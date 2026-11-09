@@ -1,5 +1,6 @@
 import { formatCentavos } from "@/lib/accounting/money";
 import { getErrorMessage, httpStatusOf } from "@/lib/api-error";
+import { formatDate } from "@/lib/format";
 import type { ReconciliationMatch } from "@/types";
 import type {
   CreatedRecord,
@@ -50,15 +51,28 @@ export function headerFigures(r: ReconciliationDetail): HeaderFigure[] {
     { key: "matched", label: "Matched", value: String(r.matched_count), money: false },
     { key: "possible", label: "Possible matches", value: String(r.possible_count), money: false },
     { key: "unmatched", label: "Unmatched", value: String(r.unmatched_count), money: false },
+    {
+      key: "outstanding",
+      label: "Outstanding items",
+      value: r.outstanding_count === undefined ? "—" : String(r.outstanding_count),
+      money: false,
+    },
   ];
 }
 
 /** The ledger line a row is matched to or suggested for, or which side it is missing from. */
 export function ledgerLineText(row: ReconciliationRow): string {
-  if (row.source === "ledger") return "Not on the statement";
+  if (row.source === "ledger") {
+    return row.outside_period ? `Outstanding from ${formatDate(row.date)}` : "Not on the statement";
+  }
   if (row.source === "statement") return "Not in the books";
   const entry = row.journal_no ?? "a ledger line";
   return row.match === "possible" ? `Suggested: ${entry}` : `Matched to ${entry}`;
+}
+
+/** A hand-match candidate's date, marked when it is an outstanding item from before the period. */
+export function candidateDateText(row: ReconciliationRow): string {
+  return row.outside_period ? ledgerLineText(row) : formatDate(row.date);
 }
 
 export function journalHref(journalId: number): string {
@@ -126,6 +140,17 @@ export function requestFailure(err: unknown, { canViewAll }: AccessContext): Req
   const inBooks = status === 422 ? lineErrors(err).find((m) => ALREADY_IN_THE_BOOKS.test(m)) : undefined;
   if (inBooks) return { reload: false, message: inBooks, inBooks: true };
   return { reload: status === 409, message: getErrorMessage(err) };
+}
+
+/**
+ * A refused match. Besides the 409s, a 422 (a draft entry, or a leg that wasn't
+ * live at the period end) means the worksheet offered something stale, so it
+ * shows the server's words and is read again.
+ */
+export function matchFailure(err: unknown, context: AccessContext): RequestFailure {
+  const failure = requestFailure(err, context);
+  if (httpStatusOf(err) !== 422) return failure;
+  return { reload: true, message: getErrorMessage(err) };
 }
 
 export function loadFailure(err: unknown, { canViewAll }: AccessContext): string {

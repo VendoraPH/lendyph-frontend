@@ -4,6 +4,7 @@ import type { Account, Permission } from "@/types";
 import type { ReconciliationRow } from "./types";
 import {
   ACCEPT_SUGGESTIONS_BODY,
+  bookRows,
   EXPENSE_PAYEE_MAX,
   SUSPENSE_DESCRIPTION_MAX,
   counterAccountChoices,
@@ -130,6 +131,33 @@ describe("match and unmatch per line", () => {
     const ledgerB = row({ source: "ledger", statement_line_id: null, journal_line_id: 91, journal_no: "JE-91" });
     const lines = [row(), ledgerA, row({ match: "matched", source: "both", journal_line_id: 88 }), ledgerB];
     assert.deepEqual(matchCandidates(lines), [ledgerA, ledgerB]);
+  });
+
+  test("the picker offers only rows the match endpoint accepts (matchable), outstanding items included", () => {
+    const live = row({ source: "ledger", statement_line_id: null, journal_line_id: 90, matchable: true });
+    const outstanding = row({
+      source: "ledger",
+      statement_line_id: null,
+      journal_line_id: 91,
+      matchable: true,
+      outside_period: true,
+      date: "2026-09-28",
+    });
+    const deadLeg = row({ source: "ledger", statement_line_id: null, journal_line_id: 92, matchable: false });
+    const claimed = row({ source: "ledger", statement_line_id: null, journal_line_id: 93, matchable: false });
+    assert.deepEqual(matchCandidates([row(), live, deadLeg, outstanding, claimed]), [live, outstanding]);
+  });
+
+  test("an older API that sends no matchable keeps offering every books-only row", () => {
+    const ledgerA = row({ source: "ledger", statement_line_id: null, journal_line_id: 90 });
+    const ledgerB = row({ source: "ledger", statement_line_id: null, journal_line_id: 91 });
+    assert.deepEqual(matchCandidates([ledgerA, ledgerB]), [ledgerA, ledgerB]);
+  });
+
+  test("the books table still lists every books-only row, matchable or not", () => {
+    const deadLeg = row({ source: "ledger", statement_line_id: null, journal_line_id: 92, matchable: false });
+    const live = row({ source: "ledger", statement_line_id: null, journal_line_id: 90, matchable: true });
+    assert.deepEqual(bookRows([row(), deadLeg, live]), [deadLeg, live]);
   });
 });
 

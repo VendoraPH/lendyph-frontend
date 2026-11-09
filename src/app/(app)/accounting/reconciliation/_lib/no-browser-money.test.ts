@@ -43,7 +43,7 @@ function codeOnly(source: string): string {
 const TAILWIND_FRACTION = /\b[a-z-]*\d+\/\d+\b/g;
 
 const MONEY_FIELD =
-  String.raw`(?:\.(?:amount|total)\b|\b(?:book_balance|statement_balance|difference|matched_count|possible_count|unmatched_count)\b|\btotals\.\w+)`;
+  String.raw`(?:\.(?:amount|total)\b|\b(?:book_balance|statement_balance|difference|matched_count|possible_count|unmatched_count|outstanding_count)\b|\btotals\.\w+)`;
 const OPERATOR = String.raw`(?:\+=|-=|\*=|\/=|[-+*/](?![=>]))`;
 const MONEY_ARITHMETIC = new RegExp(
   `${MONEY_FIELD}\\s*[)\\]]*\\s*${OPERATOR}|${OPERATOR}\\s*\\(*\\s*[\\w.?!\\[\\]]*${MONEY_FIELD}`,

@@ -22,7 +22,12 @@ import {
   recordAnyway,
 } from "../_lib/line-actions";
 import type { LineRecordRequest } from "../_lib/reconciliation-api";
-import { accountLabel, directionLabel, type RequestFailure } from "../_lib/reconciliation-view";
+import {
+  accountLabel,
+  candidateDateText,
+  directionLabel,
+  type RequestFailure,
+} from "../_lib/reconciliation-view";
 import type { LineActionKind, ReconciliationDetail, ReconciliationRow } from "../_lib/types";
 import { ExpenseForm, SuspenseForm, TransferForm } from "./line-action-forms";
 import { HiddenActionHint, ReasonButton } from "./reason-button";
@@ -172,7 +177,7 @@ export function ResolveLineDialog({
                   <div className="min-w-0">
                     <p className="truncate">{candidate.description}</p>
                     <p className="text-xs text-muted-foreground">
-                      {`${formatDate(candidate.date)} · ${candidate.journal_no ?? "Journal"}`}
+                      {`${candidateDateText(candidate)} · ${candidate.journal_no ?? "Journal"}`}
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">

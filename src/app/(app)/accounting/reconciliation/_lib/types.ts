@@ -25,6 +25,13 @@ export interface ReconciliationRow extends ReconciliationLine {
   journal_no: string | null;
   source: ReconciliationRowSource;
   external_reference: string | null;
+  /**
+   * Exactly what `POST …/match` accepts by hand for this ledger line. Absent
+   * from an API older than backend #257, where every books-only row is offered.
+   */
+  matchable?: boolean;
+  /** The ledger entry is dated outside the period (an outstanding item); `date` is its own. */
+  outside_period?: boolean;
 }
 
 export interface ReconciliationDetail extends Reconciliation {
@@ -43,6 +50,12 @@ export interface ReconciliationDetail extends Reconciliation {
   matched_count: number;
   possible_count: number;
   unmatched_count: number;
+  /**
+   * Entries dated before the period that no statement line has matched yet
+   * (deposits in transit, uncleared cheques). Absent from an API older than
+   * backend #257.
+   */
+  outstanding_count?: number;
   notes: string | null;
   lines: ReconciliationRow[];
 }

@@ -1,15 +1,20 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
+// Dates read in Philippine time, as the screens show them on a Manila machine.
+process.env.TZ = "Asia/Manila";
+
 import type { ReconciliationActionAnswer, ReconciliationDetail, ReconciliationRow } from "./types";
 import {
   BRANCH_ACCESS_EXPLANATION,
   afterAction,
+  candidateDateText,
   createdNotice,
   descriptionDefault,
   directionLabel,
   headerFigures,
   ledgerLineText,
   loadFailure,
+  matchFailure,
   matchLabel,
   reconciledLabel,
   requestFailure,
@@ -33,6 +38,7 @@ function detail(overrides: Partial<ReconciliationDetail> = {}): ReconciliationDe
     matched_count: 3,
     possible_count: 1,
     unmatched_count: 2,
+    outstanding_count: 0,
     notes: null,
     lines: [],
     ...overrides,
@@ -44,7 +50,7 @@ function httpError(status: number, data: Record<string, unknown>) {
 }
 
 describe("the header shows the server's figures", () => {
-  test("statement, books and difference in ₱ with two decimals, and the three counts", () => {
+  test("statement, books and difference in ₱ with two decimals, and the four counts", () => {
     assert.deepEqual(
       headerFigures(detail()).map((f) => [f.label, f.value]),
       [
@@ -54,6 +60,7 @@ describe("the header shows the server's figures", () => {
         ["Matched", "3"],
         ["Possible matches", "1"],
         ["Unmatched", "2"],
+        ["Outstanding items", "0"],
       ],
     );
   });
@@ -119,6 +126,17 @@ describe("rows read in words", () => {
     );
     assert.equal(ledgerLineText({ ...base, match: "unmatched", source: "ledger", statement_line_id: null }), "Not on the statement");
   });
+
+  test("an entry dated outside the period reads as an outstanding item, with its date", () => {
+    const books = { ...base, match: "unmatched" as const, source: "ledger" as const, statement_line_id: null };
+    assert.equal(
+      ledgerLineText({ ...books, date: "2026-09-28", outside_period: true }),
+      "Outstanding from Sep 28, 2026",
+    );
+    assert.equal(ledgerLineText({ ...books, outside_period: false }), "Not on the statement");
+    assert.equal(candidateDateText({ ...books, date: "2026-09-28", outside_period: true }), "Outstanding from Sep 28, 2026");
+    assert.equal(candidateDateText({ ...books, date: "2026-10-05" }), "Oct 5, 2026");
+  });
 });
 
 describe("after an action", () => {
@@ -145,6 +163,55 @@ describe("after an action", () => {
     const state = afterAction(answer);
     assert.equal(state.reconciliation, answer.data);
     assert.equal(state.notice?.text, "Recorded as suspense entry JE-000347");
+  });
+});
+
+describe("outstanding items and manual-match refusals", () => {
+  test("the header shows the server's outstanding_count as sent, with a short label", () => {
+    const figure = headerFigures(detail({ outstanding_count: 4 })).find((f) => f.key === "outstanding");
+    assert.deepEqual(figure, { key: "outstanding", label: "Outstanding items", value: "4", money: false });
+  });
+
+  test("an older API without outstanding_count shows a dash, never a count of the rows", () => {
+    const lines: ReconciliationRow[] = [
+      {
+        journal_id: 1,
+        date: "2026-09-28",
+        description: "Deposit in transit",
+        amount: 500_000,
+        match: "unmatched",
+        external_reference: null,
+        journal_no: "JE-1",
+        source: "ledger",
+        statement_line_id: null,
+        journal_line_id: 9,
+        outside_period: true,
+      },
+    ];
+    const figure = headerFigures(detail({ lines, outstanding_count: undefined })).find((f) => f.key === "outstanding");
+    assert.equal(figure?.value, "—");
+  });
+
+  test("a 409 or a 422 on match shows the server's words and reloads the worksheet", () => {
+    const conflict = "That ledger entry was just matched to another statement line. Reload and try again.";
+    assert.deepEqual(matchFailure(httpError(409, { message: conflict }), { canViewAll: true }), {
+      reload: true,
+      message: conflict,
+    });
+    const notLive = "This ledger entry was reversed before the period ended, so it can't be matched.";
+    assert.deepEqual(
+      matchFailure(
+        httpError(422, { message: "The given data was invalid.", errors: { journal_line_id: [notLive] } }),
+        { canViewAll: true },
+      ),
+      { reload: true, message: notLive },
+    );
+  });
+
+  test("other match refusals keep their own handling", () => {
+    const err = httpError(403, { message: "This action is unauthorized." });
+    assert.deepEqual(matchFailure(err, { canViewAll: false }), { reload: false, message: BRANCH_ACCESS_EXPLANATION });
+    assert.equal(matchFailure(httpError(500, { message: "Server Error" }), { canViewAll: true }).reload, false);
   });
 });
 

@@ -23,7 +23,7 @@ export function WorksheetHeader({ reconciliation }: { reconciliation: Reconcilia
           <ReconciledBadge reconciled={reconciled} label={reconciledLabel(reconciliation)} />
         </div>
 
-        <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+        <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-7">
           {headerFigures(reconciliation).map((figure) => (
             <div key={figure.key} className="space-y-1">
               <dt className="text-sm text-muted-foreground">{figure.label}</dt>

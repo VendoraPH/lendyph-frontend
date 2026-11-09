@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/table";
 import { formatCentavos } from "@/lib/accounting/money";
 import { formatDate } from "@/lib/format";
-import { matchCandidates, rowMatchAction } from "../_lib/line-actions";
+import { bookRows as booksOnly, rowMatchAction } from "../_lib/line-actions";
 import { journalHref, ledgerLineText } from "../_lib/reconciliation-view";
 import type { ReconciliationDetail, ReconciliationRow } from "../_lib/types";
 import { MatchBadge } from "./match-badge";
@@ -29,7 +29,7 @@ interface WorksheetTableProps {
 /** The statement's lines with their status and ledger line, then the books' lines nothing claims. */
 export function WorksheetTable({ reconciliation, busy, onConfirm, onUnmatch, onResolve }: WorksheetTableProps) {
   const statementRows = reconciliation.lines.filter((row) => row.statement_line_id !== null);
-  const bookRows = matchCandidates(reconciliation.lines);
+  const bookRows = booksOnly(reconciliation.lines);
 
   return (
     <div className="space-y-6">
@@ -101,6 +101,7 @@ export function WorksheetTable({ reconciliation, busy, onConfirm, onUnmatch, onR
                   <TableHead className="w-36">Journal</TableHead>
                   <TableHead className="w-32">Reference</TableHead>
                   <TableHead className="w-32 text-right">Amount</TableHead>
+                  <TableHead className="w-48">Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -121,6 +122,7 @@ export function WorksheetTable({ reconciliation, busy, onConfirm, onUnmatch, onR
                       {row.external_reference || "—"}
                     </TableCell>
                     <TableCell className="text-right font-mono text-sm">{formatCentavos(row.amount)}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{ledgerLineText(row)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
