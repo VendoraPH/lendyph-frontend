@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, Mail, MessageSquare } from "lucide-react";
+import { AlertTriangle, Clock, Mail, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,7 +19,7 @@ import { formatCurrencyExact, formatDate } from "@/lib/format";
 import { getErrorMessage } from "@/lib/api-error";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { TestModeBanner } from "./test-mode";
-import { TEMPLATE_TYPES, TEMPLATE_TYPE_LABELS, manualSendWording, type SendMode } from "@/lib/reminders";
+import { TEMPLATE_TYPES, TEMPLATE_TYPE_LABELS, manualSendWording, rowTestMode, type SendMode } from "@/lib/reminders";
 import { reminderService } from "@/services";
 import type {
   ManualReminderPreview,
@@ -74,8 +74,6 @@ export function SendReminderDialog({
   onSent,
   testMode = null,
 }: SendReminderDialogProps) {
-  // Live words only on a known live mode; neutral ones when it's unknown.
-  const wording = manualSendWording(testMode);
   const [channel, setChannel] = useState<ManualSendChannel>("sms");
   const [template, setTemplate] = useState<ReminderTemplateType | null>(() => offeredOrNull(defaultTemplate));
   const [result, setResult] = useState<PreviewResult | null>(null);
@@ -111,6 +109,10 @@ export function SendReminderDialog({
 
   const current = template && result?.key === key ? result : null;
   const preview = current?.preview ?? null;
+  // The preview's own test_mode is the server's answer for this send; until
+  // it arrives, the settings' mode. Live words only on a known live mode.
+  const mode = preview ? rowTestMode(preview, testMode) : testMode;
+  const wording = manualSendWording(mode);
   const blocked = preview ? preview.blocked_reasons.length > 0 : true;
 
   const send = () => {
@@ -140,7 +142,7 @@ export function SendReminderDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <TestModeBanner testMode={testMode} enabled={null} />
+        <TestModeBanner testMode={mode} enabled={null} />
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
@@ -213,6 +215,17 @@ export function SendReminderDialog({
                   </>
                 )}
               </dl>
+
+              {preview.notes && preview.notes.length > 0 && (
+                <ul className="space-y-0.5 rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
+                  {preview.notes.map((n) => (
+                    <li key={n} className="flex items-center gap-1.5">
+                      <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      {n}
+                    </li>
+                  ))}
+                </ul>
+              )}
 
               {preview.blocked_reasons.length > 0 && (
                 <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-500/10 dark:text-amber-300">

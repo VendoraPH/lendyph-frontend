@@ -82,8 +82,8 @@ function validate(form: ReminderSettingsUpdate): string[] {
   const problems: string[] = [];
   const windowProblem = validateContactWindow(form.contact_hours);
   if (windowProblem) problems.push(windowProblem);
-  else if (form.default_send_time < form.contact_hours.start || form.default_send_time > form.contact_hours.end) {
-    problems.push("Default send time (within contact hours)");
+  else if (form.default_send_time < form.contact_hours.start || form.default_send_time >= form.contact_hours.end) {
+    problems.push("Default send time (within contact hours, before they end)");
   }
   if (form.enabled && !form.channels.sms && !form.channels.email) problems.push("At least one channel");
   if (!Number.isInteger(form.retry.max_attempts) || form.retry.max_attempts < 0 || form.retry.max_attempts > MAX_RETRY_ATTEMPTS) {

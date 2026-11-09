@@ -200,9 +200,19 @@ export function deliveryStatusOptions(mode: SendMode): Record<DeliveryStatus, St
   return { ...DELIVERY_STATUS_META, sent: wentOutMeta(mode)!, delivered: CONFIRMED_OPTION };
 }
 
-/** The dashboard chart's bar names; "Sent" and "Delivered" only when live. */
-export function chartSeriesLabel(series: "sent" | "delivered" | "failed", mode: SendMode): string {
+/**
+ * The dashboard chart's bar names; "Sent" and "Delivered" only when live.
+ * When the answer carries `daily[].logged` (`hasLogged`), "sent" leaves out
+ * logged-only messages, so it keeps "Sent", as the counts do.
+ */
+export function chartSeriesLabel(
+  series: "sent" | "logged" | "delivered" | "failed",
+  mode: SendMode,
+  hasLogged = false,
+): string {
   if (series === "failed") return "Failed";
+  if (series === "logged") return LOGGED_META.label;
+  if (series === "sent" && hasLogged) return "Sent";
   if (mode === false) return series === "sent" ? "Sent" : "Delivered";
   if (series === "delivered") return CONFIRMED_OPTION.label;
   return wentOutMeta(mode)!.label;
@@ -334,11 +344,13 @@ export const REMINDER_REASON_LABELS: Record<ReminderReasonCode, string> = {
   fire_date_passed: "Its day has passed",
   outside_contact_hours: "Outside contact hours",
   template_unavailable: "No active template for this reminder and channel",
+  rule_deleted: "Its rule was deleted",
   not_set_up: "Sending is not set up",
   retry_window_closed: "Could not be retried within contact hours",
   interrupted: "Sending was interrupted; not resent so the member is not sent it twice",
   error: "Could not be prepared for sending",
   driver_error: "The driver failed",
+  already_handed_over: "Its message was already handed over; not sent again",
 };
 
 /** "some_new_code" → "Some new code". */
@@ -596,10 +608,11 @@ export function validateRule(rule: ReminderRuleInput, contactHours: ContactWindo
   const end = minutesOf(contactHours.end);
   if (send === null) {
     problems.push("Send time");
-  } else if (start !== null && end !== null && (send < start || send > end)) {
-    problems.push(
-      `Send time (within contact hours, ${formatSendTime(contactHours.start)}–${formatSendTime(contactHours.end)})`,
-    );
+  } else if (start !== null && end !== null && send < start) {
+    problems.push(`Send time (not before contact hours open at ${formatSendTime(contactHours.start)})`);
+  } else if (start !== null && end !== null && send >= end) {
+    // The end is exclusive, as the engine reads it.
+    problems.push(`Send time (before contact hours end at ${formatSendTime(contactHours.end)})`);
   }
   if (rule.channels.length === 0) problems.push("At least one channel");
   return problems;

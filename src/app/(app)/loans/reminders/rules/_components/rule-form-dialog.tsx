@@ -194,7 +194,8 @@ export function RuleFormDialog({ open, onOpenChange, rule, draft, contactHours, 
               onChange={(e) => set("send_time", e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              Must fall within contact hours ({formatSendTime(contactHours.start)}–{formatSendTime(contactHours.end)}).
+              Must fall within contact hours: from {formatSendTime(contactHours.start)}, and before{" "}
+              {formatSendTime(contactHours.end)}.
             </p>
           </div>
           <div className="space-y-1.5">

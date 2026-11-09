@@ -336,6 +336,11 @@ export function TemplateFormDialog({ open, onOpenChange, template, onSaved }: Te
                 </p>
                 {preview.subject && <p className="mb-1 text-sm font-medium">{preview.subject}</p>}
                 <p className="whitespace-pre-wrap text-sm">{preview.body}</p>
+                {typeof preview.sms_parts === "number" && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {preview.sms_parts} SMS part{preview.sms_parts === 1 ? "" : "s"}, as the server counts it
+                  </p>
+                )}
                 {preview.unknown_variables.length > 0 && (
                   <p className="mt-2 text-xs text-destructive">
                     Not recognised: {preview.unknown_variables.join(", ")}

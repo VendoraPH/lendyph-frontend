@@ -70,7 +70,7 @@ export function QueueTable({ items, testMode }: { items: ReminderQueueItem[]; te
                     ) : (
                       <Mail className="h-3.5 w-3.5 text-muted-foreground" />
                     )}
-                    {item.recipient}
+                    {item.recipient ?? "—"}
                   </span>
                 </TableCell>
                 <TableCell className="whitespace-nowrap text-sm">{formatDateTime(item.scheduled_at)}</TableCell>

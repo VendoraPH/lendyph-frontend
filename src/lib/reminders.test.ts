@@ -160,10 +160,20 @@ test("validateRule bounds days, and pins on-due rules to 0", () => {
   ]);
 });
 
-test("validateRule keeps the send time inside contact hours", () => {
-  assert.equal(validateRule(rule({ send_time: "07:59" }), HOURS).length, 1);
-  assert.equal(validateRule(rule({ send_time: "18:01" }), HOURS).length, 1);
-  assert.deepEqual(validateRule(rule({ send_time: "18:00" }), HOURS), []);
+// The engine treats the contact hours' end as exclusive (Arvin: standard),
+// so a send time at the end itself is refused, as R2's API refuses it.
+test("validateRule keeps the send time inside contact hours, the end excluded", () => {
+  assert.deepEqual(validateRule(rule({ send_time: "07:59" }), HOURS), [
+    "Send time (not before contact hours open at 8:00 AM)",
+  ]);
+  assert.deepEqual(validateRule(rule({ send_time: "08:00" }), HOURS), []);
+  assert.deepEqual(validateRule(rule({ send_time: "17:59" }), HOURS), []);
+  assert.deepEqual(validateRule(rule({ send_time: "18:00" }), HOURS), [
+    "Send time (before contact hours end at 6:00 PM)",
+  ]);
+  assert.deepEqual(validateRule(rule({ send_time: "18:01" }), HOURS), [
+    "Send time (before contact hours end at 6:00 PM)",
+  ]);
   assert.deepEqual(validateRule(rule({ send_time: "25:00" }), HOURS), ["Send time"]);
 });
 
@@ -551,4 +561,23 @@ test("sending status is unreadable once settled without a test_mode, data or not
   assert.equal(sendingStatusUnreadable({ loading: false, data: { test_mode: false } }), false);
   assert.equal(sendingStatusUnreadable({ loading: true, data: null }), false);
   assert.equal(sendingStatusUnreadable({ loading: false, data: null }, false), false);
+});
+
+test("R2's reason codes read in words: a deleted rule, a message already handed over", () => {
+  assert.equal(reminderReason({ reason: null, reason_code: "rule_deleted" }), "Its rule was deleted");
+  assert.equal(
+    reminderReason({ reason: null, reason_code: "already_handed_over" }),
+    "Its message was already handed over; not sent again",
+  );
+});
+
+// daily[].logged (R2) gets its own bar; with it present, "sent" leaves out
+// logged-only messages and keeps its live word, like the counts.
+test("chart: a Logged bar, and Sent stays Sent when the answer carries logged", () => {
+  assert.equal(chartSeriesLabel("logged", true), "Logged");
+  assert.equal(chartSeriesLabel("logged", null), "Logged");
+  assert.equal(chartSeriesLabel("sent", true, true), "Sent");
+  assert.equal(chartSeriesLabel("sent", null, true), "Sent");
+  assert.equal(chartSeriesLabel("sent", true, false), "Logged");
+  assert.equal(chartSeriesLabel("sent", null), "Processed");
 });

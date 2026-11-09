@@ -89,12 +89,14 @@ export type ReminderReasonCode =
   | "fire_date_passed"
   | "outside_contact_hours"
   | "template_unavailable"
+  | "rule_deleted"
   // failed
   | "not_set_up"
   | "retry_window_closed"
   | "interrupted"
   | "error"
-  | "driver_error";
+  | "driver_error"
+  | "already_handed_over";
 
 /** Who or what a pause applies to. */
 export type ReminderPauseScope = "global" | "borrower" | "loan";
@@ -155,6 +157,8 @@ export interface TemplatePreview {
   body: string;
   /** Variables in the body the server does not recognise. */
   unknown_variables: string[];
+  /** SMS parts of the rendered body, counted by the server; null on email. */
+  sms_parts?: number | null;
 }
 
 export interface ReminderQueueItem {
@@ -171,13 +175,16 @@ export interface ReminderQueueItem {
   rule_id: number | null;
   rule_name: string | null;
   channel: ReminderChannel;
-  /** Masked: `0917•••4567`, `ju•••@gmail.com`. */
-  recipient: string;
+  /**
+   * Masked: `63917*****01`, `ju***@example.com`. The one stored when it was
+   * handed over, else the member's current contact; null when there is none.
+   */
+  recipient: string | null;
   scheduled_at: string;
   status: ReminderQueueStatus;
   /** Why it was cancelled or skipped, or why the last attempt failed, in words. */
   reason: string | null;
-  /** The engine's code for `reason` (R2 to send it). */
+  /** The engine's code for `reason`. */
   reason_code?: ReminderReasonCode | (string & {}) | null;
   attempts: number;
   source: ReminderSource;
@@ -322,7 +329,10 @@ export interface ReminderDashboardCounts {
 
 export interface ReminderDailyStat {
   date: string;
+  /** Leaves out logged-only messages when `logged` is sent. */
   sent: number;
+  /** Logged-only messages that day (R2). */
+  logged?: number;
   delivered: number;
   failed: number;
 }
@@ -483,6 +493,10 @@ export interface ManualReminderPreview {
     body: string;
   }[];
   blocked_reasons: string[];
+  /** When it would go, e.g. "Will go at 8:00 AM" before contact hours open. */
+  notes?: string[];
+  /** The server's own answer: true when this send would only be logged. */
+  test_mode?: boolean | null;
 }
 
 export interface ManualReminderResult {

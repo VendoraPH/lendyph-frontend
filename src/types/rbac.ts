@@ -162,6 +162,9 @@ export type Action =
   | "pause"
   // Loan products: one verb for create, edit and delete, as the API seeds it.
   | "manage"
+  // Expenses: settle a payable (`expenses:pay`, seeded by the server). Not
+  // offered in the role editor's matrix.
+  | "pay"
   // Branch access: see every branch, not only the ones a user is assigned to.
   | "view_all";
 

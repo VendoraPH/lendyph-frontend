@@ -104,6 +104,8 @@ function SmsCreditsCard({ sms, mode }: { sms: ReminderDashboard["sms"]; mode: Se
 function DeliveryChart({ daily, mode }: { daily: ReminderDashboard["daily"]; mode: SendMode }) {
   const isClient = useIsClient();
   const rows = daily.map((d) => ({ ...d, label: formatDate(d.date) }));
+  // R2 sends daily[].logged; then "sent" leaves out logged-only messages.
+  const hasLogged = daily.some((d) => typeof d.logged === "number");
   return (
     <Card className="lg:col-span-2">
       <CardContent className="pt-6">
@@ -126,7 +128,10 @@ function DeliveryChart({ daily, mode }: { daily: ReminderDashboard["daily"]; mod
                   <YAxis allowDecimals={false} fontSize={11} tickLine={false} width={32} />
                   <Tooltip />
                   <Bar dataKey="delivered" name={chartSeriesLabel("delivered", mode)} stackId="a" fill="#10b981" />
-                  <Bar dataKey="sent" name={chartSeriesLabel("sent", mode)} stackId="a" fill="#60a5fa" />
+                  <Bar dataKey="sent" name={chartSeriesLabel("sent", mode, hasLogged)} stackId="a" fill="#60a5fa" />
+                  {hasLogged && (
+                    <Bar dataKey="logged" name={chartSeriesLabel("logged", mode)} stackId="a" fill="#94a3b8" />
+                  )}
                   <Bar dataKey="failed" name={chartSeriesLabel("failed", mode)} stackId="a" fill="#ef4444" />
                 </BarChart>
               </ResponsiveContainer>
