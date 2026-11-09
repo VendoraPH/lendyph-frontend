@@ -105,6 +105,15 @@ export function isApprovalChainHidden(status: string | undefined): boolean {
 }
 
 /**
+ * Whether the loan page reads the loan's approval chain. A voided loan's chain
+ * is read (read only) even though its card stays hidden: Workflow History
+ * shows the steps the void cancelled. A rejected loan's is not read.
+ */
+export function readsApprovalChain(status: string | undefined): boolean {
+  return status === "void" || !isApprovalChainHidden(status);
+}
+
+/**
  * A loan whose chain the server should already have seeded.
  *
  * `draft` is deliberately absent: the chain is seeded ON submit, so a draft
