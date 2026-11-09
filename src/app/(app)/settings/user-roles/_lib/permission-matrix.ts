@@ -54,8 +54,12 @@ export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
   imports: ["process"],
   // `close` and `settings` sit on `accounting` rather than on a module of their
   // own because neither has a screen to view — they are verbs applied to the
-  // whole book.
-  accounting: ["view", "reconcile", "close", "settings"],
+  // whole book. `allowance` (posting the allowance for credit losses) is kept
+  // apart from `journals:post`: the allowance run writes an automatic posting
+  // against 1200 for every branch, so a bookkeeper who may post a manual
+  // journal still can't post one. The API seeds it for super_admin, admin and
+  // accountant.
+  accounting: ["view", "reconcile", "close", "settings", "allowance"],
   chart_of_accounts: ["view", "create", "update", "delete"],
   // No `update` or `delete`: a posted entry is immutable, and the only lawful
   // correction is `reverse`, which writes a second entry rather than editing
@@ -75,10 +79,12 @@ export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
 /**
  * Actions offered with their own checkbox only. The module's "toggle all"
  * neither grants nor revokes them: writing off a restructure's shortfall
- * destroys debt, so it's never swept in with the rest of Loans.
+ * destroys debt, and posting the allowance moves every branch's books, so
+ * neither is swept in with the rest of its module.
  */
 const OWN_CHECKBOX_ONLY: Partial<Record<UIModule, readonly Action[]>> = {
   loans: ["write_off"],
+  accounting: ["allowance"],
 };
 
 /** The actions a module's "toggle all" checkbox covers. */
