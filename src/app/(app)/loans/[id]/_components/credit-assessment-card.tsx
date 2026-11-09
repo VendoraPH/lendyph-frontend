@@ -15,6 +15,7 @@ import {
   assessmentFormFrom,
   assessmentSaveErrors,
   canSaveAssessment,
+  memberDetailsHidden,
   NO_SCORE_DECISION_REASON,
   showsCreditAssessment,
   type AssessmentForm,
@@ -41,10 +42,20 @@ interface CreditAssessmentCardProps {
 export function CreditAssessmentCard({ loanId, status }: CreditAssessmentCardProps) {
   const { can } = usePermission();
   if (!showsCreditAssessment({ flagOn: env.features.creditScoring, status, can })) return null;
-  return <CreditAssessmentBody loanId={loanId} canSave={canSaveAssessment(can)} />;
+  return (
+    <CreditAssessmentBody loanId={loanId} canSave={canSaveAssessment(can)} detailsHidden={memberDetailsHidden(can)} />
+  );
 }
 
-function CreditAssessmentBody({ loanId, canSave }: { loanId: number; canSave: boolean }) {
+function CreditAssessmentBody({
+  loanId,
+  canSave,
+  detailsHidden,
+}: {
+  loanId: number;
+  canSave: boolean;
+  detailsHidden: boolean;
+}) {
   const fetcher = useCallback(() => creditScoringService.getLoanAssessment(loanId), [loanId]);
   const resource = useApiResource<LoanCreditAssessment>(fetcher);
   // The PUT answers the whole assessment, which is shown as it came back.
@@ -58,7 +69,7 @@ function CreditAssessmentBody({ loanId, canSave }: { loanId: number; canSave: bo
     setSaving(true);
     setErrors([]);
     try {
-      const next = await creditScoringService.saveLoanAssessment(loanId, assessmentBody(form, loaded));
+      const next = await creditScoringService.saveLoanAssessment(loanId, assessmentBody(form, loaded, { memberDetailsHidden: detailsHidden }));
       setSaved(next);
       setDraft(null);
       notifySuccess("Credit assessment saved.");
@@ -150,6 +161,7 @@ function CreditAssessmentBody({ loanId, canSave }: { loanId: number; canSave: bo
                     assessment={assessment}
                     form={form}
                     canSave={canSave}
+                    detailsHidden={detailsHidden}
                     saving={saving}
                     onChange={setDraft}
                     onSave={() => handleSave(form, loaded)}

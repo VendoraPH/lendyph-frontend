@@ -14,6 +14,8 @@ import {
 import { formatDateTime } from "@/lib/format";
 import { INCOME_VERIFICATION_LABELS } from "@/lib/credit-scoring/labels";
 import {
+  MEMBER_DETAIL_FIELDS,
+  MEMBER_DETAILS_HIDDEN_TEXT,
   SAVE_BLOCKED_REASON,
   noticeStatus,
   type AssessmentForm,
@@ -39,6 +41,7 @@ export function AssessmentFormFields({
   assessment,
   form,
   canSave,
+  detailsHidden,
   saving,
   onChange,
   onSave,
@@ -46,6 +49,8 @@ export function AssessmentFormFields({
   assessment: LoanCreditAssessment;
   form: AssessmentForm;
   canSave: boolean;
+  /** The server sends the member-detail figures as null to this caller. */
+  detailsHidden: boolean;
   saving: boolean;
   onChange: (next: AssessmentForm) => void;
   onSave: () => void;
@@ -77,6 +82,7 @@ export function AssessmentFormFields({
       <div className="grid gap-4 sm:grid-cols-2">
         {TEXT_FIELDS.map((f) => {
           const id = `assessment-${f.key}`;
+          const hidden = detailsHidden && MEMBER_DETAIL_FIELDS.includes(f.key);
           return (
             <div key={f.key} className="space-y-1.5">
               <Label htmlFor={id}>{f.label}</Label>
@@ -85,8 +91,9 @@ export function AssessmentFormFields({
                 type={f.mode === "date" ? "date" : "text"}
                 inputMode={f.mode === "date" ? undefined : f.mode}
                 className={f.mode === "date" ? undefined : "tabular-nums"}
-                value={form[f.key]}
-                disabled={!canSave}
+                value={hidden ? "" : form[f.key]}
+                placeholder={hidden ? MEMBER_DETAILS_HIDDEN_TEXT : undefined}
+                disabled={!canSave || hidden}
                 onChange={(e) => onChange({ ...form, [f.key]: e.target.value })}
               />
             </div>

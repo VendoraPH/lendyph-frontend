@@ -74,20 +74,48 @@ export function assessmentFormFrom(profile: CreditApplicationProfile | null): As
 }
 
 /**
- * The PUT body: every field as typed, an empty one cleared to null.
- *
- * `notice_acknowledged` goes only when the box differs from how it loaded.
- * The server clears a stored acknowledgement on false, and the box loads
- * unticked for a member who acknowledged an earlier notice version, so
- * sending it on every save would erase that earlier consent.
+ * The application figures the server hides from a caller without
+ * `borrowers:view` or the member's branch: they arrive as null then.
  */
-export function assessmentBody(form: AssessmentForm, loaded: AssessmentForm): SaveLoanAssessmentData {
+export const MEMBER_DETAIL_FIELDS: readonly AssessmentTextField[] = [
+  "other_income",
+  "household_expenses",
+  "outside_debt_payments",
+];
+
+export const MEMBER_DETAILS_HIDDEN_TEXT = "Hidden (needs access to member details)";
+
+/** Without borrowers:view the server sends the member-detail figures as null. */
+export function memberDetailsHidden(can: Can): boolean {
+  return !can("borrowers:view");
+}
+
+/**
+ * The PUT body: each field that differs from how it loaded, as typed, and an
+ * emptied one as null. The server leaves out-of-body fields unchanged, so a
+ * figure the caller can't see (sent to them as null) is never cleared by a
+ * save. While member details are hidden their figures are never sent at all.
+ *
+ * `notice_acknowledged` follows the same rule. The server clears a stored
+ * acknowledgement on false, and the box loads unticked for a member who
+ * acknowledged an earlier notice version, so sending it on every save would
+ * erase that earlier consent.
+ */
+export function assessmentBody(
+  form: AssessmentForm,
+  loaded: AssessmentForm,
+  { memberDetailsHidden: hidden = false }: { memberDetailsHidden?: boolean } = {},
+): SaveLoanAssessmentData {
   const body: SaveLoanAssessmentData = {};
   for (const key of ASSESSMENT_TEXT_FIELDS) {
+    if (hidden && MEMBER_DETAIL_FIELDS.includes(key)) continue;
     const value = form[key].trim();
+    if (value === loaded[key].trim()) continue;
     body[key] = value === "" ? null : value;
   }
-  body.income_verification = form.income_verification === "" ? null : form.income_verification;
+  if (form.income_verification !== loaded.income_verification) {
+    body.income_verification = form.income_verification === "" ? null : form.income_verification;
+  }
   if (form.notice_acknowledged !== loaded.notice_acknowledged) {
     body.notice_acknowledged = form.notice_acknowledged;
   }

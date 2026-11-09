@@ -104,7 +104,8 @@ The other nullables: `average_score` (no one scored, shown as "—") and an aler
 **Loan assessment (`PUT /credit-scoring/loans/{loan}/assessment`):**
 
 - Only a draft or for-approval loan (otherwise 422). The GET's `editable` says which.
-- The body carries the application details (a field left out is unchanged, null clears it) and `notice_acknowledged` (true stamps the current notice version; false clears it). The card sends every field, an empty one as null.
+- The body carries the application details (a field left out is unchanged, null clears it) and `notice_acknowledged` (true stamps the current notice version; false clears it).
+- The card sends only the fields that changed since they loaded, an emptied one as null, and `notice_acknowledged` only when the box changed. So a save never clears what the caller can't see: an earlier version's acknowledgement, or `other_income`, `household_expenses` and `outside_debt_payments`, which arrive as null without `borrowers:view` or the member's branch. Without `borrowers:view` those three read "Hidden (needs access to member details)" and are never sent.
 - `employment_status` is one of the GET's `employment_statuses` (`employed`, `self_employed`, `business_owner`, `overseas_worker`, `retired`, `not_employed`, `other`). The four money fields are at most ₱9,999,999,999.99.
 - It then assesses the application and answers the GET shape, which the card shows as it came back.
 - 409 when the member is being scored and the 3-second wait runs out, or when two first saves collide. Nothing is saved then. The card shows 422 and 409 messages in place.
