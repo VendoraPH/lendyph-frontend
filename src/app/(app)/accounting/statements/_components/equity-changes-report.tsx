@@ -11,11 +11,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useAccountingResource } from "@/hooks";
 import { accountingService } from "@/services";
 import type { EquityChanges } from "@/types";
-import { DataState } from "../../_components/data-state";
 import { Amount } from "../../_components/report-section";
+import { equityRowKey } from "../_lib/statement-lines";
+import { StatementState } from "./statement-state";
+import { useStatementResource } from "./use-statement-resource";
 
 interface EquityChangesReportProps {
   from: string;
@@ -26,9 +27,10 @@ interface EquityChangesReportProps {
 /**
  * How equity moved over the period, line by line.
  *
- * Needs opening balances and the movements between them, which a single
- * trial balance does not carry, so it comes from the server rather than being
- * regrouped client-side like the balance sheet.
+ * Needs opening balances and the movements between them, so it comes from the
+ * server, totals included. The "Earnings not yet closed" row (income less
+ * expense not yet closed into equity) is one of the server's rows and reads
+ * like the others, so the ending total equals the balance sheet's equity.
  */
 export function EquityChangesReport({
   from,
@@ -39,11 +41,12 @@ export function EquityChangesReport({
     () => accountingService.equityChanges({ from, to, branch_id: branchId }),
     [from, to, branchId],
   );
-  const resource = useAccountingResource<EquityChanges>(fetcher);
+  const { resource, refusal } = useStatementResource<EquityChanges>(fetcher);
 
   return (
-    <DataState
+    <StatementState
       resource={resource}
+      refusal={refusal}
       summary="Capital at the start of the period, what was put in and taken out, and where it ended."
       endpoints={["GET /accounting/statements/equity-changes"]}
       isEmpty={(report) => report.rows.length === 0}
@@ -64,7 +67,7 @@ export function EquityChangesReport({
               </TableHeader>
               <TableBody>
                 {report.rows.map((row) => (
-                  <TableRow key={row.label}>
+                  <TableRow key={equityRowKey(row)}>
                     <TableCell className="text-sm">{row.label}</TableCell>
                     <TableCell className="text-right">
                       <Amount value={row.beginning} />
@@ -97,6 +100,6 @@ export function EquityChangesReport({
           </CardContent>
         </Card>
       )}
-    </DataState>
+    </StatementState>
   );
 }
