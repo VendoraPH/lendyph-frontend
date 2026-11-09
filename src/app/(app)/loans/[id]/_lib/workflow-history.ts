@@ -19,7 +19,14 @@ export type WorkflowLoan = Pick<Loan, "status" | "created_at"> &
     >
   > & { submitted_at?: string | null };
 
-export type WorkflowEventKey = "created" | "submitted" | "approved" | "rejected" | "released" | "sent_back";
+export type WorkflowEventKey =
+  | "created"
+  | "submitted"
+  | "approved"
+  | "rejected"
+  | "released"
+  | "sent_back"
+  | "cancelled";
 
 export interface WorkflowEvent {
   key: WorkflowEventKey;

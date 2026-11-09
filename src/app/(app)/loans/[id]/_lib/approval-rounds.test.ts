@@ -13,7 +13,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { LoanApprovalRound, LoanApprovalStep } from "@/types/loan-approval";
-import { approvalRemarksHistory, chainEvents, readyForRelease, revisionRoundView, withChainEvents } from "./approval-rounds";
+import {
+  approvalRemarksHistory,
+  approvalStepState,
+  chainEvents,
+  readyForRelease,
+  revisionRoundView,
+  withChainEvents,
+} from "./approval-rounds";
 
 function step(index: number, kind: LoanApprovalStep["kind"], status: LoanApprovalStep["status"], name: string): LoanApprovalStep {
   return { id: index + 1, index, step_id: name, name, role: "r", kind, status };
@@ -183,4 +190,29 @@ test("ready for release only on an approved loan whose chain is signed off", () 
   assert.equal(readyForRelease("released", true), false);
   assert.equal(readyForRelease("ongoing", true), false);
   assert.equal(readyForRelease("restructured", true), false);
+});
+
+test("a voided loan's cancelled steps read as one Cancelled line, never as waiting", () => {
+  const current: LoanApprovalStep[] = [
+    { ...step(0, "submit", "approved", "Loan Processor"), acted_at: "2026-11-09T05:00:00Z", acted_by: "Lea" },
+    { ...step(1, "approve", "cancelled", "Manager"), acted_at: "2026-11-09T07:00:00Z", acted_by: "Vic Voider" },
+    { ...step(2, "release", "cancelled", "Cashier"), acted_at: "2026-11-09T07:00:00Z", acted_by: "Vic Voider" },
+  ];
+  assert.deepEqual(
+    chainEvents([], current).map((e) => [e.key, e.label, e.date]),
+    [
+      ["submitted", "Submitted for approval by Lea", "2026-11-09T05:00:00Z"],
+      ["cancelled", "Approval cancelled by Vic Voider (Manager, Cashier)", "2026-11-09T07:00:00Z"],
+    ],
+  );
+  // Cancelled steps are not sign-offs or send-backs.
+  assert.deepEqual(approvalRemarksHistory([], current).map((r) => r.name), ["Loan Processor"]);
+});
+
+test("the approval tracker reads each step's state, cancelled included", () => {
+  assert.equal(approvalStepState("pending"), "current");
+  assert.equal(approvalStepState("approved"), "done");
+  assert.equal(approvalStepState("sent_back"), "sent_back");
+  assert.equal(approvalStepState("cancelled"), "cancelled");
+  assert.equal(approvalStepState("waiting"), "waiting");
 });

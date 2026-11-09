@@ -23,7 +23,8 @@ import type { LoanStatus } from "./loan";
  */
 export type ApprovalStepKind = "submit" | "approve" | "release";
 
-export type ApprovalStepStatus = "waiting" | "pending" | "approved" | "sent_back";
+/** `cancelled`: an open step closed when its loan was voided (stamped with who voided it and when). */
+export type ApprovalStepStatus = "waiting" | "pending" | "approved" | "sent_back" | "cancelled";
 
 export interface LoanApprovalStep {
   /**

@@ -34,6 +34,7 @@ import { loadLoan, loanLoadFailure } from "./_lib/load-loan";
 import { workflowEvents, type WorkflowEventKey } from "./_lib/workflow-history";
 import {
   approvalRemarksHistory,
+  approvalStepState,
   chainEvents,
   readyForRelease,
   revisionRoundView,
@@ -213,6 +214,7 @@ import {
   FileText,
   UserCheck,
   Ban,
+  CircleSlash,
   Send,
   Unlock,
   Lock,
@@ -579,6 +581,7 @@ const WORKFLOW_ICONS: Record<WorkflowEventKey, React.ReactNode> = {
   rejected: <Ban className="h-4 w-4 text-red-600" />,
   released: <Unlock className="h-4 w-4 text-cyan-600" />,
   sent_back: <Undo2 className="h-4 w-4 text-red-600" />,
+  cancelled: <CircleSlash className="h-4 w-4 text-muted-foreground" />,
 };
 
 function WorkflowHistory({
@@ -2479,9 +2482,12 @@ function LoanDetail({ loanId }: { loanId: number }) {
             <div className="rounded-lg border bg-muted/20 p-3">
               <div className="flex items-center gap-1 overflow-x-auto pb-1">
                 {approvalSteps.map((step, i) => {
-                  const isCurrent = step.status === "pending";
-                  const isDone = step.status === "approved";
-                  const isSentBack = step.status === "sent_back";
+                  const state = approvalStepState(step.status);
+                  const isCurrent = state === "current";
+                  const isDone = state === "done";
+                  const isSentBack = state === "sent_back";
+                  // Closed when the loan was voided: neutral, never the waiting circle.
+                  const isCancelled = state === "cancelled";
                   const isLast = i === approvalSteps.length - 1;
                   return (
                     <div
@@ -2495,11 +2501,14 @@ function LoanDetail({ loanId }: { loanId: number }) {
                             isCurrent && "bg-brand-orange ring-4 ring-brand-orange/20 scale-110",
                             isDone && "bg-green-600",
                             isSentBack && "bg-red-500",
-                            !isCurrent && !isDone && !isSentBack && "bg-muted text-muted-foreground"
+                            isCancelled && "border border-dashed border-muted-foreground/40 bg-background text-muted-foreground",
+                            state === "waiting" && "bg-muted text-muted-foreground"
                           )}
                         >
                           {isDone ? (
                             <CheckCircle2 className="h-3.5 w-3.5" />
+                          ) : isCancelled ? (
+                            <CircleSlash className="h-3.5 w-3.5" aria-hidden="true" />
                           ) : isSentBack ? (
                             <XCircle className="h-3.5 w-3.5" />
                           ) : isCurrent ? (
@@ -2520,10 +2529,15 @@ function LoanDetail({ loanId }: { loanId: number }) {
                             isCurrent && "text-brand-orange",
                             isDone && "text-green-700",
                             isSentBack && "text-red-700",
-                            !isCurrent && !isDone && !isSentBack && "text-muted-foreground"
+                            (isCancelled || state === "waiting") && "text-muted-foreground"
                           )}
                         >
                           {step.name}
+                          {isCancelled && (
+                            <span className="block font-normal">
+                              Cancelled
+                            </span>
+                          )}
                         </span>
                       </div>
                       {!isLast && (

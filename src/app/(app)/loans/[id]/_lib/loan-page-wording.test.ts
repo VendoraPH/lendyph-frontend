@@ -61,3 +61,13 @@ test("Record Payment's scheduled payment card keeps its height in a short dialog
 test("Previous Approval Remarks lists every round's remarks", () => {
   assert.ok(page.includes("approvalRemarksHistory(approvalRounds, approvalSteps)"));
 });
+
+test("a cancelled approval step shows as Cancelled with a neutral icon", () => {
+  assert.match(page, /cancelled: <CircleSlash className="h-4 w-4 text-muted-foreground" \/>/);
+  const start = page.indexOf("Horizontal progress tracker");
+  const tracker = page.slice(start, page.indexOf("Previous revision rounds", start));
+  assert.ok(start > -1);
+  assert.ok(tracker.includes("approvalStepState(step.status)"));
+  assert.match(tracker, /<CircleSlash className="h-3\.5 w-3\.5"/);
+  assert.match(tracker, />\s*Cancelled\s*</);
+});

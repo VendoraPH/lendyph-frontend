@@ -47,8 +47,28 @@ function by(name: string | null | undefined): string {
   return typeof name === "string" && name.trim() !== "" ? name : "—";
 }
 
+/**
+ * One line for the steps a void closed: who voided the loan, when, and which
+ * steps it cancelled. Null when none were cancelled.
+ */
+function cancelledEvent(steps: readonly LoanApprovalStep[]): WorkflowEvent | null {
+  const cancelled = steps.filter((s) => s.status === "cancelled");
+  if (cancelled.length === 0) return null;
+  const first = cancelled[0];
+  return {
+    key: "cancelled",
+    label: `Approval cancelled by ${by(first.acted_by)} (${cancelled.map((s) => s.name).join(", ")})`,
+    date: first.acted_at ?? null,
+  };
+}
+
 /** The events one round's acted steps add, in the chain's order. */
 function roundEvents(steps: readonly LoanApprovalStep[], first: boolean, round: LoanApprovalRound | null): WorkflowEvent[] {
+  const cancelled = cancelledEvent(steps);
+  return [...actedEvents(steps, first, round), ...(cancelled ? [cancelled] : [])];
+}
+
+function actedEvents(steps: readonly LoanApprovalStep[], first: boolean, round: LoanApprovalRound | null): WorkflowEvent[] {
   return steps.flatMap((s): WorkflowEvent[] => {
     const detail = s.remarks && s.remarks.trim() !== "" ? s.remarks : undefined;
     if (s.status === "sent_back") {
@@ -166,6 +186,24 @@ export function approvalRemarksHistory(
     ...roundRemarks(currentSteps, currentRound, null),
     ...previous.flatMap((round) => roundRemarks(round.steps, round.round, round)),
   ];
+}
+
+/** How the approval tracker draws a step. */
+export type ApprovalStepState = "current" | "done" | "sent_back" | "cancelled" | "waiting";
+
+export function approvalStepState(status: LoanApprovalStep["status"]): ApprovalStepState {
+  switch (status) {
+    case "pending":
+      return "current";
+    case "approved":
+      return "done";
+    case "sent_back":
+      return "sent_back";
+    case "cancelled":
+      return "cancelled";
+    default:
+      return "waiting";
+  }
 }
 
 /**
