@@ -1,4 +1,120 @@
-import type { Role, RoleConfig } from "@/types";
+import type { Permission, Role, RoleConfig } from "@/types";
+
+/**
+ * Every permission lendyph-backend creates (RoleAndPermissionSeeder and the
+ * permission migrations). The seeder syncs `Permission::all()` to both
+ * super_admin and admin, and each permission migration grants both, so the
+ * roles grid seeds them with this list.
+ */
+const EVERY_PERMISSION: Permission[] = [
+  "dashboard:view",
+  "borrowers:view",
+  "borrowers:create",
+  "borrowers:update",
+  "borrowers:delete",
+  "borrowers:approve",
+  "loans:view",
+  "loans:create",
+  "loans:update",
+  "loans:delete",
+  "loans:approve",
+  "loans:reject",
+  "loans:release",
+  "loans:void",
+  "loans:extend",
+  "loans:restructure",
+  // Writing off a restructure's shortfall; its own checkbox in the editor.
+  "loans:write_off",
+  // Creating, editing and deleting loan products. Seeded for admin and
+  // super_admin only; viewing products needs just `loans:view`.
+  "loan_products:manage",
+  // Extensions and balance adjustments; no checkbox in the editor.
+  "loan_adjustments:view",
+  "loan_adjustments:create",
+  "loan_adjustments:approve",
+  "payments:view",
+  "payments:create",
+  "payments:update",
+  "payments:void",
+  "collections:view",
+  "collections:mark_collected",
+  "reports:view",
+  "reports:export",
+  "settings:view",
+  "settings:update",
+  "settings:delete",
+  "fees:view",
+  "fees:create",
+  "fees:update",
+  "fees:delete",
+  "users:view",
+  "users:create",
+  "users:update",
+  "users:delete",
+  "users:reset_password",
+  // Sees every branch's data, not only assigned ones.
+  "branches:view_all",
+  "audit_logs:view",
+  "audit_logs:export",
+  "share_capital:view",
+  "share_capital:create",
+  "share_capital:update",
+  "auto_pay:view",
+  "auto_pay:process",
+  "auto_pay:toggle",
+  // Crediting members' share capital in a batch; no checkbox in the editor.
+  "auto_credit:process",
+  "collaterals:view",
+  "collaterals:create",
+  "collaterals:update",
+  "collaterals:delete",
+  "gcash:view",
+  "gcash:transact",
+  "gcash:settings",
+  // CSV migration. Granted to `super_admin` and `admin` only; no other role
+  // in this map gets it.
+  "imports:process",
+  // Accounting — the full set, including the three that move or lock the
+  // books: post, reverse and close.
+  "accounting:view",
+  "accounting:reconcile",
+  "accounting:close",
+  "accounting:settings",
+  // Posting the allowance for credit losses. Seeded for super_admin, admin
+  // and accountant only (round C).
+  "accounting:allowance",
+  "chart_of_accounts:view",
+  "chart_of_accounts:create",
+  "chart_of_accounts:update",
+  "chart_of_accounts:delete",
+  "journals:view",
+  "journals:create",
+  "journals:post",
+  "journals:reverse",
+  "expenses:view",
+  "expenses:create",
+  "expenses:update",
+  "expenses:pay",
+  "cash_accounts:view",
+  "cash_accounts:transfer",
+  // Credit Scoring. Seeded for admin and super_admin only (lendyph-backend
+  // #174); its endpoints answer 501 until they are built, so the screens
+  // show "Not connected yet". Other roles get it only through the roles
+  // screen.
+  "credit_scoring:view",
+  "credit_scoring:override",
+  // `:settings`, not `:configure` — the design spec originally said
+  // `configure` (since corrected, but older copies were not). A backend
+  // seeded from that wording creates a permission nothing here reads.
+  "credit_scoring:settings",
+  // Reminders (Phase 2). Seeded for admin and super_admin only; other
+  // roles get them only through the roles screen. `:settings` holds the
+  // SMS/email provider credentials.
+  "reminders:view",
+  "reminders:send",
+  "reminders:pause",
+  "reminders:settings",
+];
 
 /**
  * What each role is DOCUMENTED to have — the roles screen reads this to seed a
@@ -11,195 +127,18 @@ import type { Role, RoleConfig } from "@/types";
  * behave exactly as the server says.
  */
 export const ROLES: Record<Role, RoleConfig> = {
-  // The platform team's role. The backend grants it every permission
-  // (`Permission::all()` in RoleAndPermissionSeeder): this is that list, from
-  // the seeder and the permission migrations. It labels the role; it is never
-  // offered as a choice (see ROLE_OPTIONS).
+  // The platform team's role. It labels the role; it is never offered as a
+  // choice (see ROLE_OPTIONS).
   super_admin: {
     label: "Super Admin",
     description:
       "Platform super administrator — holds every permission. Reserved for the platform team, not client staff.",
-    permissions: [
-      "dashboard:view",
-      "borrowers:view",
-      "borrowers:create",
-      "borrowers:update",
-      "borrowers:delete",
-      "loans:view",
-      "loans:create",
-      "loans:update",
-      "loans:delete",
-      "loans:approve",
-      "loans:reject",
-      "loans:release",
-      "loan_products:manage",
-      "payments:view",
-      "payments:create",
-      "payments:update",
-      "payments:void",
-      "collections:view",
-      "collections:mark_collected",
-      "reports:view",
-      "reports:export",
-      "settings:view",
-      "settings:update",
-      "fees:view",
-      "fees:create",
-      "fees:update",
-      "fees:delete",
-      "users:view",
-      "users:create",
-      "users:update",
-      "users:delete",
-      "audit_logs:view",
-      "audit_logs:export",
-      "share_capital:view",
-      "share_capital:create",
-      "share_capital:update",
-      "collaterals:view",
-      "collaterals:create",
-      "collaterals:update",
-      "collaterals:delete",
-      "gcash:view",
-      "gcash:transact",
-      "gcash:settings",
-      "imports:process",
-      "accounting:view",
-      "accounting:reconcile",
-      "accounting:close",
-      "accounting:settings",
-      "accounting:allowance",
-      "chart_of_accounts:view",
-      "chart_of_accounts:create",
-      "chart_of_accounts:update",
-      "chart_of_accounts:delete",
-      "journals:view",
-      "journals:create",
-      "journals:post",
-      "journals:reverse",
-      "expenses:view",
-      "expenses:create",
-      "expenses:update",
-      "cash_accounts:view",
-      "cash_accounts:transfer",
-      "credit_scoring:view",
-      "credit_scoring:override",
-      "credit_scoring:settings",
-      "reminders:view",
-      "reminders:send",
-      "reminders:pause",
-      "reminders:settings",
-      // Held through Permission::all() but not listed for admin above.
-      "auto_credit:process",
-      "auto_pay:process",
-      "auto_pay:toggle",
-      "auto_pay:view",
-      "borrowers:approve",
-      "branches:view_all",
-      "expenses:pay",
-      "loan_adjustments:approve",
-      "loan_adjustments:create",
-      "loan_adjustments:view",
-      "loans:extend",
-      "loans:restructure",
-      "loans:void",
-      "loans:write_off",
-      "settings:delete",
-      "users:reset_password",
-    ],
+    permissions: [...EVERY_PERMISSION],
   },
   admin: {
     label: "Admin",
     description: "Full access to all modules",
-    permissions: [
-      "dashboard:view",
-      "borrowers:view",
-      "borrowers:create",
-      "borrowers:update",
-      "borrowers:delete",
-      "loans:view",
-      "loans:create",
-      "loans:update",
-      "loans:delete",
-      "loans:approve",
-      "loans:reject",
-      "loans:release",
-      // Creating, editing and deleting loan products. Seeded for admin and
-      // super_admin only; viewing products needs just `loans:view`.
-      "loan_products:manage",
-      "payments:view",
-      "payments:create",
-      "payments:update",
-      "payments:void",
-      "collections:view",
-      "collections:mark_collected",
-      "reports:view",
-      "reports:export",
-      "settings:view",
-      "settings:update",
-      "fees:view",
-      "fees:create",
-      "fees:update",
-      "fees:delete",
-      "users:view",
-      "users:create",
-      "users:update",
-      "users:delete",
-      "audit_logs:view",
-      "audit_logs:export",
-      "share_capital:view",
-      "share_capital:create",
-      "share_capital:update",
-      "collaterals:view",
-      "collaterals:create",
-      "collaterals:update",
-      "collaterals:delete",
-      "gcash:view",
-      "gcash:transact",
-      "gcash:settings",
-      // CSV migration. Granted to `super_admin` and `admin` only; no other role
-      // in this map gets it.
-      "imports:process",
-      // Accounting — the full set, including the three that move or lock the
-      // books: post, reverse and close.
-      "accounting:view",
-      "accounting:reconcile",
-      "accounting:close",
-      "accounting:settings",
-      // Posting the allowance for credit losses. Seeded for super_admin, admin
-      // and accountant only (round C).
-      "accounting:allowance",
-      "chart_of_accounts:view",
-      "chart_of_accounts:create",
-      "chart_of_accounts:update",
-      "chart_of_accounts:delete",
-      "journals:view",
-      "journals:create",
-      "journals:post",
-      "journals:reverse",
-      "expenses:view",
-      "expenses:create",
-      "expenses:update",
-      "cash_accounts:view",
-      "cash_accounts:transfer",
-      // Credit Scoring. Seeded for admin and super_admin only (lendyph-backend
-      // #174); its endpoints answer 501 until they are built, so the screens
-      // show "Not connected yet". Other roles get it only through the roles
-      // screen.
-      "credit_scoring:view",
-      "credit_scoring:override",
-      // `:settings`, not `:configure` — the design spec originally said
-      // `configure` (since corrected, but older copies were not). A backend
-      // seeded from that wording creates a permission nothing here reads.
-      "credit_scoring:settings",
-      // Reminders (Phase 2). Seeded for admin and super_admin only; other
-      // roles get them only through the roles screen. `:settings` holds the
-      // SMS/email provider credentials.
-      "reminders:view",
-      "reminders:send",
-      "reminders:pause",
-      "reminders:settings",
-    ],
+    permissions: [...EVERY_PERMISSION],
   },
   // Mirrors `RoleAndPermissionSeeder::ACCOUNTANT_PERMISSIONS` exactly (round C).
   // Every accounting permission and every branch, but only read access to the

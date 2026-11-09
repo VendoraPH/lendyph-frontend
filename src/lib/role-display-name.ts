@@ -5,6 +5,7 @@
 
 import { ROLES } from "@/constants/rbac";
 import type { ApiRole } from "@/services/role.service";
+import type { UserRoleDetail } from "@/types";
 
 function titleCase(s: string): string {
   return s
@@ -28,16 +29,22 @@ export function roleDisplayName(role: Pick<ApiRole, "name" | "display_name">): s
 
 /**
  * The label for a role known only by its key, as on the signed-in user (the
- * user payload carries role keys, not display names). The matching role in
- * `roles` (from `GET /roles`) supplies its saved display name; without the
- * list, or without a match, it reads as `roleDisplayName()` would with no
- * saved name.
+ * user's `roles` carry keys, not display names).
+ *
+ * - The signed-in user's own `role_details` (from `GET /auth/me`, readable
+ *   without `users:view`) supply the saved display name first.
+ * - Then the matching role in `roles` (from `GET /roles`).
+ * - Without either, or without a saved name, it reads as `roleDisplayName()`
+ *   would with no saved name.
  */
 export function roleLabelForKey(
   key: string | null | undefined,
-  roles: ReadonlyArray<Pick<ApiRole, "name" | "display_name">> | undefined
+  roles: ReadonlyArray<Pick<ApiRole, "name" | "display_name">> | undefined,
+  ownRoles?: ReadonlyArray<UserRoleDetail> | null
 ): string {
   if (!key) return "";
+  const own = ownRoles?.find((r) => (r.key ?? r.name) === key)?.display_name?.trim();
+  if (own) return own;
   const match = roles?.find((r) => r.name === key);
   return roleDisplayName(match ?? { name: key, display_name: null });
 }

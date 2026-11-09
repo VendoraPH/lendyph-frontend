@@ -226,3 +226,10 @@ test("ROLE_OPTIONS never offers super_admin", () => {
   assert.equal(ROLE_OPTIONS.some((option) => option.value === "super_admin"), false);
   assert.ok(ROLE_OPTIONS.some((option) => option.value === "admin"));
 });
+
+// RoleAndPermissionSeeder syncs Permission::all() to admin too, and each
+// permission migration grants admin, so the roles grid seeds admin with all.
+test("admin holds exactly every backend permission", () => {
+  assert.deepEqual([...ROLES.admin.permissions].sort(), [...BACKEND_PERMISSIONS].sort());
+  assert.equal(new Set(ROLES.admin.permissions).size, ROLES.admin.permissions.length);
+});
