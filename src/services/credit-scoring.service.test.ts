@@ -217,3 +217,17 @@ test("a decision on a loan assessment carries the loan's id", async () => {
     loan_id: 12,
   });
 });
+
+test("policy flags read the nested list and its details_hidden; a bare list is tolerated", async () => {
+  respond = () => ({ data: [], details_hidden: true });
+  assert.deepEqual(await creditScoringService.listPolicyFlags(7), { data: [], details_hidden: true });
+  assert.equal(requests[0].path, "/credit-scoring/borrowers/7/policy-flags");
+
+  const flag = { id: 1, type: "hard_flag", label: "Past due", detail: "d", triggered_at: "2026-11-09", loan_id: null };
+  respond = () => ({ data: [flag] });
+  assert.deepEqual(await creditScoringService.listPolicyFlags(7), { data: [flag], details_hidden: false });
+  respond = () => [flag];
+  assert.deepEqual(await creditScoringService.listPolicyFlags(7), { data: [flag], details_hidden: false });
+  respond = () => ({ rows: [] });
+  await assert.rejects(creditScoringService.listPolicyFlags(7));
+});

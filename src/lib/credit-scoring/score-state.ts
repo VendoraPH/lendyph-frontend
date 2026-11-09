@@ -1,4 +1,11 @@
-import type { CreditDataUsed, CreditScore, RiskLevel, ScoreCategoryBreakdown } from "@/types/credit-scoring";
+import type {
+  CreditDataUsed,
+  CreditScore,
+  FactorWithoutData,
+  RiskLevel,
+  ScoreCategoryBreakdown,
+  ScoreFactor,
+} from "@/types/credit-scoring";
 
 export const NOT_SCORED_MESSAGE = "Not scored yet";
 export const INSUFFICIENT_DATA_MESSAGE = "Insufficient data: no repayment or capacity data";
@@ -53,7 +60,7 @@ export function categoryDataNote(c: Pick<ScoreCategoryBreakdown, "has_data">): s
  * The server's count of the loans it left out for this caller. The screen
  * says so and never fills in what's hidden.
  */
-export function otherBranchLoansNote(dataUsed: CreditDataUsed | null): string | null {
+export function otherBranchLoansNote(dataUsed: CreditDataUsed | null | undefined): string | null {
   const n = dataUsed?.other_branch_loans ?? 0;
   if (n <= 0) return null;
   return n === 1
@@ -64,4 +71,48 @@ export function otherBranchLoansNote(dataUsed: CreditDataUsed | null): string | 
 /** The server's average (already one decimal), or a dash when no one is scored. */
 export function averageScoreText(average: number | null): string {
   return average === null ? "—" : String(average);
+}
+
+/** A server count, or a dash when it's null or missing. */
+export function countOrDash(count: number | null | undefined): string {
+  return count === null || count === undefined ? "—" : String(count);
+}
+
+export const DETAILS_HIDDEN_NOTE = "Details need access to this member's details";
+
+/**
+ * Whether any of these answers is the summary-only view (`details_hidden`:
+ * the caller can't read the member's details). An answer without the key
+ * isn't.
+ */
+export function isDetailsHidden(...answers: ({ details_hidden?: boolean } | null | undefined)[]): boolean {
+  return answers.some((a) => a?.details_hidden === true);
+}
+
+export type ScoreSections =
+  | { kind: "hidden"; note: string }
+  | { kind: "none" }
+  | {
+      kind: "shown";
+      breakdown: ScoreCategoryBreakdown[];
+      withoutData: FactorWithoutData[];
+      factors: ScoreFactor[];
+    };
+
+/**
+ * What goes under a score's summary and recommendation. A summary-only answer
+ * gets one notice instead of empty sections, so nothing reads as "no data".
+ */
+export function scoreSections(
+  score: Pick<CreditScore, "status" | "details_hidden" | "category_breakdown" | "factors_without_data" | "factors">,
+  hidden: boolean = isDetailsHidden(score),
+): ScoreSections {
+  if (hidden) return { kind: "hidden", note: DETAILS_HIDDEN_NOTE };
+  if (score.status === "not_scored") return { kind: "none" };
+  return {
+    kind: "shown",
+    breakdown: score.category_breakdown ?? [],
+    withoutData: score.factors_without_data ?? [],
+    factors: score.factors ?? [],
+  };
 }

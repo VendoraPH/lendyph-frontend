@@ -83,34 +83,24 @@ export type AssessmentField = AssessmentTextField | "income_verification";
  */
 export const MEMBER_DETAIL_FIELDS: readonly AssessmentField[] = [...ASSESSMENT_TEXT_FIELDS, "income_verification"];
 
-export const MEMBER_DETAILS_HIDDEN_TEXT = "Hidden (needs access to member details)";
-
 /** Whether this field is locked and never sent: it's a member detail and they're hidden. */
 export function memberDetailHidden(field: AssessmentField, detailsHidden: boolean): boolean {
   return detailsHidden && MEMBER_DETAIL_FIELDS.includes(field);
 }
 
-/** The value a hidden field's Select holds, so it reads the hidden text. */
-export const HIDDEN_CHOICE = "hidden";
-
-/** A hidden field's Select offers only the hidden text; otherwise its own choices. */
-export function choicesFor(
-  items: { value: string; label: string }[],
-  hidden: boolean,
-): { value: string; label: string }[] {
-  return hidden ? [{ value: HIDDEN_CHOICE, label: MEMBER_DETAILS_HIDDEN_TEXT }] : items;
-}
-
 /**
- * Whether the member-detail figures are hidden from this caller: the server's
- * `application_figures_hidden` (borrowers:view and the member's branch), or,
- * on an API that doesn't send it yet, a missing borrowers:view.
+ * Whether the application details are hidden from this caller: the server's
+ * `details_hidden` or `application_figures_hidden` (borrowers:view and the
+ * member's branch), or, on an API that sends neither, a missing
+ * borrowers:view.
  */
 export function memberDetailsHidden(
-  assessment: Pick<Partial<LoanCreditAssessment>, "application_figures_hidden">,
+  assessment: Pick<Partial<LoanCreditAssessment>, "application_figures_hidden" | "details_hidden">,
   can: Can,
 ): boolean {
-  return assessment.application_figures_hidden === true || !can("borrowers:view");
+  return (
+    assessment.details_hidden === true || assessment.application_figures_hidden === true || !can("borrowers:view")
+  );
 }
 
 /**

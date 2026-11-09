@@ -11,6 +11,7 @@ import { MemberCell } from "../_components/member-cell";
 import { ScoreCells } from "../_components/score-cells";
 import { ALERT_KIND_LABELS, ALERT_SEVERITY_LABELS } from "@/lib/credit-scoring/labels";
 import { borrowerLabel } from "@/lib/credit-scoring/borrower-label";
+import { countOrDash } from "@/lib/credit-scoring/score-state";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -58,10 +59,10 @@ function RiskMonitoringContent() {
         {(data) => (
           <div className="space-y-6">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <Figure label="Total Members" value={String(data.summary.total_borrowers)} />
-              <Figure label="High Risk" value={String(data.summary.high_risk_count)} />
-              <Figure label="Score Declines (30d)" value={String(data.summary.score_declines_30d)} />
-              <Figure label="New Hard Flags (30d)" value={String(data.summary.new_hard_flags_30d)} />
+              <Figure label="Total Members" value={countOrDash(data.summary.total_borrowers)} />
+              <Figure label="High Risk" value={countOrDash(data.summary.high_risk_count)} />
+              <Figure label="Score Declines (30d)" value={countOrDash(data.summary.score_declines_30d)} />
+              <Figure label="New Hard Flags (30d)" value={countOrDash(data.summary.new_hard_flags_30d)} />
             </div>
 
             <Card>

@@ -59,3 +59,11 @@ test("a save compares the box with how it loaded, and a disabled Record Decision
   assert.match(card, /const loaded = assessmentFormFrom\(assessment\.application_profile\)/);
   assert.match(card, /\{!score\?\.id && \(\s*<p id="assessment-decision-reason"[^>]*>\s*\{NO_SCORE_DECISION_REASON\}/);
 });
+
+test("a summary-only assessment shows the score and one notice, never the capacity or flag sections", () => {
+  assert.match(card, /const summaryOnly = isDetailsHidden\(assessment, score\)/);
+  assert.match(card, /<ScoreDetail score=\{score\} detailsHidden=\{summaryOnly\} \/>/);
+  assert.match(card, /summaryOnly \? \(\s*<DetailsHiddenNotice \/>\s*\) : \(\s*<p className="text-sm text-muted-foreground">\s*Not assessed yet/);
+  assert.match(card, /\{!summaryOnly && \(\s*<>\s*<CapacitySection capacity=\{assessment\.capacity \?\? null\}/);
+  assert.match(card, /\(assessment\.policy_flags \?\? \[\]\)\.length === 0/);
+});

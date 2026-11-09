@@ -120,28 +120,41 @@ export interface CreditScore {
   /** Null with `insufficient_data` and `not_scored`. */
   score: number | null;
   risk_level: RiskLevel | null;
-  confidence: ScoreConfidence | null;
+  /** Absent with `details_hidden`. */
+  confidence?: ScoreConfidence | null;
   model_version: string | null;
-  category_breakdown: ScoreCategoryBreakdown[];
-  factors: ScoreFactor[];
+  /** Empty with `details_hidden`. */
+  category_breakdown?: ScoreCategoryBreakdown[];
+  /** Empty with `details_hidden`. */
+  factors?: ScoreFactor[];
+  /** One generic sentence with `details_hidden`. */
   recommendation: string;
   calculated_at: string | null;
   status: ScoreStatus;
   limited_history: boolean;
-  confidence_reason: string | null;
+  /** Absent with `details_hidden`. */
+  confidence_reason?: string | null;
   validated: boolean | null;
   previous_score: number | null;
   context: ScoreContext | null;
   loan_id: number | null;
-  factors_without_data: FactorWithoutData[];
+  /** Empty with `details_hidden`. */
+  factors_without_data?: FactorWithoutData[];
   /**
    * True when the caller may not see the member's financial figures: then
    * `capacity` (and `data_used.capacity`) is null and the factor lines that
    * would print income or debt read generic text.
    */
   financials_hidden: boolean;
-  capacity: CreditCapacity | null;
-  data_used: CreditDataUsed | null;
+  /**
+   * True for a caller who can't read the member's details (no borrowers:view
+   * or not the member's branch): the summary only. Absent on an older API.
+   */
+  details_hidden?: boolean;
+  /** Absent with `details_hidden`. */
+  capacity?: CreditCapacity | null;
+  /** Absent with `details_hidden`. */
+  data_used?: CreditDataUsed | null;
 }
 
 export interface CreditScoreHistoryEntry {
@@ -157,6 +170,12 @@ export interface CreditScoreHistoryEntry {
   reason: string;
   status: Exclude<ScoreStatus, "not_scored">;
   previous_score: number | null;
+}
+
+/** `GET /borrowers/{id}/policy-flags`: empty with `details_hidden`. */
+export interface PolicyFlagList {
+  data: PolicyFlag[];
+  details_hidden: boolean;
 }
 
 export interface PolicyFlag {
@@ -235,7 +254,8 @@ export interface RiskMonitoringSummary {
   total_borrowers: number;
   high_risk_count: number;
   score_declines_30d: number;
-  new_hard_flags_30d: number;
+  /** Null for a caller without borrowers:view. */
+  new_hard_flags_30d?: number | null;
 }
 
 export interface CreditScoringDashboardSummary {
@@ -340,18 +360,22 @@ export type UpdateCreditScoringSettingsData = Partial<{
   decline_alert_points: string;
 }>;
 
-/** A loan application's own details. Money is two-decimal peso strings. */
+/**
+ * A loan application's own details. Money is two-decimal peso strings. With
+ * `details_hidden` only the three notice fields are sent; every other key is
+ * absent.
+ */
 export interface CreditApplicationProfile {
-  other_income: string | null;
-  business_income: string | null;
-  household_expenses: string | null;
-  outside_debt_payments: string | null;
-  outside_lenders_count: number | null;
-  employment_status: EmploymentStatus | null;
-  business_start_date: string | null;
-  years_at_residence: DecimalValue | null;
-  verified_references_count: number | null;
-  income_verification: IncomeVerification | null;
+  other_income?: string | null;
+  business_income?: string | null;
+  household_expenses?: string | null;
+  outside_debt_payments?: string | null;
+  outside_lenders_count?: number | null;
+  employment_status?: EmploymentStatus | null;
+  business_start_date?: string | null;
+  years_at_residence?: DecimalValue | null;
+  verified_references_count?: number | null;
+  income_verification?: IncomeVerification | null;
   notice_version: number | string | null;
   notice_acknowledged_at: string | null;
   /** True when acknowledged under the current notice version. */
@@ -373,14 +397,20 @@ export interface LoanCreditAssessment {
   /**
    * True when the application details are hidden from the caller (they need
    * borrowers:view and the member's branch): every `application_profile`
-   * field but the notice fields then arrives as null.
+   * field but the notice fields then arrives as null or absent.
    */
-  application_figures_hidden: boolean;
-  /** The loan's latest assessment, or null. */
+  application_figures_hidden?: boolean;
+  /** The summary-only view; true together with `application_figures_hidden`. */
+  details_hidden?: boolean;
+  /** The loan's latest assessment, or null. A summary with `details_hidden`. */
   score: CreditScore | null;
-  /** Null without the score, or when the caller may not see the financials. */
-  capacity: CreditCapacity | null;
-  policy_flags: PolicyFlag[];
+  /**
+   * Null without the score, or when the caller may not see the financials;
+   * absent with `details_hidden`.
+   */
+  capacity?: CreditCapacity | null;
+  /** Empty with `details_hidden`. */
+  policy_flags?: PolicyFlag[];
   /** This loan's latest 50 decisions, newest first. */
   decisions: CreditDecision[];
   decisions_total: number;

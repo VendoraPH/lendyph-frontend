@@ -23,6 +23,8 @@ import {
 import { ScoreDetail } from "@/app/(app)/credit-scoring/_components/score-detail";
 import { CapacitySection } from "@/app/(app)/credit-scoring/_components/capacity-section";
 import { PolicyFlagAlert } from "@/app/(app)/credit-scoring/_components/policy-flag-alert";
+import { DetailsHiddenNotice } from "@/app/(app)/credit-scoring/_components/details-hidden-notice";
+import { isDetailsHidden } from "@/lib/credit-scoring/score-state";
 import { DecisionList } from "@/app/(app)/credit-scoring/_components/decision-list";
 import { AssessmentFormFields } from "@/app/(app)/credit-scoring/_components/assessment-form";
 import { ManualOverrideDialog } from "@/app/(app)/credit-scoring/borrowers/[id]/_components/manual-override-dialog";
@@ -99,6 +101,7 @@ function CreditAssessmentBody({
           const detailsHidden = memberDetailsHidden(assessment, can);
           const form = draft ?? loaded;
           const score = assessment.score;
+          const summaryOnly = isDetailsHidden(assessment, score);
           return (
             <div className="space-y-6">
               {errors.length > 0 && (
@@ -110,25 +113,31 @@ function CreditAssessmentBody({
               )}
 
               {score ? (
-                <ScoreDetail score={score} />
+                <ScoreDetail score={score} detailsHidden={summaryOnly} />
+              ) : summaryOnly ? (
+                <DetailsHiddenNotice />
               ) : (
                 <p className="text-sm text-muted-foreground">
                   Not assessed yet. Save the application&apos;s details below to assess it.
                 </p>
               )}
 
-              <CapacitySection capacity={assessment.capacity} financialsHidden={score?.financials_hidden ?? false} />
+              {!summaryOnly && (
+                <>
+                  <CapacitySection capacity={assessment.capacity ?? null} financialsHidden={score?.financials_hidden ?? false} />
 
-              <section aria-labelledby="assessment-flags-heading" className="space-y-2">
-                <h3 id="assessment-flags-heading" className="text-sm font-medium">
-                  Policy Flags
-                </h3>
-                {assessment.policy_flags.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No open policy flags.</p>
-                ) : (
-                  <PolicyFlagAlert flags={assessment.policy_flags} />
-                )}
-              </section>
+                  <section aria-labelledby="assessment-flags-heading" className="space-y-2">
+                    <h3 id="assessment-flags-heading" className="text-sm font-medium">
+                      Policy Flags
+                    </h3>
+                    {(assessment.policy_flags ?? []).length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No open policy flags.</p>
+                    ) : (
+                      <PolicyFlagAlert flags={assessment.policy_flags ?? []} />
+                    )}
+                  </section>
+                </>
+              )}
 
               <section aria-labelledby="assessment-decisions-heading" className="space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">

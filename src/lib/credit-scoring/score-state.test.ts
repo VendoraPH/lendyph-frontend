@@ -1,13 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  DETAILS_HIDDEN_NOTE,
   INSUFFICIENT_DATA_MESSAGE,
   NOT_SCORED_MESSAGE,
   advisoryLine,
   averageScoreText,
   categoryDataNote,
+  countOrDash,
+  isDetailsHidden,
   otherBranchLoansNote,
   rowScoreView,
+  scoreSections,
   scoreView,
   showsLimitedHistory,
 } from "./score-state";
@@ -114,4 +118,64 @@ test("a missing average reads a dash, never 0.0", () => {
   assert.equal(averageScoreText(null), "—");
   assert.equal(averageScoreText(72.5), "72.5");
   assert.equal(averageScoreText(0), "0");
+});
+
+/** The summary-only score: the detail keys absent, the lists empty. */
+function summaryOnly(over: Partial<CreditScore> = {}): CreditScore {
+  const full: Partial<CreditScore> = {
+    ...score({ recommendation: "Manual review required." }),
+    category_breakdown: [],
+    factors: [],
+    factors_without_data: [],
+    financials_hidden: true,
+    details_hidden: true,
+    ...over,
+  };
+  delete full.confidence;
+  delete full.confidence_reason;
+  delete full.capacity;
+  delete full.data_used;
+  return full as CreditScore;
+}
+
+test("a summary-only score shows one notice in place of its breakdown and factors", () => {
+  assert.equal(DETAILS_HIDDEN_NOTE, "Details need access to this member's details");
+  assert.deepEqual(scoreSections(summaryOnly()), { kind: "hidden", note: DETAILS_HIDDEN_NOTE });
+  assert.deepEqual(scoreSections(summaryOnly({ status: "not_scored", score: null, risk_level: null })), {
+    kind: "hidden",
+    note: DETAILS_HIDDEN_NOTE,
+  });
+  assert.deepEqual(scoreView(summaryOnly()), { kind: "scored", score: 72, riskLevel: "moderate" });
+  assert.equal(otherBranchLoansNote(summaryOnly().data_used), null);
+});
+
+test("a page hides the details when the score, the assessment or the flags answer say so", () => {
+  assert.equal(isDetailsHidden(summaryOnly()), true);
+  assert.equal(isDetailsHidden(score()), false);
+  assert.equal(isDetailsHidden(score({ details_hidden: false }), { details_hidden: true }), true);
+  assert.equal(isDetailsHidden(null, undefined, {}), false);
+  assert.deepEqual(scoreSections(score(), true), { kind: "hidden", note: DETAILS_HIDDEN_NOTE });
+});
+
+test("a full score shows its sections, and an absent list reads as empty", () => {
+  const factor = { id: 1, label: "On time", detail: "All paid", impact: "positive" as const, category: "History" };
+  assert.deepEqual(scoreSections(score({ factors: [factor] })), {
+    kind: "shown",
+    breakdown: [],
+    withoutData: [],
+    factors: [factor],
+  });
+  const bare = score();
+  delete (bare as Partial<CreditScore>).factors;
+  delete (bare as Partial<CreditScore>).category_breakdown;
+  delete (bare as Partial<CreditScore>).factors_without_data;
+  assert.deepEqual(scoreSections(bare), { kind: "shown", breakdown: [], withoutData: [], factors: [] });
+  assert.deepEqual(scoreSections(score({ status: "not_scored" })), { kind: "none" });
+});
+
+test("a null or missing count reads a dash, never 0", () => {
+  assert.equal(countOrDash(null), "—");
+  assert.equal(countOrDash(undefined), "—");
+  assert.equal(countOrDash(0), "0");
+  assert.equal(countOrDash(3), "3");
 });

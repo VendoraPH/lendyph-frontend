@@ -14,16 +14,13 @@ import {
 import { formatDateTime } from "@/lib/format";
 import { INCOME_VERIFICATION_LABELS } from "@/lib/credit-scoring/labels";
 import {
-  HIDDEN_CHOICE,
-  MEMBER_DETAILS_HIDDEN_TEXT,
   SAVE_BLOCKED_REASON,
-  choicesFor,
-  memberDetailHidden,
   noticeStatus,
   type AssessmentForm,
   type AssessmentTextField,
 } from "@/lib/credit-scoring/assessment-card";
 import type { IncomeVerification, LoanCreditAssessment } from "@/types/credit-scoring";
+import { DetailsHiddenNotice } from "./details-hidden-notice";
 
 /** A Select can't hold an empty value, so "not given" has its own key. */
 const NONE = "none";
@@ -51,31 +48,23 @@ export function AssessmentFormFields({
   assessment: LoanCreditAssessment;
   form: AssessmentForm;
   canSave: boolean;
-  /** The server sends the member's application details as null to this caller. */
+  /** The server doesn't send this caller the application details: none is shown or sent. */
   detailsHidden: boolean;
   saving: boolean;
   onChange: (next: AssessmentForm) => void;
   onSave: () => void;
 }) {
-  const employmentHidden = memberDetailHidden("employment_status", detailsHidden);
-  const verificationHidden = memberDetailHidden("income_verification", detailsHidden);
-  const employmentItems = choicesFor(
-    [
-      { value: NONE, label: "Not given" },
-      ...assessment.employment_statuses.map((s) => ({ value: s.value, label: s.label })),
-    ],
-    employmentHidden,
-  );
-  const verificationItems = choicesFor(
-    [
-      { value: NONE, label: "Not checked" },
-      ...(Object.keys(INCOME_VERIFICATION_LABELS) as IncomeVerification[]).map((v) => ({
-        value: v,
-        label: INCOME_VERIFICATION_LABELS[v],
-      })),
-    ],
-    verificationHidden,
-  );
+  const employmentItems = [
+    { value: NONE, label: "Not given" },
+    ...assessment.employment_statuses.map((s) => ({ value: s.value, label: s.label })),
+  ];
+  const verificationItems = [
+    { value: NONE, label: "Not checked" },
+    ...(Object.keys(INCOME_VERIFICATION_LABELS) as IncomeVerification[]).map((v) => ({
+      value: v,
+      label: INCOME_VERIFICATION_LABELS[v],
+    })),
+  ];
   const notice = noticeStatus(assessment.application_profile);
 
   return (
@@ -89,71 +78,73 @@ export function AssessmentFormFields({
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        {TEXT_FIELDS.map((f) => {
-          const id = `assessment-${f.key}`;
-          const hidden = memberDetailHidden(f.key, detailsHidden);
-          return (
-            <div key={f.key} className="space-y-1.5">
-              <Label htmlFor={id}>{f.label}</Label>
-              <Input
-                id={id}
-                type={f.mode === "date" ? "date" : "text"}
-                inputMode={f.mode === "date" ? undefined : f.mode}
-                className={f.mode === "date" ? undefined : "tabular-nums"}
-                value={hidden ? "" : form[f.key]}
-                placeholder={hidden ? MEMBER_DETAILS_HIDDEN_TEXT : undefined}
-                disabled={!canSave || hidden}
-                onChange={(e) => onChange({ ...form, [f.key]: e.target.value })}
-              />
-            </div>
-          );
-        })}
+      {detailsHidden ? (
+        <DetailsHiddenNotice />
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2">
+          {TEXT_FIELDS.map((f) => {
+            const id = `assessment-${f.key}`;
+            return (
+              <div key={f.key} className="space-y-1.5">
+                <Label htmlFor={id}>{f.label}</Label>
+                <Input
+                  id={id}
+                  type={f.mode === "date" ? "date" : "text"}
+                  inputMode={f.mode === "date" ? undefined : f.mode}
+                  className={f.mode === "date" ? undefined : "tabular-nums"}
+                  value={form[f.key]}
+                  disabled={!canSave}
+                  onChange={(e) => onChange({ ...form, [f.key]: e.target.value })}
+                />
+              </div>
+            );
+          })}
 
-        <div className="space-y-1.5">
-          <Label id="assessment-employment-label">Employment status</Label>
-          <Select
-            value={employmentHidden ? HIDDEN_CHOICE : form.employment_status || NONE}
-            onValueChange={(v) => onChange({ ...form, employment_status: v && v !== NONE ? v : "" })}
-            items={employmentItems}
-            disabled={!canSave || employmentHidden}
-          >
-            <SelectTrigger className="w-full" aria-labelledby="assessment-employment-label">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {employmentItems.map((item) => (
-                <SelectItem key={item.value} value={item.value}>
-                  {item.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+          <div className="space-y-1.5">
+            <Label id="assessment-employment-label">Employment status</Label>
+            <Select
+              value={form.employment_status || NONE}
+              onValueChange={(v) => onChange({ ...form, employment_status: v && v !== NONE ? v : "" })}
+              items={employmentItems}
+              disabled={!canSave}
+            >
+              <SelectTrigger className="w-full" aria-labelledby="assessment-employment-label">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {employmentItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-        <div className="space-y-1.5">
-          <Label id="assessment-income-label">Income verification</Label>
-          <Select
-            value={verificationHidden ? HIDDEN_CHOICE : form.income_verification || NONE}
-            onValueChange={(v) =>
-              onChange({ ...form, income_verification: v && v !== NONE ? (v as IncomeVerification) : "" })
-            }
-            items={verificationItems}
-            disabled={!canSave || verificationHidden}
-          >
-            <SelectTrigger className="w-full" aria-labelledby="assessment-income-label">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {verificationItems.map((item) => (
-                <SelectItem key={item.value} value={item.value}>
-                  {item.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="space-y-1.5">
+            <Label id="assessment-income-label">Income verification</Label>
+            <Select
+              value={form.income_verification || NONE}
+              onValueChange={(v) =>
+                onChange({ ...form, income_verification: v && v !== NONE ? (v as IncomeVerification) : "" })
+              }
+              items={verificationItems}
+              disabled={!canSave}
+            >
+              <SelectTrigger className="w-full" aria-labelledby="assessment-income-label">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {verificationItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="space-y-2 rounded-md border bg-muted/30 p-3">
         <p className="text-xs font-medium">Privacy notice (version {assessment.notice_version ?? "—"})</p>

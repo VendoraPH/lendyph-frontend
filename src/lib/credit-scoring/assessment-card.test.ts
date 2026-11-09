@@ -6,8 +6,6 @@ import {
   assessmentSaveErrors,
   noticeStatus,
   canSaveAssessment,
-  choicesFor,
-  HIDDEN_CHOICE,
   MEMBER_DETAIL_FIELDS,
   memberDetailHidden,
   memberDetailsHidden,
@@ -122,12 +120,6 @@ test("while member details are hidden, every application detail but the notice i
   assert.deepEqual([...MEMBER_DETAIL_FIELDS].sort(), [...HIDDEN_DETAILS].sort());
 });
 
-test("a hidden choice offers only the hidden text, so its locked Select reads it", () => {
-  const items = [{ value: "none", label: "Not given" }, { value: "employed", label: "Employed" }];
-  assert.deepEqual(choicesFor(items, true), [{ value: HIDDEN_CHOICE, label: "Hidden (needs access to member details)" }]);
-  assert.deepEqual(choicesFor(items, false), items);
-});
-
 test("member details are never sent while they're hidden, so a save never clears them", () => {
   const loaded = assessmentFormFrom(null);
   const typed = {
@@ -161,6 +153,20 @@ test("member details are hidden when the server says so, or without borrowers:vi
   assert.equal(memberDetailsHidden({ application_figures_hidden: false }, holding("loans:view")), true);
   assert.equal(memberDetailsHidden({}, viewer), false);
   assert.equal(memberDetailsHidden({}, holding("loans:view")), true);
+});
+
+test("a summary-only assessment hides the application details too", () => {
+  const viewer = holding("loans:view", "borrowers:view");
+  assert.equal(memberDetailsHidden({ details_hidden: true }, viewer), true);
+  assert.equal(memberDetailsHidden({ details_hidden: false, application_figures_hidden: false }, viewer), false);
+});
+
+test("a profile holding only the notice fields loads blank and saves only the notice", () => {
+  const noticeOnly = { notice_version: 2, notice_acknowledged_at: null, notice_acknowledged: false } as CreditApplicationProfile;
+  const loaded = assessmentFormFrom(noticeOnly);
+  for (const field of HIDDEN_DETAILS) assert.equal(loaded[field], "", field);
+  const typed = { ...loaded, employment_status: "employed", other_income: "1.00", notice_acknowledged: true };
+  assert.deepEqual(assessmentBody(typed, loaded, { memberDetailsHidden: true }), { notice_acknowledged: true });
 });
 
 test("a 422 lists every field message on the card; a 409 shows the server's reason", () => {
