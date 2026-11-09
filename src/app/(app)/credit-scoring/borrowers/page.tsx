@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, Minus } from "lucide-react";
 import { RouteGuard } from "@/components/common/route-guard";
 import { DataState } from "@/components/common/data-state";
+import { TablePagination } from "@/components/common/table-pagination";
 import { useApiResource } from "@/hooks";
 import { creditScoringService } from "@/services";
+import { CREDIT_SCORING_PER_PAGE } from "@/services/credit-scoring.service";
+import { CREDIT_SCORING_PER_PAGE_OPTIONS } from "@/lib/credit-scoring/paging";
 import { CreditScoringPageHeader } from "../_components/page-header";
 import {
   BranchFilter,
@@ -17,7 +19,8 @@ import {
   ALL_BRANCHES,
   ALL_RISK_LEVELS,
 } from "../_components/filters";
-import { RiskLevelBadge } from "../_components/risk-level-badge";
+import { MemberCell } from "../_components/member-cell";
+import { ScoreCells } from "../_components/score-cells";
 import {
   Table,
   TableBody,
@@ -27,50 +30,67 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDate } from "@/lib/format";
-import type { BorrowerScoreFilters, BorrowerScoreRow } from "@/types/credit-scoring";
+import type { BorrowerScoreFilters, BorrowerScoreRow, CreditScoringPage } from "@/types/credit-scoring";
+
+const TREND_LABELS = { up: "Score went up", down: "Score went down", flat: "No change" } as const;
 
 function TrendIcon({ trend }: { trend: BorrowerScoreRow["score_trend"] }) {
-  if (trend === "up") return <ArrowUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />;
-  if (trend === "down") return <ArrowDown className="h-4 w-4 text-red-600 dark:text-red-400" />;
-  return <Minus className="h-4 w-4 text-muted-foreground" />;
+  if (trend === null) return <span className="text-muted-foreground">—</span>;
+  const label = TREND_LABELS[trend];
+  if (trend === "up") return <ArrowUp aria-label={label} className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />;
+  if (trend === "down") return <ArrowDown aria-label={label} className="h-4 w-4 text-red-600 dark:text-red-400" />;
+  return <Minus aria-label={label} className="h-4 w-4 text-muted-foreground" />;
 }
 
 function BorrowerScoresContent() {
-  const router = useRouter();
   const [branch, setBranch] = useState(ALL_BRANCHES);
   const [riskLevel, setRiskLevel] = useState(ALL_RISK_LEVELS);
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState<number>(CREDIT_SCORING_PER_PAGE);
 
-  const fetcher = useCallback((): Promise<BorrowerScoreRow[]> => {
+  const fetcher = useCallback((): Promise<CreditScoringPage<BorrowerScoreRow>> => {
     const filters: BorrowerScoreFilters = {
       branch_id: branchParam(branch),
       risk_level: riskLevelParam(riskLevel),
     };
-    return creditScoringService.listBorrowerScores(filters);
-  }, [branch, riskLevel]);
+    return creditScoringService.listBorrowerScores(filters, { page, per_page: perPage });
+  }, [branch, riskLevel, page, perPage]);
 
-  const resource = useApiResource<BorrowerScoreRow[]>(fetcher);
+  const resource = useApiResource<CreditScoringPage<BorrowerScoreRow>>(fetcher);
 
   return (
     <div className="space-y-6">
       <CreditScoringPageHeader
         title="Member Scores"
-        description="Every member's current Lendy Credit Score and risk level."
+        description="Every member's current Lendy Credit Score and risk level. Scores are advisory only and never change a loan."
       />
 
       <FilterBar>
-        <BranchFilter value={branch} onChange={setBranch} />
-        <RiskLevelFilter value={riskLevel} onChange={setRiskLevel} />
+        <BranchFilter
+          value={branch}
+          onChange={(v) => {
+            setBranch(v);
+            setPage(1);
+          }}
+        />
+        <RiskLevelFilter
+          value={riskLevel}
+          onChange={(v) => {
+            setRiskLevel(v);
+            setPage(1);
+          }}
+        />
       </FilterBar>
 
       <DataState
         resource={resource}
-        summary="The member scores table will list every scored member with their current score, risk level, and trend once the backend is connected."
+        summary="The member scores table lists every scored member with their current score, risk level and trend."
         endpoints={["GET /credit-scoring/borrowers"]}
-        isEmpty={(rows) => rows.length === 0}
+        isEmpty={(res) => res.total === 0}
         emptyMessage="No members match this filter."
       >
-        {(rows) => (
-          <div className="rounded-lg border">
+        {(res) => (
+          <div className="rounded-lg border p-2">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -80,27 +100,39 @@ function BorrowerScoresContent() {
                   <TableHead>Risk Level</TableHead>
                   <TableHead>Trend</TableHead>
                   <TableHead>Active Loan</TableHead>
+                  <TableHead>Past Due</TableHead>
                   <TableHead>Calculated</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map((row) => (
-                  <TableRow
-                    key={row.borrower_id}
-                    className="cursor-pointer"
-                    onClick={() => router.push(`/credit-scoring/borrowers/${row.borrower_id}`)}
-                  >
-                    <TableCell className="font-medium">{row.borrower_name}</TableCell>
-                    <TableCell>{row.branch_name}</TableCell>
-                    <TableCell>{row.score}</TableCell>
-                    <TableCell><RiskLevelBadge level={row.risk_level} /></TableCell>
-                    <TableCell><TrendIcon trend={row.score_trend} /></TableCell>
+                {res.data.map((row) => (
+                  <TableRow key={row.borrower_id}>
+                    <TableCell>
+                      <MemberCell row={row} />
+                    </TableCell>
+                    <TableCell>{row.branch_name ?? "—"}</TableCell>
+                    <ScoreCells row={row} />
+                    <TableCell>
+                      <TrendIcon trend={row.score_trend} />
+                    </TableCell>
                     <TableCell>{row.has_active_loan ? "Yes" : "No"}</TableCell>
-                    <TableCell>{formatDate(row.calculated_at)}</TableCell>
+                    <TableCell>{row.past_due ? "Yes" : "No"}</TableCell>
+                    <TableCell>{row.calculated_at ? formatDate(row.calculated_at) : "—"}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+            <TablePagination
+              page={res.current_page}
+              perPage={res.per_page}
+              total={res.total}
+              perPageOptions={CREDIT_SCORING_PER_PAGE_OPTIONS}
+              onPageChange={setPage}
+              onPerPageChange={(n) => {
+                setPerPage(n);
+                setPage(1);
+              }}
+            />
           </div>
         )}
       </DataState>

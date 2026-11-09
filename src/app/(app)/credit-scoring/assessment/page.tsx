@@ -19,8 +19,13 @@ function CreditAssessmentContent() {
     <div className="space-y-6">
       <CreditScoringPageHeader
         title="Credit Assessment"
-        description="Run a fresh credit assessment for any member."
+        description="See a member's current credit score, worked out every night and when their records change."
       />
+
+      <p className="max-w-2xl rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+        To assess a loan application, open the loan while it is a draft or for approval. Its Credit Assessment card
+        takes the application&apos;s details and scores that application.
+      </p>
 
       <div className="max-w-sm space-y-1.5">
         <Label>Member</Label>

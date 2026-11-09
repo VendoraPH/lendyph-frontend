@@ -11,6 +11,7 @@ import { CreditScoringPageHeader } from "./_components/page-header";
 import { RISK_LEVEL_LABELS } from "@/constants/risk-level";
 import { formatDateTime } from "@/lib/format";
 import { borrowerLabel } from "@/lib/credit-scoring/borrower-label";
+import { averageScoreText, rowScoreView } from "@/lib/credit-scoring/score-state";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { CreditScoringDashboardSummary, RiskLevel } from "@/types/credit-scoring";
@@ -47,9 +48,10 @@ function DashboardBody({ data }: { data: CreditScoringDashboardSummary }) {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-3">
         <Figure label="Scored Members" value={String(data.total_scored_borrowers)} />
-        <Figure label="Average Score" value={Number(data.average_score ?? 0).toFixed(1)} />
+        <Figure label="Average Score" value={averageScoreText(data.average_score)} />
+        <Figure label="Insufficient Data" value={String(data.insufficient_data_count)} />
       </div>
 
       <Card>
@@ -90,19 +92,24 @@ function DashboardBody({ data }: { data: CreditScoringDashboardSummary }) {
             {data.recent_score_changes.length === 0 && (
               <p className="text-sm text-muted-foreground">No recent score changes.</p>
             )}
-            {data.recent_score_changes.map((entry) => (
-              <div key={entry.id} className="flex items-center justify-between text-sm">
-                <Link
-                  href={`/credit-scoring/borrowers/${entry.borrower_id}`}
-                  className="font-medium hover:underline"
-                >
-                  {borrowerLabel(entry)}
-                </Link>
-                <span className="text-muted-foreground">
-                  {entry.score} · {RISK_LEVEL_LABELS[entry.risk_level]} · {formatDateTime(entry.calculated_at)}
-                </span>
-              </div>
-            ))}
+            {data.recent_score_changes.map((entry) => {
+              const view = rowScoreView(entry);
+              return (
+                <div key={entry.id} className="flex items-center justify-between text-sm">
+                  <Link
+                    href={`/credit-scoring/borrowers/${entry.borrower_id}`}
+                    className="font-medium hover:underline"
+                  >
+                    {borrowerLabel(entry)}
+                  </Link>
+                  <span className="text-muted-foreground">
+                    {view.kind === "scored" ? `${view.score} · ${RISK_LEVEL_LABELS[view.riskLevel]}` : view.message}
+                    {" · "}
+                    {formatDateTime(entry.calculated_at)}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </CardContent>
       </Card>
@@ -123,7 +130,7 @@ function CreditScoringDashboardContent() {
 
       <DataState
         resource={resource}
-        summary="The credit scoring dashboard will summarize scored members, average score, and risk distribution once the backend is connected."
+        summary="The credit scoring dashboard summarizes scored members, the average score and the risk distribution."
         endpoints={["GET /credit-scoring/dashboard"]}
       >
         {(data) => <DashboardBody data={data} />}

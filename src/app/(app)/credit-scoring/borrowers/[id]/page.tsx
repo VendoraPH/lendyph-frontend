@@ -9,17 +9,16 @@ import { DataState } from "@/components/common/data-state";
 import { useApiResource } from "@/hooks";
 import { creditScoringService } from "@/services";
 import { CreditScoringPageHeader } from "../../_components/page-header";
-import { RiskLevelBadge } from "../../_components/risk-level-badge";
-import { ConfidenceBadge } from "../../_components/confidence-badge";
-import { ScoreBreakdownCard } from "../../_components/score-breakdown-card";
-import { ScoreFactorList } from "../../_components/score-factor-list";
+import { ScoreDetail } from "../../_components/score-detail";
 import { PolicyFlagAlert } from "../../_components/policy-flag-alert";
+import { ScoreHistoryChart } from "./_components/score-history-chart";
+import { MemberScoreHistory } from "./_components/member-score-history";
 import { ManualOverrideDialog } from "./_components/manual-override-dialog";
 import { LindaChatPlaceholder } from "./_components/linda-chat-placeholder";
 import { CicPlaceholder } from "./_components/cic-placeholder";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatDateTime } from "@/lib/format";
+import { SCORE_TYPE_LABELS } from "@/lib/credit-scoring/labels";
 import type { CreditScore, PolicyFlag } from "@/types/credit-scoring";
 
 function BorrowerCreditProfileContent({
@@ -47,41 +46,28 @@ function BorrowerCreditProfileContent({
     <div className="space-y-6">
       <DataState
         resource={profileResource}
-        summary="This member's full credit score, breakdown, and factors will appear here once the backend is connected."
+        summary="This member's credit score, breakdown and factors."
         endpoints={[`GET /credit-scoring/borrowers/${borrowerId}`]}
       >
         {(profile) => (
           <>
             <CreditScoringPageHeader
               title={profile.borrower_name}
-              description={`Lendy Credit Score · ${profile.score_type === "application" ? "Application Score" : "Behavioral Score"}`}
+              description={[
+                profile.borrower_code,
+                "Lendy Credit Score",
+                profile.score_type ? SCORE_TYPE_LABELS[profile.score_type] : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
               actions={
-                <PermissionGate permission="credit_scoring:override">
-                  <Button onClick={() => setOverrideOpen(true)}>Record Decision</Button>
-                </PermissionGate>
+                profile.id !== null && (
+                  <PermissionGate permission="credit_scoring:override">
+                    <Button onClick={() => setOverrideOpen(true)}>Record Decision</Button>
+                  </PermissionGate>
+                )
               }
             />
-
-            <Card>
-              <CardContent className="flex flex-wrap items-center gap-4 pt-6">
-                <div>
-                  <p className="text-3xl font-semibold">{profile.score}</p>
-                  <p className="text-xs text-muted-foreground">out of 100</p>
-                </div>
-                <RiskLevelBadge level={profile.risk_level} />
-                <ConfidenceBadge level={profile.confidence} />
-                <span className="text-xs text-muted-foreground">
-                  Model {profile.model_version} · {formatDateTime(profile.calculated_at)}
-                </span>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="pt-6">
-                <p className="text-sm font-medium">System Recommendation</p>
-                <p className="mt-1 text-sm text-muted-foreground">{profile.recommendation}</p>
-              </CardContent>
-            </Card>
 
             {flagsResource.unavailable || flagsResource.error ? (
               <Card>
@@ -98,21 +84,25 @@ function BorrowerCreditProfileContent({
               )
             )}
 
-            <ScoreBreakdownCard breakdown={profile.category_breakdown} />
-            <ScoreFactorList factors={profile.factors} />
+            <ScoreDetail score={profile} />
+
+            <ScoreHistoryChart borrowerId={borrowerId} />
+            <MemberScoreHistory borrowerId={borrowerId} />
 
             <div className="grid gap-4 sm:grid-cols-2">
               <LindaChatPlaceholder />
               <CicPlaceholder />
             </div>
 
-            <ManualOverrideDialog
-              open={overrideOpen}
-              onOpenChange={setOverrideOpen}
-              borrowerId={borrowerId}
-              creditScoreId={profile.id}
-              onDecisionRecorded={() => profileResource.refetch()}
-            />
+            {profile.id !== null && (
+              <ManualOverrideDialog
+                open={overrideOpen}
+                onOpenChange={setOverrideOpen}
+                borrowerId={borrowerId}
+                creditScoreId={profile.id}
+                onDecisionRecorded={() => profileResource.refetch()}
+              />
+            )}
           </>
         )}
       </DataState>

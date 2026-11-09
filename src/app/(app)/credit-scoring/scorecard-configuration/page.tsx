@@ -1,162 +1,130 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { toast } from "sonner";
 import { RouteGuard } from "@/components/common/route-guard";
 import { DataState } from "@/components/common/data-state";
 import { useApiResource } from "@/hooks";
 import { creditScoringService } from "@/services";
+import { notifyError, notifySuccess } from "@/lib/notify";
+import { fieldErrorsFor } from "@/lib/credit-scoring/field-errors";
+import { scorecardBody, scorecardDraftFrom, type ScorecardDraft } from "@/lib/credit-scoring/scorecard-form";
 import { CreditScoringPageHeader } from "../_components/page-header";
-import { isValidWeightTotal, sumWeights } from "@/lib/credit-scoring/scorecard-weights";
+import { CategoriesEditor } from "./_components/categories-editor";
+import { RiskBandsEditor } from "./_components/risk-bands-editor";
+import { FactorRulesList, PolicyRulesList } from "./_components/read-only-rules";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { ScorecardConfig } from "@/types/credit-scoring";
 
-function CategoriesTab({
-  config,
-  onChange,
-}: {
-  config: ScorecardConfig;
-  onChange: (next: ScorecardConfig) => void;
-}) {
-  const total = sumWeights(config.categories);
-  const valid = isValidWeightTotal(config.categories);
-
-  return (
-    <div className="space-y-4">
-      {config.categories.map((cat, idx) => (
-        <Card key={cat.key}>
-          <CardContent className="flex items-center justify-between gap-4 pt-6">
-            <div>
-              <p className="text-sm font-medium">{cat.label}</p>
-              <p className="text-xs text-muted-foreground">{cat.description}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Input
-                type="number"
-                className="w-20"
-                value={cat.weight_percent}
-                onChange={(e) => {
-                  const next = { ...config, categories: [...config.categories] };
-                  next.categories[idx] = { ...cat, weight_percent: Number(e.target.value) };
-                  onChange(next);
-                }}
-              />
-              <span className="text-sm text-muted-foreground">%</span>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
-      <p className={valid ? "text-sm text-emerald-600 dark:text-emerald-400" : "text-sm text-destructive"}>
-        Total weight: {total}% {valid ? "(valid)" : "(must equal 100%)"}
-      </p>
-    </div>
-  );
+interface SaveErrors {
+  categories: string[];
+  bands: string[];
 }
 
-function FactorRulesTab({ config }: { config: ScorecardConfig }) {
-  return (
-    <div className="space-y-2">
-      {config.factor_rules.map((rule) => (
-        <Card key={rule.id}>
-          <CardContent className="flex items-center justify-between py-3">
-            <div>
-              <p className="text-sm font-medium">{rule.label}</p>
-              <p className="text-xs text-muted-foreground">{rule.category_key} · {rule.points} pts</p>
-            </div>
-            <Switch checked={rule.is_active} disabled />
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  );
-}
+const NO_ERRORS: SaveErrors = { categories: [], bands: [] };
 
-function PolicyRulesTab({ config }: { config: ScorecardConfig }) {
-  return (
-    <div className="space-y-2">
-      {config.policy_rules.map((rule) => (
-        <Card key={rule.id}>
-          <CardContent className="flex items-center justify-between py-3">
-            <div>
-              <p className="text-sm font-medium">{rule.label}</p>
-              <p className="text-xs text-muted-foreground">{rule.description}</p>
-            </div>
-            <Switch checked={rule.is_active} disabled />
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  );
+function savedNote(before: string, after: ScorecardConfig): string {
+  return after.version === before
+    ? `Nothing changed. The scorecard stays v${after.version}.`
+    : `Saved as scorecard v${after.version}. New scores use it from the next nightly run; existing scores keep their version.`;
 }
 
 function ScorecardConfigurationContent() {
   const fetcher = useCallback(() => creditScoringService.getScorecardConfig(), []);
   const resource = useApiResource<ScorecardConfig>(fetcher);
-  const [draft, setDraft] = useState<ScorecardConfig | null>(null);
+  const [draft, setDraft] = useState<ScorecardDraft | null>(null);
+  const [errors, setErrors] = useState<SaveErrors>(NO_ERRORS);
+  const [note, setNote] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const active = draft ?? resource.data;
-
-  async function handleSave() {
-    if (!active || !isValidWeightTotal(active.categories)) return;
+  async function handleSave(config: ScorecardConfig, current: ScorecardDraft) {
     setSaving(true);
+    setErrors(NO_ERRORS);
+    setNote(null);
     try {
-      await creditScoringService.updateScorecardConfig(active);
-      toast.success("Scorecard configuration saved.");
+      const saved = await creditScoringService.updateScorecardConfig(scorecardBody(config, current));
+      notifySuccess("Scorecard saved.");
+      setNote(savedNote(config.version, saved));
       setDraft(null);
       resource.refetch();
     } catch (err: unknown) {
-      const status = (err as { response?: { status?: number } })?.response?.status;
-      toast.error(
-        status === 404 || status === 501
-          ? "Not connected yet — configuration cannot be saved until the backend is live."
-          : "Unable to save this configuration.",
-      );
+      setErrors({ categories: fieldErrorsFor(err, "categories"), bands: fieldErrorsFor(err, "risk_bands") });
+      notifyError(err, "Unable to save this scorecard.");
     } finally {
       setSaving(false);
     }
   }
 
+  const loaded = resource.data;
+
   return (
     <div className="space-y-6">
       <CreditScoringPageHeader
         title="Scorecard Configuration"
-        description="Category weights, factor rules, and policy rules used to compute scores."
+        description="Category weights and risk bands used to work out scores. Each save makes a new scorecard version."
         actions={
-          <Button onClick={handleSave} disabled={!active || !isValidWeightTotal(active.categories) || saving}>
-            {saving ? "Saving…" : "Save Changes"}
-          </Button>
+          loaded && (
+            <Button onClick={() => handleSave(loaded, draft ?? scorecardDraftFrom(loaded))} disabled={saving}>
+              {saving ? "Saving…" : "Save Changes"}
+            </Button>
+          )
         }
       />
 
       <DataState
         resource={resource}
-        summary="Scorecard category weights, factor rules, and policy rules will be editable here once the backend is connected."
+        summary="Scorecard category weights, risk bands, factor rules and policy rules."
         endpoints={["GET /credit-scoring/scorecard-config", "PUT /credit-scoring/scorecard-config"]}
       >
         {(config) => {
-          const current = active ?? config;
+          const current = draft ?? scorecardDraftFrom(config);
           return (
-            <Tabs defaultValue="categories">
-              <TabsList>
-                <TabsTrigger value="categories">Categories</TabsTrigger>
-                <TabsTrigger value="factors">Factor Configuration</TabsTrigger>
-                <TabsTrigger value="policy">Policy Rules</TabsTrigger>
-              </TabsList>
-              <TabsContent value="categories">
-                <CategoriesTab config={current} onChange={setDraft} />
-              </TabsContent>
-              <TabsContent value="factors">
-                <FactorRulesTab config={current} />
-              </TabsContent>
-              <TabsContent value="policy">
-                <PolicyRulesTab config={current} />
-              </TabsContent>
-            </Tabs>
+            <div className="space-y-6">
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span>Scorecard v{config.version}</span>
+                {!config.validated && <Badge variant="outline">Unvalidated</Badge>}
+              </div>
+
+              {note && (
+                <p role="status" className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                  {note}
+                </p>
+              )}
+
+              <Tabs defaultValue="categories">
+                <TabsList>
+                  <TabsTrigger value="categories">Categories</TabsTrigger>
+                  <TabsTrigger value="bands">Risk Bands</TabsTrigger>
+                  <TabsTrigger value="factors">Factor Configuration</TabsTrigger>
+                  <TabsTrigger value="policy">Policy Rules</TabsTrigger>
+                </TabsList>
+                <TabsContent value="categories">
+                  <CategoriesEditor
+                    categories={config.categories}
+                    weights={current.weights}
+                    errors={errors.categories}
+                    onChange={(key, value) =>
+                      setDraft({ ...current, weights: { ...current.weights, [key]: value } })
+                    }
+                  />
+                </TabsContent>
+                <TabsContent value="bands">
+                  <RiskBandsEditor
+                    bands={config.risk_bands}
+                    minimums={current.bands}
+                    errors={errors.bands}
+                    onChange={(key, value) => setDraft({ ...current, bands: { ...current.bands, [key]: value } })}
+                  />
+                </TabsContent>
+                <TabsContent value="factors">
+                  <FactorRulesList rules={config.factor_rules} categories={config.categories} />
+                </TabsContent>
+                <TabsContent value="policy">
+                  <PolicyRulesList rules={config.policy_rules} />
+                </TabsContent>
+              </Tabs>
+            </div>
           );
         }}
       </DataState>

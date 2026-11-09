@@ -382,10 +382,10 @@ export const API_ENDPOINTS = {
     ACCOUNT_MAPPING: "/accounting/settings/account-mapping",
   },
   /**
-   * None of these exist yet: the credit-scoring backend is not built, and
-   * docs/CREDIT_SCORING_BACKEND_HANDOFF.md is its contract. Typed and wired now
-   * so the UI-only screens have one place to be wrong. Re-check against the
-   * handoff before trusting any path.
+   * Credit Scoring (backend PR #240). Every route needs credit_scoring:view,
+   * settings or override as docs/CREDIT_SCORING_BACKEND_HANDOFF.md lists; the
+   * loan assessment also needs loans:view, and loans:update to save.
+   * The screens stay behind NEXT_PUBLIC_ENABLE_CREDIT_SCORING.
    */
   CREDIT_SCORING: {
     DASHBOARD: "/credit-scoring/dashboard",
@@ -398,6 +398,7 @@ export const API_ENDPOINTS = {
     POLICY_FLAGS: (borrowerId: number) => `/credit-scoring/borrowers/${borrowerId}/policy-flags`,
     DECISIONS_CREATE: "/credit-scoring/decisions",
     SETTINGS: "/credit-scoring/settings",
+    LOAN_ASSESSMENT: (loanId: number) => `/credit-scoring/loans/${loanId}/assessment`,
   },
   /**
    * Automated due-date reminders. None of these exist yet: the scheduler,
