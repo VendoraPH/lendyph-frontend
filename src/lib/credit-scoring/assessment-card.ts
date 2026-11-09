@@ -2,6 +2,7 @@ import { getErrorMessage, getFieldErrors, httpStatusOf } from "@/lib/api-error";
 import type { Permission } from "@/types";
 import type {
   CreditApplicationProfile,
+  LoanCreditAssessment,
   IncomeVerification,
   SaveLoanAssessmentData,
 } from "@/types/credit-scoring";
@@ -85,9 +86,16 @@ export const MEMBER_DETAIL_FIELDS: readonly AssessmentTextField[] = [
 
 export const MEMBER_DETAILS_HIDDEN_TEXT = "Hidden (needs access to member details)";
 
-/** Without borrowers:view the server sends the member-detail figures as null. */
-export function memberDetailsHidden(can: Can): boolean {
-  return !can("borrowers:view");
+/**
+ * Whether the member-detail figures are hidden from this caller: the server's
+ * `application_figures_hidden` (borrowers:view and the member's branch), or,
+ * on an API that doesn't send it yet, a missing borrowers:view.
+ */
+export function memberDetailsHidden(
+  assessment: Pick<Partial<LoanCreditAssessment>, "application_figures_hidden">,
+  can: Can,
+): boolean {
+  return assessment.application_figures_hidden === true || !can("borrowers:view");
 }
 
 /**

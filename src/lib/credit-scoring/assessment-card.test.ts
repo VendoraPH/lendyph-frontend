@@ -109,9 +109,13 @@ test("member-detail figures are never sent while they're hidden", () => {
   ]);
 });
 
-test("member details are hidden without borrowers:view", () => {
-  assert.equal(memberDetailsHidden(holding("loans:view")), true);
-  assert.equal(memberDetailsHidden(holding("loans:view", "borrowers:view")), false);
+test("member details are hidden when the server says so, or without borrowers:view", () => {
+  const viewer = holding("loans:view", "borrowers:view");
+  assert.equal(memberDetailsHidden({ application_figures_hidden: true }, viewer), true);
+  assert.equal(memberDetailsHidden({ application_figures_hidden: false }, viewer), false);
+  assert.equal(memberDetailsHidden({ application_figures_hidden: false }, holding("loans:view")), true);
+  assert.equal(memberDetailsHidden({}, viewer), false);
+  assert.equal(memberDetailsHidden({}, holding("loans:view")), true);
 });
 
 test("a 422 lists every field message on the card; a 409 shows the server's reason", () => {

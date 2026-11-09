@@ -26,6 +26,7 @@ import { PolicyFlagAlert } from "@/app/(app)/credit-scoring/_components/policy-f
 import { DecisionList } from "@/app/(app)/credit-scoring/_components/decision-list";
 import { AssessmentFormFields } from "@/app/(app)/credit-scoring/_components/assessment-form";
 import { ManualOverrideDialog } from "@/app/(app)/credit-scoring/borrowers/[id]/_components/manual-override-dialog";
+import type { Permission } from "@/types";
 import type { LoanCreditAssessment } from "@/types/credit-scoring";
 
 interface CreditAssessmentCardProps {
@@ -42,19 +43,17 @@ interface CreditAssessmentCardProps {
 export function CreditAssessmentCard({ loanId, status }: CreditAssessmentCardProps) {
   const { can } = usePermission();
   if (!showsCreditAssessment({ flagOn: env.features.creditScoring, status, can })) return null;
-  return (
-    <CreditAssessmentBody loanId={loanId} canSave={canSaveAssessment(can)} detailsHidden={memberDetailsHidden(can)} />
-  );
+  return <CreditAssessmentBody loanId={loanId} canSave={canSaveAssessment(can)} can={can} />;
 }
 
 function CreditAssessmentBody({
   loanId,
   canSave,
-  detailsHidden,
+  can,
 }: {
   loanId: number;
   canSave: boolean;
-  detailsHidden: boolean;
+  can: (permission: Permission) => boolean;
 }) {
   const fetcher = useCallback(() => creditScoringService.getLoanAssessment(loanId), [loanId]);
   const resource = useApiResource<LoanCreditAssessment>(fetcher);
@@ -65,7 +64,7 @@ function CreditAssessmentBody({
   const [saving, setSaving] = useState(false);
   const [decisionOpen, setDecisionOpen] = useState(false);
 
-  async function handleSave(form: AssessmentForm, loaded: AssessmentForm) {
+  async function handleSave(form: AssessmentForm, loaded: AssessmentForm, detailsHidden: boolean) {
     setSaving(true);
     setErrors([]);
     try {
@@ -97,6 +96,7 @@ function CreditAssessmentBody({
       >
         {(assessment) => {
           const loaded = assessmentFormFrom(assessment.application_profile);
+          const detailsHidden = memberDetailsHidden(assessment, can);
           const form = draft ?? loaded;
           const score = assessment.score;
           return (
@@ -164,7 +164,7 @@ function CreditAssessmentBody({
                     detailsHidden={detailsHidden}
                     saving={saving}
                     onChange={setDraft}
-                    onSave={() => handleSave(form, loaded)}
+                    onSave={() => handleSave(form, loaded, detailsHidden)}
                   />
                 </>
               )}
