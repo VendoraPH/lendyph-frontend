@@ -23,13 +23,29 @@ import type {
   AccountingDashboard,
   AccountingPeriod,
   Aging,
+  AgingBucket,
+  BalanceSheet,
   BookKind,
+  CashAccountPage,
   CashFlowStatement,
+  ColumnBook,
+  ColumnBookKind,
   EquityChanges,
   Expense,
+  ExpensePage,
+  ExpenseStatus,
+  GeneralLedgerPage,
+  IncomeStatement,
   JournalEntry,
   JournalEntryDraft,
+  JournalPage,
+  JournalPreview,
+  JournalPreviewLine,
   LedgerEntry,
+  LoanAccountingSummary,
+  LoanAgingPage,
+  LoanAgingRow,
+  MemberAgingRow,
   Reconciliation,
   TrialBalance,
 } from "@/types/accounting";
@@ -83,11 +99,60 @@ export interface PeriodQuery {
   branch_id?: number;
 }
 
+/** One page of an account's ledger, optionally narrowed to one journal source. */
+export interface GeneralLedgerPageQuery extends LedgerQuery, PageParams {
+  source?: JournalEntry["source"];
+}
+
+/** One page of the journal register. `search` matches number, reference or description. */
+export interface JournalPageQuery extends JournalQuery, PageParams {
+  search?: string;
+}
+
+/** One page of expenses. `search` matches payee or reference. */
+export interface ExpensePageQuery extends PageParams {
+  status?: ExpenseStatus;
+  search?: string;
+  from?: string;
+  to?: string;
+  branch_id?: number;
+}
+
+export interface CashAccountPageParams extends PageParams {
+  branch_id?: number;
+}
+
+export type LoanAccountingGroup = "loan" | "member";
+
+/** One page of the Loan Accounting list. 25 rows by default, at most 100. */
+export interface LoanAccountingLoansQuery<G extends LoanAccountingGroup = LoanAccountingGroup>
+  extends PageParams {
+  as_of?: string;
+  branch_id?: number;
+  bucket?: AgingBucket;
+  past_due_only?: boolean;
+  search?: string;
+  group?: G;
+}
+
+/** A row of the Loan Accounting list: a member row when grouped by member. */
+export type LoanAccountingRow<G extends LoanAccountingGroup> = G extends "member"
+  ? MemberAgingRow
+  : LoanAgingRow;
+
+/** Paying an expense: the date, centavos, and the money account it is paid from. */
+export interface PayExpenseData {
+  date: string;
+  amount: number;
+  account_id: number;
+}
+
 export const accountingService = {
   // ── Dashboard ──
-  dashboard: (asOf: string, branchId?: number): Promise<AccountingDashboard> =>
+  /** `from` starts the dashboard's period; the server defaults it to the first of `asOf`'s month. */
+  dashboard: (asOf: string, branchId?: number, from?: string): Promise<AccountingDashboard> =>
     api.get<AccountingDashboard>(API_ENDPOINTS.ACCOUNTING.DASHBOARD, {
-      params: { as_of: asOf, branch_id: branchId },
+      params: { as_of: asOf, branch_id: branchId, from },
     }),
 
   // ── Chart of accounts ──
@@ -130,6 +195,19 @@ export const accountingService = {
   /** Seed a fresh organisation with the default chart. One-time, admin-only. */
   seedAccounts: (): Promise<Account[]> =>
     api.post<Account[]>(API_ENDPOINTS.ACCOUNTING.ACCOUNTS_SEED, {}),
+
+  createAccount: (data: Partial<Account>): Promise<Account> =>
+    api.post<Account>(API_ENDPOINTS.ACCOUNTING.ACCOUNTS_CREATE, data),
+
+  account: (id: number): Promise<Account> =>
+    api.get<Account>(API_ENDPOINTS.ACCOUNTING.ACCOUNTS_SHOW(id)),
+
+  updateAccount: (id: number, data: Partial<Account>): Promise<Account> =>
+    api.put<Account>(API_ENDPOINTS.ACCOUNTING.ACCOUNTS_UPDATE(id), data),
+
+  /** The server refuses an account with history; deactivate it instead. */
+  deleteAccount: (id: number): Promise<void> =>
+    api.delete<void>(API_ENDPOINTS.ACCOUNTING.ACCOUNTS_DELETE(id)),
 
   // ── Journals ──
   journalsList: (
@@ -176,6 +254,27 @@ export const accountingService = {
       buildJournalPayload(draft),
     ),
 
+  /** One page of the register, with the server's totals and per-status counts in `meta`. */
+  journalsPage: (query: JournalPageQuery = {}): Promise<JournalPage> =>
+    api.getRaw<JournalPage>(API_ENDPOINTS.ACCOUNTING.JOURNALS_LIST, { params: query }),
+
+  journal: (id: number): Promise<JournalEntry> =>
+    api.get<JournalEntry>(API_ENDPOINTS.ACCOUNTING.JOURNALS_SHOW(id)),
+
+  /**
+   * Saves a draft. Converted by `buildJournalPayload`, as `createJournal` is,
+   * and `async` for the same reason: its throw becomes this call's rejection.
+   */
+  updateJournal: async (id: number, draft: JournalEntryDraft): Promise<JournalEntry> =>
+    api.put<JournalEntry>(
+      API_ENDPOINTS.ACCOUNTING.JOURNALS_UPDATE(id),
+      buildJournalPayload(draft),
+    ),
+
+  /** The server's totals for lines in centavos. Writes nothing. */
+  previewJournal: (lines: JournalPreviewLine[]): Promise<JournalPreview> =>
+    api.post<JournalPreview>(API_ENDPOINTS.ACCOUNTING.JOURNALS_PREVIEW, { lines }),
+
   /**
    * Posting is its own verb, not a status field on an update, because it is
    * the point of no return: after this the entry can only be reversed.
@@ -211,16 +310,27 @@ export const accountingService = {
       accountingService.generalLedgerList({ ...query, page, per_page }),
     ),
 
+  /**
+   * One page of an account's ledger. `meta` carries the opening and closing
+   * balances and the range's totals; with `source` each row keeps the
+   * account's true running balance.
+   */
+  generalLedgerPage: (query: GeneralLedgerPageQuery): Promise<GeneralLedgerPage> =>
+    api.getRaw<GeneralLedgerPage>(API_ENDPOINTS.ACCOUNTING.GENERAL_LEDGER, { params: query }),
+
   trialBalance: (asOf: string, branchId?: number): Promise<TrialBalance> =>
     api.get<TrialBalance>(API_ENDPOINTS.ACCOUNTING.TRIAL_BALANCE, {
       params: { as_of: asOf, branch_id: branchId },
     }),
 
-  /**
-   * Balance sheet and income statement are NOT here. They are regroupings of
-   * the trial balance and are built from it by `@/lib/accounting/statements`,
-   * so there is exactly one place a figure can come from.
-   */
+  balanceSheet: (asOf: string, branchId?: number): Promise<BalanceSheet> =>
+    api.get<BalanceSheet>(API_ENDPOINTS.ACCOUNTING.BALANCE_SHEET, {
+      params: { as_of: asOf, branch_id: branchId },
+    }),
+
+  incomeStatement: (query: PeriodQuery): Promise<IncomeStatement> =>
+    api.get<IncomeStatement>(API_ENDPOINTS.ACCOUNTING.INCOME_STATEMENT, { params: query }),
+
   cashFlow: (query: PeriodQuery): Promise<CashFlowStatement> =>
     api.get<CashFlowStatement>(API_ENDPOINTS.ACCOUNTING.CASH_FLOW, { params: query }),
 
@@ -230,10 +340,34 @@ export const accountingService = {
   book: (kind: BookKind, query: PeriodQuery): Promise<AccountingBook> =>
     api.get<AccountingBook>(API_ENDPOINTS.ACCOUNTING.BOOKS[kind], { params: query }),
 
+  /** Cash receipts or disbursements in columns. Printed whole, not paged. */
+  columnBook: (kind: ColumnBookKind, query: PeriodQuery): Promise<ColumnBook> =>
+    api.get<ColumnBook>(API_ENDPOINTS.ACCOUNTING.BOOK_COLUMNS[kind], { params: query }),
+
   receivableAging: (asOf: string, branchId?: number): Promise<Aging> =>
     api.get<Aging>(API_ENDPOINTS.ACCOUNTING.RECEIVABLE_AGING, {
       params: { as_of: asOf, branch_id: branchId },
     }),
+
+  // ── Loan Accounting ──
+  loanAccountingSummary: (asOf: string, branchId?: number): Promise<LoanAccountingSummary> =>
+    api.get<LoanAccountingSummary>(API_ENDPOINTS.ACCOUNTING.LOAN_ACCOUNTING_SUMMARY, {
+      params: { as_of: asOf, branch_id: branchId },
+    }),
+
+  /**
+   * One page of loans, or of members with `group: "member"`. `past_due_only`
+   * travels as `1` and is left out when off.
+   */
+  loanAccountingLoans: <G extends LoanAccountingGroup = "loan">(
+    query: LoanAccountingLoansQuery<G> = {},
+  ): Promise<LoanAgingPage<LoanAccountingRow<G>>> => {
+    const { past_due_only, ...rest } = query;
+    return api.getRaw<LoanAgingPage<LoanAccountingRow<G>>>(
+      API_ENDPOINTS.ACCOUNTING.LOAN_ACCOUNTING_LOANS,
+      { params: { ...rest, past_due_only: past_due_only ? 1 : undefined } },
+    );
+  },
 
   // ── Expenses ──
   expensesList: (params: PageParams = {}): Promise<ListPage<Expense>> =>
@@ -255,8 +389,21 @@ export const accountingService = {
       accountingService.expensesList({ page, per_page }),
     ),
 
+  /** One page, with the server's totals (amount due included) and per-status counts. */
+  expensesPage: (query: ExpensePageQuery = {}): Promise<ExpensePage> =>
+    api.getRaw<ExpensePage>(API_ENDPOINTS.ACCOUNTING.EXPENSES_LIST, { params: query }),
+
+  expense: (id: number): Promise<Expense> =>
+    api.get<Expense>(API_ENDPOINTS.ACCOUNTING.EXPENSES_SHOW(id)),
+
   createExpense: (data: Partial<Expense>): Promise<Expense> =>
     api.post<Expense>(API_ENDPOINTS.ACCOUNTING.EXPENSES_CREATE, data),
+
+  updateExpense: (id: number, data: Partial<Expense>): Promise<Expense> =>
+    api.put<Expense>(API_ENDPOINTS.ACCOUNTING.EXPENSES_UPDATE(id), data),
+
+  payExpense: (id: number, data: PayExpenseData): Promise<Expense> =>
+    api.post<Expense>(API_ENDPOINTS.ACCOUNTING.EXPENSES_PAY(id), data),
 
   // ── Cash and bank ──
   cashAccountsList: (params: PageParams = {}): Promise<ListPage<Account>> =>
@@ -269,6 +416,10 @@ export const accountingService = {
     fetchAllPages<Account>(({ page, per_page }) =>
       accountingService.cashAccountsList({ page, per_page }),
     ),
+
+  /** One page, with the balance over every money account (and by kind) in `meta.totals`. */
+  cashAccountsPage: (params: CashAccountPageParams = {}): Promise<CashAccountPage> =>
+    api.getRaw<CashAccountPage>(API_ENDPOINTS.ACCOUNTING.CASH_ACCOUNTS_LIST, { params }),
 
   transfer: (data: {
     date: string;

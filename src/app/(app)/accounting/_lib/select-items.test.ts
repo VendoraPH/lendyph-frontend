@@ -2,9 +2,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Account } from "@/types";
 import {
+  ANY_SOURCE,
   ANY_STATUS,
   accountSelectItems,
+  agingBucketItems,
+  agingGroupItems,
   expenseStatusItems,
+  journalSourceItems,
   journalStatusItems,
 } from "./select-items";
 
@@ -43,4 +47,51 @@ test("account items carry the id as the value and code and name as the label", (
 
 test("no accounts means no account items", () => {
   assert.deepEqual(accountSelectItems([]), []);
+});
+
+test("journal source items label every source in words, after any source", () => {
+  assert.deepEqual(journalSourceItems, [
+    { value: ANY_SOURCE, label: "Any source" },
+    { value: "loan_release", label: "Loan Release" },
+    { value: "loan_collection", label: "Loan Collection" },
+    { value: "penalty", label: "Penalty" },
+    { value: "loan_fee", label: "Loan Fee" },
+    { value: "gcash", label: "GCash" },
+    { value: "cash_transaction", label: "Cash Transaction" },
+    { value: "bank_transaction", label: "Bank Transaction" },
+    { value: "cash_in", label: "Cash In" },
+    { value: "cash_out", label: "Cash Out" },
+    { value: "expense", label: "Expense" },
+    { value: "payable", label: "Payable" },
+    { value: "transfer", label: "Transfer" },
+    { value: "manual", label: "Manual" },
+    { value: "adjustment", label: "Adjustment" },
+    { value: "reversal", label: "Reversal" },
+    { value: "opening_balance", label: "Opening Balance" },
+    { value: "credit_loss", label: "Credit Loss" },
+    { value: "share_capital", label: "Share Capital" },
+  ]);
+});
+
+test("any source is its own value, never an empty string", () => {
+  assert.notEqual(ANY_SOURCE, "");
+  assert.equal(journalSourceItems.filter((item) => item.value === ANY_SOURCE).length, 1);
+});
+
+test("aging bucket items use the aging report's labels, youngest first", () => {
+  assert.deepEqual(agingBucketItems, [
+    { value: "current", label: "Current" },
+    { value: "1_30", label: "1–30 days" },
+    { value: "31_60", label: "31–60 days" },
+    { value: "61_90", label: "61–90 days" },
+    { value: "91_120", label: "91–120 days" },
+    { value: "over_120", label: "Over 120 days" },
+  ]);
+});
+
+test("aging group items offer by loan and by member", () => {
+  assert.deepEqual(agingGroupItems, [
+    { value: "loan", label: "By loan" },
+    { value: "member", label: "By member" },
+  ]);
 });
