@@ -169,7 +169,7 @@ test("the preview names the account the result moves to, its date and the months
 test("the blocking reasons are listed as the server wrote them, and they stop the close", () => {
   const reasons = [
     "2026 ends on 31 December 2026; it can be closed from 1 January 2027",
-    "3 draft journals are dated in 2026. Post or delete them first.",
+    "3 draft journals are dated in 2026. Post them or move them out of the year first.",
   ];
   const view = previewView(preview({ can_close: false, blocking_reasons: reasons }));
   assert.deepEqual(view.blockingReasons, reasons);
