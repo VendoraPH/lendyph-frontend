@@ -1,6 +1,8 @@
 // Shared formatters used across the app.
 // Locale: en-PH, Currency: PHP. Keep formatting consistent everywhere.
 
+import { env } from "@/config/env";
+
 const pesoFmt = new Intl.NumberFormat("en-PH", {
   style: "currency",
   currency: "PHP",
@@ -47,16 +49,50 @@ export function formatRate(rate: number | string | undefined | null): string {
   return String(parseFloat(n.toFixed(4)));
 }
 
+// ---------------------------------------------------------------------------
+// Dates and times are shown in the app's time zone (Asia/Manila), whatever the
+// computer is set to (round fz). On one set to New York, every date-only value
+// read a day early; on one east of Manila, evening timestamps read a day late.
+// ---------------------------------------------------------------------------
+
+/** The zone every date and time is shown in. */
+const APP_TIME_ZONE = env.business.timezone || "Asia/Manila";
+
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+const NO_ZONE = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/;
+
+interface Shown {
+  date: Date;
+  timeZone: string;
+}
+
+/**
+ * What a value shows, and in which zone.
+ *
+ * A date alone, or a server time with no zone, is already a reading in the
+ * app's zone (the server's own Manila time). It is held at that reading in UTC
+ * and shown in UTC, so no computer can move it. A timestamp with a zone, or a
+ * `Date`, is an instant, shown in the app's zone.
+ */
+function shown(value: string | Date): Shown {
+  if (value instanceof Date) return { date: value, timeZone: APP_TIME_ZONE };
+  const text = value.trim();
+  if (DATE_ONLY.test(text)) return { date: new Date(`${text}T00:00:00Z`), timeZone: "UTC" };
+  if (NO_ZONE.test(text)) return { date: new Date(`${text.replace(" ", "T")}Z`), timeZone: "UTC" };
+  return { date: new Date(text), timeZone: APP_TIME_ZONE };
+}
+
+function formatShown(value: string | Date, options: Intl.DateTimeFormatOptions): string {
+  const { date, timeZone } = shown(value);
+  return date.toLocaleDateString("en-PH", { ...options, timeZone });
+}
+
 export function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-PH", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+  return formatShown(dateStr, { year: "numeric", month: "short", day: "numeric" });
 }
 
 export function formatDateTime(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-PH", {
+  return formatShown(dateStr, {
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -65,8 +101,16 @@ export function formatDateTime(dateStr: string): string {
   });
 }
 
+/**
+ * A calendar date held as a `Date` at the computer's own midnight: a date
+ * picker's value, or `parseApiDate`'s. Its own year, month and day are the
+ * date, so they are read as they are (the same parts `formatDateISO` sends).
+ * Shown in Manila's zone, a midnight in Auckland would read the day before.
+ */
 export function formatDateObj(date: Date): string {
-  return date.toLocaleDateString("en-PH", {
+  const calendarDay = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  return calendarDay.toLocaleDateString("en-PH", {
+    timeZone: "UTC",
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -112,11 +156,6 @@ export function todayISO(): string {
 // wrote its own instead of converting. One entry point per format, and the
 // conversion happens here.
 
-/** `new Date(string)` unless it already is one. */
-function toDate(value: string | Date): Date {
-  return value instanceof Date ? value : new Date(value);
-}
-
 /**
  * "August 28, 2026" — the long form.
  *
@@ -129,11 +168,7 @@ function toDate(value: string | Date): Date {
  * habit can move here with no visual change at all.
  */
 export function formatDateLong(date: string | Date): string {
-  return toDate(date).toLocaleDateString("en-PH", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  return formatShown(date, { year: "numeric", month: "long", day: "numeric" });
 }
 
 /**
@@ -143,12 +178,7 @@ export function formatDateLong(date: string | Date): string {
  * panel reporting on *today's* collections.
  */
 export function formatDateFull(date: string | Date): string {
-  return toDate(date).toLocaleDateString("en-PH", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  return formatShown(date, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 }
 
 /**
@@ -158,9 +188,6 @@ export function formatDateFull(date: string | Date): string {
  * audit trail uses, where date and time sit in separate columns.
  */
 export function formatTime(date: string | Date): string {
-  return toDate(date).toLocaleTimeString("en-PH", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
+  const { date: instant, timeZone } = shown(date);
+  return instant.toLocaleTimeString("en-PH", { timeZone, hour: "numeric", minute: "2-digit", hour12: true });
 }
