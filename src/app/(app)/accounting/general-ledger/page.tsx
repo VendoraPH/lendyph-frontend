@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { RouteGuard, TablePagination } from "@/components/common";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -39,6 +40,8 @@ import { defaultDashboardFrom } from "../_lib/dashboard-period";
 import {
   LEDGER_PER_PAGE_OPTIONS,
   ledgerQueryString,
+  ledgerRangeError,
+  ledgerToFieldError,
   readLedgerQuery,
   type LedgerDefaults,
   type LedgerUrlState,
@@ -83,6 +86,15 @@ function GeneralLedgerContent() {
   );
 
   const { accountId, from, to, source, page, perPage } = query;
+  // A To before From is refused here; the server's own 422 on `to` shows on the
+  // field too, for as long as the same range is asked for.
+  const [serverToError, setServerToError] = useState<{ range: string; message: string } | null>(
+    null,
+  );
+  const rangeError = ledgerRangeError(from, to);
+  const toError =
+    rangeError ?? (serverToError?.range === `${from}|${to}` ? serverToError.message : null);
+
   const fetcher = useCallback(
     () =>
       accountingService.generalLedgerPage({
@@ -93,13 +105,20 @@ function GeneralLedgerContent() {
         source: source === ANY_SOURCE ? undefined : (source as JournalSource),
         page,
         per_page: perPage,
+      }).catch((error: unknown) => {
+        const message = ledgerToFieldError(error);
+        if (message) setServerToError({ range: `${from}|${to}`, message });
+        throw error;
       }),
     [accountId, from, to, branch, source, page, perPage],
   );
 
   // A ledger with no account chosen is every movement in the book, which is
-  // not a ledger. Hold the request until one is picked.
-  const resource = useAccountingResource<LedgerPage>(fetcher, accountId !== null);
+  // not a ledger. Hold the request until one is picked, and while the range is wrong.
+  const resource = useAccountingResource<LedgerPage>(
+    fetcher,
+    accountId !== null && rangeError === null,
+  );
 
   // Turning the page keeps the last page on screen, dimmed, until the next one
   // arrives. Any other filter change shows the loading panel instead, so rows
@@ -129,7 +148,25 @@ function GeneralLedgerContent() {
           onChange={(id) => updateQuery({ accountId: id })}
         />
         <DateFilter label="From" value={from} onChange={(value) => updateQuery({ from: value })} />
-        <DateFilter label="To" value={to} onChange={(value) => updateQuery({ to: value })} />
+        <div className="space-y-1.5">
+          <Label htmlFor="ledger-to" className="text-xs text-muted-foreground">
+            To
+          </Label>
+          <Input
+            id="ledger-to"
+            type="date"
+            value={to}
+            onChange={(e) => updateQuery({ to: e.target.value })}
+            className="w-[170px]"
+            aria-invalid={toError !== null}
+            aria-describedby={toError ? "ledger-to-error" : undefined}
+          />
+          {toError && (
+            <p id="ledger-to-error" role="alert" className="max-w-[220px] text-xs text-destructive">
+              {toError}
+            </p>
+          )}
+        </div>
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">Source</Label>
           <Select
@@ -162,6 +199,12 @@ function GeneralLedgerContent() {
         <Card>
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
             Choose an account to see its ledger.
+          </CardContent>
+        </Card>
+      ) : toError ? (
+        <Card>
+          <CardContent className="py-12 text-center text-sm text-muted-foreground">
+            Correct the To date to see the ledger.
           </CardContent>
         </Card>
       ) : (

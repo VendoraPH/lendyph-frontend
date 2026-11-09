@@ -79,3 +79,20 @@ export function ledgerHref(target: { accountId: number; from?: string; to?: stri
   if (target.to) params.set("to", target.to);
   return `/accounting/general-ledger?${params.toString()}`;
 }
+
+/**
+ * Why the range can't be sent (the server answers 422 on `to`), or null. Both
+ * are `YYYY-MM-DD`, so comparing the strings compares the dates.
+ */
+export function ledgerRangeError(from: string, to: string): string | null {
+  return to < from ? "To must be on or after From." : null;
+}
+
+/** The server's own message for `to` from a 422, or null for any other error. */
+export function ledgerToFieldError(error: unknown): string | null {
+  const response = (error as { response?: { status?: number; data?: { errors?: Record<string, unknown> } } } | null)
+    ?.response;
+  if (response?.status !== 422) return null;
+  const messages = response.data?.errors?.to;
+  return Array.isArray(messages) && typeof messages[0] === "string" ? messages[0] : null;
+}

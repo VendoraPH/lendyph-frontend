@@ -4,6 +4,8 @@ import { ANY_SOURCE } from "./select-items";
 import {
   LEDGER_PER_PAGE,
   ledgerHref,
+  ledgerRangeError,
+  ledgerToFieldError,
   ledgerQueryString,
   readLedgerQuery,
   type LedgerUrlState,
@@ -95,4 +97,36 @@ test("ledgerHref links an account's ledger over a range", () => {
     ledgerHref({ accountId: 5, from: "2026-10-01", to: "2026-10-31" }),
     "/accounting/general-ledger?account_id=5&from=2026-10-01&to=2026-10-31",
   );
+});
+
+test("a To before From is refused before sending, by comparing the date strings", () => {
+  assert.equal(ledgerRangeError("2026-11-01", "2026-11-09"), null);
+  assert.equal(ledgerRangeError("2026-11-09", "2026-11-09"), null);
+  assert.equal(ledgerRangeError("2026-11-10", "2026-11-09"), "To must be on or after From.");
+  assert.equal(ledgerRangeError("2026-12-31", "2027-01-01"), null);
+});
+
+test("the server's message for To is read from a 422", () => {
+  const refused = {
+    response: {
+      status: 422,
+      data: {
+        message: "The to field must be a date after or equal to from.",
+        errors: { to: ["The to field must be a date after or equal to from."] },
+      },
+    },
+  };
+  assert.equal(ledgerToFieldError(refused), "The to field must be a date after or equal to from.");
+});
+
+test("no To message for other errors or other fields", () => {
+  assert.equal(ledgerToFieldError(null), null);
+  assert.equal(ledgerToFieldError(new Error("Network Error")), null);
+  assert.equal(ledgerToFieldError({ response: { status: 500, data: { errors: { to: ["x"] } } } }), null);
+  assert.equal(
+    ledgerToFieldError({ response: { status: 422, data: { errors: { from: ["The from field is required."] } } } }),
+    null,
+  );
+  assert.equal(ledgerToFieldError({ response: { status: 422, data: { errors: { to: [] } } } }), null);
+  assert.equal(ledgerToFieldError({ response: { status: 422, data: { errors: { to: [42] } } } }), null);
 });

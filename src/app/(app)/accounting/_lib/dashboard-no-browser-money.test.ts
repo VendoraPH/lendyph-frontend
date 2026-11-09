@@ -151,6 +151,14 @@ test("the general ledger pages on the server and shows the server's meta", () =>
   assert.match(page, /row\.running_balance/);
 });
 
+test("the general ledger holds a To before From and shows the server's To message", () => {
+  const page = read(`${ROOT}/general-ledger/page.tsx`);
+  assert.match(page, /const rangeError = ledgerRangeError\(from, to\)/);
+  assert.match(page, /accountId !== null && rangeError === null/);
+  assert.match(page, /ledgerToFieldError\(/);
+  assert.match(page, /aria-invalid=\{toError !== null\}/);
+});
+
 test("the dashboard passes From to the server", () => {
   const page = read(`${ROOT}/page.tsx`);
   assert.match(page, /accountingService\.dashboard\(asOf, branchParam\(branch\), from\)/);
