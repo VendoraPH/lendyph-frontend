@@ -14,7 +14,9 @@ export type AuditAction =
   // A member document or an accounting attachment added, and an attachment
   // taken off a journal or expense.
   | "uploaded"
-  | "attachment_removed";
+  | "attachment_removed"
+  // A voided loan's pending approval steps, cancelled with it.
+  | "loan_chain_cancelled";
 
 export type AuditModule =
   | "auth"

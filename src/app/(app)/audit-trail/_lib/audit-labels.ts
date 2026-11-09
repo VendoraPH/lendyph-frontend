@@ -44,6 +44,7 @@ const ACTION_LABELS: Record<string, string> = {
   role_permissions_changed: "Permissions changed",
   uploaded: "Uploaded",
   attachment_removed: "Attachment removed",
+  loan_chain_cancelled: "Approvals cancelled",
 };
 
 /**
@@ -66,6 +67,7 @@ export const AUDIT_ACTION_OPTIONS: { value: AuditAction; label: string }[] = (
     "status_changed",
     "uploaded",
     "attachment_removed",
+    "loan_chain_cancelled",
   ] as const
 ).map((value) => ({ value, label: ACTION_LABELS[value] }));
 

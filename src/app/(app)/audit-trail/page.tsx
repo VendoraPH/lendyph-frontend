@@ -79,6 +79,7 @@ const ACTION_COLOR: Record<AuditAction, string> = {
   status_changed: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800",
   uploaded: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
   attachment_removed: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
+  loan_chain_cancelled: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
 };
 
 // Each filter's options, "all" first. The same list is the Select's `items`,

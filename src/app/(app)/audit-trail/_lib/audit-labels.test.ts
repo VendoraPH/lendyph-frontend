@@ -344,3 +344,11 @@ test("the Audit Trail's Action filter is built from AUDIT_ACTION_OPTIONS", () =>
   const page = readFileSync(join(process.cwd(), "src/app/(app)/audit-trail/page.tsx"), "utf8");
   assert.match(page, /\.\.\.AUDIT_ACTION_OPTIONS\]/);
 });
+
+// f2d-be: voiding a loan that still had approvals pending cancels them and
+// writes `loan_chain_cancelled`.
+test("the Action filter offers Approvals cancelled", () => {
+  const option = AUDIT_ACTION_OPTIONS.find((o) => o.value === "loan_chain_cancelled");
+  assert.equal(option?.label, "Approvals cancelled");
+  assert.equal(auditActionLabel("loan_chain_cancelled"), "Approvals cancelled");
+});
