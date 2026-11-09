@@ -6,7 +6,6 @@
 import { LOAN_STATUS_LABELS } from "@/constants/loan-status";
 import { normaliseSearchQuery } from "@/hooks/use-search-page";
 import { AGING_BUCKETS, agingBucketLabel } from "@/lib/accounting/aging";
-import { formatCentavos } from "@/lib/accounting/money";
 import type {
   LoanAccountingGroup,
   LoanAccountingLoansQuery,
@@ -17,6 +16,7 @@ import type {
   LoanAccountingSummary,
 } from "@/types";
 import { agingBucketItems, type SelectItemOption } from "../../_lib/select-items";
+import { signedCentavos } from "../../_lib/signed-money";
 
 /** Rows per page of the Loan Accounting list. */
 export const LOAN_ACCOUNTING_PAGE_SIZE = 25;
@@ -105,9 +105,12 @@ export function shareBarValue(share: string | null | undefined): number {
   return Math.min(100, Number(share));
 }
 
-/** A server figure in ₱ with two decimals; a missing one is a dash, and zero is ₱0.00. */
+/**
+ * A server figure in ₱ with two decimals, a negative in parentheses; a missing
+ * one is a dash, and zero is ₱0.00.
+ */
 export function centavosOrDash(value: number | null | undefined): string {
-  return typeof value === "number" && Number.isFinite(value) ? formatCentavos(value) : "—";
+  return typeof value === "number" && Number.isFinite(value) ? signedCentavos(value) : "—";
 }
 
 export function daysPastDueLabel(days: number): string {

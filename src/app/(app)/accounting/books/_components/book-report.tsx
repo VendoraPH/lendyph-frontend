@@ -13,10 +13,10 @@ import {
 } from "@/components/ui/table";
 import { useAccountingResource } from "@/hooks";
 import { accountingService } from "@/services";
-import { formatCentavos } from "@/lib/accounting/money";
 import { formatDate } from "@/lib/format";
 import type { AccountingBook, BookKind } from "@/types";
 import { DataState } from "../../_components/data-state";
+import { cellText, totalText } from "../_lib/column-book";
 
 interface BookReportProps {
   kind: BookKind;
@@ -99,10 +99,10 @@ export function BookReport({
                         )}
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm">
-                        {row.debit ? formatCentavos(row.debit) : ""}
+                        {cellText(row.debit)}
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm">
-                        {row.credit ? formatCentavos(row.credit) : ""}
+                        {cellText(row.credit)}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -113,10 +113,10 @@ export function BookReport({
                       Total
                     </TableCell>
                     <TableCell className="text-right font-mono font-semibold">
-                      {formatCentavos(book.total_debit)}
+                      {totalText(book.total_debit)}
                     </TableCell>
                     <TableCell className="text-right font-mono font-semibold">
-                      {formatCentavos(book.total_credit)}
+                      {totalText(book.total_credit)}
                     </TableCell>
                   </TableRow>
                 </TableFooter>

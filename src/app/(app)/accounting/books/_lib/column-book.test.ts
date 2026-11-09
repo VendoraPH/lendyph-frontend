@@ -103,11 +103,12 @@ test("a cell with no amount is empty; an amount shows in pesos with two decimals
   assert.equal(cellText(null), "");
   assert.equal(cellText(0), "");
   assert.equal(cellText(150050), "₱1,500.50");
-  assert.equal(cellText(-2500), "-₱25.00");
+  assert.equal(cellText(-2500), "(₱25.00)");
 });
 
 test("a zero total shows ₱0.00 and a missing total shows a dash", () => {
   assert.equal(totalText(0), "₱0.00");
+  assert.equal(totalText(-40_000), "(₱400.00)");
   assert.equal(totalText(undefined), "—");
   assert.equal(totalText(null), "—");
   assert.equal(totalText(161550), "₱1,615.50");

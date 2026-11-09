@@ -1,4 +1,4 @@
-import { formatCentavos } from "@/lib/accounting/money";
+import { signedCentavos } from "../../_lib/signed-money";
 import type { ColumnBook, ColumnBookKind, ColumnBookRow } from "@/types";
 
 /**
@@ -49,16 +49,16 @@ export function columnBookHeads(book: ColumnBook): { money: ColumnHead[]; column
 
 type Amount = number | string | null | undefined;
 
-/** A cell with no amount is empty. */
+/** A cell with no amount is empty; a negative reads in parentheses. */
 export function cellText(value: Amount): string {
   return value === null || value === undefined || Number(value) === 0
     ? ""
-    : formatCentavos(Number(value));
+    : signedCentavos(Number(value));
 }
 
-/** A zero total is ₱0.00; a total the server didn't send is a dash. */
+/** A zero total is ₱0.00; a total the server didn't send is a dash; a negative reads in parentheses. */
 export function totalText(value: Amount): string {
-  return value === null || value === undefined ? "—" : formatCentavos(Number(value));
+  return value === null || value === undefined ? "—" : signedCentavos(Number(value));
 }
 
 export interface SundryCell {
