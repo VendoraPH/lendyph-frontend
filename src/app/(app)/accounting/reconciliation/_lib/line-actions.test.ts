@@ -12,6 +12,7 @@ import {
   lineActions,
   matchBody,
   matchCandidates,
+  recordAnyway,
   rowMatchAction,
   suspenseRequest,
   transferRequest,
@@ -209,5 +210,27 @@ describe("request bodies", () => {
       body: { description: "Unknown deposit" },
     });
     assert.equal(suspenseRequest({ description: "x".repeat(256) }).ok, false);
+  });
+});
+
+describe("Record anyway", () => {
+  test("resends the same request with record_anyway: true", () => {
+    assert.deepEqual(recordAnyway({ kind: "expense", body: { expense_account_id: 4, payee: "BDO" } }), {
+      kind: "expense",
+      body: { expense_account_id: 4, payee: "BDO", record_anyway: true },
+    });
+    assert.deepEqual(recordAnyway({ kind: "transfer", body: { counter_account_id: 1, description: "Sweep" } }), {
+      kind: "transfer",
+      body: { counter_account_id: 1, description: "Sweep", record_anyway: true },
+    });
+    assert.deepEqual(recordAnyway({ kind: "suspense", body: {} }), {
+      kind: "suspense",
+      body: { record_anyway: true },
+    });
+  });
+
+  test("a first request never carries it", () => {
+    const first = expenseRequest({ expenseAccountId: 4, payee: "BDO", description: "" });
+    assert.ok(first.ok && !("record_anyway" in first.body));
   });
 });

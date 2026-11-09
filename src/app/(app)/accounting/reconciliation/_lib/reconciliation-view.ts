@@ -104,12 +104,27 @@ export interface RequestFailure {
   /** A 409: the worksheet changed underneath, so it is read again. */
   reload: boolean;
   message: string;
+  /**
+   * A 422 on a line the books already hold: offer "Match it instead" or
+   * "Record anyway" (the same request with `record_anyway: true`).
+   */
+  inBooks?: true;
+}
+
+/** C5's wording for that refusal: "This statement line matches JE-… already in the books. …". */
+const ALREADY_IN_THE_BOOKS = /already in the books/i;
+
+function lineErrors(err: unknown): string[] {
+  const line = (err as { response?: { data?: { errors?: { line?: unknown } } } })?.response?.data?.errors?.line;
+  return Array.isArray(line) ? line.filter((m): m is string => typeof m === "string") : [];
 }
 
 /** A refused write in words: the server's own for 409 and 422, and an explained 403. */
 export function requestFailure(err: unknown, { canViewAll }: AccessContext): RequestFailure {
   const status = httpStatusOf(err);
   if (status === 403 && !canViewAll) return { reload: false, message: BRANCH_ACCESS_EXPLANATION };
+  const inBooks = status === 422 ? lineErrors(err).find((m) => ALREADY_IN_THE_BOOKS.test(m)) : undefined;
+  if (inBooks) return { reload: false, message: inBooks, inBooks: true };
   return { reload: status === 409, message: getErrorMessage(err) };
 }
 

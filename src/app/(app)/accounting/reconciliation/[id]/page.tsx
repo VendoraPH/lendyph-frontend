@@ -112,6 +112,7 @@ function WorksheetContent({ id }: { id: number }) {
         onClose={() => actions.setResolving(null)}
         onMatch={actions.onMatch}
         onRecord={actions.onRecord}
+        onMatchInstead={actions.matchInstead}
       />
     </div>
   );

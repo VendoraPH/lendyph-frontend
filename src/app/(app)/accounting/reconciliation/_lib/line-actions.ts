@@ -5,6 +5,7 @@ import type {
   ReconcileLineAsTransferBody,
   ReconcileLineToSuspenseBody,
 } from "@/types";
+import type { LineRecordRequest } from "./reconciliation-api";
 import type { LineActionKind, MatchReconciliationBody, ReconciliationRow } from "./types";
 
 /**
@@ -167,4 +168,9 @@ export function suspenseRequest(form: { description: string }): BodyResult<Recon
     return { ok: false, reason: `The note can be at most ${SUSPENSE_DESCRIPTION_MAX} characters.` };
   }
   return { ok: true, body: optionalText("description", form.description) };
+}
+
+/** "Record anyway": the same request again, telling the server the match it found is not this line. */
+export function recordAnyway(request: LineRecordRequest): LineRecordRequest {
+  return { ...request, body: { ...request.body, record_anyway: true } } as LineRecordRequest;
 }

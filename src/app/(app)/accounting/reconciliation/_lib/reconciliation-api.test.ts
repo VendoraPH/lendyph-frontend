@@ -2,6 +2,7 @@ import { test, before, after, beforeEach, describe } from "node:test";
 import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { requestFailure } from "./reconciliation-view";
 
 /**
  * The reconciliation screens' calls, over real HTTP against a stub of the
@@ -15,6 +16,15 @@ interface Recorded {
 
 const WORKSHEET = { id: 7, account_id: 2, difference: 0, is_reconciled: true, lines: [] };
 const CREATED = { type: "expense", id: 12, journal_id: 345, journal_no: "JE-000345" };
+const IN_BOOKS =
+  "This statement line matches JE-000345 already in the books. Match it instead, or record it anyway.";
+const COLLISION = "Another change to this reconciliation was saved at the same time. Reload and try again.";
+
+/** Line 98 is one the books already hold; line 99 collides on the journal number. */
+const REFUSALS: Record<string, { status: number; body: unknown }> = {
+  "/accounting/reconciliations/7/lines/98": { status: 422, body: { message: IN_BOOKS, errors: { line: [IN_BOOKS] } } },
+  "/accounting/reconciliations/7/lines/99": { status: 409, body: { message: COLLISION } },
+};
 
 let server: Server;
 let requests: Recorded[] = [];
@@ -29,6 +39,11 @@ before(async () => {
       const raw = Buffer.concat(chunks).toString("utf8");
       requests.push({ method: req.method ?? "GET", path, body: raw ? JSON.parse(raw) : null });
       res.setHeader("Content-Type", "application/json");
+      const refusal = REFUSALS[path.replace(/\/(expense|transfer|suspense)$/, "")];
+      if (refusal) {
+        res.statusCode = refusal.status;
+        return res.end(JSON.stringify(refusal.body));
+      }
       if (/\/lines\/\d+\/(expense|transfer|suspense)$/.test(path)) {
         res.statusCode = 201;
         return res.end(JSON.stringify({ data: WORKSHEET, created: CREATED }));
@@ -107,6 +122,40 @@ describe("the three line actions", () => {
         body,
       });
       assert.deepEqual(answer, { data: WORKSHEET, created: CREATED });
+    }
+  });
+});
+
+describe("C5 review fixes, over HTTP", () => {
+  test("Record anyway sends record_anyway: true with the same body", async () => {
+    await api.recordLine("expense", 7, 41, { expense_account_id: 4, payee: "BDO", record_anyway: true });
+    assert.deepEqual(onlyRequest().body, { expense_account_id: 4, payee: "BDO", record_anyway: true });
+  });
+
+  test("a line the books already hold: 422 with the two choices", async () => {
+    const err = await api.recordLine("suspense", 7, 98, {}).then(
+      () => assert.fail("expected a refusal"),
+      (e: unknown) => e,
+    );
+    assert.deepEqual(requestFailure(err, { canViewAll: true }), {
+      reload: false,
+      message: IN_BOOKS,
+      inBooks: true,
+    });
+  });
+
+  test("a journal-number collision: 409 with the server's words, and the worksheet reloads", async () => {
+    const cases = [
+      ["expense", { expense_account_id: 4, payee: "BDO" }],
+      ["transfer", { counter_account_id: 1 }],
+      ["suspense", {}],
+    ] as const;
+    for (const [kind, body] of cases) {
+      const err = await api.recordLine(kind, 7, 99, body).then(
+        () => assert.fail("expected a refusal"),
+        (e: unknown) => e,
+      );
+      assert.deepEqual(requestFailure(err, { canViewAll: true }), { reload: true, message: COLLISION });
     }
   });
 });

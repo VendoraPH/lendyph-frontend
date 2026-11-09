@@ -81,3 +81,11 @@ export type MatchReconciliationBody =
 
 /** The three things an unmatched statement line can be recorded as. */
 export type LineActionKind = "expense" | "transfer" | "suspense";
+
+/**
+ * C5's review fix: an action on a line the books already hold is refused (422)
+ * unless it is resent with `record_anyway: true`. Not in the shared body types.
+ */
+export interface RecordAnyway {
+  record_anyway?: boolean;
+}

@@ -80,5 +80,11 @@ export function useWorksheetActions(id: number, worksheet: Worksheet, canViewAll
     unmatch: (row: ReconciliationRow) => pairRow(row, null),
     onMatch,
     onRecord,
+    /** The books already hold the line: read the worksheet again, where it shows as a possible match. */
+    matchInstead: () => {
+      setResolving(null);
+      worksheet.reload();
+      toast.info("The worksheet was read again. Confirm the line's possible match there.");
+    },
   };
 }

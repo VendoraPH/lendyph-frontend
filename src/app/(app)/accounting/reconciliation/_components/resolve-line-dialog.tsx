@@ -19,6 +19,7 @@ import {
   expenseAccountChoices,
   lineActions,
   matchCandidates,
+  recordAnyway,
 } from "../_lib/line-actions";
 import type { LineRecordRequest } from "../_lib/reconciliation-api";
 import { accountLabel, directionLabel, type RequestFailure } from "../_lib/reconciliation-view";
@@ -40,6 +41,14 @@ interface ResolveLineDialogProps {
   /** Resolves to null on success, or the refusal to show here. */
   onMatch: (row: ReconciliationRow, journalLineId: number) => Promise<RequestFailure | null>;
   onRecord: (row: ReconciliationRow, request: LineRecordRequest) => Promise<RequestFailure | null>;
+  /** The books already hold this line: read the worksheet again so its possible match shows. */
+  onMatchInstead: () => void;
+}
+
+/** A refusal because the books already hold the line, with the request to resend. */
+interface InBooks {
+  message: string;
+  request: LineRecordRequest;
 }
 
 export function ResolveLineDialog({
@@ -50,16 +59,19 @@ export function ResolveLineDialog({
   onClose,
   onMatch,
   onRecord,
+  onMatchInstead,
 }: ResolveLineDialogProps) {
   const { can } = usePermission();
   const open = row !== null;
   const [mode, setMode] = useState<Mode>("choose");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [inBooks, setInBooks] = useState<InBooks | null>(null);
 
   if (useDialogOpening(open, row)) {
     setMode("choose");
     setError(null);
+    setInBooks(null);
   }
 
   if (row === null) return null;
@@ -77,8 +89,22 @@ export function ResolveLineDialog({
       .finally(() => setSubmitting(false));
   };
 
+  const record = (request: LineRecordRequest) => {
+    if (submitting) return;
+    setSubmitting(true);
+    setError(null);
+    setInBooks(null);
+    onRecord(row, request)
+      .then((failure) => {
+        if (failure?.inBooks) setInBooks({ message: failure.message, request });
+        else setError(failure?.message ?? null);
+      })
+      .finally(() => setSubmitting(false));
+  };
+
   const choose = (next: Mode) => {
     setError(null);
+    setInBooks(null);
     setMode(next);
   };
 
@@ -89,7 +115,7 @@ export function ResolveLineDialog({
     submitting,
     error,
     onBack: () => choose("choose"),
-    onSubmit: (request: LineRecordRequest) => settle(onRecord(row, request)),
+    onSubmit: record,
   };
 
   return (
@@ -176,11 +202,28 @@ export function ResolveLineDialog({
           </div>
         )}
 
-        {mode === "expense" && <ExpenseForm accounts={expenseAccountChoices(accounts)} {...formProps} />}
-        {mode === "transfer" && (
-          <TransferForm accounts={counterAccountChoices(accounts, reconciliation.account_id)} {...formProps} />
+        {inBooks && (
+          <div role="alert" className="space-y-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+            <p>{inBooks.message}</p>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button variant="outline" disabled={submitting} onClick={onMatchInstead}>
+                Match it instead
+              </Button>
+              <Button disabled={submitting} onClick={() => record(recordAnyway(inBooks.request))}>
+                {submitting ? "Recording…" : "Record anyway"}
+              </Button>
+            </div>
+          </div>
         )}
-        {mode === "suspense" && <SuspenseForm {...formProps} />}
+
+        {/* Hidden, not unmounted, while the choice is open: the form keeps what was typed. */}
+        <div hidden={inBooks !== null}>
+          {mode === "expense" && <ExpenseForm accounts={expenseAccountChoices(accounts)} {...formProps} />}
+          {mode === "transfer" && (
+            <TransferForm accounts={counterAccountChoices(accounts, reconciliation.account_id)} {...formProps} />
+          )}
+          {mode === "suspense" && <SuspenseForm {...formProps} />}
+        </div>
       </DialogContent>
     </Dialog>
   );

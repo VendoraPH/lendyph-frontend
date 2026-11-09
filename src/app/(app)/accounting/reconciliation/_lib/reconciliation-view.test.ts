@@ -235,3 +235,34 @@ describe("what each action says it will do", () => {
     assert.equal(descriptionDefault("transfer", line), "Transfer from statement line: Unknown deposit");
   });
 });
+
+describe("C5 review fixes", () => {
+  const IN_BOOKS =
+    "This statement line matches JE-000345 already in the books. Match it instead, or record it anyway.";
+
+  test("a line the books already hold is refused with the two choices, in the server's words", () => {
+    assert.deepEqual(
+      requestFailure(httpError(422, { message: IN_BOOKS, errors: { line: [IN_BOOKS] } }), { canViewAll: true }),
+      { reload: false, message: IN_BOOKS, inBooks: true },
+    );
+  });
+
+  test("other refusals on the line offer no such choice", () => {
+    const words = "This statement line is dated outside the reconciliation's dates.";
+    const failure = requestFailure(httpError(422, { errors: { line: [words] } }), { canViewAll: true });
+    assert.equal(failure.inBooks, undefined);
+  });
+
+  test("an account no longer usable reads in the server's words", () => {
+    for (const [field, words] of [
+      ["account_id", "1020 Cash in Bank is not a money account, so money cannot move through it. Reactivate it or reconcile another account."],
+      ["account_mapping", "2390 Suspense Account is deactivated and no longer accepts entries."],
+      ["account_mapping", "2390 Suspense Account is a heading. Map a postable account in Accounting Settings."],
+    ]) {
+      assert.deepEqual(requestFailure(httpError(422, { errors: { [field]: [words] } }), { canViewAll: true }), {
+        reload: false,
+        message: words,
+      });
+    }
+  });
+});

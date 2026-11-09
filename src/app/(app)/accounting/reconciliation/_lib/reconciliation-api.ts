@@ -12,6 +12,7 @@ import type {
   MatchReconciliationBody,
   ReconciliationActionAnswer,
   ReconciliationDetail,
+  RecordAnyway,
 } from "./types";
 
 /**
@@ -37,9 +38,9 @@ export function reconciliationMatch(
 }
 
 export interface LineActionBodies {
-  expense: ReconcileLineAsExpenseBody;
-  transfer: ReconcileLineAsTransferBody;
-  suspense: ReconcileLineToSuspenseBody;
+  expense: ReconcileLineAsExpenseBody & RecordAnyway;
+  transfer: ReconcileLineAsTransferBody & RecordAnyway;
+  suspense: ReconcileLineToSuspenseBody & RecordAnyway;
 }
 
 /** One line action and its body, as the resolve dialog hands it to the page. */
