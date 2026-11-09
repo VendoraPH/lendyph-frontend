@@ -123,22 +123,89 @@ export function memberLabel(member: AccountingMemberRef): string {
   return member.code ? `${member.name} · ${member.code}` : member.name;
 }
 
-/** How the books-against-records card reads. */
-export function booksVsRecordsNote(comparison: LoanAccountingSummary["books_vs_records"]): {
-  reconciled: boolean;
+/** A loan's account number; an imported loan has none and reads as a dash. */
+export function accountNumberLabel(accountNumber: string | null): string {
+  return accountNumber ?? "—";
+}
+
+/** One figure on a card, already formatted. */
+export interface FigureView {
+  label: string;
+  value: string;
+  hint?: string;
+  /** The server says this figure needs review. */
+  needsReview?: boolean;
+}
+
+type Books = NonNullable<LoanAccountingSummary["books"]>;
+type Comparison = NonNullable<LoanAccountingSummary["books_vs_records"]>;
+
+/**
+ * The books' cards. Until the server sends `books`, every figure is a dash. The
+ * clearing badge is the server's `adjustments_clearing_needs_review`, never a
+ * test of the balance here.
+ */
+export function booksFigureViews(books: Books | undefined): {
+  figures: FigureView[];
+  clearingNeedsReview: boolean;
+} {
+  const clearingNeedsReview = books?.adjustments_clearing_needs_review === true;
+  return {
+    figures: [
+      { label: "Gross loans receivable", value: centavosOrDash(books?.gross) },
+      { label: "Less allowance for credit losses", value: centavosOrDash(books?.allowance) },
+      {
+        label: "Less unearned income on restructured loans",
+        value: centavosOrDash(books?.unearned_income),
+        hint: "Interest and penalty capitalised at restructure, not yet collected.",
+      },
+      { label: "Net loans receivable", value: centavosOrDash(books?.net) },
+      {
+        label: "Loan adjustments clearing",
+        value: centavosOrDash(books?.adjustments_clearing),
+        hint: "Any balance left here needs review.",
+        needsReview: clearingNeedsReview,
+      },
+    ],
+    clearingNeedsReview,
+  };
+}
+
+/** How the books-against-records card reads; every figure is a dash until the server sends it. */
+export function booksVsRecordsView(comparison: Comparison | undefined): {
+  status: "reconciled" | "differs" | "pending";
   label: string;
   text: string;
+  figures: FigureView[];
 } {
+  const figures: FigureView[] = [
+    { label: "Loans receivable in the books", value: centavosOrDash(comparison?.books_principal) },
+    {
+      label: "Principal Balance on the loan records",
+      value: centavosOrDash(comparison?.records_principal),
+    },
+    { label: "Difference (books less records)", value: centavosOrDash(comparison?.difference) },
+  ];
+  if (!comparison) {
+    return {
+      status: "pending",
+      label: "Not available yet",
+      text: "The comparison with the books isn't available yet.",
+      figures,
+    };
+  }
   if (comparison.is_reconciled) {
     return {
-      reconciled: true,
+      status: "reconciled",
       label: "Reconciled",
       text: "The loans receivable in the books equal the principal still owed on the loan records.",
+      figures,
     };
   }
   return {
-    reconciled: false,
+    status: "differs",
     label: "Not reconciled",
     text: "The books and the loan records differ. This usually means loans were released before the books existed, or an opening balance has not been entered yet. Entering the opening balances corrects it.",
+    figures,
   };
 }

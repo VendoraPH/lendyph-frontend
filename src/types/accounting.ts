@@ -745,7 +745,8 @@ export interface AccountingMemberRef {
 /** One loan on the Loan Accounting list. Centavos. */
 export interface LoanAgingRow {
   loan_id: number;
-  account_number: string;
+  /** Null on an imported loan, which has no account number. */
+  account_number: string | null;
   member: AccountingMemberRef;
   branch: { id: number; name: string } | null;
   display_status: string;
@@ -773,12 +774,17 @@ export interface MemberAgingRow {
 export interface LoanAccountingSummary {
   as_of: string;
   aging: Aging;
-  /** The ledger at `as_of`. */
-  books: {
+  /**
+   * The ledger at `as_of`. Absent until the server reads the books for this
+   * summary; the screen shows a dash for each figure meanwhile.
+   */
+  books?: {
     gross: number;
     allowance: number;
     unearned_income: number;
     adjustments_clearing: number;
+    /** The server's flag: true whenever Loan Adjustments Clearing holds a balance. */
+    adjustments_clearing_needs_review: boolean;
     net: number;
   };
   /** The loan records, always as of today; `as_of` says which day. */
@@ -790,8 +796,8 @@ export interface LoanAccountingSummary {
     past_due_amount: number;
     past_due_count: number;
   };
-  /** Today's books principal against today's records. */
-  books_vs_records: {
+  /** Today's books principal against today's records. Absent, like `books`, until it is sent. */
+  books_vs_records?: {
     as_of: string;
     books_principal: number;
     records_principal: number;

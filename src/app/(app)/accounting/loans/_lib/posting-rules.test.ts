@@ -92,6 +92,32 @@ test("the balance adjustment entry goes through Loan Adjustments Clearing", () =
   assert.match(adjustment.note, /needs review/i);
 });
 
+test("a reduction on a loan holding unearned income also clears its matching share", () => {
+  const adjustment = rule(/^Balance adjustment$/);
+  assert.ok(
+    adjustment.debit.includes(
+      "Unearned Interest and Penalty – Restructured Loans (a reduction's matching share)",
+    ),
+  );
+  assert.equal(adjustment.credit.filter((c) => c.startsWith("Loan Adjustments Clearing")).length, 2);
+  assert.match(adjustment.note, /matching share/i);
+});
+
+test("the old loan's unearned income left after its write-off carries to the new loan", () => {
+  assert.match(rule(/^Restructure released$/).note, /left after its write-off carries to the new loan/i);
+});
+
+test("a restructure write-off spells out its order: own unearned income, the allowance, then expense", () => {
+  assert.match(
+    rule(/^Allowance for credit losses$/).note,
+    /old loan's own unearned interest and penalty first, then the allowance, then Credit Loss Expense/,
+  );
+});
+
+test("a Cash Out posts when it is created, which completes it", () => {
+  assert.match(rule(/^GCash Cash Out$/).note, /created, which completes it/i);
+});
+
 test("share capital, GCash, the allowance and a void are each written", () => {
   assert.deepEqual(rule(/^Share capital entry$/).credit, ["Share Capital"]);
   assert.ok(rule(/^GCash Cash In$/).credit.includes("GCash Service Income (the charge)"));

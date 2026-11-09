@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import {
   ANY_BUCKET,
   LOAN_ACCOUNTING_PAGE_SIZE,
-  booksVsRecordsNote,
+  accountNumberLabel,
+  booksFigureViews,
+  booksVsRecordsView,
   bucketFilterItems,
   bucketLabel,
   centavosOrDash,
@@ -149,29 +151,98 @@ test("a member shows name and code only", () => {
 
 // ── Books against records ──
 
-test("reconciled books say so", () => {
-  const note = booksVsRecordsNote({
-    as_of: "2026-11-09",
-    books_principal: 100,
-    records_principal: 100,
-    difference: 0,
-    is_reconciled: true,
-  });
-  assert.equal(note.reconciled, true);
-  assert.equal(note.label, "Reconciled");
+const COMPARISON = {
+  as_of: "2026-11-09",
+  books_principal: 100,
+  records_principal: 100,
+  difference: 0,
+  is_reconciled: true,
+};
+
+test("reconciled books say so, with the server's three figures", () => {
+  const view = booksVsRecordsView(COMPARISON);
+  assert.equal(view.status, "reconciled");
+  assert.equal(view.label, "Reconciled");
+  assert.deepEqual(
+    view.figures.map((f) => f.value),
+    ["₱1.00", "₱1.00", "₱0.00"],
+  );
 });
 
 test("a difference is explained in plain words, pointing at opening balances", () => {
-  const note = booksVsRecordsNote({
-    as_of: "2026-11-09",
+  const view = booksVsRecordsView({
+    ...COMPARISON,
     books_principal: 0,
-    records_principal: 100,
     difference: -100,
     is_reconciled: false,
   });
-  assert.equal(note.reconciled, false);
-  assert.equal(note.label, "Not reconciled");
-  assert.match(note.text, /released before the books/i);
-  assert.match(note.text, /opening balance/i);
-  assert.doesNotMatch(note.text, /books_principal|records_principal|is_reconciled/);
+  assert.equal(view.status, "differs");
+  assert.equal(view.label, "Not reconciled");
+  assert.equal(view.figures[2].value, "-₱1.00");
+  assert.match(view.text, /released before the books/i);
+  assert.match(view.text, /opening balance/i);
+  assert.doesNotMatch(view.text, /books_principal|records_principal|is_reconciled/);
+});
+
+test("before the server sends the comparison, every figure is a dash and nothing is claimed", () => {
+  const view = booksVsRecordsView(undefined);
+  assert.equal(view.status, "pending");
+  assert.deepEqual(
+    view.figures.map((f) => f.value),
+    ["—", "—", "—"],
+  );
+  assert.doesNotMatch(view.label, /reconciled/i);
+});
+
+// ── The books ──
+
+const BOOKS = {
+  gross: 1_000_000,
+  allowance: 50_000,
+  unearned_income: 20_000,
+  adjustments_clearing: 0,
+  adjustments_clearing_needs_review: false,
+  net: 930_000,
+};
+
+test("the books' figures are the server's, in order", () => {
+  const view = booksFigureViews(BOOKS);
+  assert.deepEqual(
+    view.figures.map((f) => [f.label, f.value]),
+    [
+      ["Gross loans receivable", "₱10,000.00"],
+      ["Less allowance for credit losses", "₱500.00"],
+      ["Less unearned income on restructured loans", "₱200.00"],
+      ["Net loans receivable", "₱9,300.00"],
+      ["Loan adjustments clearing", "₱0.00"],
+    ],
+  );
+  assert.equal(view.clearingNeedsReview, false);
+});
+
+test("the needs-review badge follows the server's flag, not the balance", () => {
+  assert.equal(
+    booksFigureViews({ ...BOOKS, adjustments_clearing: 0, adjustments_clearing_needs_review: true })
+      .clearingNeedsReview,
+    true,
+  );
+  assert.equal(
+    booksFigureViews({ ...BOOKS, adjustments_clearing: 500, adjustments_clearing_needs_review: false })
+      .clearingNeedsReview,
+    false,
+  );
+});
+
+test("before the server sends the books, each card is a dash and nothing needs review", () => {
+  const view = booksFigureViews(undefined);
+  assert.equal(view.figures.length, 5);
+  assert.ok(view.figures.every((f) => f.value === "—"));
+  assert.equal(view.clearingNeedsReview, false);
+});
+
+// ── Loan rows ──
+
+test("an imported loan with no account number reads as a dash", () => {
+  assert.equal(accountNumberLabel(null), "—");
+  assert.equal(accountNumberLabel("LN-000004"), "LN-000004");
 });

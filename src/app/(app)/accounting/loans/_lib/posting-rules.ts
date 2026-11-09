@@ -50,7 +50,7 @@ export const POSTING_RULES: readonly PostingRule[] = [
       "Unearned Interest and Penalty – Restructured Loans (interest and penalty capitalised)",
       "Each deduction's own account",
     ],
-    note: "No money changes hands for the principal, so nothing is paid out: the old loan's principal is carried into the new one. The deductions are collected from the member at release. The capitalised interest and penalty wait in the unearned account until the new loan's principal is collected.",
+    note: "No money changes hands for the principal, so nothing is paid out: the old loan's principal is carried into the new one. The deductions are collected from the member at release. The capitalised interest and penalty wait in the unearned account until the new loan's principal is collected. Whatever unearned interest and penalty the old loan has left after its write-off carries to the new loan, and is recognised the same way.",
   },
   {
     event: "Restructure: principal written off",
@@ -64,9 +64,17 @@ export const POSTING_RULES: readonly PostingRule[] = [
   },
   {
     event: "Balance adjustment",
-    debit: ["Loan Adjustments Clearing (a reduction)", "Loans Receivable (an increase)"],
-    credit: ["Loans Receivable (a reduction)", "Loan Adjustments Clearing (an increase)"],
-    note: "An approved adjustment moves principal through Loan Adjustments Clearing. Any balance left there needs review by the accountant.",
+    debit: [
+      "Loan Adjustments Clearing (a reduction)",
+      "Unearned Interest and Penalty – Restructured Loans (a reduction's matching share)",
+      "Loans Receivable (an increase)",
+    ],
+    credit: [
+      "Loans Receivable (a reduction)",
+      "Loan Adjustments Clearing (the matching share)",
+      "Loan Adjustments Clearing (an increase)",
+    ],
+    note: "An approved adjustment moves principal through Loan Adjustments Clearing. A reduction on a loan holding unearned interest and penalty also clears its matching share of it, in proportion to the principal reduced, into the clearing account; a reduction that completes the loan clears all of it. An increase clears nothing. Any balance left in Loan Adjustments Clearing needs review by the accountant.",
   },
   {
     event: "Share capital entry",
@@ -84,13 +92,13 @@ export const POSTING_RULES: readonly PostingRule[] = [
     event: "GCash Cash Out",
     debit: ["GCash (the amount)"],
     credit: ["Cash on Hand (the amount less the charge)", "GCash Service Income (the charge)"],
-    note: "Posted when the Cash Out is created. A ₱0.00 charge posts no service income line.",
+    note: "Posted when the Cash Out is created, which completes it. A ₱0.00 charge posts no service income line.",
   },
   {
     event: "Allowance for credit losses",
     debit: ["Credit Loss Expense"],
     credit: ["Allowance for Credit Losses"],
-    note: "Posted by someone with permission to book the allowance; lowering it posts the reverse. The allowance reduces net loans receivable without touching what a member still owes. A write-off takes principal only, against the allowance first.",
+    note: "Posted by someone with permission to book the allowance; lowering it posts the reverse. The allowance reduces net loans receivable without touching what a member still owes. A write-off takes principal only. A restructure write-off uses the old loan's own unearned interest and penalty first, then the allowance, then Credit Loss Expense.",
   },
   {
     event: "Payment voided",

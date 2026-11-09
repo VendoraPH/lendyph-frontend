@@ -107,8 +107,10 @@ export function LoansByAge({ asOf, branchId }: LoansByAgeProps) {
             Loans past due
           </h2>
           <p className="text-xs text-muted-foreground">
-            As of today: loan records keep no history. A loan can sit in a bucket and still be
-            within its grace period; &quot;Past due only&quot; keeps the loans past grace.
+            Days past due, the bucket and Past Due follow the &quot;As of&quot; date. Principal
+            Balance and Outstanding read today&apos;s payments, and the status is today&apos;s,
+            because loan records keep no history. A loan can sit in a bucket and still be within
+            its grace period; &quot;Past due only&quot; keeps the loans past grace.
           </p>
         </div>
 

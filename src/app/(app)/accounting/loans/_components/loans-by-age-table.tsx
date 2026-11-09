@@ -13,6 +13,7 @@ import { LOAN_STATUS_COLORS } from "@/constants/loan-status";
 import { formatDate } from "@/lib/format";
 import type { LoanAgingPage, LoanAgingRow, MemberAgingRow } from "@/types";
 import {
+  accountNumberLabel,
   bucketLabel,
   centavosOrDash,
   daysPastDueLabel,
@@ -97,8 +98,12 @@ export function LoanRowsTable({ rows, totals }: { rows: LoanAgingRow[]; totals: 
         {rows.map((row) => (
           <TableRow key={row.loan_id}>
             <TableCell className="font-mono text-sm">
-              <Link href={`/loans/${row.loan_id}`} className="text-primary hover:underline">
-                {row.account_number}
+              <Link
+                href={`/loans/${row.loan_id}`}
+                aria-label={row.account_number ? undefined : "Open loan (no account number)"}
+                className="text-primary hover:underline"
+              >
+                {accountNumberLabel(row.account_number)}
               </Link>
             </TableCell>
             <TableCell className="text-sm">{memberLabel(row.member)}</TableCell>
