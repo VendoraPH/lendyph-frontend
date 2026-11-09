@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   accountTypeLabel,
   cashKindLabel,
+  expenseStatusLabel,
   journalSourceLabel,
   journalStatusLabel,
   periodStatusLabel,
@@ -38,4 +39,15 @@ test("an account's type and kind read in words", () => {
 test("a period's status reads in words", () => {
   assert.equal(periodStatusLabel("open"), "Open");
   assert.equal(periodStatusLabel("closed"), "Closed");
+});
+
+test("an expense's status reads as the status filter reads it", () => {
+  assert.equal(expenseStatusLabel("unpaid"), "Unpaid");
+  assert.equal(expenseStatusLabel("partially_paid"), "Partially paid");
+  assert.equal(expenseStatusLabel("paid"), "Paid");
+  assert.equal(expenseStatusLabel("overdue"), "Overdue");
+});
+
+test("an expense status the screen doesn't know yet still reads in words", () => {
+  assert.equal(expenseStatusLabel("written_off"), "Written Off");
 });

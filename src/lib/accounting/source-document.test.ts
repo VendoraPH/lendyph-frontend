@@ -72,11 +72,33 @@ test("an expense payment has no route at all", () => {
 test("a type nobody has mapped is readable and unlinked, never a crash", () => {
   // The server snake-cases the basename of any class it has not curated.
   const doc = sourceDocument(
-    entry({ postable_type: "gcash_transaction", postable_id: 3, postable_label: "GC-77" })
+    entry({ postable_type: "petty_cash_voucher", postable_id: 3, postable_label: "PCV-77" })
   );
   assert.equal(doc?.href, null);
-  assert.equal(doc?.text, "gcash transaction GC-77");
-  assert.equal(doc?.type, "gcash_transaction");
+  assert.equal(doc?.text, "petty cash voucher PCV-77");
+  assert.equal(doc?.type, "petty_cash_voucher");
+});
+
+test("the Phase 2 documents are named in words and not linked — none has a detail page", () => {
+  const cases = [
+    ["loan_adjustment", "Loan adjustment"],
+    ["share_capital_entry", "Share capital entry"],
+    ["gcash_transaction", "GCash transaction"],
+  ] as const;
+  for (const [type, name] of cases) {
+    const doc = sourceDocument(entry({ postable_type: type, postable_id: 5 }));
+    assert.equal(doc?.typeLabel, name, type);
+    assert.equal(doc?.text, `${name} #5`, type);
+    assert.equal(doc?.href, null, type);
+  }
+});
+
+test("a GCash transaction keeps its own reference as the label", () => {
+  const doc = sourceDocument(
+    entry({ postable_type: "gcash_transaction", postable_id: 3, postable_label: "GC-77" })
+  );
+  assert.equal(doc?.text, "GCash transaction GC-77");
+  assert.equal(doc?.href, null);
 });
 
 test("a known type with no id cannot be linked — there is no url to build", () => {
