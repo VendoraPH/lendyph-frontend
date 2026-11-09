@@ -5,7 +5,7 @@ import { ArrowDown, ArrowUp, Minus } from "lucide-react";
 import { RouteGuard } from "@/components/common/route-guard";
 import { DataState } from "@/components/common/data-state";
 import { TablePagination } from "@/components/common/table-pagination";
-import { useApiResource } from "@/hooks";
+import { useApiResource, usePermission } from "@/hooks";
 import { creditScoringService } from "@/services";
 import { CREDIT_SCORING_PER_PAGE } from "@/services/credit-scoring.service";
 import { CREDIT_SCORING_PER_PAGE_OPTIONS } from "@/lib/credit-scoring/paging";
@@ -30,6 +30,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDate } from "@/lib/format";
+import { borrowerScoreFilters, yesNoOrDash } from "@/lib/credit-scoring/loan-facts";
 import type { BorrowerScoreFilters, BorrowerScoreRow, CreditScoringPage } from "@/types/credit-scoring";
 
 const TREND_LABELS = { up: "Score went up", down: "Score went down", flat: "No change" } as const;
@@ -47,14 +48,16 @@ function BorrowerScoresContent() {
   const [riskLevel, setRiskLevel] = useState(ALL_RISK_LEVELS);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState<number>(CREDIT_SCORING_PER_PAGE);
+  const { can } = usePermission();
+  const canViewLoans = can("loans:view");
 
   const fetcher = useCallback((): Promise<CreditScoringPage<BorrowerScoreRow>> => {
     const filters: BorrowerScoreFilters = {
       branch_id: branchParam(branch),
       risk_level: riskLevelParam(riskLevel),
     };
-    return creditScoringService.listBorrowerScores(filters, { page, per_page: perPage });
-  }, [branch, riskLevel, page, perPage]);
+    return creditScoringService.listBorrowerScores(borrowerScoreFilters(filters, canViewLoans), { page, per_page: perPage });
+  }, [branch, riskLevel, page, perPage, canViewLoans]);
 
   const resource = useApiResource<CreditScoringPage<BorrowerScoreRow>>(fetcher);
 
@@ -115,8 +118,8 @@ function BorrowerScoresContent() {
                     <TableCell>
                       <TrendIcon trend={row.score_trend} />
                     </TableCell>
-                    <TableCell>{row.has_active_loan ? "Yes" : "No"}</TableCell>
-                    <TableCell>{row.past_due ? "Yes" : "No"}</TableCell>
+                    <TableCell>{yesNoOrDash(row.has_active_loan)}</TableCell>
+                    <TableCell>{yesNoOrDash(row.past_due)}</TableCell>
                     <TableCell>{row.calculated_at ? formatDate(row.calculated_at) : "—"}</TableCell>
                   </TableRow>
                 ))}

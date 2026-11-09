@@ -10,3 +10,8 @@ test("the new hard flags count reads a dash when the server sends null", () => {
   assert.match(page, /value=\{countOrDash\(data\.summary\.new_hard_flags_30d\)\}/);
   assert.doesNotMatch(page, /String\(data\.summary\./);
 });
+
+test("an affected member's past due reads a dash when null", () => {
+  assert.match(page, /<TableCell>\{yesNoOrDash\(row\.past_due\)\}<\/TableCell>/);
+  assert.doesNotMatch(page, /\? "Yes" : "No"/);
+});

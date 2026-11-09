@@ -14,7 +14,7 @@ export function DecisionList({ decisions, total }: { decisions: CreditDecision[]
         {decisions.map((d) => (
           <li key={d.id} className="rounded-md border p-3 text-sm">
             <p className="font-medium">{DECISION_LABELS[d.decision]}</p>
-            <p>{d.reason}</p>
+            {d.reason && <p>{d.reason}</p>}
             {d.remarks && <p className="text-muted-foreground">{d.remarks}</p>}
             <p className="text-xs text-muted-foreground">
               {d.decided_by} · {formatDateTime(d.decided_at)}

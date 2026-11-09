@@ -14,7 +14,12 @@ const form = readFileSync(
   "utf8",
 );
 
-test("hidden member details show the notice in place of every field", () => {
-  assert.match(form, /\{detailsHidden \? \(\s*<DetailsHiddenNotice \/>\s*\) : \(\s*<div className="grid gap-4 sm:grid-cols-2">/);
+test("hidden member details show no field, and the notice only once on the page", () => {
+  assert.match(form, /\{detailsHidden \? \(\s*showHiddenNotice && <DetailsHiddenNotice \/>\s*\) : \(\s*<div className="grid gap-4 sm:grid-cols-2">/);
+  assert.match(form, /showHiddenNotice = true,/);
   assert.doesNotMatch(form, /MEMBER_DETAILS_HIDDEN_TEXT|HIDDEN_CHOICE/);
+});
+
+test("a caller who can't see the details is offered only the notice acknowledgement", () => {
+  assert.match(form, /\{detailsHidden \? ONLY_NOTICE_TEXT : "Optional\. Saving scores this application again\. Leave a field empty to clear it\."\}/);
 });

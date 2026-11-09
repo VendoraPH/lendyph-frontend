@@ -171,6 +171,7 @@ function CreditAssessmentBody({
                     form={form}
                     canSave={canSave}
                     detailsHidden={detailsHidden}
+                    showHiddenNotice={!summaryOnly}
                     saving={saving}
                     onChange={setDraft}
                     onSave={() => handleSave(form, loaded, detailsHidden)}

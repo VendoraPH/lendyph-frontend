@@ -1,5 +1,6 @@
 import { formatCurrency } from "@/lib/format";
 import { CAPACITY_ASSESSMENT_LABELS, labelOf } from "./labels";
+import { yesNoOrDash } from "./loan-facts";
 import type { CreditCapacity } from "@/types/credit-scoring";
 
 export interface CapacityRow {
@@ -12,11 +13,6 @@ export interface CapacityRow {
 export function pesoOrDash(value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === "") return "—";
   return formatCurrency(value);
-}
-
-function yesNo(value: boolean | null): string {
-  if (value === null) return "—";
-  return value ? "Yes" : "No";
 }
 
 /** The capacity block's rows, every figure as the server sent it. */
@@ -34,7 +30,7 @@ export function capacityRows(c: CreditCapacity): CapacityRow[] {
     { label: "Suggested maximum payment", value: pesoOrDash(c.suggested_maximum_payment) },
     { label: "Debt service ratio", value: c.debt_service_ratio === null ? "—" : `${c.debt_service_ratio}%` },
     { label: "Assessment", value: labelOf(CAPACITY_ASSESSMENT_LABELS, c.assessment) },
-    { label: "Proposed payment fits", value: yesNo(c.proposed_fits) },
+    { label: "Proposed payment fits", value: yesNoOrDash(c.proposed_fits) },
   ];
 }
 

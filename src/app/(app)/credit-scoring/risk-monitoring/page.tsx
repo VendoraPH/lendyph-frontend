@@ -12,6 +12,7 @@ import { ScoreCells } from "../_components/score-cells";
 import { ALERT_KIND_LABELS, ALERT_SEVERITY_LABELS } from "@/lib/credit-scoring/labels";
 import { borrowerLabel } from "@/lib/credit-scoring/borrower-label";
 import { countOrDash } from "@/lib/credit-scoring/score-state";
+import { yesNoOrDash } from "@/lib/credit-scoring/loan-facts";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -117,7 +118,7 @@ function RiskMonitoringContent() {
                       </TableCell>
                       <TableCell>{row.branch_name ?? "—"}</TableCell>
                       <ScoreCells row={row} />
-                      <TableCell>{row.past_due ? "Yes" : "No"}</TableCell>
+                      <TableCell>{yesNoOrDash(row.past_due)}</TableCell>
                     </TableRow>
                   ))}
                   {data.affected_borrowers.length === 0 && (

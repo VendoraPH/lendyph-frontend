@@ -45,7 +45,7 @@ export function ScoreHistoryTable({
             <ScoreCells row={row} />
             <TableCell className="tabular-nums">{row.previous_score ?? "—"}</TableCell>
             <TableCell>{labelOf(SCORE_TYPE_LABELS, row.score_type)}</TableCell>
-            <TableCell>{row.reason}</TableCell>
+            <TableCell>{row.reason ?? ""}</TableCell>
             <TableCell>v{row.model_version}</TableCell>
             <TableCell>{formatDateTime(row.calculated_at)}</TableCell>
           </TableRow>

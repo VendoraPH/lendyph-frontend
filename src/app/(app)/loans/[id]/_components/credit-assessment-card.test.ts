@@ -67,3 +67,7 @@ test("a summary-only assessment shows the score and one notice, never the capaci
   assert.match(card, /\{!summaryOnly && \(\s*<>\s*<CapacitySection capacity=\{assessment\.capacity \?\? null\}/);
   assert.match(card, /\(assessment\.policy_flags \?\? \[\]\)\.length === 0/);
 });
+
+test("the summary notice shows once on the card: the form doesn't repeat it", () => {
+  assert.match(card, /showHiddenNotice=\{!summaryOnly\}/);
+});

@@ -22,6 +22,9 @@ import {
 import type { IncomeVerification, LoanCreditAssessment } from "@/types/credit-scoring";
 import { DetailsHiddenNotice } from "./details-hidden-notice";
 
+/** What a caller who can't see the member's details may save. */
+const ONLY_NOTICE_TEXT = "Only the member's privacy notice acknowledgement can be recorded here.";
+
 /** A Select can't hold an empty value, so "not given" has its own key. */
 const NONE = "none";
 
@@ -41,6 +44,7 @@ export function AssessmentFormFields({
   form,
   canSave,
   detailsHidden,
+  showHiddenNotice = true,
   saving,
   onChange,
   onSave,
@@ -50,6 +54,8 @@ export function AssessmentFormFields({
   canSave: boolean;
   /** The server doesn't send this caller the application details: none is shown or sent. */
   detailsHidden: boolean;
+  /** False where the page already shows the details notice, so it shows once. */
+  showHiddenNotice?: boolean;
   saving: boolean;
   onChange: (next: AssessmentForm) => void;
   onSave: () => void;
@@ -74,12 +80,12 @@ export function AssessmentFormFields({
           Application Details
         </h3>
         <p className="text-xs text-muted-foreground">
-          Optional. Saving scores this application again. Leave a field empty to clear it.
+          {detailsHidden ? ONLY_NOTICE_TEXT : "Optional. Saving scores this application again. Leave a field empty to clear it."}
         </p>
       </div>
 
       {detailsHidden ? (
-        <DetailsHiddenNotice />
+        showHiddenNotice && <DetailsHiddenNotice />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           {TEXT_FIELDS.map((f) => {

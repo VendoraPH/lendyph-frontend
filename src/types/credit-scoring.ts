@@ -167,7 +167,8 @@ export interface CreditScoreHistoryEntry {
   score_type: ScoreType;
   model_version: string;
   calculated_at: string;
-  reason: string;
+  /** "Recalculated" for a summary caller; tolerated when absent. */
+  reason?: string;
   status: Exclude<ScoreStatus, "not_scored">;
   previous_score: number | null;
 }
@@ -195,8 +196,10 @@ export interface CreditDecision {
   loan_id: number | null;
   credit_score_id: number;
   decision: CreditDecisionValue;
-  reason: string;
-  remarks: string | null;
+  /** Absent for a summary caller (`details_hidden`). */
+  reason?: string;
+  /** Absent for a summary caller (`details_hidden`). */
+  remarks?: string | null;
   decided_by: string;
   decided_at: string;
   revision_version: string | null;
@@ -276,8 +279,10 @@ export interface BorrowerScoreRow {
   score: number | null;
   risk_level: RiskLevel | null;
   score_trend: "up" | "down" | "flat" | null;
-  has_active_loan: boolean;
-  past_due: boolean;
+  /** Null without loans:view. */
+  has_active_loan: boolean | null;
+  /** Null without loans:view. */
+  past_due: boolean | null;
   calculated_at: string | null;
   status: Exclude<ScoreStatus, "not_scored">;
 }
@@ -287,7 +292,9 @@ export interface BorrowerScoreFilters {
   risk_level?: RiskLevel;
   min_score?: number;
   max_score?: number;
+  /** Needs loans:view (422 without it). */
   has_active_loan?: boolean;
+  /** Needs loans:view (422 without it). */
   past_due?: boolean;
 }
 

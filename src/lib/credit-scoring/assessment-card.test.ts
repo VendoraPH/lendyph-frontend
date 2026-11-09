@@ -219,3 +219,20 @@ test("the notice status names an earlier version's acknowledgement", () => {
   assert.deepEqual(noticeStatus(null), { kind: "none" });
   assert.deepEqual(noticeStatus({ ...profile, notice_acknowledged: false, notice_version: null, notice_acknowledged_at: null }), { kind: "none" });
 });
+
+test("a summary-only caller's save carries only the notice, so it never meets the 403", () => {
+  const viewer = holding("loans:view", "borrowers:view", "loans:update");
+  const hidden = memberDetailsHidden({ details_hidden: true, application_figures_hidden: true }, viewer);
+  assert.equal(hidden, true);
+  const loaded = assessmentFormFrom({ notice_version: 2, notice_acknowledged_at: null, notice_acknowledged: false });
+  const typed = { ...loaded, other_income: "1.00", employment_status: "employed", income_verification: "verified" as const };
+  assert.deepEqual(assessmentBody({ ...typed, notice_acknowledged: true }, loaded, { memberDetailsHidden: hidden }), {
+    notice_acknowledged: true,
+  });
+  assert.deepEqual(assessmentBody(typed, loaded, { memberDetailsHidden: hidden }), {});
+});
+
+test("a 403 on save shows the server's own words", () => {
+  const message = "Saving application details needs permission to view the member's details in their branch.";
+  assert.deepEqual(assessmentSaveErrors({ response: { status: 403, data: { message } } }), [message]);
+});
