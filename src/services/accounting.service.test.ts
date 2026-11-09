@@ -368,12 +368,12 @@ describe("createJournal sends centavos, not the characters someone typed", () =>
     );
   });
 
-  test("totals travel with the lines, as they do on a reversal", async () => {
+  test("no totals travel with the lines: the server works them out", async () => {
     await accountingService.createJournal(capturedDraft());
 
     const body = lastBody();
-    assert.equal(body.total_debit, 150050);
-    assert.equal(body.total_credit, 150050);
+    assert.equal("total_debit" in body, false);
+    assert.equal("total_credit" in body, false);
     assert.equal(body.source, "manual");
     // "" is the form's empty reference; the API's empty is null.
     assert.equal(body.reference, null);
@@ -387,16 +387,14 @@ describe("createJournal sends centavos, not the characters someone typed", () =>
     assert.equal(bodyLines()[0].debit, 150050);
   });
 
-  test("an unbalanced draft is refused before anything is sent", async () => {
+  test("an unbalanced draft is sent as typed: the balance is the server's to judge", async () => {
+    // The form refuses it first, from the server's preview; posting refuses it
+    // again on the server. The browser never totals the lines.
     const draft = capturedDraft();
     draft.lines[1].credit = "1400.50";
 
-    await assert.rejects(
-      () => accountingService.createJournal(draft),
-      /differ by/,
-      "the service is the last gate before the ledger",
-    );
-    assert.equal(requests.length, 0, "nothing may reach the API");
+    await accountingService.createJournal(draft);
+    assert.equal(bodyLines()[1].credit, 140050);
   });
 
   test("an amount that is not an amount is refused, with the text quoted back", async () => {
@@ -459,21 +457,6 @@ describe("lists are drained, not read one page deep", () => {
     assert.equal(total, ACCOUNT_COUNT);
     assert.equal(truncated, false);
     assert.equal(requests.length, 1, "64 rows fit in one page of 100");
-  });
-
-  test("meta survives the service instead of being thrown away", async () => {
-    // `unwrapList` recognised the paginator envelope and returned `res.data`
-    // from it, discarding `meta` — so nothing downstream could even ask whether
-    // it had the whole list. `total` here is that answer, restored.
-    const { total } = await accountingService.journalsListAll();
-    assert.equal(total, JOURNAL_COUNT);
-  });
-
-  test("the journal register follows last_page to the end", async () => {
-    const { rows, pagesFetched } = await accountingService.journalsListAll();
-
-    assert.equal(rows.length, JOURNAL_COUNT);
-    assert.equal(pagesFetched, 2, "137 rows is two pages of 100");
   });
 
   test("REGRESSION: Outstanding was the total of the first 15 of 40 payables", async () => {
@@ -759,9 +742,11 @@ describe("round B writes", () => {
     assert.equal(lines[1].credit, 150_050);
   });
 
-  test("updateJournal refuses an unbalanced draft before sending anything", async () => {
+  test("updateJournal refuses a malformed draft before sending anything", async () => {
+    // The balance is the server's (the form checks it with the preview), but a
+    // line that isn't an amount still never leaves the browser.
     const bad = draft();
-    bad.lines[1].credit = "1000";
+    bad.lines[1].credit = "one thousand";
     await assert.rejects(accountingService.updateJournal(9, bad));
     assert.equal(requests.length, 0);
   });

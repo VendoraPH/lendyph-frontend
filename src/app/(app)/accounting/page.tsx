@@ -49,6 +49,7 @@ import { CashAccountsTable } from "./_components/dashboard/cash-accounts-table";
 import { ReceivablesSection } from "./_components/dashboard/receivables-section";
 import { TrendCharts } from "./_components/dashboard/trend-charts";
 import { journalSourceLabel } from "./_lib/display-labels";
+import { journalHref } from "./journals/_lib/journal-register";
 import { centavosOrDash } from "./_lib/dashboard-figures";
 import {
   currentPeriodText,
@@ -255,7 +256,14 @@ function RecentJournals({ journals }: { journals: readonly RecentJournal[] | und
                 {journals.map((journal) => (
                   <TableRow key={journal.id}>
                     <TableCell className="text-sm">{formatValue(journal.date, "date")}</TableCell>
-                    <TableCell className="font-mono text-xs">{journal.journal_no}</TableCell>
+                    <TableCell className="font-mono text-xs">
+                      <Link
+                        href={journalHref(journal.id)}
+                        className="underline-offset-4 hover:underline"
+                      >
+                        {journal.journal_no}
+                      </Link>
+                    </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="text-[10px]">
                         {journalSourceLabel(journal.source)}

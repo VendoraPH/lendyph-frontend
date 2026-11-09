@@ -217,14 +217,6 @@ export const accountingService = {
       params: query,
     }),
 
-  /** Every journal matching `query`. The register is the last list that should stop at 15. */
-  journalsListAll: (
-    query: JournalQuery = {},
-  ): Promise<DrainResult<JournalEntry>> =>
-    fetchAllPages<JournalEntry>(({ page, per_page }) =>
-      accountingService.journalsList({ ...query, page, per_page }),
-    ),
-
   /**
    * Creates a manual entry from the form's draft.
    *
@@ -264,6 +256,7 @@ export const accountingService = {
   /**
    * Saves a draft. Converted by `buildJournalPayload`, as `createJournal` is,
    * and `async` for the same reason: its throw becomes this call's rejection.
+   * The balance is the server's: the form checks it with `previewJournal`.
    */
   updateJournal: async (id: number, draft: JournalEntryDraft): Promise<JournalEntry> =>
     api.put<JournalEntry>(

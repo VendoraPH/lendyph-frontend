@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useMemo, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { RouteGuard, TablePagination } from "@/components/common";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +35,7 @@ import { AccountingPageHeader } from "../_components/page-header";
 import { DataState } from "../_components/data-state";
 import { AccountSelect } from "../_components/account-select";
 import { journalSourceLabel } from "../_lib/display-labels";
+import { journalHref } from "../journals/_lib/journal-register";
 import { ANY_SOURCE, journalSourceItems } from "../_lib/select-items";
 import { centavosOrDash } from "../_lib/dashboard-figures";
 import { defaultDashboardFrom } from "../_lib/dashboard-period";
@@ -280,7 +282,14 @@ function GeneralLedgerContent() {
                         rows.map((row, i) => (
                           <TableRow key={`${row.journal_id}-${i}`}>
                             <TableCell className="text-sm">{formatValue(row.date, "date")}</TableCell>
-                            <TableCell className="font-mono text-xs">{row.journal_no}</TableCell>
+                            <TableCell className="font-mono text-xs">
+                              <Link
+                                href={journalHref(row.journal_id)}
+                                className="underline-offset-4 hover:underline"
+                              >
+                                {row.journal_no}
+                              </Link>
+                            </TableCell>
                             <TableCell className="text-sm">{row.description}</TableCell>
                             <TableCell>
                               <Badge variant="outline" className="text-[10px]">
