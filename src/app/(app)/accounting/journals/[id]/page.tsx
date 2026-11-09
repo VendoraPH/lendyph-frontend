@@ -237,7 +237,9 @@ function JournalContent({ id }: { id: number }) {
         onRefused={reloadJournal}
       />
       <ReverseJournalDialog
+        key={entry.id}
         open={reversing}
+        entryDate={entry.date}
         onOpenChange={setReversing}
         onConfirm={reverse}
         onRefused={reloadJournal}

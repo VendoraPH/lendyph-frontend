@@ -15,9 +15,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { todayISO } from "@/lib/format";
 import { runJournalAction } from "../_lib/journal-refusal";
+import { defaultReversalDate, reversalDateError } from "../_lib/reversal-date";
 
 interface ReverseJournalDialogProps {
   open: boolean;
+  /** The entry's own date (YYYY-MM-DD): the earliest a reversal may be dated. */
+  entryDate: string;
   onOpenChange: (open: boolean) => void;
   /** Writes the reversing entry. A rejection keeps the dialog open with the server's message. */
   onConfirm: (date: string, reason: string) => Promise<void>;
@@ -30,11 +33,12 @@ const REASON_MAX = 300;
 
 export function ReverseJournalDialog({
   open,
+  entryDate,
   onOpenChange,
   onConfirm,
   onRefused,
 }: ReverseJournalDialogProps) {
-  const [date, setDate] = useState(todayISO);
+  const [date, setDate] = useState(() => defaultReversalDate(entryDate, todayISO()));
   const [reason, setReason] = useState("");
   const [reversing, setReversing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,14 +46,15 @@ export function ReverseJournalDialog({
   const change = (next: boolean) => {
     if (reversing) return;
     if (!next) {
-      setDate(todayISO());
+      setDate(defaultReversalDate(entryDate, todayISO()));
       setReason("");
       setError(null);
     }
     onOpenChange(next);
   };
 
-  const ready = date !== "" && reason.trim() !== "";
+  const dateError = reversalDateError(date, entryDate);
+  const ready = dateError === null && reason.trim() !== "";
 
   const confirm = () => {
     if (!ready) return;
@@ -81,8 +86,16 @@ export function ReverseJournalDialog({
               id="reverse-date"
               type="date"
               value={date}
+              min={entryDate}
               onChange={(e) => setDate(e.target.value)}
+              aria-invalid={dateError !== null}
+              aria-describedby={dateError ? "reverse-date-error" : undefined}
             />
+            {dateError && (
+              <p id="reverse-date-error" className="text-sm text-destructive">
+                {dateError}
+              </p>
+            )}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="reverse-reason">Why is this being reversed?</Label>

@@ -59,6 +59,14 @@ test("a posted entry that already has a reversal can't be reversed again", () =>
   assert.match(actions.reverse.disabledReason ?? "", /already been reversed/i);
 });
 
+test("an entry that is itself a reversal doesn't offer Reverse", () => {
+  const reversal = { status: "posted", reversed_by_journal_id: null, reverses_journal_id: 38 } as const;
+  const actions = journalActions(reversal, holding(...ALL), { editing: false, balance: "balanced" });
+  assert.equal(actions.reverse.shown, false);
+  assert.equal(actions.edit.shown, false);
+  assert.equal(actions.post.shown, false);
+});
+
 test("a reversed entry offers nothing", () => {
   const actions = journalActions(reversed, holding(...ALL), { editing: false, balance: "balanced" });
   assert.equal(actions.edit.shown, false);

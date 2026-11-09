@@ -1,6 +1,6 @@
 /**
  * What the journal page offers for one entry: edit and post a draft, reverse a
- * posted entry. An action the status doesn't allow, or the user's role can't
+ * posted entry that isn't itself a reversal. An action the status doesn't allow, or the user's role can't
  * take, is hidden. One that is offered but can't be taken right now carries
  * the reason, for a disabled button.
  */
@@ -49,12 +49,14 @@ const POST_WAITS: Record<DraftBalance, string | null> = {
 };
 
 export function journalActions(
-  entry: Pick<JournalEntry, "status" | "reversed_by_journal_id">,
+  entry: Pick<JournalEntry, "status" | "reversed_by_journal_id" | "reverses_journal_id">,
   can: (permission: Permission) => boolean,
   { editing, balance }: { editing: boolean; balance: DraftBalance },
 ): Record<JournalAction, JournalActionState> {
   const isDraft = entry.status === "draft";
   const isPosted = entry.status === "posted";
+  /** A reversal is never reversed itself: it is the correction. */
+  const isReversal = Boolean(entry.reverses_journal_id);
 
   return {
     edit: isDraft && can("journals:create") ? READY : HIDDEN,
@@ -68,7 +70,7 @@ export function journalActions(
           }
         : HIDDEN,
     reverse:
-      isPosted && can("journals:reverse")
+      isPosted && !isReversal && can("journals:reverse")
         ? {
             shown: true,
             disabledReason: entry.reversed_by_journal_id
