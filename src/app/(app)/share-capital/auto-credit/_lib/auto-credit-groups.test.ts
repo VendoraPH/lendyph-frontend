@@ -11,7 +11,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { autoCreditGroups } from "./auto-credit-groups";
+import { autoCreditGroups, serverTotalToCredit } from "./auto-credit-groups";
 
 const STATUS = {
   active_count: 2,
@@ -73,4 +73,13 @@ test("the page counts its warnings from the groups", () => {
   assert.ok(page.includes("autoCreditGroups(raw)"));
   assert.ok(page.includes("{groups.disabledCount} member"));
   assert.ok(!page.includes("...noPledgeArr.map((m) => ({ ...toLocalMember(m), autoCredit: false }))"));
+});
+
+test("the total to credit is read as the server sent it: 0 stays 0, nothing is null", () => {
+  assert.equal(serverTotalToCredit({ total_to_credit: 750 }), 750);
+  assert.equal(serverTotalToCredit({ total_to_credit: "750.50" }), 750.5);
+  assert.equal(serverTotalToCredit({ total_to_credit: 0 }), 0);
+  assert.equal(serverTotalToCredit({}), null);
+  assert.equal(serverTotalToCredit({ total_to_credit: null }), null);
+  assert.equal(serverTotalToCredit({ total_to_credit: "n/a" }), null);
 });

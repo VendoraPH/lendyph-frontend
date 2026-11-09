@@ -26,7 +26,8 @@ import { shareCapitalService } from "@/services";
 import { Zap, AlertTriangle, CheckCircle2, AlertCircle } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { formatCurrency, formatDateTime } from "@/lib/format";
-import { autoCreditGroups, type AutoCreditGroups } from "./_lib/auto-credit-groups";
+import { currencyOrDash } from "@/lib/report-format";
+import { autoCreditGroups, serverTotalToCredit, type AutoCreditGroups } from "./_lib/auto-credit-groups";
 import { MethodReferenceFields } from "@/components/common/method-reference-fields";
 import { useDialogOpening } from "@/hooks/use-dialog-opening";
 import {
@@ -46,7 +47,8 @@ function AutoCreditContent() {
   const [lastRun, setLastRun] = useState<string | null>(null);
   const [showDisabled, setShowDisabled] = useState(false);
   const [showNoPledge, setShowNoPledge] = useState(false);
-  const [totalToCredit, setTotalToCredit] = useState(0);
+  // The server's total, or null (a dash) when it sent none.
+  const [totalToCredit, setTotalToCredit] = useState<number | null>(null);
   // The account the run is credited through (Bank by default) and an optional
   // reference, picked afresh each time the confirm dialog opens.
   const [settlementMethod, setSettlementMethod] = useState<AutoCreditMethod>(AUTO_CREDIT_DEFAULT_METHOD);
@@ -63,7 +65,7 @@ function AutoCreditContent() {
       // The server's own groups and counts: a pledge with no amount is not
       // one whose auto-credit is off.
       setGroups(autoCreditGroups(raw));
-      setTotalToCredit((raw.total_to_credit as number) ?? 0);
+      setTotalToCredit(serverTotalToCredit(raw));
 
       // last_run can be an object or a string
       const lastRunRaw = raw.last_run ?? raw.last_run_at;
@@ -85,7 +87,6 @@ function AutoCreditContent() {
   }, [fetchStatus]);
 
   const { active: activeMembers, disabled: disabledMembers, noPledge: noPledgeMembers } = groups;
-  const totalPledge = totalToCredit > 0 ? totalToCredit : activeMembers.reduce((sum, m) => sum + m.pledgeAmount, 0);
 
   function handleInitiate() {
     setConfirmOpen(true);
@@ -100,7 +101,7 @@ function AutoCreditContent() {
       setConfirmOpen(false);
       setLastRun(formatDateTime(result.processed_at ?? new Date()));
       toast.success(
-        `Auto-credit completed: ${formatCurrency(result.total_amount ?? totalPledge)} credited to ${result.processed_count ?? activeMembers.length} members`
+        `Auto-credit completed: ${currencyOrDash(result.total_amount ?? totalToCredit)} credited to ${result.processed_count ?? activeMembers.length} members`
       );
       fetchStatus();
     } catch (err) {
@@ -170,7 +171,7 @@ function AutoCreditContent() {
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-muted-foreground">Total to Credit</span>
               <span className="text-2xl font-bold text-green-600">
-                {loading ? <Spinner className="size-5 text-muted-foreground" /> : formatCurrency(totalPledge)}
+                {loading ? <Spinner className="size-5 text-muted-foreground" /> : currencyOrDash(totalToCredit)}
               </span>
             </div>
           </CardContent>
@@ -254,7 +255,7 @@ function AutoCreditContent() {
           </DialogHeader>
           <div className="flex flex-col items-center py-6">
             <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Total Pledge Amount</p>
-            <p className="text-5xl font-bold text-brand-orange">{formatCurrency(totalPledge)}</p>
+            <p className="text-5xl font-bold text-brand-orange">{currencyOrDash(totalToCredit)}</p>
             <p className="text-sm text-muted-foreground mt-2">
               {activeMembers.length} member{activeMembers.length > 1 ? "s" : ""}
             </p>

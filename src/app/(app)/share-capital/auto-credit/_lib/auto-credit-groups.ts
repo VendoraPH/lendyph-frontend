@@ -59,3 +59,15 @@ export function autoCreditGroups(status: Record<string, unknown>): AutoCreditGro
     noPledgeCount: count(status.no_pledge_count, noPledge.length),
   };
 }
+
+/**
+ * The server's `total_to_credit`, as sent: 0 is a real ₱0.00, and a missing or
+ * unreadable figure is null (a dash). Never a sum of the pledges on screen.
+ */
+export function serverTotalToCredit(status: Record<string, unknown>): number | null {
+  const raw = status.total_to_credit;
+  if (typeof raw !== "number" && typeof raw !== "string") return null;
+  if (typeof raw === "string" && raw.trim() === "") return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
