@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { LoanSearchPicker } from "@/components/common/loan-search-picker";
 import { MemberSearchPicker } from "@/components/common/member-search-picker";
 import { Label } from "@/components/ui/label";
+import { subjectLockedReason } from "@/lib/subject-picker-reason";
 import { usePermission } from "@/hooks";
 import type { LoanOption } from "@/hooks/use-loan-search";
 import type { MemberOption } from "@/hooks/use-member-search";
@@ -51,6 +52,7 @@ export function SubjectPicker({
   const canList = usePermission().can(
     subject === "loan" ? "loans:view" : "borrowers:view",
   );
+  const lockedReason = subjectLockedReason(subject, canList);
   // The row picked, which holds its name: the search moves on, the choice stays.
   const [member, setMember] = useState<MemberOption | null>(null);
   const [loan, setLoan] = useState<LoanOption | null>(null);
@@ -81,6 +83,7 @@ export function SubjectPicker({
           aria-label="Loan"
           className={TRIGGER_CLASS}
         />
+        {lockedReason && <p className="text-xs text-muted-foreground">{lockedReason}</p>}
       </div>
     );
   }
@@ -99,6 +102,7 @@ export function SubjectPicker({
         aria-label="Member"
         className={TRIGGER_CLASS}
       />
+      {lockedReason && <p className="text-xs text-muted-foreground">{lockedReason}</p>}
     </div>
   );
 }

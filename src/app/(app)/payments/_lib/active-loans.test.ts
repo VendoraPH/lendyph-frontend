@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -255,4 +255,28 @@ test("the drain is gone from the module and from the screen", () => {
   const page = readFileSync(join(process.cwd(), "src/app/(app)/payments/page.tsx"), "utf8");
   assert.equal(page.includes("fetchAllActiveLoans"), false);
   assert.equal(page.includes("This list is incomplete"), false);
+});
+
+test("Due Soon counts Manila's calendar days to the next due date, on any computer", () => {
+  const original = process.env.TZ;
+  // 07:00 on 10 Nov in Manila: 18:00 the 9th in New York, 12:00 the 10th in Auckland.
+  mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 10, 9, 23, 0) });
+  try {
+    for (const zone of ["America/New_York", "Pacific/Auckland", "Asia/Manila"]) {
+      process.env.TZ = zone;
+      assert.equal(activeLoans.isDueSoon("2026-11-13"), true, `3 days ahead, ${zone}`);
+      assert.equal(activeLoans.isDueSoon("2026-11-14"), false, `4 days ahead, ${zone}`);
+      assert.equal(activeLoans.isDueSoon("2026-11-10"), true, `today, ${zone}`);
+      assert.equal(activeLoans.isDueSoon("not a date"), false, zone);
+    }
+  } finally {
+    mock.timers.reset();
+    process.env.TZ = original;
+  }
+});
+
+test("the payments screen asks isDueSoon instead of counting from the computer's clock", () => {
+  const page = readFileSync(join(process.cwd(), "src/app/(app)/payments/page.tsx"), "utf8");
+  assert.match(page, /isDueSoon\(loan\.next_due_date\)/);
+  assert.doesNotMatch(page, /new Date\(loan\.next_due_date\)/);
 });

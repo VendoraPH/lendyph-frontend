@@ -16,6 +16,8 @@ import {
   formatDateTime,
   formatTime,
   calendarDate,
+  clockDate,
+  daysFromToday,
   todayDate,
   todayISO,
 } from "./format";
@@ -161,6 +163,91 @@ test("no screen formats a date or time in the computer's zone", () => {
     zonelessCalls(readFileSync(file, "utf8")).map((call) => `${file}: ${call}`),
   );
   assert.deepEqual(offenders, []);
+});
+
+/**
+ * The other ways a screen can read the computer's zone (round 2):
+ * - an `Intl.DateTimeFormat` that names no `timeZone`;
+ * - date-fns `format`, which reads a `Date`'s local parts (the format.ts
+ *   helpers say which reading they mean);
+ * - a date-fns range built from the computer's `new Date()`, which is the
+ *   wrong day for part of every day west or east of Manila (`todayDate()` is
+ *   Manila's today).
+ */
+function otherZonelessUses(source: string): string[] {
+  const found: string[] = [];
+  for (const match of source.matchAll(/new Intl\.DateTimeFormat\(/g)) {
+    let depth = 1;
+    let end = match.index + match[0].length;
+    while (end < source.length && depth > 0) {
+      if (source[end] === "(") depth += 1;
+      if (source[end] === ")") depth -= 1;
+      end += 1;
+    }
+    const call = source.slice(match.index, end);
+    if (!/\btimeZone\b/.test(call)) found.push(call.replace(/\s+/g, " "));
+  }
+  for (const match of source.matchAll(/import\s*\{([^}]*)\}\s*from\s*["']date-fns["']/g)) {
+    if (/(^|[\s,])format([\s,]|$)/.test(match[1])) found.push("date-fns format");
+  }
+  for (const match of source.matchAll(/\b(?:startOf|endOf|sub|add)[A-Z]\w*\(\s*new Date\(\)/g)) {
+    found.push(match[0]);
+  }
+  return found;
+}
+
+test("the wider source check fires on each zoneless form, and passes the zoned ones", () => {
+  assert.equal(otherZonelessUses('new Intl.DateTimeFormat("en-PH", { month: "short" })').length, 1);
+  assert.equal(otherZonelessUses('new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" })').length, 0);
+  assert.equal(otherZonelessUses('import { format, startOfMonth } from "date-fns";').length, 1);
+  assert.equal(otherZonelessUses('import { formatDistanceToNow } from "date-fns";').length, 0);
+  assert.equal(otherZonelessUses("startOfMonth(new Date())").length, 1);
+  assert.equal(otherZonelessUses("startOfMonth(todayDate())").length, 0);
+});
+
+test("no screen formats with a zoneless Intl or date-fns format, or counts from the computer's today", () => {
+  const offenders = SCANNED.flatMap(sources).flatMap((file) =>
+    otherZonelessUses(readFileSync(file, "utf8")).map((use) => `${file}: ${use}`),
+  );
+  assert.deepEqual(offenders, []);
+});
+
+test("a server time reads as Manila's clock, held at the computer's own clock", () => {
+  onEveryComputer(() => {
+    for (const [value, reading] of [
+      ["2026-11-09", "2026-11-09 00:00"],
+      ["2026-11-09 23:30:00", "2026-11-09 23:30"],
+      ["2026-11-09T12:00:00Z", "2026-11-09 20:00"],
+      ["2026-11-09T20:00:00.000000Z", "2026-11-10 04:00"],
+      ["2026-11-10T04:00:00+08:00", "2026-11-10 04:00"],
+    ]) {
+      const held = clockDate(value);
+      const hh = String(held.getHours()).padStart(2, "0");
+      const mm = String(held.getMinutes()).padStart(2, "0");
+      assert.equal(`${formatDateISO(held)} ${hh}:${mm}`, reading, value);
+    }
+    assert.ok(Number.isNaN(clockDate("not a date").getTime()));
+  });
+});
+
+test("days from today count Manila's calendar days, on any computer", () => {
+  // 07:00 on 10 Nov in Manila: 18:00 the 9th in New York, 12:00 the 10th in Auckland.
+  at(Date.UTC(2026, 10, 9, 23, 0), () => {
+    onEveryComputer(() => {
+      assert.equal(daysFromToday("2026-11-10"), 0);
+      assert.equal(daysFromToday("2026-11-13"), 3);
+      assert.equal(daysFromToday("2026-11-14"), 4);
+      assert.equal(daysFromToday("2026-11-09"), -1);
+      assert.equal(daysFromToday("2026-10-11"), -30);
+      // 04:00 on 10 Nov in Manila.
+      assert.equal(daysFromToday("2026-11-09T20:00:00Z"), 0);
+      assert.ok(Number.isNaN(daysFromToday("not a date")));
+    });
+  });
+  // Across New York's clock change (1 Nov 2026), a day is still a day.
+  at(Date.UTC(2026, 10, 2, 4, 0), () => {
+    onEveryComputer(() => assert.equal(daysFromToday("2026-10-30"), -3));
+  });
 });
 
 test("a server date becomes Manila's calendar day, held as a picker holds it", () => {

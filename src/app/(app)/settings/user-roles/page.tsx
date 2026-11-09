@@ -76,7 +76,7 @@ import { notifyValidation } from "@/lib/notify";
 import { getErrorMessage } from "@/lib/api-error";
 import { describePermission, otherRoleSaveErrors, readablePermissionKeys, roleSaveErrorMessage } from "./_lib/role-save-error";
 import { roleConflictMessage } from "./_lib/role-conflict";
-import { canToggleActive, roleActivationError } from "./_lib/role-activation";
+import { canToggleActive, roleActivationError, roleStatusMark } from "./_lib/role-activation";
 import { completeRows } from "@/lib/paginate";
 import { cn } from "@/lib/utils";
 
@@ -346,6 +346,8 @@ const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   release: { label: "Release", colorClass: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30" },
   restructure: { label: "Restructure", colorClass: "bg-purple-500/10 text-purple-700 border-purple-500/30" },
   write_off: { label: "Write off restructure shortfall", colorClass: "bg-red-500/10 text-red-700 border-red-500/30" },
+  extend: { label: "Extend", colorClass: "bg-purple-500/10 text-purple-700 border-purple-500/30" },
+  reset_password: { label: "Reset password", colorClass: "bg-amber-500/10 text-amber-700 border-amber-500/30" },
   void: { label: "Void", colorClass: "bg-rose-500/10 text-rose-700 border-rose-500/30" },
   mark_collected: { label: "Mark Collected", colorClass: "bg-teal-500/10 text-teal-700 border-teal-500/30" },
   export: { label: "Export", colorClass: "bg-indigo-500/10 text-indigo-700 border-indigo-500/30" },
@@ -943,6 +945,11 @@ function UserRolesContent() {
                             >
                               {r.label}
                             </Badge>
+                            {roleStatusMark(r.isActive) && (
+                              <Badge variant="outline" className="text-xs text-muted-foreground">
+                                {roleStatusMark(r.isActive)}
+                              </Badge>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell>

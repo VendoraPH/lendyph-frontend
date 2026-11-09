@@ -1,4 +1,5 @@
 import type { Loan, PaginatedResponse } from "@/types";
+import { daysFromToday } from "@/lib/format";
 import { currencyOrDash, toNumber } from "@/lib/report-format";
 import { dueAmountCell, readAmountDueNow, type AmountDueNow } from "@/lib/payment-figures";
 
@@ -213,4 +214,15 @@ export function activeLoanDueCell(loan: ActiveLoan): ReturnType<typeof dueAmount
     penaltyNote: null,
     insuranceNote: null,
   };
+}
+
+/** How many days ahead a next due date reads "Due Soon". */
+const DUE_SOON_DAYS = 3;
+
+/**
+ * Whether a loan's next due date is close enough to read "Due Soon": within
+ * three of Manila's calendar days, or already passed (a loan not yet overdue).
+ */
+export function isDueSoon(nextDueDate: string): boolean {
+  return daysFromToday(nextDueDate) <= DUE_SOON_DAYS;
 }

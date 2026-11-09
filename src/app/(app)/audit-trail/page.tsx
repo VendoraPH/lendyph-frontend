@@ -50,6 +50,7 @@ import { MAX_PER_PAGE } from "@/lib/paginate";
 import { formatDate, formatDateISO, formatTime, todayISO } from "@/lib/format";
 import type { AuditLog, AuditAction } from "@/types";
 import {
+  AUDIT_ACTION_OPTIONS,
   AUDIT_MODULE_OPTIONS,
   auditActionLabel,
   auditChangePair,
@@ -76,27 +77,14 @@ const ACTION_COLOR: Record<AuditAction, string> = {
   printed: "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700",
   reset_password: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800",
   status_changed: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800",
+  uploaded: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
+  attachment_removed: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
 };
-
-const ACTION_OPTIONS: { value: AuditAction; label: string }[] = [
-  { value: "login", label: "Login" },
-  { value: "logout", label: "Logout" },
-  { value: "created", label: "Created" },
-  { value: "updated", label: "Updated" },
-  { value: "deleted", label: "Deleted" },
-  { value: "voided", label: "Voided" },
-  { value: "approved", label: "Approved" },
-  { value: "rejected", label: "Rejected" },
-  { value: "released", label: "Released" },
-  { value: "printed", label: "Printed" },
-  { value: "reset_password", label: "Reset Password" },
-  { value: "status_changed", label: "Status Changed" },
-];
 
 // Each filter's options, "all" first. The same list is the Select's `items`,
 // which is what lets the closed trigger show the label, not the raw value.
 const MODULE_FILTER_ITEMS = [{ value: "all", label: "All Modules" }, ...AUDIT_MODULE_OPTIONS];
-const ACTION_FILTER_ITEMS = [{ value: "all", label: "All Actions" }, ...ACTION_OPTIONS];
+const ACTION_FILTER_ITEMS = [{ value: "all", label: "All Actions" }, ...AUDIT_ACTION_OPTIONS];
 
 
 

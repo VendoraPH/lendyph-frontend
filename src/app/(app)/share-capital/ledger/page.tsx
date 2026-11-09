@@ -41,10 +41,10 @@ import {
   ArrowDown,
   Download,
 } from "lucide-react";
-import { format, startOfMonth, endOfMonth, subMonths, startOfYear } from "date-fns";
+import { startOfMonth, endOfMonth, subMonths, startOfYear } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { shareCapitalService } from "@/services";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCurrency, formatDate, formatDateISO, formatDateObj, todayDate } from "@/lib/format";
 import { ledgerAmounts } from "@/utils/share-capital";
 import type {
   ShareCapitalBookTotals,
@@ -80,12 +80,13 @@ function toLedgerEntry(raw: ShareCapitalLedgerEntry): LedgerEntry {
 }
 
 // ── Date range presets ──
+// Counted from Manila's today, held as the picker holds a day (`todayDate`).
 
 const DATE_PRESETS = [
-  { label: "This Month", getValue: () => ({ from: startOfMonth(new Date()), to: endOfMonth(new Date()) }) },
-  { label: "Last Month", getValue: () => ({ from: startOfMonth(subMonths(new Date(), 1)), to: endOfMonth(subMonths(new Date(), 1)) }) },
-  { label: "Last 3 Months", getValue: () => ({ from: startOfMonth(subMonths(new Date(), 2)), to: endOfMonth(new Date()) }) },
-  { label: "Year to Date", getValue: () => ({ from: startOfYear(new Date()), to: new Date() }) },
+  { label: "This Month", getValue: () => ({ from: startOfMonth(todayDate()), to: endOfMonth(todayDate()) }) },
+  { label: "Last Month", getValue: () => ({ from: startOfMonth(subMonths(todayDate(), 1)), to: endOfMonth(subMonths(todayDate(), 1)) }) },
+  { label: "Last 3 Months", getValue: () => ({ from: startOfMonth(subMonths(todayDate(), 2)), to: endOfMonth(todayDate()) }) },
+  { label: "Year to Date", getValue: () => ({ from: startOfYear(todayDate()), to: todayDate() }) },
 ];
 
 const PAGE_SIZES = [10, 25, 50];
@@ -205,8 +206,8 @@ function SubsidiaryLedgerContent() {
 
   // ── Fetch one member's entries ──
   const selectedMemberId = selectedMember?.borrower_id ?? null;
-  const rangeFrom = dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : undefined;
-  const rangeTo = dateRange?.from ? format(dateRange.to ?? dateRange.from, "yyyy-MM-dd") : undefined;
+  const rangeFrom = dateRange?.from ? formatDateISO(dateRange.from) : undefined;
+  const rangeTo = dateRange?.from ? formatDateISO(dateRange.to ?? dateRange.from) : undefined;
   const detailKey = JSON.stringify([selectedMemberId, rangeFrom, rangeTo]);
 
   useEffect(() => {
@@ -640,10 +641,10 @@ function SubsidiaryLedgerContent() {
                       {dateRange?.from ? (
                         dateRange.to ? (
                           <>
-                            {format(dateRange.from, "MMM d, yyyy")} – {format(dateRange.to, "MMM d, yyyy")}
+                            {formatDateObj(dateRange.from)} – {formatDateObj(dateRange.to)}
                           </>
                         ) : (
-                          format(dateRange.from, "MMM d, yyyy")
+                          formatDateObj(dateRange.from)
                         )
                       ) : (
                         "All dates"
@@ -714,7 +715,7 @@ function SubsidiaryLedgerContent() {
                       <TableRow className="bg-muted/30">
                         <TableCell colSpan={3} className="text-sm font-medium italic text-muted-foreground">
                           {dateRange?.from
-                            ? `Opening Balance as of ${format(dateRange.from, "MMM d, yyyy")}`
+                            ? `Opening Balance as of ${formatDateObj(dateRange.from)}`
                             : "Opening Balance"}
                         </TableCell>
                         <TableCell />

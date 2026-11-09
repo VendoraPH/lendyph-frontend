@@ -10,7 +10,11 @@ export type AuditAction =
   | "released"
   | "printed"
   | "reset_password"
-  | "status_changed";
+  | "status_changed"
+  // A member document or an accounting attachment added, and an attachment
+  // taken off a journal or expense.
+  | "uploaded"
+  | "attachment_removed";
 
 export type AuditModule =
   | "auth"

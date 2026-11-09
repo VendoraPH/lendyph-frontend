@@ -1,7 +1,7 @@
 // How an audit row reads on the Audit Trail: its module, action, user and
 // description. Dependency-free so it is unit-testable under `tsx --test`.
 
-import type { AuditLog, AuditModule } from "@/types";
+import type { AuditAction, AuditLog, AuditModule } from "@/types";
 import { LOAN_STATUS_LABELS } from "@/constants/loan-status";
 import { roleLabelForKey } from "@/lib/role-display-name";
 import { permissionChipLabel } from "@/app/(app)/users/_lib/user-labels";
@@ -42,7 +42,32 @@ const ACTION_LABELS: Record<string, string> = {
   reset_password: "Reset Password",
   status_changed: "Status Changed",
   role_permissions_changed: "Permissions changed",
+  uploaded: "Uploaded",
+  attachment_removed: "Attachment removed",
 };
+
+/**
+ * The Action filter's options. The audit log list's `action` parameter takes
+ * any stored action; these are the ones a person filters by.
+ */
+export const AUDIT_ACTION_OPTIONS: { value: AuditAction; label: string }[] = (
+  [
+    "login",
+    "logout",
+    "created",
+    "updated",
+    "deleted",
+    "voided",
+    "approved",
+    "rejected",
+    "released",
+    "printed",
+    "reset_password",
+    "status_changed",
+    "uploaded",
+    "attachment_removed",
+  ] as const
+).map((value) => ({ value, label: ACTION_LABELS[value] }));
 
 /** "loan_step_sent_back" → "Loan step sent back". */
 function inWords(key: string): string {

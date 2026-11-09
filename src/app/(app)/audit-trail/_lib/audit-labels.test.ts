@@ -1,7 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { AuditLog } from "@/types";
 import {
+  AUDIT_ACTION_OPTIONS,
   AUDIT_MODULE_OPTIONS,
   auditActionLabel,
   auditChangePair,
@@ -323,4 +326,21 @@ test("reminder rows read under the Reminders module", () => {
     auditModuleLabel(log({ module: "reminders" as AuditLog["module"], target: { id: 1, type: "ReminderRule", label: "Due today" } })),
     "Reminders",
   );
+});
+
+// Round 2: document and attachment rows are written as `uploaded` and
+// `attachment_removed`, so the Action filter offers both, in words.
+test("the Action filter offers Uploaded and Attachment removed", () => {
+  const options = new Map(AUDIT_ACTION_OPTIONS.map((o) => [o.value, o.label]));
+  assert.equal(options.get("uploaded"), "Uploaded");
+  assert.equal(options.get("attachment_removed"), "Attachment removed");
+  assert.equal(auditActionLabel("uploaded"), "Uploaded");
+  assert.equal(auditActionLabel("attachment_removed"), "Attachment removed");
+  for (const { value, label } of AUDIT_ACTION_OPTIONS) assert.equal(auditActionLabel(value), label, value);
+  assert.equal(new Set(options.keys()).size, AUDIT_ACTION_OPTIONS.length);
+});
+
+test("the Audit Trail's Action filter is built from AUDIT_ACTION_OPTIONS", () => {
+  const page = readFileSync(join(process.cwd(), "src/app/(app)/audit-trail/page.tsx"), "utf8");
+  assert.match(page, /\.\.\.AUDIT_ACTION_OPTIONS\]/);
 });

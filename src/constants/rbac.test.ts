@@ -1,21 +1,24 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ROLES } from "./rbac";
+import { ROLES, ROLE_OPTIONS } from "./rbac";
 
 const REMINDERS = ["reminders:view", "reminders:send", "reminders:pause", "reminders:settings"];
 
 // Phase 2: the four reminders permissions are seeded for admin and
-// super_admin only. super_admin has no entry in this map (see `Role`).
-test("admin holds all four reminders permissions", () => {
-  assert.deepEqual(
-    ROLES.admin.permissions.filter((p) => p.startsWith("reminders:")),
-    REMINDERS,
-  );
+// super_admin only.
+test("admin and super_admin hold all four reminders permissions", () => {
+  for (const role of ["admin", "super_admin"] as const) {
+    assert.deepEqual(
+      ROLES[role].permissions.filter((p) => p.startsWith("reminders:")),
+      REMINDERS,
+      role,
+    );
+  }
 });
 
-test("no role but admin holds a reminders permission", () => {
+test("no role but admin and super_admin holds a reminders permission", () => {
   for (const [role, config] of Object.entries(ROLES)) {
-    if (role === "admin") continue;
+    if (role === "admin" || role === "super_admin") continue;
     assert.deepEqual(
       config.permissions.filter((p) => p.startsWith("reminders:")),
       [],
@@ -82,13 +85,12 @@ test("the Accountant holds no member permission and no lending write", () => {
   }
 });
 
-// super_admin has no entry in this map (see `Role`); the server grants it there.
-test("only admin and the Accountant hold accounting:allowance", () => {
+test("only super_admin, admin and the Accountant hold accounting:allowance", () => {
   const holders = Object.entries(ROLES)
     .filter(([, config]) => config.permissions.includes("accounting:allowance"))
     .map(([role]) => role)
     .sort();
-  assert.deepEqual(holders, ["accountant", "admin"]);
+  assert.deepEqual(holders, ["accountant", "admin", "super_admin"]);
 });
 
 // The bookkeeper and the manager are unchanged by round C.
@@ -116,4 +118,111 @@ test("general_bookkeeper and manager keep their accounting grants", () => {
   ]);
   assert.equal(ROLES.general_bookkeeper.permissions.length, 16);
   assert.equal(ROLES.manager.permissions.length, 16);
+});
+
+// Every permission lendyph-backend creates (RoleAndPermissionSeeder plus the
+// permission migrations), which super_admin holds through Permission::all().
+const BACKEND_PERMISSIONS = [
+  "accounting:allowance",
+  "accounting:close",
+  "accounting:reconcile",
+  "accounting:settings",
+  "accounting:view",
+  "audit_logs:export",
+  "audit_logs:view",
+  "auto_credit:process",
+  "auto_pay:process",
+  "auto_pay:toggle",
+  "auto_pay:view",
+  "borrowers:approve",
+  "borrowers:create",
+  "borrowers:delete",
+  "borrowers:update",
+  "borrowers:view",
+  "branches:view_all",
+  "cash_accounts:transfer",
+  "cash_accounts:view",
+  "chart_of_accounts:create",
+  "chart_of_accounts:delete",
+  "chart_of_accounts:update",
+  "chart_of_accounts:view",
+  "collaterals:create",
+  "collaterals:delete",
+  "collaterals:update",
+  "collaterals:view",
+  "collections:mark_collected",
+  "collections:view",
+  "credit_scoring:override",
+  "credit_scoring:settings",
+  "credit_scoring:view",
+  "dashboard:view",
+  "expenses:create",
+  "expenses:pay",
+  "expenses:update",
+  "expenses:view",
+  "fees:create",
+  "fees:delete",
+  "fees:update",
+  "fees:view",
+  "gcash:settings",
+  "gcash:transact",
+  "gcash:view",
+  "imports:process",
+  "journals:create",
+  "journals:post",
+  "journals:reverse",
+  "journals:view",
+  "loan_adjustments:approve",
+  "loan_adjustments:create",
+  "loan_adjustments:view",
+  "loan_products:manage",
+  "loans:approve",
+  "loans:create",
+  "loans:delete",
+  "loans:extend",
+  "loans:reject",
+  "loans:release",
+  "loans:restructure",
+  "loans:update",
+  "loans:view",
+  "loans:void",
+  "loans:write_off",
+  "payments:create",
+  "payments:update",
+  "payments:view",
+  "payments:void",
+  "reminders:pause",
+  "reminders:send",
+  "reminders:settings",
+  "reminders:view",
+  "reports:export",
+  "reports:view",
+  "settings:delete",
+  "settings:update",
+  "settings:view",
+  "share_capital:create",
+  "share_capital:update",
+  "share_capital:view",
+  "users:create",
+  "users:delete",
+  "users:reset_password",
+  "users:update",
+  "users:view",
+];
+
+test("super_admin is labelled in words and holds exactly every backend permission", () => {
+  assert.equal(ROLES.super_admin.label, "Super Admin");
+  assert.equal(
+    ROLES.super_admin.description,
+    "Platform super administrator — holds every permission. Reserved for the platform team, not client staff.",
+  );
+  assert.deepEqual([...ROLES.super_admin.permissions].sort(), [...BACKEND_PERMISSIONS].sort());
+  assert.equal(new Set(ROLES.super_admin.permissions).size, ROLES.super_admin.permissions.length);
+});
+
+// A label for screens that name the role, never a choice: super_admin is
+// reserved for the platform team, so no role list built from this map offers it.
+test("ROLE_OPTIONS never offers super_admin", () => {
+  assert.equal(ROLE_OPTIONS.some((option) => option.value === "super_admin"), false);
+  assert.ok(ROLE_OPTIONS.some((option) => option.value === "admin"));
 });

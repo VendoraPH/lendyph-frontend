@@ -85,7 +85,7 @@ import type { User, UserStatus } from "@/types";
 import type { ApiRole } from "@/services/role.service";
 import { roleDisplayName } from "@/lib/role-display-name";
 import { isInactiveRole, roleOptionLabel, roleOptions, withoutUnchangedRole } from "./_lib/role-options";
-import { USERNAME_PLACEHOLDER, permissionChipLabel, userStatusLabel } from "./_lib/user-labels";
+import { USERNAME_PLACEHOLDER, permissionChipLabel, permissionCountLabel, userStatusLabel } from "./_lib/user-labels";
 import { userManageLock } from "./_lib/manage-lock";
 import type { ApiBranch } from "@/services/branch.service";
 
@@ -1060,7 +1060,7 @@ function RoleSummaryCard({
           <span className="text-2xl font-bold">{count}</span>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          {role.permissions.length} permissions
+          {permissionCountLabel(role.permissions.length)}
         </p>
       </CardContent>
     </Card>

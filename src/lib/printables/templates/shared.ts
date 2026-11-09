@@ -16,6 +16,7 @@
  */
 
 import { asRecord, pick, pickNumber } from "@/lib/api-payload";
+import { clockDate } from "@/lib/format";
 import { escapeHtml } from "@/lib/html-escape";
 import { readTermUnit, termUnitNoun } from "@/lib/loan-terms";
 import {
@@ -133,16 +134,14 @@ export function textOrBlank(value: unknown): string {
 // timezone west of UTC. Parsing the parts into a local Date removes both.
 // ---------------------------------------------------------------------------
 
-/** `YYYY-MM-DD`, with nothing after it. */
-const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
-
 /**
- * An API date value as a `Date` in the reader's own timezone, or null.
+ * An API date value as Manila's clock reads it, held at the reader's own
+ * clock (`clockDate`), or null.
  *
- * Date-only strings are built from their parts so they land on local midnight
- * of the day they name. Everything else (a `YYYY-MM-DD HH:mm:ss` timestamp, an
- * ISO instant, a `Date`) is left to the platform, which already reads those as
- * the instant they denote.
+ * A date-only string lands on local midnight of the day it names, and a
+ * `YYYY-MM-DD HH:mm:ss` server time keeps its reading. A timestamp with a zone
+ * takes Manila's reading too, so a ledger mixing dated entries and timestamps
+ * orders the same on any computer. A `Date` is kept as it is.
  */
 export function parseApiDate(value: unknown): Date | null {
   if (value === null || value === undefined || value === "") return null;
@@ -150,13 +149,7 @@ export function parseApiDate(value: unknown): Date | null {
     return Number.isNaN(value.getTime()) ? null : value;
   }
 
-  const text = String(value).trim();
-  const parts = DATE_ONLY.exec(text);
-  if (parts) {
-    return new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]));
-  }
-
-  const parsed = new Date(text);
+  const parsed = clockDate(String(value));
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 

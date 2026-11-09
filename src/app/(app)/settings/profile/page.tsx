@@ -27,6 +27,7 @@ import type { Role } from "@/types/rbac";
 // ── Helpers ──
 
 const ROLE_BADGE_CLASS: Record<Role, string> = {
+  super_admin: "bg-brand-orange/10 text-brand-orange border-brand-orange/30",
   admin: "bg-brand-orange/10 text-brand-orange border-brand-orange/30",
   accountant: "bg-amber-100 text-amber-700 border-amber-200",
   loan_officer: "bg-blue-100 text-blue-700 border-blue-200",

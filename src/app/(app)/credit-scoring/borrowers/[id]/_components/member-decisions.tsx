@@ -36,7 +36,7 @@ export function MemberDecisions({ borrowerId }: { borrowerId: number }) {
         >
           {(res) => (
             <div className="space-y-3">
-              <DecisionItems decisions={res.data} />
+              <DecisionItems decisions={res.data} showLoan />
               <TablePagination
                 page={res.current_page}
                 perPage={res.per_page}
