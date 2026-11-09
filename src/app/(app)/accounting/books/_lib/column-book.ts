@@ -107,6 +107,9 @@ export interface ColumnBookFooter {
   columns: string[];
   sundryDebit: string;
   sundryCredit: string;
+  /** The server's `total_debit` and `total_credit`: every line of the book's journals, as the Lines view shows. */
+  bookDebit: string;
+  bookCredit: string;
 }
 
 export function columnBookFooter(book: ColumnBook): ColumnBookFooter {
@@ -116,7 +119,22 @@ export function columnBookFooter(book: ColumnBook): ColumnBookFooter {
     columns: laidOut(heads.columns, book.totals.columns, totalText),
     sundryDebit: totalText(book.totals.sundry_debit),
     sundryCredit: totalText(book.totals.sundry_credit),
+    bookDebit: totalText(book.totals.total_debit),
+    bookCredit: totalText(book.totals.total_credit),
   };
+}
+
+const BOOK_TOTAL_NOTE =
+  "The book total is every line's debits and credits, the same as the Lines view.";
+
+/**
+ * Why the money columns don't add up to the book total: each one is an
+ * entry's net movement on that account, not its gross lines.
+ */
+export function columnBookNote(kind: ColumnBookKind): string {
+  return kind === "cash_receipts"
+    ? `Money columns show each entry's net movement on that account, so a GCash Cash In shows the amount less on GCash. ${BOOK_TOTAL_NOTE}`
+    : `Money columns show each entry's net movement on that account. ${BOOK_TOTAL_NOTE}`;
 }
 
 export function balanceBadge(book: ColumnBook): { label: string; balanced: boolean } {

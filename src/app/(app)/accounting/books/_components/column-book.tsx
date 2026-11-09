@@ -23,6 +23,7 @@ import {
   balanceBadge,
   columnBookFooter,
   columnBookHeads,
+  columnBookNote,
   columnBookRowCells,
   sideLabels,
 } from "../_lib/column-book";
@@ -115,6 +116,7 @@ function ColumnBookCard({ book }: { book: ColumnBook }) {
             {badge.label}
           </Badge>
         </div>
+        <p className="text-xs text-muted-foreground">{columnBookNote(book.kind)}</p>
 
         <Table>
           <caption className="sr-only">
@@ -221,6 +223,18 @@ function ColumnBookCard({ book }: { book: ColumnBook }) {
               <TableCell className={groupStart} />
               <TableCell className={cn(amount, "font-semibold")}>{footer.sundryDebit}</TableCell>
               <TableCell className={cn(amount, "font-semibold")}>{footer.sundryCredit}</TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell colSpan={4} className="font-semibold">
+                Book total
+              </TableCell>
+              {hasMoney && <TableCell colSpan={heads.money.length} className={groupStart} />}
+              {hasColumns && <TableCell colSpan={heads.columns.length} className={groupStart} />}
+              <TableCell className={cn("whitespace-normal text-sm text-muted-foreground", groupStart)}>
+                Every line, as in the Lines view
+              </TableCell>
+              <TableCell className={cn(amount, "font-semibold")}>{footer.bookDebit}</TableCell>
+              <TableCell className={cn(amount, "font-semibold")}>{footer.bookCredit}</TableCell>
             </TableRow>
           </TableFooter>
         </Table>

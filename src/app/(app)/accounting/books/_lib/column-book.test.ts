@@ -1,5 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { ColumnBook } from "@/types";
 import {
   BOOK_VIEW_ITEMS,
@@ -7,6 +9,7 @@ import {
   cellText,
   columnBookFooter,
   columnBookHeads,
+  columnBookNote,
   columnBookRowCells,
   isBookView,
   sideLabels,
@@ -150,6 +153,8 @@ test("the footer is the server's totals, in heading order, with a dash where non
     columns: ["₱1,000.00", "₱500.50", "₱15.00"],
     sundryDebit: "₱0.00",
     sundryCredit: "₱100.00",
+    bookDebit: "₱1,615.50",
+    bookCredit: "₱1,615.50",
   });
 
   const partial = receipts({
@@ -167,6 +172,8 @@ test("the footer is the server's totals, in heading order, with a dash where non
     columns: ["—", "₱500.50", "—"],
     sundryDebit: "₱0.00",
     sundryCredit: "₱0.00",
+    bookDebit: "₱0.00",
+    bookCredit: "₱0.00",
   });
 });
 
@@ -176,4 +183,50 @@ test("the badge reads the server's is_balanced", () => {
     label: "Doesn't balance",
     balanced: false,
   });
+});
+
+test("the book total is the server's total_debit and total_credit, never a sum of the columns", () => {
+  const book = receipts({
+    totals: {
+      money: { "7": 151550, "3": 10000 },
+      columns: { loans_receivable: 100000, interest_income: 50050, gcash_service_income: 1500 },
+      sundry_debit: 0,
+      sundry_credit: 10000,
+      total_debit: 177869_50,
+      total_credit: 177869_50,
+    },
+  });
+  const footer = columnBookFooter(book);
+  assert.equal(footer.bookDebit, "₱177,869.50");
+  assert.equal(footer.bookCredit, "₱177,869.50");
+
+  const unsent = receipts();
+  const totals = { ...unsent.totals } as Partial<ColumnBook["totals"]>;
+  delete totals.total_debit;
+  delete totals.total_credit;
+  const missing = columnBookFooter({ ...unsent, totals: totals as ColumnBook["totals"] });
+  assert.equal(missing.bookDebit, "—");
+  assert.equal(missing.bookCredit, "—");
+});
+
+test("the caption says money columns are each entry's net movement", () => {
+  assert.equal(
+    columnBookNote("cash_receipts"),
+    "Money columns show each entry's net movement on that account, so a GCash Cash In shows the amount less on GCash. The book total is every line's debits and credits, the same as the Lines view.",
+  );
+  assert.equal(
+    columnBookNote("cash_disbursements"),
+    "Money columns show each entry's net movement on that account. The book total is every line's debits and credits, the same as the Lines view.",
+  );
+});
+
+test("the Columns view shows the Book total row and the caption", () => {
+  const source = readFileSync(
+    join(process.cwd(), "src/app/(app)/accounting/books/_components/column-book.tsx"),
+    "utf8",
+  );
+  assert.match(source, /Book total/);
+  assert.match(source, /footer\.bookDebit/);
+  assert.match(source, /footer\.bookCredit/);
+  assert.match(source, /columnBookNote\(book\.kind\)/);
 });
