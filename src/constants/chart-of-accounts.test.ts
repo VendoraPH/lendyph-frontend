@@ -68,14 +68,16 @@ test("each of the five sections has a top-level heading", () => {
   }
 });
 
-test("the contra accounts are the allowance and accumulated depreciation", () => {
+test("the contra accounts are the allowance, unearned restructure income and accumulated depreciation", () => {
   const contra = DEFAULT_CHART_OF_ACCOUNTS.filter((a) => a.is_contra).map((a) => a.code);
-  assert.deepEqual(contra.sort(), ["1200", "1490"]);
+  assert.deepEqual(contra.sort(), ["1200", "1210", "1490"]);
 });
 
 test("a contra asset is credit-normal", () => {
-  const allowance = DEFAULT_CHART_OF_ACCOUNTS.find((a) => a.code === "1200")!;
-  assert.equal(seedNormalBalance(allowance), "credit");
+  for (const code of ["1200", "1210"]) {
+    const seed = DEFAULT_CHART_OF_ACCOUNTS.find((a) => a.code === code)!;
+    assert.equal(seedNormalBalance(seed), "credit", code);
+  }
 });
 
 test("a plain asset is debit-normal and a plain income account credit-normal", () => {
@@ -152,6 +154,41 @@ test("each tax role defaults to the payable account the backend seeds under 2200
     assert.equal(seed.parent, "2200", role);
     assert.equal(seed.is_group ?? false, false, role);
   }
+});
+
+test("each Phase 2 posting role defaults to the account the backend seeds, of the type it must be", () => {
+  const byCode = new Map(DEFAULT_CHART_OF_ACCOUNTS.map((a) => [a.code, a]));
+  const expected = {
+    gcash_service_income: ["4090", "GCash Service Income", "income", "4000"],
+    loan_adjustments: ["1180", "Loan Adjustments Clearing", "asset", "1000"],
+    unearned_restructure_income: [
+      "1210",
+      "Unearned Interest and Penalty – Restructured Loans",
+      "asset",
+      "1000",
+    ],
+    net_surplus: ["3030", "Retained Earnings", "equity", "3000"],
+    suspense: ["2390", "Suspense Account", "liability", "2000"],
+  } as const;
+  for (const [role, [code, name, type, parent]] of Object.entries(expected)) {
+    assert.equal(DEFAULT_ACCOUNT_MAPPING_CODES[role as keyof typeof expected], code, role);
+    const seed = byCode.get(code)!;
+    assert.ok(seed, `${role} points at ${code}, which the chart lacks`);
+    assert.equal(seed.name, name, role);
+    assert.equal(seed.type, type, role);
+    assert.equal(seed.parent, parent, role);
+    assert.equal(seed.is_group ?? false, false, role);
+  }
+});
+
+test("unearned restructure income is a contra asset beside the allowance, outside the loans receivable heading", () => {
+  // Under 1000, not 1100: the portfolio heading sums gross receivables, and
+  // the deferral must reduce them on its own line, as the allowance does.
+  const unearned = DEFAULT_CHART_OF_ACCOUNTS.find((a) => a.code === "1210")!;
+  assert.equal(unearned.is_contra, true);
+  assert.equal(unearned.parent, "1000");
+  const codes = DEFAULT_CHART_OF_ACCOUNTS.map((a) => a.code);
+  assert.equal(codes.indexOf("1210"), codes.indexOf("1200") + 1);
 });
 
 test("insurance premium collected from payments has no receivable role: it goes to Insurance Premium Payable", () => {

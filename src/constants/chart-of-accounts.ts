@@ -52,11 +52,25 @@ export const DEFAULT_CHART_OF_ACCOUNTS: SeedAccount[] = [
   { code: "1160", name: "Penalty Receivable", type: "asset", parent: "1000" },
   { code: "1170", name: "Other Receivables", type: "asset", parent: "1000" },
 
+  // Where a balance adjustment clears. It reads zero once each adjustment is
+  // reviewed; any balance here needs review.
+  { code: "1180", name: "Loan Adjustments Clearing", type: "asset", parent: "1000" },
+
   // Credit-balanced asset: it REDUCES loans receivable. Net Loans Receivable
   // is gross minus this, which is why `is_contra` has to be set.
   {
     code: "1200",
     name: "Allowance for Credit Losses",
+    type: "asset",
+    is_contra: true,
+    parent: "1000",
+  },
+  // Interest and penalty a restructure capitalised into the new loan's
+  // principal, not yet earned. A contra asset like 1200, and under 1000, not
+  // 1100, so the loans receivable heading never sums it.
+  {
+    code: "1210",
+    name: "Unearned Interest and Penalty – Restructured Loans",
     type: "asset",
     is_contra: true,
     parent: "1000",
@@ -100,6 +114,8 @@ export const DEFAULT_CHART_OF_ACCOUNTS: SeedAccount[] = [
   },
 
   { code: "2300", name: "Other Liabilities", type: "liability", parent: "2000" },
+  // Money received that cannot be identified yet, held until it is.
+  { code: "2390", name: "Suspense Account", type: "liability", parent: "2000" },
 
   // ── Equity ──
   // A cooperative replaces these with Share Capital, Statutory Funds, Reserve
@@ -139,6 +155,8 @@ export const DEFAULT_CHART_OF_ACCOUNTS: SeedAccount[] = [
   { code: "4070", name: "Other Income", type: "income", parent: "4000" },
   // Configured catalog fees (Settings → Fees) withheld at release.
   { code: "4080", name: "Other Fee Income", type: "income", parent: "4000" },
+  // The charge on a GCash Cash In or Cash Out.
+  { code: "4090", name: "GCash Service Income", type: "income", parent: "4000" },
 
   // ── Expenses ──
   { code: "5000", name: "Expenses", type: "expense", is_group: true },
@@ -202,6 +220,16 @@ export const DEFAULT_ACCOUNT_MAPPING_CODES = {
   // payable is owed to a supplier, and one account for both makes a payables
   // ageing report unreadable.
   borrower_advances: "2300",
+  gcash_service_income: "4090",
+  // Balance adjustments clear here, against loans receivable.
+  loan_adjustments: "1180",
+  // Interest and penalty a restructure capitalised, recognised as the new
+  // loan's principal is collected.
+  unearned_restructure_income: "1210",
+  // Where the year-end close moves the result. Retained Earnings on a
+  // company chart; a cooperative chart points it at its own net surplus.
+  net_surplus: "3030",
+  suspense: "2390",
 } as const satisfies Record<keyof AccountMapping, string>;
 
 /** The normal balance a seed row implies, for building the account record. */
