@@ -195,6 +195,7 @@ export const SIDEBAR_NAV: NavItem[] = [
       // The page itself opens on `accounting:view` (+ `branches:view_all`);
       // the menu shows it to those who set the entry up.
       { title: "Opening Balances", href: "/accounting/opening-balances", permission: "accounting:settings" },
+      { title: "Allowance for Credit Losses", href: "/accounting/allowance", permission: "accounting:view" },
       { title: "Settings", href: "/accounting/settings", permission: "accounting:settings" },
     ],
   },

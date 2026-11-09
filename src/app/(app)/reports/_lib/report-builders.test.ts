@@ -4079,6 +4079,152 @@ test("a failed provisioning request still renders every bucket", () => {
   assert.doesNotMatch(noteText(doc)!, /Computed as of/);
 });
 
+// The allowance calculator's figures, in pesos, beside the overdue schedule
+// (round C, C4). `91_120` and `over_120` arrive folded into `over_90`.
+const PRINCIPAL_BASIS = {
+  buckets: {
+    "1_30": { principal: 250000, count: 12, rate_percent: "5", required_allowance: 12500 },
+    "31_60": { principal: 80000.5, count: 5, rate_percent: "15", required_allowance: 12000.08 },
+    "61_90": { principal: 40000, count: 1, rate_percent: "25", required_allowance: 10000 },
+    over_90: { principal: 300000, count: 9, rate_percent: "50", required_allowance: 150000 },
+  },
+  // Distinct loans and the server's own totals: not the rows added up here.
+  totals: { principal: 670000.5, count: 27, required_allowance: 184500.08 },
+  basis_note: "Outstanding principal of each loan, in the bucket of its oldest unpaid instalment",
+};
+
+const PROVISIONING_WITH_BASIS = { ...PROVISIONING_PAYLOAD, principal_basis: PRINCIPAL_BASIS };
+
+test("provisioning adds the principal basis: buckets, loans, principal, rate and required", () => {
+  const doc = buildProvisioningDoc(PROVISIONING_WITH_BASIS, RANGE);
+  const table = namedTable(doc, "Principal Basis");
+
+  assert.deepEqual(
+    table.columns.map((c) => [c.key, c.header]),
+    [
+      ["bucket", "Bucket"],
+      ["count", "Loans"],
+      ["principal", "Principal"],
+      ["rate", "Rate"],
+      ["required_allowance", "Required"],
+    ]
+  );
+  assert.deepEqual(
+    table.rows.map((r) => r.bucket),
+    ["1–30 Days", "31–60 Days", "61–90 Days", "Over 90 Days"]
+  );
+  assert.deepEqual(table.rows[1], {
+    bucket: "31–60 Days",
+    count: 5,
+    principal: 80000.5,
+    rate: "15%",
+    required_allowance: 12000.08,
+  });
+  assert.equal(formatValue(table.rows[1].principal, "currency"), "₱80,000.50");
+});
+
+test("the principal basis shows each rate exactly as the server sends it", () => {
+  const doc = buildProvisioningDoc(
+    {
+      ...PROVISIONING_PAYLOAD,
+      principal_basis: {
+        ...PRINCIPAL_BASIS,
+        buckets: {
+          ...PRINCIPAL_BASIS.buckets,
+          "1_30": { ...PRINCIPAL_BASIS.buckets["1_30"], rate_percent: "2.375" },
+        },
+      },
+    },
+    RANGE
+  );
+  // Never rounded to "2.4%".
+  assert.equal(namedTable(doc, "Principal Basis").rows[0].rate, "2.375%");
+});
+
+test("the principal basis totals row is the server's", () => {
+  const doc = buildProvisioningDoc(PROVISIONING_WITH_BASIS, RANGE);
+  const table = namedTable(doc, "Principal Basis");
+
+  assert.deepEqual(table.totals, [
+    { column: "count", label: "Total", value: "27" },
+    { column: "principal", label: undefined, value: "₱670,000.50" },
+    { column: "required_allowance", label: undefined, value: "₱184,500.08" },
+  ]);
+});
+
+test("the principal basis never adds its buckets or multiplies principal by rate", () => {
+  const doc = buildProvisioningDoc(
+    {
+      ...PROVISIONING_PAYLOAD,
+      principal_basis: {
+        buckets: {
+          "1_30": { principal: 250000, count: 12, rate_percent: "5" },
+          "31_60": { principal: 80000.5, count: 5, rate_percent: "15" },
+          "61_90": { principal: 40000, count: 1, rate_percent: "25" },
+          over_90: { principal: 300000, count: 9, rate_percent: "50" },
+        },
+        totals: {},
+      },
+    },
+    RANGE
+  );
+  const table = namedTable(doc, "Principal Basis");
+
+  // Not ₱12,500.00 (principal × 5%).
+  assert.equal(table.rows[0].required_allowance, null);
+  assert.equal(formatValue(table.rows[0].required_allowance, "currency"), DASH);
+  // Not the rows added up.
+  assert.deepEqual(
+    table.totals?.map((t) => t.value),
+    [DASH, DASH, DASH]
+  );
+});
+
+test("the principal basis carries the server's basis note as its caption", () => {
+  const doc = buildProvisioningDoc(PROVISIONING_WITH_BASIS, RANGE);
+  const at = doc.sections.findIndex((s) => s.kind === "table" && s.title === "Principal Basis");
+  const caption = doc.sections[at + 1];
+
+  assert.equal(caption.kind, "note");
+  assert.equal(
+    caption.kind === "note" && caption.text,
+    "Outstanding principal of each loan, in the bucket of its oldest unpaid instalment"
+  );
+});
+
+test("the principal basis leaves the overdue schedule and its figures as they were", () => {
+  const before = buildProvisioningDoc(PROVISIONING_PAYLOAD, RANGE);
+  const after = buildProvisioningDoc(PROVISIONING_WITH_BASIS, RANGE);
+
+  const basisAt = (doc: ReportDocument) =>
+    doc.sections.findIndex((s) => s.kind === "table" && s.title === "Principal Basis");
+
+  // The KPIs, the schedule and its note come first, exactly as before.
+  assert.equal(basisAt(after), basisAt(before));
+  assert.deepEqual(after.sections.slice(0, basisAt(after)), before.sections.slice(0, basisAt(before)));
+  assert.equal(noteText(after), noteText(before));
+});
+
+test("without a principal basis every bucket still shows, with dashes", () => {
+  const doc = buildProvisioningDoc(null, RANGE);
+  const table = namedTable(doc, "Principal Basis");
+
+  assert.equal(table.rows.length, 4);
+  assert.deepEqual(table.rows[0], {
+    bucket: "1–30 Days",
+    count: null,
+    principal: null,
+    rate: null,
+    required_allowance: null,
+  });
+  assert.deepEqual(
+    table.totals?.map((t) => t.value),
+    [DASH, DASH, DASH]
+  );
+  // No server note to quote, so no caption is made up.
+  assert.equal(doc.sections.at(-1)?.kind, "table");
+});
+
 // ---------------------------------------------------------------------------
 // Reporting period cap
 //
