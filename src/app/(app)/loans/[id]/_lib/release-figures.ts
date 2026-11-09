@@ -5,9 +5,11 @@
 // (`GET /loans/{id}/release-preview` with these params); nothing here works
 // one out. Dependency-free, so it runs under `tsx --test`.
 
+import { knownPaymentMethodName, type RecordPaymentMethod } from "@/constants/payment-methods";
 import { getErrorMessage } from "@/lib/api-error";
+import { paymentMethodFields } from "@/lib/payment-reference";
 import type { ReleaseLoanPayload, ReleasePreviewInsuranceQuery } from "@/services/loan.service";
-import type { LoanReleasePreview } from "@/types/loan";
+import type { Loan, LoanReleasePreview, LoanReleaseRestructure } from "@/types/loan";
 import type { InsurancePremiumValue } from "../_components/insurance-premium.types";
 
 /** A typed amount as a number of pesos, or null when nothing usable is typed. */
@@ -47,7 +49,7 @@ export function releaseInsuranceQuery(value: InsurancePremiumValue): ReleasePrev
 }
 
 /** The insurance fields of `PATCH /loans/{id}/release`. */
-export type ReleaseInsurancePayload = Omit<ReleaseLoanPayload, "fee_fingerprint">;
+export type ReleaseInsurancePayload = Omit<ReleaseLoanPayload, "fee_fingerprint" | "method" | "reference_number">;
 
 /**
  * The insurance the release sends: the inputs that were previewed, plus the
@@ -207,4 +209,67 @@ export function staleReread(
 /** Why an insurance preview failed, in the server's words where it gave any. */
 export function releaseInsuranceFailureMessage(err: unknown): string {
   return getErrorMessage(err, "We couldn't work out the insurance. Please try again.");
+}
+
+/**
+ * What Confirm Release sends: the insurance previewed, the fingerprint of the
+ * fees quoted (a 409 if they changed since), and how the proceeds are paid out
+ * with its reference (required unless cash; the dialog says so first).
+ */
+export function releaseRequest(
+  query: ReleasePreviewInsuranceQuery | null,
+  answer: LoanReleasePreview,
+  method: RecordPaymentMethod,
+  reference: string,
+): ReleaseLoanPayload {
+  return {
+    ...releaseInsurancePayload(query, answer.insurance),
+    fee_fingerprint: answer.fee_fingerprint,
+    ...paymentMethodFields(method, reference),
+  };
+}
+
+/** One line of the restructure block: the server's figure, or null for a dash. */
+export interface RestructureReleaseRow {
+  label: string;
+  amount: string | number | null;
+}
+
+const RESTRUCTURE_ROWS: readonly { key: keyof LoanReleaseRestructure; label: string }[] = [
+  { key: "carried_principal", label: "Carried from the old loan" },
+  { key: "capitalised_interest", label: "Capitalised interest" },
+  { key: "capitalised_penalty", label: "Capitalised penalty" },
+  { key: "written_off_principal", label: "Principal written off" },
+  { key: "collected_now", label: "Collected from the member now" },
+  { key: "paid_out", label: "Paid out" },
+];
+
+/**
+ * What a restructure's Release dialog shows in place of Net Proceeds: the
+ * server's `restructure` block, line by line. A figure it didn't send is null
+ * (shown as a dash); nothing is worked out here.
+ */
+export function restructureReleaseRows(
+  block: LoanReleaseRestructure | null | undefined,
+): RestructureReleaseRow[] {
+  return RESTRUCTURE_ROWS.map(({ key, label }) => {
+    const value: unknown = block?.[key];
+    return { label, amount: typeof value === "string" || typeof value === "number" ? value : null };
+  });
+}
+
+const NOT_RECORDED = "Not recorded";
+
+/**
+ * How a released loan's proceeds were paid out, in words. Loans released
+ * before the method was stored read "Not recorded"; a cash release with no
+ * reference shows a dash; a stored key the screen doesn't know reads "Other".
+ */
+export function releaseMethodDetails(
+  loan: Pick<Loan, "release_method" | "release_reference">,
+): { method: string; reference: string } {
+  const stored = loan.release_method;
+  if (stored == null || stored === "") return { method: NOT_RECORDED, reference: NOT_RECORDED };
+  const reference = loan.release_reference?.trim();
+  return { method: knownPaymentMethodName(stored) ?? "Other", reference: reference ? reference : "—" };
 }

@@ -73,7 +73,13 @@ import { LoanCollateralsCard } from "./_components/loan-collaterals-card";
 import { ReleaseDeductions } from "./_components/release-deductions";
 import { ReleaseCoMakers } from "./_components/release-co-makers";
 import { InsurancePremiumSection } from "./_components/insurance-premium-section";
-import { releaseInsurancePayload, releaseInsuranceQuery } from "./_lib/release-figures";
+import {
+  releaseInsuranceQuery,
+  releaseMethodDetails,
+  releaseRequest,
+  restructureReleaseRows,
+} from "./_lib/release-figures";
+import { MethodReferenceFields } from "@/components/common/method-reference-fields";
 import { releaseConflictOf } from "./_lib/release-conflict";
 import { useReleasePreview } from "./_hooks/use-release-preview";
 import { useDeductionsPreview } from "./_hooks/use-deductions-preview";
@@ -82,6 +88,8 @@ import { cardDeductionsSource, cardFiguresAreEstimated } from "./_lib/deductions
 import {
   DEFAULT_PAYMENT_METHOD,
   PAYMENT_METHOD_OPTIONS,
+  extensionMethodFields,
+  extensionReferenceError,
   paymentMethodFields,
   paymentMethodLabel,
   paymentReferenceError,
@@ -743,6 +751,14 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // Bumped on every open, so a reopened dialog asks the server again rather
   // than showing the figures from before the last extension.
   const [extendPreviewRound, setExtendPreviewRound] = useState(0);
+  // How "pay" collects what the extension takes, and its reference. Every
+  // opening starts at Cash with no reference, as Record Payment does.
+  const [extendMethod, setExtendMethod] = useState<RecordPaymentMethod>(DEFAULT_PAYMENT_METHOD);
+  const [extendReference, setExtendReference] = useState("");
+  if (useDialogOpening(extendOpen, loanId)) {
+    setExtendMethod(DEFAULT_PAYMENT_METHOD);
+    setExtendReference("");
+  }
 
   // Loan Adjustments state
   const [adjustments, setAdjustments] = useState<LoanAdjustment[]>([]);
@@ -997,6 +1013,14 @@ function LoanDetail({ loanId }: { loanId: number }) {
 
   // Dialog state
   const [releaseOpen, setReleaseOpen] = useState(false);
+  // How the proceeds are paid out, and its reference. Every opening starts at
+  // Cash with no reference, so a later release can't go out under an old one.
+  const [releaseMethod, setReleaseMethod] = useState<RecordPaymentMethod>(DEFAULT_PAYMENT_METHOD);
+  const [releaseReference, setReleaseReference] = useState("");
+  if (useDialogOpening(releaseOpen, loanId)) {
+    setReleaseMethod(DEFAULT_PAYMENT_METHOD);
+    setReleaseReference("");
+  }
   const [autoPayDialogOpen, setAutoPayDialogOpen] = useState(false);
   const [autoPayIsPostRelease, setAutoPayIsPostRelease] = useState(false);
 
@@ -1383,7 +1407,15 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // Release stays off until then.
   const releaseAnswer = releaseConfirm.status === "ready" ? releaseConfirm.answer : null;
   const releaseExceedsNet = releaseAnswer?.exceeds_net_proceeds === true;
-  const canConfirmRelease = releaseAnswer !== null && !releaseExceedsNet && !actionLoading;
+  const releaseReferenceProblem = paymentReferenceError(releaseMethod, releaseReference, "release");
+  const canConfirmRelease =
+    releaseAnswer !== null && !releaseExceedsNet && releaseReferenceProblem === null && !actionLoading;
+  // A restructure pays nothing out: the dialog shows how the release settles
+  // the old loan, from the server's `restructure` block, instead of a net.
+  const releaseRestructureRows = loan.is_restructure
+    ? restructureReleaseRows(releaseAnswer?.restructure ?? null)
+    : null;
+  const loanReleaseMethod = releaseMethodDetails(loan);
 
   const handleRelease = async () => {
     if (releaseAnswer === null || !canConfirmRelease) return;
@@ -1393,10 +1425,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
       // since, the server refuses the release (409) rather than pay out a
       // different amount from the one the cashier just read. The premium sent
       // is the server's own from the same answer; it refuses any other (422).
-      await loanService.release(loan.id, {
-        ...releaseInsurancePayload(releaseInsurance, releaseAnswer.insurance),
-        fee_fingerprint: releaseAnswer.fee_fingerprint,
-      });
+      // How the proceeds are paid out goes with it, for the release journal.
+      await loanService.release(
+        loan.id,
+        releaseRequest(releaseInsurance, releaseAnswer, releaseMethod, releaseReference),
+      );
     } catch (err) {
       console.error("[release] failed", err instanceof AxiosError ? { status: err.response?.status, data: err.response?.data } : err);
       const conflict = releaseConflictOf(err);
@@ -1795,7 +1828,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
 
   // ── Loan Extension Handlers (Upon Maturity) ──
 
+  const extendReferenceProblem = extensionReferenceError(extendInterestOption, extendMethod, extendReference);
+
   const handleExtendLoan = async () => {
+    if (extendReferenceProblem !== null) return;
     setActionLoading(true);
     try {
       // The API collects the interest itself when "pay" is chosen, in the same
@@ -1803,9 +1839,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
       // call followed by extend(): if the extend failed, the payment was
       // already committed, and the only thing stopping a second charge was a
       // ref that reset whenever this dialog was reopened.
+      // "pay" says how the collection was received; "defer" sends neither.
       await loanService.extend(loan.id, {
         remarks: extendRemarks.trim() || undefined,
         interest_option: extendInterestOption,
+        ...extensionMethodFields(extendInterestOption, extendMethod, extendReference),
       });
       toast.success(
         extendInterestOption === "pay"
@@ -3228,6 +3266,14 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 <p className="text-xs text-muted-foreground">Release Date</p>
                 <p className="text-sm font-medium">{formatDate(loan.release_date)}</p>
               </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Release Method</p>
+                <p className="text-sm font-medium">{loanReleaseMethod.method}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Release Reference</p>
+                <p className="text-sm font-medium break-all">{loanReleaseMethod.reference}</p>
+              </div>
               {loan.maturity_date && (
                 <div>
                   <p className="text-xs text-muted-foreground">Maturity Date</p>
@@ -3753,14 +3799,16 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   <p className="text-xs text-muted-foreground">Principal Amount</p>
                   <p className="text-sm font-semibold">{formatCurrency(loan.principal_amount)}</p>
                 </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Net Proceeds</p>
-                  <p className="text-sm font-semibold text-green-600">
-                    {releaseAnswer && !releaseExceedsNet
-                      ? currencyOrDash(releaseAnswer.net_proceeds_after_insurance)
-                      : "—"}
-                  </p>
-                </div>
+                {releaseRestructureRows === null && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Net Proceeds</p>
+                    <p className="text-sm font-semibold text-green-600">
+                      {releaseAnswer && !releaseExceedsNet
+                        ? currencyOrDash(releaseAnswer.net_proceeds_after_insurance)
+                        : "—"}
+                    </p>
+                  </div>
+                )}
                 <div>
                   <p className="text-xs text-muted-foreground">Interest Rate / Type</p>
                   <p className="text-sm font-medium">
@@ -3776,7 +3824,40 @@ function LoanDetail({ loanId }: { loanId: number }) {
               </div>
             </div>
 
+            {/* A restructure: how the release settles the old loan, each
+                figure the server's (a dash when it sent none). */}
+            {releaseRestructureRows !== null && (
+              <section aria-labelledby="release-restructure-title" className="rounded-lg border p-4 space-y-2">
+                <h3 id="release-restructure-title" className="text-sm font-semibold">
+                  Restructure settlement
+                </h3>
+                <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1.5 text-sm">
+                  {releaseRestructureRows.map((row) => (
+                    <Fragment key={row.label}>
+                      <dt className="text-muted-foreground">{row.label}</dt>
+                      <dd className="text-right font-medium tabular-nums">{currencyOrDash(row.amount)}</dd>
+                    </Fragment>
+                  ))}
+                </dl>
+              </section>
+            )}
+
             <ReleaseDeductions preview={releasePreview} onRetry={reloadReleasePreview} />
+
+            <MethodReferenceFields
+              idPrefix="release"
+              methodLabel="Release Method"
+              options={PAYMENT_METHOD_OPTIONS}
+              method={releaseMethod}
+              reference={releaseReference}
+              onChange={(next) => {
+                setReleaseMethod(next.method);
+                setReleaseReference(next.reference);
+              }}
+              referenceRequired={releaseMethod !== "cash"}
+              problem={releaseReferenceProblem}
+              disabled={actionLoading}
+            />
 
             <ReleaseCoMakers loan={loan} onLoanChange={setLoan} />
 
@@ -3896,7 +3977,15 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
                 <p className="text-sm text-amber-700">
                   Releasing this loan will lock the principal, interest rate, and term.
-                  {releaseAnswer && (
+                  {releaseAnswer && releaseRestructureRows !== null && (
+                    <>
+                      {" "}The member is paid out{" "}
+                      <span className="font-semibold">{currencyOrDash(releaseAnswer.restructure?.paid_out)}</span>, and{" "}
+                      <span className="font-semibold">{currencyOrDash(releaseAnswer.restructure?.collected_now)}</span>{" "}
+                      is collected from the member now.
+                    </>
+                  )}
+                  {releaseAnswer && releaseRestructureRows === null && (
                     <>
                       {" "}The member will receive{" "}
                       <span className="font-semibold">
@@ -4919,6 +5008,21 @@ function LoanDetail({ loanId }: { loanId: number }) {
               </SelectContent>
             </Select>
           </div>
+          {extendInterestOption === "pay" && (
+            <MethodReferenceFields
+              idPrefix="extend"
+              options={PAYMENT_METHOD_OPTIONS}
+              method={extendMethod}
+              reference={extendReference}
+              onChange={(next) => {
+                setExtendMethod(next.method);
+                setExtendReference(next.reference);
+              }}
+              referenceRequired={extendMethod !== "cash"}
+              problem={extendReferenceProblem}
+              disabled={actionLoading}
+            />
+          )}
           <div className="space-y-2">
             <Label className="text-xs">Extension Details</Label>
             {/* Both from the server's preview; a dash until it answers, and
@@ -4954,7 +5058,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
             <AlertDialogCancel disabled={actionLoading}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleExtendLoan}
-              disabled={actionLoading || !canConfirmExtension(extendPreview.preview)}
+              disabled={
+                actionLoading || extendReferenceProblem !== null || !canConfirmExtension(extendPreview.preview)
+              }
               className="bg-brand-blue text-brand-blue-foreground shadow-sm hover:bg-brand-blue-dark hover:shadow-md transition-all"
             >
               {actionLoading ? (

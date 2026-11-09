@@ -26,6 +26,14 @@ import type { AutoCreditMember } from "@/types";
 import { Zap, AlertTriangle, CheckCircle2, AlertCircle } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { formatCurrency } from "@/lib/format";
+import { MethodReferenceFields } from "@/components/common/method-reference-fields";
+import { useDialogOpening } from "@/hooks/use-dialog-opening";
+import {
+  AUTO_CREDIT_DEFAULT_METHOD,
+  AUTO_CREDIT_METHOD_OPTIONS,
+  paymentMethodFields,
+  type AutoCreditMethod,
+} from "@/lib/payment-reference";
 
 interface LocalMember {
   id: number;
@@ -53,6 +61,14 @@ function AutoCreditContent() {
   const [showDisabled, setShowDisabled] = useState(false);
   const [showNoPledge, setShowNoPledge] = useState(false);
   const [totalToCredit, setTotalToCredit] = useState(0);
+  // The account the run is credited through (Bank by default) and an optional
+  // reference, picked afresh each time the confirm dialog opens.
+  const [settlementMethod, setSettlementMethod] = useState<AutoCreditMethod>(AUTO_CREDIT_DEFAULT_METHOD);
+  const [settlementReference, setSettlementReference] = useState("");
+  if (useDialogOpening(confirmOpen, true)) {
+    setSettlementMethod(AUTO_CREDIT_DEFAULT_METHOD);
+    setSettlementReference("");
+  }
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -106,7 +122,9 @@ function AutoCreditContent() {
   async function handleConfirm() {
     setProcessing(true);
     try {
-      const result = await shareCapitalService.autoCreditProcess();
+      const result = await shareCapitalService.autoCreditProcess(
+        paymentMethodFields(settlementMethod, settlementReference),
+      );
       setConfirmOpen(false);
       setLastRun(new Date(result.processed_at ?? new Date()).toLocaleString("en-PH"));
       toast.success(
@@ -262,6 +280,20 @@ function AutoCreditContent() {
               {activeMembers.length} member{activeMembers.length > 1 ? "s" : ""}
             </p>
           </div>
+          <MethodReferenceFields
+            idPrefix="auto-credit"
+            methodLabel="Settlement Account"
+            options={AUTO_CREDIT_METHOD_OPTIONS}
+            method={settlementMethod}
+            reference={settlementReference}
+            onChange={(next) => {
+              setSettlementMethod(next.method);
+              setSettlementReference(next.reference);
+            }}
+            referenceRequired={false}
+            problem={null}
+            disabled={processing}
+          />
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={processing}>
               Cancel

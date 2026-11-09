@@ -115,13 +115,33 @@ export interface AutoCreditMember {
   auto_credit: boolean;
 }
 
+/**
+ * `POST /auto-credit/process`: the settlement account the run is credited
+ * through (Bank, `bank_transfer`, when left out) and an optional reference.
+ */
+export interface AutoCreditProcessData {
+  method?: "cash" | "gcash" | "maya" | "bank_transfer";
+  reference_number?: string;
+}
+
 export interface AutoCreditProcessResult {
   processed_count: number;
   total_amount: number;
   processed_at: string;
 }
 
-export interface CreateLedgerEntryData {
+/**
+ * How a share capital entry's money came in or went out. `method` is cash when
+ * left out; `reference_number` is required unless cash, at most 100
+ * characters. A credit posts Dr the method's account / Cr 3060, a debit the
+ * reverse.
+ */
+export interface ShareCapitalMethodFields {
+  method?: "cash" | "gcash" | "maya" | "bank_transfer" | "online";
+  reference_number?: string;
+}
+
+export interface CreateLedgerEntryData extends ShareCapitalMethodFields {
   borrower_id: number;
   date: string;
   description: string;
@@ -136,14 +156,15 @@ export interface UpdatePledgeData {
 
 // `date` and `type` are required by `ShareCapitalManualEntryRequest` and
 // `ShareCapitalBulkEntryRequest`; a request without them is a 422.
-export interface CreatePledgeEntryData {
+export interface CreatePledgeEntryData extends ShareCapitalMethodFields {
   amount: number;
   date: string;
   description?: string;
   type: "credit" | "debit";
 }
 
-export interface BulkPledgeEntryData {
+/** One method and reference for the whole batch. */
+export interface BulkPledgeEntryData extends ShareCapitalMethodFields {
   entries: {
     pledge_id: number;
     amount: number;

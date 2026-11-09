@@ -30,6 +30,9 @@ import {
   releaseInsuranceView,
   staleReread,
   type ReleaseInsuranceOutcome,
+  releaseMethodDetails,
+  releaseRequest,
+  restructureReleaseRows,
 } from "./release-figures";
 
 function typed(value: Partial<InsurancePremiumValue>) {
@@ -296,5 +299,89 @@ describe("staleReread", () => {
     assert.deepEqual(staleReread(releaseConfirmView(BASE, query, ready), BASE, ready, "9f2c1e|a41b07"), none);
     assert.deepEqual(staleReread({ status: "waiting" }, BASE, { status: "loading" }, null), none);
     assert.deepEqual(staleReread({ status: "waiting" }, null, newer, null), none);
+  });
+});
+
+describe("releaseRequest", () => {
+  test("the release sends the method and trimmed reference with the fingerprint and insurance", () => {
+    const query = typed({ percentage: "2", paymentType: "partial", partialAmount: "120" });
+    assert.deepEqual(releaseRequest(query, PREVIEW, "gcash", " GC-77 "), {
+      insurance_premium_percentage: 2,
+      insurance_payment_type: "partial",
+      insurance_partial_amount: 120,
+      insurance_premium_amount: 300,
+      insurance_remaining_balance: 180,
+      fee_fingerprint: "9f2c1e",
+      method: "gcash",
+      reference_number: "GC-77",
+    });
+  });
+
+  test("a cash release with nothing typed sends cash and no reference", () => {
+    assert.deepEqual(releaseRequest(null, PREVIEW, "cash", ""), { fee_fingerprint: "9f2c1e", method: "cash" });
+  });
+});
+
+describe("restructureReleaseRows", () => {
+  const BLOCK = {
+    carried_principal: "40000.00",
+    capitalised_interest: "1500.00",
+    capitalised_penalty: "250.00",
+    written_off_principal: "0.00",
+    collected_now: "850.00",
+    paid_out: "0.00",
+  };
+
+  test("the server's six figures, in order, under the dialog's labels", () => {
+    assert.deepEqual(restructureReleaseRows(BLOCK), [
+      { label: "Carried from the old loan", amount: "40000.00" },
+      { label: "Capitalised interest", amount: "1500.00" },
+      { label: "Capitalised penalty", amount: "250.00" },
+      { label: "Principal written off", amount: "0.00" },
+      { label: "Collected from the member now", amount: "850.00" },
+      { label: "Paid out", amount: "0.00" },
+    ]);
+  });
+
+  test("a figure the server didn't send is null (a dash), never worked out here", () => {
+    const rows = restructureReleaseRows({ ...BLOCK, capitalised_penalty: undefined as unknown as string });
+    assert.equal(rows[2].amount, null);
+    assert.equal(rows[0].amount, "40000.00");
+  });
+
+  test("no block at all: every row is a dash", () => {
+    for (const block of [null, undefined]) {
+      const rows = restructureReleaseRows(block);
+      assert.equal(rows.length, 6);
+      assert.ok(rows.every((row) => row.amount === null));
+    }
+  });
+});
+
+describe("releaseMethodDetails", () => {
+  test("an old loan, with no method stored, reads Not recorded", () => {
+    assert.deepEqual(releaseMethodDetails({}), { method: "Not recorded", reference: "Not recorded" });
+    assert.deepEqual(releaseMethodDetails({ release_method: null, release_reference: null }), {
+      method: "Not recorded",
+      reference: "Not recorded",
+    });
+  });
+
+  test("a recorded release reads its method in words and its reference", () => {
+    assert.deepEqual(releaseMethodDetails({ release_method: "bank_transfer", release_reference: "BT-1" }), {
+      method: "Bank Transfer",
+      reference: "BT-1",
+    });
+  });
+
+  test("cash with no reference shows a dash for the reference", () => {
+    assert.deepEqual(releaseMethodDetails({ release_method: "cash", release_reference: null }), {
+      method: "Cash",
+      reference: "—",
+    });
+  });
+
+  test("a stored key the screen doesn't know never shows raw", () => {
+    assert.equal(releaseMethodDetails({ release_method: "cheque_x", release_reference: "C-1" }).method, "Other");
   });
 });
