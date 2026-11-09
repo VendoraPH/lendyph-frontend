@@ -29,8 +29,8 @@ test("no role but admin and super_admin holds a reminders permission", () => {
 
 // Copied from lendyph-backend `RoleAndPermissionSeeder::ACCOUNTANT_PERMISSIONS`
 // (round C, slice C1, after the review fix on #249 removed `audit_logs:view`,
-// whose rows carry members' personal data). The roles screen seeds the Accountant's grid from
-// `ROLES.accountant`, so it must match the server's list exactly.
+// whose rows carry members' personal data). `ROLES.accountant` documents the
+// role, so it must match the server's list exactly.
 const ACCOUNTANT_PERMISSIONS = [
   "accounting:view",
   "accounting:reconcile",
@@ -228,7 +228,7 @@ test("ROLE_OPTIONS never offers super_admin", () => {
 });
 
 // RoleAndPermissionSeeder syncs Permission::all() to admin too, and each
-// permission migration grants admin, so the roles grid seeds admin with all.
+// permission migration grants admin, so the catalog documents admin with all.
 test("admin holds exactly every backend permission", () => {
   assert.deepEqual([...ROLES.admin.permissions].sort(), [...BACKEND_PERMISSIONS].sort());
   assert.equal(new Set(ROLES.admin.permissions).size, ROLES.admin.permissions.length);

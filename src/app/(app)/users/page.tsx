@@ -305,6 +305,7 @@ function AddUserDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const callerRoles = useAuthStore((s) => s.user?.roles);
   const [form, setForm] = useState({
     first_name: "",
     last_name: "",
@@ -510,7 +511,7 @@ function AddUserDialog({
               <RoleSelector
                 value={form.role}
                 onChange={(v) => update("role", v)}
-                roles={roleOptions(roles)}
+                roles={roleOptions(roles, undefined, callerRoles)}
               />
               {!form.role && submitting && (
                 <p className="text-xs text-red-500">Please select a role</p>
@@ -557,6 +558,7 @@ function EditUserDialog({
   branches: ApiBranch[];
 }) {
   const [submitting, setSubmitting] = useState(false);
+  const callerRoles = useAuthStore((s) => s.user?.roles);
   const [form, setForm] = useState({
     first_name: user.first_name,
     last_name: user.last_name,
@@ -691,7 +693,7 @@ function EditUserDialog({
               <RoleSelector
                 value={form.role}
                 onChange={(v) => update("role", v)}
-                roles={roleOptions(roles, user.roles?.[0])}
+                roles={roleOptions(roles, user.roles?.[0], callerRoles)}
               />
             </div>
           </div>
@@ -947,10 +949,8 @@ function UserActionsCell({
   // sets: a denied action stays visible with a reason attached, because an
   // action that vanishes reads as a bug in the page.
   //
-  // Read off the raw roles array rather than usePermission().isRole, because
-  // the `Role` union deliberately excludes "super_admin" — it is the platform
-  // team's role, not a client one, so it is not a value client code is meant to
-  // name. This is the one place that has to.
+  // Read off the raw roles arrays: `usePermission().isRole` checks only the
+  // caller, and the target's roles come from the list row.
   const targetIsSuperAdmin = user.roles?.includes("super_admin") ?? false;
   const isSuperAdminLocked =
     targetIsSuperAdmin && !currentUserRoles.includes("super_admin");

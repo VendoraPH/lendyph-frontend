@@ -1,5 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { ApiRole } from "@/services/role.service";
 import { isInactiveRole, roleOptionLabel, roleOptions, withoutUnchangedRole } from "./role-options";
 
@@ -45,4 +47,20 @@ test("a changed role is sent", () => {
     role: "cashier",
   });
   assert.deepEqual(withoutUnchangedRole({ role: "cashier" }), { role: "cashier" });
+});
+
+// super_admin is the platform team's role: only a super_admin is offered it.
+test("super_admin is offered only to a caller who holds it", () => {
+  const roles = [role("super_admin", true), role("admin", true), role("cashier", true)];
+  assert.deepEqual(roleOptions(roles).map((r) => r.name), ["admin", "cashier"]);
+  assert.deepEqual(roleOptions(roles, undefined, ["admin"]).map((r) => r.name), ["admin", "cashier"]);
+  assert.deepEqual(roleOptions(roles, undefined, ["super_admin"]).map((r) => r.name), ["super_admin", "admin", "cashier"]);
+  // The role the edited user already holds stays shown, as a deactivated one does.
+  assert.deepEqual(roleOptions(roles, "super_admin", ["admin"]).map((r) => r.name), ["super_admin", "admin", "cashier"]);
+});
+
+test("both user dialogs pass the caller's roles", () => {
+  const page = readFileSync(join(process.cwd(), "src/app/(app)/users/page.tsx"), "utf8");
+  assert.match(page, /roleOptions\(roles, undefined, callerRoles\)/);
+  assert.match(page, /roleOptions\(roles, user\.roles\?\.\[0\], callerRoles\)/);
 });

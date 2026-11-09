@@ -265,3 +265,64 @@ test("a server date becomes Manila's calendar day, held as a picker holds it", (
     assert.ok(Number.isNaN(calendarDate("not a date").getTime()));
   });
 });
+
+// The first hour of Manila's day is the one a UTC clock still files under
+// yesterday, and a month or year end moves every part of the date at once.
+test("00:00 to 00:59 in Manila is already Manila's new day", () => {
+  for (const [instant, label] of [
+    [Date.UTC(2026, 10, 9, 16, 0), "00:00"],
+    [Date.UTC(2026, 10, 9, 16, 30), "00:30"],
+    [Date.UTC(2026, 10, 9, 16, 59, 59), "00:59:59"],
+  ] as const) {
+    at(instant, () => {
+      onEveryComputer(() => {
+        assert.equal(todayISO(), "2026-11-10", label);
+        assert.equal(daysFromToday("2026-11-10"), 0, label);
+        assert.equal(daysFromToday("2026-11-09"), -1, label);
+        assert.equal(formatDateISO(calendarDate(new Date(instant))), "2026-11-10", label);
+      });
+    });
+  }
+  // One second before: still the 9th.
+  at(Date.UTC(2026, 10, 9, 15, 59, 59), () => {
+    onEveryComputer(() => assert.equal(daysFromToday("2026-11-09"), 0));
+  });
+});
+
+test("a month end reads Manila's day on both sides of midnight", () => {
+  // 23:59 on 30 Nov in Manila, then 00:15 on 1 Dec.
+  at(Date.UTC(2026, 10, 30, 15, 59), () => {
+    onEveryComputer(() => {
+      assert.equal(todayISO(), "2026-11-30");
+      assert.equal(daysFromToday("2026-12-01"), 1);
+    });
+  });
+  at(Date.UTC(2026, 10, 30, 16, 15), () => {
+    onEveryComputer(() => {
+      assert.equal(todayISO(), "2026-12-01");
+      assert.equal(daysFromToday("2026-11-30"), -1);
+      assert.equal(daysFromToday("2026-12-31"), 30);
+      assert.equal(formatDate("2026-11-30T16:15:00Z"), "Dec 1, 2026");
+    });
+  });
+});
+
+test("a year end reads Manila's day on both sides of midnight", () => {
+  // 23:59 on 31 Dec 2026 in Manila, then 00:05 on 1 Jan 2027.
+  at(Date.UTC(2026, 11, 31, 15, 59), () => {
+    onEveryComputer(() => {
+      assert.equal(todayISO(), "2026-12-31");
+      assert.equal(daysFromToday("2027-01-01"), 1);
+    });
+  });
+  at(Date.UTC(2026, 11, 31, 16, 5), () => {
+    onEveryComputer(() => {
+      assert.equal(todayISO(), "2027-01-01");
+      assert.equal(daysFromToday("2026-12-31"), -1);
+      assert.equal(daysFromToday("2027-01-03"), 2);
+      assert.equal(formatDate("2026-12-31T16:05:00Z"), "Jan 1, 2027");
+      const held = clockDate("2026-12-31T16:05:00Z");
+      assert.deepEqual([formatDateISO(held), held.getHours(), held.getMinutes()], ["2027-01-01", 0, 5]);
+    });
+  });
+});

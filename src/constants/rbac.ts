@@ -3,8 +3,8 @@ import type { Permission, Role, RoleConfig } from "@/types";
 /**
  * Every permission lendyph-backend creates (RoleAndPermissionSeeder and the
  * permission migrations). The seeder syncs `Permission::all()` to both
- * super_admin and admin, and each permission migration grants both, so the
- * roles grid seeds them with this list.
+ * super_admin and admin, and each permission migration grants both, so both
+ * entries document this list.
  */
 const EVERY_PERMISSION: Permission[] = [
   "dashboard:view",
@@ -117,8 +117,10 @@ const EVERY_PERMISSION: Permission[] = [
 ];
 
 /**
- * What each role is DOCUMENTED to have — the roles screen reads this to seed a
- * role's permission grid and to label it.
+ * What each role is DOCUMENTED to have. Screens read it to label a role (its
+ * name when no display name is saved) and for a role's description when the
+ * API sends none. The roles screen fills each role's permission grid from
+ * `GET /roles`, never from here.
  *
  * It is not the gate. Every guard in the app (`RouteGuard`, `PermissionGate`,
  * `usePermission().can`) asks the auth store, which holds `user.permissions`

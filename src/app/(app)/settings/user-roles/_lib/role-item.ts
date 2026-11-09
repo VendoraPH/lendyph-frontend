@@ -82,17 +82,20 @@ export function togglePermission(
 /**
  * Grant or revoke every action the matrix offers for one module. A permission
  * the matrix does not offer, in this module or any other, is left as it was.
+ * Granting adds only what `canGrant` allows (what the caller may hand out);
+ * revoking removes them all.
  */
 export function setModulePermissions(
   current: ReadonlySet<Permission>,
   mod: UIModule,
-  enable: boolean
+  enable: boolean,
+  canGrant: (permission: Permission) => boolean = () => true
 ): Set<Permission> {
   const next = new Set(current);
   for (const act of moduleToggleActions(mod)) {
     const perm = `${mod}:${act}` as Permission;
-    if (enable) next.add(perm);
-    else next.delete(perm);
+    if (!enable) next.delete(perm);
+    else if (canGrant(perm)) next.add(perm);
   }
   return next;
 }

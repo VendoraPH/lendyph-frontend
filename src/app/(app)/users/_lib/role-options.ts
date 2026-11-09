@@ -13,9 +13,21 @@ import type { UpdateUserData } from "@/services/user.service";
  *
  * Only an explicit `is_active: false` hides a role; an API that predates the
  * flag sends none, and every role there is active.
+ *
+ * `super_admin` is the platform team's role, offered only to a caller who holds
+ * it (`callerRoles`). The edited user's own role stays shown, as above.
  */
-export function roleOptions(roles: ApiRole[], heldRole?: string): ApiRole[] {
-  return roles.filter((role) => role.is_active !== false || (heldRole !== undefined && role.name === heldRole));
+export function roleOptions(
+  roles: ApiRole[],
+  heldRole?: string,
+  callerRoles: readonly string[] = [],
+): ApiRole[] {
+  const held = (role: ApiRole) => heldRole !== undefined && role.name === heldRole;
+  const offerSuperAdmin = callerRoles.includes("super_admin");
+  return roles.filter(
+    (role) =>
+      held(role) || (role.is_active !== false && (role.name !== "super_admin" || offerSuperAdmin)),
+  );
 }
 
 export function isInactiveRole(role: ApiRole): boolean {
