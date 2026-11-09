@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, type Dispatch, type SetStateAction } from "react";
+import { todayISO } from "@/lib/format";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Info } from "lucide-react";
@@ -151,8 +152,8 @@ function validateEmployment(
   if (d.pledge_amount && Number(d.pledge_amount) < 0) {
     errs.pledge_amount = "Pledge amount cannot be negative";
   }
-  // en-CA renders local time as YYYY-MM-DD, so a plain string compare works.
-  if (d.date_hired && d.date_hired > new Date().toLocaleDateString("en-CA")) {
+  // Both are YYYY-MM-DD, so a plain string compare works; today is Manila's.
+  if (d.date_hired && d.date_hired > todayISO()) {
     errs.date_hired = "Date hired cannot be in the future";
   }
   return errs;

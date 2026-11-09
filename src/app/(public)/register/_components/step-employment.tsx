@@ -1,6 +1,7 @@
 "use client";
 
 import { Input } from "@/components/ui/input";
+import { todayISO } from "@/lib/format";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 
@@ -42,7 +43,7 @@ export function StepEmployment({ employment, onChange, onNext, onBack }: Props) 
             <Input
               id="date_hired"
               type="date"
-              max={new Date().toLocaleDateString("en-CA")}
+              max={todayISO()}
               value={employment.date_hired}
               onChange={(e) => onChange("date_hired", e.target.value)}
             />

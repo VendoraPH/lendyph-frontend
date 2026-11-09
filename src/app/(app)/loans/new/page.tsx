@@ -82,7 +82,7 @@ import {
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
-import { formatCurrency, formatDateISO, formatRate } from "@/lib/format";
+import { formatCurrency, formatDateISO, formatDateObj, formatRate, todayDate } from "@/lib/format";
 import { currencyOrDash } from "@/lib/report-format";
 import {
   decimalInputValue,
@@ -152,14 +152,6 @@ import { proceedsFigures } from "@/lib/restructure-proceeds";
 import { formatProductRangeMessage } from "./_lib/product-range-message";
 
 // ── Helpers ──
-
-function formatDate(date: Date): string {
-  return date.toLocaleDateString("en-PH", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
 
 /**
  * A 403 from a list this form only reads for reference. The edit mode below is
@@ -260,7 +252,7 @@ function NewLoanApplicationInner() {
   // ── Combobox Open State ──
 
   // ── Dates State ──
-  const [releaseDate, setReleaseDate] = useState<Date | undefined>(new Date());
+  const [releaseDate, setReleaseDate] = useState<Date | undefined>(todayDate);
   const [releaseDateOpen, setReleaseDateOpen] = useState(false);
 
   // ── Deductions State ──
@@ -1585,7 +1577,7 @@ function NewLoanApplicationInner() {
                 >
                   <CalendarIcon className="size-4 text-muted-foreground" />
                   {releaseDate ? (
-                    <span>{formatDate(releaseDate)}</span>
+                    <span>{formatDateObj(releaseDate)}</span>
                   ) : (
                     <span className="text-muted-foreground">Pick a date</span>
                   )}
@@ -1608,7 +1600,7 @@ function NewLoanApplicationInner() {
               <Label>Maturity Date</Label>
               <div className="flex h-8 items-center rounded-lg border border-input bg-muted/30 px-2.5 text-sm text-muted-foreground">
                 {previewMaturity
-                  ? formatDate(parseApiDate(previewMaturity) ?? new Date(previewMaturity))
+                  ? formatDateObj(parseApiDate(previewMaturity) ?? new Date(previewMaturity))
                   : "—"}
               </div>
             </div>
@@ -1905,7 +1897,7 @@ function NewLoanApplicationInner() {
                         <TableCell className="text-center">
                           {row.period_number}
                         </TableCell>
-                        <TableCell>{formatDate(parseApiDate(row.due_date) ?? new Date(row.due_date))}</TableCell>
+                        <TableCell>{formatDateObj(parseApiDate(row.due_date) ?? new Date(row.due_date))}</TableCell>
                         <TableCell className="text-right">
                           {formatCurrency(row.principal_due)}
                         </TableCell>

@@ -6,14 +6,10 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Banknote, CalendarClock, AlertCircle, CheckCircle2 } from "lucide-react";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatDate } from "@/lib/format";
 import type { BorrowerLoanSummary, Payment, Loan } from "@/types";
 import { memberPaymentFigures } from "../_lib/member-payment-figures";
 import { paymentReferenceCell, statusInWords } from "@/app/(app)/borrowers/_components/utils";
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
 
 const paymentMethodLabels: Record<string, string> = {
   cash: "Cash",

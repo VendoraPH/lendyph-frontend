@@ -54,7 +54,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatCurrency, formatRate, todayISO } from "@/lib/format";
+import { formatCurrency, formatDate as formatShortDate, formatRate, todayISO } from "@/lib/format";
 import { INSURANCE_PREMIUM_LABEL } from "@/lib/insurance-premium";
 import { currencyOrDash } from "@/lib/report-format";
 import {
@@ -93,11 +93,7 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
 
 const formatDate = (dateStr: string) => {
   if (!dateStr) return "—";
-  return new Date(dateStr).toLocaleDateString("en-PH", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+  return formatShortDate(dateStr);
 };
 
 function getLoanPaymentStatus(loan: ActiveLoan) {

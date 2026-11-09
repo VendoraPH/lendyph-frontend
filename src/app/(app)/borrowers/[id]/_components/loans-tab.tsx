@@ -15,15 +15,11 @@ import {
 import { loanDisplayStatus, loanRowStatusLabel } from "@/constants/loan-status";
 import { loanService } from "@/services";
 import { coMakerName } from "@/lib/co-maker-name";
-import { formatCurrency, formatRate } from "@/lib/format";
+import { formatCurrency, formatDate, formatRate } from "@/lib/format";
 import { readTermUnit } from "@/lib/loan-terms";
 import { statusInWords } from "@/app/(app)/borrowers/_components/utils";
 import { loanNeedsCoMaker } from "../_lib/co-maker-recommendation";
 import { loanOutstandingCell } from "../_lib/loan-outstanding-cell";
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
 
 const scheduleStatusColor: Record<string, string> = {
   paid: "bg-green-100 text-green-700 border-green-200",

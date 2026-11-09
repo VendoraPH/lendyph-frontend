@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { formatDate } from "@/lib/format";
 import { usePermission } from "@/hooks";
 import { CollapsibleCard } from "@/components/common/collapsible-card";
 import { Button } from "@/components/ui/button";
@@ -33,14 +34,6 @@ interface LoanDocumentsCardProps {
   canUpload?: boolean;
   /** When false, hide delete buttons. */
   canDelete?: boolean;
-}
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
 }
 
 function humanizeType(type: string): string {

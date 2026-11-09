@@ -88,7 +88,7 @@ import {
   type CollateralValueRow,
 } from "@/utils/collateral-value";
 import { securityStatusLabel } from "@/types/collateral";
-import { formatCurrency, formatDateObj, formatDateISO } from "@/lib/format";
+import { formatCurrency, formatDateObj, formatDateISO, todayDate } from "@/lib/format";
 import { currencyOrDash } from "@/lib/report-format";
 import { parseApiDate } from "@/lib/printables/templates/shared";
 import { usePermission } from "@/hooks/use-permission";
@@ -232,7 +232,7 @@ function RestructureLoanInner() {
   const [paymentFrequency, setPaymentFrequency] = useState<string | null>(null);
   const [interestRate, setInterestRate] = useState<string>("");
   const [scbAmount, setScbAmount] = useState<string>("");
-  const [restructureDate, setRestructureDate] = useState<Date | undefined>(new Date());
+  const [restructureDate, setRestructureDate] = useState<Date | undefined>(todayDate);
   const [restructureDateOpen, setRestructureDateOpen] = useState(false);
   const [processingFeeRate, setProcessingFeeRate] = useState<string>("");
   const [serviceFeeRate, setServiceFeeRate] = useState<string>("");
@@ -370,7 +370,7 @@ function RestructureLoanInner() {
       setScbAmount(loan.scb_amount != null ? String(loan.scb_amount) : "");
 
       // Restructure date defaults to today
-      setRestructureDate(new Date());
+      setRestructureDate(todayDate());
 
       // Recalculate deductions from the selected product
       const prod = products.find((p) => p.id === Number(pid));

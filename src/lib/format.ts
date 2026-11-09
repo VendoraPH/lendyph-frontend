@@ -87,11 +87,11 @@ function formatShown(value: string | Date, options: Intl.DateTimeFormatOptions):
   return date.toLocaleDateString("en-PH", { ...options, timeZone });
 }
 
-export function formatDate(dateStr: string): string {
+export function formatDate(dateStr: string | Date): string {
   return formatShown(dateStr, { year: "numeric", month: "short", day: "numeric" });
 }
 
-export function formatDateTime(dateStr: string): string {
+export function formatDateTime(dateStr: string | Date): string {
   return formatShown(dateStr, {
     year: "numeric",
     month: "short",
@@ -132,17 +132,37 @@ export function formatDateISO(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+/** `YYYY-MM-DD` in the app's zone (`en-CA` writes dates in that order). */
+const appDayFmt = new Intl.DateTimeFormat("en-CA", {
+  timeZone: APP_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
 /**
- * Today's calendar date as `YYYY-MM-DD`, in the user's own timezone.
+ * Today's calendar date as `YYYY-MM-DD`, in the app's zone (Manila), whatever
+ * the computer is set to.
  *
  * The one correct way to answer "what is today?" — `new Date().toISOString()`
  * is not it. Between 00:00 and 07:59 in Manila (UTC+8) the UTC instant still
  * falls on the previous day, so a cashier opening the payment form at 07:00
- * posted the receipt against yesterday. Reach for this for defaults, filters
- * and export filenames; use `formatDateISO` when you already hold a `Date`.
+ * posted the receipt against yesterday; a computer set to New York was a day
+ * behind until noon. Reach for this for defaults, filters and export filenames;
+ * use `formatDateISO` when you already hold a picked `Date`.
  */
 export function todayISO(): string {
-  return formatDateISO(new Date());
+  return appDayFmt.format(new Date());
+}
+
+/**
+ * Manila's today as a date picker holds a date: a `Date` at the computer's own
+ * midnight, so `formatDateISO` and `formatDateObj` read it back as that day.
+ * Use it for a picker's default instead of `new Date()`.
+ */
+export function todayDate(): Date {
+  const [year, month, day] = todayISO().split("-").map(Number);
+  return new Date(year, month - 1, day);
 }
 
 // ---------------------------------------------------------------------------

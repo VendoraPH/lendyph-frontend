@@ -26,7 +26,7 @@ import { shareCapitalService } from "@/services";
 import type { AutoCreditMember } from "@/types";
 import { Zap, AlertTriangle, CheckCircle2, AlertCircle } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatDateTime } from "@/lib/format";
 import { MethodReferenceFields } from "@/components/common/method-reference-fields";
 import { useDialogOpening } from "@/hooks/use-dialog-opening";
 import {
@@ -98,7 +98,7 @@ function AutoCreditContent() {
         const runDate = typeof lastRunRaw === "object" && lastRunRaw !== null
           ? (lastRunRaw as Record<string, unknown>).processed_at as string
           : lastRunRaw as string;
-        if (runDate) setLastRun(new Date(runDate).toLocaleString("en-PH"));
+        if (runDate) setLastRun(formatDateTime(runDate));
       }
     } catch {
       toast.error("We couldn't load the auto-credit status. Please try again.");
@@ -127,7 +127,7 @@ function AutoCreditContent() {
         paymentMethodFields(settlementMethod, settlementReference),
       );
       setConfirmOpen(false);
-      setLastRun(new Date(result.processed_at ?? new Date()).toLocaleString("en-PH"));
+      setLastRun(formatDateTime(result.processed_at ?? new Date()));
       toast.success(
         `Auto-credit completed: ${formatCurrency(result.total_amount ?? totalPledge)} credited to ${result.processed_count ?? activeMembers.length} members`
       );
