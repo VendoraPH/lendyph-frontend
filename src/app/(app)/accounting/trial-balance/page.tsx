@@ -19,6 +19,7 @@ import { formatCentavos } from "@/lib/accounting/money";
 import { todayISO } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { TrialBalance } from "@/types";
+import { outOfBalanceMessage } from "../_lib/trial-balance-side";
 import { AccountingPageHeader } from "../_components/page-header";
 import { DataState } from "../_components/data-state";
 import {
@@ -85,9 +86,8 @@ function TrialBalanceContent() {
                   <p className="text-sm text-muted-foreground">
                     {tb.is_balanced
                       ? "Total debits equal total credits."
-                      : `Debits and credits differ by ${formatCentavos(
-                          Math.abs(tb.total_debit - tb.total_credit),
-                        )}. Something has been posted that should not have been.`}
+                      : (outOfBalanceMessage(tb.difference) ??
+                        "Total debits and total credits don't agree.")}
                   </p>
                 </div>
               </CardContent>
