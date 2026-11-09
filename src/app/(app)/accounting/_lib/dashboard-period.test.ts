@@ -27,13 +27,41 @@ test("no period covering the date says so", () => {
   assert.equal(currentPeriodText(undefined), "No accounting period covers this date");
 });
 
-test("the period label names the server's own from and to", () => {
-  assert.equal(
-    periodRangeLabel({ from: "2026-11-01", to: "2026-11-09" }),
-    "Nov 1, 2026 to Nov 9, 2026",
-  );
-  assert.equal(periodRangeLabel({ from: "2026-11-09", to: "2026-11-09" }), "Nov 9, 2026");
+// The label reads in Manila time on any computer: on one set west of UTC,
+// `new Date("2026-11-01")` is still October 31st locally.
+const ZONES = ["Asia/Manila", "UTC", "America/Los_Angeles", "Pacific/Kiritimati"];
+
+function inEachZone(check: () => void) {
+  const saved = process.env.TZ;
+  try {
+    for (const zone of ZONES) {
+      process.env.TZ = zone;
+      check();
+    }
+  } finally {
+    if (saved === undefined) delete process.env.TZ;
+    else process.env.TZ = saved;
+  }
+}
+
+test("the period label names the server's own from and to, in every time zone", () => {
+  inEachZone(() => {
+    assert.equal(
+      periodRangeLabel({ from: "2026-11-01", to: "2026-11-09" }),
+      "Nov 1, 2026 – Nov 9, 2026",
+      process.env.TZ ?? "",
+    );
+    assert.equal(periodRangeLabel({ from: "2026-11-09", to: "2026-11-09" }), "Nov 9, 2026");
+  });
   assert.equal(periodRangeLabel(undefined), "");
+});
+
+test("the zone switch is real: a local-time date reads a day early west of UTC", () => {
+  inEachZone(() => {
+    const local = new Date("2026-11-01").getDate();
+    if (process.env.TZ === "America/Los_Angeles") assert.equal(local, 31);
+    if (process.env.TZ === "Asia/Manila") assert.equal(local, 1);
+  });
 });
 
 test("From defaults to the first day of As of's month", () => {

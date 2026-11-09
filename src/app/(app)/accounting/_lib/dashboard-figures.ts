@@ -19,3 +19,11 @@ export function centavosOrDash(value: number | string | null | undefined): strin
   const centavos = centavosOrNull(value);
   return centavos === null ? "—" : formatCentavos(centavos);
 }
+
+/**
+ * Whether the 1180 Loan Adjustments Clearing card shows "Needs review". The
+ * server's flag alone decides it; the browser never reads the balance for it.
+ */
+export function clearingNeedsReview(flag: boolean | null | undefined): boolean {
+  return flag === true;
+}

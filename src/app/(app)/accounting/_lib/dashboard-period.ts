@@ -1,5 +1,5 @@
 import type { AccountingPeriodSummary } from "@/types";
-import { formatDate } from "@/lib/format";
+import { formatDateRange } from "@/lib/report-format";
 import { periodStatusLabel } from "./display-labels";
 
 /** "November 2026 · Open", or that no period covers the As of date. */
@@ -11,8 +11,7 @@ export function currentPeriodText(period: AccountingPeriodSummary | null | undef
 /** The server's `period.from` to `period.to`, in words. */
 export function periodRangeLabel(period: { from: string; to: string } | null | undefined): string {
   if (!period) return "";
-  if (period.from === period.to) return formatDate(period.to);
-  return `${formatDate(period.from)} to ${formatDate(period.to)}`;
+  return formatDateRange(period.from, period.to);
 }
 
 /** The first day of As of's month: the server's own default for `from`. */

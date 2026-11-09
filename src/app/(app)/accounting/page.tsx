@@ -31,7 +31,8 @@ import {
 } from "@/components/ui/table";
 import { useAccountingResource } from "@/hooks";
 import { accountingService } from "@/services";
-import { formatDate, todayISO } from "@/lib/format";
+import { todayISO } from "@/lib/format";
+import { formatValue } from "@/lib/report-format";
 import { cn } from "@/lib/utils";
 import type { AccountingDashboard, RecentJournal } from "@/types";
 import { AccountingPageHeader } from "./_components/page-header";
@@ -89,7 +90,11 @@ function AccountingDashboardContent() {
 
       <FilterBar>
         <DateFilter label="As of" value={asOf} onChange={setAsOf} />
-        <DateFilter label="From" value={from} onChange={setFromPicked} />
+        <DateFilter
+          label="From"
+          value={from}
+          onChange={(value) => setFromPicked(value === "" ? null : value)}
+        />
         <BranchFilter value={branch} onChange={setBranch} />
       </FilterBar>
 
@@ -165,7 +170,7 @@ function DashboardBody({ data }: { data: AccountingDashboard }) {
                 : "The books do not balance"}
             </p>
             <p className="text-sm text-muted-foreground">
-              As of {formatDate(data.as_of)} · {currentPeriodText(data.current_period)}
+              As of {formatValue(data.as_of, "date")} · {currentPeriodText(data.current_period)}
             </p>
           </div>
           {data.unposted_journals > 0 && (
@@ -249,7 +254,7 @@ function RecentJournals({ journals }: { journals: readonly RecentJournal[] | und
               <TableBody>
                 {journals.map((journal) => (
                   <TableRow key={journal.id}>
-                    <TableCell className="text-sm">{formatDate(journal.date)}</TableCell>
+                    <TableCell className="text-sm">{formatValue(journal.date, "date")}</TableCell>
                     <TableCell className="font-mono text-xs">{journal.journal_no}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className="text-[10px]">

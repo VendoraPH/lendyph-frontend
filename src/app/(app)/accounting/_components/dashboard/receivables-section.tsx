@@ -1,7 +1,8 @@
 import { AlertTriangle, ArrowLeftRight, CalendarClock, Clock, ShieldMinus, Wallet } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { formatDate } from "@/lib/format";
+import { formatValue } from "@/lib/report-format";
 import type { AccountingDashboard } from "@/types";
+import { clearingNeedsReview } from "../../_lib/dashboard-figures";
 import { FigureCard, FigureSection } from "./figure-card";
 
 type ReceivableFields = Pick<
@@ -44,7 +45,7 @@ export function ReceivablesSection({ data }: { data: ReceivableFields }) {
         caption={
           <>
             Past due today, from the loan records
-            {pastDue ? ` (${formatDate(pastDue.as_of)})` : ""}
+            {pastDue ? ` (${formatValue(pastDue.as_of, "date")})` : ""}
             {typeof pastDue?.count === "number"
               ? ` · ${pastDue.count} ${pastDue.count === 1 ? "loan" : "loans"}`
               : ""}
@@ -57,7 +58,7 @@ export function ReceivablesSection({ data }: { data: ReceivableFields }) {
         icon={ArrowLeftRight}
         caption="Should be ₱0.00 once every balance adjustment is settled."
         badge={
-          data.adjustments_clearing_needs_review ? (
+          clearingNeedsReview(data.adjustments_clearing_needs_review) ? (
             <Badge variant="outline" className="border-amber-500/60 text-amber-700">
               <AlertTriangle className="mr-1 h-3 w-3" aria-hidden="true" />
               Needs review

@@ -25,7 +25,8 @@ import {
 import { useAccountingResource, useChartOfAccounts } from "@/hooks";
 import { accountingService } from "@/services";
 import { formatCentavos } from "@/lib/accounting/money";
-import { formatDate, todayISO } from "@/lib/format";
+import { todayISO } from "@/lib/format";
+import { formatValue } from "@/lib/report-format";
 import { cn } from "@/lib/utils";
 import type { GeneralLedgerPage as LedgerPage, JournalSource } from "@/types";
 import { AccountingPageHeader } from "../_components/page-header";
@@ -105,7 +106,12 @@ function GeneralLedgerContent() {
   // from another account or range are never left standing under new filters.
   const filterKey = [accountId, from, to, branch, source, perPage].join("|");
   const [shownKey, setShownKey] = useState(filterKey);
-  if (!resource.loading && resource.data !== null && shownKey !== filterKey) {
+  if (
+    !resource.loading &&
+    resource.error === null &&
+    resource.data !== null &&
+    shownKey !== filterKey
+  ) {
     setShownKey(filterKey);
   }
   const paging = resource.loading && resource.data !== null && shownKey === filterKey;
@@ -181,21 +187,21 @@ function GeneralLedgerContent() {
 
                 <dl className="grid gap-3 rounded-lg border bg-muted/30 p-4 sm:grid-cols-2 lg:grid-cols-4">
                   <LedgerFigure
-                    label={`Opening balance, before ${formatDate(from)}`}
+                    label={`Opening balance, before ${formatValue(from, "date")}`}
                     value={meta.opening_balance}
                   />
                   <LedgerFigure label="Total debit" value={meta.total_debit} />
                   <LedgerFigure label="Total credit" value={meta.total_credit} />
                   <LedgerFigure
-                    label={`Closing balance, at ${formatDate(to)}`}
+                    label={`Closing balance, at ${formatValue(to, "date")}`}
                     value={meta.closing_balance}
                   />
                 </dl>
                 {source !== ANY_SOURCE && (
                   <p className="text-xs text-muted-foreground">
                     Showing {journalSourceLabel(source)} entries only. The opening and closing
-                    balances and each row&apos;s balance cover every source; the totals cover the
-                    entries shown.
+                    balances and each row&apos;s balance cover every source; the totals cover
+                    every {journalSourceLabel(source)} entry in the range.
                   </p>
                 )}
 
@@ -230,7 +236,7 @@ function GeneralLedgerContent() {
                       ) : (
                         rows.map((row, i) => (
                           <TableRow key={`${row.journal_id}-${i}`}>
-                            <TableCell className="text-sm">{formatDate(row.date)}</TableCell>
+                            <TableCell className="text-sm">{formatValue(row.date, "date")}</TableCell>
                             <TableCell className="font-mono text-xs">{row.journal_no}</TableCell>
                             <TableCell className="text-sm">{row.description}</TableCell>
                             <TableCell>
