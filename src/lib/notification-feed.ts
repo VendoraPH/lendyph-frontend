@@ -157,9 +157,12 @@ export function notificationTone(type: string): NotificationTone {
       return "success";
     case "loan_rejected":
     case "payment_voided":
+    case "reminder_failed":
       return "danger";
     case "loan_sent_back":
     case "loan_past_due":
+    case "reminder_contact_invalid":
+    case "reminder_follow_up":
       return "warning";
     default:
       return "info";
