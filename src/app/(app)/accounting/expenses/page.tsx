@@ -1,12 +1,11 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { Plus } from "lucide-react";
-import { toast } from "sonner";
-import { PermissionGate, RouteGuard } from "@/components/common";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Plus, Search } from "lucide-react";
+import { PermissionGate, RouteGuard, TablePagination } from "@/components/common";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -15,54 +14,105 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { useAccountingResource } from "@/hooks";
+import { SEARCH_DEBOUNCE_MS } from "@/hooks/use-search-page";
+import { notifyError, notifySuccess } from "@/lib/notify";
 import { accountingService } from "@/services";
-import { formatCentavos, sumCentavos } from "@/lib/accounting/money";
-import { formatDate } from "@/lib/format";
-import type { DrainResult } from "@/lib/paginate";
-import type { Expense, ExpenseStatus } from "@/types";
-import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
+import type { PayExpenseData } from "@/services/accounting.service";
+import type { Expense, ExpensePage } from "@/types";
 import { AccountingPageHeader } from "../_components/page-header";
 import { DataState } from "../_components/data-state";
 import { FilterBar } from "../_components/accounting-filters";
-import { ExpenseDialog } from "../_components/expense-dialog";
+import { EditExpenseDialog, ExpenseDialog } from "../_components/expense-dialog";
+import { PayExpenseDialog } from "../_components/pay-expense-dialog";
 import { ANY_STATUS, expenseStatusItems } from "../_lib/select-items";
-
-const STATUS_STYLES: Record<ExpenseStatus, string> = {
-  unpaid: "bg-slate-500/10 text-slate-700 border-slate-500/30",
-  partially_paid: "bg-amber-500/10 text-amber-700 border-amber-500/30",
-  paid: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30",
-  overdue: "bg-red-500/10 text-red-700 border-red-500/30",
-};
+import { centavosOrDash } from "../_lib/server-figure";
+import type { ExpenseEditPayload } from "./_lib/expense-forms";
+import {
+  EXPENSE_PAGE_SIZE,
+  expenseListQuery,
+  expensePageToStepBackTo,
+  expenseStatusCounts,
+} from "./_lib/expense-list";
+import { ExpenseTable } from "./_components/expense-table";
 
 function ExpensesContent() {
   const [status, setStatus] = useState(ANY_STATUS);
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [creating, setCreating] = useState(false);
+  const [paying, setPaying] = useState<Expense | null>(null);
+  const [editing, setEditing] = useState<Expense | null>(null);
 
-  // Drained. `listExpenses()` read one page of 15 and the card below totalled
-  // it into "Outstanding", so a co-op with 40 open payables was shown the sum
-  // of the first fifteen in headline type with nothing marking it partial.
-  const fetcher = useCallback(() => accountingService.expensesListAll(), []);
-  const resource = useAccountingResource<DrainResult<Expense>>(fetcher);
+  // The search goes to the server once typing settles, from page one.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(1);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
-  const create = async (data: Partial<Expense>) => {
+  // One server page. The rows, the cards and the counts all come from its
+  // answer: `meta.totals` over every matching expense and `meta.stats` per
+  // status, never a sum of the rows in hand.
+  const query = useMemo(() => expenseListQuery({ status, search, page }), [status, search, page]);
+  const fetcher = useCallback(() => accountingService.expensesPage(query), [query]);
+  const resource = useAccountingResource<ExpensePage>(fetcher);
+  const { data, loading, refetch } = resource;
+
+  // A payment or a filter can leave this page past the end: step back.
+  const stepBack =
+    data && !loading
+      ? expensePageToStepBackTo({
+          rows: (data.data ?? []).length,
+          page,
+          lastPage: data.meta?.last_page,
+        })
+      : null;
+  if (stepBack !== null) setPage(stepBack);
+
+  // The previous page stays up, dimmed, while the next one loads; only the
+  // first load shows the loading panel.
+  const shownResource = { ...resource, loading: loading && data === null };
+
+  const create = async (input: Partial<Expense>) => {
     try {
-      await accountingService.createExpense(data);
-      toast.success("Expense recorded.");
+      await accountingService.createExpense(input);
+      notifySuccess("Expense recorded");
       setCreating(false);
-      resource.refetch();
-    } catch {
-      toast.error("Could not record this expense.");
+      refetch();
+    } catch (err) {
+      notifyError(err, "Could not record this expense.");
     }
   };
+
+  const pay = async (expense: Expense, input: PayExpenseData) => {
+    try {
+      await accountingService.payExpense(expense.id, input);
+    } catch (err) {
+      notifyError(err, "Could not pay this expense.");
+      throw err;
+    }
+    notifySuccess("Payment recorded");
+    setPaying(null);
+    refetch();
+  };
+
+  const update = async (expense: Expense, input: ExpenseEditPayload) => {
+    try {
+      await accountingService.updateExpense(expense.id, input);
+    } catch (err) {
+      notifyError(err, "Could not save this expense.");
+      throw err;
+    }
+    notifySuccess("Expense updated");
+    setEditing(null);
+    refetch();
+  };
+
+  const filtered = status !== ANY_STATUS || search.trim() !== "";
 
   return (
     <div className="space-y-6">
@@ -81,10 +131,29 @@ function ExpensesContent() {
 
       <FilterBar>
         <div className="space-y-1.5">
+          <Label htmlFor="expense-search" className="text-xs text-muted-foreground">
+            Search
+          </Label>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              id="expense-search"
+              type="search"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Payee or reference"
+              className="w-[240px] pl-9"
+            />
+          </div>
+        </div>
+        <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">Status</Label>
           <Select
             value={status}
-            onValueChange={(v) => setStatus(v ?? ANY_STATUS)}
+            onValueChange={(v) => {
+              setStatus(v ?? ANY_STATUS);
+              setPage(1);
+            }}
             items={expenseStatusItems}
           >
             <SelectTrigger className="w-[180px]">
@@ -102,30 +171,70 @@ function ExpensesContent() {
       </FilterBar>
 
       <DataState
-        resource={resource}
+        resource={shownResource}
         summary="Recording expenses against a cash account or as a payable, and settling payables."
         endpoints={[
           "GET /accounting/expenses",
           "POST /accounting/expenses",
+          "PUT /accounting/expenses/{id}",
           "POST /accounting/expenses/{id}/pay",
         ]}
-        isEmpty={(drain) => drain.rows.length === 0}
-        emptyMessage="No expense recorded yet."
       >
-        {(drain) => (
-          <ExpenseTable
-            rows={drain.rows}
-            status={status}
-            truncated={drain.truncated}
-            total={drain.total}
-          />
-        )}
+        {(answer) => {
+          const totals = loading ? undefined : answer.meta?.totals;
+          const counts = loading ? [] : expenseStatusCounts(answer.meta?.stats);
+          const rows = answer.data ?? [];
+          return (
+            <div className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Figure label="Recorded" value={totals?.amount} />
+                <Figure label="Paid" value={totals?.amount_paid} />
+                <Figure label="Outstanding" value={totals?.amount_due} emphasis />
+              </div>
+
+              {counts.length > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  {counts.map((c) => `${c.count} ${c.label.toLowerCase()}`).join(" · ")}
+                  {search.trim() ? ", matching the search" : ""}
+                </p>
+              )}
+
+              <Card aria-busy={loading}>
+                <CardContent className={loading ? "pt-6 opacity-60 transition-opacity" : "pt-6 transition-opacity"}>
+                  {rows.length === 0 ? (
+                    <p className="py-12 text-center text-sm text-muted-foreground">
+                      {filtered ? "No expense matches these filters." : "No expense recorded yet."}
+                    </p>
+                  ) : (
+                    <ExpenseTable rows={rows} onPay={setPaying} onEdit={setEditing} />
+                  )}
+                  {typeof answer.meta?.total === "number" && answer.meta.total > 0 && (
+                    <TablePagination
+                      page={page}
+                      perPage={EXPENSE_PAGE_SIZE}
+                      total={answer.meta.total}
+                      perPageOptions={[EXPENSE_PAGE_SIZE]}
+                      onPageChange={setPage}
+                      onPerPageChange={() => setPage(1)}
+                    />
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          );
+        }}
       </DataState>
 
-      <ExpenseDialog
-        open={creating}
-        onOpenChange={setCreating}
-        onSubmit={create}
+      <ExpenseDialog open={creating} onOpenChange={setCreating} onSubmit={create} />
+      <PayExpenseDialog
+        expense={paying}
+        onOpenChange={(open) => !open && setPaying(null)}
+        onSubmit={pay}
+      />
+      <EditExpenseDialog
+        expense={editing}
+        onOpenChange={(open) => !open && setEditing(null)}
+        onSubmit={update}
       />
     </div>
   );
@@ -139,109 +248,16 @@ export default function ExpensesPage() {
   );
 }
 
-/**
- * Split out so the filtering memo is not re-created on every parent render,
- * and so the page component stays about page concerns.
- */
-function ExpenseTable({
-  rows,
-  status,
-  truncated,
-  total,
-}: {
-  rows: Expense[];
-  status: string;
-  truncated: boolean;
-  total: number | null;
-}) {
-  const filtered = useMemo(
-    () => (status === ANY_STATUS ? rows : rows.filter((r) => r.status === status)),
-    [rows, status],
-  );
-
-  const outstanding = useMemo(
-    () => sumCentavos(filtered.map((r) => r.amount - r.amount_paid)),
-    [filtered],
-  );
-
-  // The status filter narrows what is already in hand, so a short list makes
-  // every one of these figures short too — including the filtered ones.
-  const notice = truncated ? (
-    <IncompleteListNotice
-      shown={rows.length}
-      total={total}
-      noun="expenses"
-      consequence="Outstanding is the total of the expenses listed here, not of every expense on file."
-    />
-  ) : null;
-
-  if (filtered.length === 0) {
-    return (
-      <div className="space-y-4">
-        {notice}
-        <Card>
-          <CardContent className="py-12 text-center text-sm text-muted-foreground">
-            No expense matches this status.
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
+/** One of the server's totals; a dash while it isn't there. */
+function Figure({ label, value, emphasis = false }: { label: string; value?: number; emphasis?: boolean }) {
   return (
-    <div className="space-y-4">
-      {notice}
-      <Card>
-        <CardContent className="flex items-center justify-between py-4">
-          <span className="text-sm text-muted-foreground">Outstanding</span>
-          <span className="font-mono text-xl font-semibold">
-            {formatCentavos(outstanding)}
-          </span>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="pt-6">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-28">Date</TableHead>
-                <TableHead>Payee</TableHead>
-                <TableHead>Account</TableHead>
-                <TableHead className="w-28">Due</TableHead>
-                <TableHead className="w-28">Status</TableHead>
-                <TableHead className="w-32 text-right">Amount</TableHead>
-                <TableHead className="w-32 text-right">Balance</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((expense) => (
-                <TableRow key={expense.id}>
-                  <TableCell className="text-sm">{formatDate(expense.date)}</TableCell>
-                  <TableCell className="text-sm">{expense.payee}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {expense.expense_account_name ?? "—"}
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {expense.due_date ? formatDate(expense.due_date) : "—"}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={STATUS_STYLES[expense.status]}>
-                      {expense.status.replace(/_/g, " ")}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm">
-                    {formatCentavos(expense.amount)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm font-medium">
-                    {formatCentavos(expense.amount - expense.amount_paid)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    </div>
+    <Card>
+      <CardContent className="flex items-center justify-between py-4">
+        <span className="text-sm text-muted-foreground">{label}</span>
+        <span className={emphasis ? "font-mono text-xl font-semibold" : "font-mono text-lg"}>
+          {centavosOrDash(value)}
+        </span>
+      </CardContent>
+    </Card>
   );
 }

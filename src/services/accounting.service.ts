@@ -375,20 +375,6 @@ export const accountingService = {
       params,
     }),
 
-  /**
-   * Every expense, because the screen totals them.
-   *
-   * The Expenses screen sums `amount - amount_paid` over what it holds and
-   * renders it as "Outstanding ₱X" in headline type. On a co-op with 40 open
-   * payables that headline was the total of the first 15 — and the status
-   * filter above it narrows the same short page client-side, so filtering to
-   * "Unpaid" made the figure smaller again rather than more complete.
-   */
-  expensesListAll: (): Promise<DrainResult<Expense>> =>
-    fetchAllPages<Expense>(({ page, per_page }) =>
-      accountingService.expensesList({ page, per_page }),
-    ),
-
   /** One page, with the server's totals (amount due included) and per-status counts. */
   expensesPage: (query: ExpensePageQuery = {}): Promise<ExpensePage> =>
     api.getRaw<ExpensePage>(API_ENDPOINTS.ACCOUNTING.EXPENSES_LIST, { params: query }),

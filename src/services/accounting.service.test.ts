@@ -477,16 +477,14 @@ describe("lists are drained, not read one page deep", () => {
   });
 
   test("REGRESSION: Outstanding was the total of the first 15 of 40 payables", async () => {
-    // eslint-disable-next-line pagination/no-unparameterised-list -- the defect, on purpose
-    const short = rowsOf(await accountingService.expensesList());
-    const shortTotal = short.reduce((t, r) => t + r.amount - r.amount_paid, 0);
+    // The screen once summed the rows it held. One page of 25 now carries the
+    // server's outstanding over all 40, so the headline no longer depends on
+    // how many rows came back.
+    const page = await accountingService.expensesPage({ page: 1, per_page: 25 });
 
-    const { rows } = await accountingService.expensesListAll();
-    const wholeTotal = rows.reduce((t, r) => t + r.amount - r.amount_paid, 0);
-
-    assert.equal(shortTotal, 15 * 100_000, "₱15,000.00 — the headline that shipped");
-    assert.equal(wholeTotal, EXPENSE_COUNT * 100_000, "₱40,000.00 — what is owed");
-    assert.ok(wholeTotal > shortTotal, "and the screen said nothing about the gap");
+    assert.equal(page.data.length, 25, "one page, not every expense");
+    assert.equal(page.meta.totals.count, EXPENSE_COUNT);
+    assert.equal(page.meta.totals.amount_due, EXPENSE_COUNT * 100_000, "₱40,000.00 — what is owed");
   });
 
   test("REGRESSION: the ledger's last visible running_balance was not the balance", async () => {

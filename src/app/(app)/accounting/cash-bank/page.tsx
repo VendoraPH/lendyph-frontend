@@ -1,20 +1,27 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { ArrowLeftRight, Banknote, Building2, Smartphone, Wallet } from "lucide-react";
-import { toast } from "sonner";
+import Link from "next/link";
+import { ArrowLeftRight, Banknote, Building2, History, Smartphone, Wallet } from "lucide-react";
 import { PermissionGate, RouteGuard } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAccountingResource } from "@/hooks";
+import { notifyError, notifySuccess } from "@/lib/notify";
 import { accountingService } from "@/services";
-import { formatCentavos, sumCentavos } from "@/lib/accounting/money";
-import type { DrainResult } from "@/lib/paginate";
-import type { Account, CashAccountKind } from "@/types";
+import type { CashAccountKind, CashAccountPage } from "@/types";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { AccountingPageHeader } from "../_components/page-header";
 import { DataState } from "../_components/data-state";
 import { TransferDialog } from "../_components/transfer-dialog";
+import { centavosOrDash } from "../_lib/server-figure";
+import type { TransferPayload } from "../_lib/transfer-payload";
+import {
+  CASH_ACCOUNTS_PER_PAGE,
+  accountHistoryHref,
+  cashKindTotals,
+  cashListIsIncomplete,
+} from "./_lib/cash-bank";
 
 const KIND_ICON: Record<CashAccountKind, typeof Wallet> = {
   cash: Banknote,
@@ -27,27 +34,25 @@ const KIND_ICON: Record<CashAccountKind, typeof Wallet> = {
 function CashAndBankContent() {
   const [transferring, setTransferring] = useState(false);
 
-  // Drained. The card at the bottom sums these into "Total across all money
-  // accounts", so a short list understates the co-op's cash position — and the
-  // transfer dialog picks its from/to accounts out of the same array.
-  const fetcher = useCallback(() => accountingService.cashAccountsListAll(), []);
-  const resource = useAccountingResource<DrainResult<Account>>(fetcher);
+  // One page of the server's largest size. The headline and the line per kind
+  // are the server's `meta.totals`, over every money account in scope, so they
+  // hold even when a chart has more accounts than this page shows.
+  const fetcher = useCallback(
+    () => accountingService.cashAccountsPage({ per_page: CASH_ACCOUNTS_PER_PAGE }),
+    [],
+  );
+  const resource = useAccountingResource<CashAccountPage>(fetcher);
 
-  const transfer = async (data: {
-    date: string;
-    from_account_id: number;
-    to_account_id: number;
-    amount: number;
-    charge?: number;
-    description: string;
-  }) => {
+  const transfer = async (data: TransferPayload) => {
     try {
+      // The service's parameter type predates `reference`; the server accepts
+      // it, and `data` is sent as it is.
       await accountingService.transfer(data);
-      toast.success("Transfer recorded.");
+      notifySuccess("Transfer recorded");
       setTransferring(false);
       resource.refetch();
-    } catch {
-      toast.error("Could not record this transfer.");
+    } catch (err) {
+      notifyError(err, "Could not record this transfer.");
     }
   };
 
@@ -84,57 +89,15 @@ function CashAndBankContent() {
           "GET /accounting/cash-accounts",
           "POST /accounting/cash-accounts/transfer",
         ]}
-        isEmpty={(drain) => drain.rows.length === 0}
+        isEmpty={(page) => (page.data ?? []).length === 0}
         emptyMessage="No cash or bank account has been set up."
       >
-        {({ rows: accounts, truncated, total }) => (
+        {(page) => (
           <div className="space-y-4">
-            {truncated && (
-              <IncompleteListNotice
-                shown={accounts.length}
-                total={total}
-                noun="money accounts"
-                consequence="The total below covers only the accounts shown, and an account missing here cannot be picked as a transfer destination."
-              />
-            )}
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {accounts.map((account) => {
-                const Icon = account.cash_kind
-                  ? KIND_ICON[account.cash_kind]
-                  : Wallet;
-                return (
-                  <Card key={account.id}>
-                    <CardContent className="space-y-2 pt-6">
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <Icon className="h-4 w-4" />
-                        <span className="text-sm">{account.name}</span>
-                      </div>
-                      <p className="font-mono text-2xl font-semibold">
-                        {formatCentavos(account.balance ?? 0)}
-                      </p>
-                      <p className="font-mono text-xs text-muted-foreground">
-                        {account.code}
-                      </p>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-
-            <Card>
-              <CardContent className="flex items-center justify-between py-4">
-                <span className="text-sm text-muted-foreground">
-                  Total across all money accounts
-                </span>
-                <span className="font-mono text-xl font-semibold">
-                  {formatCentavos(sumCentavos(accounts.map((a) => a.balance)))}
-                </span>
-              </CardContent>
-            </Card>
-
+            <CashAccounts page={page} />
             <TransferDialog
               open={transferring}
-              accounts={accounts}
+              accounts={page.data ?? []}
               onOpenChange={setTransferring}
               onSubmit={transfer}
             />
@@ -150,5 +113,75 @@ export default function CashAndBankPage() {
     <RouteGuard permission="cash_accounts:view" pageName="Cash & Bank">
       <CashAndBankContent />
     </RouteGuard>
+  );
+}
+
+/** The account cards, each with its history link, and the server's totals. */
+function CashAccounts({ page }: { page: CashAccountPage }) {
+  const accounts = page.data ?? [];
+  const totals = page.meta?.totals;
+
+  return (
+    <>
+      {cashListIsIncomplete(page.meta, accounts.length) && (
+        <IncompleteListNotice
+          shown={accounts.length}
+          total={page.meta.total}
+          noun="money accounts"
+          consequence="The totals below still cover every money account, but an account missing here cannot be picked for a transfer."
+        />
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {accounts.map((account) => {
+          const Icon = account.cash_kind ? KIND_ICON[account.cash_kind] : Wallet;
+          return (
+            <Card key={account.id}>
+              <CardContent className="space-y-2 pt-6">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Icon className="h-4 w-4" aria-hidden />
+                  <span className="text-sm">{account.name}</span>
+                </div>
+                <p className="font-mono text-2xl font-semibold">
+                  {centavosOrDash(account.balance)}
+                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-mono text-xs text-muted-foreground">{account.code}</p>
+                  <Link
+                    href={accountHistoryHref(account.id)}
+                    className="inline-flex items-center gap-1 rounded-sm text-xs font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label={`History of ${account.name}`}
+                  >
+                    <History className="h-3.5 w-3.5" aria-hidden />
+                    History
+                  </Link>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      <Card>
+        <CardContent className="space-y-3 py-4">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">Total across all money accounts</span>
+            <span className="font-mono text-xl font-semibold">
+              {centavosOrDash(totals?.balance)}
+            </span>
+          </div>
+          {totals?.by_kind && (
+            <dl className="grid gap-x-6 gap-y-1 border-t pt-3 text-sm sm:grid-cols-2 lg:grid-cols-5">
+              {cashKindTotals(totals.by_kind).map((line) => (
+                <div key={line.kind} className="flex items-center justify-between gap-2">
+                  <dt className="text-muted-foreground">{line.label}</dt>
+                  <dd className="font-mono">{centavosOrDash(line.amount)}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </CardContent>
+      </Card>
+    </>
   );
 }
