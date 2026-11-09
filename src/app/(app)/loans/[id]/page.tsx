@@ -148,6 +148,7 @@ import type { ExtensionInterestOption, LoanAdjustment, LoanAdjustmentType, Repay
 import { isApprovalChainHidden, loanShouldHaveAChain, type LoanApprovalStep } from "@/types";
 import { useLoanApproval } from "@/hooks/use-loan-approval";
 import { usePermission } from "@/hooks/use-permission";
+import { LOAN_ADJUSTMENT_CREATE_GATE, recordPaymentGate } from "@/lib/lending-write-gates";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { CollapsibleCard } from "@/components/common/collapsible-card";
@@ -844,6 +845,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // officers never saw the control.
   const canUpdateLoan = usePermission().can("loans:update");
   const canToggleAutoPay = usePermission().can("auto_pay:toggle");
+  const { can } = usePermission();
 
   // Save AO assignment. This goes through its own endpoint, not `update`: PUT
   // /loans/{id} refuses every loan past for_review. The page shows what the
@@ -1773,6 +1775,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
       loan.interest_type === "upon_maturity"
     );
   })();
+  const recordPayment = recordPaymentGate(isUponMaturityLoan, can);
 
   // Loan Extension is offered only on one-month-term loans, whatever the
   // product. The API decides: eligibility depends on the loan's ORIGINAL term,
@@ -3631,7 +3634,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
           headerExtra={
             <>
                 {["released", "ongoing"].includes(loan.status) && (
-                  <Button
+                  <PermissionButton
+                    permission={LOAN_ADJUSTMENT_CREATE_GATE.permission}
+                    tooltip={LOAN_ADJUSTMENT_CREATE_GATE.tooltip}
                     size="sm"
                     variant="outline"
                     onClick={() => {
@@ -3643,32 +3648,23 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   >
                     <Plus className="mr-1 h-3 w-3" />
                     New Adjustment
-                  </Button>
+                  </PermissionButton>
                 )}
-                {["released", "ongoing", "current", "past_due"].includes(loan.status) &&
-                  (isUponMaturityLoan ? (
-                    // An upon-maturity payment is checked against the
-                    // server's payment preview, which needs payments:view.
-                    <PermissionButton
-                      permission="payments:view"
-                      tooltip="Checking an upon-maturity payment needs permission to view payments"
-                      size="sm"
-                      className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                      onClick={() => setRecordPaymentOpen(true)}
-                    >
-                      <Plus className="mr-1 h-3 w-3" />
-                      Record Payment
-                    </PermissionButton>
-                  ) : (
-                    <Button
-                      size="sm"
-                      className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                      onClick={() => setRecordPaymentOpen(true)}
-                    >
-                      <Plus className="mr-1 h-3 w-3" />
-                      Record Payment
-                    </Button>
-                  ))}
+                {["released", "ongoing", "current", "past_due"].includes(loan.status) && (
+                  // Recording needs payments:create; an upon-maturity payment
+                  // is also checked against the server's payment preview,
+                  // which needs payments:view.
+                  <PermissionButton
+                    permission={recordPayment.permission}
+                    tooltip={recordPayment.tooltip}
+                    size="sm"
+                    className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                    onClick={() => setRecordPaymentOpen(true)}
+                  >
+                    <Plus className="mr-1 h-3 w-3" />
+                    Record Payment
+                  </PermissionButton>
+                )}
             </>
           }
         >

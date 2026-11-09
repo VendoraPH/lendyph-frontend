@@ -1,10 +1,13 @@
 /**
  * What the journal page offers for one entry: edit and post a draft, reverse a
- * posted entry that isn't itself a reversal. An action the status doesn't allow, or the user's role can't
+ * posted entry that isn't itself a reversal. A year-end closing entry is
+ * undone only by reopening its year, so its Reverse is disabled with that
+ * reason (the server refuses it, and the reversal of one, with 422). An action the status doesn't allow, or the user's role can't
  * take, is hidden. One that is offered but can't be taken right now carries
  * the reason, for a disabled button.
  */
 import { previewIsBalanced } from "@/lib/accounting/journal";
+import { closedYear } from "@/lib/accounting/source-document";
 import type { JournalEntry, JournalPreview, Permission } from "@/types";
 
 export type JournalAction = "edit" | "post" | "reverse";
@@ -48,14 +51,27 @@ const POST_WAITS: Record<DraftBalance, string | null> = {
   failed: "The totals couldn't be checked",
 };
 
+function reverseRefusal(
+  entry: Pick<JournalEntry, "reversed_by_journal_id"> & Partial<Pick<JournalEntry, "source" | "date">>,
+): string | null {
+  if (entry.source === "closing") {
+    const year = closedYear(entry.date);
+    return year
+      ? `This entry is part of the ${year} year-end close. Reopen the year instead.`
+      : "This entry is part of a year-end close. Reopen the year instead.";
+  }
+  return entry.reversed_by_journal_id ? "This entry has already been reversed." : null;
+}
+
 export function journalActions(
-  entry: Pick<JournalEntry, "status" | "reversed_by_journal_id" | "reverses_journal_id">,
+  entry: Pick<JournalEntry, "status" | "reversed_by_journal_id" | "reverses_journal_id"> &
+    Partial<Pick<JournalEntry, "source" | "date">>,
   can: (permission: Permission) => boolean,
   { editing, balance }: { editing: boolean; balance: DraftBalance },
 ): Record<JournalAction, JournalActionState> {
   const isDraft = entry.status === "draft";
   const isPosted = entry.status === "posted";
-  /** A reversal is never reversed itself: it is the correction. */
+  /** A reversal is never reversed itself: it is the correction (a year's reopen included). */
   const isReversal = Boolean(entry.reverses_journal_id);
 
   return {
@@ -71,12 +87,7 @@ export function journalActions(
         : HIDDEN,
     reverse:
       isPosted && !isReversal && can("journals:reverse")
-        ? {
-            shown: true,
-            disabledReason: entry.reversed_by_journal_id
-              ? "This entry has already been reversed."
-              : null,
-          }
+        ? { shown: true, disabledReason: reverseRefusal(entry) }
         : HIDDEN,
   };
 }

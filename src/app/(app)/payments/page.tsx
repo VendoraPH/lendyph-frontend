@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { RouteGuard, PermissionButton } from "@/components/common";
+import { PAYMENT_CREATE_GATE } from "@/lib/lending-write-gates";
 import { TablePagination } from "@/components/common/table-pagination";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -509,7 +510,9 @@ function PaymentsContent() {
                           </span>
                         </TableCell>
                         <TableCell>
-                          <Button
+                          <PermissionButton
+                            permission={PAYMENT_CREATE_GATE.permission}
+                            tooltip={PAYMENT_CREATE_GATE.tooltip}
                             size="sm"
                             variant="ghost"
                             className="gap-1 text-xs text-brand-orange hover:text-brand-orange-dark"
@@ -520,7 +523,7 @@ function PaymentsContent() {
                           >
                             Pay
                             <ArrowRight className="size-3" />
-                          </Button>
+                          </PermissionButton>
                         </TableCell>
                       </TableRow>
                     );

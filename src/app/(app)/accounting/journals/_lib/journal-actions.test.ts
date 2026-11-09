@@ -128,3 +128,25 @@ test("the balance state: unknown without the preview, else the preview's answer"
     "unbalanced",
   );
 });
+
+test("a year-end closing entry offers Reverse disabled: reopening the year undoes it", () => {
+  const actions = journalActions(
+    { status: "posted", source: "closing", date: "2025-12-31", reversed_by_journal_id: null },
+    holding(...ALL),
+    { editing: false, balance: "balanced" },
+  );
+  assert.equal(actions.reverse.shown, true);
+  assert.equal(
+    actions.reverse.disabledReason,
+    "This entry is part of the 2025 year-end close. Reopen the year instead.",
+  );
+});
+
+test("the reversal of a closing entry (a reopen) doesn't offer Reverse", () => {
+  const actions = journalActions(
+    { status: "posted", source: "reversal", date: "2025-12-31", reversed_by_journal_id: null, reverses_journal_id: 50 },
+    holding(...ALL),
+    { editing: false, balance: "balanced" },
+  );
+  assert.equal(actions.reverse.shown, false);
+});

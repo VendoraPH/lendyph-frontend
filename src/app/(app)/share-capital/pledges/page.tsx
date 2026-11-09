@@ -2,7 +2,8 @@
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { AlertTriangle } from "lucide-react";
-import { RouteGuard } from "@/components/common";
+import { PermissionButton, RouteGuard } from "@/components/common";
+import { PLEDGE_ENTRY_CREATE_GATE } from "@/lib/lending-write-gates";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -782,7 +783,9 @@ function PledgeEntryContent() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Button
+                        <PermissionButton
+                          permission={PLEDGE_ENTRY_CREATE_GATE.permission}
+                          tooltip={PLEDGE_ENTRY_CREATE_GATE.tooltip}
                           variant="ghost"
                           size="sm"
                           className="text-xs text-brand-orange hover:text-brand-orange disabled:text-muted-foreground disabled:opacity-50"
@@ -796,7 +799,7 @@ function PledgeEntryContent() {
                         >
                           <PlusCircle className="h-3.5 w-3.5 mr-1" />
                           Entry
-                        </Button>
+                        </PermissionButton>
                       </TableCell>
                     </TableRow>
                     {manualEntryId === pledge.id && (
