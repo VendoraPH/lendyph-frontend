@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { repaymentService } from "@/services";
 import type { RepaymentPreview } from "@/services/repayment.service";
 import { useAuth } from "@/hooks/use-auth";
+import { usePermission } from "@/hooks/use-permission";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -174,6 +175,9 @@ function SummaryCard({
 function PaymentsContent() {
   const router = useRouter();
   const { user } = useAuth();
+  const { can } = usePermission();
+  // Picking a loan opens Record Payment, so it needs payments:create.
+  const canRecordPayment = can(PAYMENT_CREATE_GATE.permission);
   const defaultCollector = user?.full_name || user?.username || "";
 
   const list = useActiveLoanPage();
@@ -462,8 +466,11 @@ function PaymentsContent() {
                     return (
                       <TableRow
                         key={loan.id}
-                        className="cursor-pointer hover:bg-muted/50 transition-colors"
-                        onClick={() => handleSelectLoan(loan)}
+                        className={cn(
+                          "hover:bg-muted/50 transition-colors",
+                          canRecordPayment && "cursor-pointer",
+                        )}
+                        onClick={canRecordPayment ? () => handleSelectLoan(loan) : undefined}
                       >
                         <TableCell>
                           <div>
@@ -509,7 +516,7 @@ function PaymentsContent() {
                             {status.label}
                           </span>
                         </TableCell>
-                        <TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
                           <PermissionButton
                             permission={PAYMENT_CREATE_GATE.permission}
                             tooltip={PAYMENT_CREATE_GATE.tooltip}

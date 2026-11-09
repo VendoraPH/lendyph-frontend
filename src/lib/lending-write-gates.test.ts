@@ -114,3 +114,15 @@ test("a pledge's amount, schedule and auto-credit need share_capital:update, wit
   assert.match(page, /onClick=\{canUpdatePledge \? \(\) => startScheduleEdit\(pledge\) : undefined\}/);
   assert.match(page, /<Switch\s+checked=\{pledge\.autoCredit\}\s+disabled=\{!canUpdatePledge\}/);
 });
+
+test("without payments:create, Payment Entry's row and its disabled Pay don't open Record Payment", () => {
+  const page = read("src/app/(app)/payments/page.tsx");
+  assert.match(page, /const canRecordPayment = can\(PAYMENT_CREATE_GATE\.permission\)/);
+  // The row opens the dialog only for a user who can record a payment.
+  assert.match(page, /onClick=\{canRecordPayment \? \(\) => handleSelectLoan\(loan\) : undefined\}/);
+  assert.doesNotMatch(page, /onClick=\{\(\) => handleSelectLoan\(loan\)\}/);
+  // A click on the disabled Pay (its tooltip wrapper) stops at its cell.
+  const pay = page.indexOf("permission={PAYMENT_CREATE_GATE.permission}");
+  const cellStart = page.lastIndexOf("<TableCell", pay);
+  assert.match(page.slice(cellStart, pay), /^<TableCell onClick=\{\(e\) => e\.stopPropagation\(\)\}>/);
+});
