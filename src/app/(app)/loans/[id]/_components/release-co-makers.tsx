@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { usePermission } from "@/hooks/use-permission";
 import { coMakerName } from "@/lib/co-maker-name";
+import { relationshipInWords } from "@/lib/co-maker-relationship";
 import { notifyError, notifySuccess, notifyWarning } from "@/lib/notify";
 import { coMakerService } from "@/services/co-maker.service";
 import { loanService, type AddLoanCoMakerPayload } from "@/services/loan.service";
@@ -150,8 +151,8 @@ export function ReleaseCoMakers({ loan, onLoanChange }: ReleaseCoMakersProps) {
                   <div className="min-w-0">
                     <p className="font-medium truncate">{coMakerName(cm) || "—"}</p>
                     {cm.relationship_to_borrower && (
-                      <p className="text-xs text-muted-foreground capitalize">
-                        {cm.relationship_to_borrower}
+                      <p className="text-xs text-muted-foreground">
+                        {relationshipInWords(cm.relationship_to_borrower)}
                       </p>
                     )}
                   </div>

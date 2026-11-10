@@ -282,8 +282,9 @@ export default function AmortizationPage() {
 
             {/* Interest Method */}
             <div className="space-y-1.5">
-              <Label>Interest Method *</Label>
+              <Label id="interest-method-label">Interest Method *</Label>
               <RadioGroup
+                aria-labelledby="interest-method-label"
                 value={interestMethod}
                 onValueChange={(val) => setInterestMethod(val as AmortizationMethod)}
                 className="flex flex-wrap gap-4 pt-1"

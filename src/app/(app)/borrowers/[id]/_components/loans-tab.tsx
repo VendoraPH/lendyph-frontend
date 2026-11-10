@@ -15,6 +15,7 @@ import {
 import { loanDisplayStatus, loanRowStatusLabel } from "@/constants/loan-status";
 import { loanService } from "@/services";
 import { coMakerName } from "@/lib/co-maker-name";
+import { relationshipInWords } from "@/lib/co-maker-relationship";
 import { formatCurrency, formatDate, formatRate } from "@/lib/format";
 import { readTermUnit } from "@/lib/loan-terms";
 import { statusInWords } from "@/app/(app)/borrowers/_components/utils";
@@ -196,8 +197,11 @@ export function LoansTab({ loans }: LoansTabProps) {
                                     <UserCheck className="h-4 w-4 text-green-600 shrink-0" />
                                     <div className="min-w-0">
                                       <p className="text-sm font-medium truncate">{coMakerName(cm) || "—"}</p>
-                                      <p className="text-xs text-muted-foreground capitalize">
-                                        {[cm.relationship_to_borrower, cm.contact_number].filter(Boolean).join(" · ") || "—"}
+                                      <p className="text-xs text-muted-foreground">
+                                        {[
+                                          cm.relationship_to_borrower ? relationshipInWords(cm.relationship_to_borrower) : null,
+                                          cm.contact_number,
+                                        ].filter(Boolean).join(" · ") || "—"}
                                       </p>
                                     </div>
                                   </div>

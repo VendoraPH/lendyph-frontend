@@ -182,7 +182,7 @@ export function Header({ onMenuClick }: HeaderProps) {
           <DropdownMenu>
             <DropdownMenuTrigger
               aria-label={accountMenuLabel(user?.full_name)}
-              className="rounded-full outline-none"
+              className="rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
             >
               <Avatar className="h-8 w-8">
                 <AvatarFallback className="bg-brand-orange text-brand-orange-foreground text-xs">

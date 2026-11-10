@@ -47,3 +47,9 @@ test("the Amortization Calculator links Rate Per, Term Unit and Payment Frequenc
   assertSelectLabelled(source, page, "Term Unit *", "termUnit");
   assertSelectLabelled(source, page, "Payment Frequency *", "frequency");
 });
+
+test("the Amortization Calculator's Interest Method group is named by its label", () => {
+  const source = read("src/app/(app)/loans/amortization/page.tsx");
+  assert.match(source, /<Label id="interest-method-label">Interest Method \*<\/Label>/);
+  assert.match(source, /<RadioGroup\s+aria-labelledby="interest-method-label"/);
+});

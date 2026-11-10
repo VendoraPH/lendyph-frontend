@@ -22,3 +22,9 @@ test("the header's initials button carries that name", () => {
     /<DropdownMenuTrigger\s+aria-label=\{accountMenuLabel\(user\?\.full_name\)\}/,
   );
 });
+
+test("the account menu button shows a focus ring like the app's buttons", () => {
+  const header = readFileSync(join(process.cwd(), "src/components/layout/header.tsx"), "utf8");
+  const trigger = header.match(/<DropdownMenuTrigger[\s\S]*?>/)?.[0] ?? "";
+  assert.match(trigger, /focus-visible:ring-3 focus-visible:ring-ring\/50/);
+});
