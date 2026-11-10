@@ -10,7 +10,7 @@
  * The network is a mocked fetch (axios's fetch adapter), so nothing leaves the
  * process.
  */
-import { test, before, beforeEach, afterEach, describe } from "node:test";
+import { test, before, beforeEach, afterEach, describe, mock } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import type { AxiosInstance, AxiosStatic } from "axios";
@@ -29,6 +29,8 @@ const server = {
   refreshCalls: 0,
   refreshStatus: 200,
   refreshNetworkError: false,
+  /** A refresh the API never answers (stuck before it rotates anything). */
+  refreshHangs: false,
   seen: [] as Seen[],
   releaseRefresh: () => {},
   refreshGate: Promise.resolve(),
@@ -54,6 +56,12 @@ async function mockFetch(input: RequestInfo | URL, init?: RequestInit): Promise<
 
   if (path.endsWith("/auth/refresh")) {
     server.refreshCalls += 1;
+    if (server.refreshHangs) {
+      // Only the caller's own timeout ends it, through the request's signal.
+      await new Promise<never>((_, reject) => {
+        request.signal.addEventListener("abort", () => reject(request.signal.reason), { once: true });
+      });
+    }
     const rotates = !server.refreshNetworkError && server.refreshStatus === 200 && auth === `Bearer ${server.token}`;
     // The API revokes the old token as it issues the new one, so from here a
     // request carrying the old token is answered 401.
@@ -79,6 +87,16 @@ win.addEventListener("auth:session-expired", () => {
 let client: AxiosInstance;
 let renewAccessToken: () => Promise<string>;
 let tokenManager: typeof import("./axios-client").tokenManager;
+let REFRESH_TIMEOUT_MS: number;
+let SessionEndedError: typeof import("./axios-client").SessionEndedError;
+
+/** Wait, a bounded number of turns, until `done()` holds; never hangs. */
+async function until(done: () => boolean): Promise<void> {
+  for (let i = 0; i < 500 && !done(); i += 1) {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  assert.ok(done(), "condition not reached");
+}
 
 /** Let queued promise work (interceptors, the adapter) run. */
 async function settle(): Promise<void> {
@@ -98,6 +116,8 @@ before(async () => {
   const clientModule = await import("./axios-client");
   client = clientModule.default;
   renewAccessToken = clientModule.renewAccessToken;
+  REFRESH_TIMEOUT_MS = clientModule.REFRESH_TIMEOUT_MS;
+  SessionEndedError = clientModule.SessionEndedError;
   tokenManager = clientModule.tokenManager;
 
   // The renewal uses plain axios; every other request uses the client.
@@ -122,6 +142,7 @@ beforeEach(() => {
   server.refreshCalls = 0;
   server.refreshStatus = 200;
   server.refreshNetworkError = false;
+  server.refreshHangs = false;
   server.seen = [];
   sessionExpiredEvents = 0;
   holdRefresh();
@@ -130,6 +151,7 @@ beforeEach(() => {
 
 // A test that fails midway must not leave its renewal running into the next.
 afterEach(async () => {
+  mock.timers.reset();
   server.releaseRefresh();
   await settle();
 });
@@ -174,7 +196,7 @@ describe("requests while a token renewal is running", () => {
     assert.deepEqual(server.seen, [{ path: "/api/loans", auth: "Bearer old", status: 200 }]);
   });
 
-  test("a rejected renewal still ends the session once, and the waiting request fails", async () => {
+  test("a rejected renewal still ends the session once, and the waiting request is refused here, never sent", async () => {
     server.refreshStatus = 401;
     const renewal = renewAccessToken();
     const waiting = client.get("/loans");
@@ -182,13 +204,64 @@ describe("requests while a token renewal is running", () => {
     server.releaseRefresh();
 
     await assert.rejects(renewal, (err: { response?: { status?: number } }) => err.response?.status === 401);
-    await assert.rejects(waiting, (err: { response?: { status?: number } }) => err.response?.status === 401);
+    await assert.rejects(waiting, (err) => err instanceof SessionEndedError);
 
     assert.equal(tokenManager.getAccessToken(), null);
     assert.equal(sessionExpiredEvents, 1);
     assert.equal(server.refreshCalls, 1);
-    // It went out after the session ended, with no token, and was not replayed.
-    assert.deepEqual(server.seen, [{ path: "/api/loans", auth: null, status: 401 }]);
+    // The session ended while it waited: it is refused in the browser, not sent to 401.
+    assert.deepEqual(server.seen, []);
+  });
+
+  // A real-time limit, so a hang fails the test instead of the run.
+  test("a renewal that never answers times out: the token is kept and the waiting requests go out with it", { timeout: 10_000 }, async () => {
+    assert.ok(REFRESH_TIMEOUT_MS >= 10_000 && REFRESH_TIMEOUT_MS <= 20_000, "about 15 s");
+    mock.timers.enable({ apis: ["setTimeout"] });
+    server.refreshHangs = true;
+
+    const renewal = renewAccessToken();
+    const first = client.get("/loans");
+    const second = client.get("/borrowers");
+    // The refresh reaches the API only after axios has set its timer.
+    await until(() => server.refreshCalls === 1);
+    await settle();
+    assert.deepEqual(server.seen, [], "they wait while the renewal runs");
+
+    mock.timers.tick(REFRESH_TIMEOUT_MS);
+    await assert.rejects(renewal, (err: { code?: string }) => err.code === "ETIMEDOUT" || err.code === "ECONNABORTED");
+    const answers = await Promise.all([first, second]);
+
+    assert.deepEqual(answers.map((a) => a.status), [200, 200]);
+    assert.equal(tokenManager.getAccessToken(), "old");
+    assert.equal(sessionExpiredEvents, 0);
+    assert.equal(server.refreshCalls, 1);
+    assert.deepEqual(server.seen, [
+      { path: "/api/loans", auth: "Bearer old", status: 200 },
+      { path: "/api/borrowers", auth: "Bearer old", status: 200 },
+    ]);
+  });
+
+  // A real-time limit, so a hang fails the test instead of the run.
+  test("Log out never waits on a stuck renewal", { timeout: 10_000 }, async () => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    server.refreshHangs = true;
+
+    const renewal = renewAccessToken();
+    renewal.catch(() => undefined);
+    await until(() => server.refreshCalls === 1);
+    const logout = client.post("/auth/logout");
+    let answered = false;
+    logout.then(() => {
+      answered = true;
+    }, () => undefined);
+
+    // Answered while the renewal is still stuck, with no timer moved.
+    await until(() => answered);
+    assert.equal((await logout).status, 200);
+    assert.deepEqual(server.seen, [{ path: "/api/auth/logout", auth: "Bearer old", status: 200 }]);
+
+    mock.timers.tick(REFRESH_TIMEOUT_MS);
+    await assert.rejects(renewal);
   });
 
   test("a renewal lost to the network keeps the session, and the waiting request uses the token in hand", async () => {

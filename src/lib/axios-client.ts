@@ -83,19 +83,48 @@ function hasSubmissionToken(config: { headers?: unknown }): boolean {
 // and requests made meanwhile wait for it (below).
 let renewal: Promise<string> | null = null;
 
+/**
+ * How long a renewal may take. Requests wait for it, so a stuck
+ * /auth/refresh must not hold them until the proxy gives up (90 s). A timeout
+ * keeps the token, the same as a dropped connection.
+ */
+export const REFRESH_TIMEOUT_MS = 15_000;
+
+/**
+ * A request refused in the browser because the session ended while it waited
+ * for a renewal. The "Session Expired" dialog is already showing, so it is not
+ * sent only to come back 401.
+ */
+export class SessionEndedError extends Error {
+  constructor(message = "Your session has ended. Please sign in again.") {
+    super(message);
+    this.name = "SessionEndedError";
+  }
+}
+
+function isLogout(url: string | undefined): boolean {
+  return Boolean(url?.includes("/auth/logout"));
+}
+
 axiosClient.interceptors.request.use(
   async (config) => {
     if (hasSubmissionToken(config)) {
       return config;
     }
     // A renewal in flight is about to revoke the token in hand, so a request
-    // sent with it now would come back 401. Wait for the renewal and send the
-    // token it leaves behind. Its failure is handled inside it (a rejection
-    // ends the session there), so only the outcome matters here. The renewal
-    // itself goes through plain axios, never this client, so it can't wait on
-    // itself.
-    if (renewal) {
+    // sent with it now would come back 401. Wait for the renewal (at most
+    // REFRESH_TIMEOUT_MS) and send the token it leaves behind. Its failure is
+    // handled inside it (a rejection ends the session there; a timeout keeps
+    // the token), so only the outcome matters here. The renewal itself goes
+    // through plain axios, never this client, so it can't wait on itself.
+    //
+    // Log out never waits: signing out must work even while a renewal is stuck.
+    if (renewal && !isLogout(config.url)) {
+      const hadToken = tokenManager.getAccessToken() !== null;
       await renewal.catch(() => undefined);
+      if (hadToken && tokenManager.getAccessToken() === null) {
+        throw new SessionEndedError();
+      }
     }
     const token = tokenManager.getAccessToken();
     if (token) {
@@ -162,6 +191,7 @@ async function rotateToken(): Promise<string> {
       `${API_BASE_URL}/auth/refresh`,
       {},
       {
+        timeout: REFRESH_TIMEOUT_MS,
         headers: {
           Authorization: `Bearer ${sent}`,
           "Content-Type": "application/json",
