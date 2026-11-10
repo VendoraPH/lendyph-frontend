@@ -180,3 +180,10 @@ test("an ID type reads as its label, or the name given for 'Others'", () => {
   assert.equal(validIdTypeLabel("others", null), "Others");
   assert.equal(validIdTypeLabel("barangay_id"), "barangay_id");
 });
+
+test("the co-maker ID picker takes the server's valid ID list, .jpe and .jfif included", async () => {
+  const { VALID_ID_FILE_ACCEPT } = await import("./co-maker-valid-id");
+  const { ID_ACCEPT } = await import("./file-validation");
+  assert.ok(VALID_ID_FILE_ACCEPT.startsWith(`${ID_ACCEPT},`), VALID_ID_FILE_ACCEPT);
+  for (const name of [".jpe", ".jfif"]) assert.ok(VALID_ID_FILE_ACCEPT.split(",").includes(name), name);
+});

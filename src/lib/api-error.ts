@@ -5,6 +5,7 @@
 // `instanceof AxiosError`, which is fragile when axios is bundled more than once.
 
 import { IncompleteListError } from "./paginate";
+import { SessionEndedError } from "./session-ended";
 
 export interface ApiErrorBody {
   message?: string;
@@ -169,6 +170,10 @@ export function getErrorMessage(err: unknown, fallback: string = GENERIC): strin
   // short, so the caller's "couldn't load" fallback would be the wrong advice.
   // Its message is copy written for the user; see `completeRows`.
   if (err instanceof IncompleteListError) return err.message;
+
+  // Refused in the browser because the session ended while it waited for a
+  // token renewal: the same words as a 401, never the screen's own fallback.
+  if (err instanceof SessionEndedError) return STATUS_COPY[401];
 
   // No reply: a genuine offline, a DNS failure, a CORS block — and a timeout,
   // which axios reports identically. They need opposite advice. "You appear to

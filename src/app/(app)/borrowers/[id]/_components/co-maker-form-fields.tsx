@@ -207,7 +207,7 @@ export function CoMakerFormFields({
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="cm_income">Monthly Income (PHP)</Label>
+          <Label htmlFor="cm_income">Monthly Income (₱)</Label>
           <Input
             id="cm_income"
             type="number"

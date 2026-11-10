@@ -10,6 +10,20 @@ export const IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
 // excluded — it passes a generic image check but the server rejects it.
 export const ID_MIME_TYPES = ["image/jpeg", "image/png", "application/pdf"];
 
+// The file names a Documents tab and an accounting attachment take, the same
+// list the server checks. .jpe and .jfif are JPEG names too, so "JPG" in the
+// on-screen hint covers them.
+export const DOCUMENT_EXTENSIONS = [".jpg", ".jpeg", ".jpe", ".jfif", ".png", ".pdf", ".doc", ".docx"] as const;
+
+/** For a file input's `accept`. */
+export const DOCUMENT_ACCEPT = DOCUMENT_EXTENSIONS.join(",");
+
+// The file names a member's valid ID takes, the server's valid ID list.
+export const ID_EXTENSIONS = [".jpg", ".jpeg", ".jpe", ".jfif", ".png", ".pdf"] as const;
+
+/** For a valid ID file input's `accept`. */
+export const ID_ACCEPT = ID_EXTENSIONS.join(",");
+
 const TYPE_LABELS: Record<string, string> = {
   "image/jpeg": "JPG",
   "image/png": "PNG",

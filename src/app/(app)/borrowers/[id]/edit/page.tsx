@@ -7,7 +7,6 @@ import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Camera,
-  FileText,
   ImageIcon,
   Plus,
   X,
@@ -18,6 +17,9 @@ import { toast } from "sonner";
 import { notifyError, notifyValidation } from "@/lib/notify";
 import { sentencesMessage } from "@/app/(app)/borrowers/_components/utils";
 import { isBlankValidId, validateValidIds } from "@/lib/valid-id";
+import { uploadFailureMessage, uploadMemberFiles } from "../_lib/member-uploads";
+import { useMemberValidIds } from "../_hooks/use-member-valid-ids";
+import { MemberValidIdsOnFile } from "../_components/member-valid-ids-on-file";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -45,6 +47,8 @@ import { branchService, type ApiBranch } from "@/services/branch.service";
 import { completeRows } from "@/lib/paginate";
 import { IdCropDialog } from "@/components/borrower/id-crop-dialog";
 import { PhotoCropDialog } from "@/components/borrower/photo-crop-dialog";
+import { ValidIdFilePicker } from "@/components/borrower/valid-id-file-picker";
+import { removeValidIdRowLabel, validIdRowName } from "@/lib/valid-id-names";
 import { CIVIL_STATUS_OPTIONS, SUFFIX_OPTIONS, VALID_ID_OPTIONS } from "@/constants";
 import type { Borrower } from "@/types";
 
@@ -171,6 +175,7 @@ function EditBorrowerContent() {
 
   // Valid IDs
   const [validIds, setValidIds] = useState<ValidIdEntry[]>([]);
+  const idsOnFile = useMemberValidIds(borrowerId);
   const [cropTarget, setCropTarget] = useState<{
     index: number;
     side: "front" | "back";
@@ -434,19 +439,15 @@ function EditBorrowerContent() {
 
       await borrowerService.update(borrowerId, payload as Partial<Borrower>);
 
-      if (profilePhoto) {
-        try {
+      const uploads = await uploadMemberFiles({
+        photo: profilePhoto,
+        ids: validIds.filter((v) => !isBlankValidId(v)),
+        uploadPhoto: (photo) => {
           const photoData = new FormData();
-          photoData.append("photo", profilePhoto);
-          await borrowerService.uploadPhoto(borrowerId, photoData);
-        } catch {
-          toast.error("Member updated but photo upload failed");
-        }
-      }
-
-      const validIdsToUpload = validIds.filter((v) => !isBlankValidId(v));
-      for (const entry of validIdsToUpload) {
-        try {
+          photoData.append("photo", photo);
+          return borrowerService.uploadPhoto(borrowerId, photoData);
+        },
+        uploadId: (entry) => {
           const idData = new FormData();
           idData.append("type", entry.type);
           if (entry.type === "others" && entry.custom_type_name.trim()) {
@@ -455,10 +456,30 @@ function EditBorrowerContent() {
           if (entry.id_number.trim()) idData.append("id_number", entry.id_number.trim());
           if (entry.front_file) idData.append("front_file", entry.front_file);
           if (entry.back_file) idData.append("back_file", entry.back_file);
-          await api.upload(`/borrowers/${borrowerId}/valid-ids`, idData);
-        } catch (err) {
-          notifyError(err, "We couldn't upload this ID. Please try again.");
-        }
+          return api.upload(`/borrowers/${borrowerId}/valid-ids`, idData);
+        },
+      });
+
+      // The details are saved either way. A saved photo or ID is dropped from
+      // the form, so saving again sends only what failed, never a duplicate.
+      // So is an ID that got no reply (it may be stored): the user checks the
+      // IDs on file, read again below, before adding it again.
+      if (uploads.photoError !== null) {
+        const { title, description } = uploadFailureMessage("photo", uploads.photoError);
+        toast.error(title, { description });
+      } else {
+        setProfilePhoto(null);
+      }
+      for (const failed of uploads.failedIds) {
+        const { title, description } = uploadFailureMessage("ID", failed.error);
+        toast.error(title, { description });
+      }
+      setValidIds(uploads.failedIds.filter((failed) => failed.refused).map((failed) => failed.entry));
+
+      // Stay on the page so the user can fix the file and save again.
+      if (uploads.anyFailed) {
+        idsOnFile.reload();
+        return;
       }
 
       toast.success("Member updated");
@@ -952,10 +973,12 @@ function EditBorrowerContent() {
               </Button>
             </div>
 
+            <MemberValidIdsOnFile ids={idsOnFile.ids} status={idsOnFile.status} onRetry={idsOnFile.reload} />
+
             {validIds.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4 text-center">
-                Attach additional valid IDs. Existing IDs are managed from the member detail
-                page.
+                Attach additional valid IDs. IDs on file are removed from the member&apos;s Documents
+                tab.
               </p>
             ) : (
               <div className="space-y-4">
@@ -968,6 +991,7 @@ function EditBorrowerContent() {
                       type="button"
                       variant="ghost"
                       size="icon-sm"
+                      aria-label={removeValidIdRowLabel(entry, index)}
                       onClick={() => removeValidId(index)}
                       className="absolute top-2 right-2 text-destructive hover:text-destructive"
                     >
@@ -976,12 +1000,12 @@ function EditBorrowerContent() {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pr-8">
                       <div className="space-y-2">
-                        <Label>ID Type</Label>
+                        <Label htmlFor={`valid_id_type_${index}`}>ID Type</Label>
                         <Select
                           value={entry.type || null}
                           onValueChange={(v) => updateValidId(index, "type", v ?? "")}
                         >
-                          <SelectTrigger className="w-full">
+                          <SelectTrigger id={`valid_id_type_${index}`} className="w-full">
                             <SelectValue placeholder="Select ID type">
                               {(value: string | null) =>
                                 value
@@ -1000,8 +1024,9 @@ function EditBorrowerContent() {
                         </Select>
                       </div>
                       <div className="space-y-2">
-                        <Label>ID Number</Label>
+                        <Label htmlFor={`valid_id_number_${index}`}>ID Number</Label>
                         <Input
+                          id={`valid_id_number_${index}`}
                           placeholder="ID number"
                           value={entry.id_number}
                           onChange={(e) => updateValidId(index, "id_number", e.target.value)}
@@ -1009,10 +1034,11 @@ function EditBorrowerContent() {
                       </div>
                       {entry.type === "others" && (
                         <div className="space-y-2 sm:col-span-2">
-                          <Label>
+                          <Label htmlFor={`valid_id_name_${index}`}>
                             ID Name <span className="text-destructive">*</span>
                           </Label>
                           <Input
+                            id={`valid_id_name_${index}`}
                             placeholder="e.g. Senior Citizen ID, Company ID"
                             value={entry.custom_type_name}
                             onChange={(e) =>
@@ -1025,7 +1051,7 @@ function EditBorrowerContent() {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="space-y-2">
-                        <Label>Front of ID</Label>
+                        <Label htmlFor={entry.front_preview ? undefined : `valid_id_front_${index}`}>Front of ID</Label>
                         {entry.front_preview ? (
                           <div className="space-y-2">
                             <div className="relative h-44 rounded-lg overflow-hidden border">
@@ -1037,6 +1063,7 @@ function EditBorrowerContent() {
                               />
                               <button
                                 type="button"
+                                aria-label={`Remove front of ${validIdRowName(entry, index)}`}
                                 onClick={() => {
                                   updateValidId(index, "front_file", null);
                                   updateValidId(index, "front_preview", null);
@@ -1051,6 +1078,7 @@ function EditBorrowerContent() {
                               variant="outline"
                               size="sm"
                               className="w-full h-8 text-xs gap-1"
+                              aria-label={`Crop front of ${validIdRowName(entry, index)}`}
                               onClick={() =>
                                 setCropTarget({
                                   index,
@@ -1064,20 +1092,16 @@ function EditBorrowerContent() {
                             </Button>
                           </div>
                         ) : (
-                          <label className="flex h-44 flex-col items-center justify-center gap-1 cursor-pointer rounded-lg border border-dashed border-muted-foreground/30 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors">
-                            <FileText className="h-5 w-5 text-muted-foreground" />
-                            <span className="text-xs text-muted-foreground">Upload Front</span>
-                            <input
-                              type="file"
-                              accept="image/*,.pdf"
-                              onChange={(e) => handleValidIdFile(index, "front", e)}
-                              className="hidden"
-                            />
-                          </label>
+                          <ValidIdFilePicker
+                            controlId={`valid_id_front_${index}`}
+                            side="front"
+                            rowName={validIdRowName(entry, index)}
+                            onPick={(e) => handleValidIdFile(index, "front", e)}
+                          />
                         )}
                       </div>
                       <div className="space-y-2">
-                        <Label>Back of ID</Label>
+                        <Label htmlFor={entry.back_preview ? undefined : `valid_id_back_${index}`}>Back of ID</Label>
                         {entry.back_preview ? (
                           <div className="space-y-2">
                             <div className="relative h-44 rounded-lg overflow-hidden border">
@@ -1089,6 +1113,7 @@ function EditBorrowerContent() {
                               />
                               <button
                                 type="button"
+                                aria-label={`Remove back of ${validIdRowName(entry, index)}`}
                                 onClick={() => {
                                   updateValidId(index, "back_file", null);
                                   updateValidId(index, "back_preview", null);
@@ -1103,6 +1128,7 @@ function EditBorrowerContent() {
                               variant="outline"
                               size="sm"
                               className="w-full h-8 text-xs gap-1"
+                              aria-label={`Crop back of ${validIdRowName(entry, index)}`}
                               onClick={() =>
                                 setCropTarget({
                                   index,
@@ -1116,16 +1142,12 @@ function EditBorrowerContent() {
                             </Button>
                           </div>
                         ) : (
-                          <label className="flex h-44 flex-col items-center justify-center gap-1 cursor-pointer rounded-lg border border-dashed border-muted-foreground/30 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors">
-                            <FileText className="h-5 w-5 text-muted-foreground" />
-                            <span className="text-xs text-muted-foreground">Upload Back</span>
-                            <input
-                              type="file"
-                              accept="image/*,.pdf"
-                              onChange={(e) => handleValidIdFile(index, "back", e)}
-                              className="hidden"
-                            />
-                          </label>
+                          <ValidIdFilePicker
+                            controlId={`valid_id_back_${index}`}
+                            side="back"
+                            rowName={validIdRowName(entry, index)}
+                            onPick={(e) => handleValidIdFile(index, "back", e)}
+                          />
                         )}
                       </div>
                     </div>
@@ -1152,7 +1174,7 @@ function EditBorrowerContent() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="monthly_income">Monthly Income (PHP)</Label>
+              <Label htmlFor="monthly_income">Monthly Income (₱)</Label>
               <Input
                 id="monthly_income"
                 type="number"

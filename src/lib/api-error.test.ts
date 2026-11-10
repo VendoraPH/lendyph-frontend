@@ -327,3 +327,11 @@ test("a human sentence containing an underscored field name still survives", () 
     "The field loan_amount must be filled in before you can submit."
   );
 });
+
+test("a request refused because the session ended reads as the session-expired message", async () => {
+  const { SessionEndedError } = await import("./session-ended");
+  assert.equal(
+    getErrorMessage(new SessionEndedError(), "We couldn't load the loans. Please try again."),
+    "Your session has expired. Please sign in again.",
+  );
+});

@@ -4,12 +4,14 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { RouteGuard } from "@/components/common";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Camera, FileText, ImageIcon, Plus, X, SwitchCamera } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Camera, ImageIcon, Plus, X, SwitchCamera } from "lucide-react";
 import { toast } from "sonner";
 import { notifyError, notifyValidation } from "@/lib/notify";
 import { sentencesMessage } from "@/app/(app)/borrowers/_components/utils";
 import { isBlankValidId, validateValidIds } from "@/lib/valid-id";
 import { isDuplicateNameMessage } from "@/lib/duplicate-error";
+import { afterCreate, uploadFailureMessage, uploadMemberFiles } from "../[id]/_lib/member-uploads";
+import { usePermission } from "@/hooks/use-permission";
 import { branchSelectItems, userBranches } from "@/lib/user-branches";
 
 import { Button } from "@/components/ui/button";
@@ -39,6 +41,8 @@ import { IdCropDialog } from "@/components/borrower/id-crop-dialog";
 import { Crop as CropIcon } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { PhotoCropDialog } from "@/components/borrower/photo-crop-dialog";
+import { ValidIdFilePicker } from "@/components/borrower/valid-id-file-picker";
+import { removeValidIdRowLabel, validIdRowName } from "@/lib/valid-id-names";
 import { CIVIL_STATUS_OPTIONS, SUFFIX_OPTIONS, VALID_ID_OPTIONS } from "@/constants";
 
 // Last-resort copy for the duplicate dialog when NONE of name/code/birthdate
@@ -130,6 +134,7 @@ function emptyForm(): BorrowerFormData {
 
 function NewBorrowerContent() {
   const router = useRouter();
+  const { can } = usePermission();
   const { user } = useAuth();
   const [form, setForm] = useState<BorrowerFormData>(emptyForm());
   const [submitting, setSubmitting] = useState(false);
@@ -626,42 +631,53 @@ function NewBorrowerContent() {
       );
       const borrowerId = (created as unknown as { id: number }).id;
 
-      // Upload profile photo if provided
-      if (profilePhoto && borrowerId) {
-        try {
-          const photoData = new FormData();
-          photoData.append("photo", profilePhoto);
-          await borrowerService.uploadPhoto(borrowerId, photoData);
-        } catch {
-          toast.error("Member created but photo upload failed");
-        }
-      }
-
-      // Upload valid IDs if provided (front and back separately). Only blank
+      // Then the photo and the IDs (front and back separately). Only blank ID
       // rows are dropped — completeness was already enforced above, and
       // filtering on it here is what used to discard an ID in silence.
-      const validIdsToUpload = validIds.filter((v) => !isBlankValidId(v));
-      if (validIdsToUpload.length > 0 && borrowerId) {
-        for (const entry of validIdsToUpload) {
-          try {
-            const idData = new FormData();
-            idData.append("type", entry.type);
-            if (entry.type === "others" && entry.custom_type_name.trim()) {
-              idData.append("custom_type_name", entry.custom_type_name.trim());
-            }
-            if (entry.id_number.trim()) idData.append("id_number", entry.id_number.trim());
-            if (entry.front_file) idData.append("front_file", entry.front_file);
-            if (entry.back_file) idData.append("back_file", entry.back_file);
-            await borrowerService.uploadValidId(borrowerId, idData);
-          } catch {
-            toast.error(`We couldn't upload the ${entry.type} ID. Please try again.`);
+      const uploads = await uploadMemberFiles({
+        photo: borrowerId ? profilePhoto : null,
+        ids: borrowerId ? validIds.filter((v) => !isBlankValidId(v)) : [],
+        uploadPhoto: (photo) => {
+          const photoData = new FormData();
+          photoData.append("photo", photo);
+          return borrowerService.uploadPhoto(borrowerId, photoData);
+        },
+        uploadId: (entry) => {
+          const idData = new FormData();
+          idData.append("type", entry.type);
+          if (entry.type === "others" && entry.custom_type_name.trim()) {
+            idData.append("custom_type_name", entry.custom_type_name.trim());
           }
-        }
+          if (entry.id_number.trim()) idData.append("id_number", entry.id_number.trim());
+          if (entry.front_file) idData.append("front_file", entry.front_file);
+          if (entry.back_file) idData.append("back_file", entry.back_file);
+          return borrowerService.uploadValidId(borrowerId, idData);
+        },
+      });
+
+      // The member exists now, so a failed upload is never retried from this
+      // form, which would create them twice: the edit page takes it instead.
+      const next = afterCreate(borrowerId, uploads.anyFailed, can);
+      const options = {
+        saved: "Member saved",
+        hint: next.retryHere ? "Add it again on this page." : undefined,
+        // The edit page lists the IDs on file; the member's page has them on its Documents tab.
+        uncertainHint: next.retryHere
+          ? "Check the list below before adding it again."
+          : "Check the member's Documents tab before adding it again.",
+      };
+      if (uploads.photoError !== null) {
+        const { title, description } = uploadFailureMessage("photo", uploads.photoError, options);
+        toast.error(title, { description });
+      }
+      for (const failed of uploads.failedIds) {
+        const { title, description } = uploadFailureMessage("ID", failed.error, options);
+        toast.error(title, { description });
       }
 
       setDuplicateMatch(null);
-      toast.success("Member created");
-      router.push("/borrowers");
+      if (!uploads.anyFailed) toast.success("Member created");
+      router.push(next.path);
     } catch (err: unknown) {
       const apiError = err as {
         response?: {
@@ -1143,6 +1159,7 @@ function NewBorrowerContent() {
                       type="button"
                       variant="ghost"
                       size="icon-sm"
+                      aria-label={removeValidIdRowLabel(entry, index)}
                       onClick={() => removeValidId(index)}
                       className="absolute top-2 right-2 text-destructive hover:text-destructive"
                     >
@@ -1152,12 +1169,12 @@ function NewBorrowerContent() {
                     {/* ID Type + ID Number (and custom name when "Others") */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pr-8">
                       <div className="space-y-2">
-                        <Label>ID Type</Label>
+                        <Label htmlFor={`valid_id_type_${index}`}>ID Type</Label>
                         <Select
                           value={entry.type || null}
                           onValueChange={(v) => updateValidId(index, "type", v ?? "")}
                         >
-                          <SelectTrigger className="w-full">
+                          <SelectTrigger id={`valid_id_type_${index}`} className="w-full">
                             <SelectValue placeholder="Select ID type">
                               {(value: string | null) =>
                                 value
@@ -1176,8 +1193,9 @@ function NewBorrowerContent() {
                         </Select>
                       </div>
                       <div className="space-y-2">
-                        <Label>ID Number</Label>
+                        <Label htmlFor={`valid_id_number_${index}`}>ID Number</Label>
                         <Input
+                          id={`valid_id_number_${index}`}
                           placeholder="ID number"
                           value={entry.id_number}
                           onChange={(e) => updateValidId(index, "id_number", e.target.value)}
@@ -1185,10 +1203,11 @@ function NewBorrowerContent() {
                       </div>
                       {entry.type === "others" && (
                         <div className="space-y-2 sm:col-span-2">
-                          <Label>
+                          <Label htmlFor={`valid_id_name_${index}`}>
                             ID Name <span className="text-destructive">*</span>
                           </Label>
                           <Input
+                            id={`valid_id_name_${index}`}
                             placeholder="e.g. Senior Citizen ID, Company ID"
                             value={entry.custom_type_name}
                             onChange={(e) =>
@@ -1202,7 +1221,7 @@ function NewBorrowerContent() {
                     {/* Front / Back Uploads */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="space-y-2">
-                        <Label>Front of ID</Label>
+                        <Label htmlFor={entry.front_preview ? undefined : `valid_id_front_${index}`}>Front of ID</Label>
                         {entry.front_preview ? (
                           <div className="space-y-2">
                             <div className="relative h-44 rounded-lg overflow-hidden border bg-muted/30">
@@ -1214,6 +1233,7 @@ function NewBorrowerContent() {
                               />
                               <button
                                 type="button"
+                                aria-label={`Remove front of ${validIdRowName(entry, index)}`}
                                 onClick={() => {
                                   updateValidId(index, "front_file", null);
                                   updateValidId(index, "front_preview", null);
@@ -1228,6 +1248,7 @@ function NewBorrowerContent() {
                               variant="outline"
                               size="sm"
                               className="w-full h-8 text-xs gap-1"
+                              aria-label={`Crop front of ${validIdRowName(entry, index)}`}
                               onClick={() => setCropTarget({ index, side: "front", src: entry.front_preview! })}
                             >
                               <CropIcon className="h-3.5 w-3.5" />
@@ -1235,20 +1256,16 @@ function NewBorrowerContent() {
                             </Button>
                           </div>
                         ) : (
-                          <label className="flex h-44 flex-col items-center justify-center gap-1 cursor-pointer rounded-lg border border-dashed border-muted-foreground/30 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors">
-                            <FileText className="h-5 w-5 text-muted-foreground" />
-                            <span className="text-xs text-muted-foreground">Upload Front</span>
-                            <input
-                              type="file"
-                              accept="image/*,.pdf"
-                              onChange={(e) => handleValidIdFile(index, "front", e)}
-                              className="hidden"
-                            />
-                          </label>
+                          <ValidIdFilePicker
+                            controlId={`valid_id_front_${index}`}
+                            side="front"
+                            rowName={validIdRowName(entry, index)}
+                            onPick={(e) => handleValidIdFile(index, "front", e)}
+                          />
                         )}
                       </div>
                       <div className="space-y-2">
-                        <Label>Back of ID</Label>
+                        <Label htmlFor={entry.back_preview ? undefined : `valid_id_back_${index}`}>Back of ID</Label>
                         {entry.back_preview ? (
                           <div className="space-y-2">
                             <div className="relative h-44 rounded-lg overflow-hidden border bg-muted/30">
@@ -1260,6 +1277,7 @@ function NewBorrowerContent() {
                               />
                               <button
                                 type="button"
+                                aria-label={`Remove back of ${validIdRowName(entry, index)}`}
                                 onClick={() => {
                                   updateValidId(index, "back_file", null);
                                   updateValidId(index, "back_preview", null);
@@ -1274,6 +1292,7 @@ function NewBorrowerContent() {
                               variant="outline"
                               size="sm"
                               className="w-full h-8 text-xs gap-1"
+                              aria-label={`Crop back of ${validIdRowName(entry, index)}`}
                               onClick={() => setCropTarget({ index, side: "back", src: entry.back_preview! })}
                             >
                               <CropIcon className="h-3.5 w-3.5" />
@@ -1281,16 +1300,12 @@ function NewBorrowerContent() {
                             </Button>
                           </div>
                         ) : (
-                          <label className="flex h-44 flex-col items-center justify-center gap-1 cursor-pointer rounded-lg border border-dashed border-muted-foreground/30 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors">
-                            <FileText className="h-5 w-5 text-muted-foreground" />
-                            <span className="text-xs text-muted-foreground">Upload Back</span>
-                            <input
-                              type="file"
-                              accept="image/*,.pdf"
-                              onChange={(e) => handleValidIdFile(index, "back", e)}
-                              className="hidden"
-                            />
-                          </label>
+                          <ValidIdFilePicker
+                            controlId={`valid_id_back_${index}`}
+                            side="back"
+                            rowName={validIdRowName(entry, index)}
+                            onPick={(e) => handleValidIdFile(index, "back", e)}
+                          />
                         )}
                       </div>
                     </div>
@@ -1318,7 +1333,7 @@ function NewBorrowerContent() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="monthly_income">Monthly Income (PHP)</Label>
+                <Label htmlFor="monthly_income">Monthly Income (₱)</Label>
                 <Input
                   id="monthly_income"
                   type="number"
@@ -1331,7 +1346,7 @@ function NewBorrowerContent() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="pledge_amount">Pledge Amount (PHP)</Label>
+                <Label htmlFor="pledge_amount">Pledge Amount (₱)</Label>
                 <Input
                   id="pledge_amount"
                   type="number"

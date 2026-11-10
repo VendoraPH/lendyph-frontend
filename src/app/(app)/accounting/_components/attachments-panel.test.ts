@@ -198,7 +198,8 @@ describe("upload", () => {
     Object.defineProperty(exact, "size", { value: 10 * 1024 * 1024 });
 
     assert.equal(panel.precheckFile(exact), null);
-    for (const name of ["a.jpg", "a.jpeg", "a.png", "a.pdf", "a.doc", "a.docx"]) {
+    // .jpe and .jfif are JPEG names the server takes too.
+    for (const name of ["a.jpg", "a.jpeg", "a.jpe", "a.JFIF", "a.png", "a.pdf", "a.doc", "a.docx"]) {
       assert.equal(panel.precheckFile(new File(["x"], name)), null, name);
     }
     assert.equal(panel.precheckFile(big), "This file is larger than 10 MB.");

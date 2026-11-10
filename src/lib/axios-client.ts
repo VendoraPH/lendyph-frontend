@@ -12,6 +12,7 @@ import {
   unauthorizedOutcome,
   type TokenLifetime,
 } from "./session-token";
+import { SessionEndedError } from "./session-ended";
 
 const DIRECT_API_URL = process.env.NEXT_PUBLIC_API_URL || env.api.baseUrl;
 
@@ -78,10 +79,43 @@ function hasSubmissionToken(config: { headers?: unknown }): boolean {
   return Boolean(headers[SUBMISSION_TOKEN_HEADER] ?? headers[SUBMISSION_TOKEN_HEADER.toLowerCase()]);
 }
 
+// One renewal at a time. Every caller that asks while one is in flight gets
+// the same promise, so parallel callers can never rotate the token twice,
+// and requests made meanwhile wait for it (below).
+let renewal: Promise<string> | null = null;
+
+/**
+ * How long a renewal may take. Requests wait for it, so a stuck
+ * /auth/refresh must not hold them until the proxy gives up (90 s). A timeout
+ * keeps the token, the same as a dropped connection.
+ */
+export const REFRESH_TIMEOUT_MS = 15_000;
+
+export { SessionEndedError };
+
+function isLogout(url: string | undefined): boolean {
+  return Boolean(url?.includes("/auth/logout"));
+}
+
 axiosClient.interceptors.request.use(
-  (config) => {
+  async (config) => {
     if (hasSubmissionToken(config)) {
       return config;
+    }
+    // A renewal in flight is about to revoke the token in hand, so a request
+    // sent with it now would come back 401. Wait for the renewal (at most
+    // REFRESH_TIMEOUT_MS) and send the token it leaves behind. Its failure is
+    // handled inside it (a rejection ends the session there; a timeout keeps
+    // the token), so only the outcome matters here. The renewal itself goes
+    // through plain axios, never this client, so it can't wait on itself.
+    //
+    // Log out never waits: signing out must work even while a renewal is stuck.
+    if (renewal && !isLogout(config.url)) {
+      const hadToken = tokenManager.getAccessToken() !== null;
+      await renewal.catch(() => undefined);
+      if (hadToken && tokenManager.getAccessToken() === null) {
+        throw new SessionEndedError();
+      }
     }
     const token = tokenManager.getAccessToken();
     if (token) {
@@ -125,10 +159,6 @@ function endSession(): void {
   }
 }
 
-// One renewal at a time. Every caller that asks while one is in flight gets
-// the same promise, so parallel callers can never rotate the token twice.
-let renewal: Promise<string> | null = null;
-
 /**
  * Swap the current access token for a fresh one, while it is still valid.
  *
@@ -152,6 +182,7 @@ async function rotateToken(): Promise<string> {
       `${API_BASE_URL}/auth/refresh`,
       {},
       {
+        timeout: REFRESH_TIMEOUT_MS,
         headers: {
           Authorization: `Bearer ${sent}`,
           "Content-Type": "application/json",
@@ -171,6 +202,17 @@ async function rotateToken(): Promise<string> {
       // request then sent `Bearer undefined` and 401'd. Treat a token we
       // cannot find as a failed renewal instead.
       throw new MalformedRefreshError();
+    }
+    // Store it only over the token it renews. Log out may have cleared
+    // storage while the refresh was out (Log out never waits for it), or
+    // another sign-in or tab replaced it. Storing it then would bring a
+    // signed-out session back on the next page load, so it is revoked
+    // instead.
+    if (tokenManager.getAccessToken() !== sent) {
+      revokeToken(newToken);
+      const current = tokenManager.getAccessToken();
+      if (current !== null) return current;
+      throw new SessionEndedError();
     }
     tokenManager.setAccessToken(newToken, data?.data?.expires_in ?? data?.expires_in);
     return newToken;
@@ -196,6 +238,29 @@ async function rotateToken(): Promise<string> {
 
     throw renewError;
   }
+}
+
+/**
+ * Revoke a token the browser won't keep (a renewal that answered after Log
+ * out). Plain axios with that token, never the client, so it neither waits on
+ * a renewal nor touches stored tokens. Its result doesn't matter: at worst
+ * the token runs out on its own.
+ */
+function revokeToken(token: string): void {
+  axios
+    .post(
+      `${API_BASE_URL}/auth/logout`,
+      {},
+      {
+        timeout: REFRESH_TIMEOUT_MS,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+      }
+    )
+    .catch(() => undefined);
 }
 
 // Response interceptor — a 401 means the token that request carried is dead
@@ -232,6 +297,16 @@ axiosClient.interceptors.response.use(
     // Either way there is no session left here to end.
     const hasAccessToken = tokenManager.getAccessToken() !== null;
 
+    // A 401 on Log out means the session is already gone (a renewal the
+    // server finished may have replaced the token it carried). Sign out here
+    // and now: never wait for a renewal or replay it. The caller goes to
+    // sign-in; no "Session Expired" dialog for a deliberate Log out. A late
+    // renewal finds storage cleared and revokes its own token (rotateToken).
+    if (error.response?.status === 401 && isLogout(originalRequest?.url)) {
+      tokenManager.clearTokens();
+      return Promise.reject(error);
+    }
+
     if (
       error.response?.status === 401 &&
       originalRequest &&
@@ -242,8 +317,9 @@ axiosClient.interceptors.response.use(
     ) {
       originalRequest._retry = true;
 
-      // A renewal in flight rotates the token this request may have carried.
-      // Its own failure is handled inside it, so only the outcome matters.
+      // A renewal that started after this request went out rotates the token
+      // it carried. Its own failure is handled inside it, so only the outcome
+      // matters.
       if (renewal) {
         await renewal.catch(() => undefined);
       }
