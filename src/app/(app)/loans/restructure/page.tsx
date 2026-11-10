@@ -87,7 +87,7 @@ import {
   collateralValue,
   type CollateralValueRow,
 } from "@/utils/collateral-value";
-import { calendarDate, formatCurrency, formatDateObj, formatDateISO, todayDate } from "@/lib/format";
+import { calendarDate, formatCurrency, formatDateObj, formatDateISO, formatDeduction, todayDate } from "@/lib/format";
 import { currencyOrDash } from "@/lib/report-format";
 import { COLLECTED_BEFORE_INSURANCE, proceedsFigures } from "@/lib/restructure-proceeds";
 import { usePermission } from "@/hooks/use-permission";
@@ -1491,7 +1491,7 @@ function RestructureLoanInner() {
                   <div className="flex justify-between text-red-600 dark:text-red-400">
                     <span>Total Deductions</span>
                     <span>
-                      {previewDeductions ? `- ${formatCurrency(previewDeductions.total_deductions)}` : "—"}
+                      {previewDeductions ? formatDeduction(previewDeductions.total_deductions) : "—"}
                     </span>
                   </div>
                   <Separator />

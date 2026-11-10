@@ -24,6 +24,18 @@ export const ID_EXTENSIONS = [".jpg", ".jpeg", ".jpe", ".jfif", ".png", ".pdf"] 
 /** For a valid ID file input's `accept`. */
 export const ID_ACCEPT = ID_EXTENSIONS.join(",");
 
+/**
+ * Why a picked file can't be a valid ID by its name, or `null` when it can.
+ * The picker's `accept` is only a hint (the file dialog can show all files),
+ * so a .bat or a .heic is refused here, before any preview is read.
+ */
+export function idFileNameProblem(name: string): string | null {
+  const lower = name.toLowerCase();
+  return ID_EXTENSIONS.some((extension) => lower.endsWith(extension))
+    ? null
+    : "This file can't be used as an ID. Please choose a JPG, PNG or PDF file.";
+}
+
 const TYPE_LABELS: Record<string, string> = {
   "image/jpeg": "JPG",
   "image/png": "PNG",

@@ -31,7 +31,7 @@ import { notifyError } from "@/lib/notify";
 import { documentService } from "@/services";
 import type { Document } from "@/services/document.service";
 import { fileUrl } from "@/lib/file-url";
-import { documentTypeFromName } from "@/lib/document-type";
+import { documentTypeFromName, documentTypeLabel } from "@/lib/document-type";
 import { DOCUMENT_ACCEPT } from "@/lib/file-validation";
 import { ConfirmDeleteDialog } from "@/components/common/confirm-delete-dialog";
 import { deleteDocumentLabel, documentName, openDocumentLabel } from "@/lib/document-delete";
@@ -41,10 +41,6 @@ interface CoMakerDocumentsDialogProps {
   coMakerName: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}
-
-function humanizeType(type: string): string {
-  return type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 /**
@@ -210,7 +206,7 @@ export function CoMakerDocumentsDialog({
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-[10px] h-5">
-                          {humanizeType(doc.type)}
+                          {documentTypeLabel(doc.type)}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">

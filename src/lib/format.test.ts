@@ -12,9 +12,12 @@ process.env.TZ = "Asia/Manila";
 
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   formatCurrency,
   formatCurrencyExact,
+  formatDeduction,
   formatDate,
   formatDateFull,
   formatDateISO,
@@ -274,4 +277,23 @@ test("formatRate leaves whole numbers whole", () => {
   assert.equal(formatRate(5), "5");
   assert.equal(formatRate("5.0000"), "5");
   assert.equal(formatRate(""), "0");
+});
+
+// ── formatDeduction ──────────────────────────────────────────────────
+
+test("a deduction reads as the lending screens' negative, -₱ with no space", () => {
+  assert.equal(formatDeduction(4543.5), "-₱4,543.50");
+  assert.equal(formatDeduction("4543.50"), "-₱4,543.50");
+  assert.equal(formatDeduction(10), "-₱10.00");
+});
+
+test("a zero deduction reads ₱0.00, with no sign", () => {
+  assert.equal(formatDeduction(0), "₱0.00");
+  assert.equal(formatDeduction("0.00"), "₱0.00");
+});
+
+test("the restructure page writes Total Deductions through formatDeduction", () => {
+  const source = readFileSync(join(process.cwd(), "src/app/(app)/loans/restructure/page.tsx"), "utf8");
+  assert.ok(source.includes("formatDeduction(previewDeductions.total_deductions)"));
+  assert.ok(!source.includes("`- ${formatCurrency("));
 });

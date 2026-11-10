@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Camera, ImageIcon, Plus, X, SwitchCamera } from "lucide-react";
 import { toast } from "sonner";
+import { idFileNameProblem } from "@/lib/file-validation";
 import { notifyError, notifyValidation } from "@/lib/notify";
 import { sentencesMessage } from "@/app/(app)/borrowers/_components/utils";
 import { isBlankValidId, validateValidIds } from "@/lib/valid-id";
@@ -324,6 +325,13 @@ function NewBorrowerContent() {
   function handleValidIdFile(index: number, side: "front" | "back", e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    const problem = idFileNameProblem(file.name);
+    if (problem) {
+      // Cleared, so picking the same file again still reports it.
+      e.target.value = "";
+      toast.error(problem);
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       setValidIds((prev) => prev.map((entry, i) =>
@@ -904,12 +912,12 @@ function NewBorrowerContent() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Suffix</Label>
+                <Label htmlFor="suffix">Suffix</Label>
                 <Select
                   value={form.suffix || null}
                   onValueChange={(v) => update("suffix", v ?? "")}
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger id="suffix" className="w-full">
                     <SelectValue placeholder="None">
                       {(value: string | null) =>
                         value
@@ -942,10 +950,11 @@ function NewBorrowerContent() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>
+                <Label id="gender-label">
                   Gender <span className="text-destructive">*</span>
                 </Label>
                 <RadioGroup
+                  aria-labelledby="gender-label"
                   className="flex gap-4 pt-2"
                   value={form.gender || null}
                   onValueChange={(v) => update("gender", v ?? "")}
@@ -963,14 +972,14 @@ function NewBorrowerContent() {
             </div>
 
             <div className="space-y-2">
-              <Label>
+              <Label htmlFor="civil_status">
                 Civil Status <span className="text-destructive">*</span>
               </Label>
               <Select
                 value={form.civil_status || null}
                 onValueChange={(v) => update("civil_status", v ?? "")}
               >
-                <SelectTrigger className="w-full sm:w-1/2">
+                <SelectTrigger id="civil_status" className="w-full sm:w-1/2">
                   <SelectValue placeholder="Select civil status">
                     {(value: string | null) =>
                       value

@@ -36,6 +36,10 @@ const server = {
   seen: [] as Seen[],
   releaseRefresh: () => {},
   refreshGate: Promise.resolve(),
+  /** Hold the next Log out's answer until `releaseLogout()`. */
+  holdLogout: false,
+  releaseLogout: () => {},
+  logoutGate: Promise.resolve(),
 };
 
 function holdRefresh(): void {
@@ -73,6 +77,11 @@ async function mockFetch(input: RequestInfo | URL, init?: RequestInit): Promise<
     if (server.refreshNetworkError) throw new TypeError("fetch failed");
     if (!rotates) return json(server.refreshStatus === 200 ? 401 : server.refreshStatus, { message: "Unauthenticated." });
     return json(200, { token: "new", expires_in: 1800 });
+  }
+
+  if (path.endsWith("/auth/logout") && server.holdLogout) {
+    server.holdLogout = false;
+    await server.logoutGate;
   }
 
   const status = server.token !== null && auth === `Bearer ${server.token}` ? 200 : 401;
@@ -149,6 +158,8 @@ beforeEach(() => {
   server.refreshNetworkError = false;
   server.refreshHangs = false;
   server.rotateOnReply = false;
+  server.holdLogout = false;
+  server.logoutGate = Promise.resolve();
   server.seen = [];
   sessionExpiredEvents = 0;
   holdRefresh();
@@ -322,6 +333,36 @@ describe("requests while a token renewal is running", () => {
     assert.equal(tokenManager.getAccessToken(), null);
     assert.deepEqual(server.seen[1], { path: "/api/auth/logout", auth: "Bearer new", status: 200 });
     assert.equal(server.token, null);
+  });
+
+  test("Log out that gets 401 after a renewal stored a new token revokes that token too", { timeout: 10_000 }, async () => {
+    // The server renews on receipt, so the old token Log out carries is already dead.
+    const renewal = renewAccessToken();
+    await until(() => server.refreshCalls === 1);
+
+    server.logoutGate = new Promise<void>((resolve) => {
+      server.releaseLogout = resolve;
+    });
+    server.holdLogout = true;
+    const logout = client.post("/auth/logout");
+    logout.catch(() => undefined);
+
+    // The renewal answers while Log out is out, and stores the token it renewed.
+    server.releaseRefresh();
+    assert.equal(await renewal, "new");
+    assert.equal(tokenManager.getAccessToken(), "new");
+
+    // Then Log out's 401 arrives: the session ends, and the stored token is revoked.
+    server.releaseLogout();
+    await assert.rejects(logout, (err: { response?: { status?: number } }) => err.response?.status === 401);
+    assert.equal(tokenManager.getAccessToken(), null, "the session ends here");
+    await until(() => server.seen.length === 2);
+    assert.deepEqual(server.seen, [
+      { path: "/api/auth/logout", auth: "Bearer old", status: 401 },
+      { path: "/api/auth/logout", auth: "Bearer new", status: 200 },
+    ]);
+    assert.equal(server.token, null, "the renewed token no longer works");
+    assert.equal(sessionExpiredEvents, 0, "a deliberate Log out shows no Session Expired dialog");
   });
 
   test("a renewal that answers after another sign-in replaced the token keeps that one and revokes its own", { timeout: 10_000 }, async () => {
