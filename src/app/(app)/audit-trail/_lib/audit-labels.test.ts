@@ -410,3 +410,25 @@ test("savings rows read their module, actions, targets and statuses in words", (
   assert.equal(auditChangeValue(run, "status", "posted"), "Posted");
   assert.ok(AUDIT_ACTION_OPTIONS.some((o) => o.value === "time_deposit_preterminated"));
 });
+
+test("savings id fields read without \"id\"", () => {
+  const cases: Array<[string, string]> = [
+    ["result_transaction_id", "result transaction"],
+    ["reverses_transaction_id", "reversed transaction"],
+    ["counterpart_transaction_id", "counterpart transaction"],
+    ["interest_transaction_id", "interest transaction"],
+    ["tax_transaction_id", "tax transaction"],
+    ["funding_transaction_id", "funding transaction"],
+    ["target_transaction_id", "target transaction"],
+    ["interest_run_id", "interest run"],
+    ["time_deposit_id", "time deposit"],
+    ["payout_account_id", "payout account"],
+  ];
+  for (const [field, label] of cases) assert.equal(auditFieldLabel(field), label, field);
+  const approval = { type: "SavingsApproval" };
+  assert.equal(auditFieldLabel("account_id", approval), "savings account");
+  assert.equal(auditFieldLabel("borrower_id", { type: "TimeDeposit" }), "member");
+  assert.equal(auditFieldLabel("run_id", { type: "SavingsInterestRunLine" }), "interest run");
+  // Outside savings a plain id keeps its general words.
+  assert.equal(auditFieldLabel("account_id", { type: "AccountingJournalLine" }), "account id");
+});

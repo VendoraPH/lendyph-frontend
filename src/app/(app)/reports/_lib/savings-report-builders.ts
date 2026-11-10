@@ -221,8 +221,12 @@ export function buildTimeDepositMaturitiesDoc(raw: unknown, range: DateRange): R
   const due = pick(totals, ["total_maturity_amount"]);
   const payout = pick(totals, ["payout_amount"]);
 
+  // The server's `count` and money totals cover only placements still owed
+  // (active or matured); the table lists every placement maturing in the
+  // period, `listed_count` of them, settled ones included.
   const items = [
-    kpi("Maturing", countOrDash(pick(totals, ["count"]) ?? totalRows)),
+    kpi("Listed", countOrDash(pick(totals, ["listed_count"]) ?? totalRows), { hint: "Every placement maturing in the period" }),
+    kpi("Still owed", countOrDash(pick(totals, ["count"])), { hint: "Placements not yet settled" }),
     kpi("Principal", currencyOrDash(principal)),
     kpi("Net Interest", currencyOrDash(interest), { hint: "After withholding tax" }),
     kpi("Due at Maturity", currencyOrDash(due), { tone: "positive" }),
@@ -244,7 +248,7 @@ export function buildTimeDepositMaturitiesDoc(raw: unknown, range: DateRange): R
     totals:
       rows.length > 0
         ? [
-            { column: "principal", label: "Total", value: currencyOrDash(principal) },
+            { column: "principal", label: "Still owed", value: currencyOrDash(principal) },
             { column: "net_interest", value: currencyOrDash(interest) },
             { column: "maturity_amount", value: currencyOrDash(due) },
           ]

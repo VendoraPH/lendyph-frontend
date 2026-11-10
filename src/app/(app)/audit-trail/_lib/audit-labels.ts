@@ -199,7 +199,39 @@ const FIELD_LABELS: Record<string, string> = {
   reverses_journal_id: "reverses",
   journal_id: "journal",
   accounting_journal_id: "journal",
+  // Savings links (Phase 3): the transaction, run, request and placement ids
+  // savings rows carry.
+  result_transaction_id: "result transaction",
+  reverses_transaction_id: "reversed transaction",
+  counterpart_transaction_id: "counterpart transaction",
+  interest_transaction_id: "interest transaction",
+  tax_transaction_id: "tax transaction",
+  funding_transaction_id: "funding transaction",
+  target_transaction_id: "target transaction",
+  interest_run_id: "interest run",
+  approval_id: "approval request",
+  first_checker_id: "first approver",
+  time_deposit_id: "time deposit",
+  payout_account_id: "payout account",
+  pretermination_product_id: "early termination product",
+  rolled_over_from_id: "rolled over from",
 };
+
+/**
+ * Savings rows' plain ids, which mean something narrower on a savings record
+ * than elsewhere (an `account_id` there is a savings account).
+ */
+const SAVINGS_FIELD_LABELS: Record<string, string> = {
+  account_id: "savings account",
+  product_id: "savings product",
+  borrower_id: "member",
+  run_id: "interest run",
+  source_id: "source",
+};
+
+function isSavingsTarget(type: string | undefined): boolean {
+  return type === "TimeDeposit" || (type?.startsWith("Savings") ?? false);
+}
 
 /**
  * A changed field's name, with every underscore as a space. A loan product's
@@ -209,6 +241,7 @@ export function auditFieldLabel(field: string, target?: Pick<NonNullable<AuditLo
   if (target?.type === "LoanProduct" && Object.hasOwn(PRODUCT_FIELD_LABELS, field)) {
     return PRODUCT_FIELD_LABELS[field];
   }
+  if (isSavingsTarget(target?.type) && Object.hasOwn(SAVINGS_FIELD_LABELS, field)) return SAVINGS_FIELD_LABELS[field];
   if (Object.hasOwn(FIELD_LABELS, field)) return FIELD_LABELS[field];
   return field.split("_").filter(Boolean).join(" ");
 }

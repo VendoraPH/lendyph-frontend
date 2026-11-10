@@ -126,6 +126,13 @@ test("time deposit maturities: server totals, labelled instruction and status, t
   assert.ok(doc.meta.period);
   assert.equal(kpiValue(doc, "Due at Maturity"), formatCurrency(50400));
   assert.equal(total(doc, "maturity_amount"), formatCurrency(50400));
+  // The totals cover only placements still owed; the table lists them all.
+  assert.equal(table(doc).totals?.find((t) => t.column === "principal")?.label, "Still owed");
+  assert.equal(kpiValue(doc, "Still owed"), "1");
+  assert.equal(kpiValue(doc, "Listed"), "1");
+  const listed = buildTimeDepositMaturitiesDoc({ ...raw, totals: { ...raw.totals, listed_count: 3 } }, RANGE);
+  assert.equal(kpiValue(listed, "Listed"), "3");
+  assert.equal(kpiValue(listed, "Still owed"), "1");
   assert.equal(kpiValue(doc, "To Pay Out"), undefined);
   const row = table(doc).rows[0];
   assert.equal(row.maturity_instruction, "Roll over principal, pay out interest");

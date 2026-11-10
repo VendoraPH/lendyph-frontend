@@ -137,7 +137,7 @@ export function reversedEntryText(entry: Pick<JournalEntry, "reverses_journal_no
  */
 export function journalPageDescription(
   entry: Pick<JournalEntry, "status" | "reverses_journal_id" | "reversed_by_journal_id"> &
-    Partial<Pick<JournalEntry, "reverses_journal_no">>,
+    Partial<Pick<JournalEntry, "reverses_journal_no" | "reversible" | "not_reversible_reason">>,
 ): string {
   if (entry.status === "draft") return "A draft. Nothing moves in the books until it is posted.";
   if (entry.reverses_journal_id) {
@@ -145,6 +145,12 @@ export function journalPageDescription(
   }
   if (entry.status === "reversed" || entry.reversed_by_journal_id) {
     return "This entry has been reversed. It stays in the books, and its reversing entry cancels it out.";
+  }
+  // An entry the server won't reverse from the journal (a savings posting)
+  // doesn't promise a reversal; it says why instead.
+  if (entry.reversible === false) {
+    const reason = entry.not_reversible_reason?.trim();
+    return reason ? `Posted entries can't be edited. ${reason}` : "Posted entries can't be edited.";
   }
   return "Posted entries can't be edited, only reversed.";
 }

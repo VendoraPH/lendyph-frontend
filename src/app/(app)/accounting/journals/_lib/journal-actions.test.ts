@@ -271,3 +271,14 @@ test("a server that sends no reversible field keeps today's Reverse", () => {
   const marked = journalActions({ ...posted, reversible: true }, holding(...ALL), { editing: false, balance: "balanced" });
   assert.equal(marked.reverse.disabledReason, null);
 });
+
+test("a posted entry the server won't reverse doesn't promise a reversal", async () => {
+  const { journalPageDescription } = await import("./journal-actions");
+  const savings = { status: "posted" as const, reverses_journal_id: null, reversed_by_journal_id: null };
+  assert.equal(
+    journalPageDescription({ ...savings, reversible: false, not_reversible_reason: "Reverse it from the savings account." }),
+    "Posted entries can't be edited. Reverse it from the savings account.",
+  );
+  assert.equal(journalPageDescription({ ...savings, reversible: false }), "Posted entries can't be edited.");
+  assert.equal(journalPageDescription(savings), "Posted entries can't be edited, only reversed.");
+});
