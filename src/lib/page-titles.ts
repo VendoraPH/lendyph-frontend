@@ -47,7 +47,6 @@ export const PRINTABLE_TITLES: Readonly<Record<PrintableId, string>> = {
 
 /** Fixed sub-pages, whatever section they sit under. */
 const SUB_PAGE_TITLES: Readonly<Record<string, string>> = {
-  new: "New Application",
   products: "Loan Products",
   amortization: "Amortization Calculator",
   restructure: "Restructure",
@@ -57,8 +56,14 @@ const SUB_PAGE_TITLES: Readonly<Record<string, string>> = {
   "user-roles": "Role and Permissions",
 };
 
-/** Sections whose second segment is a catalog id. */
+/**
+ * Sections whose second segment has its own title there: a catalog id, or a
+ * "new" page named after what it creates.
+ */
 const ID_TITLES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  loans: { new: "New Application" },
+  borrowers: { new: "New Member" },
+  collaterals: { new: "New Collateral" },
   reports: REPORT_TITLES,
   printables: PRINTABLE_TITLES,
   "credit-scoring": {
@@ -74,6 +79,11 @@ const ID_TITLES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     pledges: "Pledge Entry",
     "auto-credit": "Auto-Credit",
   },
+};
+
+/** A record's sub-pages (`/borrowers/{id}/edit`), by section, as each page titles itself. */
+const RECORD_PAGE_TITLES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  borrowers: { edit: "Edit Member" },
 };
 
 function own<T>(map: Readonly<Record<string, T>>, key: string): T | undefined {
@@ -105,4 +115,13 @@ export function subPageTitle(
     own(SUB_PAGE_TITLES, segment) ??
     humanizeSegment(segment)
   );
+}
+
+/**
+ * The breadcrumb label for a record's page (`/borrowers/{id}`): "Detail", or
+ * the page's own title for a sub-page such as `/borrowers/{id}/edit`.
+ */
+export function detailPageTitle(section: string, subPage: string | undefined): string {
+  if (subPage === undefined) return "Detail";
+  return own(own(RECORD_PAGE_TITLES, section) ?? {}, subPage) ?? "Detail";
 }

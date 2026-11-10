@@ -32,7 +32,7 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { authService } from "@/services";
 import { tokenManager } from "@/lib/axios-client";
-import { humanizeSegment, subPageTitle } from "@/lib/page-titles";
+import { detailPageTitle, humanizeSegment, subPageTitle } from "@/lib/page-titles";
 import { SIDEBAR_NAV } from "@/constants";
 import type { Permission } from "@/types";
 import { toast } from "sonner";
@@ -40,6 +40,7 @@ import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LindaTrigger } from "@/components/linda/linda-trigger";
 import { NotificationBell } from "./notification-bell";
+import { accountMenuLabel } from "./account-menu-label";
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -73,7 +74,9 @@ function Breadcrumb({ editParam }: { editParam: string | null }) {
 
   const subSegment = segments[1];
   const isId = /^\d+$/.test(subSegment);
-  const subLabel = isId ? "Detail" : subPageTitle(firstSegment, subSegment, { edit: editParam });
+  const subLabel = isId
+    ? detailPageTitle(firstSegment, segments[2])
+    : subPageTitle(firstSegment, subSegment, { edit: editParam });
 
   return (
     <div className="flex items-center gap-1.5 text-sm">
@@ -177,7 +180,10 @@ export function Header({ onMenuClick }: HeaderProps) {
 
           {/* User avatar only */}
           <DropdownMenu>
-            <DropdownMenuTrigger className="rounded-full outline-none">
+            <DropdownMenuTrigger
+              aria-label={accountMenuLabel(user?.full_name)}
+              className="rounded-full outline-none"
+            >
               <Avatar className="h-8 w-8">
                 <AvatarFallback className="bg-brand-orange text-brand-orange-foreground text-xs">
                   {initials}

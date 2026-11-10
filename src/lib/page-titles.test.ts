@@ -6,6 +6,7 @@ import {
   EDIT_LOAN_TITLE,
   PRINTABLE_TITLES,
   REPORT_TITLES,
+  detailPageTitle,
   humanizeSegment,
   subPageTitle,
 } from "./page-titles";
@@ -143,5 +144,30 @@ describe("the loan form's breadcrumb", () => {
     const form = readFileSync(join(process.cwd(), "src/app/(app)/loans/new/page.tsx"), "utf8");
     assert.ok(form.includes("isEditMode ? EDIT_LOAN_TITLE"));
     assert.ok(!form.includes('"Edit Loan Application"'));
+  });
+});
+
+describe("each section's new and edit pages", () => {
+  test("a new page reads its own section's title", () => {
+    assert.equal(subPageTitle("borrowers", "new"), "New Member");
+    assert.equal(subPageTitle("collaterals", "new"), "New Collateral");
+    assert.equal(subPageTitle("loans", "new"), "New Application");
+  });
+
+  test("a new page under another section is not called an application", () => {
+    assert.equal(subPageTitle("payments", "new"), "New");
+  });
+
+  test("the member edit page reads Edit Member, a record's own page Detail", () => {
+    assert.equal(detailPageTitle("borrowers", "edit"), "Edit Member");
+    assert.equal(detailPageTitle("borrowers", undefined), "Detail");
+    assert.equal(detailPageTitle("loans", undefined), "Detail");
+    assert.equal(detailPageTitle("loans", "edit"), "Detail");
+    assert.equal(detailPageTitle("borrowers", "constructor"), "Detail");
+  });
+
+  test("the header reads a record's page through detailPageTitle", () => {
+    const header = readFileSync(join(process.cwd(), "src/components/layout/header.tsx"), "utf8");
+    assert.ok(header.includes("detailPageTitle(firstSegment, segments[2])"));
   });
 });
