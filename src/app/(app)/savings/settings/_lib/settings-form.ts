@@ -1,5 +1,12 @@
 import { parseMoneyInput } from "@/lib/money-input";
-import type { SavingsHolderType, SavingsSettings, SavingsSettingsInput, SavingsTaxRuleInput } from "@/types";
+import type {
+  Permission,
+  PrepareBooksResult,
+  SavingsHolderType,
+  SavingsSettings,
+  SavingsSettingsInput,
+  SavingsTaxRuleInput,
+} from "@/types";
 import { rateProblem } from "../../products/_lib/product-draft";
 
 export interface SettingsDraft {
@@ -59,4 +66,25 @@ export function readTaxRule(
   if (rateError) problems.push(rateError);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom) || effectiveFrom < today) problems.push("Effective from (today or later)");
   return { input: { holder_type: holderType, rate: rate.trim(), effective_from: effectiveFrom }, problems };
+}
+
+/** What setting up the books did, as headed groups of the server's own sentences; empty groups left out. */
+export function prepareBooksSummary(result: Partial<PrepareBooksResult>): Array<{ heading: string; lines: string[] }> {
+  const groups: Array<[string, string[] | undefined]> = [
+    ["Added to the chart", result.added],
+    ["Posting roles mapped", result.mapped],
+    ["Already in place", result.unchanged],
+    ["Left alone", result.skipped],
+    ["Still missing", result.books_ready === false ? result.books_missing : []],
+  ];
+  return groups
+    .map(([heading, lines]) => ({ heading, lines: Array.isArray(lines) ? lines.filter((l) => typeof l === "string" && l !== "") : [] }))
+    .filter((g) => g.lines.length > 0);
+}
+
+/** Why the set-up button is disabled, or null: it needs savings:settings and branches:view_all. */
+export function prepareBooksBlocker(can: (permission: Permission) => boolean): string | null {
+  if (!can("savings:settings")) return "Setting up the books needs the Savings configure permission.";
+  if (!can("branches:view_all")) return "Setting up the books changes the whole chart, so it needs access to all branches.";
+  return null;
 }

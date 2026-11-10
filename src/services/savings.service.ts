@@ -20,6 +20,7 @@ import type {
   OpenSavingsAccountInput,
   PaginatedResponse,
   PlaceSavingsHoldInput,
+  PrepareBooksResult,
   ReleaseSavingsHoldInput,
   SavingsAccount,
   SavingsAccountsResponse,
@@ -58,6 +59,12 @@ export const savingsService = {
 
   settings: () => api.get<SavingsSettings>(E.SETTINGS),
   updateSettings: (data: SavingsSettingsInput) => api.put<SavingsSettings>(E.SETTINGS, data),
+  /**
+   * Adds any missing savings accounts and posting roles to the chart
+   * (savings:settings plus branches:view_all). 422 on `books` with no chart
+   * yet; 409 when pressed twice at once.
+   */
+  prepareBooks: () => api.post<PrepareBooksResult>(E.PREPARE_BOOKS),
   /** Append-only; `effective_from` on or after today. */
   addTaxRule: (data: SavingsTaxRuleInput) => api.post<SavingsTaxRule>(E.TAX_RULES, data),
 

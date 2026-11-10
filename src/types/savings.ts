@@ -46,6 +46,12 @@ export interface SavingsSettings {
   /** The rate in force today per holder type. */
   current_tax_rates: Record<SavingsHolderType, RateString>;
   tax_rules: SavingsTaxRule[];
+  /**
+   * False while the chart lacks a savings account or posting role (backend
+   * S6); `books_missing` says what, in words. Absent before S6.
+   */
+  books_ready?: boolean;
+  books_missing?: string[];
   updated_by?: SavingsUserRef | null;
   updated_at?: string | null;
 }
@@ -57,6 +63,16 @@ export interface SavingsSettingsInput {
   tier3_checkers: number;
   dormancy_months: number;
   large_transaction_alert: string;
+}
+
+/** `POST /savings/settings/prepare-books`: what setting up the books did, each a sentence. */
+export interface PrepareBooksResult {
+  books_ready: boolean;
+  books_missing: string[];
+  added: string[];
+  mapped: string[];
+  unchanged: string[];
+  skipped: string[];
 }
 
 export interface SavingsTaxRuleInput {
@@ -498,6 +514,12 @@ export interface SettleTimeDepositInput {
    * `savings` pays into the placement's payout account and needs no approval.
    */
   payout_method?: SavingsMethod;
+  /**
+   * With `payout_method` savings: the member's own active account in the same
+   * branch to pay into (backend S6). Before S6 the placement's own payout
+   * account is used.
+   */
+  payout_account_id?: number;
   /** On a rollover: the new placement's instruction (the original's when left out). */
   next_instruction?: MaturityInstruction;
 }
@@ -507,6 +529,8 @@ export interface PreterminateTimeDepositInput {
   date: string;
   reason: string;
   payout_method: SavingsMethod;
+  /** With `payout_method` savings: the account to pay into (backend S6). */
+  payout_account_id?: number;
 }
 
 /** `GET …/{id}/pretermination-quote?date=`: what breaking it on `date` pays. */

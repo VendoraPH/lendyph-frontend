@@ -431,6 +431,7 @@ export const API_ENDPOINTS = {
    */
   SAVINGS: {
     SETTINGS: "/savings/settings",
+    PREPARE_BOOKS: "/savings/settings/prepare-books",
     TAX_RULES: "/savings/tax-rules",
 
     PRODUCTS: "/savings/products",

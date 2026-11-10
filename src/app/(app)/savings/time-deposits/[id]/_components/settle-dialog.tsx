@@ -21,7 +21,8 @@ import type { MaturityInstruction, SavingsMethod, TimeDeposit } from "@/types";
 import { FormField } from "../../../_components/field";
 import { OptionSelect } from "../../../_components/option-select";
 import { MATURITY_INSTRUCTION_OPTIONS } from "../../../_lib/time-deposit-rules";
-import { payoutOptions, postMaturityLabel, settleBody } from "../../_lib/settle-form";
+import { defaultPayoutAccount, payoutOptions, postMaturityLabel, settleBody } from "../../_lib/settle-form";
+import { PayoutAccountField, usePayoutAccounts } from "./payout-account-field";
 
 interface SettleDialogProps {
   open: boolean;
@@ -37,21 +38,31 @@ export function SettleDialog({ open, deposit, onOpenChange, onSettled }: SettleD
   const methods = payoutOptions(deposit);
   const [method, setMethod] = useState<SavingsMethod>(methods[0].value);
   const [next, setNext] = useState<MaturityInstruction>(deposit.maturity_instruction);
+  const [accountId, setAccountId] = useState("");
+  const [submitted, setSubmitted] = useState(false);
   const { submitting, run } = useSubmitGuard();
   if (useDialogOpening(open, deposit)) {
     setDate(todayISO());
     setAction(deposit.maturity_instruction);
     setNext(deposit.maturity_instruction);
     setMethod(methods[0].value);
+    setAccountId("");
+    setSubmitted(false);
   }
 
   const tooEarly = date !== "" && date < deposit.maturity_date;
   const paysOut = action !== "rollover_all";
   const rollsOver = action !== "payout";
+  const intoSavings = paysOut && method === "savings";
+  const accounts = usePayoutAccounts(deposit, open && intoSavings);
+  // The placement's own payout account is picked until staff choose another.
+  const payoutAccount = accountId || defaultPayoutAccount(deposit, accounts.offered);
+  const accountError = intoSavings && !payoutAccount ? "Choose the savings account to pay into." : null;
 
   function submit() {
-    if (!date || tooEarly) return;
-    const body = settleBody(date, action, method, next);
+    setSubmitted(true);
+    if (!date || tooEarly || accountError) return;
+    const body = settleBody(date, action, method, next, payoutAccount);
     run((key) => timeDepositService.settle(deposit.id, body, key))
       ?.then((result) => {
         const next = result.kind === "posted" ? result.record : null;
@@ -116,6 +127,16 @@ export function SettleDialog({ open, deposit, onOpenChange, onSettled }: SettleD
               </FormField>
             )}
           </div>
+          {intoSavings && (
+            <PayoutAccountField
+              id="st-account"
+              value={payoutAccount}
+              onChange={setAccountId}
+              offered={accounts.offered}
+              loading={accounts.loading}
+              error={submitted ? accountError : null}
+            />
+          )}
         </div>
 
         <DialogFooter>

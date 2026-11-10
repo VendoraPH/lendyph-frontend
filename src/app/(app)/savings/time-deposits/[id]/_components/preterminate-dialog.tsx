@@ -21,7 +21,8 @@ import { timeDepositService } from "@/services";
 import type { SavingsMethod, TimeDeposit } from "@/types";
 import { FormField } from "../../../_components/field";
 import { OptionSelect } from "../../../_components/option-select";
-import { payoutOptions } from "../../_lib/settle-form";
+import { defaultPayoutAccount, payoutFields, payoutOptions } from "../../_lib/settle-form";
+import { PayoutAccountField, usePayoutAccounts } from "./payout-account-field";
 
 interface PreterminateDialogProps {
   open: boolean;
@@ -35,11 +36,13 @@ export function PreterminateDialog({ open, deposit, onOpenChange, onDone }: Pret
   const methods = payoutOptions(deposit);
   const [method, setMethod] = useState<SavingsMethod>(methods[0].value);
   const [reason, setReason] = useState("");
+  const [accountId, setAccountId] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const { submitting, run } = useSubmitGuard();
   if (useDialogOpening(open, deposit)) {
     setDate(todayISO());
     setMethod(methods[0].value);
+    setAccountId("");
     setReason("");
     setSubmitted(false);
   }
@@ -48,11 +51,15 @@ export function PreterminateDialog({ open, deposit, onOpenChange, onDone }: Pret
   const fetchQuote = useCallback(() => timeDepositService.preterminationQuote(deposit.id, date), [deposit.id, date]);
   const quote = useApiResource(fetchQuote, open && dateOk);
   const reasonError = reason.trim() ? null : "Say why the placement is being broken early.";
+  const intoSavings = method === "savings";
+  const accounts = usePayoutAccounts(deposit, open && intoSavings);
+  const payoutAccount = accountId || defaultPayoutAccount(deposit, accounts.offered);
+  const accountError = intoSavings && !payoutAccount ? "Choose the savings account to pay into." : null;
 
   function submit() {
     setSubmitted(true);
-    if (reasonError || !dateOk) return;
-    const body = { date, reason: reason.trim(), payout_method: method };
+    if (reasonError || !dateOk || accountError) return;
+    const body = { date, reason: reason.trim(), ...payoutFields(method, payoutAccount) };
     run((key) => timeDepositService.preterminate(deposit.id, body, key))
       ?.then((result) => {
         notifySuccess(moneyPostMessage(result, "Time deposit pre-terminated"), deposit.certificate_number);
@@ -89,6 +96,16 @@ export function PreterminateDialog({ open, deposit, onOpenChange, onDone }: Pret
               />
             </FormField>
           </div>
+          {intoSavings && (
+            <PayoutAccountField
+              id="pt-account"
+              value={payoutAccount}
+              onChange={setAccountId}
+              offered={accounts.offered}
+              loading={accounts.loading}
+              error={submitted ? accountError : null}
+            />
+          )}
           <FormField id="pt-reason" label="Reason" error={submitted ? reasonError : null}>
             <Textarea id="pt-reason" value={reason} onChange={(e) => setReason(e.target.value)} rows={2} />
           </FormField>

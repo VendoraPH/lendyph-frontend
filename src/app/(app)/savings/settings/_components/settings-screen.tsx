@@ -5,6 +5,7 @@ import { DataState } from "@/components/common/data-state";
 import { useApiResource } from "@/hooks";
 import { savingsService } from "@/services";
 import { ApprovalSettingsCard } from "./approval-settings-card";
+import { BooksCard } from "./books-card";
 import { TaxRulesCard } from "./tax-rules-card";
 
 /**
@@ -31,6 +32,7 @@ export function SettingsScreen() {
       >
         {(settings) => (
           <div className="grid gap-6 lg:grid-cols-2">
+            <BooksCard settings={settings} onPrepared={() => resource.refetch()} />
             <ApprovalSettingsCard settings={settings} onSaved={() => resource.refetch()} />
             <TaxRulesCard settings={settings} onAdded={() => resource.refetch()} />
           </div>

@@ -1,23 +1,54 @@
-import type { MaturityInstruction, SavingsMethod, SettleTimeDepositInput, TimeDeposit } from "@/types";
+import type { MaturityInstruction, SavingsAccount, SavingsMethod, SettleTimeDepositInput, TimeDeposit } from "@/types";
 import { METHOD_LABELS, PAYMENT_METHOD_OPTIONS } from "../../_lib/savings-rules";
 
 /**
- * How a time deposit's money can be paid out: over the counter, or into the
- * savings account set at placement. The savings payout needs no approval; a
- * cash, bank, GCash or Maya payout above the first tier waits for one.
+ * How a time deposit's money can be paid out: into one of the member's own
+ * savings accounts (no approval), or over the counter, where cash, bank,
+ * GCash or Maya above the first tier waits for approval. Savings comes first
+ * when the placement names a payout account.
  */
 export function payoutOptions(
-  td: Pick<TimeDeposit, "payout_account_id" | "payout_account_number">,
+  td: Pick<TimeDeposit, "payout_account_id">,
 ): Array<{ value: SavingsMethod; label: string }> {
   const counter = PAYMENT_METHOD_OPTIONS.map((o) => ({ value: o.value as SavingsMethod, label: o.label }));
-  if (!td.payout_account_id) return counter;
-  return [
-    {
-      value: "savings",
-      label: `${METHOD_LABELS.savings}${td.payout_account_number ? ` ${td.payout_account_number}` : ""}`,
-    },
-    ...counter,
-  ];
+  const savings = { value: "savings" as const, label: `Into a ${METHOD_LABELS.savings.toLowerCase()}` };
+  return td.payout_account_id ? [savings, ...counter] : [...counter, savings];
+}
+
+/**
+ * The accounts a payout into savings may go to: the member's own active
+ * regular accounts in the placement's branch. The server refuses any other
+ * (422 on `payout_account_id`).
+ */
+export function payoutAccounts(
+  td: Pick<TimeDeposit, "borrower_id" | "branch_id">,
+  accounts: readonly SavingsAccount[],
+): SavingsAccount[] {
+  return accounts.filter(
+    (a) =>
+      a.borrower_id === td.borrower_id &&
+      a.branch_id === td.branch_id &&
+      a.status === "active" &&
+      a.product.kind === "regular",
+  );
+}
+
+/** The account picked first: the placement's payout account when it's offered, else none. */
+export function defaultPayoutAccount(
+  td: Pick<TimeDeposit, "payout_account_id">,
+  offered: readonly Pick<SavingsAccount, "id">[],
+): string {
+  return td.payout_account_id && offered.some((a) => a.id === td.payout_account_id) ? String(td.payout_account_id) : "";
+}
+
+/** The payout fields: the method, and the account when it goes into savings. */
+export function payoutFields(
+  method: SavingsMethod,
+  accountId: string,
+): { payout_method: SavingsMethod; payout_account_id?: number } {
+  return method === "savings" && Number(accountId) > 0
+    ? { payout_method: method, payout_account_id: Number(accountId) }
+    : { payout_method: method };
 }
 
 /**
@@ -29,11 +60,12 @@ export function settleBody(
   action: MaturityInstruction,
   payoutMethod: SavingsMethod,
   nextInstruction: MaturityInstruction,
+  payoutAccountId = "",
 ): SettleTimeDepositInput {
   return {
     date,
     action,
-    ...(action === "rollover_all" ? {} : { payout_method: payoutMethod }),
+    ...(action === "rollover_all" ? {} : payoutFields(payoutMethod, payoutAccountId)),
     ...(action === "payout" ? {} : { next_instruction: nextInstruction }),
   };
 }

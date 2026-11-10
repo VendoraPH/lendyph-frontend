@@ -1,14 +1,48 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { payoutOptions, postMaturityLabel, settleBody } from "./settle-form";
+import type { SavingsAccount } from "@/types";
+import { defaultPayoutAccount, payoutAccounts, payoutFields, payoutOptions, postMaturityLabel, settleBody } from "./settle-form";
 
-test("a placement with a payout account offers it first; one without offers the counter only", () => {
-  assert.deepEqual(
-    payoutOptions({ payout_account_id: 9, payout_account_number: "SAV-2026-000009" }).map((o) => o.value),
-    ["savings", "cash", "bank_transfer", "gcash", "maya"],
-  );
-  assert.equal(payoutOptions({ payout_account_id: 9, payout_account_number: "SAV-2026-000009" })[0].label, "Savings account SAV-2026-000009");
-  assert.deepEqual(payoutOptions({ payout_account_id: null }).map((o) => o.value), ["cash", "bank_transfer", "gcash", "maya"]);
+test("savings comes first when the placement names a payout account, last otherwise", () => {
+  assert.deepEqual(payoutOptions({ payout_account_id: 9 }).map((o) => o.value), ["savings", "cash", "bank_transfer", "gcash", "maya"]);
+  assert.deepEqual(payoutOptions({ payout_account_id: null }).map((o) => o.value), ["cash", "bank_transfer", "gcash", "maya", "savings"]);
+  assert.equal(payoutOptions({ payout_account_id: null })[4].label, "Into a savings account");
+});
+
+const account = (over: Partial<SavingsAccount>) =>
+  ({ id: 1, borrower_id: 5, branch_id: 2, status: "active", product: { id: 1, code: "RS", name: "Regular", kind: "regular" }, ...over }) as SavingsAccount;
+
+test("a payout goes only into the member's own active regular accounts in the placement's branch", () => {
+  const td = { borrower_id: 5, branch_id: 2 };
+  const ids = payoutAccounts(td, [
+    account({ id: 1 }),
+    account({ id: 2, status: "dormant" }),
+    account({ id: 3, branch_id: 7 }),
+    account({ id: 4, borrower_id: 8 }),
+    account({ id: 5, product: { id: 2, code: "TD", name: "TD", kind: "time_deposit" } }),
+    account({ id: 6 }),
+  ]).map((a) => a.id);
+  assert.deepEqual(ids, [1, 6]);
+});
+
+test("the placement's payout account is picked first when it's offered", () => {
+  assert.equal(defaultPayoutAccount({ payout_account_id: 6 }, [{ id: 1 }, { id: 6 }]), "6");
+  assert.equal(defaultPayoutAccount({ payout_account_id: 9 }, [{ id: 1 }]), "");
+  assert.equal(defaultPayoutAccount({ payout_account_id: null }, [{ id: 1 }]), "");
+});
+
+test("a payout into savings sends the account; one over the counter doesn't", () => {
+  assert.deepEqual(payoutFields("savings", "6"), { payout_method: "savings", payout_account_id: 6 });
+  assert.deepEqual(payoutFields("cash", "6"), { payout_method: "cash" });
+  assert.deepEqual(payoutFields("savings", ""), { payout_method: "savings" });
+  assert.deepEqual(settleBody("2026-11-10", "payout", "savings", "payout", "6"), {
+    date: "2026-11-10",
+    action: "payout",
+    payout_method: "savings",
+    payout_account_id: 6,
+  });
+  // A full rollover pays nothing out, so no account either.
+  assert.equal("payout_account_id" in settleBody("2026-11-10", "rollover_all", "savings", "payout", "6"), false);
 });
 
 test("a payout sends its method and no next instruction", () => {
