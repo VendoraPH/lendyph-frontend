@@ -19,7 +19,7 @@ import { borrowerService, type BorrowerValidId } from "@/services/borrower.servi
 import type { Document } from "@/services/document.service";
 import { fileUrl } from "@/lib/file-url";
 import { ImagePreviewDialog, type PreviewImage } from "@/components/common";
-import { documentTypeFromName } from "@/lib/document-type";
+import { documentTypeFromName, documentTypeLabel } from "@/lib/document-type";
 import { DOCUMENT_ACCEPT } from "@/lib/file-validation";
 import {
   deleteDocumentLabel,
@@ -234,7 +234,7 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="text-xs">{doc.type}</Badge>
+                      <Badge variant="outline" className="text-xs">{documentTypeLabel(doc.type)}</Badge>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{formatDate(doc.created_at)}</TableCell>
                     <TableCell className="text-right">
