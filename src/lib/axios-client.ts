@@ -78,10 +78,24 @@ function hasSubmissionToken(config: { headers?: unknown }): boolean {
   return Boolean(headers[SUBMISSION_TOKEN_HEADER] ?? headers[SUBMISSION_TOKEN_HEADER.toLowerCase()]);
 }
 
+// One renewal at a time. Every caller that asks while one is in flight gets
+// the same promise, so parallel callers can never rotate the token twice,
+// and requests made meanwhile wait for it (below).
+let renewal: Promise<string> | null = null;
+
 axiosClient.interceptors.request.use(
-  (config) => {
+  async (config) => {
     if (hasSubmissionToken(config)) {
       return config;
+    }
+    // A renewal in flight is about to revoke the token in hand, so a request
+    // sent with it now would come back 401. Wait for the renewal and send the
+    // token it leaves behind. Its failure is handled inside it (a rejection
+    // ends the session there), so only the outcome matters here. The renewal
+    // itself goes through plain axios, never this client, so it can't wait on
+    // itself.
+    if (renewal) {
+      await renewal.catch(() => undefined);
     }
     const token = tokenManager.getAccessToken();
     if (token) {
@@ -124,10 +138,6 @@ function endSession(): void {
     window.dispatchEvent(new CustomEvent("auth:session-expired"));
   }
 }
-
-// One renewal at a time. Every caller that asks while one is in flight gets
-// the same promise, so parallel callers can never rotate the token twice.
-let renewal: Promise<string> | null = null;
 
 /**
  * Swap the current access token for a fresh one, while it is still valid.
@@ -242,8 +252,9 @@ axiosClient.interceptors.response.use(
     ) {
       originalRequest._retry = true;
 
-      // A renewal in flight rotates the token this request may have carried.
-      // Its own failure is handled inside it, so only the outcome matters.
+      // A renewal that started after this request went out rotates the token
+      // it carried. Its own failure is handled inside it, so only the outcome
+      // matters.
       if (renewal) {
         await renewal.catch(() => undefined);
       }
