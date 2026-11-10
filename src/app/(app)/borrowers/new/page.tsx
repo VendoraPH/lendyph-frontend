@@ -1318,7 +1318,7 @@ function NewBorrowerContent() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="monthly_income">Monthly Income (PHP)</Label>
+                <Label htmlFor="monthly_income">Monthly Income (₱)</Label>
                 <Input
                   id="monthly_income"
                   type="number"
@@ -1331,7 +1331,7 @@ function NewBorrowerContent() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="pledge_amount">Pledge Amount (PHP)</Label>
+                <Label htmlFor="pledge_amount">Pledge Amount (₱)</Label>
                 <Input
                   id="pledge_amount"
                   type="number"

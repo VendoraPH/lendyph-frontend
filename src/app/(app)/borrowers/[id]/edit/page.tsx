@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { notifyError, notifyValidation } from "@/lib/notify";
 import { sentencesMessage } from "@/app/(app)/borrowers/_components/utils";
 import { isBlankValidId, validateValidIds } from "@/lib/valid-id";
+import { uploadFailureMessage, uploadMemberFiles } from "../_lib/member-uploads";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -434,19 +435,15 @@ function EditBorrowerContent() {
 
       await borrowerService.update(borrowerId, payload as Partial<Borrower>);
 
-      if (profilePhoto) {
-        try {
+      const uploads = await uploadMemberFiles({
+        photo: profilePhoto,
+        ids: validIds.filter((v) => !isBlankValidId(v)),
+        uploadPhoto: (photo) => {
           const photoData = new FormData();
-          photoData.append("photo", profilePhoto);
-          await borrowerService.uploadPhoto(borrowerId, photoData);
-        } catch {
-          toast.error("Member updated but photo upload failed");
-        }
-      }
-
-      const validIdsToUpload = validIds.filter((v) => !isBlankValidId(v));
-      for (const entry of validIdsToUpload) {
-        try {
+          photoData.append("photo", photo);
+          return borrowerService.uploadPhoto(borrowerId, photoData);
+        },
+        uploadId: (entry) => {
           const idData = new FormData();
           idData.append("type", entry.type);
           if (entry.type === "others" && entry.custom_type_name.trim()) {
@@ -455,10 +452,27 @@ function EditBorrowerContent() {
           if (entry.id_number.trim()) idData.append("id_number", entry.id_number.trim());
           if (entry.front_file) idData.append("front_file", entry.front_file);
           if (entry.back_file) idData.append("back_file", entry.back_file);
-          await api.upload(`/borrowers/${borrowerId}/valid-ids`, idData);
-        } catch (err) {
-          notifyError(err, "We couldn't upload this ID. Please try again.");
-        }
+          return api.upload(`/borrowers/${borrowerId}/valid-ids`, idData);
+        },
+      });
+
+      // The details are saved either way. A saved photo or ID is dropped from
+      // the form, so saving again sends only what failed, never a duplicate.
+      if (uploads.photoError !== null) {
+        const { title, description } = uploadFailureMessage("photo", uploads.photoError);
+        toast.error(title, { description });
+      } else {
+        setProfilePhoto(null);
+      }
+      for (const failed of uploads.failedIds) {
+        const { title, description } = uploadFailureMessage("ID", failed.error);
+        toast.error(title, { description });
+      }
+      setValidIds(uploads.failedIds.map((failed) => failed.entry));
+
+      // Stay on the page so the user can fix the file and save again.
+      if (uploads.anyFailed) {
+        return;
       }
 
       toast.success("Member updated");
@@ -1000,8 +1014,9 @@ function EditBorrowerContent() {
                         </Select>
                       </div>
                       <div className="space-y-2">
-                        <Label>ID Number</Label>
+                        <Label htmlFor={`valid_id_number_${index}`}>ID Number</Label>
                         <Input
+                          id={`valid_id_number_${index}`}
                           placeholder="ID number"
                           value={entry.id_number}
                           onChange={(e) => updateValidId(index, "id_number", e.target.value)}
@@ -1152,7 +1167,7 @@ function EditBorrowerContent() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="monthly_income">Monthly Income (PHP)</Label>
+              <Label htmlFor="monthly_income">Monthly Income (₱)</Label>
               <Input
                 id="monthly_income"
                 type="number"
