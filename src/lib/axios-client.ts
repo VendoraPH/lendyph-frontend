@@ -302,7 +302,13 @@ axiosClient.interceptors.response.use(
     // and now: never wait for a renewal or replay it. The caller goes to
     // sign-in; no "Session Expired" dialog for a deliberate Log out. A late
     // renewal finds storage cleared and revokes its own token (rotateToken).
+    // A renewal that answered while Log out was out has already stored its
+    // token, so that one is revoked here before storage is cleared.
     if (error.response?.status === 401 && isLogout(originalRequest?.url)) {
+      const current = tokenManager.getAccessToken();
+      if (current !== null && current !== bearerToken(originalRequest?.headers?.Authorization)) {
+        revokeToken(current);
+      }
       tokenManager.clearTokens();
       return Promise.reject(error);
     }
