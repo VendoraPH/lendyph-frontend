@@ -7,9 +7,9 @@ import { savingsService } from "@/services";
 import type { SavingsAccount, TimeDeposit } from "@/types";
 import { FormField } from "../../../_components/field";
 import { OptionSelect } from "../../../_components/option-select";
-import { payoutAccounts } from "../../_lib/settle-form";
+import { payoutAccountLabel, payoutAccounts } from "../../_lib/settle-form";
 
-/** The member's own active savings accounts in the placement's branch, loaded while `enabled`. */
+/** The member's own active or dormant savings accounts in the placement's branch, loaded while `enabled`. */
 export function usePayoutAccounts(
   deposit: Pick<TimeDeposit, "borrower_id" | "branch_id">,
   enabled: boolean,
@@ -19,7 +19,6 @@ export function usePayoutAccounts(
       savingsService.accounts({
         borrower_id: deposit.borrower_id,
         branch_id: deposit.branch_id ?? undefined,
-        status: "active",
         per_page: 100,
       }),
     [deposit.borrower_id, deposit.branch_id],
@@ -46,7 +45,7 @@ export function PayoutAccountField({ id, value, onChange, offered, loading, erro
       error={error}
       hint={
         !loading && offered.length === 0
-          ? "The member has no active savings account in this branch. Pick another payout method."
+          ? "The member has no active or dormant savings account in this branch. Pick another payout method."
           : "Paid into savings at once, with no approval needed."
       }
     >
@@ -56,7 +55,7 @@ export function PayoutAccountField({ id, value, onChange, offered, loading, erro
         onChange={onChange}
         options={offered.map((a) => ({
           value: String(a.id),
-          label: `${a.account_number} · ${a.product.name} · ${formatCurrency(a.balance)}`,
+          label: payoutAccountLabel(a, formatCurrency(a.balance)),
         }))}
         placeholder={loading ? "Loading…" : "Choose an account"}
         disabled={loading || offered.length === 0}

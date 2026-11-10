@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { SavingsAccount } from "@/types";
-import { defaultPayoutAccount, payoutAccounts, payoutFields, payoutOptions, postMaturityLabel, settleBody } from "./settle-form";
+import { defaultPayoutAccount, payoutAccountLabel, payoutAccounts, payoutFields, payoutOptions, postMaturityLabel, settleBody } from "./settle-form";
 
 test("savings comes first when the placement names a payout account, last otherwise", () => {
   assert.deepEqual(payoutOptions({ payout_account_id: 9 }).map((o) => o.value), ["savings", "cash", "bank_transfer", "gcash", "maya"]);
@@ -12,17 +12,31 @@ test("savings comes first when the placement names a payout account, last otherw
 const account = (over: Partial<SavingsAccount>) =>
   ({ id: 1, borrower_id: 5, branch_id: 2, status: "active", product: { id: 1, code: "RS", name: "Regular", kind: "regular" }, ...over }) as SavingsAccount;
 
-test("a payout goes only into the member's own active regular accounts in the placement's branch", () => {
+test("a payout goes only into the member's own active or dormant regular accounts in the placement's branch", () => {
   const td = { borrower_id: 5, branch_id: 2 };
   const ids = payoutAccounts(td, [
     account({ id: 1 }),
     account({ id: 2, status: "dormant" }),
+    account({ id: 7, status: "frozen" }),
+    account({ id: 8, status: "closed" }),
     account({ id: 3, branch_id: 7 }),
     account({ id: 4, borrower_id: 8 }),
     account({ id: 5, product: { id: 2, code: "TD", name: "TD", kind: "time_deposit" } }),
     account({ id: 6 }),
   ]).map((a) => a.id);
-  assert.deepEqual(ids, [1, 6]);
+  assert.deepEqual(ids, [1, 2, 6]);
+});
+
+test("a dormant account says the payout reactivates it", () => {
+  const product = { id: 1, code: "RS", name: "Regular", kind: "regular" as const };
+  assert.equal(
+    payoutAccountLabel({ account_number: "SAV-2026-000002", status: "dormant", product }, "₱10.00"),
+    "SAV-2026-000002 · Regular · ₱10.00 (dormant; this payout reactivates it)",
+  );
+  assert.equal(
+    payoutAccountLabel({ account_number: "SAV-2026-000001", status: "active", product }, "₱10.00"),
+    "SAV-2026-000001 · Regular · ₱10.00",
+  );
 });
 
 test("the placement's payout account is picked first when it's offered", () => {

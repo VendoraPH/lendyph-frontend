@@ -16,9 +16,10 @@ export function payoutOptions(
 }
 
 /**
- * The accounts a payout into savings may go to: the member's own active
- * regular accounts in the placement's branch. The server refuses any other
- * (422 on `payout_account_id`).
+ * The accounts a payout into savings may go to: the member's own active or
+ * dormant regular accounts in the placement's branch (a payout into a dormant
+ * one reactivates it). Closed and frozen accounts are left out; the server
+ * refuses them (422 on `payout_account_id`).
  */
 export function payoutAccounts(
   td: Pick<TimeDeposit, "borrower_id" | "branch_id">,
@@ -28,9 +29,18 @@ export function payoutAccounts(
     (a) =>
       a.borrower_id === td.borrower_id &&
       a.branch_id === td.branch_id &&
-      a.status === "active" &&
+      (a.status === "active" || a.status === "dormant") &&
       a.product.kind === "regular",
   );
+}
+
+/** An account as the picker lists it; a dormant one says the payout reactivates it. */
+export function payoutAccountLabel(
+  account: Pick<SavingsAccount, "account_number" | "status" | "product">,
+  balance: string,
+): string {
+  const base = `${account.account_number} · ${account.product.name} · ${balance}`;
+  return account.status === "dormant" ? `${base} (dormant; this payout reactivates it)` : base;
 }
 
 /** The account picked first: the placement's payout account when it's offered, else none. */
