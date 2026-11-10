@@ -177,9 +177,9 @@ export default function AmortizationPage() {
 
             {/* Rate Frequency */}
             <div className="space-y-1.5">
-              <Label>Rate Per *</Label>
+              <Label htmlFor="rateFrequency">Rate Per *</Label>
               <Select value={rateFrequency} onValueChange={(val) => setRateFrequency(String(val))}>
-                <SelectTrigger className="w-full">
+                <SelectTrigger id="rateFrequency" className="w-full">
                   <SelectValue>
                     {(value: string | null) => optionLabel(INTEREST_RATE_FREQUENCY_OPTIONS, value)}
                   </SelectValue>
@@ -210,9 +210,9 @@ export default function AmortizationPage() {
 
             {/* Term Unit */}
             <div className="space-y-1.5">
-              <Label>Term Unit *</Label>
+              <Label htmlFor="termUnit">Term Unit *</Label>
               <Select value={termUnit} onValueChange={(val) => setTermUnit(String(val))}>
-                <SelectTrigger className="w-full">
+                <SelectTrigger id="termUnit" className="w-full">
                   <SelectValue>
                     {(value: string | null) => optionLabel(TERM_UNIT_OPTIONS, value)}
                   </SelectValue>
@@ -229,9 +229,9 @@ export default function AmortizationPage() {
 
             {/* Payment Frequency */}
             <div className="space-y-1.5">
-              <Label>Payment Frequency *</Label>
+              <Label htmlFor="frequency">Payment Frequency *</Label>
               <Select value={frequency} onValueChange={(val) => setFrequency(String(val))}>
-                <SelectTrigger className="w-full">
+                <SelectTrigger id="frequency" className="w-full">
                   <SelectValue>
                     {(value: string | null) => optionLabel(PAYMENT_FREQUENCY_OPTIONS, value)}
                   </SelectValue>

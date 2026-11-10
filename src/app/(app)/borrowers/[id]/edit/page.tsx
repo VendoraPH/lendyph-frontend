@@ -14,6 +14,7 @@ import {
   Crop as CropIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { idFileNameProblem } from "@/lib/file-validation";
 import { notifyError, notifyValidation } from "@/lib/notify";
 import { sentencesMessage } from "@/app/(app)/borrowers/_components/utils";
 import { isBlankValidId, validateValidIds } from "@/lib/valid-id";
@@ -345,6 +346,13 @@ function EditBorrowerContent() {
   ) {
     const file = e.target.files?.[0];
     if (!file) return;
+    const problem = idFileNameProblem(file.name);
+    if (problem) {
+      // Cleared, so picking the same file again still reports it.
+      e.target.value = "";
+      toast.error(problem);
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       setValidIds((prev) =>
@@ -654,14 +662,14 @@ function EditBorrowerContent() {
               </span>
             </p>
             <div className="space-y-2">
-              <Label>
+              <Label htmlFor="member-branch">
                 Assigned Branch <span className="text-destructive">*</span>
               </Label>
               <Select
                 value={form.branch_id || null}
                 onValueChange={(v) => update("branch_id", v ?? "")}
               >
-                <SelectTrigger className="w-full sm:w-2/3">
+                <SelectTrigger id="member-branch" className="w-full sm:w-2/3">
                   <SelectValue placeholder="Select branch">
                     {(value: string | null) => {
                       if (!value) return "Select branch";
@@ -734,12 +742,12 @@ function EditBorrowerContent() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Suffix</Label>
+                <Label htmlFor="suffix">Suffix</Label>
                 <Select
                   value={form.suffix || null}
                   onValueChange={(v) => update("suffix", v ?? "")}
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger id="suffix" className="w-full">
                     <SelectValue placeholder="None">
                       {(value: string | null) =>
                         value
@@ -772,10 +780,11 @@ function EditBorrowerContent() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>
+                <Label id="gender-label">
                   Gender <span className="text-destructive">*</span>
                 </Label>
                 <RadioGroup
+                  aria-labelledby="gender-label"
                   className="flex gap-4 pt-2"
                   value={form.gender || null}
                   onValueChange={(v) => update("gender", v ?? "")}
@@ -793,7 +802,7 @@ function EditBorrowerContent() {
             </div>
 
             <div className="space-y-2">
-              <Label>
+              <Label htmlFor="civil_status">
                 Civil Status <span className="text-destructive">*</span>
               </Label>
               <Select
@@ -801,7 +810,7 @@ function EditBorrowerContent() {
                 value={form.civil_status || null}
                 onValueChange={(v) => update("civil_status", v ?? "")}
               >
-                <SelectTrigger className="w-full sm:w-1/2">
+                <SelectTrigger id="civil_status" className="w-full sm:w-1/2">
                   <SelectValue placeholder="Select civil status">
                     {(value: string | null) =>
                       value
