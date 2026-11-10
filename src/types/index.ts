@@ -169,3 +169,4 @@ export type {
   CreateCreditDecisionData,
   CreditScoringSettings,
 } from "./credit-scoring";
+export type * from "./savings";

@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import type { SubjectKind } from "@/components/common/subject-picker";
 import { DASH, type FormattableColumn } from "@/lib/report-format";
+import type { Permission } from "@/types";
 
 export type ReportId =
   | "daily_collection"
@@ -19,7 +20,14 @@ export type ReportId =
   | "portfolio_by_product"
   | "share_capital"
   | "performance"
-  | "provisioning";
+  | "provisioning"
+  | "savings_balances"
+  | "savings_transactions"
+  | "time_deposit_maturities"
+  | "savings_interest_postings"
+  | "savings_dormant"
+  | "savings_statement"
+  | "savings_gl_control";
 
 export type ReportCategory =
   | "operations"
@@ -27,7 +35,8 @@ export type ReportCategory =
   | "member"
   | "disbursement"
   | "financial"
-  | "performance";
+  | "performance"
+  | "savings";
 
 /**
  * Re-exported, not redeclared: `formatValue` in `@/lib/report-format` is what
@@ -263,7 +272,7 @@ export interface ReportContext {
   range: DateRange;
   /** null = all branches. Only sent for endpoints that accept branch_id. */
   branchId?: number | null;
-  /** The chosen loan or borrower id, for subject-scoped reports. */
+  /** The chosen loan, borrower or savings account id, for subject-scoped reports. */
   subjectId?: number | null;
 }
 
@@ -282,8 +291,29 @@ export interface ReportDefinition {
   supportsBranch?: boolean;
   /** Set when the report is scoped to one loan or borrower. */
   subject?: ReportSubject;
+  /**
+   * Set when the report reads one savings account, chosen by opening it from
+   * that account's page (`?account=<id>`) rather than with a picker.
+   */
+  accountParam?: boolean;
   /** Set when the API takes no dates, which hides the date range controls. */
   noDateRange?: boolean;
+  /**
+   * The period the report opens on. "this_month" (the default) runs from the
+   * 1st to today; "whole_month" to the month's last day, for a report that
+   * looks ahead, such as time deposits maturing.
+   */
+  defaultPeriod?: "this_month" | "whole_month";
+  /** Set when the server writes no CSV for the report (a printable), which hides the CSV export. */
+  noCsv?: boolean;
+  /**
+   * A permission beyond `reports:view` that the report's data needs, such as
+   * `savings:view` for the savings reports. Without it the report is not
+   * listed and its page answers "not found".
+   */
+  permission?: Permission;
+  /** False when the report's module is switched off for this deployment. */
+  available?: boolean;
   build: (ctx: ReportContext) => Promise<ReportDocument>;
 }
 
@@ -314,5 +344,9 @@ export const CATEGORY_META: Record<
   performance: {
     label: "Performance",
     description: "Collection efficiency and account officer productivity",
+  },
+  savings: {
+    label: "Savings & Deposits",
+    description: "Members' savings, time deposits, interest and the GL control",
   },
 };

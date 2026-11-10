@@ -208,7 +208,8 @@ test("insurance premium collected from payments has no receivable role: it goes 
 // ── Round C: chart templates ──
 
 // Copied from lendyph-backend `ChartOfAccountsSeeder::COOPERATIVE_ADDITIONS`
-// (slice C1): code, name, parent, and whether it is a heading.
+// (slice C1, plus 5160 from the Phase 3 savings design §4): code, name,
+// parent, and whether it is a heading.
 const BACKEND_COOPERATIVE_ADDITIONS = [
   ["2050", "Savings Deposits", "2000", false],
   ["2060", "Time Deposits", "2000", false],
@@ -220,9 +221,10 @@ const BACKEND_COOPERATIVE_ADDITIONS = [
   ["3073", "Community Development Fund", "3070", false],
   ["3074", "Optional Fund", "3070", false],
   ["3080", "Undivided Net Surplus", "3000", false],
+  ["5160", "Interest Expense on Deposits", "5000", false],
 ] as const;
 
-test("the cooperative additions are the backend's ten rows, code for code and name for name", () => {
+test("the cooperative additions are the backend's eleven rows, code for code and name for name", () => {
   assert.deepEqual(
     COOPERATIVE_CHART_ADDITIONS.map((a) => [a.code, a.name, a.parent, a.is_group ?? false]),
     BACKEND_COOPERATIVE_ADDITIONS.map((row) => [...row]),
@@ -234,8 +236,23 @@ test("the cooperative additions are the backend's ten rows, code for code and na
   }
 });
 
-test("the cooperative mapping differs only in net_surplus, which points at 3080", () => {
-  assert.deepEqual(COOPERATIVE_MAPPING_OVERRIDES, { net_surplus: "3080" });
+test("the cooperative mapping points net_surplus at 3080 and maps the four savings roles", () => {
+  assert.deepEqual(COOPERATIVE_MAPPING_OVERRIDES, {
+    net_surplus: "3080",
+    savings_deposits: "2050",
+    time_deposits: "2060",
+    interest_expense_deposits: "5160",
+    withholding_tax_deposits: "2210",
+  });
+});
+
+test("the lending company chart maps no savings role: it has no deposit accounts", () => {
+  for (const role of ["savings_deposits", "time_deposits", "interest_expense_deposits", "withholding_tax_deposits"]) {
+    assert.equal(role in DEFAULT_ACCOUNT_MAPPING_CODES, false, role);
+  }
+  for (const code of ["2050", "2060", "5160"]) {
+    assert.equal(DEFAULT_CHART_OF_ACCOUNTS.some((a) => a.code === code), false, code);
+  }
 });
 
 test("the lending company template is today's chart, unchanged", () => {
@@ -243,10 +260,10 @@ test("the lending company template is today's chart, unchanged", () => {
   assert.equal(DEFAULT_CHART_OF_ACCOUNTS.some((a) => a.code === "3080"), false);
 });
 
-test("the cooperative template is today's chart plus the ten rows, in code order", () => {
+test("the cooperative template is today's chart plus the eleven rows, in code order", () => {
   const chart = templateChart("cooperative");
   const codes = chart.map((a) => a.code);
-  assert.equal(chart.length, DEFAULT_CHART_OF_ACCOUNTS.length + 10);
+  assert.equal(chart.length, DEFAULT_CHART_OF_ACCOUNTS.length + 11);
   assert.deepEqual(codes, [...codes].sort());
   assert.equal(new Set(codes).size, codes.length);
   for (const seed of DEFAULT_CHART_OF_ACCOUNTS) assert.ok(codes.includes(seed.code), seed.code);

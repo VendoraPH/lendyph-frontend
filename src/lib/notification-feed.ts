@@ -5,7 +5,7 @@
  * no DOM, so `node:test` covers them.
  */
 import { formatDate } from "@/lib/format";
-import type { AppNotification } from "@/types/notification";
+import type { AppNotification, NotificationType } from "@/types/notification";
 
 /** The bell lists at most this many rows. */
 export const FEED_LIMIT = 20;
@@ -146,6 +146,32 @@ export function combineFeedPages(
 
 export type NotificationTone = "approval" | "success" | "danger" | "warning" | "info";
 
+/** Each notification kind in words; the bell names it beside the icon for screen readers. */
+export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
+  approval_needed: "Approval needed",
+  loan_approved: "Loan approved",
+  loan_rejected: "Loan rejected",
+  loan_sent_back: "Loan sent back",
+  loan_released: "Loan released",
+  payment_voided: "Payment voided",
+  loan_past_due: "Loan past due",
+  extension_applied: "Extension applied",
+  restructure_applied: "Restructure applied",
+  adjustment_pending: "Adjustment waiting for approval",
+  reminder_contact_invalid: "Member contact needs fixing",
+  reminder_follow_up: "Reminder follow-up",
+  reminder_failed: "Reminder not sent",
+  savings_gl_difference: "Savings books don't match the savings records",
+  savings_large_transaction: "Large savings transaction",
+};
+
+/** The kind in words, or "Notification" for a kind added on the server later. */
+export function notificationTypeLabel(type: string): string {
+  return Object.hasOwn(NOTIFICATION_TYPE_LABELS, type)
+    ? NOTIFICATION_TYPE_LABELS[type as NotificationType]
+    : "Notification";
+}
+
 /** The colour family of a type's icon; an unknown type is plain info. */
 export function notificationTone(type: string): NotificationTone {
   switch (type) {
@@ -158,11 +184,13 @@ export function notificationTone(type: string): NotificationTone {
     case "loan_rejected":
     case "payment_voided":
     case "reminder_failed":
+    case "savings_gl_difference":
       return "danger";
     case "loan_sent_back":
     case "loan_past_due":
     case "reminder_contact_invalid":
     case "reminder_follow_up":
+    case "savings_large_transaction":
       return "warning";
     default:
       return "info";
@@ -215,6 +243,8 @@ export interface NotificationFeedItem {
   id: string;
   type: string;
   tone: NotificationTone;
+  /** The kind in words ("Large savings transaction"). */
+  kind: string;
   /** As the server wrote it, ₱ amounts included. */
   title: string;
   /** As the server wrote it; null when it sent none. */
@@ -260,7 +290,8 @@ export function buildFeed(
     id: String(row.id),
     type: row.type,
     tone: notificationTone(row.type),
-    title: typeof row.title === "string" ? row.title : "",
+    kind: notificationTypeLabel(row.type),
+    title: typeof row.title === "string" && row.title !== "" ? row.title : notificationTypeLabel(row.type),
     body: typeof row.body === "string" && row.body !== "" ? row.body : null,
     href: safeAppPath(row.url),
     unread: !row.read_at,

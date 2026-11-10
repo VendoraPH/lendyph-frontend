@@ -254,3 +254,31 @@ test("a draft, a posted entry and a reversed one each read their own way", () =>
     "This entry has been reversed. It stays in the books, and its reversing entry cancels it out.",
   );
 });
+
+test("an entry the server marks not reversible shows Reverse disabled with the server's reason", () => {
+  const savings = { ...posted, source: "savings" as const, reversible: false, not_reversible_reason: "Reverse it from the savings account." };
+  const actions = journalActions(savings, holding(...ALL), { editing: false, balance: "balanced" });
+  assert.deepEqual(actions.reverse, { shown: true, disabledReason: "Reverse it from the savings account." });
+  const noReason = journalActions({ ...savings, not_reversible_reason: "" }, holding(...ALL), { editing: false, balance: "balanced" });
+  assert.equal(noReason.reverse.disabledReason, "This entry can't be reversed from the journal.");
+});
+
+test("a server that sends no reversible field keeps today's Reverse", () => {
+  assert.deepEqual(journalActions(posted, holding(...ALL), { editing: false, balance: "balanced" }).reverse, {
+    shown: true,
+    disabledReason: null,
+  });
+  const marked = journalActions({ ...posted, reversible: true }, holding(...ALL), { editing: false, balance: "balanced" });
+  assert.equal(marked.reverse.disabledReason, null);
+});
+
+test("a posted entry the server won't reverse doesn't promise a reversal", async () => {
+  const { journalPageDescription } = await import("./journal-actions");
+  const savings = { status: "posted" as const, reverses_journal_id: null, reversed_by_journal_id: null };
+  assert.equal(
+    journalPageDescription({ ...savings, reversible: false, not_reversible_reason: "Reverse it from the savings account." }),
+    "Posted entries can't be edited. Reverse it from the savings account.",
+  );
+  assert.equal(journalPageDescription({ ...savings, reversible: false }), "Posted entries can't be edited.");
+  assert.equal(journalPageDescription(savings), "Posted entries can't be edited, only reversed.");
+});

@@ -106,3 +106,74 @@ test("the Member Report reads the member list with the period and a page size", 
   assert.ok(table && table.kind === "table");
   assert.equal(table.rows[0].borrower_name, "Ana Cruz");
 });
+
+const SAVINGS_REPORT_IDS = [
+  "savings_balances",
+  "savings_transactions",
+  "time_deposit_maturities",
+  "savings_interest_postings",
+  "savings_dormant",
+  "savings_statement",
+  "savings_gl_control",
+];
+
+test("the savings reports stay off the list unless savings is switched on and the user can read it", async () => {
+  const { visibleReports } = await import("./report-catalog");
+  // NEXT_PUBLIC_ENABLE_SAVINGS is unset here, so even an all-powerful user
+  // doesn't see them; the loan reports are unaffected.
+  const ids = visibleReports(() => true).map((r) => r.id);
+  for (const id of SAVINGS_REPORT_IDS) {
+    assert.equal(ids.includes(id as never), false, id);
+    const report = await reportDefinition(id);
+    assert.equal(report.permission, "savings:view", id);
+    assert.equal(report.available, false, id);
+    assert.equal(report.category, "savings", id);
+  }
+  assert.ok(ids.includes("releases_list"));
+});
+
+test("the point-in-time savings reports send no dates; the period reports send theirs", async () => {
+  const cases: Array<[string, string, boolean]> = [
+    ["savings_balances", "/reports/savings/balances", false],
+    ["savings_dormant", "/reports/savings/dormant", false],
+    ["savings_gl_control", "/reports/savings/gl-control", false],
+    ["savings_transactions", "/reports/savings/transactions", true],
+    ["time_deposit_maturities", "/reports/savings/time-deposit-maturities", true],
+    ["savings_interest_postings", "/reports/savings/interest-postings", true],
+  ];
+  for (const [id, path, dated] of cases) {
+    requests.length = 0;
+    await (await reportDefinition(id)).build({ range: RANGE, branchId: 2 });
+    assert.equal(requests.length, 1, id);
+    assert.equal(requests[0].pathname, path, id);
+    assert.equal(requests[0].searchParams.get("branch_id"), "2", id);
+    assert.equal(requests[0].searchParams.get("date_from"), dated ? RANGE.from : null, id);
+    assert.equal(requests[0].searchParams.get("date_to"), dated ? RANGE.to : null, id);
+    if (id !== "savings_gl_control") {
+      assert.equal(requests[0].searchParams.get("per_page"), "200", id);
+    }
+  }
+});
+
+test("the savings statement reads the account it was opened for, over the period, and nothing without one", async () => {
+  const statement = await reportDefinition("savings_statement");
+  assert.equal(statement.accountParam, true);
+  assert.equal(statement.subject, undefined);
+
+  requests.length = 0;
+  await statement.build({ range: RANGE, subjectId: 7 });
+  assert.equal(requests[0].pathname, "/reports/savings/statement/7");
+  assert.equal(requests[0].searchParams.get("date_from"), RANGE.from);
+  assert.equal(requests[0].searchParams.get("date_to"), RANGE.to);
+
+  requests.length = 0;
+  await statement.build({ range: RANGE, subjectId: null });
+  assert.equal(requests.length, 0);
+});
+
+test("Time Deposit Maturities opens on the whole month, and the savings statement offers no CSV", async () => {
+  assert.equal((await reportDefinition("time_deposit_maturities")).defaultPeriod, "whole_month");
+  assert.equal((await reportDefinition("savings_balances")).defaultPeriod, undefined);
+  assert.equal((await reportDefinition("savings_statement")).noCsv, true);
+  assert.equal((await reportDefinition("savings_transactions")).noCsv, undefined);
+});

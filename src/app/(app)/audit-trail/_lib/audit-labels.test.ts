@@ -119,7 +119,7 @@ test("accounting and GCash rows read by their module names", () => {
 test("the module filter offers exactly the modules the server filters by", () => {
   assert.deepEqual(
     AUDIT_MODULE_OPTIONS.map((o) => o.value).sort(),
-    ["accounting", "auth", "borrowers", "collections", "gcash", "loans", "payments", "roles", "system", "users"]
+    ["accounting", "auth", "borrowers", "collections", "gcash", "loans", "payments", "roles", "savings", "system", "users"]
   );
   assert.ok(AUDIT_MODULE_OPTIONS.every((o) => o.label === auditModuleLabel({ module: o.value, target: null })));
 });
@@ -389,4 +389,46 @@ test("journal id fields read in words", () => {
   assert.equal(auditFieldLabel("reverses_journal_id"), "reverses");
   assert.equal(auditFieldLabel("journal_id"), "journal");
   assert.equal(auditFieldLabel("accounting_journal_id"), "journal");
+});
+
+test("savings rows read their module, actions, targets and statuses in words", () => {
+  assert.equal(auditModuleLabel({ module: "savings", target: null }), "Savings");
+  assert.equal(auditActionLabel("time_deposit_preterminated"), "Time deposit pre-terminated");
+  assert.equal(auditActionLabel("savings_account_reactivated"), "Account reactivated");
+  assert.equal(auditTargetType("TimeDeposit"), "Time deposit");
+  assert.equal(auditTargetType("SavingsApproval"), "Savings approval request");
+  const td = log({ module: "savings", target: { id: 4, type: "TimeDeposit", label: "TD-2026-000004" } });
+  assert.equal(auditChangeValue(td, "status", "preterminated"), "Pre-terminated");
+  assert.equal(auditChangeValue(td, "status", "rolled_over"), "Rolled over");
+  const account = log({ module: "savings", target: { id: 2, type: "SavingsAccount", label: "SAV-2026-000002" } });
+  assert.equal(auditChangeValue(account, "status", "dormant"), "Dormant");
+  const hold = log({ module: "savings", target: { id: 3, type: "SavingsHold", label: "Hold #3" } });
+  assert.equal(auditChangeValue(hold, "status", "expired"), "Expired");
+  const approval = log({ module: "savings", target: { id: 5, type: "SavingsApproval", label: "#5" } });
+  assert.equal(auditChangeValue(approval, "status", "cancelled"), "Cancelled");
+  const run = log({ module: "savings", target: { id: 6, type: "SavingsInterestRun", label: "#6" } });
+  assert.equal(auditChangeValue(run, "status", "posted"), "Posted");
+  assert.ok(AUDIT_ACTION_OPTIONS.some((o) => o.value === "time_deposit_preterminated"));
+});
+
+test("savings id fields read without \"id\"", () => {
+  const cases: Array<[string, string]> = [
+    ["result_transaction_id", "result transaction"],
+    ["reverses_transaction_id", "reversed transaction"],
+    ["counterpart_transaction_id", "counterpart transaction"],
+    ["interest_transaction_id", "interest transaction"],
+    ["tax_transaction_id", "tax transaction"],
+    ["funding_transaction_id", "funding transaction"],
+    ["target_transaction_id", "target transaction"],
+    ["interest_run_id", "interest run"],
+    ["time_deposit_id", "time deposit"],
+    ["payout_account_id", "payout account"],
+  ];
+  for (const [field, label] of cases) assert.equal(auditFieldLabel(field), label, field);
+  const approval = { type: "SavingsApproval" };
+  assert.equal(auditFieldLabel("account_id", approval), "savings account");
+  assert.equal(auditFieldLabel("borrower_id", { type: "TimeDeposit" }), "member");
+  assert.equal(auditFieldLabel("run_id", { type: "SavingsInterestRunLine" }), "interest run");
+  // Outside savings a plain id keeps its general words.
+  assert.equal(auditFieldLabel("account_id", { type: "AccountingJournalLine" }), "account id");
 });

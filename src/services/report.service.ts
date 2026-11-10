@@ -267,11 +267,48 @@ export const reportService = {
   provisioning: (params?: Record<string, unknown>) =>
     api.get(API_ENDPOINTS.REPORTS.PROVISIONING, { params }),
 
+  // Savings (NEXT_PUBLIC_ENABLE_SAVINGS; reports:view plus savings:view).
+  // The lists are paginator envelopes with `totals` over the whole filter, so
+  // getRaw keeps the meta and the server's figures.
+  savingsBalances: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.SAVINGS_BALANCES, { params }),
+
+  savingsTransactions: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.SAVINGS_TRANSACTIONS, { params }),
+
+  timeDepositMaturities: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.TIME_DEPOSIT_MATURITIES, { params }),
+
+  savingsInterestPostings: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.SAVINGS_INTEREST_POSTINGS, { params }),
+
+  savingsDormant: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.SAVINGS_DORMANT, { params }),
+
+  // One account's statement for the period: its opening balance, each line
+  // with the server's running balance, and the closing balance.
+  savingsStatement: (accountId: number, params?: Record<string, unknown>) =>
+    api.get(API_ENDPOINTS.REPORTS.SAVINGS_STATEMENT(accountId), { params }),
+
+  // The savings subledger against GL 2050 and 2060, per branch, as of a day.
+  savingsGlControl: (params?: Record<string, unknown>) =>
+    api.get(API_ENDPOINTS.REPORTS.SAVINGS_GL_CONTROL, { params }),
+
   // One member's share capital statement: opening balance, entries with a
   // running balance, period credits/debits, closing balance. Accepts
   // date_from/date_to to window the entries.
   shareCapitalStatement: (borrowerId: number, params?: Record<string, unknown>) =>
     api.get(API_ENDPOINTS.REPORTS.SHARE_CAPITAL_STATEMENT(borrowerId), { params }),
+
+  /**
+   * Savings report CSVs, written by the server over the whole filter
+   * (reports:export plus savings:view). The statement has none: it's a
+   * printable.
+   */
+  exportSavingsReport: (
+    report: "balances" | "transactions" | "time-deposit-maturities" | "interest-postings" | "dormant" | "gl-control",
+    params?: Record<string, unknown>,
+  ) => api.download(API_ENDPOINTS.REPORTS.SAVINGS_EXPORT(report), { params }),
 
   exportReleases: (params?: Record<string, unknown>) =>
     api.download(API_ENDPOINTS.REPORTS.EXPORT_RELEASES, { params }),

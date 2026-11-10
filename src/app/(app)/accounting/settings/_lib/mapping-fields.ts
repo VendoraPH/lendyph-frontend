@@ -189,6 +189,37 @@ export const GROUPS: { title: string; description: string; fields: MappingField[
     ],
   },
   {
+    title: "Savings and time deposits",
+    description:
+      "Where members' deposits and the interest paid on them post. A cooperative chart maps these; a savings product can't be turned on until all four are set.",
+    fields: [
+      {
+        key: "savings_deposits",
+        label: "Savings deposits",
+        hint: "Members' savings balances, owed back to them (2050).",
+        types: ["liability"],
+      },
+      {
+        key: "time_deposits",
+        label: "Time deposits",
+        hint: "Members' time deposits, owed back at maturity (2060).",
+        types: ["liability"],
+      },
+      {
+        key: "interest_expense_deposits",
+        label: "Interest expense on deposits",
+        hint: "Interest credited on savings and paid on time deposits (5160).",
+        types: ["expense"],
+      },
+      {
+        key: "withholding_tax_deposits",
+        label: "Withholding tax on deposit interest",
+        hint: "Tax withheld from deposit interest, owed to the government until remitted (2210).",
+        types: ["liability"],
+      },
+    ],
+  },
+  {
     title: "Year-end close",
     description: "Where the year's result is moved when the books are closed.",
     fields: [

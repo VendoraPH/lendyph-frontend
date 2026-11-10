@@ -6,6 +6,13 @@ import { LOAN_STATUS_LABELS } from "@/constants/loan-status";
 import { roleLabelForKey } from "@/lib/role-display-name";
 import { permissionChipLabel } from "@/app/(app)/users/_lib/user-labels";
 import { PRODUCT_FIELD_LABELS } from "@/app/(app)/settings/loan-products/_lib/product-form";
+import {
+  ACCOUNT_STATUS_LABELS,
+  APPROVAL_STATUS_LABELS,
+  HOLD_STATUS_LABELS,
+  INTEREST_RUN_STATUS_LABELS,
+} from "@/app/(app)/savings/_lib/savings-rules";
+import { TD_STATUS_LABELS } from "@/app/(app)/savings/_lib/time-deposit-rules";
 
 const MODULE_LABELS: Record<AuditModule, string> = {
   auth: "Auth",
@@ -17,6 +24,7 @@ const MODULE_LABELS: Record<AuditModule, string> = {
   roles: "Roles",
   accounting: "Accounting",
   gcash: "GCash",
+  savings: "Savings",
   system: "System",
 };
 
@@ -25,7 +33,7 @@ const MODULE_LABELS: Record<AuditModule, string> = {
  * `module` parameter accepts (anything else is refused with 422).
  */
 export const AUDIT_MODULE_OPTIONS: { value: AuditModule; label: string }[] = (
-  ["auth", "borrowers", "loans", "payments", "collections", "users", "roles", "accounting", "gcash", "system"] as const
+  ["auth", "borrowers", "loans", "payments", "collections", "users", "roles", "accounting", "gcash", "savings", "system"] as const
 ).map((value) => ({ value, label: MODULE_LABELS[value] }));
 
 const ACTION_LABELS: Record<string, string> = {
@@ -45,6 +53,16 @@ const ACTION_LABELS: Record<string, string> = {
   uploaded: "Uploaded",
   attachment_removed: "Attachment removed",
   loan_chain_cancelled: "Approvals cancelled",
+  savings_account_frozen: "Account frozen",
+  savings_account_unfrozen: "Account unfrozen",
+  savings_account_reactivated: "Account reactivated",
+  savings_account_dormant: "Account marked dormant",
+  savings_account_closed: "Account closed",
+  savings_hold_expired: "Hold expired",
+  savings_approval_expired: "Request expired",
+  time_deposit_matured: "Time deposit matured",
+  time_deposit_settled: "Time deposit settled",
+  time_deposit_preterminated: "Time deposit pre-terminated",
 };
 
 /**
@@ -68,6 +86,16 @@ export const AUDIT_ACTION_OPTIONS: { value: AuditAction; label: string }[] = (
     "uploaded",
     "attachment_removed",
     "loan_chain_cancelled",
+    "savings_account_frozen",
+    "savings_account_unfrozen",
+    "savings_account_reactivated",
+    "savings_account_dormant",
+    "savings_account_closed",
+    "savings_hold_expired",
+    "savings_approval_expired",
+    "time_deposit_matured",
+    "time_deposit_settled",
+    "time_deposit_preterminated",
   ] as const
 ).map((value) => ({ value, label: ACTION_LABELS[value] }));
 
@@ -91,6 +119,15 @@ export function auditModuleLabel(log: Pick<AuditLog, "module" | "target">): stri
  * reminders models (backend #232, module `reminders`).
  */
 const TARGET_TYPE_LABELS: Record<string, string> = {
+  SavingsAccount: "Savings account",
+  SavingsHold: "Savings hold",
+  SavingsApproval: "Savings approval request",
+  SavingsInterestRun: "Savings interest run",
+  SavingsProduct: "Savings product",
+  SavingsProductRate: "Savings product rate",
+  SavingsTaxRule: "Savings tax rule",
+  SavingsSetting: "Savings settings",
+  TimeDeposit: "Time deposit",
   ReminderSetting: "Reminder settings",
   ReminderBranchSetting: "Branch reminder settings",
   ReminderRule: "Reminder rule",
@@ -162,7 +199,39 @@ const FIELD_LABELS: Record<string, string> = {
   reverses_journal_id: "reverses",
   journal_id: "journal",
   accounting_journal_id: "journal",
+  // Savings links (Phase 3): the transaction, run, request and placement ids
+  // savings rows carry.
+  result_transaction_id: "result transaction",
+  reverses_transaction_id: "reversed transaction",
+  counterpart_transaction_id: "counterpart transaction",
+  interest_transaction_id: "interest transaction",
+  tax_transaction_id: "tax transaction",
+  funding_transaction_id: "funding transaction",
+  target_transaction_id: "target transaction",
+  interest_run_id: "interest run",
+  approval_id: "approval request",
+  first_checker_id: "first approver",
+  time_deposit_id: "time deposit",
+  payout_account_id: "payout account",
+  pretermination_product_id: "early termination product",
+  rolled_over_from_id: "rolled over from",
 };
+
+/**
+ * Savings rows' plain ids, which mean something narrower on a savings record
+ * than elsewhere (an `account_id` there is a savings account).
+ */
+const SAVINGS_FIELD_LABELS: Record<string, string> = {
+  account_id: "savings account",
+  product_id: "savings product",
+  borrower_id: "member",
+  run_id: "interest run",
+  source_id: "source",
+};
+
+function isSavingsTarget(type: string | undefined): boolean {
+  return type === "TimeDeposit" || (type?.startsWith("Savings") ?? false);
+}
 
 /**
  * A changed field's name, with every underscore as a space. A loan product's
@@ -172,6 +241,7 @@ export function auditFieldLabel(field: string, target?: Pick<NonNullable<AuditLo
   if (target?.type === "LoanProduct" && Object.hasOwn(PRODUCT_FIELD_LABELS, field)) {
     return PRODUCT_FIELD_LABELS[field];
   }
+  if (isSavingsTarget(target?.type) && Object.hasOwn(SAVINGS_FIELD_LABELS, field)) return SAVINGS_FIELD_LABELS[field];
   if (Object.hasOwn(FIELD_LABELS, field)) return FIELD_LABELS[field];
   return field.split("_").filter(Boolean).join(" ");
 }
@@ -179,6 +249,18 @@ export function auditFieldLabel(field: string, target?: Pick<NonNullable<AuditLo
 function isStatusField(field: string): boolean {
   return field === "status" || field.endsWith("_status");
 }
+
+/**
+ * The savings records' statuses in words, by audit target. The server keeps
+ * them raw in audit rows; "preterminated" reads "Pre-terminated" here.
+ */
+const SAVINGS_STATUS_LABELS: Record<string, Record<string, string>> = {
+  SavingsAccount: ACCOUNT_STATUS_LABELS,
+  SavingsHold: HOLD_STATUS_LABELS,
+  SavingsApproval: APPROVAL_STATUS_LABELS,
+  TimeDeposit: TD_STATUS_LABELS,
+  SavingsInterestRun: INTEREST_RUN_STATUS_LABELS,
+};
 
 /**
  * A changed value as the row shows it. A status reads in words with a capital
@@ -194,6 +276,8 @@ export function auditChangeValue(
   if (value === null) return value;
   if (field === "permissions") return permissionsInWords(value);
   if (!isStatusField(field)) return value;
+  const savingsStatuses = log.target ? SAVINGS_STATUS_LABELS[log.target.type] : undefined;
+  if (field === "status" && savingsStatuses && Object.hasOwn(savingsStatuses, value)) return savingsStatuses[value];
   const isLoanStatus = field === "status" && log.target?.type === "Loan";
   if ((isLoanStatus || value === "for_review") && Object.hasOwn(LOAN_STATUS_LABELS, value)) {
     return LOAN_STATUS_LABELS[value as keyof typeof LOAN_STATUS_LABELS];

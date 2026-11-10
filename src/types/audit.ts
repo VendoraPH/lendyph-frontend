@@ -16,7 +16,18 @@ export type AuditAction =
   | "uploaded"
   | "attachment_removed"
   // A voided loan's pending approval steps, cancelled with it.
-  | "loan_chain_cancelled";
+  | "loan_chain_cancelled"
+  // Savings & Deposits.
+  | "savings_account_frozen"
+  | "savings_account_unfrozen"
+  | "savings_account_reactivated"
+  | "savings_account_dormant"
+  | "savings_account_closed"
+  | "savings_hold_expired"
+  | "savings_approval_expired"
+  | "time_deposit_matured"
+  | "time_deposit_settled"
+  | "time_deposit_preterminated";
 
 export type AuditModule =
   | "auth"
@@ -28,6 +39,9 @@ export type AuditModule =
   | "roles"
   | "accounting"
   | "gcash"
+  // Savings & Deposits (Phase 3): accounts, holds, approvals, time deposits,
+  // interest runs, products, rates, tax rules and settings.
+  | "savings"
   | "system";
 
 export interface AuditChange {

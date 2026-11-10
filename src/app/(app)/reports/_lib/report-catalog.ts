@@ -5,10 +5,14 @@ import {
   BookOpen,
   ClipboardList,
   Clock,
+  Coins,
   FileText,
   Gauge,
+  Hourglass,
+  Scale,
   Layers,
   ListChecks,
+  MoonStar,
   PieChart,
   PiggyBank,
   ReceiptText,
@@ -16,7 +20,9 @@ import {
   Target,
   TrendingUp,
   Users,
+  Wallet,
 } from "lucide-react";
+import { env } from "@/config/env";
 import { api } from "@/lib/api-client";
 import { reportService } from "@/services";
 import { REPORT_TITLES } from "@/lib/page-titles";
@@ -40,6 +46,16 @@ import {
   buildStatementOfAccountDoc,
   buildSubsidiaryLedgerDoc,
 } from "./report-builders";
+import {
+  buildSavingsBalancesDoc,
+  buildSavingsDormantDoc,
+  buildSavingsGlControlDoc,
+  buildSavingsInterestPostingsDoc,
+  buildSavingsStatementDoc,
+  buildSavingsTransactionsDoc,
+  buildTimeDepositMaturitiesDoc,
+} from "./savings-report-builders";
+import type { Permission } from "@/types";
 import type {
   DateRange,
   ReportContext,
@@ -107,6 +123,9 @@ function pointInTimeBuilder(fetcher: Fetcher, map: Mapper) {
 }
 
 const listParams = { per_page: LIST_PAGE_SIZE };
+
+/** Savings reports need `savings:view` and the deployment's savings switch. */
+const SAVINGS_REPORT = { permission: "savings:view", available: env.features.savings } as const;
 
 /** The members behind the Member Report's cards; a paginator envelope, so getRaw. */
 const MEMBER_LIST_ENDPOINT = "/reports/borrowers/list";
@@ -365,4 +384,110 @@ export const REPORT_CATALOG: ReportDefinition[] = [
       buildSubsidiaryLedgerDoc
     ),
   },
+  // Savings & Deposits: listed only where NEXT_PUBLIC_ENABLE_SAVINGS is on, and
+  // only to users who hold savings:view as well as reports:view.
+  {
+    id: "savings_balances",
+    title: REPORT_TITLES.savings_balances,
+    description: "Every savings account's balance, holds, pending approvals and accrued interest today.",
+    category: "savings",
+    icon: Wallet,
+    accent: ACCENT.emerald,
+    supportsBranch: true,
+    noDateRange: true,
+    ...SAVINGS_REPORT,
+    build: pointInTimeBuilder(
+      (params) => reportService.savingsBalances({ ...params, ...listParams }),
+      buildSavingsBalancesDoc,
+    ),
+  },
+  {
+    id: "savings_transactions",
+    title: REPORT_TITLES.savings_transactions,
+    description: "Every deposit, withdrawal, transfer, interest and payout posted in the period.",
+    category: "savings",
+    icon: ArrowLeftRight,
+    accent: ACCENT.blue,
+    supportsBranch: true,
+    ...SAVINGS_REPORT,
+    build: reportBuilder(reportService.savingsTransactions, buildSavingsTransactionsDoc, listParams),
+  },
+  {
+    id: "time_deposit_maturities",
+    title: REPORT_TITLES.time_deposit_maturities,
+    description: "Time deposits maturing in the period and the cash due on them.",
+    category: "savings",
+    icon: Hourglass,
+    accent: ACCENT.amber,
+    supportsBranch: true,
+    ...SAVINGS_REPORT,
+    defaultPeriod: "whole_month",
+    build: reportBuilder(reportService.timeDepositMaturities, buildTimeDepositMaturitiesDoc, listParams),
+  },
+  {
+    id: "savings_interest_postings",
+    title: REPORT_TITLES.savings_interest_postings,
+    description: "Interest runs posted in the period: gross interest, tax withheld and net credited.",
+    category: "savings",
+    icon: Coins,
+    accent: ACCENT.green,
+    supportsBranch: true,
+    ...SAVINGS_REPORT,
+    build: reportBuilder(reportService.savingsInterestPostings, buildSavingsInterestPostingsDoc, listParams),
+  },
+  {
+    id: "savings_dormant",
+    title: REPORT_TITLES.savings_dormant,
+    description: "Accounts with no member activity for the dormancy period, and the balance they hold.",
+    category: "savings",
+    icon: MoonStar,
+    accent: ACCENT.indigo,
+    supportsBranch: true,
+    noDateRange: true,
+    ...SAVINGS_REPORT,
+    build: pointInTimeBuilder(
+      (params) => reportService.savingsDormant({ ...params, ...listParams }),
+      (raw) => buildSavingsDormantDoc(raw),
+    ),
+  },
+  {
+    id: "savings_statement",
+    title: REPORT_TITLES.savings_statement,
+    description: "One savings account's transactions with its opening, running and closing balances.",
+    category: "savings",
+    icon: BookOpen,
+    accent: ACCENT.purple,
+    accountParam: true,
+    noCsv: true,
+    ...SAVINGS_REPORT,
+    build: async (ctx: ReportContext): Promise<ReportDocument> => {
+      if (!ctx.subjectId) return buildSavingsStatementDoc(null, ctx.range);
+      const raw = await reportService
+        .savingsStatement(ctx.subjectId, { date_from: ctx.range.from, date_to: ctx.range.to })
+        .catch(() => null);
+      return buildSavingsStatementDoc(raw, ctx.range);
+    },
+  },
+  {
+    id: "savings_gl_control",
+    title: REPORT_TITLES.savings_gl_control,
+    description: "The savings subledger against GL 2050 and 2060, by branch, as of today.",
+    category: "savings",
+    icon: Scale,
+    accent: ACCENT.red,
+    supportsBranch: true,
+    noDateRange: true,
+    ...SAVINGS_REPORT,
+    build: pointInTimeBuilder(reportService.savingsGlControl, (raw) => buildSavingsGlControlDoc(raw)),
+  },
 ];
+
+/**
+ * The reports this user may open: their module is switched on for this
+ * deployment, and they hold any extra permission the report's data needs.
+ */
+export function visibleReports(can: (permission: Permission) => boolean): ReportDefinition[] {
+  return REPORT_CATALOG.filter(
+    (r) => r.available !== false && (!r.permission || can(r.permission)),
+  );
+}

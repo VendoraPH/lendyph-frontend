@@ -38,7 +38,20 @@ const REFERENCE_PREFIX: Record<ReportId, string> = {
   share_capital: "SCP",
   performance: "PRF",
   provisioning: "PRV",
+  // Savings report prefixes never start like a savings record's own number
+  // (SAV- accounts, SVT- transactions, SVI- interest rows, TD- certificates),
+  // so a printed report can't be mistaken for a transaction.
+  savings_balances: "SBR",
+  savings_transactions: "STR",
+  time_deposit_maturities: "TMR",
+  savings_interest_postings: "SIR",
+  savings_dormant: "SDR",
+  savings_statement: "SSA",
+  savings_gl_control: "SGC",
 };
+
+/** The prefixes of savings records' own numbers, which no report reference may start with. */
+export const SAVINGS_RECORD_PREFIXES = ["SAV", "SVT", "SVI", "TD"] as const;
 
 /** Sign-off roles. Cooperative reports are prepared, checked, then approved. */
 const SIGNATORY_ROLES = ["Prepared by", "Checked by", "Approved by"];
