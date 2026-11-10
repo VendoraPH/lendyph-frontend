@@ -109,7 +109,9 @@ export const savingsService = {
   /** Same member, same branch. 201 with both legs; no approval tier. */
   transfer: (id: number, data: SavingsTransferInput, key: string | null) =>
     postMoney<SavingsTransferResult>(E.TRANSFERS(id), data, key),
-  closingQuote: (id: number) => api.get<SavingsClosingQuote>(E.CLOSING_QUOTE(id)),
+  /** What closing on `date` (today by default; today or yesterday) credits and pays. */
+  closingQuote: (id: number, date?: string) =>
+    api.get<SavingsClosingQuote>(E.CLOSING_QUOTE(id), { params: date ? { date } : undefined }),
   /** 201 with the closed account, or 202 with `{approval}`. */
   close: (id: number, data: CloseSavingsAccountInput, key: string | null) =>
     postMoney<SavingsAccount>(E.CLOSE(id), data, key),
@@ -120,7 +122,9 @@ export const savingsService = {
 
   /** Every hold on the account, active first. A short list, so not paged. */
   holds: (id: number) => api.get<SavingsHold[]>(E.HOLDS(id)),
-  placeHold: (id: number, data: PlaceSavingsHoldInput) => api.post<SavingsHold>(E.HOLDS(id), data),
+  /** Needs an `Idempotency-Key` (422 without one). */
+  placeHold: (id: number, data: PlaceSavingsHoldInput, key: string | null) =>
+    api.post<SavingsHold>(E.HOLDS(id), data, idempotencyHeaders(key)),
   releaseHold: (holdId: number, data: ReleaseSavingsHoldInput) =>
     api.post<SavingsHold>(E.HOLD_RELEASE(holdId), data),
 

@@ -157,13 +157,31 @@ export function canOfferClose(account: Pick<SavingsAccount, "status">): boolean 
   return account.status !== "closed";
 }
 
-/** The status change offered on an account, or null: freeze an active or dormant one, unfreeze a frozen one. */
-export function statusChangeOffer(
-  account: Pick<SavingsAccount, "status">,
-): { status: "frozen" | "active"; label: string } | null {
-  if (account.status === "frozen") return { status: "active", label: "Unfreeze" };
-  if (account.status === "active" || account.status === "dormant") return { status: "frozen", label: "Freeze" };
-  return null;
+export interface StatusOffer {
+  status: "frozen" | "active";
+  label: string;
+}
+
+/**
+ * The status changes offered on an account: freeze an active or dormant one,
+ * reactivate a dormant one, unfreeze a frozen one. Unfreezing returns the
+ * account to the status the server decides (dormant when it was dormant before
+ * it was frozen), so the screen shows the server's answer.
+ */
+export function statusChangeOffers(account: Pick<SavingsAccount, "status">): StatusOffer[] {
+  switch (account.status) {
+    case "active":
+      return [{ status: "frozen", label: "Freeze" }];
+    case "dormant":
+      return [
+        { status: "active", label: "Reactivate" },
+        { status: "frozen", label: "Freeze" },
+      ];
+    case "frozen":
+      return [{ status: "active", label: "Unfreeze" }];
+    default:
+      return [];
+  }
 }
 
 const NOT_REVERSIBLE: ReadonlySet<SavingsTransactionType> = new Set([

@@ -38,8 +38,9 @@ interface DecideDialogProps {
 
 /**
  * Approve, reject or cancel one request. Approving re-checks the money under
- * the server's lock, so it may still be refused (422) if the funds are gone;
- * the server's words are shown.
+ * the server's lock, so it may still be refused: 422 if the funds are gone, or
+ * 409 on a close whose balance changed since the request ("make a new
+ * request"). The server's words are shown.
  */
 export function DecideDialog({ approval, decision, onOpenChange, onDecided }: DecideDialogProps) {
   const open = approval !== null;

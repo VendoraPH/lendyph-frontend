@@ -155,7 +155,7 @@ export function RunActions({ run, onChanged }: { run: InterestRun; onChanged: ()
   return (
     <div className="flex flex-wrap gap-2">
       {offered.approve && <ActionButton action="approve" blocked={offered.approveBlocked} onPick={setAction} />}
-      {offered.reject && <ActionButton action="reject" onPick={setAction} />}
+      {offered.reject && <ActionButton action="reject" blocked={offered.rejectBlocked} onPick={setAction} />}
       {offered.post && <ActionButton action="post" onPick={setAction} />}
       {offered.reverse && <ActionButton action="reverse" onPick={setAction} />}
 
@@ -164,7 +164,7 @@ export function RunActions({ run, onChanged }: { run: InterestRun; onChanged: ()
           <DialogHeader>
             <DialogTitle>{copy?.title}</DialogTitle>
             <DialogDescription>
-              {copy?.description} Net interest: {formatCurrency(run.total_net)} across {run.account_count} account(s).
+              {copy?.description} Net interest: {formatCurrency(run.total_net)} across {run.account_count} account{run.account_count === 1 ? "" : "s"} in the run.
             </DialogDescription>
           </DialogHeader>
           {needsReason && (

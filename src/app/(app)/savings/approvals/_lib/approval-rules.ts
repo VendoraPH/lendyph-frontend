@@ -5,7 +5,7 @@ export interface ApprovalOffer {
   approveBlocked: string | null;
   /** Why the caller can't reject, or null when they can. */
   rejectBlocked: string | null;
-  /** The maker may withdraw their own pending request. */
+  /** The maker may withdraw their own pending request (with `savings:transact`). */
   canCancel: boolean;
 }
 

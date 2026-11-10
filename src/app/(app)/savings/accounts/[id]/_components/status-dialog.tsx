@@ -17,22 +17,23 @@ import { notifyError, notifySuccess } from "@/lib/notify";
 import { savingsService } from "@/services";
 import type { SavingsAccount } from "@/types";
 import { FormField } from "../../../_components/field";
-import { statusChangeOffer } from "../../../_lib/savings-rules";
+import { ACCOUNT_STATUS_LABELS, labelOf, type StatusOffer } from "../../../_lib/savings-rules";
 
 interface StatusDialogProps {
-  open: boolean;
+  /** The change asked for, or null while closed. */
+  offer: StatusOffer | null;
   account: SavingsAccount;
   onOpenChange: (open: boolean) => void;
   onChanged: () => void;
 }
 
-/** Freeze an account, or unfreeze it, with a reason. Audited by the server. */
-export function StatusDialog({ open, account, onOpenChange, onChanged }: StatusDialogProps) {
-  const offer = statusChangeOffer(account);
+/** Freeze, unfreeze or reactivate an account, with a reason. Audited by the server. */
+export function StatusDialog({ offer, account, onOpenChange, onChanged }: StatusDialogProps) {
+  const open = offer !== null;
   const [reason, setReason] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const { submitting, run } = useSubmitGuard();
-  if (useDialogOpening(open, account.id)) {
+  if (useDialogOpening(open, offer?.label ?? null)) {
     setReason("");
     setSubmitted(false);
   }
@@ -43,8 +44,9 @@ export function StatusDialog({ open, account, onOpenChange, onChanged }: StatusD
     setSubmitted(true);
     if (!offer || reasonError) return;
     run(() => savingsService.setStatus(account.id, { status: offer.status, reason: reason.trim() }))
-      ?.then(() => {
-        notifySuccess(offer.status === "frozen" ? "Account frozen" : "Account unfrozen", account.account_number);
+      ?.then((changed) => {
+        // Unfreezing can return a once-dormant account to dormant: say what the server set.
+        notifySuccess(`Account is now ${labelOf(ACCOUNT_STATUS_LABELS, changed.status).toLowerCase()}`, account.account_number);
         onOpenChange(false);
         onChanged();
       })
@@ -60,8 +62,10 @@ export function StatusDialog({ open, account, onOpenChange, onChanged }: StatusD
           </DialogTitle>
           <DialogDescription>
             {offer?.status === "frozen"
-              ? "A frozen account takes no deposits, withdrawals or transfers until it is unfrozen. It keeps earning interest."
-              : "The account takes deposits, withdrawals and transfers again."}
+              ? "A frozen account takes no deposits, withdrawals, transfers or reversals until it is unfrozen. It keeps earning interest."
+              : offer?.label === "Reactivate"
+                ? "The account becomes active again, counted as member activity today."
+                : "The account takes transactions again. One that was dormant before it was frozen goes back to dormant."}
           </DialogDescription>
         </DialogHeader>
         <FormField id="st-reason" label="Reason" error={submitted ? reasonError : null}>

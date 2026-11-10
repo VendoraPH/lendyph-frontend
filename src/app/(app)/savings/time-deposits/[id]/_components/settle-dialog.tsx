@@ -20,8 +20,8 @@ import { timeDepositService } from "@/services";
 import type { MaturityInstruction, SavingsMethod, TimeDeposit } from "@/types";
 import { FormField } from "../../../_components/field";
 import { OptionSelect } from "../../../_components/option-select";
-import { PAYMENT_METHOD_OPTIONS } from "../../../_lib/savings-rules";
 import { MATURITY_INSTRUCTION_OPTIONS } from "../../../_lib/time-deposit-rules";
+import { payoutOptions, postMaturityLabel, settleBody } from "../../_lib/settle-form";
 
 interface SettleDialogProps {
   open: boolean;
@@ -34,20 +34,24 @@ interface SettleDialogProps {
 export function SettleDialog({ open, deposit, onOpenChange, onSettled }: SettleDialogProps) {
   const [date, setDate] = useState("");
   const [action, setAction] = useState<MaturityInstruction>(deposit.maturity_instruction);
-  const [method, setMethod] = useState<Exclude<SavingsMethod, "savings">>("cash");
+  const methods = payoutOptions(deposit);
+  const [method, setMethod] = useState<SavingsMethod>(methods[0].value);
+  const [next, setNext] = useState<MaturityInstruction>(deposit.maturity_instruction);
   const { submitting, run } = useSubmitGuard();
   if (useDialogOpening(open, deposit)) {
     setDate(todayISO());
     setAction(deposit.maturity_instruction);
-    setMethod("cash");
+    setNext(deposit.maturity_instruction);
+    setMethod(methods[0].value);
   }
 
   const tooEarly = date !== "" && date < deposit.maturity_date;
   const paysOut = action !== "rollover_all";
+  const rollsOver = action !== "payout";
 
   function submit() {
     if (!date || tooEarly) return;
-    const body = { date, action, payout_method: method };
+    const body = settleBody(date, action, method, next);
     run((key) => timeDepositService.settle(deposit.id, body, key))
       ?.then((result) => {
         const next = result.kind === "posted" ? result.record : null;
@@ -68,8 +72,9 @@ export function SettleDialog({ open, deposit, onOpenChange, onSettled }: SettleD
           <DialogTitle>Settle {deposit.certificate_number}</DialogTitle>
           <DialogDescription>
             Matured {formatDate(deposit.maturity_date)} with {formatCurrency(deposit.maturity_amount)} due. A rollover
-            opens a new placement at the rate in force on the maturity date and links the two. Above the approval
-            amount, a payout waits for approval.
+            opens a new placement at the rate in force on the maturity date and links the two; it is refused, in the
+            server&apos;s words, when the product no longer offers the term. A payout over the counter above the
+            approval amount waits for approval; one into the member&apos;s savings account posts at once.
           </DialogDescription>
         </DialogHeader>
 
@@ -77,6 +82,25 @@ export function SettleDialog({ open, deposit, onOpenChange, onSettled }: SettleD
           <FormField id="st-action" label="Action" hint="Defaults to the instruction given at placement.">
             <OptionSelect id="st-action" value={action} onChange={(v) => setAction(v as MaturityInstruction)} options={MATURITY_INSTRUCTION_OPTIONS} />
           </FormField>
+          {rollsOver && (
+            <FormField id="st-next" label="The new placement at maturity" hint="Defaults to this placement's instruction.">
+              <OptionSelect
+                id="st-next"
+                value={next}
+                onChange={(v) => setNext(v as MaturityInstruction)}
+                options={MATURITY_INSTRUCTION_OPTIONS}
+              />
+            </FormField>
+          )}
+          {deposit.post_maturity_interest !== "0.00" && (
+            <p className="rounded-md border bg-muted/40 p-2 text-sm">
+              {postMaturityLabel(deposit)}:{" "}
+              <span className="tabular-nums">
+                {deposit.post_maturity_interest === null ? "—" : formatCurrency(deposit.post_maturity_interest)}
+              </span>{" "}
+              if settled today.
+            </p>
+          )}
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField id="st-date" label="Settlement date" error={tooEarly ? "This is before the maturity date; pre-terminate instead." : null}>
               <Input id="st-date" type="date" value={date} min={deposit.maturity_date} max={todayISO()} onChange={(e) => setDate(e.target.value)} />
@@ -86,8 +110,8 @@ export function SettleDialog({ open, deposit, onOpenChange, onSettled }: SettleD
                 <OptionSelect
                   id="st-method"
                   value={method}
-                  onChange={(v) => setMethod(v as Exclude<SavingsMethod, "savings">)}
-                  options={PAYMENT_METHOD_OPTIONS}
+                  onChange={(v) => setMethod(v as SavingsMethod)}
+                  options={methods}
                 />
               </FormField>
             )}

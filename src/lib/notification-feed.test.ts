@@ -15,6 +15,7 @@ import {
   markOneRead,
   needsReadTopUp,
   notificationTone,
+  notificationTypeLabel,
   revertReadAt,
   safeAppPath,
   unreadBadgeLabel,
@@ -466,5 +467,24 @@ describe("badge and labels", () => {
     assert.equal(notificationTone("reminder_contact_invalid"), "warning");
     assert.equal(notificationTone("reminder_follow_up"), "warning");
     assert.equal(notificationTone("reminder_failed"), "danger");
+  });
+});
+
+describe("savings notifications", () => {
+  test("the two savings kinds read in words and take their tone", () => {
+    assert.equal(notificationTypeLabel("savings_gl_difference"), "Savings books don't match the savings records");
+    assert.equal(notificationTypeLabel("savings_large_transaction"), "Large savings transaction");
+    assert.equal(notificationTone("savings_gl_difference"), "danger");
+    assert.equal(notificationTone("savings_large_transaction"), "warning");
+  });
+
+  test("an unknown kind reads as a plain notification, never its key", () => {
+    assert.equal(notificationTypeLabel("something_new"), "Notification");
+  });
+
+  test("a row without a title shows its kind in words", () => {
+    const [item] = buildFeed([row({ id: "n1", type: "savings_large_transaction", title: "" })], NOW);
+    assert.equal(item.title, "Large savings transaction");
+    assert.equal(item.kind, "Large savings transaction");
   });
 });

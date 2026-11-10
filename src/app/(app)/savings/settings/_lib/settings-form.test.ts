@@ -30,7 +30,7 @@ test("blank or over-precise amounts, fewer than two approvers and no dormancy ar
   assert.deepEqual(problems, [
     "Approval needed above",
     "Two approvers needed above",
-    "Approvers above the second amount (2 or more)",
+    "Approvers above the second amount (2)",
     "Dormant after (months)",
   ]);
 });

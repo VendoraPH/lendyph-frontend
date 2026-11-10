@@ -421,6 +421,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     accent: ACCENT.amber,
     supportsBranch: true,
     ...SAVINGS_REPORT,
+    defaultPeriod: "whole_month",
     build: reportBuilder(reportService.timeDepositMaturities, buildTimeDepositMaturitiesDoc, listParams),
   },
   {
@@ -457,6 +458,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     icon: BookOpen,
     accent: ACCENT.purple,
     accountParam: true,
+    noCsv: true,
     ...SAVINGS_REPORT,
     build: async (ctx: ReportContext): Promise<ReportDocument> => {
       if (!ctx.subjectId) return buildSavingsStatementDoc(null, ctx.range);

@@ -7,6 +7,7 @@ import {
   isIsoDate,
   MAKER_APPROVE_REASON,
   RUN_STATUS_TABS,
+  MAKER_REJECT_REASON,
   runActions,
   runProductOptions,
   skipReasonText,
@@ -14,17 +15,19 @@ import {
 
 const maker = { id: 5, name: "Ana" };
 
-test("a draft offers approve and reject; the maker can't approve their own run", () => {
+test("a draft offers approve and reject; the maker can't approve or reject their own run", () => {
   assert.deepEqual(runActions({ status: "draft", created_by: maker }, 9), {
     approve: true,
     approveBlocked: null,
     reject: true,
+    rejectBlocked: null,
     post: false,
     reverse: false,
   });
   const own = runActions({ status: "draft", created_by: maker }, 5);
   assert.equal(own.approve, true);
   assert.equal(own.approveBlocked, MAKER_APPROVE_REASON);
+  assert.equal(own.rejectBlocked, MAKER_REJECT_REASON);
   assert.equal(MAKER_APPROVE_REASON, "You created this run; another user must approve it");
 });
 

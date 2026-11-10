@@ -70,6 +70,12 @@ const BACKEND_CSV_EXPORTERS: Partial<Record<ReportId, BackendExporter>> = {
   releases_list: reportService.exportReleases,
   repayments_list: reportService.exportRepayments,
   due_past_due_list: reportService.exportDuePastDue,
+  savings_balances: (params) => reportService.exportSavingsReport("balances", params),
+  savings_transactions: (params) => reportService.exportSavingsReport("transactions", params),
+  time_deposit_maturities: (params) => reportService.exportSavingsReport("time-deposit-maturities", params),
+  savings_interest_postings: (params) => reportService.exportSavingsReport("interest-postings", params),
+  savings_dormant: (params) => reportService.exportSavingsReport("dormant", params),
+  savings_gl_control: (params) => reportService.exportSavingsReport("gl-control", params),
 };
 
 type ExportFormat = "excel" | "pdf" | "docx" | "csv" | "print";
@@ -122,6 +128,7 @@ type Preset =
   | "yesterday"
   | "last_7"
   | "this_month"
+  | "whole_month"
   | "last_month"
   | "ytd"
   | "custom";
@@ -131,6 +138,7 @@ const PRESETS: { id: Preset; label: string }[] = [
   { id: "yesterday", label: "Yesterday" },
   { id: "last_7", label: "Last 7 Days" },
   { id: "this_month", label: "This Month" },
+  { id: "whole_month", label: "Whole Month" },
   { id: "last_month", label: "Last Month" },
   { id: "ytd", label: "Year to Date" },
   { id: "custom", label: "Custom" },
@@ -165,6 +173,11 @@ function presetRange(preset: Preset, fallback: DateRange): DateRange {
         from: formatDateISO(new Date(y, m, 1)),
         to: formatDateISO(new Date(y, m, d)),
       };
+    case "whole_month":
+      return {
+        from: formatDateISO(new Date(y, m, 1)),
+        to: formatDateISO(new Date(y, m + 1, 0)),
+      };
     case "last_month":
       return {
         from: formatDateISO(new Date(y, m - 1, 1)),
@@ -196,9 +209,10 @@ function ReportDetailContent({
   // same as an unknown id, so its data is never requested.
   const report = visibleReports(hasPermission).find((r) => r.id === (reportId as ReportId));
 
-  const [preset, setPreset] = useState<Preset>("this_month");
+  const defaultPreset: Preset = report?.defaultPeriod ?? "this_month";
+  const [preset, setPreset] = useState<Preset>(defaultPreset);
   const [range, setRange] = useState<DateRange>(() =>
-    presetRange("this_month", { from: "", to: "" })
+    presetRange(defaultPreset, { from: "", to: "" })
   );
   const [branchId, setBranchId] = useState<number | null>(null);
   // `?member=<id>` opens a member's report with them selected. Reading a member
@@ -461,6 +475,7 @@ function ReportDetailContent({
           </Button>
           <ExportMenu
             doc={doc}
+            noCsv={report.noCsv === true}
             exportingFormat={exportingFormat}
             onExport={handleExport}
           />
@@ -677,11 +692,13 @@ export default function ReportDetailPage() {
 
 interface ExportMenuProps {
   doc: ReportDocument | null;
+  /** Hides the CSV export for a report the server writes no CSV for. */
+  noCsv?: boolean;
   exportingFormat: ExportFormat | null;
   onExport: (format: ExportFormat) => void;
 }
 
-function ExportMenu({ doc, exportingFormat, onExport }: ExportMenuProps) {
+function ExportMenu({ doc, noCsv = false, exportingFormat, onExport }: ExportMenuProps) {
   const disabled = !doc;
   const exporting = exportingFormat !== null;
 
@@ -720,7 +737,7 @@ function ExportMenu({ doc, exportingFormat, onExport }: ExportMenuProps) {
           <DropdownMenuGroup>
             <DropdownMenuLabel>Export as…</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {EXPORT_FORMATS.map((fmt) => {
+            {EXPORT_FORMATS.filter((fmt) => !(noCsv && fmt.id === "csv")).map((fmt) => {
               const Icon = fmt.icon;
               return (
                 <DropdownMenuItem

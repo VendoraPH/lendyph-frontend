@@ -25,7 +25,8 @@ const WHOLE = /^\d+$/;
 /**
  * `PUT /savings/settings`, or the labels to fix. Amounts are sent as typed
  * (two-decimal text). The server checks that the second tier is above the
- * first and answers 422 in words if it isn't.
+ * first and answers 422 in words if it isn't. Above the second tier, v1 always
+ * needs two different approvers, so that number is shown, never edited.
  */
 export function readSettingsDraft(d: SettingsDraft): { input: SavingsSettingsInput; problems: string[] } {
   const problems: string[] = [];
@@ -41,7 +42,7 @@ export function readSettingsDraft(d: SettingsDraft): { input: SavingsSettingsInp
     dormancy_months: WHOLE.test(d.dormancy.trim()) ? Number(d.dormancy) : 0,
     large_transaction_alert: money(d.alert, "Large transaction alert"),
   };
-  if (input.tier3_checkers < 2) problems.push("Approvers above the second amount (2 or more)");
+  if (input.tier3_checkers !== 2) problems.push("Approvers above the second amount (2)");
   if (input.dormancy_months < 1) problems.push("Dormant after (months)");
   return { input, problems };
 }

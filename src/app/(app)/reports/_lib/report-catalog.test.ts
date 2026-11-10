@@ -170,3 +170,10 @@ test("the savings statement reads the account it was opened for, over the period
   await statement.build({ range: RANGE, subjectId: null });
   assert.equal(requests.length, 0);
 });
+
+test("Time Deposit Maturities opens on the whole month, and the savings statement offers no CSV", async () => {
+  assert.equal((await reportDefinition("time_deposit_maturities")).defaultPeriod, "whole_month");
+  assert.equal((await reportDefinition("savings_balances")).defaultPeriod, undefined);
+  assert.equal((await reportDefinition("savings_statement")).noCsv, true);
+  assert.equal((await reportDefinition("savings_transactions")).noCsv, undefined);
+});

@@ -36,6 +36,8 @@ const TD: TimeDeposit = {
   settled_amount: null,
   payout_method: null,
   settled_by: null,
+  post_maturity_days: 0,
+  post_maturity_interest: "0.00",
   rolled_over_from_id: null,
   rolled_over_to_id: null,
   created_by: { id: 1, name: "Teller One" },

@@ -208,6 +208,7 @@ export const API_ENDPOINTS = {
     SAVINGS_DORMANT: "/reports/savings/dormant",
     SAVINGS_STATEMENT: (accountId: number) => `/reports/savings/statement/${accountId}`,
     SAVINGS_GL_CONTROL: "/reports/savings/gl-control",
+    SAVINGS_EXPORT: (report: string) => `/reports/savings/${report}/export`,
     // Running-balance statement for one member. Separate from SHARE_CAPITAL
     // (the org-wide summary) and from SHARE_CAPITAL.LEDGER_LIST, whose
     // paginator caps at 100 rows and carries no opening/closing balance.

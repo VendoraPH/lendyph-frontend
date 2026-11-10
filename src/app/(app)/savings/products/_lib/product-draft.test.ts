@@ -35,8 +35,8 @@ test("a time deposit with no terms, a rate that isn't one, or money with more th
 test("a regular draft sends no time deposit fields, and money as two-decimal text", () => {
   const { input } = readCreateDraft({ ...toDraft(null), code: "RS", name: "Regular", rate: "1.5", maintaining: "100" });
   assert.equal(input.kind, "regular");
-  assert.equal(input.term_options_days, null);
-  assert.equal(input.pretermination_product_id, null);
+  assert.equal("term_options_days" in input, false);
+  assert.equal("pretermination_product_id" in input, false);
   assert.equal(input.maintaining_balance, "100.00");
   assert.equal(input.minimum_opening_balance, "0.00");
 });

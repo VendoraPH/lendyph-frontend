@@ -46,12 +46,14 @@ export interface SavingsSettings {
   /** The rate in force today per holder type. */
   current_tax_rates: Record<SavingsHolderType, RateString>;
   tax_rules: SavingsTaxRule[];
+  updated_by?: SavingsUserRef | null;
   updated_at?: string | null;
 }
 
 export interface SavingsSettingsInput {
   tier1_limit: string;
   tier2_limit: string;
+  /** The server accepts only 2 (dual control) in v1. */
   tier3_checkers: number;
   dormancy_months: number;
   large_transaction_alert: string;
@@ -74,6 +76,7 @@ export type InterestCrediting = "monthly" | "quarterly" | "semi_annual" | "annua
 /** One append-only rate row. `term_days` is null on a regular product. */
 export interface SavingsProductRate {
   id?: number;
+  product_id?: number;
   term_days: number | null;
   annual_rate: RateString;
   effective_from: string;
@@ -115,14 +118,26 @@ export interface SavingsProductCreateInput {
   minimum_opening_balance: string;
   maintaining_balance: string;
   minimum_adb_for_interest: string;
-  term_options_days: number[] | null;
-  pretermination_product_id: number | null;
+  /** Time deposits only; left out on a regular product. */
+  term_options_days?: number[];
+  /** Time deposits only; left out on a regular product. */
+  pretermination_product_id?: number | null;
   is_active: boolean;
   annual_interest_rate: string;
 }
 
-/** `PUT /savings/products/{id}`: the product's terms; rates go through the rates endpoint. */
-export type SavingsProductUpdateInput = Omit<SavingsProductCreateInput, "annual_interest_rate" | "kind">;
+/**
+ * `PUT /savings/products/{id}`: the product's terms; rates go through the rates
+ * endpoint. The time-deposit fields are left out on a regular product (the
+ * server refuses them there).
+ */
+export type SavingsProductUpdateInput = Omit<
+  SavingsProductCreateInput,
+  "annual_interest_rate" | "kind" | "term_options_days" | "pretermination_product_id"
+> & {
+  term_options_days?: number[];
+  pretermination_product_id?: number | null;
+};
 
 export interface SavingsRateInput {
   annual_rate: string;
@@ -389,6 +404,7 @@ export interface TimeDeposit {
   net_interest: MoneyString;
   maturity_amount: MoneyString;
   maturity_instruction: MaturityInstruction;
+  /** Null on a rollover: the earlier placement (`rolled_over_from_id`) funded it. */
   funding_method: SavingsMethod | null;
   payout_account_id: number | null;
   payout_account_number?: string | null;
@@ -400,9 +416,17 @@ export interface TimeDeposit {
   payout_method: SavingsMethod | null;
   /** Null when the system settled it (shown as "System"). */
   settled_by: SavingsUserRef | null;
+  /**
+   * Days and interest after the maturity date: what a late settlement paid, or
+   * what settling today would pay on a placement past maturity. Null when the
+   * server couldn't work it out.
+   */
+  post_maturity_days: number | null;
+  post_maturity_interest: MoneyString | null;
   rolled_over_from_id: number | null;
   rolled_over_to_id?: number | null;
   created_by: SavingsUserRef | null;
+  created_at?: string | null;
 }
 
 /** `GET /savings/time-deposits`: one page, `meta.stats` per status and `meta.totals` over the filter. */
@@ -456,11 +480,16 @@ export interface PlaceTimeDepositInput {
 }
 
 export interface SettleTimeDepositInput {
-  /** YYYY-MM-DD, on or after the maturity date. */
+  /** YYYY-MM-DD, on or after the maturity date (today or yesterday). */
   date: string;
   action: MaturityInstruction;
-  /** How anything paid out leaves the cooperative. Ignored for `rollover_all`. */
-  payout_method: SavingsMethod;
+  /**
+   * How anything paid out leaves the cooperative; left out for `rollover_all`.
+   * `savings` pays into the placement's payout account and needs no approval.
+   */
+  payout_method?: SavingsMethod;
+  /** On a rollover: the new placement's instruction (the original's when left out). */
+  next_instruction?: MaturityInstruction;
 }
 
 export interface PreterminateTimeDepositInput {
@@ -490,7 +519,9 @@ export type InterestRunStatus = "draft" | "approved" | "posted" | "rejected" | "
 export interface InterestRunLine {
   account_id: number;
   account_number: string | null;
+  borrower_id?: number | null;
   borrower_name: string | null;
+  borrower_code?: string | null;
   days: number;
   average_daily_balance: MoneyString;
   rate: RateString;
@@ -505,23 +536,32 @@ export interface InterestRunLine {
 export interface InterestRun {
   id: number;
   product: { id: number; code?: string; name: string } | null;
+  product_id: number;
+  product_name: string | null;
   branch: { id: number; name: string } | null;
+  branch_id: number | null;
+  branch_name: string | null;
   period_start: string;
   period_end: string;
   status: InterestRunStatus;
+  /** Every line in the run, accounts that earned nothing included. */
   account_count: number;
   total_gross: MoneyString;
   total_tax: MoneyString;
   total_net: MoneyString;
   created_by: SavingsUserRef | null;
+  /** One checker column on the server: set on an approved run, or as `rejected_by` on a rejected one. */
   approved_by: SavingsUserRef | null;
+  approved_at: string | null;
+  rejected_by: SavingsUserRef | null;
+  rejected_at: string | null;
+  reject_reason: string | null;
   posted_by: SavingsUserRef | null;
-  rejected_by?: SavingsUserRef | null;
-  reversed_by?: SavingsUserRef | null;
-  reject_reason?: string | null;
-  reverse_reason?: string | null;
+  posted_at: string | null;
+  reversed_by: SavingsUserRef | null;
+  reversed_at: string | null;
+  reverse_reason: string | null;
   created_at: string | null;
-  posted_at?: string | null;
   /** On `GET /savings/interest-runs/{id}`. */
   lines?: InterestRunLine[];
 }
@@ -535,6 +575,7 @@ export interface InterestRunRequest {
 
 /** `POST /savings/interest-runs/preview`: one draft-to-be per branch. Writes nothing. */
 export interface InterestRunPreview {
+  product?: { id: number; code?: string; name: string } | null;
   period_start: string;
   period_end: string;
   runs: Array<

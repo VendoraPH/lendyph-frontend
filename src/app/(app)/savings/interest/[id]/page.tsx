@@ -44,24 +44,43 @@ function RunDetail({ run, onChanged }: { run: InterestRun; onChanged: () => void
       <Card>
         <CardContent className="pt-6">
           <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
-            <Detail label="Product">{run.product?.name ?? "—"}</Detail>
-            <Detail label="Branch">{run.branch?.name ?? "—"}</Detail>
+            <Detail label="Product">{run.product_name ?? run.product?.name ?? "—"}</Detail>
+            <Detail label="Branch">{run.branch_name ?? run.branch?.name ?? "—"}</Detail>
             <Detail label="Created by">
               {actorName(run.created_by)}
               {run.created_at && (
                 <span className="block text-xs font-normal text-muted-foreground">{formatDateTime(run.created_at)}</span>
               )}
             </Detail>
-            <Detail label="Approved by">{run.approved_by ? run.approved_by.name : "—"}</Detail>
+            <Detail label="Approved by">
+              {run.approved_by ? run.approved_by.name : "—"}
+              {run.approved_at && (
+                <span className="block text-xs font-normal text-muted-foreground">{formatDateTime(run.approved_at)}</span>
+              )}
+            </Detail>
             <Detail label="Posted by">
               {run.posted_by ? run.posted_by.name : "—"}
               {run.posted_at && (
                 <span className="block text-xs font-normal text-muted-foreground">{formatDateTime(run.posted_at)}</span>
               )}
             </Detail>
-            {run.rejected_by && <Detail label="Rejected by">{run.rejected_by.name}</Detail>}
+            {run.rejected_by && (
+              <Detail label="Rejected by">
+                {run.rejected_by.name}
+                {run.rejected_at && (
+                  <span className="block text-xs font-normal text-muted-foreground">{formatDateTime(run.rejected_at)}</span>
+                )}
+              </Detail>
+            )}
             {run.reject_reason && <Detail label="Reason for rejecting">{run.reject_reason}</Detail>}
-            {run.reversed_by && <Detail label="Reversed by">{run.reversed_by.name}</Detail>}
+            {run.reversed_by && (
+              <Detail label="Reversed by">
+                {run.reversed_by.name}
+                {run.reversed_at && (
+                  <span className="block text-xs font-normal text-muted-foreground">{formatDateTime(run.reversed_at)}</span>
+                )}
+              </Detail>
+            )}
             {run.reverse_reason && <Detail label="Reason for reversing">{run.reverse_reason}</Detail>}
           </dl>
         </CardContent>

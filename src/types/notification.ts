@@ -22,7 +22,12 @@ export type NotificationType =
   // go out after every attempt.
   | "reminder_contact_invalid"
   | "reminder_follow_up"
-  | "reminder_failed";
+  | "reminder_failed"
+  // Savings (Phase 3): the nightly control found the savings records and the
+  // books (2050, 2060) apart, for holders of savings:post; a savings
+  // transaction at or above the large-transaction alert.
+  | "savings_gl_difference"
+  | "savings_large_transaction";
 
 /**
  * One row of `GET /notifications`, the signed-in user's own notifications.

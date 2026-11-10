@@ -20,6 +20,7 @@ import type { SavingsAccount } from "@/types";
 import { FormField } from "../../../_components/field";
 import { OptionSelect } from "../../../_components/option-select";
 import { parseMoneyInput } from "@/lib/money-input";
+import { useSubmitGuard } from "@/hooks/use-submit-guard";
 import { HOLD_TYPE_OPTIONS } from "../../../_lib/savings-rules";
 
 interface PlaceHoldDialogProps {
@@ -35,7 +36,7 @@ export function PlaceHoldDialog({ open, account, onOpenChange, onPlaced }: Place
   const [reason, setReason] = useState("");
   const [expiresOn, setExpiresOn] = useState("");
   const [submitted, setSubmitted] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const { submitting, run } = useSubmitGuard();
   if (useDialogOpening(open, account.id)) {
     setAmount("");
     setType("manual");
@@ -47,27 +48,25 @@ export function PlaceHoldDialog({ open, account, onOpenChange, onPlaced }: Place
   const today = todayISO();
   const parsed = parseMoneyInput(amount, { label: "Amount to hold" });
   const amountError = parsed.ok ? null : parsed.message;
-  const dateError = expiresOn && expiresOn <= today ? "The hold must end after today, or leave the date blank." : null;
+  const dateError = expiresOn && expiresOn < today ? "The hold can end today or later, or leave the date blank." : null;
   const reasonError = reason.trim() ? null : "Say what the hold is for.";
 
   function submit() {
     setSubmitted(true);
     if (!parsed.ok || reasonError || dateError) return;
-    setSubmitting(true);
-    savingsService
-      .placeHold(account.id, {
-        type,
-        amount: parsed.value,
-        reason: reason.trim(),
-        ...(expiresOn ? { expires_on: expiresOn } : {}),
-      })
-      .then(() => {
+    const body = {
+      type,
+      amount: parsed.value,
+      reason: reason.trim(),
+      ...(expiresOn ? { expires_on: expiresOn } : {}),
+    };
+    run((key) => savingsService.placeHold(account.id, body, key))
+      ?.then(() => {
         notifySuccess("Hold placed", `${formatCurrency(parsed.value)} on ${account.account_number}`);
         onOpenChange(false);
         onPlaced();
       })
-      .catch((err: unknown) => notifyError(err, "Couldn't place the hold."))
-      .then(() => setSubmitting(false));
+      .catch((err: unknown) => notifyError(err, "Couldn't place the hold."));
   }
 
   return (

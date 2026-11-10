@@ -78,9 +78,14 @@ function readTerms(d: ProductDraft): { input: SavingsProductUpdateInput; problem
     minimum_opening_balance: moneyField(d.minOpening, td ? "Minimum placement" : "Minimum opening balance", problems),
     maintaining_balance: td ? "0.00" : moneyField(d.maintaining, "Maintaining balance", problems),
     minimum_adb_for_interest: td ? "0.00" : moneyField(d.minAdb, "Minimum average daily balance to earn interest", problems),
-    term_options_days: td ? (terms ?? []) : null,
-    pretermination_product_id: td && d.preProductId ? Number(d.preProductId) : null,
     is_active: d.active,
+    // The time-deposit fields go only on a time deposit; the server refuses them on a regular product.
+    ...(td
+      ? {
+          term_options_days: terms ?? [],
+          pretermination_product_id: d.preProductId ? Number(d.preProductId) : null,
+        }
+      : {}),
   };
   return { input, problems };
 }

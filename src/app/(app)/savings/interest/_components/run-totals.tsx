@@ -13,7 +13,7 @@ export interface RunFigures {
 export function RunTotals({ figures }: { figures: RunFigures }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <Kpi label="Accounts" value={String(figures.account_count)} />
+      <Kpi label="Accounts in run" value={String(figures.account_count)} />
       <Kpi label="Gross interest" value={formatCurrency(figures.total_gross)} />
       <Kpi label="Withholding tax" value={formatCurrency(figures.total_tax)} />
       <Kpi label="Net interest credited" value={formatCurrency(figures.total_net)} />

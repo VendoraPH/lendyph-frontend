@@ -300,6 +300,16 @@ export const reportService = {
   shareCapitalStatement: (borrowerId: number, params?: Record<string, unknown>) =>
     api.get(API_ENDPOINTS.REPORTS.SHARE_CAPITAL_STATEMENT(borrowerId), { params }),
 
+  /**
+   * Savings report CSVs, written by the server over the whole filter
+   * (reports:export plus savings:view). The statement has none: it's a
+   * printable.
+   */
+  exportSavingsReport: (
+    report: "balances" | "transactions" | "time-deposit-maturities" | "interest-postings" | "dormant" | "gl-control",
+    params?: Record<string, unknown>,
+  ) => api.download(API_ENDPOINTS.REPORTS.SAVINGS_EXPORT(report), { params }),
+
   exportReleases: (params?: Record<string, unknown>) =>
     api.download(API_ENDPOINTS.REPORTS.EXPORT_RELEASES, { params }),
 

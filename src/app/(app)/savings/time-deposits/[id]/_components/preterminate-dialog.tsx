@@ -21,7 +21,7 @@ import { timeDepositService } from "@/services";
 import type { SavingsMethod, TimeDeposit } from "@/types";
 import { FormField } from "../../../_components/field";
 import { OptionSelect } from "../../../_components/option-select";
-import { PAYMENT_METHOD_OPTIONS } from "../../../_lib/savings-rules";
+import { payoutOptions } from "../../_lib/settle-form";
 
 interface PreterminateDialogProps {
   open: boolean;
@@ -32,13 +32,14 @@ interface PreterminateDialogProps {
 
 export function PreterminateDialog({ open, deposit, onOpenChange, onDone }: PreterminateDialogProps) {
   const [date, setDate] = useState("");
-  const [method, setMethod] = useState<Exclude<SavingsMethod, "savings">>("cash");
+  const methods = payoutOptions(deposit);
+  const [method, setMethod] = useState<SavingsMethod>(methods[0].value);
   const [reason, setReason] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const { submitting, run } = useSubmitGuard();
   if (useDialogOpening(open, deposit)) {
     setDate(todayISO());
-    setMethod("cash");
+    setMethod(methods[0].value);
     setReason("");
     setSubmitted(false);
   }
@@ -69,7 +70,8 @@ export function PreterminateDialog({ open, deposit, onOpenChange, onDone }: Pret
           <DialogDescription>
             Breaking the placement before maturity pays the regular savings rate kept at placement
             {deposit.pretermination_rate != null && ` (${formatRate(deposit.pretermination_rate)}% a year)`} for the days
-            held, less withholding tax. This can&apos;t be undone. Above the approval amount, it waits for approval.
+            held, less withholding tax. This can&apos;t be undone. Paid over the counter above the approval amount, it
+            waits for approval.
           </DialogDescription>
         </DialogHeader>
 
@@ -82,8 +84,8 @@ export function PreterminateDialog({ open, deposit, onOpenChange, onDone }: Pret
               <OptionSelect
                 id="pt-method"
                 value={method}
-                onChange={(v) => setMethod(v as Exclude<SavingsMethod, "savings">)}
-                options={PAYMENT_METHOD_OPTIONS}
+                onChange={(v) => setMethod(v as SavingsMethod)}
+                options={methods}
               />
             </FormField>
           </div>

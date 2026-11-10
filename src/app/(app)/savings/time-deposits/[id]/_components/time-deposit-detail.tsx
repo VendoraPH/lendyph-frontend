@@ -22,6 +22,7 @@ import {
 } from "../../../_lib/time-deposit-rules";
 import { TdStatusBadge } from "../../_components/td-status-badge";
 import { printTimeDepositCertificate } from "../_lib/print-certificate";
+import { postMaturityLabel } from "../../_lib/settle-form";
 import { PreterminateDialog } from "./preterminate-dialog";
 import { SettleDialog } from "./settle-dialog";
 
@@ -88,14 +89,11 @@ export function TimeDepositDetail({ depositId }: { depositId: number }) {
                       >
                         <HandCoins className="h-4 w-4" /> Settle at maturity
                       </ActionButton>
-                      <ActionButton
-                        permission="savings:close"
-                        variant="outline"
-                        onClick={() => setBreaking(true)}
-                        blockedReason={breakable ? null : "Only a running placement before its maturity date can be pre-terminated."}
-                      >
-                        <Ban className="h-4 w-4" /> Pre-terminate
-                      </ActionButton>
+                      {breakable && (
+                        <ActionButton permission="savings:close" variant="outline" onClick={() => setBreaking(true)}>
+                          <Ban className="h-4 w-4" /> Pre-terminate
+                        </ActionButton>
+                      )}
                     </>
                   )}
                 </div>
@@ -146,8 +144,15 @@ function Terms({ td }: { td: TimeDeposit }) {
     ["At maturity", labelOf(MATURITY_INSTRUCTION_LABELS, td.maturity_instruction)],
     ["Early termination rate", td.pretermination_rate == null ? "—" : `${formatRate(td.pretermination_rate)}% a year`],
     ["Withholding tax rate", `${formatRate(td.withholding_tax_rate)}%`],
-    ["Paid by", td.funding_method ? labelOf(METHOD_LABELS, td.funding_method) : "—"],
   ];
+  // A rollover has no funding method: the earlier placement funded it.
+  if (td.funding_method) rows.push(["Paid by", labelOf(METHOD_LABELS, td.funding_method)]);
+  else if (td.rolled_over_from_id) rows.push(["Paid by", "Rolled over from the previous placement"]);
+  if (td.post_maturity_interest !== "0.00")
+    rows.push([
+      postMaturityLabel(td),
+      td.post_maturity_interest === null ? "—" : formatCurrency(td.post_maturity_interest),
+    ]);
   if (td.payout_account_id)
     rows.push([
       "Maturity paid into",

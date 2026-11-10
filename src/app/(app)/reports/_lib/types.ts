@@ -299,6 +299,14 @@ export interface ReportDefinition {
   /** Set when the API takes no dates, which hides the date range controls. */
   noDateRange?: boolean;
   /**
+   * The period the report opens on. "this_month" (the default) runs from the
+   * 1st to today; "whole_month" to the month's last day, for a report that
+   * looks ahead, such as time deposits maturing.
+   */
+  defaultPeriod?: "this_month" | "whole_month";
+  /** Set when the server writes no CSV for the report (a printable), which hides the CSV export. */
+  noCsv?: boolean;
+  /**
    * A permission beyond `reports:view` that the report's data needs, such as
    * `savings:view` for the savings reports. Without it the report is not
    * listed and its page answers "not found".

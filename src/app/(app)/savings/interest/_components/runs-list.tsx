@@ -27,7 +27,7 @@ function RunsTable({ runs }: { runs: InterestRun[] }) {
             <TableHead>Period</TableHead>
             <TableHead>Product</TableHead>
             <TableHead>Branch</TableHead>
-            <TableHead className="text-right">Accounts</TableHead>
+            <TableHead className="text-right">Accounts in run</TableHead>
             <TableHead className="text-right">Gross interest</TableHead>
             <TableHead className="text-right">Net interest</TableHead>
             <TableHead>Status</TableHead>
@@ -41,8 +41,8 @@ function RunsTable({ runs }: { runs: InterestRun[] }) {
                   {formatDate(run.period_start)} to {formatDate(run.period_end)}
                 </Link>
               </TableCell>
-              <TableCell>{run.product?.name ?? "—"}</TableCell>
-              <TableCell>{run.branch?.name ?? "—"}</TableCell>
+              <TableCell>{run.product_name ?? run.product?.name ?? "—"}</TableCell>
+              <TableCell>{run.branch_name ?? run.branch?.name ?? "—"}</TableCell>
               <TableCell className="text-right tabular-nums">{run.account_count}</TableCell>
               <TableCell className="text-right tabular-nums">{formatCurrency(run.total_gross)}</TableCell>
               <TableCell className="text-right tabular-nums">{formatCurrency(run.total_net)}</TableCell>

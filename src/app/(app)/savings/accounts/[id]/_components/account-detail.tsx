@@ -26,7 +26,8 @@ import {
   canDeposit,
   canOfferClose,
   canWithdraw,
-  statusChangeOffer,
+  statusChangeOffers,
+  type StatusOffer,
 } from "../../../_lib/savings-rules";
 import { printSavingsPassbook } from "../_lib/print-passbook";
 import { CloseAccountDialog } from "./close-account-dialog";
@@ -43,7 +44,7 @@ export function AccountDetail({ accountId }: { accountId: number }) {
   const [mode, setMode] = useState<TransactionMode | null>(null);
   const [closing, setClosing] = useState(false);
   const [transferring, setTransferring] = useState(false);
-  const [changingStatus, setChangingStatus] = useState(false);
+  const [statusOffer, setStatusOffer] = useState<StatusOffer | null>(null);
   const [printing, setPrinting] = useState(false);
 
   const printPassbook = (account: SavingsAccount) => {
@@ -76,7 +77,7 @@ export function AccountDetail({ accountId }: { accountId: number }) {
               onDeposit={() => setMode("deposit")}
               onWithdraw={() => setMode("withdrawal")}
               onTransfer={() => setTransferring(true)}
-              onStatus={() => setChangingStatus(true)}
+              onStatus={setStatusOffer}
               onClose={() => setClosing(true)}
             />
             <Balances account={account} />
@@ -97,9 +98,9 @@ export function AccountDetail({ accountId }: { accountId: number }) {
             />
             <TransferDialog open={transferring} account={account} onOpenChange={setTransferring} onPosted={reload} />
             <StatusDialog
-              open={changingStatus}
+              offer={statusOffer}
               account={account}
-              onOpenChange={setChangingStatus}
+              onOpenChange={(open) => !open && setStatusOffer(null)}
               onChanged={() => resource.refetch()}
             />
             <CloseAccountDialog open={closing} account={account} onOpenChange={setClosing} onClosed={reload} />
@@ -126,10 +127,10 @@ function Header({
   onDeposit: () => void;
   onWithdraw: () => void;
   onTransfer: () => void;
-  onStatus: () => void;
+  onStatus: (offer: StatusOffer) => void;
   onClose: () => void;
 }) {
-  const statusOffer = statusChangeOffer(account);
+  const statusOffers = statusChangeOffers(account);
   const notActive = canWithdraw(account) ? null : "Only an active account can be withdrawn from or transferred out of.";
   return (
     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -181,11 +182,11 @@ function Header({
             <ActionButton permission="savings:transact" variant="outline" onClick={onTransfer} blockedReason={notActive}>
               <ArrowLeftRight className="h-4 w-4" /> Transfer
             </ActionButton>
-            {statusOffer && (
-              <ActionButton permission="savings:close" variant="outline" onClick={onStatus}>
-                <Snowflake className="h-4 w-4" /> {statusOffer.label}
+            {statusOffers.map((offer) => (
+              <ActionButton key={offer.label} permission="savings:close" variant="outline" onClick={() => onStatus(offer)}>
+                <Snowflake className="h-4 w-4" /> {offer.label}
               </ActionButton>
-            )}
+            ))}
             <ActionButton
               permission="savings:close"
               variant="outline"

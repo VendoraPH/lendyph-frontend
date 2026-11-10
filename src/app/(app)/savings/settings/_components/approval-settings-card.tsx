@@ -42,7 +42,7 @@ export function ApprovalSettingsCard({ settings, onSaved }: ApprovalSettingsCard
       .catch((err: unknown) => notifyError(err, "Couldn't save the savings settings."));
   }
 
-  const field = (key: keyof SettingsDraft, id: string, label: string, hint: string, numeric = false) => (
+  const field = (key: Exclude<keyof SettingsDraft, "checkers">, id: string, label: string, hint: string, numeric = false) => (
     <FormField id={id} label={label} hint={hint}>
       <Input
         id={id}
@@ -67,7 +67,9 @@ export function ApprovalSettingsCard({ settings, onSaved }: ApprovalSettingsCard
         <div className="grid gap-4 sm:grid-cols-2">
           {field("tier1", "ss-tier1", "Approval needed above (₱)", "One approver.")}
           {field("tier2", "ss-tier2", "Two approvers needed above (₱)", "More than the first amount.")}
-          {field("checkers", "ss-checkers", "Approvers above the second amount", "Different users; 2 or more.", true)}
+          <FormField id="ss-checkers" label="Approvers above the second amount" hint="Two different users (dual control).">
+            <Input id="ss-checkers" value={draft.checkers} readOnly disabled />
+          </FormField>
           {field("dormancy", "ss-dormancy", "Dormant after (months)", "With no deposit, withdrawal or transfer.", true)}
           {field("alert", "ss-alert", "Large transaction alert (₱)", "Transactions at or above this are flagged.")}
         </div>

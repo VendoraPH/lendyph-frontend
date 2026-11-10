@@ -19,7 +19,7 @@ import {
   canWithdraw,
   labelOf,
   reversalBlocker,
-  statusChangeOffer,
+  statusChangeOffers,
   statusTabs,
 } from "./savings-rules";
 
@@ -57,9 +57,10 @@ test("the actions an account offers follow its status", () => {
   assert.equal(canPlaceHold({ status: "frozen" }), true);
   assert.equal(canPlaceHold({ status: "closed" }), false);
   assert.equal(canOfferClose({ status: "closed" }), false);
-  assert.deepEqual(statusChangeOffer({ status: "active" }), { status: "frozen", label: "Freeze" });
-  assert.deepEqual(statusChangeOffer({ status: "frozen" }), { status: "active", label: "Unfreeze" });
-  assert.equal(statusChangeOffer({ status: "closed" }), null);
+  assert.deepEqual(statusChangeOffers({ status: "active" }), [{ status: "frozen", label: "Freeze" }]);
+  assert.deepEqual(statusChangeOffers({ status: "dormant" }).map((o) => o.label), ["Reactivate", "Freeze"]);
+  assert.deepEqual(statusChangeOffers({ status: "frozen" }), [{ status: "active", label: "Unfreeze" }]);
+  assert.deepEqual(statusChangeOffers({ status: "closed" }), []);
 });
 
 const txn = (over: Partial<SavingsTransaction>) =>

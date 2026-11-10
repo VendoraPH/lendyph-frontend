@@ -7,7 +7,7 @@ import { BranchFilter, ALL_BRANCHES, branchIdParam } from "@/components/common/b
 import { DataState } from "@/components/common/data-state";
 import { TablePagination } from "@/components/common/table-pagination";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { PermissionButton } from "@/components/common/permission-button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -201,13 +201,14 @@ export function ApprovalsScreen() {
                                 <X className="h-4 w-4" /> Reject
                               </ActionButton>
                               {offer.canCancel && (
-                                <Button
+                                <PermissionButton
+                                  permission="savings:transact"
                                   size="sm"
                                   variant="ghost"
                                   onClick={() => setDeciding({ approval: a, decision: "cancel" })}
                                 >
                                   <Undo2 className="h-4 w-4" /> Cancel
-                                </Button>
+                                </PermissionButton>
                               )}
                             </div>
                           )}

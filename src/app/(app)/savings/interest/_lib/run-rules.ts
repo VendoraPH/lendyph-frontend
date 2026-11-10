@@ -9,6 +9,7 @@ import { INTEREST_RUN_STATUS_LABELS, labelOf, SKIP_REASON_LABELS, UNKNOWN_LABEL 
  */
 
 export const MAKER_APPROVE_REASON = "You created this run; another user must approve it";
+export const MAKER_REJECT_REASON = "You created this run; another user must reject it";
 
 /** Status tabs for the runs list, in display order. */
 export const RUN_STATUS_TABS: ReadonlyArray<{ value: "all" | InterestRunStatus; label: string }> = [
@@ -24,6 +25,8 @@ export interface RunActions {
   approve: boolean;
   approveBlocked: string | null;
   reject: boolean;
+  /** Why the viewer can't reject it: the creator can't (the server answers 403). */
+  rejectBlocked: string | null;
   /** Shown on an approved run. */
   post: boolean;
   /** Shown on a posted run. Only the latest posted run can be reversed; the server checks it. */
@@ -33,7 +36,7 @@ export interface RunActions {
 /**
  * The actions a run offers by its status. Permission is left to
  * `PermissionButton`, which shows a missing one with its reason. The maker
- * may never approve their own run (the server answers 403).
+ * may never approve or reject their own run (the server answers 403).
  */
 export function runActions(
   run: Pick<InterestRun, "status" | "created_by">,
@@ -45,6 +48,7 @@ export function runActions(
     approve: draft,
     approveBlocked: draft && ownRun ? MAKER_APPROVE_REASON : null,
     reject: draft,
+    rejectBlocked: draft && ownRun ? MAKER_REJECT_REASON : null,
     post: run.status === "approved",
     reverse: run.status === "posted",
   };

@@ -51,7 +51,12 @@ export function CloseAccountDialog({ open, account, onOpenChange, onClosed }: Cl
     setSubmitted(false);
   }
 
-  const fetchQuote = useCallback(() => savingsService.closingQuote(account.id), [account.id]);
+  // The quote is for the closing date chosen (today or yesterday).
+  const quoteDate = /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : "";
+  const fetchQuote = useCallback(
+    () => savingsService.closingQuote(account.id, quoteDate || undefined),
+    [account.id, quoteDate],
+  );
   const quote = useApiResource(fetchQuote, open);
 
   const reasonError = reason.trim() ? null : "Say why the account is being closed.";
@@ -77,7 +82,8 @@ export function CloseAccountDialog({ open, account, onOpenChange, onClosed }: Cl
           <DialogTitle>Close {account.account_number}?</DialogTitle>
           <DialogDescription>
             The accrued interest is credited first, then the balance is paid out. A closed account takes no
-            further transactions. Above the approval amount, the close waits for approval.
+            further transactions. Above the approval amount, the close waits for approval; if the balance changes
+            before it is approved, make a new request.
           </DialogDescription>
         </DialogHeader>
 
