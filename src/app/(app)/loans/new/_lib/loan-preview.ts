@@ -3,7 +3,8 @@ import { getErrorMessage, httpStatusOf, type ApiErrorBody } from "@/lib/api-erro
 import { formatDateISO } from "@/lib/format";
 import type { LoanFormPreview, LoanFormPreviewRequest } from "@/types";
 import type { LoanFormPreviewDeduction, LoanProduct } from "@/types/loan";
-import { pledgedCollaterals, type SelectedCollateral } from "./edit-collaterals";
+import { securityStatusLabel } from "@/types/collateral";
+import { pledgedCollaterals, sameCollaterals, type SelectedCollateral } from "./edit-collaterals";
 
 /** A deduction input as the payload states it: a percentage's rate, a fixed item's pesos. */
 export interface StatedDeduction {
@@ -25,10 +26,17 @@ export interface LoanPreviewInputs {
   borrowerId: number | null;
   /** The loan a restructure replaces; absent or null for a new application. */
   sourceLoanId?: number | null;
-  /** The loan being edited; absent or null for a new application or a restructure. */
+  /** The loan being edited; absent or null for a new application or a new restructure. */
   editLoanId?: number | null;
   /** Only each row's collateral id goes up; the figure a row shows never does. */
   collaterals: readonly Pick<SelectedCollateral, "collateral">[];
+  /**
+   * An edit's collaterals as the loan held them when the form loaded; null
+   * until read (or when the read failed). While the form's list is that one,
+   * the preview leaves `collaterals` out, as the save does, and the server
+   * counts the held pledges (or withholds a share capital value).
+   */
+  heldCollaterals?: readonly Pick<SelectedCollateral, "collateral">[] | null;
   /**
    * The deductions the save would state, or null when it states none and the
    * server charges the product's own fees.
@@ -39,6 +47,24 @@ export interface LoanPreviewInputs {
 /** A positive figure typed into the form, parsed as the submit parses it. */
 function positive(value: number): number | undefined {
   return Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+/**
+ * The collaterals the preview states, by id. An edit states them only once its
+ * list differs from what the loan held (an added or removed row, or none at
+ * all), and not before the held list is read: the server then counts the held
+ * pledges itself, so a share capital pledge the user may not see is withheld
+ * (`value_unknown`) rather than refused.
+ */
+function statedCollaterals(
+  inputs: Pick<LoanPreviewInputs, "collaterals" | "heldCollaterals">,
+  isEdit: boolean,
+): ReturnType<typeof pledgedCollaterals> | undefined {
+  if (isEdit) {
+    const held = inputs.heldCollaterals ?? null;
+    if (held === null || sameCollaterals(inputs.collaterals, held)) return undefined;
+  }
+  return pledgedCollaterals(inputs.collaterals);
 }
 
 /**
@@ -67,10 +93,14 @@ export function loanPreviewRequest(inputs: LoanPreviewInputs): LoanFormPreviewRe
   // The shortfall needs a principal to measure, so a restructure names its
   // source loan only once one above 0 is entered.
   const sourceLoanId = principal !== undefined ? inputs.sourceLoanId ?? undefined : undefined;
-  // Only an edit names its loan; a restructure names its source loan instead.
-  const editLoanId =
-    inputs.sourceLoanId == null ? inputs.editLoanId ?? undefined : undefined;
-  const valuable = borrowerId !== undefined && inputs.collaterals.length > 0;
+  // Only an edit names its loan. A restructure being edited names both, so one
+  // preview carries the edited loan's collaterals and the restructure block.
+  const editLoanId = inputs.editLoanId ?? undefined;
+  const stated = statedCollaterals(inputs, editLoanId !== undefined);
+  // An edit's collaterals are valued whether stated or held; a new
+  // application's only once some are listed.
+  const valuable =
+    borrowerId !== undefined && (editLoanId !== undefined || (stated !== undefined && stated.length > 0));
 
   if (productId === undefined && !valuable) return null;
 
@@ -85,7 +115,7 @@ export function loanPreviewRequest(inputs: LoanPreviewInputs): LoanFormPreviewRe
     ...(frequency !== undefined && { frequency }),
     ...(startDate !== undefined && { start_date: startDate }),
     ...(scb !== undefined && { scb_amount: scb }),
-    ...(borrowerId !== undefined && { collaterals: pledgedCollaterals(inputs.collaterals) }),
+    ...(borrowerId !== undefined && stated !== undefined && { collaterals: stated }),
     ...(inputs.deductions !== null && {
       deductions: inputs.deductions.map((d) => ({ name: d.name, amount: d.amount, type: d.type })),
     }),
@@ -228,16 +258,33 @@ export function previewFailureText<Row>(
   return refusedCollateralMessage(view.refused, removable);
 }
 
+type PreviewCollateral = LoanFormPreview["collateral"];
+
+/** Whether the server withheld the collateral figures (`value_unknown`). */
+function withheld(collateral: PreviewCollateral): boolean {
+  return collateral.value_unknown === true;
+}
+
 /**
  * Whether the collateral summary says how far short of the principal the
- * collateral falls: only when the server says the loan is not fully secured
- * and a principal has been entered.
+ * collateral falls: only when the server says the loan is not fully secured,
+ * sent the shortfall, and a principal has been entered. Withheld or null
+ * figures are no answer, never "not secured".
  */
-export function showsShortBy(
-  collateral: LoanFormPreview["collateral"],
-  principal: number,
-): boolean {
+export function showsShortBy(collateral: PreviewCollateral, principal: number): boolean {
+  if (withheld(collateral) || collateral.security_status === null || collateral.short_by === null) return false;
   return principal > 0 && collateral.security_status !== "secured";
+}
+
+/** Total Collateral Value as the server sent it; null (a dash) when withheld, never ₱0.00. */
+export function shownCollateralTotal(collateral: PreviewCollateral): number | null {
+  return withheld(collateral) ? null : collateral.total_value;
+}
+
+/** The security badge's label; null (no badge) when withheld or the status is null. */
+export function shownSecurityStatus(collateral: PreviewCollateral): string | null {
+  if (withheld(collateral) || collateral.security_status === null) return null;
+  return securityStatusLabel(collateral.security_status);
 }
 
 /** An interest method by name ("fixed" is the legacy spelling of "straight"). */

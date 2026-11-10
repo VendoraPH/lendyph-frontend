@@ -9,6 +9,10 @@
  */
 import type { ReportId } from "@/app/(app)/reports/_lib/types";
 import type { PrintableId } from "@/lib/printables/types";
+import { parseEditLoanId } from "@/app/(app)/loans/new/_lib/edit-loan-id";
+
+/** The loan form's own title in edit mode (`/loans/new?edit={id}`). */
+export const EDIT_LOAN_TITLE = "Edit Loan Application";
 
 export const REPORT_TITLES: Readonly<Record<ReportId, string>> = {
   daily_collection: "Daily Collection Report",
@@ -84,9 +88,18 @@ export function humanizeSegment(segment: string): string {
 /**
  * The breadcrumb label for the segment under `section` (`/reports/cash_flow`
  * reads "Cash Flow Statement"). A report or printable id reads its catalog
- * title, a fixed sub-page its label, and anything else its words.
+ * title, a fixed sub-page its label, and anything else its words. The loan
+ * form in edit mode (`?edit={id}`, read as the page reads it) reads the
+ * page's own title.
  */
-export function subPageTitle(section: string, segment: string): string {
+export function subPageTitle(
+  section: string,
+  segment: string,
+  query: { edit?: string | null } = {},
+): string {
+  if (section === "loans" && segment === "new" && parseEditLoanId(query.edit ?? null) !== null) {
+    return EDIT_LOAN_TITLE;
+  }
   return (
     own(own(ID_TITLES, section) ?? {}, segment) ??
     own(SUB_PAGE_TITLES, segment) ??

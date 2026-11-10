@@ -1,11 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { JournalPreview, Permission } from "@/types";
 import type { JournalValidation } from "@/lib/accounting/journal";
 import {
   draftBalance,
   journalActions,
   journalPageDescription,
+  reversedEntryText,
   saveDraftState,
   type DraftBalance,
 } from "./journal-actions";
@@ -202,34 +205,52 @@ test("on the template chart Save draft says why it can't save", () => {
 
 // ── The page's description ──
 
-test("a reversal's page names the entry it reverses, and never says it can only be reversed", () => {
-  const text = journalPageDescription(
-    { status: "posted", reverses_journal_id: 14, reversed_by_journal_id: null },
-    "JE-000014",
-  );
+test("a reversal's page names the entry it reverses by the server's number, and never says it can only be reversed", () => {
+  const text = journalPageDescription({
+    status: "posted",
+    reverses_journal_id: 14,
+    reverses_journal_no: "JE-000014",
+    reversed_by_journal_id: null,
+  });
   assert.equal(text, "This entry reverses JE-000014.");
   assert.doesNotMatch(text, /only reversed/);
 });
 
-test("a reversal whose original's number isn't known yet still says what it is", () => {
-  const text = journalPageDescription(
-    { status: "posted", reverses_journal_id: 14, reversed_by_journal_id: null },
-    null,
-  );
-  assert.equal(text, "This entry reverses another entry.");
+test("a reversal whose original's number isn't sent says \"another entry\"", () => {
+  for (const reverses_journal_no of [null, undefined]) {
+    const text = journalPageDescription({
+      status: "posted",
+      reverses_journal_id: 14,
+      reverses_journal_no,
+      reversed_by_journal_id: null,
+    });
+    assert.equal(text, "This entry reverses another entry.");
+  }
+  assert.equal(reversedEntryText({ reverses_journal_no: null }), "another entry");
+  assert.equal(reversedEntryText({ reverses_journal_no: "JE-000014" }), "JE-000014");
+});
+
+test("the journal page loads one entry: the reversed entry's number comes with it", () => {
+  const dir = join(process.cwd(), "src/app/(app)/accounting/journals");
+  const page = readFileSync(join(dir, "[id]/page.tsx"), "utf8");
+  const details = readFileSync(join(dir, "_components/journal-details.tsx"), "utf8");
+  assert.equal(page.match(/accountingService\s*\.journal\(/g)?.length, 1);
+  assert.doesNotMatch(page, /reverses_journal_id/);
+  assert.doesNotMatch(details, /originalNo/);
+  assert.match(details, /reversedEntryText\(entry\)/);
 });
 
 test("a draft, a posted entry and a reversed one each read their own way", () => {
   assert.equal(
-    journalPageDescription({ status: "draft", reverses_journal_id: null, reversed_by_journal_id: null }, null),
+    journalPageDescription({ status: "draft", reverses_journal_id: null, reversed_by_journal_id: null }),
     "A draft. Nothing moves in the books until it is posted.",
   );
   assert.equal(
-    journalPageDescription({ status: "posted", reverses_journal_id: null, reversed_by_journal_id: null }, null),
+    journalPageDescription({ status: "posted", reverses_journal_id: null, reversed_by_journal_id: null }),
     "Posted entries can't be edited, only reversed.",
   );
   assert.equal(
-    journalPageDescription({ status: "reversed", reverses_journal_id: null, reversed_by_journal_id: 15 }, null),
+    journalPageDescription({ status: "reversed", reverses_journal_id: null, reversed_by_journal_id: 15 }),
     "This entry has been reversed. It stays in the books, and its reversing entry cancels it out.",
   );
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useAuth, usePermission } from "@/hooks";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -29,7 +29,7 @@ import {
   FilePlus,
   CreditCard,
 } from "lucide-react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { authService } from "@/services";
 import { tokenManager } from "@/lib/axios-client";
 import { humanizeSegment, subPageTitle } from "@/lib/page-titles";
@@ -55,7 +55,8 @@ function getPageTitle(segment: string): string {
   return humanizeSegment(segment);
 }
 
-function Breadcrumb() {
+/** `editParam`: the `?edit=` value, so the loan form's edit page reads its own title. */
+function Breadcrumb({ editParam }: { editParam: string | null }) {
   const pathname = usePathname();
   const segments = pathname.split("/").filter(Boolean);
 
@@ -72,7 +73,7 @@ function Breadcrumb() {
 
   const subSegment = segments[1];
   const isId = /^\d+$/.test(subSegment);
-  const subLabel = isId ? "Detail" : subPageTitle(firstSegment, subSegment);
+  const subLabel = isId ? "Detail" : subPageTitle(firstSegment, subSegment, { edit: editParam });
 
   return (
     <div className="flex items-center gap-1.5 text-sm">
@@ -81,6 +82,11 @@ function Breadcrumb() {
       <span className="font-medium text-foreground">{subLabel}</span>
     </div>
   );
+}
+
+/** The breadcrumb with the query string, which needs a Suspense boundary. */
+function BreadcrumbWithQuery() {
+  return <Breadcrumb editParam={useSearchParams().get("edit")} />;
 }
 
 // Each carries the permission its page needs to do the action, so the palette
@@ -153,7 +159,9 @@ export function Header({ onMenuClick }: HeaderProps) {
             <Menu className="h-5 w-5" />
             <span className="sr-only">Open menu</span>
           </Button>
-          <Breadcrumb />
+          <Suspense fallback={<Breadcrumb editParam={null} />}>
+            <BreadcrumbWithQuery />
+          </Suspense>
         </div>
 
         {/* Right side: notifications + avatar */}

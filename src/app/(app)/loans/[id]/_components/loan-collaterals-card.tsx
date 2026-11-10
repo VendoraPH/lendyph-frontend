@@ -12,7 +12,12 @@ import type { CollateralType, LoanCollateral } from "@/types";
 import type { Loan } from "@/types/loan";
 import { formatCurrency } from "@/utils/format";
 import { cn } from "@/lib/utils";
-import { attachedCollateralValue, collateralSummaryFigures } from "../_lib/collateral-display";
+import {
+  SHARE_CAPITAL_VALUE_HIDDEN,
+  attachedCollateralValue,
+  collateralSummaryFigures,
+  summaryShowsShortBy,
+} from "../_lib/collateral-display";
 
 interface LoanCollateralsCardProps {
   loanId: number;
@@ -152,11 +157,11 @@ export function LoanCollateralsCard({
                 </p>
                 {valueHidden && (
                   <p className="text-xs text-muted-foreground">
-                    Share capital value hidden for your role
+                    {SHARE_CAPITAL_VALUE_HIDDEN}
                   </p>
                 )}
               </div>
-              {summary && summary.security_status !== "secured" && (
+              {summaryShowsShortBy(summary) && (
                 <p className="text-xs text-muted-foreground">
                   Short by{" "}
                   <span className="font-medium text-foreground">

@@ -24,7 +24,7 @@ import {
   REMARKS_SAVED_HINT,
   remarksRefusal,
   restructureEditFields,
-  restructureEditPreviewRequest,
+  restructureEditSourceId,
   scbRuleError,
 } from "./restructure-edit";
 
@@ -112,21 +112,23 @@ test("the loan form wires the principal, build-up and remarks rules", () => {
   assert.ok(page.includes('htmlFor="restructure-remarks"'));
 });
 
-test("the edit form asks the restructure preview for the source loan's balance, by its own principal", () => {
-  assert.deepEqual(restructureEditPreviewRequest({ sourceLoanId: 12, principalAmount: "18000.50", canRestructure: true }), {
-    source_loan_id: 12,
-    principal_amount: 18000.5,
-  });
-  // Only the restructure preview carries the balance; it needs loans:restructure.
-  assert.equal(restructureEditPreviewRequest({ sourceLoanId: 12, principalAmount: "18000", canRestructure: false }), null);
-  // Not a restructure, or no principal to measure yet.
-  assert.equal(restructureEditPreviewRequest({ sourceLoanId: null, principalAmount: "18000", canRestructure: true }), null);
-  assert.equal(restructureEditPreviewRequest({ sourceLoanId: 12, principalAmount: "", canRestructure: true }), null);
-  assert.equal(restructureEditPreviewRequest({ sourceLoanId: 12, principalAmount: "0", canRestructure: true }), null);
+test("the edit form's preview names the source loan only for a restructure, and only with loans:restructure", () => {
+  assert.equal(restructureEditSourceId({ isRestructureEdit: true, sourceLoanId: 12, canRestructure: true }), 12);
+  // The restructure block needs loans:restructure; without it the preview names only the edited loan.
+  assert.equal(restructureEditSourceId({ isRestructureEdit: true, sourceLoanId: 12, canRestructure: false }), null);
+  // Not a restructure, or no source loan on record.
+  assert.equal(restructureEditSourceId({ isRestructureEdit: false, sourceLoanId: 12, canRestructure: true }), null);
+  assert.equal(restructureEditSourceId({ isRestructureEdit: true, sourceLoanId: null, canRestructure: true }), null);
+  assert.equal(restructureEditSourceId({ isRestructureEdit: true, sourceLoanId: undefined, canRestructure: true }), null);
 });
 
-test("the edit form shows the source loan's restructurable balance under the principal", () => {
+test("the edit form shows the source loan's restructurable balance from its one preview call", () => {
   const page = readFileSync(join(process.cwd(), "src/app/(app)/loans/new/page.tsx"), "utf8");
-  assert.ok(page.includes("restructureEditPreviewRequest({"));
+  assert.equal(page.match(/useLoanPreview\(/g)?.length, 1);
+  assert.match(page, /loanPreviewRequest\(\{[\s\S]*?sourceLoanId: restructureSourceId,[\s\S]*?editLoanId,/);
+  // No second preview, and no fallback to the source loan's summary.
+  assert.ok(!page.includes("restructureEditPreviewRequest"));
+  assert.ok(!page.includes("loanService.summary("));
+  assert.ok(!page.includes("sourceSummaryBalance"));
   assert.ok(page.includes('id="restructure-balance-hint"'));
 });

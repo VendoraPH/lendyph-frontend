@@ -1,6 +1,9 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
+  EDIT_LOAN_TITLE,
   PRINTABLE_TITLES,
   REPORT_TITLES,
   humanizeSegment,
@@ -111,5 +114,34 @@ describe("humanizeSegment", () => {
     assert.equal(humanizeSegment("a_b-c"), "A b c");
     assert.equal(humanizeSegment("dashboard"), "Dashboard");
     assert.equal(humanizeSegment(""), "");
+  });
+});
+
+describe("the loan form's breadcrumb", () => {
+  test("the edit page reads its own title, a new application the menu's", () => {
+    assert.equal(EDIT_LOAN_TITLE, "Edit Loan Application");
+    assert.equal(subPageTitle("loans", "new", { edit: "12" }), "Edit Loan Application");
+    assert.equal(subPageTitle("loans", "new"), "New Application");
+    assert.equal(subPageTitle("loans", "new", { edit: null }), "New Application");
+  });
+
+  test("a malformed edit id is a new application, as the page reads it", () => {
+    for (const edit of ["", "abc", "0", "-3"]) {
+      assert.equal(subPageTitle("loans", "new", { edit }), "New Application", edit);
+    }
+  });
+
+  test("the edit id changes no other page's title", () => {
+    assert.equal(subPageTitle("loans", "products", { edit: "12" }), "Loan Products");
+  });
+
+  test("the header passes the edit id and the page uses the same title", () => {
+    const header = readFileSync(join(process.cwd(), "src/components/layout/header.tsx"), "utf8");
+    assert.ok(header.includes('subPageTitle(firstSegment, subSegment, { edit: editParam })'));
+    assert.ok(header.includes('useSearchParams().get("edit")'));
+    assert.match(header, /<Suspense fallback=\{<Breadcrumb editParam=\{null\} \/>\}>/);
+    const form = readFileSync(join(process.cwd(), "src/app/(app)/loans/new/page.tsx"), "utf8");
+    assert.ok(form.includes("isEditMode ? EDIT_LOAN_TITLE"));
+    assert.ok(!form.includes('"Edit Loan Application"'));
   });
 });

@@ -173,9 +173,16 @@ export function editedCollaterals(
   attached: readonly SelectedCollateral[] | null,
 ): { collaterals?: PledgedCollateral[] } {
   if (attached === null) return {};
-  const before = new Set(attached.map((a) => a.collateral.id));
-  const after = new Set(selected.map((s) => s.collateral.id));
-  const unchanged = before.size === after.size && [...after].every((id) => before.has(id));
-  if (unchanged) return {};
+  if (sameCollaterals(selected, attached)) return {};
   return { collaterals: pledgedCollaterals(selected) };
+}
+
+/** Whether two lists hold the same collaterals, by id, in any order. */
+export function sameCollaterals(
+  a: readonly Pick<SelectedCollateral, "collateral">[],
+  b: readonly Pick<SelectedCollateral, "collateral">[],
+): boolean {
+  const before = new Set(b.map((row) => row.collateral.id));
+  const after = new Set(a.map((row) => row.collateral.id));
+  return before.size === after.size && [...after].every((id) => before.has(id));
 }

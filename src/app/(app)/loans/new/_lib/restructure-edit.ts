@@ -6,7 +6,7 @@
 // `tsx --test`.
 
 import { formatCurrency } from "@/lib/format";
-import type { LoanFormPreviewRequest, LoanProduct } from "@/types/loan";
+import type { LoanProduct } from "@/types/loan";
 
 /** What a typed amount keeps: digits and one decimal point, at most two decimals. */
 export function amountInputValue(raw: string): string {
@@ -106,20 +106,18 @@ export function remarksRefusal(err: unknown): string | null {
 }
 
 /**
- * The restructure preview the edit form asks for the source loan's
- * restructurable balance (`POST /loans/preview` with `source_loan_id`), by the
- * principal on screen. The form's own preview names the edited loan, which the
- * server won't combine with a source loan, so this one sends only the two
- * fields. It needs `loans:restructure`, as the restructure page does; null
- * without it, for an ordinary loan, or before a principal above 0 is entered.
+ * The source loan the edit form's preview names (`source_loan_id`, with the
+ * edited loan's `loan_id`), so its one answer carries the restructure block:
+ * the source's restructurable balance and shortfall, and what is collected
+ * and paid out. It needs `loans:restructure`, as the restructure page does;
+ * null without it or for an ordinary loan, and the preview then names only
+ * the edited loan.
  */
-export function restructureEditPreviewRequest(input: {
+export function restructureEditSourceId(input: {
+  isRestructureEdit: boolean;
   sourceLoanId: number | null | undefined;
-  principalAmount: string;
   canRestructure: boolean;
-}): LoanFormPreviewRequest | null {
-  const principal = parseFloat(input.principalAmount);
-  if (input.sourceLoanId == null || !input.canRestructure) return null;
-  if (!Number.isFinite(principal) || principal <= 0) return null;
-  return { source_loan_id: input.sourceLoanId, principal_amount: principal };
+}): number | null {
+  if (!input.isRestructureEdit || !input.canRestructure) return null;
+  return input.sourceLoanId ?? null;
 }

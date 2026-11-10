@@ -1,5 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   ACTIVE_LOAN_STATUSES,
   EVER_RELEASED_LOAN_STATUSES,
@@ -290,4 +292,14 @@ test("a restructure's row says so, except once it has itself been restructured",
     "Restructured — Past Due",
   );
   assert.equal(loanRowStatusLabel({ status: "restructured", is_restructure: true }), "Restructured");
+});
+
+test("the restructure page's loan picker reads the server's display_status, like the Loans list", () => {
+  // A loan the API reports past due reads "Past Due" (red), not "Current".
+  assert.equal(loanRowStatusLabel({ status: "ongoing", display_status: "past_due" }), "Past Due");
+  assert.match(LOAN_STATUS_COLORS[loanDisplayStatus({ status: "ongoing", display_status: "past_due" })], /red/);
+  const page = readFileSync(join(process.cwd(), "src/app/(app)/loans/restructure/page.tsx"), "utf8");
+  assert.ok(page.includes("LOAN_STATUS_COLORS[loanDisplayStatus(l)]"));
+  assert.ok(page.includes("{loanRowStatusLabel(l)}"));
+  assert.ok(!page.includes("LOAN_STATUS_LABELS[l.status]"));
 });

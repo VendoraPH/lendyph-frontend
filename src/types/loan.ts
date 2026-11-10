@@ -155,7 +155,8 @@ export interface LoanFormPreviewRequest {
   /**
    * The loan an edit changes (draft or for_review; needs `loans:update`). The
    * server then carries the collaterals it already holds at their stored
-   * pledged value, so the total matches what the save keeps.
+   * pledged value, so the total matches what the save keeps. A restructure
+   * being edited sends it with `source_loan_id`; each keeps its own checks.
    */
   loan_id?: number;
   /** Each collateral by id only; the server sets the value it is held at. */
@@ -223,10 +224,16 @@ export interface LoanFormPreview {
   maturity_date: string | null;
   /** Null until a product and a principal above zero are known. */
   deductions: LoanFormPreviewDeductions | null;
+  /**
+   * The three figures are null, and `value_unknown` is true, when the server
+   * withholds them: an edit's preview with no collaterals list sent, for a
+   * caller without `share_capital:view` holding a share capital pledge.
+   */
   collateral: {
-    total_value: number;
-    security_status: SecurityStatus;
-    short_by: number;
+    total_value: number | null;
+    security_status: SecurityStatus | null;
+    short_by: number | null;
+    value_unknown?: boolean;
   };
   amortization: {
     maturity_date: string;
@@ -242,6 +249,9 @@ export interface LoanFormPreview {
   /**
    * Present only when the request sent `source_loan_id`: what the restructure
    * carries over from that loan and how far the new principal falls short.
+   * `collected_now` and `paid_out` are the release preview's figures, built by
+   * the same code, in 2-decimal strings: every deduction is collected from the
+   * member, and nothing is paid out.
    */
   restructure?: {
     restructurable_balance: number;
@@ -249,6 +259,8 @@ export interface LoanFormPreview {
     shortfall: number;
     remarks_required: boolean;
     write_off_permission_required: boolean;
+    collected_now?: string;
+    paid_out?: string;
   } | null;
 }
 
@@ -492,6 +504,12 @@ export interface Loan {
   total_payable?: number | null;
   /** The contract's principal plus interest, shown on its own line. */
   contract_total?: number | string | null;
+  /**
+   * The contract's interest, by the same rule as `contract_total` (a
+   * restructured source's original contract), on GET /loans/{id} only; null on
+   * lists.
+   */
+  contract_interest?: number | string | null;
   /** Everything still owed on the loan, insurance premium included. */
   total_outstanding?: number | string | null;
   /** Principal still owed; the premium owed is `insurance_owed`. */
@@ -541,7 +559,8 @@ export interface Loan {
    */
   collateral_summary?: {
     total_value: number | null;
-    security_status: SecurityStatus;
+    /** Null, with `value_unknown`, while the server withholds the figures. */
+    security_status: SecurityStatus | null;
     short_by: number | null;
     value_unknown?: boolean;
   } | null;
