@@ -297,6 +297,16 @@ axiosClient.interceptors.response.use(
     // Either way there is no session left here to end.
     const hasAccessToken = tokenManager.getAccessToken() !== null;
 
+    // A 401 on Log out means the session is already gone (a renewal the
+    // server finished may have replaced the token it carried). Sign out here
+    // and now: never wait for a renewal or replay it. The caller goes to
+    // sign-in; no "Session Expired" dialog for a deliberate Log out. A late
+    // renewal finds storage cleared and revokes its own token (rotateToken).
+    if (error.response?.status === 401 && isLogout(originalRequest?.url)) {
+      tokenManager.clearTokens();
+      return Promise.reject(error);
+    }
+
     if (
       error.response?.status === 401 &&
       originalRequest &&

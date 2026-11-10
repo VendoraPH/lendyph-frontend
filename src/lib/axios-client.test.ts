@@ -296,6 +296,34 @@ describe("requests while a token renewal is running", () => {
     assert.equal(sessionExpiredEvents, 0);
   });
 
+  test("Log out that gets 401 while a late renewal is out ends at once, and the late token is revoked", { timeout: 10_000 }, async () => {
+    // The server renews on receipt, so the old token is already dead, but its answer is late.
+    mock.timers.enable({ apis: ["setTimeout"] });
+    const renewal = renewAccessToken();
+    renewal.catch(() => undefined);
+    await until(() => server.refreshCalls === 1);
+
+    const logout = client.post("/auth/logout");
+    let failedWith: number | undefined;
+    logout.catch((err: { response?: { status?: number } }) => {
+      failedWith = err.response?.status ?? -1;
+    });
+    // With no timer moved and the renewal still out, Log out has already failed: no wait, no replay.
+    await until(() => failedWith !== undefined);
+    assert.equal(failedWith, 401);
+    assert.equal(tokenManager.getAccessToken(), null, "the session ends here");
+    assert.equal(sessionExpiredEvents, 0, "a deliberate Log out shows no Session Expired dialog");
+    assert.deepEqual(server.seen, [{ path: "/api/auth/logout", auth: "Bearer old", status: 401 }]);
+
+    // Then the late answer arrives: not stored, and revoked.
+    server.releaseRefresh();
+    await assert.rejects(renewal);
+    await until(() => server.seen.length === 2);
+    assert.equal(tokenManager.getAccessToken(), null);
+    assert.deepEqual(server.seen[1], { path: "/api/auth/logout", auth: "Bearer new", status: 200 });
+    assert.equal(server.token, null);
+  });
+
   test("a renewal that answers after another sign-in replaced the token keeps that one and revokes its own", { timeout: 10_000 }, async () => {
     server.rotateOnReply = true;
     const renewal = renewAccessToken();
