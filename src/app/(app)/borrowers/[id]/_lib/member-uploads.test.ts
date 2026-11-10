@@ -128,16 +128,18 @@ test("the edit page stays on the page when an upload failed, and leaves only whe
   assert.ok(/if \(uploads\.anyFailed\) \{[^}]*return;/.test(editPage), "the failed branch returns before leaving");
 });
 
-test("every label on an edit page ID row is linked to its own input", () => {
-  for (const field of ["type", "number", "name", "front", "back"]) {
-    const id = "`valid_id_" + field + "_${index}`";
-    assert.ok(editPage.includes(`htmlFor={${id}}`) || editPage.includes(`: ${id}}`), `${field} label`);
-    // Front and back point at the keyboard picker (ValidIdFilePicker), which carries the id.
-    const control = field === "front" || field === "back" ? `controlId={${id}}` : `id={${id}}`;
-    assert.ok(editPage.includes(control), `${field} input`);
-  }
-  for (const label of ["ID Type", "ID Number", "Front of ID", "Back of ID"]) {
-    assert.ok(!editPage.includes(`<Label>${label}</Label>`), label);
-  }
-  assert.ok(!/<Label>\s*ID Name/.test(editPage), "ID Name");
-});
+for (const [name, page] of [["edit", editPage], ["new", newPage]] as const) {
+  test(`every label on a ${name} member page ID row is linked to its own input`, () => {
+    for (const field of ["type", "number", "name", "front", "back"]) {
+      const id = "`valid_id_" + field + "_${index}`";
+      assert.ok(page.includes(`htmlFor={${id}}`) || page.includes(`: ${id}}`), `${field} label`);
+      // Front and back point at the keyboard picker (ValidIdFilePicker), which carries the id.
+      const control = field === "front" || field === "back" ? `controlId={${id}}` : `id={${id}}`;
+      assert.ok(page.includes(control), `${field} input`);
+    }
+    for (const label of ["ID Type", "ID Number", "Front of ID", "Back of ID"]) {
+      assert.ok(!page.includes(`<Label>${label}</Label>`), label);
+    }
+    assert.ok(!/<Label>\s*ID Name/.test(page), "ID Name");
+  });
+}

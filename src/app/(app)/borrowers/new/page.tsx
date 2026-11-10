@@ -1165,12 +1165,12 @@ function NewBorrowerContent() {
                     {/* ID Type + ID Number (and custom name when "Others") */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pr-8">
                       <div className="space-y-2">
-                        <Label>ID Type</Label>
+                        <Label htmlFor={`valid_id_type_${index}`}>ID Type</Label>
                         <Select
                           value={entry.type || null}
                           onValueChange={(v) => updateValidId(index, "type", v ?? "")}
                         >
-                          <SelectTrigger className="w-full">
+                          <SelectTrigger id={`valid_id_type_${index}`} className="w-full">
                             <SelectValue placeholder="Select ID type">
                               {(value: string | null) =>
                                 value
@@ -1189,8 +1189,9 @@ function NewBorrowerContent() {
                         </Select>
                       </div>
                       <div className="space-y-2">
-                        <Label>ID Number</Label>
+                        <Label htmlFor={`valid_id_number_${index}`}>ID Number</Label>
                         <Input
+                          id={`valid_id_number_${index}`}
                           placeholder="ID number"
                           value={entry.id_number}
                           onChange={(e) => updateValidId(index, "id_number", e.target.value)}
@@ -1198,10 +1199,11 @@ function NewBorrowerContent() {
                       </div>
                       {entry.type === "others" && (
                         <div className="space-y-2 sm:col-span-2">
-                          <Label>
+                          <Label htmlFor={`valid_id_name_${index}`}>
                             ID Name <span className="text-destructive">*</span>
                           </Label>
                           <Input
+                            id={`valid_id_name_${index}`}
                             placeholder="e.g. Senior Citizen ID, Company ID"
                             value={entry.custom_type_name}
                             onChange={(e) =>
