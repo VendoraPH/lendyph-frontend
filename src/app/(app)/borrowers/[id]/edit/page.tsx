@@ -990,12 +990,12 @@ function EditBorrowerContent() {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pr-8">
                       <div className="space-y-2">
-                        <Label>ID Type</Label>
+                        <Label htmlFor={`valid_id_type_${index}`}>ID Type</Label>
                         <Select
                           value={entry.type || null}
                           onValueChange={(v) => updateValidId(index, "type", v ?? "")}
                         >
-                          <SelectTrigger className="w-full">
+                          <SelectTrigger id={`valid_id_type_${index}`} className="w-full">
                             <SelectValue placeholder="Select ID type">
                               {(value: string | null) =>
                                 value
@@ -1024,10 +1024,11 @@ function EditBorrowerContent() {
                       </div>
                       {entry.type === "others" && (
                         <div className="space-y-2 sm:col-span-2">
-                          <Label>
+                          <Label htmlFor={`valid_id_name_${index}`}>
                             ID Name <span className="text-destructive">*</span>
                           </Label>
                           <Input
+                            id={`valid_id_name_${index}`}
                             placeholder="e.g. Senior Citizen ID, Company ID"
                             value={entry.custom_type_name}
                             onChange={(e) =>
@@ -1040,7 +1041,7 @@ function EditBorrowerContent() {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="space-y-2">
-                        <Label>Front of ID</Label>
+                        <Label htmlFor={entry.front_preview ? undefined : `valid_id_front_${index}`}>Front of ID</Label>
                         {entry.front_preview ? (
                           <div className="space-y-2">
                             <div className="relative h-44 rounded-lg overflow-hidden border">
@@ -1083,6 +1084,7 @@ function EditBorrowerContent() {
                             <FileText className="h-5 w-5 text-muted-foreground" />
                             <span className="text-xs text-muted-foreground">Upload Front</span>
                             <input
+                              id={`valid_id_front_${index}`}
                               type="file"
                               accept="image/*,.pdf"
                               onChange={(e) => handleValidIdFile(index, "front", e)}
@@ -1092,7 +1094,7 @@ function EditBorrowerContent() {
                         )}
                       </div>
                       <div className="space-y-2">
-                        <Label>Back of ID</Label>
+                        <Label htmlFor={entry.back_preview ? undefined : `valid_id_back_${index}`}>Back of ID</Label>
                         {entry.back_preview ? (
                           <div className="space-y-2">
                             <div className="relative h-44 rounded-lg overflow-hidden border">
@@ -1135,6 +1137,7 @@ function EditBorrowerContent() {
                             <FileText className="h-5 w-5 text-muted-foreground" />
                             <span className="text-xs text-muted-foreground">Upload Back</span>
                             <input
+                              id={`valid_id_back_${index}`}
                               type="file"
                               accept="image/*,.pdf"
                               onChange={(e) => handleValidIdFile(index, "back", e)}

@@ -149,7 +149,7 @@ export default function AmortizationPage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {/* Principal */}
             <div className="space-y-1.5">
-              <Label htmlFor="principal">Principal Amount (PHP) *</Label>
+              <Label htmlFor="principal">Principal Amount (₱) *</Label>
               <Input
                 id="principal"
                 type="number"
@@ -268,7 +268,7 @@ export default function AmortizationPage() {
 
             {/* Share Capital Build-Up */}
             <div className="space-y-1.5">
-              <Label htmlFor="scbAmount">Share Capital Build-Up per Period (PHP)</Label>
+              <Label htmlFor="scbAmount">Share Capital Build-Up per Period (₱)</Label>
               <Input
                 id="scbAmount"
                 type="number"

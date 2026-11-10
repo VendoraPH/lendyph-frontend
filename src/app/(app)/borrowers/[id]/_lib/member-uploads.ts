@@ -8,11 +8,33 @@ import { getErrorMessage } from "@/lib/api-error";
 export function uploadFailureMessage(
   what: "photo" | "ID",
   err: unknown,
+  { saved = "Member details saved", hint }: { saved?: string; hint?: string } = {},
 ): { title: string; description: string } {
+  const reason = getErrorMessage(err, "Please try again.");
   return {
-    title: `Member details saved, but the ${what} upload failed`,
-    description: getErrorMessage(err, "Please try again."),
+    title: `${saved}, but the ${what} upload failed`,
+    description: hint ? `${reason} ${hint}` : reason,
   };
+}
+
+/**
+ * Where the new member page goes after a create. The member exists once it's
+ * created, so a failed upload is never retried from the create form (saving it
+ * again would create the member twice). It goes to the member's edit page,
+ * where the photo and IDs can be added again, or to the member's page when the
+ * user can't edit members.
+ */
+export function afterCreate(
+  memberId: number,
+  anyFailed: boolean,
+  can: (permission: "borrowers:update" | "borrowers:view") => boolean,
+): { path: string; retryHere: boolean } {
+  if (!anyFailed) return { path: "/borrowers", retryHere: false };
+  if (can("borrowers:update") && can("borrowers:view")) {
+    return { path: `/borrowers/${memberId}/edit`, retryHere: true };
+  }
+  if (can("borrowers:view")) return { path: `/borrowers/${memberId}`, retryHere: false };
+  return { path: "/borrowers", retryHere: false };
 }
 
 export interface MemberUploadsResult<T> {

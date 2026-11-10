@@ -10,6 +10,8 @@ import { notifyError, notifyValidation } from "@/lib/notify";
 import { sentencesMessage } from "@/app/(app)/borrowers/_components/utils";
 import { isBlankValidId, validateValidIds } from "@/lib/valid-id";
 import { isDuplicateNameMessage } from "@/lib/duplicate-error";
+import { afterCreate, uploadFailureMessage, uploadMemberFiles } from "../[id]/_lib/member-uploads";
+import { usePermission } from "@/hooks/use-permission";
 import { branchSelectItems, userBranches } from "@/lib/user-branches";
 
 import { Button } from "@/components/ui/button";
@@ -130,6 +132,7 @@ function emptyForm(): BorrowerFormData {
 
 function NewBorrowerContent() {
   const router = useRouter();
+  const { can } = usePermission();
   const { user } = useAuth();
   const [form, setForm] = useState<BorrowerFormData>(emptyForm());
   const [submitting, setSubmitting] = useState(false);
@@ -626,42 +629,49 @@ function NewBorrowerContent() {
       );
       const borrowerId = (created as unknown as { id: number }).id;
 
-      // Upload profile photo if provided
-      if (profilePhoto && borrowerId) {
-        try {
-          const photoData = new FormData();
-          photoData.append("photo", profilePhoto);
-          await borrowerService.uploadPhoto(borrowerId, photoData);
-        } catch {
-          toast.error("Member created but photo upload failed");
-        }
-      }
-
-      // Upload valid IDs if provided (front and back separately). Only blank
+      // Then the photo and the IDs (front and back separately). Only blank ID
       // rows are dropped — completeness was already enforced above, and
       // filtering on it here is what used to discard an ID in silence.
-      const validIdsToUpload = validIds.filter((v) => !isBlankValidId(v));
-      if (validIdsToUpload.length > 0 && borrowerId) {
-        for (const entry of validIdsToUpload) {
-          try {
-            const idData = new FormData();
-            idData.append("type", entry.type);
-            if (entry.type === "others" && entry.custom_type_name.trim()) {
-              idData.append("custom_type_name", entry.custom_type_name.trim());
-            }
-            if (entry.id_number.trim()) idData.append("id_number", entry.id_number.trim());
-            if (entry.front_file) idData.append("front_file", entry.front_file);
-            if (entry.back_file) idData.append("back_file", entry.back_file);
-            await borrowerService.uploadValidId(borrowerId, idData);
-          } catch {
-            toast.error(`We couldn't upload the ${entry.type} ID. Please try again.`);
+      const uploads = await uploadMemberFiles({
+        photo: borrowerId ? profilePhoto : null,
+        ids: borrowerId ? validIds.filter((v) => !isBlankValidId(v)) : [],
+        uploadPhoto: (photo) => {
+          const photoData = new FormData();
+          photoData.append("photo", photo);
+          return borrowerService.uploadPhoto(borrowerId, photoData);
+        },
+        uploadId: (entry) => {
+          const idData = new FormData();
+          idData.append("type", entry.type);
+          if (entry.type === "others" && entry.custom_type_name.trim()) {
+            idData.append("custom_type_name", entry.custom_type_name.trim());
           }
-        }
+          if (entry.id_number.trim()) idData.append("id_number", entry.id_number.trim());
+          if (entry.front_file) idData.append("front_file", entry.front_file);
+          if (entry.back_file) idData.append("back_file", entry.back_file);
+          return borrowerService.uploadValidId(borrowerId, idData);
+        },
+      });
+
+      // The member exists now, so a failed upload is never retried from this
+      // form, which would create them twice: the edit page takes it instead.
+      const next = afterCreate(borrowerId, uploads.anyFailed, can);
+      const options = {
+        saved: "Member saved",
+        hint: next.retryHere ? "Add it again on this page." : undefined,
+      };
+      if (uploads.photoError !== null) {
+        const { title, description } = uploadFailureMessage("photo", uploads.photoError, options);
+        toast.error(title, { description });
+      }
+      for (const failed of uploads.failedIds) {
+        const { title, description } = uploadFailureMessage("ID", failed.error, options);
+        toast.error(title, { description });
       }
 
       setDuplicateMatch(null);
-      toast.success("Member created");
-      router.push("/borrowers");
+      if (!uploads.anyFailed) toast.success("Member created");
+      router.push(next.path);
     } catch (err: unknown) {
       const apiError = err as {
         response?: {
