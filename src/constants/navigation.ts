@@ -1,4 +1,5 @@
 import type { Permission } from "@/types";
+import type { PermissionRequirement } from "@/lib/permission-requirement";
 import type { ComponentType } from "react";
 import {
   LayoutDashboard,
@@ -34,8 +35,11 @@ export interface NavSubItem {
    * which a manager has, while the import itself needs `imports:process`,
    * which only an admin has. Without this the sidebar would show the link to
    * everyone who can see Settings and land them on AccessDenied.
+   *
+   * A list means any one of them is enough, matching a `RouteGuard` given
+   * the same list.
    */
-  permission?: Permission;
+  permission?: PermissionRequirement;
 }
 
 export interface NavItem {

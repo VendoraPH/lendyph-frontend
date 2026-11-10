@@ -11,6 +11,7 @@ import {
   pendingApprovalsBadgeEnabled,
   usePendingLoanApprovals,
 } from "@/hooks/use-pending-loan-approvals";
+import { meetsPermission } from "@/lib/permission-requirement";
 import { cn } from "@/lib/utils";
 import {
   ChevronDown,
@@ -106,7 +107,7 @@ function NavLink({
   // AccessDenied. A child with no `permission` of its own inherits the
   // parent's, which is why every pre-existing child is untouched by this.
   const visibleChildren = useMemo(
-    () => (item.children ?? []).filter((c) => !c.permission || can(c.permission)),
+    () => (item.children ?? []).filter((c) => !c.permission || meetsPermission(c.permission, can)),
     // `can` reads the auth store through a fresh closure on every render, so it
     // is not referentially stable; depending on it would rebuild this array
     // every render and defeat the memo. The permissions it reads only change
