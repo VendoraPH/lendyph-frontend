@@ -4,7 +4,7 @@ import { formatDateISO } from "@/lib/format";
 import type { LoanFormPreview, LoanFormPreviewRequest } from "@/types";
 import type { LoanFormPreviewDeduction, LoanProduct } from "@/types/loan";
 import { securityStatusLabel } from "@/types/collateral";
-import { pledgedCollaterals, type SelectedCollateral } from "./edit-collaterals";
+import { pledgedCollaterals, sameCollaterals, type SelectedCollateral } from "./edit-collaterals";
 
 /** A deduction input as the payload states it: a percentage's rate, a fixed item's pesos. */
 export interface StatedDeduction {
@@ -31,6 +31,13 @@ export interface LoanPreviewInputs {
   /** Only each row's collateral id goes up; the figure a row shows never does. */
   collaterals: readonly Pick<SelectedCollateral, "collateral">[];
   /**
+   * An edit's collaterals as the loan held them when the form loaded; null
+   * until read (or when the read failed). While the form's list is that one,
+   * the preview leaves `collaterals` out, as the save does, and the server
+   * counts the held pledges (or withholds a share capital value).
+   */
+  heldCollaterals?: readonly Pick<SelectedCollateral, "collateral">[] | null;
+  /**
    * The deductions the save would state, or null when it states none and the
    * server charges the product's own fees.
    */
@@ -40,6 +47,24 @@ export interface LoanPreviewInputs {
 /** A positive figure typed into the form, parsed as the submit parses it. */
 function positive(value: number): number | undefined {
   return Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+/**
+ * The collaterals the preview states, by id. An edit states them only once its
+ * list differs from what the loan held (an added or removed row, or none at
+ * all), and not before the held list is read: the server then counts the held
+ * pledges itself, so a share capital pledge the user may not see is withheld
+ * (`value_unknown`) rather than refused.
+ */
+function statedCollaterals(
+  inputs: Pick<LoanPreviewInputs, "collaterals" | "heldCollaterals">,
+  isEdit: boolean,
+): ReturnType<typeof pledgedCollaterals> | undefined {
+  if (isEdit) {
+    const held = inputs.heldCollaterals ?? null;
+    if (held === null || sameCollaterals(inputs.collaterals, held)) return undefined;
+  }
+  return pledgedCollaterals(inputs.collaterals);
 }
 
 /**
@@ -71,7 +96,11 @@ export function loanPreviewRequest(inputs: LoanPreviewInputs): LoanFormPreviewRe
   // Only an edit names its loan. A restructure being edited names both, so one
   // preview carries the edited loan's collaterals and the restructure block.
   const editLoanId = inputs.editLoanId ?? undefined;
-  const valuable = borrowerId !== undefined && inputs.collaterals.length > 0;
+  const stated = statedCollaterals(inputs, editLoanId !== undefined);
+  // An edit's collaterals are valued whether stated or held; a new
+  // application's only once some are listed.
+  const valuable =
+    borrowerId !== undefined && (editLoanId !== undefined || (stated !== undefined && stated.length > 0));
 
   if (productId === undefined && !valuable) return null;
 
@@ -86,7 +115,7 @@ export function loanPreviewRequest(inputs: LoanPreviewInputs): LoanFormPreviewRe
     ...(frequency !== undefined && { frequency }),
     ...(startDate !== undefined && { start_date: startDate }),
     ...(scb !== undefined && { scb_amount: scb }),
-    ...(borrowerId !== undefined && { collaterals: pledgedCollaterals(inputs.collaterals) }),
+    ...(borrowerId !== undefined && stated !== undefined && { collaterals: stated }),
     ...(inputs.deductions !== null && {
       deductions: inputs.deductions.map((d) => ({ name: d.name, amount: d.amount, type: d.type })),
     }),

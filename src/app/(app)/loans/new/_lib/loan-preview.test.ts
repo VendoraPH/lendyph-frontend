@@ -155,6 +155,42 @@ describe("loanPreviewRequest", () => {
     assert.equal(loanPreviewRequest({ ...COMPLETE, productId: null, editLoanId: 7 })?.loan_id, 7);
   });
 
+  test("an edit leaves the collaterals out while the list is the one the loan held, as the save does", () => {
+    const held = [selected(2, 0), selected(3, 0)];
+    // Same ids, any order: the server counts (or withholds) the held pledges itself.
+    for (const collaterals of [held, [selected(3, 0), selected(2, 0)]]) {
+      const request = loanPreviewRequest({ ...COMPLETE, editLoanId: 7, collaterals, heldCollaterals: held });
+      assert.ok(request);
+      assert.equal(request.loan_id, 7);
+      assert.equal("collaterals" in request, false);
+    }
+    // Not read yet (or the read failed): nothing is stated either.
+    const unread = loanPreviewRequest({ ...COMPLETE, editLoanId: 7, collaterals: [], heldCollaterals: null });
+    assert.ok(unread);
+    assert.equal("collaterals" in unread, false);
+  });
+
+  test("an edit sends the collaterals once the list changes: added, removed, or none", () => {
+    const held = [selected(2, 0), selected(3, 0)];
+    const send = (collaterals: SelectedCollateral[]) =>
+      loanPreviewRequest({ ...COMPLETE, editLoanId: 7, collaterals, heldCollaterals: held })?.collaterals;
+    assert.deepEqual(send([...held, selected(4, 0)]), [{ collateral_id: 2 }, { collateral_id: 3 }, { collateral_id: 4 }]);
+    assert.deepEqual(send([selected(2, 0)]), [{ collateral_id: 2 }]);
+    assert.deepEqual(send([selected(2, 0), selected(4, 0)]), [{ collateral_id: 2 }, { collateral_id: 4 }]);
+    // [] detaches them all, so it is stated (no product needed to ask).
+    const none = loanPreviewRequest({ ...COMPLETE, productId: null, editLoanId: 7, collaterals: [], heldCollaterals: held });
+    assert.deepEqual(none?.collaterals, []);
+  });
+
+  test("a new application still sends its collaterals", () => {
+    assert.deepEqual(loanPreviewRequest(COMPLETE)?.collaterals, [{ collateral_id: 7 }]);
+  });
+
+  test("the edit form passes the loaded list as heldCollaterals", () => {
+    const page = readFileSync(join(process.cwd(), "src/app/(app)/loans/new/page.tsx"), "utf8");
+    assert.match(page, /heldCollaterals: isEditMode \? \(collateralResult\?\.attached \?\? null\) : undefined,/);
+  });
+
   test("a new application names no loan", () => {
     for (const inputs of [COMPLETE, { ...COMPLETE, editLoanId: null }]) {
       const request = loanPreviewRequest(inputs);

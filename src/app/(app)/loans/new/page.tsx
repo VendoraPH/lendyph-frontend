@@ -643,6 +643,7 @@ function NewLoanApplicationInner() {
       releaseDate,
       scbAmount,
       collaterals: selectedCollaterals,
+      heldCollaterals: isEditMode ? (collateralResult?.attached ?? null) : undefined,
       // What the save would charge: the form's deductions once the product is
       // known. Before then the save states none, and an edit keeps the loan's
       // own, so the preview asks about those; a new loan asks about none yet.
