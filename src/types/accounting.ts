@@ -117,7 +117,14 @@ export type JournalSource =
   | "opening_balance"
   | "credit_loss"
   | "share_capital"
-  | "closing";
+  | "closing"
+  // Savings & Deposits (Phase 3): deposits, withdrawals and closing payouts;
+  // interest runs and the interest credited at close; time deposit
+  // placements; and their maturity, rollover and pre-termination.
+  | "savings"
+  | "savings_interest"
+  | "time_deposit"
+  | "time_deposit_settlement";
 
 /**
  * `draft` is editable and affects nothing. `posted` is live and immutable —
@@ -145,6 +152,9 @@ export type JournalPostableType =
   | "share_capital_entry"
   | "gcash_transaction"
   | "accounting_year_close_entry"
+  | "savings_transaction"
+  | "savings_interest_run"
+  | "time_deposit"
   | (string & {});
 
 export interface JournalEntry {
@@ -393,7 +403,23 @@ export interface AccountMapping {
   net_surplus: number;
   /** Money received that cannot be identified yet, held until it is (2390). */
   suspense: number;
+  /**
+   * Savings & Deposits (Phase 3). Mapped on a cooperative chart (2050, 2060,
+   * 5160 and 2210); a lending company chart has no deposit accounts, so they
+   * stay unmapped there and a savings product can't be turned on.
+   */
+  savings_deposits?: number | null;
+  time_deposits?: number | null;
+  interest_expense_deposits?: number | null;
+  withholding_tax_deposits?: number | null;
 }
+
+/** The savings posting roles, which only a cooperative chart maps by default. */
+export type SavingsPostingRole =
+  | "savings_deposits"
+  | "time_deposits"
+  | "interest_expense_deposits"
+  | "withholding_tax_deposits";
 
 /** Accounting periods lock the books once an accountant signs them off. */
 export type PeriodStatus = "open" | "closed";

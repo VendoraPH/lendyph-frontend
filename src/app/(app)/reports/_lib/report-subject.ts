@@ -11,7 +11,12 @@ export function noDateRangeScope(subject: SubjectKind | undefined): string {
 }
 
 /** What the empty preview asks the user to pick before generating. */
-export function reportPickPrompt(report: { noDateRange?: boolean; subject?: SubjectKind }): string {
+export function reportPickPrompt(report: {
+  noDateRange?: boolean;
+  subject?: SubjectKind;
+  accountParam?: boolean;
+}): string {
+  if (report.accountParam) return "a date range for the savings account";
   if (!report.noDateRange) return "a date range";
   return report.subject ? `a ${reportSubjectNoun(report.subject)}` : "a branch";
 }
@@ -20,3 +25,12 @@ export function reportPickPrompt(report: { noDateRange?: boolean; subject?: Subj
 export function presetMemberId(param: string | null): number | null {
   return param !== null && /^[1-9]\d*$/.test(param) ? Number(param) : null;
 }
+
+/** The savings account a `?account=<id>` link opens with, read the same way. */
+export function presetAccountId(param: string | null): number | null {
+  return presetMemberId(param);
+}
+
+/** Why a report that reads one savings account can't run yet. */
+export const ACCOUNT_REPORT_HINT =
+  "Open this statement from a savings account's page (Savings → Accounts → the account → Statement).";

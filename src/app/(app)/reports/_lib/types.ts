@@ -22,7 +22,12 @@ export type ReportId =
   | "performance"
   | "provisioning"
   | "savings_balances"
-  | "time_deposit_maturities";
+  | "savings_transactions"
+  | "time_deposit_maturities"
+  | "savings_interest_postings"
+  | "savings_dormant"
+  | "savings_statement"
+  | "savings_gl_control";
 
 export type ReportCategory =
   | "operations"
@@ -30,7 +35,8 @@ export type ReportCategory =
   | "member"
   | "disbursement"
   | "financial"
-  | "performance";
+  | "performance"
+  | "savings";
 
 /**
  * Re-exported, not redeclared: `formatValue` in `@/lib/report-format` is what
@@ -266,7 +272,7 @@ export interface ReportContext {
   range: DateRange;
   /** null = all branches. Only sent for endpoints that accept branch_id. */
   branchId?: number | null;
-  /** The chosen loan or borrower id, for subject-scoped reports. */
+  /** The chosen loan, borrower or savings account id, for subject-scoped reports. */
   subjectId?: number | null;
 }
 
@@ -285,6 +291,11 @@ export interface ReportDefinition {
   supportsBranch?: boolean;
   /** Set when the report is scoped to one loan or borrower. */
   subject?: ReportSubject;
+  /**
+   * Set when the report reads one savings account, chosen by opening it from
+   * that account's page (`?account=<id>`) rather than with a picker.
+   */
+  accountParam?: boolean;
   /** Set when the API takes no dates, which hides the date range controls. */
   noDateRange?: boolean;
   /**
@@ -325,5 +336,9 @@ export const CATEGORY_META: Record<
   performance: {
     label: "Performance",
     description: "Collection efficiency and account officer productivity",
+  },
+  savings: {
+    label: "Savings & Deposits",
+    description: "Members' savings, time deposits, interest and the GL control",
   },
 };

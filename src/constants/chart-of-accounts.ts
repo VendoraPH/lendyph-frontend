@@ -17,6 +17,7 @@
 import type {
   Account,
   AccountMapping,
+  SavingsPostingRole,
   AccountType,
   CashAccountKind,
   ChartTemplate,
@@ -228,7 +229,7 @@ export const DEFAULT_ACCOUNT_MAPPING_CODES = {
   // company chart; a cooperative chart points it at its own net surplus.
   net_surplus: "3030",
   suspense: "2390",
-} as const satisfies Record<keyof AccountMapping, string>;
+} as const satisfies Record<Exclude<keyof AccountMapping, SavingsPostingRole>, string>;
 
 /**
  * What the cooperative template adds to the lending company chart. Mirrors
@@ -250,15 +251,23 @@ export const COOPERATIVE_CHART_ADDITIONS: SeedAccount[] = [
   { code: "3074", name: "Optional Fund", type: "equity", parent: "3070" },
   // Where a cooperative's year-end close moves the result.
   { code: "3080", name: "Undivided Net Surplus", type: "equity", parent: "3000" },
+  // Interest paid on members' savings and time deposits (Phase 3).
+  { code: "5160", name: "Interest Expense on Deposits", type: "expense", parent: "5000" },
 ];
 
 /**
  * The cooperative template's posting roles that differ from
  * `DEFAULT_ACCOUNT_MAPPING_CODES`: its year-end result goes to Undivided Net
- * Surplus, not Retained Earnings.
+ * Surplus, not Retained Earnings. It also maps the four savings roles (Phase 3),
+ * which a lending company chart leaves unmapped: deposits to 2050 and 2060,
+ * their interest to 5160, and the tax withheld from it to 2210.
  */
 export const COOPERATIVE_MAPPING_OVERRIDES = {
   net_surplus: "3080",
+  savings_deposits: "2050",
+  time_deposits: "2060",
+  interest_expense_deposits: "5160",
+  withholding_tax_deposits: "2210",
 } as const satisfies Partial<Record<keyof AccountMapping, string>>;
 
 /**

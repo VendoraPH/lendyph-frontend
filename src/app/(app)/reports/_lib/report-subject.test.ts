@@ -1,6 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { noDateRangeScope, presetMemberId, reportPickPrompt, reportSubjectNoun } from "./report-subject";
+import {
+  ACCOUNT_REPORT_HINT,
+  noDateRangeScope,
+  presetAccountId,
+  presetMemberId,
+  reportPickPrompt,
+  reportSubjectNoun,
+} from "./report-subject";
 
 test("a report that needs one person asks for a member", () => {
   assert.equal(reportSubjectNoun("borrower"), "member");
@@ -15,6 +22,18 @@ test("?member= opens a member only for a whole positive id", () => {
   for (const value of [null, "", "abc", "0", "-1", "1.5", "4e2", " 7"]) {
     assert.equal(presetMemberId(value), null, String(value));
   }
+});
+
+test("?account= opens a savings account only for a whole positive id", () => {
+  assert.equal(presetAccountId("12"), 12);
+  for (const value of [null, "", "abc", "0", "-1", "1.5"]) {
+    assert.equal(presetAccountId(value), null, String(value));
+  }
+});
+
+test("the savings statement asks for its period and says where to open it from", () => {
+  assert.equal(reportPickPrompt({ accountParam: true }), "a date range for the savings account");
+  assert.match(ACCOUNT_REPORT_HINT, /savings account's page/);
 });
 
 test("a report without dates says what it covers", () => {

@@ -1,25 +1,43 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  COOPERATIVE_MAPPING_OVERRIDES,
   DEFAULT_ACCOUNT_MAPPING_CODES,
-  DEFAULT_CHART_OF_ACCOUNTS,
+  templateChart,
 } from "@/constants/chart-of-accounts";
 import type { Account } from "@/types";
 import { GROUPS, accountsForField, saveFailureMessage } from "./mapping-fields";
 
 const FIELDS = GROUPS.flatMap((group) => group.fields);
 
+// A cooperative chart maps every role, the four savings roles included.
+const COOPERATIVE_MAPPING: Record<string, string> = { ...DEFAULT_ACCOUNT_MAPPING_CODES, ...COOPERATIVE_MAPPING_OVERRIDES };
+
 test("every posting role is offered on the Default Accounts screen exactly once", () => {
   const offered = FIELDS.map((field) => field.key).sort();
-  assert.deepEqual(offered, Object.keys(DEFAULT_ACCOUNT_MAPPING_CODES).sort());
+  assert.deepEqual(offered, Object.keys(COOPERATIVE_MAPPING).sort());
 });
 
-test("each role's default account is one its field accepts", () => {
-  const byCode = new Map(DEFAULT_CHART_OF_ACCOUNTS.map((a) => [a.code, a]));
+test("each role's default account on a cooperative chart is one its field accepts", () => {
+  const byCode = new Map(templateChart("cooperative").map((a) => [a.code, a]));
   for (const field of FIELDS) {
-    const seed = byCode.get(DEFAULT_ACCOUNT_MAPPING_CODES[field.key])!;
+    const seed = byCode.get(COOPERATIVE_MAPPING[field.key])!;
     assert.ok(field.types.includes(seed.type), `${field.key} defaults to ${seed.code}, a ${seed.type}`);
   }
+});
+
+test("the four savings roles read in words, each with the account type it must be", () => {
+  const savings = GROUPS.find((group) => group.title === "Savings and time deposits");
+  assert.ok(savings, "the savings group is on the screen");
+  assert.deepEqual(
+    savings.fields.map((field) => [field.key, field.label, field.types]),
+    [
+      ["savings_deposits", "Savings deposits", ["liability"]],
+      ["time_deposits", "Time deposits", ["liability"]],
+      ["interest_expense_deposits", "Interest expense on deposits", ["expense"]],
+      ["withholding_tax_deposits", "Withholding tax on deposit interest", ["liability"]],
+    ],
+  );
 });
 
 test("the tax roles can be re-pointed, to liability accounts only", () => {

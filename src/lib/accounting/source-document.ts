@@ -61,6 +61,8 @@ const POSTABLE_ROUTES: Record<string, ((id: number) => string) | undefined> = {
   // A repayment's detail page is the receipt, keyed by the repayment id —
   // which is exactly what `postable_id` carries.
   repayment: (id) => `/payments/${id}`,
+  // A placement has its own page under Savings.
+  time_deposit: (id) => `/savings/time-deposits/${id}`,
 };
 
 /**
@@ -77,6 +79,9 @@ const POSTABLE_NAMES: Record<string, string | undefined> = {
   share_capital_entry: "Share capital entry",
   gcash_transaction: "GCash transaction",
   accounting_year_close_entry: "Year-end close",
+  savings_transaction: "Savings transaction",
+  savings_interest_run: "Savings interest run",
+  time_deposit: "Time deposit",
 };
 
 /** The year a closing entry closes: closing entries are dated 31 December. */

@@ -46,9 +46,9 @@ test("the lending company preview is today's chart, with nothing marked Cooperat
   assert.equal(rows.some((r) => r.cooperative), false);
 });
 
-test("the cooperative preview marks exactly the ten additions, in code order", () => {
+test("the cooperative preview marks exactly the eleven additions, in code order", () => {
   const rows = seedPreviewRows("cooperative");
-  assert.equal(rows.length, DEFAULT_CHART_OF_ACCOUNTS.length + 10);
+  assert.equal(rows.length, DEFAULT_CHART_OF_ACCOUNTS.length + 11);
   assert.deepEqual(
     rows.filter((r) => r.cooperative).map((r) => r.code),
     COOPERATIVE_CODES,

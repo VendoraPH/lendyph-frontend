@@ -21,6 +21,11 @@ const JOURNAL_SOURCE_LABELS: Record<string, string> = {
   closing: "Year-end closing",
   bank_transaction: "Bank statement entry",
   cash_transaction: "Cash count entry",
+  // Savings & Deposits (Phase 3).
+  savings: "Savings",
+  savings_interest: "Savings interest",
+  time_deposit: "Time deposit placement",
+  time_deposit_settlement: "Time deposit settlement",
 };
 
 /** The source is a string, not `JournalSource`: the server has values the union doesn't. */

@@ -73,6 +73,10 @@ test("journal source items label every source in words, after any source", () =>
     { value: "credit_loss", label: "Credit Loss" },
     { value: "share_capital", label: "Share Capital" },
     { value: "closing", label: "Year-end closing" },
+    { value: "savings", label: "Savings" },
+    { value: "savings_interest", label: "Savings interest" },
+    { value: "time_deposit", label: "Time deposit placement" },
+    { value: "time_deposit_settlement", label: "Time deposit settlement" },
   ]);
 });
 

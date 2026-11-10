@@ -39,7 +39,12 @@ const REFERENCE_PREFIX: Record<ReportId, string> = {
   performance: "PRF",
   provisioning: "PRV",
   savings_balances: "SVB",
+  savings_transactions: "SVT",
   time_deposit_maturities: "TDM",
+  savings_interest_postings: "SVI",
+  savings_dormant: "SVD",
+  savings_statement: "SVS",
+  savings_gl_control: "SVG",
 };
 
 /** Sign-off roles. Cooperative reports are prepared, checked, then approved. */

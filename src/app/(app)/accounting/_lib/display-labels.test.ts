@@ -29,6 +29,13 @@ test("a journal's source reads in words", () => {
   assert.equal(journalSourceLabel("credit_loss"), "Credit Loss");
 });
 
+test("the four savings sources read in words", () => {
+  assert.equal(journalSourceLabel("savings"), "Savings");
+  assert.equal(journalSourceLabel("savings_interest"), "Savings interest");
+  assert.equal(journalSourceLabel("time_deposit"), "Time deposit placement");
+  assert.equal(journalSourceLabel("time_deposit_settlement"), "Time deposit settlement");
+});
+
 test("a source the screen doesn't know yet still reads in words", () => {
   assert.equal(journalSourceLabel("share_capital"), "Share Capital");
   assert.equal(journalSourceLabel("something_new"), "Something New");

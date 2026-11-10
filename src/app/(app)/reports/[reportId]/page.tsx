@@ -9,7 +9,9 @@ import { RouteGuard } from "@/components/common";
 // imports `@/components/common` ~52 kB it cannot use. See the note in the barrel.
 import { SubjectPicker } from "@/components/common/subject-picker";
 import {
+  ACCOUNT_REPORT_HINT,
   noDateRangeScope,
+  presetAccountId,
   presetMemberId,
   reportPickPrompt,
   reportSubjectNoun,
@@ -179,7 +181,13 @@ function presetRange(preset: Preset, fallback: DateRange): DateRange {
   }
 }
 
-function ReportDetailContent({ memberParam }: { memberParam: number | null }) {
+function ReportDetailContent({
+  memberParam,
+  accountParam,
+}: {
+  memberParam: number | null;
+  accountParam: number | null;
+}) {
   const params = useParams();
   const router = useRouter();
   const reportId = params?.reportId as string | undefined;
@@ -198,6 +206,9 @@ function ReportDetailContent({ memberParam }: { memberParam: number | null }) {
   const presetId =
     report?.subject === "borrower" && hasPermission("borrowers:view") ? memberParam : null;
   const [subjectId, setSubjectId] = useState<number | null>(presetId);
+  // `?account=<id>` names the savings account a statement reads. There is no
+  // picker: the statement is opened from the account's own page.
+  const accountId = report?.accountParam ? accountParam : null;
   const [presetMember, setPresetMember] = useState<MemberOption | null>(null);
   const [doc, setDoc] = useState<ReportDocument | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -287,7 +298,7 @@ function ReportDetailContent({ memberParam }: { memberParam: number | null }) {
     : null;
 
   // Subject-scoped reports cannot run against nothing.
-  const missingSubject = !!report.subject && !subjectId;
+  const missingSubject = (!!report.subject && !subjectId) || (!!report.accountParam && !accountId);
 
   // The API caps the reporting period, so a range wider than that is a 422 the
   // user can see coming. Mirrors `ReportController::assertSpanWithinCap`; only
@@ -301,7 +312,7 @@ function ReportDetailContent({ memberParam }: { memberParam: number | null }) {
       const result = await report.build({
         range: activeRange,
         branchId: report.supportsBranch ? branchId : null,
-        subjectId: report.subject ? subjectId : null,
+        subjectId: report.subject ? subjectId : report.accountParam ? accountId : null,
       });
       // Identity is stamped once, here, so the preview and every exported
       // format quote the same reference, logo, and preparer.
@@ -554,7 +565,7 @@ function ReportDetailContent({ memberParam }: { memberParam: number | null }) {
           {/* Scope row — only the reports whose endpoints accept these
               filters get to show them, so the controls never imply a
               narrowing the API would silently ignore. */}
-          {(report.supportsBranch || report.subject) && (
+          {(report.supportsBranch || report.subject || report.accountParam) && (
             <div className="mt-4 flex flex-wrap items-end gap-4 border-t pt-4">
               {report.supportsBranch && (
                 <div className="space-y-1">
@@ -598,10 +609,14 @@ function ReportDetailContent({ memberParam }: { memberParam: number | null }) {
                 />
               )}
 
-              {missingSubject && (
+              {missingSubject && report.subject && (
                 <p className="text-xs text-muted-foreground pb-2">
-                  Select a {report.subject && reportSubjectNoun(report.subject)} to generate this report.
+                  Select a {reportSubjectNoun(report.subject)} to generate this report.
                 </p>
+              )}
+
+              {missingSubject && report.accountParam && (
+                <p className="text-xs text-muted-foreground pb-2">{ACCOUNT_REPORT_HINT}</p>
               )}
 
               {spanTooWide && (
@@ -636,10 +651,18 @@ function ReportDetailContent({ memberParam }: { memberParam: number | null }) {
   );
 }
 
-/** Keyed by the member, so following a link to another member starts afresh. */
+/** Keyed by the member or account, so following a link to another one starts afresh. */
 function ReportDetailRoute() {
-  const memberParam = presetMemberId(useSearchParams().get("member"));
-  return <ReportDetailContent key={memberParam ?? "none"} memberParam={memberParam} />;
+  const searchParams = useSearchParams();
+  const memberParam = presetMemberId(searchParams.get("member"));
+  const accountParam = presetAccountId(searchParams.get("account"));
+  return (
+    <ReportDetailContent
+      key={`${memberParam ?? "none"}:${accountParam ?? "none"}`}
+      memberParam={memberParam}
+      accountParam={accountParam}
+    />
+  );
 }
 
 export default function ReportDetailPage() {

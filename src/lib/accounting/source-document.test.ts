@@ -93,6 +93,18 @@ test("the Phase 2 documents are named in words and not linked — none has a det
   }
 });
 
+test("the savings documents are named in words; only a time deposit has a page to open", () => {
+  const txn = sourceDocument(entry({ postable_type: "savings_transaction", postable_id: 9, postable_label: "SVT-20261110-000001" }));
+  assert.equal(txn?.text, "Savings transaction SVT-20261110-000001");
+  assert.equal(txn?.href, null);
+  const run = sourceDocument(entry({ postable_type: "savings_interest_run", postable_id: 3 }));
+  assert.equal(run?.text, "Savings interest run #3");
+  assert.equal(run?.href, null);
+  const td = sourceDocument(entry({ postable_type: "time_deposit", postable_id: 4, postable_label: "TD-2026-000004" }));
+  assert.equal(td?.text, "Time deposit TD-2026-000004");
+  assert.equal(td?.href, "/savings/time-deposits/4");
+});
+
 test("a GCash transaction keeps its own reference as the label", () => {
   const doc = sourceDocument(
     entry({ postable_type: "gcash_transaction", postable_id: 3, postable_label: "GC-77" })

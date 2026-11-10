@@ -267,13 +267,32 @@ export const reportService = {
   provisioning: (params?: Record<string, unknown>) =>
     api.get(API_ENDPOINTS.REPORTS.PROVISIONING, { params }),
 
-  // Savings (NEXT_PUBLIC_ENABLE_SAVINGS). Paginator envelopes with `totals`,
-  // so getRaw keeps the meta and the server's whole-book figures.
+  // Savings (NEXT_PUBLIC_ENABLE_SAVINGS; reports:view plus savings:view).
+  // The lists are paginator envelopes with `totals` over the whole filter, so
+  // getRaw keeps the meta and the server's figures.
   savingsBalances: (params?: Record<string, unknown>) =>
     api.getRaw(API_ENDPOINTS.REPORTS.SAVINGS_BALANCES, { params }),
 
+  savingsTransactions: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.SAVINGS_TRANSACTIONS, { params }),
+
   timeDepositMaturities: (params?: Record<string, unknown>) =>
     api.getRaw(API_ENDPOINTS.REPORTS.TIME_DEPOSIT_MATURITIES, { params }),
+
+  savingsInterestPostings: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.SAVINGS_INTEREST_POSTINGS, { params }),
+
+  savingsDormant: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.SAVINGS_DORMANT, { params }),
+
+  // One account's statement for the period: its opening balance, each line
+  // with the server's running balance, and the closing balance.
+  savingsStatement: (accountId: number, params?: Record<string, unknown>) =>
+    api.get(API_ENDPOINTS.REPORTS.SAVINGS_STATEMENT(accountId), { params }),
+
+  // The savings subledger against GL 2050 and 2060, per branch, as of a day.
+  savingsGlControl: (params?: Record<string, unknown>) =>
+    api.get(API_ENDPOINTS.REPORTS.SAVINGS_GL_CONTROL, { params }),
 
   // One member's share capital statement: opening balance, entries with a
   // running balance, period credits/debits, closing balance. Accepts

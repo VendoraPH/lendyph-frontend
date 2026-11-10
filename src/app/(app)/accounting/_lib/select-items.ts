@@ -51,6 +51,10 @@ const JOURNAL_SOURCES: Record<JournalSource, true> = {
   credit_loss: true,
   share_capital: true,
   closing: true,
+  savings: true,
+  savings_interest: true,
+  time_deposit: true,
+  time_deposit_settlement: true,
 };
 
 export const journalSourceItems: readonly SelectItemOption[] = [
