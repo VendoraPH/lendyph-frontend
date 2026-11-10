@@ -1,15 +1,36 @@
-import { getErrorMessage } from "@/lib/api-error";
+import { getErrorMessage, httpStatusOf } from "@/lib/api-error";
+
+/**
+ * Whether the server refused the upload (a 4xx), so it stored nothing and the
+ * same file can be sent again. Anything else (a timeout, a dropped connection,
+ * a 5xx) may have been stored before the reply was lost.
+ */
+export function isUploadRefused(err: unknown): boolean {
+  const status = httpStatusOf(err);
+  return status !== null && status >= 400 && status < 500;
+}
 
 /**
  * The toast for an upload that failed after the member's details were saved:
  * the details are kept, and the server's own words say why the file wasn't
  * (a 422's field message, else its message).
+ *
+ * An ID upload that may have been stored (see isUploadRefused) instead asks the
+ * user to check the IDs on file first, so it isn't added twice. A photo
+ * replaces the last one, so it never needs that.
  */
 export function uploadFailureMessage(
   what: "photo" | "ID",
   err: unknown,
-  { saved = "Member details saved", hint }: { saved?: string; hint?: string } = {},
+  {
+    saved = "Member details saved",
+    hint,
+    uncertainHint = "Check the list below before adding it again.",
+  }: { saved?: string; hint?: string; uncertainHint?: string } = {},
 ): { title: string; description: string } {
+  if (what === "ID" && !isUploadRefused(err)) {
+    return { title: `The ID may not have uploaded. ${uncertainHint}`, description: `${saved}.` };
+  }
   const reason = getErrorMessage(err, "Please try again.");
   return {
     title: `${saved}, but the ${what} upload failed`,
@@ -39,15 +60,18 @@ export function afterCreate(
 
 export interface MemberUploadsResult<T> {
   photoError: unknown | null;
-  /** The IDs that weren't saved, in order, to keep on the form for a retry. */
-  failedIds: { entry: T; error: unknown }[];
+  /**
+   * The IDs that failed, in order. Only a refused one (`refused`) is kept on
+   * the form for a retry; any other may already be stored.
+   */
+  failedIds: { entry: T; error: unknown; refused: boolean }[];
   anyFailed: boolean;
 }
 
 /**
  * Upload the photo, then each ID, after the member's details were saved. A
  * failure never stops the rest. The result says which failed, so the page can
- * keep only those for a retry and never send a saved one twice.
+ * keep only the refused ones for a retry and never send a saved one twice.
  */
 export async function uploadMemberFiles<P, T>({
   photo,
@@ -69,12 +93,12 @@ export async function uploadMemberFiles<P, T>({
     }
   }
 
-  const failedIds: { entry: T; error: unknown }[] = [];
+  const failedIds: { entry: T; error: unknown; refused: boolean }[] = [];
   for (const entry of ids) {
     try {
       await uploadId(entry);
     } catch (error) {
-      failedIds.push({ entry, error });
+      failedIds.push({ entry, error, refused: isUploadRefused(error) });
     }
   }
 

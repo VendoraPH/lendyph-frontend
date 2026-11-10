@@ -18,6 +18,8 @@ import { notifyError, notifyValidation } from "@/lib/notify";
 import { sentencesMessage } from "@/app/(app)/borrowers/_components/utils";
 import { isBlankValidId, validateValidIds } from "@/lib/valid-id";
 import { uploadFailureMessage, uploadMemberFiles } from "../_lib/member-uploads";
+import { useMemberValidIds } from "../_hooks/use-member-valid-ids";
+import { MemberValidIdsOnFile } from "../_components/member-valid-ids-on-file";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -173,6 +175,7 @@ function EditBorrowerContent() {
 
   // Valid IDs
   const [validIds, setValidIds] = useState<ValidIdEntry[]>([]);
+  const idsOnFile = useMemberValidIds(borrowerId);
   const [cropTarget, setCropTarget] = useState<{
     index: number;
     side: "front" | "back";
@@ -459,6 +462,8 @@ function EditBorrowerContent() {
 
       // The details are saved either way. A saved photo or ID is dropped from
       // the form, so saving again sends only what failed, never a duplicate.
+      // So is an ID that got no reply (it may be stored): the user checks the
+      // IDs on file, read again below, before adding it again.
       if (uploads.photoError !== null) {
         const { title, description } = uploadFailureMessage("photo", uploads.photoError);
         toast.error(title, { description });
@@ -469,10 +474,11 @@ function EditBorrowerContent() {
         const { title, description } = uploadFailureMessage("ID", failed.error);
         toast.error(title, { description });
       }
-      setValidIds(uploads.failedIds.map((failed) => failed.entry));
+      setValidIds(uploads.failedIds.filter((failed) => failed.refused).map((failed) => failed.entry));
 
       // Stay on the page so the user can fix the file and save again.
       if (uploads.anyFailed) {
+        idsOnFile.reload();
         return;
       }
 
@@ -967,10 +973,12 @@ function EditBorrowerContent() {
               </Button>
             </div>
 
+            <MemberValidIdsOnFile ids={idsOnFile.ids} status={idsOnFile.status} onRetry={idsOnFile.reload} />
+
             {validIds.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4 text-center">
-                Attach additional valid IDs. Existing IDs are managed from the member detail
-                page.
+                Attach additional valid IDs. IDs on file are removed from the member&apos;s Documents
+                tab.
               </p>
             ) : (
               <div className="space-y-4">

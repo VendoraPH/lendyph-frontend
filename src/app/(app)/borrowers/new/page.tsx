@@ -661,6 +661,10 @@ function NewBorrowerContent() {
       const options = {
         saved: "Member saved",
         hint: next.retryHere ? "Add it again on this page." : undefined,
+        // The edit page lists the IDs on file; the member's page has them on its Documents tab.
+        uncertainHint: next.retryHere
+          ? "Check the list below before adding it again."
+          : "Check the member's Documents tab before adding it again.",
       };
       if (uploads.photoError !== null) {
         const { title, description } = uploadFailureMessage("photo", uploads.photoError, options);
