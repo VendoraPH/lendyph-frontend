@@ -30,7 +30,7 @@ import { cn } from "@/lib/utils";
 import { documentTypeFromName } from "@/lib/document-type";
 import { DOCUMENT_ACCEPT } from "@/lib/file-validation";
 import { ConfirmDeleteDialog } from "@/components/common/confirm-delete-dialog";
-import { deleteDocumentLabel, documentName } from "@/lib/document-delete";
+import { deleteDocumentLabel, documentName, openDocumentLabel } from "@/lib/document-delete";
 
 interface LoanDocumentsCardProps {
   loanId: number;
@@ -214,7 +214,7 @@ export function LoanDocumentsCard({
                           variant="ghost"
                           size="sm"
                           className="h-7 w-7 p-0"
-                          aria-label="Open document"
+                          aria-label={openDocumentLabel(doc)}
                           onClick={() =>
                             window.open(
                               fileUrl(doc.url),

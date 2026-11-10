@@ -1,6 +1,6 @@
 import { VALID_ID_OPTIONS } from "@/constants";
 import type { CoMakerValidId } from "@/services/co-maker.service";
-import { ID_MIME_TYPES, validateUploadFile } from "./file-validation";
+import { ID_ACCEPT, ID_MIME_TYPES, validateUploadFile } from "./file-validation";
 
 /**
  * The valid ID the co-maker dialog is about to upload.
@@ -36,11 +36,11 @@ export const VALID_ID_MAX_BYTES = 10 * 1024 * 1024;
 export const VALID_ID_TEXT_MAX_LENGTH = 100;
 
 /**
- * Steers the file picker to what the API accepts (`mimes:jpg,jpeg,png,pdf`).
+ * Steers the file picker to what the API accepts: the server's valid ID list
+ * (ID_ACCEPT, .jpe and .jfif included), plus their types.
  * Only a hint to the browser — `idFileProblem` is what actually checks.
  */
-export const VALID_ID_FILE_ACCEPT =
-  ".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf";
+export const VALID_ID_FILE_ACCEPT = `${ID_ACCEPT},image/jpeg,image/png,application/pdf`;
 
 export type CoMakerIdField = keyof CoMakerIdDraft;
 export type CoMakerIdErrors = Partial<Record<CoMakerIdField, string>>;

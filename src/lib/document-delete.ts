@@ -10,6 +10,11 @@ export function documentName(doc: Named): string {
   return doc.label?.trim() || `Document #${doc.id}`;
 }
 
+/** The open icon's accessible name. */
+export function openDocumentLabel(doc: Named): string {
+  return `Open ${documentName(doc)}`;
+}
+
 /** The delete icon's accessible name. */
 export function deleteDocumentLabel(doc: Named): string {
   return `Delete ${documentName(doc)}`;

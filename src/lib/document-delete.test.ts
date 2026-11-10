@@ -2,7 +2,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { deleteDocumentLabel, deleteValidIdLabel, documentName, validIdLabel, validIdName } from "./document-delete";
+import {
+  deleteDocumentLabel,
+  deleteValidIdLabel,
+  documentName,
+  openDocumentLabel,
+  validIdLabel,
+  validIdName,
+} from "./document-delete";
 
 const source = readFileSync(
   join(process.cwd(), "src/app/(app)/borrowers/[id]/_components/documents-tab.tsx"),
@@ -13,6 +20,11 @@ test("a document reads by its label, else by its number", () => {
   assert.equal(documentName({ id: 7, label: "Payslip June.pdf" }), "Payslip June.pdf");
   assert.equal(documentName({ id: 7, label: "  " }), "Document #7");
   assert.equal(documentName({ id: 7 }), "Document #7");
+});
+
+test("the open button's accessible name names the document", () => {
+  assert.equal(openDocumentLabel({ id: 7, label: "Payslip June.pdf" }), "Open Payslip June.pdf");
+  assert.equal(openDocumentLabel({ id: 9 }), "Open Document #9");
 });
 
 test("the delete button's accessible name names the document", () => {
@@ -47,6 +59,7 @@ for (const [name, text] of Object.entries(lists)) {
     assert.ok(!/window\.confirm|\bconfirm\(/.test(text), `${name}: never window.confirm`);
     assert.ok(text.includes("aria-label={deleteDocumentLabel(doc)}"), `${name}: the icon button has a name`);
     assert.ok(!text.includes('aria-label="Delete document"'), `${name}: no unnamed delete`);
+    assert.ok(!text.includes('aria-label="Open document"'), `${name}: no unnamed open`);
     // The row's icon only opens the dialog; the delete runs from its Delete button.
     const handler = name === "member Documents tab" ? "handleDeleteDocument(" : "handleDelete(";
     assert.equal((text.match(new RegExp(handler.replace("(", "\\("), "g")) ?? []).length, 2, `${name}: defined once and called once`);
@@ -69,3 +82,10 @@ test("the shared dialog is the app's AlertDialog, with Cancel and a destructive 
   assert.ok(dialog.includes("<AlertDialogCancel"));
   assert.ok(dialog.includes('variant="destructive"'));
 });
+
+for (const [name, text] of Object.entries(lists)) {
+  if (name === "member Documents tab") continue;
+  test(`the ${name}'s open button names its document`, () => {
+    assert.ok(text.includes("aria-label={openDocumentLabel(doc)}"), name);
+  });
+}
