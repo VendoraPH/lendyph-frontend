@@ -27,6 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import { Wallet, FileText, PhilippinePeso, AlertTriangle, TrendingUp, Landmark } from "lucide-react";
 import { getInitials } from "@/lib/initials";
 import { formatCurrency, formatDateFull } from "@/lib/format";
+import { currencyOrDash } from "@/lib/report-format";
 import { shareCapitalService } from "@/services";
 import { dashboardService } from "@/services/dashboard.service";
 import { env } from "@/config/env";
@@ -36,6 +37,7 @@ import { shareCapitalBookBalance } from "./_lib/share-capital-kpi";
 import { collectionPieSlices, collectionRateTone, shownCollectionRate } from "./_lib/collection-pie";
 import { dashboardKpiClasses } from "./_lib/kpi-layout";
 import { insuranceCollected } from "./_lib/insurance-collected";
+import { recentTransactionRows, type RecentTransactionRow } from "./_lib/recent-transactions";
 import {
   hasSparklineData,
   isIsolatedPoint,
@@ -76,18 +78,6 @@ interface DailyDueItem {
   status?: "paid" | "partial" | "overdue" | "pending" | "collected";
 }
 
-interface RecentTransactionItem {
-  id?: number;
-  name?: string;
-  borrower_name?: string;
-  description?: string;
-  desc?: string;
-  amount?: number;
-  date?: string;
-  created_at?: string;
-  type?: "release" | "repayment";
-}
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -106,15 +96,6 @@ type DueItemView = {
   amountDue: number;
   amountPaid: number;
   status: "collected" | "partial" | "pending";
-};
-
-type TransactionView = {
-  id: number;
-  name: string;
-  desc: string;
-  amount: number;
-  date: string;
-  color: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -218,7 +199,7 @@ function DashboardContent() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [dailyDues, setDailyDues] = useState<DueItemView[]>([]);
   const [duesSummary, setDuesSummary] = useState<DailyDuesSummary | null>(null);
-  const [recentTransactions, setRecentTransactions] = useState<TransactionView[]>([]);
+  const [recentTransactions, setRecentTransactions] = useState<RecentTransactionRow[]>([]);
   // "loading" until the request settles, then "ready" or "error" — so the UI can
   // tell a genuinely empty dataset apart from a request that never came back.
   const [txStatus, setTxStatus] = useState<LoadState>("loading");
@@ -285,20 +266,7 @@ function DashboardContent() {
     dashboardService
       .recentTransactions()
       .then((res) => {
-        const raw = Array.isArray(res)
-          ? (res as RecentTransactionItem[])
-          : ((res as { data?: RecentTransactionItem[] })?.data ?? []);
-        const palette = ["bg-purple-500", "bg-orange-500", "bg-green-500", "bg-blue-500"];
-        setRecentTransactions(
-          raw.slice(0, 10).map((tx, i) => ({
-            id: Number(tx.id ?? i + 1),
-            name: tx.name ?? tx.borrower_name ?? "—",
-            desc: tx.description ?? tx.desc ?? (tx.type === "release" ? "Loan released" : "Payment received"),
-            amount: Number(tx.amount ?? 0),
-            date: tx.date ?? tx.created_at ?? "",
-            color: palette[i % palette.length]!,
-          })),
-        );
+        setRecentTransactions(recentTransactionRows(res));
         setTxStatus("ready");
       })
       .catch(() => {
@@ -540,7 +508,7 @@ function DashboardContent() {
                 {transactions.map((tx) => {
                   const initials = getInitials(tx.name);
                   return (
-                    <TableRow key={tx.id} className="hover:bg-muted/40 transition-colors">
+                    <TableRow key={tx.key} className="hover:bg-muted/40 transition-colors">
                       <TableCell className="pl-6">
                         <div className="flex items-center gap-3">
                           <div
@@ -553,7 +521,7 @@ function DashboardContent() {
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">{tx.desc}</TableCell>
                       <TableCell className="text-right text-sm font-medium">
-                        {formatCurrency(tx.amount)}
+                        {currencyOrDash(tx.amount)}
                       </TableCell>
                       <TableCell className="text-right text-sm text-muted-foreground pr-6">
                         {tx.date}

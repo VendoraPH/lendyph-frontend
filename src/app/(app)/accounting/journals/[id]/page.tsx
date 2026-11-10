@@ -97,27 +97,6 @@ function JournalContent({ id }: { id: number }) {
   const loading = answer?.key !== key;
   const entry = answer?.entry ?? null;
 
-  // A reversal names the entry it reverses, by its number. The original is in
-  // the same branch, so whoever reads the reversal can read it; until it
-  // answers (or if it can't), the page says "another entry".
-  const reversesId = entry?.reverses_journal_id ?? null;
-  const [original, setOriginal] = useState<{ id: number; no: string } | null>(null);
-  useEffect(() => {
-    if (reversesId === null) return;
-    let current = true;
-    accountingService
-      .journal(reversesId)
-      .then((found) => {
-        if (current && found.journal_no) setOriginal({ id: reversesId, no: found.journal_no });
-      })
-      // Not loaded: the page keeps "another entry".
-      .catch(() => null);
-    return () => {
-      current = false;
-    };
-  }, [reversesId]);
-  const originalNo = original && original.id === reversesId ? original.no : null;
-
   // A draft's stored lines, checked by the server's preview so Post waits
   // until they balance (and while the check is out or failed). The preview
   // needs journals:create; a poster without it may post, and the server
@@ -200,7 +179,7 @@ function JournalContent({ id }: { id: number }) {
     <div className="space-y-6">
       <AccountingPageHeader
         title={journalTitle(entry)}
-        description={journalPageDescription(entry, originalNo)}
+        description={journalPageDescription(entry)}
         actions={
           <div className="flex flex-wrap gap-2">
             <BackButton />
@@ -244,7 +223,7 @@ function JournalContent({ id }: { id: number }) {
         />
       ) : (
         <div className={loading ? "opacity-60" : undefined} aria-busy={loading}>
-          <JournalDetails entry={entry} originalNo={originalNo} />
+          <JournalDetails entry={entry} />
         </div>
       )}
 

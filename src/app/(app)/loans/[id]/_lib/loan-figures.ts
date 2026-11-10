@@ -14,6 +14,10 @@
  * - `total_payable` (LoanResource): the amount still owed, never including
  *   Share Capital Build-Up; null before release. `contract_total`: the
  *   contract's principal plus interest, shown on its own line.
+ * - `contract_interest` (GET /loans/{id}): the contract's interest, by the
+ *   same rule as `contract_total` (a restructured source's original
+ *   contract), so Principal + Interest = Contract Total. Absent on older
+ *   answers, when the stored schedule's interest total is shown instead.
  * - `total_outstanding_before` / `total_outstanding_after` (payment
  *   preview): `total_outstanding` before and after the previewed payment.
  *
@@ -123,6 +127,18 @@ export function outstandingPrincipal(summary: unknown, loan: unknown): number | 
 export function totalPayableFigures(loan: unknown): { totalPayable: number | null; contractTotal: number | null } {
   const l = record(loan);
   return { totalPayable: figure(l?.total_payable), contractTotal: figure(l?.contract_total) };
+}
+
+/**
+ * The loan page's Interest Amount: `contract_interest` when the server sent it
+ * (null then reads as a dash), else the stored schedule's interest total
+ * (`scheduleInterest`, null with no schedule). Never contract total less
+ * principal.
+ */
+export function interestAmountFigure(loan: unknown, scheduleInterest: number | null): number | null {
+  const l = record(loan);
+  if (l && l.contract_interest !== undefined) return figure(l.contract_interest);
+  return scheduleInterest;
 }
 
 /** The payment preview's `total_outstanding_before`. */

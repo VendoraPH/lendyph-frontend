@@ -87,10 +87,9 @@ import {
   collateralValue,
   type CollateralValueRow,
 } from "@/utils/collateral-value";
-import { securityStatusLabel } from "@/types/collateral";
 import { calendarDate, formatCurrency, formatDateObj, formatDateISO, todayDate } from "@/lib/format";
 import { currencyOrDash } from "@/lib/report-format";
-import { proceedsFigures } from "@/lib/restructure-proceeds";
+import { COLLECTED_BEFORE_INSURANCE, proceedsFigures } from "@/lib/restructure-proceeds";
 import { usePermission } from "@/hooks/use-permission";
 import {
   buildLoanDeductions,
@@ -110,13 +109,15 @@ import {
   loanPreviewRequest,
   previewDeductionAmount,
   previewFailureText,
+  shownSecurityStatus,
 } from "@/app/(app)/loans/new/_lib/loan-preview";
 import { useLoanPreview } from "@/app/(app)/loans/new/_hooks/use-loan-preview";
 import {
   PAYMENT_FREQUENCY_LABELS,
   PAYMENT_FREQUENCY_OPTIONS,
-  LOAN_STATUS_LABELS,
+  LOAN_STATUS_COLORS,
 } from "@/constants";
+import { loanDisplayStatus, loanRowStatusLabel } from "@/constants/loan-status";
 
 import type { CollateralType, Loan, LoanStatus, StaffMember } from "@/types";
 import { loanMemberOptions } from "@/app/(app)/loans/new/_lib/member-picker";
@@ -576,6 +577,9 @@ function RestructureLoanInner() {
   const amortization = preview.status === "ready" ? preview.preview.amortization : null;
   const previewMaturity = preview.status === "ready" ? preview.preview.maturity_date : null;
   const previewDeductions = preview.status === "ready" ? preview.preview.deductions : null;
+  // The preview's restructure block (the request names the source loan once a
+  // principal is entered): the shortfall, and what is collected and paid out.
+  const previewRestructure = preview.status === "ready" ? (preview.preview.restructure ?? null) : null;
 
   // Restructuring for less than the restructurable balance writes the
   // difference off, so the API requires remarks explaining it, and the
@@ -584,9 +588,7 @@ function RestructureLoanInner() {
   // principal is entered); nothing is subtracted here. Unknown while the
   // preview loads or after it failed: no figure, and the server still checks
   // on save.
-  const restructure = readRestructurePreview(
-    preview.status === "ready" ? preview.preview.restructure : null,
-  );
+  const restructure = readRestructurePreview(previewRestructure);
   const shortfallState = restructureShortfallState(principal, restructure, canWriteOff);
   const remarksRequired = shortfallState.remarksRequired;
   // The amount hint's one balance: the preview's, the summary's until then.
@@ -881,8 +883,11 @@ function RestructureLoanInner() {
                                 </span>
                                 <span className="text-xs text-muted-foreground">
                                   {formatCurrency(l.principal_amount)} ·{" "}
-                                  <Badge variant="outline" className="text-[10px] py-0 px-1">
-                                    {LOAN_STATUS_LABELS[l.status] ?? l.status}
+                                  <Badge
+                                    variant="outline"
+                                    className={cn("text-[10px] py-0 px-1", LOAN_STATUS_COLORS[loanDisplayStatus(l)])}
+                                  >
+                                    {loanRowStatusLabel(l)}
                                   </Badge>
                                 </span>
                               </div>
@@ -1151,11 +1156,11 @@ function RestructureLoanInner() {
                 <div className="space-y-1">
                   <CardTitle className="text-base">
                     Collaterals
-                    <Badge variant="outline" className="ml-2 text-xs">
-                      {previewCollateral
-                        ? securityStatusLabel(previewCollateral.security_status)
-                        : "—"}
-                    </Badge>
+                    {(previewCollateral === null || shownSecurityStatus(previewCollateral) !== null) && (
+                      <Badge variant="outline" className="ml-2 text-xs">
+                        {previewCollateral ? shownSecurityStatus(previewCollateral) : "—"}
+                      </Badge>
+                    )}
                   </CardTitle>
                   {/* The source loan's security carries over to the replacement
                       rather than being released — say so, because the picker
@@ -1493,7 +1498,8 @@ function RestructureLoanInner() {
                   {proceedsFigures(true, {
                     totalDeductions: previewDeductions?.total_deductions ?? null,
                     netProceeds: null,
-                  }).map((figure) => (
+                    restructure: previewRestructure,
+                  }, { collectedLabel: COLLECTED_BEFORE_INSURANCE }).map((figure) => (
                     <div key={figure.label} className="flex justify-between font-semibold">
                       <span>{figure.label}</span>
                       <span>{currencyOrDash(figure.amount)}</span>

@@ -14,6 +14,8 @@
  */
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { LoanFormPreview } from "@/types";
 import type { SelectedCollateral } from "./edit-collaterals";
 import {
@@ -27,6 +29,8 @@ import {
   previewFailureText,
   refusedCollateral,
   refusedCollateralMessage,
+  shownSecurityStatus,
+  shownCollateralTotal,
   showsShortBy,
   type LoanPreviewInputs,
   type LoanPreviewOutcome,
@@ -151,6 +155,42 @@ describe("loanPreviewRequest", () => {
     assert.equal(loanPreviewRequest({ ...COMPLETE, productId: null, editLoanId: 7 })?.loan_id, 7);
   });
 
+  test("an edit leaves the collaterals out while the list is the one the loan held, as the save does", () => {
+    const held = [selected(2, 0), selected(3, 0)];
+    // Same ids, any order: the server counts (or withholds) the held pledges itself.
+    for (const collaterals of [held, [selected(3, 0), selected(2, 0)]]) {
+      const request = loanPreviewRequest({ ...COMPLETE, editLoanId: 7, collaterals, heldCollaterals: held });
+      assert.ok(request);
+      assert.equal(request.loan_id, 7);
+      assert.equal("collaterals" in request, false);
+    }
+    // Not read yet (or the read failed): nothing is stated either.
+    const unread = loanPreviewRequest({ ...COMPLETE, editLoanId: 7, collaterals: [], heldCollaterals: null });
+    assert.ok(unread);
+    assert.equal("collaterals" in unread, false);
+  });
+
+  test("an edit sends the collaterals once the list changes: added, removed, or none", () => {
+    const held = [selected(2, 0), selected(3, 0)];
+    const send = (collaterals: SelectedCollateral[]) =>
+      loanPreviewRequest({ ...COMPLETE, editLoanId: 7, collaterals, heldCollaterals: held })?.collaterals;
+    assert.deepEqual(send([...held, selected(4, 0)]), [{ collateral_id: 2 }, { collateral_id: 3 }, { collateral_id: 4 }]);
+    assert.deepEqual(send([selected(2, 0)]), [{ collateral_id: 2 }]);
+    assert.deepEqual(send([selected(2, 0), selected(4, 0)]), [{ collateral_id: 2 }, { collateral_id: 4 }]);
+    // [] detaches them all, so it is stated (no product needed to ask).
+    const none = loanPreviewRequest({ ...COMPLETE, productId: null, editLoanId: 7, collaterals: [], heldCollaterals: held });
+    assert.deepEqual(none?.collaterals, []);
+  });
+
+  test("a new application still sends its collaterals", () => {
+    assert.deepEqual(loanPreviewRequest(COMPLETE)?.collaterals, [{ collateral_id: 7 }]);
+  });
+
+  test("the edit form passes the loaded list as heldCollaterals", () => {
+    const page = readFileSync(join(process.cwd(), "src/app/(app)/loans/new/page.tsx"), "utf8");
+    assert.match(page, /heldCollaterals: isEditMode \? \(collateralResult\?\.attached \?\? null\) : undefined,/);
+  });
+
   test("a new application names no loan", () => {
     for (const inputs of [COMPLETE, { ...COMPLETE, editLoanId: null }]) {
       const request = loanPreviewRequest(inputs);
@@ -159,14 +199,23 @@ describe("loanPreviewRequest", () => {
     }
   });
 
-  test("a restructure names its source loan, never loan_id", () => {
+  test("a restructure edit names both the edited loan and its source, in one request", () => {
     const request = loanPreviewRequest({ ...COMPLETE, sourceLoanId: 40, editLoanId: 7 });
     assert.ok(request);
     assert.equal(request.source_loan_id, 40);
-    assert.equal("loan_id" in request, false);
+    assert.equal(request.loan_id, 7);
+    // No principal to measure yet: the edited loan still goes up, the source waits.
     const blankPrincipal = loanPreviewRequest({ ...COMPLETE, principalAmount: "", sourceLoanId: 40, editLoanId: 7 });
     assert.ok(blankPrincipal);
-    assert.equal("loan_id" in blankPrincipal, false);
+    assert.equal(blankPrincipal.loan_id, 7);
+    assert.equal("source_loan_id" in blankPrincipal, false);
+  });
+
+  test("a new restructure names only its source loan", () => {
+    const request = loanPreviewRequest({ ...COMPLETE, sourceLoanId: 40 });
+    assert.ok(request);
+    assert.equal(request.source_loan_id, 40);
+    assert.equal("loan_id" in request, false);
   });
 
   test("never sends a snapshot_value, whatever the form shows", () => {
@@ -428,6 +477,60 @@ describe("showsShortBy", () => {
 
   test("hidden with no principal entered", () => {
     assert.equal(showsShortBy({ total_value: 100, security_status: "unsecured", short_by: 0 }, 0), false);
+  });
+});
+
+describe("withheld collateral figures (no share_capital:view)", () => {
+  const WITHHELD = { total_value: null, security_status: null, short_by: null, value_unknown: true };
+
+  test("showsShortBy: withheld or null figures don't show, never read as not secured", () => {
+    assert.equal(showsShortBy(WITHHELD, 50000), false);
+    // A null status or shortfall without the flag is no answer either.
+    assert.equal(showsShortBy({ total_value: 40000, security_status: null, short_by: 10000 }, 50000), false);
+    assert.equal(showsShortBy({ total_value: 40000, security_status: "partially_secured", short_by: null }, 50000), false);
+    assert.equal(
+      showsShortBy({ total_value: 40000, security_status: "partially_secured", short_by: 10000, value_unknown: true }, 50000),
+      false,
+    );
+  });
+
+  test("showsShortBy: secured hides it and not secured shows it, as before", () => {
+    assert.equal(showsShortBy({ total_value: 60000, security_status: "secured", short_by: 0, value_unknown: false }, 50000), false);
+    assert.equal(showsShortBy({ total_value: 40000, security_status: "partially_secured", short_by: 10000, value_unknown: false }, 50000), true);
+    assert.equal(showsShortBy({ total_value: 0, security_status: "unsecured", short_by: 50000 }, 50000), true);
+  });
+
+  test("shownCollateralTotal: withheld is a dash (null), never ₱0.00; 0 sent stays 0", () => {
+    assert.equal(shownCollateralTotal(WITHHELD), null);
+    assert.equal(shownCollateralTotal({ ...WITHHELD, total_value: 0 }), null);
+    assert.equal(shownCollateralTotal({ total_value: 0, security_status: "unsecured", short_by: 50000 }), 0);
+    assert.equal(shownCollateralTotal({ total_value: 60000, security_status: "secured", short_by: 0 }), 60000);
+  });
+
+  test("shownSecurityStatus: no badge when withheld or null; the label otherwise", () => {
+    assert.equal(shownSecurityStatus(WITHHELD), null);
+    assert.equal(shownSecurityStatus({ total_value: 40000, security_status: null, short_by: null }), null);
+    assert.equal(shownSecurityStatus({ ...WITHHELD, security_status: "unsecured" }), null);
+    assert.equal(shownSecurityStatus({ total_value: 60000, security_status: "secured", short_by: 0 }), "Secured");
+    assert.equal(
+      shownSecurityStatus({ total_value: 40000, security_status: "partially_secured", short_by: 10000 }),
+      "Partially Secured",
+    );
+    assert.equal(shownSecurityStatus({ total_value: 0, security_status: "unsecured", short_by: 50000 }), "Unsecured");
+  });
+
+  test("the edit form and the restructure page read the helpers", () => {
+    const read = (path: string) => readFileSync(join(process.cwd(), "src/app/(app)/loans", path), "utf8");
+    const form = read("new/page.tsx");
+    assert.ok(form.includes("currencyOrDash(shownCollateralTotal(previewCollateral))"));
+    assert.ok(form.includes("previewCollateral?.value_unknown === true"));
+    assert.ok(form.includes("{SHARE_CAPITAL_VALUE_HIDDEN}"));
+    assert.ok(form.includes("shownSecurityStatus(previewCollateral)"));
+    assert.ok(!form.includes("formatCurrency(previewCollateral.total_value)"));
+    assert.ok(!form.includes("securityStatusLabel(previewCollateral.security_status)"));
+    const restructure = read("restructure/page.tsx");
+    assert.ok(restructure.includes("shownSecurityStatus(previewCollateral)"));
+    assert.ok(!restructure.includes("securityStatusLabel(previewCollateral.security_status)"));
   });
 });
 

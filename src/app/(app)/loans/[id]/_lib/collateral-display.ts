@@ -32,8 +32,21 @@ export interface CollateralSummaryFigures {
   total_value?: number | string | null;
   short_by?: number | string | null;
   value_unknown?: boolean;
-  /** Shown by the card as sent; not read here. */
-  security_status?: string;
+  /** Shown by the card as sent; null while the server withholds the figures. */
+  security_status?: string | null;
+}
+
+/** The note under a total the server withheld for a share capital pledge. */
+export const SHARE_CAPITAL_VALUE_HIDDEN = "Share capital value hidden for your role";
+
+/**
+ * Whether the card says how far short of the principal the collateral falls:
+ * only when the server says the loan is not fully secured. Withheld figures
+ * (`value_unknown`) or a null status are no answer, never "not secured".
+ */
+export function summaryShowsShortBy(summary: CollateralSummaryFigures | null | undefined): boolean {
+  if (!summary || summary.value_unknown === true) return false;
+  return summary.security_status != null && summary.security_status !== "secured";
 }
 
 /** The summary's total value and shortfall (null: a dash), and whether the server hid them. */

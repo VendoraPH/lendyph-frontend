@@ -65,6 +65,7 @@ import {
 } from "./_lib/server-schedule";
 import { ledgerShowsScb, readLoanLedger, type LedgerView } from "./_lib/loan-ledger";
 import {
+  interestAmountFigure,
   outstandingPrincipal,
   presetButtons,
   previewOutstandingAfter,
@@ -1379,9 +1380,13 @@ function LoanDetail({ loanId }: { loanId: number }) {
     Number(paymentAmount),
     formatDateISO(paymentDate),
   );
-  // The server's interest total: ₱0.00 when it is 0, a dash when not sent.
-  const loanInterestAmount: number | null =
-    storedSchedule.length === 0 ? null : storedScheduleTotals.interest;
+  // The server's contract interest (a restructured source's original
+  // contract's, so Principal + Interest = Contract Total), else the stored
+  // schedule's interest total: ₱0.00 when it is 0, a dash when not sent.
+  const loanInterestAmount: number | null = interestAmountFigure(
+    loan,
+    storedSchedule.length === 0 ? null : storedScheduleTotals.interest,
+  );
 
   // Live-preview the repayment allocation as the user types the amount.
   // Mirrors the rich breakdown shown on /payments so cashiers see exactly

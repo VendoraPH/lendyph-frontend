@@ -36,7 +36,6 @@ import {
   collateralValue,
   type CollateralValueRow,
 } from "@/utils/collateral-value";
-import { securityStatusLabel } from "@/types/collateral";
 import type {
   CollateralType,
   Loan,
@@ -106,10 +105,8 @@ import {
 import {
   PROCESSING_FEE_LABEL,
   SERVICE_FEE_LABEL,
-  readRestructurableBalance,
   readRestructurePreview,
   restructurableBalanceHint,
-  restructurableBalanceShown,
   restructureShortfallState,
   type LoanDeduction,
 } from "@/lib/loan-restructure";
@@ -120,6 +117,7 @@ import {
   PAYMENT_FREQUENCY_LABELS,
 } from "@/constants";
 import { parseEditLoanId } from "./_lib/edit-loan-id";
+import { EDIT_LOAN_TITLE } from "@/lib/page-titles";
 import {
   attachedCollateralRows,
   canChangeCollaterals,
@@ -139,8 +137,11 @@ import {
   loanPreviewRequest,
   previewDeductionAmount,
   previewFailureText,
+  shownCollateralTotal,
+  shownSecurityStatus,
   showsShortBy,
 } from "./_lib/loan-preview";
+import { SHARE_CAPITAL_VALUE_HIDDEN } from "@/app/(app)/loans/[id]/_lib/collateral-display";
 import { useLoanPreview } from "./_hooks/use-loan-preview";
 import { saveLoanEdit } from "./_lib/save-loan-edit";
 import {
@@ -150,10 +151,10 @@ import {
   remarksRefusal,
   remarksRequired,
   restructureEditFields,
-  restructureEditPreviewRequest,
+  restructureEditSourceId,
   scbRuleError,
 } from "./_lib/restructure-edit";
-import { proceedsFigures } from "@/lib/restructure-proceeds";
+import { COLLECTED_BEFORE_INSURANCE, proceedsFigures } from "@/lib/restructure-proceeds";
 import { formatProductRangeMessage } from "./_lib/product-range-message";
 
 // ── Helpers ──
@@ -515,48 +516,18 @@ function NewLoanApplicationInner() {
   // exempts it from the product's minimum and build-up range, and it carries
   // remarks of its own.
   const isRestructureEdit = isEditMode && existingLoan?.is_restructure === true;
+  // A restructure's source loan, named by the form's one preview beside the
+  // edited loan (needs loans:restructure).
+  const restructureSourceId = restructureEditSourceId({
+    isRestructureEdit,
+    sourceLoanId: existingLoan?.source_loan_id,
+    canRestructure,
+  });
   const storedPrincipal =
     isRestructureEdit && existingLoan?.principal_amount != null ? Number(existingLoan.principal_amount) : null;
   // Asked for by the server, and only while the principal differs from the
   // stored one (the server keeps the stored remarks otherwise).
   const remarksNeeded = remarksRequired(remarksRequiredMessage, principal, storedPrincipal);
-
-  // The source loan's restructurable balance, which may have moved since the
-  // restructure was approved (a payment, waiver or adjustment): the most this
-  // restructure can take as principal. The server's figure, from the
-  // restructure preview for the principal on screen, or from the source loan's
-  // summary until that answers or without loans:restructure.
-  const sourceLoanId = isRestructureEdit ? (existingLoan?.source_loan_id ?? null) : null;
-  const [sourceSummaryBalance, setSourceSummaryBalance] = useState<{ loanId: number; balance: number | null } | null>(null);
-  useEffect(() => {
-    if (sourceLoanId === null) return;
-    let cancelled = false;
-    loanService
-      .summary(sourceLoanId)
-      .then((summary) => readRestructurableBalance(summary as unknown as Record<string, unknown>, null))
-      .catch(() => null)
-      .then((balance) => {
-        if (!cancelled) setSourceSummaryBalance({ loanId: sourceLoanId, balance });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [sourceLoanId]);
-  const { view: restructurePreview } = useLoanPreview(
-    restructureEditPreviewRequest({ sourceLoanId, principalAmount, canRestructure }),
-  );
-  const editRestructure = readRestructurePreview(
-    restructurePreview.status === "ready" ? restructurePreview.preview.restructure : null,
-  );
-  const editShowsShortfall = restructureShortfallState(principal, editRestructure, canWriteOff).showsShortfall;
-  const restructureBalanceHint = restructurableBalanceHint(
-    editShowsShortfall,
-    editRestructure.shortfall,
-    restructurableBalanceShown(
-      editRestructure,
-      sourceSummaryBalance !== null && sourceSummaryBalance.loanId === sourceLoanId ? sourceSummaryBalance.balance : null,
-    ),
-  );
 
   // Validation messages
   const principalError = useMemo(() => {
@@ -663,6 +634,7 @@ function NewLoanApplicationInner() {
   const { view: preview, retry: retryPreview } = useLoanPreview(
     loanPreviewRequest({
       borrowerId,
+      sourceLoanId: restructureSourceId,
       editLoanId,
       productId,
       principalAmount,
@@ -672,6 +644,7 @@ function NewLoanApplicationInner() {
       releaseDate,
       scbAmount,
       collaterals: selectedCollaterals,
+      heldCollaterals: isEditMode ? (collateralResult?.attached ?? null) : undefined,
       // What the save would charge: the form's deductions once the product is
       // known. Before then the save states none, and an edit keeps the loan's
       // own, so the preview asks about those; a new loan asks about none yet.
@@ -686,6 +659,20 @@ function NewLoanApplicationInner() {
   const amortization = preview.status === "ready" ? preview.preview.amortization : null;
   const previewMaturity = preview.status === "ready" ? preview.preview.maturity_date : null;
   const previewDeductions = preview.status === "ready" ? preview.preview.deductions : null;
+  // A restructure's block from the same preview (it names the source loan):
+  // the source loan's restructurable balance, which may have moved since the
+  // restructure was approved (a payment, waiver or adjustment), so the most
+  // this restructure can take as principal; the shortfall; and what is
+  // collected from the member and paid out. All the server's; no hint while
+  // the preview loads, after it failed, or without loans:restructure.
+  const previewRestructure = preview.status === "ready" ? (preview.preview.restructure ?? null) : null;
+  const editRestructure = readRestructurePreview(previewRestructure);
+  const editShowsShortfall = restructureShortfallState(principal, editRestructure, canWriteOff).showsShortfall;
+  const restructureBalanceHint = restructurableBalanceHint(
+    editShowsShortfall,
+    editRestructure.shortfall,
+    editRestructure.restructurableBalance,
+  );
   // A collateral the preview refused is worded by whether this user can take
   // it off the form: only when the collaterals can change, and in edit mode
   // not one the loan already holds.
@@ -961,7 +948,7 @@ function NewLoanApplicationInner() {
             {isEditMode ? "Back to Loan" : "Back to Loans"}
           </Link>
           <h1 className="text-2xl font-bold tracking-tight">
-            {isEditMode ? "Edit Loan Application" : "New Loan Application"}
+            {isEditMode ? EDIT_LOAN_TITLE : "New Loan Application"}
           </h1>
           {isEditMode && existingLoan?.application_number && (
             <p className="text-sm text-muted-foreground font-mono">
@@ -1555,9 +1542,14 @@ function NewLoanApplicationInner() {
                   </p>
                   <p className="text-lg font-bold tabular-nums">
                     {previewCollateral
-                      ? formatCurrency(previewCollateral.total_value)
+                      ? currencyOrDash(shownCollateralTotal(previewCollateral))
                       : "—"}
                   </p>
+                  {previewCollateral?.value_unknown === true && (
+                    <p className="text-xs text-muted-foreground">
+                      {SHARE_CAPITAL_VALUE_HIDDEN}
+                    </p>
+                  )}
                 </div>
                 <div className="flex flex-col items-start gap-1 sm:items-end">
                   {preview.status === "error" ? (
@@ -1574,23 +1566,25 @@ function NewLoanApplicationInner() {
                     </div>
                   ) : previewCollateral ? (
                     <>
-                      <Badge
-                        className={cn(
-                          previewCollateral.security_status === "secured" &&
-                            "bg-green-500/15 text-green-700 hover:bg-green-500/15",
-                          previewCollateral.security_status === "partially_secured" &&
-                            "bg-amber-500/15 text-amber-700 hover:bg-amber-500/15",
-                          previewCollateral.security_status === "unsecured" &&
-                            "bg-destructive/15 text-destructive hover:bg-destructive/15",
-                        )}
-                      >
-                        {securityStatusLabel(previewCollateral.security_status)}
-                      </Badge>
+                      {shownSecurityStatus(previewCollateral) !== null && (
+                        <Badge
+                          className={cn(
+                            previewCollateral.security_status === "secured" &&
+                              "bg-green-500/15 text-green-700 hover:bg-green-500/15",
+                            previewCollateral.security_status === "partially_secured" &&
+                              "bg-amber-500/15 text-amber-700 hover:bg-amber-500/15",
+                            previewCollateral.security_status === "unsecured" &&
+                              "bg-destructive/15 text-destructive hover:bg-destructive/15",
+                          )}
+                        >
+                          {shownSecurityStatus(previewCollateral)}
+                        </Badge>
+                      )}
                       {showsShortBy(previewCollateral, principal) && (
                         <p className="text-xs text-muted-foreground">
                           Short by{" "}
                           <span className="font-medium text-foreground">
-                            {formatCurrency(previewCollateral.short_by)}
+                            {currencyOrDash(previewCollateral.short_by)}
                           </span>{" "}
                           vs. principal
                         </p>
@@ -1861,7 +1855,8 @@ function NewLoanApplicationInner() {
             {proceedsFigures(isRestructureEdit, {
               totalDeductions: previewDeductions?.total_deductions,
               netProceeds: previewDeductions?.net_proceeds,
-            }).map((figure) => (
+              restructure: previewRestructure,
+            }, { collectedLabel: COLLECTED_BEFORE_INSURANCE }).map((figure) => (
               <div
                 key={figure.label}
                 className="flex items-center justify-between rounded-lg bg-brand-orange/10 px-4 py-3"
@@ -2156,7 +2151,7 @@ function NewLoanApplicationInner() {
 // new application the inner guard just repeats the outer one.
 function NewLoanApplicationGuard() {
   const isEditMode = parseEditLoanId(useSearchParams().get("edit")) !== null;
-  const pageName = isEditMode ? "Edit Loan Application" : "New Loan Application";
+  const pageName = isEditMode ? EDIT_LOAN_TITLE : "New Loan Application";
   return (
     <RouteGuard permission={isEditMode ? "loans:update" : "loans:create"} pageName={pageName}>
       <RouteGuard permission={isEditMode ? "loans:view" : "loans:create"} pageName={pageName}>
