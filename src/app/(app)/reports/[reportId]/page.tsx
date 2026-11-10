@@ -41,7 +41,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { formatDateISO } from "@/lib/format";
+import { formatDateISO, todayISO } from "@/lib/format";
 import {
   ArrowLeft,
   ChevronDown,
@@ -58,6 +58,7 @@ import {
 } from "lucide-react";
 import { borrowerService, reportService } from "@/services";
 import { visibleReports } from "../_lib/report-catalog";
+import { csvFileName } from "../_lib/export-file-name";
 import { CATEGORY_META, MAX_REPORT_SPAN_YEARS, exceedsReportSpanCap } from "../_lib/types";
 import type { DateRange, ReportDocument, ReportId } from "../_lib/types";
 import { ReportPreview } from "../_components/report-preview";
@@ -405,7 +406,7 @@ function ReportDetailContent({
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
             link.href = url;
-            link.download = `${reportId}-${activeRange.from}-${activeRange.to}.csv`;
+            link.download = csvFileName(reportId as string, report, activeRange, todayISO());
             link.click();
             URL.revokeObjectURL(url);
           } else {

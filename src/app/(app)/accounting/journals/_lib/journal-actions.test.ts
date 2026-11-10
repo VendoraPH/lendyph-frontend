@@ -254,3 +254,20 @@ test("a draft, a posted entry and a reversed one each read their own way", () =>
     "This entry has been reversed. It stays in the books, and its reversing entry cancels it out.",
   );
 });
+
+test("an entry the server marks not reversible shows Reverse disabled with the server's reason", () => {
+  const savings = { ...posted, source: "savings" as const, reversible: false, not_reversible_reason: "Reverse it from the savings account." };
+  const actions = journalActions(savings, holding(...ALL), { editing: false, balance: "balanced" });
+  assert.deepEqual(actions.reverse, { shown: true, disabledReason: "Reverse it from the savings account." });
+  const noReason = journalActions({ ...savings, not_reversible_reason: "" }, holding(...ALL), { editing: false, balance: "balanced" });
+  assert.equal(noReason.reverse.disabledReason, "This entry can't be reversed from the journal.");
+});
+
+test("a server that sends no reversible field keeps today's Reverse", () => {
+  assert.deepEqual(journalActions(posted, holding(...ALL), { editing: false, balance: "balanced" }).reverse, {
+    shown: true,
+    disabledReason: null,
+  });
+  const marked = journalActions({ ...posted, reversible: true }, holding(...ALL), { editing: false, balance: "balanced" });
+  assert.equal(marked.reverse.disabledReason, null);
+});

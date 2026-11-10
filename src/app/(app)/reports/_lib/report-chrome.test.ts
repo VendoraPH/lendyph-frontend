@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { siteConfig } from "@/config/site";
 import { useBrandingStore } from "@/store/branding-store";
-import { applyChrome, buildReference } from "./report-chrome";
+import { SAVINGS_RECORD_PREFIXES, applyChrome, buildReference } from "./report-chrome";
 import { orgDetailsLine, type ReportDocument } from "./types";
 
 /**
@@ -125,6 +125,25 @@ test("every report id has its own reference prefix", () => {
   const at = new Date("2026-08-06T01:15:00Z");
   assert.equal(buildReference("daily_collection", at), "DCR-20260806-0915");
   assert.equal(buildReference("subsidiary_ledger", at), "SLG-20260806-0915");
+});
+
+test("a savings report's reference can't be mistaken for a savings record's own number", () => {
+  const at = new Date("2026-11-10T14:05:00Z");
+  const ids = [
+    "savings_balances",
+    "savings_transactions",
+    "time_deposit_maturities",
+    "savings_interest_postings",
+    "savings_dormant",
+    "savings_statement",
+    "savings_gl_control",
+  ] as const;
+  for (const id of ids) {
+    const reference = buildReference(id, at);
+    for (const prefix of SAVINGS_RECORD_PREFIXES) assert.ok(!reference.startsWith(prefix), `${id}: ${reference}`);
+  }
+  assert.equal(buildReference("savings_transactions", at), "STR-20261110-2205");
+  assert.equal(buildReference("savings_balances", at), "SBR-20261110-2205");
 });
 
 test("the sign-off block closes the document", async () => {

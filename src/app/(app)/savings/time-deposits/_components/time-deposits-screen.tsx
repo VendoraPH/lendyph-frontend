@@ -22,7 +22,7 @@ import { useApiResource } from "@/hooks";
 import { formatCurrency, formatDate, formatRate, todayISO } from "@/lib/format";
 import { timeDepositService } from "@/services";
 import { Kpi } from "../../_components/kpi";
-import { maturityHint, tdStatusTabs, termLabel } from "../../_lib/time-deposit-rules";
+import { maturityHint, pendingApprovalText, tdStatusTabs, termLabel } from "../../_lib/time-deposit-rules";
 import { PlaceTimeDepositDialog } from "./place-time-deposit-dialog";
 import { TdStatusBadge } from "./td-status-badge";
 
@@ -165,6 +165,9 @@ export function TimeDepositsScreen() {
                         </TableCell>
                         <TableCell>
                           <TdStatusBadge status={td.status} />
+                          {pendingApprovalText(td) && (
+                            <span className="block text-xs text-amber-700 dark:text-amber-400">{pendingApprovalText(td)}</span>
+                          )}
                         </TableCell>
                       </TableRow>
                     );

@@ -52,3 +52,8 @@ export function approvalHref(approval: SavingsApproval): string | null {
   if (approval.account_id) return `/savings/accounts/${approval.account_id}`;
   return null;
 }
+
+/** True when the server answered with an HTTP status (a refusal), as opposed to no reply at all. */
+export function serverAnswered(err: unknown): boolean {
+  return typeof (err as { response?: { status?: unknown } } | null)?.response?.status === "number";
+}

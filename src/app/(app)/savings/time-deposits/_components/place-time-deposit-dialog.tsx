@@ -22,7 +22,7 @@ import type { MaturityInstruction, SavingsMethod, TimeDeposit } from "@/types";
 import { FormField } from "../../_components/field";
 import { OptionSelect } from "../../_components/option-select";
 import { METHOD_LABELS, PAYMENT_METHOD_OPTIONS } from "../../_lib/savings-rules";
-import { MATURITY_INSTRUCTION_OPTIONS, termLabel } from "../../_lib/time-deposit-rules";
+import { MATURITY_INSTRUCTION_OPTIONS, termLabel, termsOfferedText } from "../../_lib/time-deposit-rules";
 import { checkPlacement, type PlacementForm } from "../_lib/placement-form";
 import { PlacementPreview } from "./placement-preview";
 
@@ -140,7 +140,7 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
                 disabled={products.loading || placeable.length === 0}
               />
             </FormField>
-            <FormField id="td-term" label="Term" error={show(errors.term)}>
+            <FormField id="td-term" label="Term" error={show(errors.term)} hint={termsOfferedText(terms)}>
               <OptionSelect
                 id="td-term"
                 value={form.term}

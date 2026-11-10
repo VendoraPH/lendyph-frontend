@@ -2,7 +2,9 @@
  * What the journal page offers for one entry: edit and post a draft, reverse a
  * posted entry that isn't itself a reversal. A year-end closing entry is
  * undone only by reopening its year, so its Reverse is disabled with that
- * reason (the server refuses it, and the reversal of one, with 422). An action the status doesn't allow, or the user's role can't
+ * reason (the server refuses it, and the reversal of one, with 422). An entry
+ * the server marks `reversible: false` (the savings postings) is disabled with
+ * the server's `not_reversible_reason`. An action the status doesn't allow, or the user's role can't
  * take, is hidden. One that is offered but can't be taken right now carries
  * the reason, for a disabled button.
  */
@@ -52,8 +54,14 @@ const POST_WAITS: Record<DraftBalance, string | null> = {
 };
 
 function reverseRefusal(
-  entry: Pick<JournalEntry, "reversed_by_journal_id"> & Partial<Pick<JournalEntry, "source" | "date">>,
+  entry: Pick<JournalEntry, "reversed_by_journal_id"> &
+    Partial<Pick<JournalEntry, "source" | "date" | "reversible" | "not_reversible_reason">>,
 ): string | null {
+  // The server's own answer wins when it sends one; a server that doesn't
+  // (before S5) leaves the decision below unchanged.
+  if (entry.reversible === false) {
+    return entry.not_reversible_reason?.trim() || "This entry can't be reversed from the journal.";
+  }
   if (entry.source === "closing") {
     const year = closedYear(entry.date);
     return year
@@ -65,7 +73,7 @@ function reverseRefusal(
 
 export function journalActions(
   entry: Pick<JournalEntry, "status" | "reversed_by_journal_id" | "reverses_journal_id"> &
-    Partial<Pick<JournalEntry, "source" | "date">>,
+    Partial<Pick<JournalEntry, "source" | "date" | "reversible" | "not_reversible_reason">>,
   can: (permission: Permission) => boolean,
   { editing, balance }: { editing: boolean; balance: DraftBalance },
 ): Record<JournalAction, JournalActionState> {

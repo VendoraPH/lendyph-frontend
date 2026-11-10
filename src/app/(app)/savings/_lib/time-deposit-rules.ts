@@ -1,4 +1,5 @@
 import type { MaturityInstruction, TimeDeposit, TimeDepositStatus } from "@/types";
+import { APPROVAL_KIND_LABELS, labelOf } from "./savings-rules";
 
 /**
  * Time deposit words and the date rules that decide which actions a screen
@@ -72,4 +73,25 @@ export function tdStatusTabs(stats: Partial<Record<TimeDepositStatus, number>> |
     { value: "all", label: "All", count: null as number | null },
     ...order.map((s) => ({ value: s, label: TD_STATUS_LABELS[s], count: stats?.[s] ?? 0 })),
   ];
+}
+
+/** "Waiting for approval: Time deposit payout", or null when nothing waits. */
+export function pendingApprovalText(td: Pick<TimeDeposit, "pending_approval">): string | null {
+  const pending = td.pending_approval;
+  return pending ? `Waiting for approval: ${labelOf(APPROVAL_KIND_LABELS, pending.kind)}` : null;
+}
+
+/** Why Settle and Pre-terminate are off while a request waits, or null. */
+export function pendingApprovalBlocker(td: Pick<TimeDeposit, "pending_approval">): string | null {
+  return td.pending_approval
+    ? "A settlement or pre-termination is waiting for approval. Approve, reject or cancel it in Savings Approvals first."
+    : null;
+}
+
+/** "Offered: 30, 90, 180 and 365 days", from the product's own terms; null when it has none. */
+export function termsOfferedText(terms: readonly number[] | null | undefined): string | null {
+  if (!terms || terms.length === 0) return null;
+  const sorted = [...terms].sort((a, b) => a - b).map(String);
+  const list = sorted.length === 1 ? sorted[0] : `${sorted.slice(0, -1).join(", ")} and ${sorted[sorted.length - 1]}`;
+  return `Offered: ${list} day${sorted.length === 1 && sorted[0] === "1" ? "" : "s"}`;
 }

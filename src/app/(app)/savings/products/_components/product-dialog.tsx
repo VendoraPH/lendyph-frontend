@@ -148,8 +148,8 @@ export function ProductDialog({ open, product, products, onOpenChange, onSaved }
           </div>
           {td ? (
             <div className="grid gap-4 sm:grid-cols-2">
-              <FormField id="pd-terms" label="Terms offered (days)" hint="Comma-separated, e.g. 30, 90, 180, 360.">
-                <Input id="pd-terms" value={draft.terms} onChange={(e) => set("terms", e.target.value)} placeholder="90, 180, 360" />
+              <FormField id="pd-terms" label="Terms offered (days)" hint="Comma-separated. The standard terms are 30, 90, 180 and 365.">
+                <Input id="pd-terms" value={draft.terms} onChange={(e) => set("terms", e.target.value)} placeholder="30, 90, 180, 365" />
               </FormField>
               {money("pd-min", "Minimum placement", "minOpening")}
             </div>

@@ -427,6 +427,16 @@ export interface TimeDeposit {
   rolled_over_to_id?: number | null;
   created_by: SavingsUserRef | null;
   created_at?: string | null;
+  /**
+   * A settlement or pre-termination waiting for approval, or null. Optional
+   * until backend slice S5 sends it on list and show.
+   */
+  pending_approval?: {
+    id: number;
+    kind: SavingsApprovalKind;
+    amount: MoneyString;
+    requested_by: SavingsUserRef | null;
+  } | null;
 }
 
 /** `GET /savings/time-deposits`: one page, `meta.stats` per status and `meta.totals` over the filter. */

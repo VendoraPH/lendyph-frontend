@@ -130,6 +130,13 @@ test("time deposit maturities: server totals, labelled instruction and status, t
   const row = table(doc).rows[0];
   assert.equal(row.maturity_instruction, "Roll over principal, pay out interest");
   assert.equal(row.status, "Active");
+  // The rate reads as on every savings screen: "4%", never "4.0%".
+  assert.equal(row.annual_rate, "4%");
+  const twoAndAHalf = buildTimeDepositMaturitiesDoc(
+    { ...raw, data: [{ ...raw.data[0], annual_rate: "2.5000" }] },
+    RANGE,
+  );
+  assert.equal(table(twoAndAHalf).rows[0].annual_rate, "2.5%");
 
   const withPayout = buildTimeDepositMaturitiesDoc({ ...raw, totals: { ...raw.totals, payout_amount: "400.00" } }, RANGE);
   assert.equal(kpiValue(withPayout, "To Pay Out"), formatCurrency(400));

@@ -19,7 +19,7 @@ import { savingsApprovalService } from "@/services";
 import type { SavingsApproval } from "@/types";
 import { FormField } from "../../_components/field";
 import { APPROVAL_KIND_LABELS, labelOf } from "../../_lib/savings-rules";
-import { approvalSubject } from "../_lib/approval-rules";
+import { approvalSubject, serverAnswered } from "../_lib/approval-rules";
 
 export type Decision = "approve" | "reject" | "cancel";
 
@@ -37,7 +37,9 @@ interface DecideDialogProps {
 }
 
 /**
- * Approve, reject or cancel one request. Approving re-checks the money under
+ * Approve, reject or cancel one request. The queue reloads after every
+ * answer, a refusal included, so a decided or changed request never stays
+ * on screen as Pending. Approving re-checks the money under
  * the server's lock, so it may still be refused: 422 if the funds are gone, or
  * 409 on a close whose balance changed since the request ("make a new
  * request"). The server's words are shown.
@@ -72,7 +74,14 @@ export function DecideDialog({ approval, decision, onOpenChange, onDecided }: De
         onOpenChange(false);
         onDecided();
       })
-      .catch((err: unknown) => notifyError(err, `Couldn't ${copy.button.toLowerCase()}.`));
+      .catch((err: unknown) => {
+        notifyError(err, `Couldn't ${copy.button.toLowerCase()}.`);
+        // A refusal (409 when the request moved on, 403, 422) means the row on
+        // screen is out of date: close and reload it. With no answer at all,
+        // stay open so the same request can be tried again.
+        if (serverAnswered(err)) onOpenChange(false);
+        onDecided();
+      });
   }
 
   return (

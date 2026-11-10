@@ -1,4 +1,5 @@
 import { asArray, asRecord, pick } from "@/lib/api-payload";
+import { formatRate } from "@/lib/format";
 import { countOrDash, currencyOrDash, formatGeneratedAt, formatValue } from "@/lib/report-format";
 import {
   ACCOUNT_STATUS_LABELS,
@@ -190,7 +191,8 @@ const MATURITY_COLUMNS: ReportColumn[] = [
   { key: "borrower_name", header: "Member", format: "text", width: 180 },
   { key: "product_name", header: "Product", format: "text", width: 130 },
   { key: "principal", header: "Principal", format: "currency", align: "right", width: 120 },
-  { key: "annual_rate", header: "Rate", format: "rate", align: "right", width: 70 },
+  // Text, read the way every savings screen reads a rate (`formatRate`): "4%".
+  { key: "annual_rate", header: "Rate", format: "text", align: "right", width: 70 },
   { key: "term_days", header: "Days", format: "number", align: "right", width: 60 },
   { key: "net_interest", header: "Net Interest", format: "currency", align: "right", width: 110 },
   { key: "maturity_amount", header: "Due at Maturity", format: "currency", align: "right", width: 130 },
@@ -203,11 +205,17 @@ const MATURITY_COLUMNS: ReportColumn[] = [
  * (`GET /reports/savings/time-deposit-maturities`): what the treasurer must
  * have ready to pay out or roll over.
  */
+/** A rate as every savings screen shows it ("4%", "2.5%"), or a dash when absent. */
+function rateText(value: unknown): string {
+  return typeof value === "string" || typeof value === "number" ? `${formatRate(value)}%` : "—";
+}
+
 export function buildTimeDepositMaturitiesDoc(raw: unknown, range: DateRange): ReportDocument {
   const { rows: rawRows, totals, totalRows } = readListEnvelope(raw);
-  const rows = rawRows.map((r) =>
-    inWords(r, { maturity_instruction: MATURITY_INSTRUCTION_LABELS, status: TD_STATUS_LABELS }),
-  );
+  const rows = rawRows.map((r) => ({
+    ...inWords(r, { maturity_instruction: MATURITY_INSTRUCTION_LABELS, status: TD_STATUS_LABELS }),
+    annual_rate: rateText(r.annual_rate),
+  }));
   const principal = pick(totals, ["total_principal"]);
   const interest = pick(totals, ["total_net_interest"]);
   const due = pick(totals, ["total_maturity_amount"]);

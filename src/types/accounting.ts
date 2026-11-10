@@ -181,6 +181,13 @@ export interface JournalEntry {
   /** Set on an entry that has been reversed, pointing at its reversal. */
   reversed_by_journal_id?: number | null;
   /**
+   * False when the entry can't be reversed from the journal (savings postings
+   * are undone from savings), with the server's reason. Absent from servers
+   * before backend slice S5: then the page decides as it always has.
+   */
+  reversible?: boolean;
+  not_reversible_reason?: string | null;
+  /**
    * The source document that caused this entry, when one did.
    *
    * All three are absent or null together, and legitimately so: a fund

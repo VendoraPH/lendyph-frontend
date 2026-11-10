@@ -6,6 +6,9 @@ import {
   canSettle,
   daysBetween,
   maturityHint,
+  pendingApprovalBlocker,
+  pendingApprovalText,
+  termsOfferedText,
   parseTermOptions,
   tdStatusTabs,
 } from "./time-deposit-rules";
@@ -50,4 +53,24 @@ test("tdStatusTabs counts each status from meta.stats and adds no total in the b
     [["Active", 3], ["Matured", 1], ["Withdrawn", 0], ["Rolled over", 0], ["Pre-terminated", 0]],
   );
   assert.equal(TD_STATUS_LABELS.preterminated, "Pre-terminated");
+});
+
+test("a time deposit with a request waiting says so in words and blocks settling", () => {
+  const pending = { id: 3, kind: "td_payout" as const, amount: "50400.00", requested_by: { id: 1, name: "Ana" } };
+  assert.equal(pendingApprovalText({ pending_approval: pending }), "Waiting for approval: Time deposit payout");
+  assert.equal(
+    pendingApprovalText({ pending_approval: { ...pending, kind: "pretermination" } }),
+    "Waiting for approval: Time deposit pre-termination",
+  );
+  assert.ok(pendingApprovalBlocker({ pending_approval: pending }));
+  // Optional until S5: missing and null both mean nothing waits.
+  assert.equal(pendingApprovalText({}), null);
+  assert.equal(pendingApprovalBlocker({ pending_approval: null }), null);
+});
+
+test("the terms hint lists the product's own terms, never a fixed list", () => {
+  assert.equal(termsOfferedText([365, 30, 180, 90]), "Offered: 30, 90, 180 and 365 days");
+  assert.equal(termsOfferedText([90]), "Offered: 90 days");
+  assert.equal(termsOfferedText([]), null);
+  assert.equal(termsOfferedText(null), null);
 });

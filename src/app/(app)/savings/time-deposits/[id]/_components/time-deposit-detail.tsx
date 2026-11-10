@@ -18,6 +18,8 @@ import {
   canPreterminate,
   canSettle,
   maturityHint,
+  pendingApprovalBlocker,
+  pendingApprovalText,
   termLabel,
 } from "../../../_lib/time-deposit-rules";
 import { TdStatusBadge } from "../../_components/td-status-badge";
@@ -60,6 +62,8 @@ export function TimeDepositDetail({ depositId }: { depositId: number }) {
           const today = todayISO();
           const settleable = canSettle(td, today);
           const breakable = canPreterminate(td, today);
+          const waiting = pendingApprovalText(td);
+          const pendingBlock = pendingApprovalBlocker(td);
           return (
             <>
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -67,6 +71,14 @@ export function TimeDepositDetail({ depositId }: { depositId: number }) {
                   <div className="flex items-center gap-2">
                     <h1 className="text-2xl font-semibold tracking-tight">{td.certificate_number}</h1>
                     <TdStatusBadge status={td.status} />
+                    {waiting && (
+                      <Link
+                        href="/savings/approvals"
+                        className="rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 hover:underline dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                      >
+                        {waiting}
+                      </Link>
+                    )}
                   </div>
                   <p className="text-sm text-muted-foreground">
                     <Link href={`/borrowers/${td.borrower_id}`} className="font-medium text-foreground hover:underline">
@@ -85,12 +97,17 @@ export function TimeDepositDetail({ depositId }: { depositId: number }) {
                       <ActionButton
                         permission="savings:transact"
                         onClick={() => setSettling(true)}
-                        blockedReason={settleable ? null : `Settles on or after ${formatDate(td.maturity_date)}.`}
+                        blockedReason={pendingBlock ?? (settleable ? null : `Settles on or after ${formatDate(td.maturity_date)}.`)}
                       >
                         <HandCoins className="h-4 w-4" /> Settle at maturity
                       </ActionButton>
                       {breakable && (
-                        <ActionButton permission="savings:close" variant="outline" onClick={() => setBreaking(true)}>
+                        <ActionButton
+                          permission="savings:close"
+                          variant="outline"
+                          onClick={() => setBreaking(true)}
+                          blockedReason={pendingBlock}
+                        >
                           <Ban className="h-4 w-4" /> Pre-terminate
                         </ActionButton>
                       )}
