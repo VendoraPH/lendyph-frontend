@@ -7,7 +7,6 @@ import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Camera,
-  FileText,
   ImageIcon,
   Plus,
   X,
@@ -46,6 +45,8 @@ import { branchService, type ApiBranch } from "@/services/branch.service";
 import { completeRows } from "@/lib/paginate";
 import { IdCropDialog } from "@/components/borrower/id-crop-dialog";
 import { PhotoCropDialog } from "@/components/borrower/photo-crop-dialog";
+import { ValidIdFilePicker } from "@/components/borrower/valid-id-file-picker";
+import { removeValidIdRowLabel, validIdRowName } from "@/lib/valid-id-names";
 import { CIVIL_STATUS_OPTIONS, SUFFIX_OPTIONS, VALID_ID_OPTIONS } from "@/constants";
 import type { Borrower } from "@/types";
 
@@ -982,6 +983,7 @@ function EditBorrowerContent() {
                       type="button"
                       variant="ghost"
                       size="icon-sm"
+                      aria-label={removeValidIdRowLabel(entry, index)}
                       onClick={() => removeValidId(index)}
                       className="absolute top-2 right-2 text-destructive hover:text-destructive"
                     >
@@ -1053,6 +1055,7 @@ function EditBorrowerContent() {
                               />
                               <button
                                 type="button"
+                                aria-label={`Remove front of ${validIdRowName(entry, index)}`}
                                 onClick={() => {
                                   updateValidId(index, "front_file", null);
                                   updateValidId(index, "front_preview", null);
@@ -1067,6 +1070,7 @@ function EditBorrowerContent() {
                               variant="outline"
                               size="sm"
                               className="w-full h-8 text-xs gap-1"
+                              aria-label={`Crop front of ${validIdRowName(entry, index)}`}
                               onClick={() =>
                                 setCropTarget({
                                   index,
@@ -1080,17 +1084,12 @@ function EditBorrowerContent() {
                             </Button>
                           </div>
                         ) : (
-                          <label className="flex h-44 flex-col items-center justify-center gap-1 cursor-pointer rounded-lg border border-dashed border-muted-foreground/30 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors">
-                            <FileText className="h-5 w-5 text-muted-foreground" />
-                            <span className="text-xs text-muted-foreground">Upload Front</span>
-                            <input
-                              id={`valid_id_front_${index}`}
-                              type="file"
-                              accept="image/*,.pdf"
-                              onChange={(e) => handleValidIdFile(index, "front", e)}
-                              className="hidden"
-                            />
-                          </label>
+                          <ValidIdFilePicker
+                            controlId={`valid_id_front_${index}`}
+                            side="front"
+                            rowName={validIdRowName(entry, index)}
+                            onPick={(e) => handleValidIdFile(index, "front", e)}
+                          />
                         )}
                       </div>
                       <div className="space-y-2">
@@ -1106,6 +1105,7 @@ function EditBorrowerContent() {
                               />
                               <button
                                 type="button"
+                                aria-label={`Remove back of ${validIdRowName(entry, index)}`}
                                 onClick={() => {
                                   updateValidId(index, "back_file", null);
                                   updateValidId(index, "back_preview", null);
@@ -1120,6 +1120,7 @@ function EditBorrowerContent() {
                               variant="outline"
                               size="sm"
                               className="w-full h-8 text-xs gap-1"
+                              aria-label={`Crop back of ${validIdRowName(entry, index)}`}
                               onClick={() =>
                                 setCropTarget({
                                   index,
@@ -1133,17 +1134,12 @@ function EditBorrowerContent() {
                             </Button>
                           </div>
                         ) : (
-                          <label className="flex h-44 flex-col items-center justify-center gap-1 cursor-pointer rounded-lg border border-dashed border-muted-foreground/30 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors">
-                            <FileText className="h-5 w-5 text-muted-foreground" />
-                            <span className="text-xs text-muted-foreground">Upload Back</span>
-                            <input
-                              id={`valid_id_back_${index}`}
-                              type="file"
-                              accept="image/*,.pdf"
-                              onChange={(e) => handleValidIdFile(index, "back", e)}
-                              className="hidden"
-                            />
-                          </label>
+                          <ValidIdFilePicker
+                            controlId={`valid_id_back_${index}`}
+                            side="back"
+                            rowName={validIdRowName(entry, index)}
+                            onPick={(e) => handleValidIdFile(index, "back", e)}
+                          />
                         )}
                       </div>
                     </div>

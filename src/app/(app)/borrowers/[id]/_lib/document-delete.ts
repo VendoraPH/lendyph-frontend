@@ -1,6 +1,6 @@
 import type { Document } from "@/services/document.service";
 import type { BorrowerValidId } from "@/services/borrower.service";
-import { VALID_ID_OPTIONS } from "@/constants";
+import { validIdTypeLabel } from "@/lib/valid-id-names";
 
 type Named = Pick<Document, "id" | "label">;
 type NamedId = Pick<BorrowerValidId, "type" | "custom_type_name" | "id_number">;
@@ -17,8 +17,7 @@ export function deleteDocumentLabel(doc: Named): string {
 
 /** A valid ID's type in words: the picker's label, or the name typed for "Others". */
 export function validIdLabel(entry: NamedId): string {
-  if (entry.type === "others") return entry.custom_type_name || "Others";
-  return VALID_ID_OPTIONS.find((o) => o.value === entry.type)?.label ?? entry.custom_type_name ?? entry.type;
+  return validIdTypeLabel(entry.type, entry.custom_type_name);
 }
 
 /** A valid ID's type with its number, so two IDs of one type read apart. */

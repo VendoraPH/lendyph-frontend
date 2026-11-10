@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { RouteGuard } from "@/components/common";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Camera, FileText, ImageIcon, Plus, X, SwitchCamera } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Camera, ImageIcon, Plus, X, SwitchCamera } from "lucide-react";
 import { toast } from "sonner";
 import { notifyError, notifyValidation } from "@/lib/notify";
 import { sentencesMessage } from "@/app/(app)/borrowers/_components/utils";
@@ -41,6 +41,8 @@ import { IdCropDialog } from "@/components/borrower/id-crop-dialog";
 import { Crop as CropIcon } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { PhotoCropDialog } from "@/components/borrower/photo-crop-dialog";
+import { ValidIdFilePicker } from "@/components/borrower/valid-id-file-picker";
+import { removeValidIdRowLabel, validIdRowName } from "@/lib/valid-id-names";
 import { CIVIL_STATUS_OPTIONS, SUFFIX_OPTIONS, VALID_ID_OPTIONS } from "@/constants";
 
 // Last-resort copy for the duplicate dialog when NONE of name/code/birthdate
@@ -1153,6 +1155,7 @@ function NewBorrowerContent() {
                       type="button"
                       variant="ghost"
                       size="icon-sm"
+                      aria-label={removeValidIdRowLabel(entry, index)}
                       onClick={() => removeValidId(index)}
                       className="absolute top-2 right-2 text-destructive hover:text-destructive"
                     >
@@ -1212,7 +1215,7 @@ function NewBorrowerContent() {
                     {/* Front / Back Uploads */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="space-y-2">
-                        <Label>Front of ID</Label>
+                        <Label htmlFor={entry.front_preview ? undefined : `valid_id_front_${index}`}>Front of ID</Label>
                         {entry.front_preview ? (
                           <div className="space-y-2">
                             <div className="relative h-44 rounded-lg overflow-hidden border bg-muted/30">
@@ -1224,6 +1227,7 @@ function NewBorrowerContent() {
                               />
                               <button
                                 type="button"
+                                aria-label={`Remove front of ${validIdRowName(entry, index)}`}
                                 onClick={() => {
                                   updateValidId(index, "front_file", null);
                                   updateValidId(index, "front_preview", null);
@@ -1238,6 +1242,7 @@ function NewBorrowerContent() {
                               variant="outline"
                               size="sm"
                               className="w-full h-8 text-xs gap-1"
+                              aria-label={`Crop front of ${validIdRowName(entry, index)}`}
                               onClick={() => setCropTarget({ index, side: "front", src: entry.front_preview! })}
                             >
                               <CropIcon className="h-3.5 w-3.5" />
@@ -1245,20 +1250,16 @@ function NewBorrowerContent() {
                             </Button>
                           </div>
                         ) : (
-                          <label className="flex h-44 flex-col items-center justify-center gap-1 cursor-pointer rounded-lg border border-dashed border-muted-foreground/30 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors">
-                            <FileText className="h-5 w-5 text-muted-foreground" />
-                            <span className="text-xs text-muted-foreground">Upload Front</span>
-                            <input
-                              type="file"
-                              accept="image/*,.pdf"
-                              onChange={(e) => handleValidIdFile(index, "front", e)}
-                              className="hidden"
-                            />
-                          </label>
+                          <ValidIdFilePicker
+                            controlId={`valid_id_front_${index}`}
+                            side="front"
+                            rowName={validIdRowName(entry, index)}
+                            onPick={(e) => handleValidIdFile(index, "front", e)}
+                          />
                         )}
                       </div>
                       <div className="space-y-2">
-                        <Label>Back of ID</Label>
+                        <Label htmlFor={entry.back_preview ? undefined : `valid_id_back_${index}`}>Back of ID</Label>
                         {entry.back_preview ? (
                           <div className="space-y-2">
                             <div className="relative h-44 rounded-lg overflow-hidden border bg-muted/30">
@@ -1270,6 +1271,7 @@ function NewBorrowerContent() {
                               />
                               <button
                                 type="button"
+                                aria-label={`Remove back of ${validIdRowName(entry, index)}`}
                                 onClick={() => {
                                   updateValidId(index, "back_file", null);
                                   updateValidId(index, "back_preview", null);
@@ -1284,6 +1286,7 @@ function NewBorrowerContent() {
                               variant="outline"
                               size="sm"
                               className="w-full h-8 text-xs gap-1"
+                              aria-label={`Crop back of ${validIdRowName(entry, index)}`}
                               onClick={() => setCropTarget({ index, side: "back", src: entry.back_preview! })}
                             >
                               <CropIcon className="h-3.5 w-3.5" />
@@ -1291,16 +1294,12 @@ function NewBorrowerContent() {
                             </Button>
                           </div>
                         ) : (
-                          <label className="flex h-44 flex-col items-center justify-center gap-1 cursor-pointer rounded-lg border border-dashed border-muted-foreground/30 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors">
-                            <FileText className="h-5 w-5 text-muted-foreground" />
-                            <span className="text-xs text-muted-foreground">Upload Back</span>
-                            <input
-                              type="file"
-                              accept="image/*,.pdf"
-                              onChange={(e) => handleValidIdFile(index, "back", e)}
-                              className="hidden"
-                            />
-                          </label>
+                          <ValidIdFilePicker
+                            controlId={`valid_id_back_${index}`}
+                            side="back"
+                            rowName={validIdRowName(entry, index)}
+                            onPick={(e) => handleValidIdFile(index, "back", e)}
+                          />
                         )}
                       </div>
                     </div>
