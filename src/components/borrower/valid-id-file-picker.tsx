@@ -2,6 +2,7 @@
 
 import { useRef, type ChangeEvent } from "react";
 import { FileText } from "lucide-react";
+import { ID_ACCEPT } from "@/lib/file-validation";
 
 interface ValidIdFilePickerProps {
   /** The button's id, unique per row and side; the visible "Front of ID" label points at it. */
@@ -33,7 +34,7 @@ export function ValidIdFilePicker({ controlId, side, rowName, onPick }: ValidIdF
         <FileText className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
         <span className="text-xs text-muted-foreground">Upload {side === "front" ? "Front" : "Back"}</span>
       </button>
-      <input ref={fileInput} type="file" accept="image/*,.pdf" onChange={onPick} className="hidden" />
+      <input ref={fileInput} type="file" accept={ID_ACCEPT} onChange={onPick} className="hidden" />
     </>
   );
 }

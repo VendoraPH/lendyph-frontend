@@ -34,22 +34,38 @@ test("the valid ID delete button's accessible name names the ID", () => {
   assert.equal(deleteValidIdLabel(validId), "Delete Driver's License N01-23-456789");
 });
 
-test("the documents tab asks before deleting, in the app's own dialog", () => {
-  assert.ok(source.includes("<AlertDialog"), "uses AlertDialog");
-  assert.ok(source.includes("<AlertDialogCancel"), "has a Cancel");
-  assert.ok(!/window\.confirm|\bconfirm\(/.test(source), "never window.confirm");
-  assert.ok(source.includes("aria-label={deleteDocumentLabel(doc)}"), "the icon button has a name");
-  // The row's icon only opens the dialog; the delete runs from its Delete button.
-  const calls = source.match(/handleDeleteDocument\(/g) ?? [];
-  assert.equal(calls.length, 2, "defined once and called once");
-  const action = source.slice(source.indexOf("<AlertDialogAction"));
-  assert.ok(action.slice(0, 600).includes("handleDeleteDocument("), "called from the dialog's Delete");
-});
+const dir = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
+const lists = {
+  "member Documents tab": source,
+  "co-maker documents dialog": dir("src/app/(app)/borrowers/[id]/_components/co-maker-documents-dialog.tsx"),
+  "loan documents card": dir("src/app/(app)/loans/[id]/_components/loan-documents-card.tsx"),
+};
+
+for (const [name, text] of Object.entries(lists)) {
+  test(`the ${name} asks before deleting a document, in the app's own dialog`, () => {
+    assert.ok(text.includes("<ConfirmDeleteDialog"), `${name}: uses the shared dialog`);
+    assert.ok(!/window\.confirm|\bconfirm\(/.test(text), `${name}: never window.confirm`);
+    assert.ok(text.includes("aria-label={deleteDocumentLabel(doc)}"), `${name}: the icon button has a name`);
+    assert.ok(!text.includes('aria-label="Delete document"'), `${name}: no unnamed delete`);
+    // The row's icon only opens the dialog; the delete runs from its Delete button.
+    const handler = name === "member Documents tab" ? "handleDeleteDocument(" : "handleDelete(";
+    assert.equal((text.match(new RegExp(handler.replace("(", "\\("), "g")) ?? []).length, 2, `${name}: defined once and called once`);
+    const dialog = text.slice(text.indexOf("<ConfirmDeleteDialog"));
+    assert.ok(dialog.slice(0, 900).includes(handler), `${name}: called from the dialog's Delete`);
+  });
+}
 
 test("a valid ID row asks before deleting too, in the same dialog", () => {
   assert.ok(source.includes("aria-label={deleteValidIdLabel(entry)}"), "the icon button has a name");
   const calls = source.match(/handleDeleteValidId\(/g) ?? [];
   assert.equal(calls.length, 2, "defined once and called once");
-  const action = source.slice(source.indexOf("<AlertDialogAction"));
-  assert.ok(action.slice(0, 600).includes("handleDeleteValidId("), "called from the dialog's Delete");
+  const dialog = source.slice(source.indexOf("<ConfirmDeleteDialog"));
+  assert.ok(dialog.slice(0, 900).includes("handleDeleteValidId("), "called from the dialog's Delete");
+});
+
+test("the shared dialog is the app's AlertDialog, with Cancel and a destructive Delete", () => {
+  const dialog = dir("src/components/common/confirm-delete-dialog.tsx");
+  assert.ok(dialog.includes("<AlertDialog"));
+  assert.ok(dialog.includes("<AlertDialogCancel"));
+  assert.ok(dialog.includes('variant="destructive"'));
 });

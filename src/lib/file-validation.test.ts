@@ -6,6 +6,8 @@ import { join } from "node:path";
 import {
   DOCUMENT_ACCEPT,
   DOCUMENT_EXTENSIONS,
+  ID_ACCEPT,
+  ID_EXTENSIONS,
   ID_MIME_TYPES,
   MAX_UPLOAD_SIZE_BYTES,
   validateUploadFile,
@@ -48,4 +50,9 @@ test("every document picker that lists JPEG names reads the shared list", () => 
     .filter((path) => path.endsWith(".tsx"))
     .filter((path) => /accept="[^"]*\.jpe?g[,"]/.test(readFileSync(join(root, path), "utf8")));
   assert.deepEqual(pickers, []);
+});
+
+test("valid ID pickers take the server's valid ID list, .jpe and .jfif included", () => {
+  assert.deepEqual([...ID_EXTENSIONS], [".jpg", ".jpeg", ".jpe", ".jfif", ".png", ".pdf"]);
+  assert.equal(ID_ACCEPT, ".jpg,.jpeg,.jpe,.jfif,.png,.pdf");
 });

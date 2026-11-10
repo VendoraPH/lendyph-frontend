@@ -25,7 +25,7 @@ test("the ID picker is a real button that Tab reaches, named for its side and ro
   const input = html.match(/<input[^>]*>/)?.[0] ?? "";
   assert.match(input, /type="file"/);
   assert.match(input, /class="hidden"/);
-  assert.match(input, /accept="image\/\*,\.pdf"/);
+  assert.match(input, /accept="\.jpg,\.jpeg,\.jpe,\.jfif,\.png,\.pdf"/);
   assert.doesNotMatch(html, /<label/);
 });
 

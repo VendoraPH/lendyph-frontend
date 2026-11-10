@@ -5,16 +5,7 @@ import { formatDate } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ConfirmDeleteDialog } from "@/components/common/confirm-delete-dialog";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -36,7 +27,7 @@ import {
   documentName,
   validIdLabel,
   validIdName,
-} from "../_lib/document-delete";
+} from "@/lib/document-delete";
 
 interface DocumentsTabProps {
   borrowerId: number;
@@ -270,41 +261,23 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
       </Card>
 
       {/* Outside the table: a click inside the dialog must not reach the row, which opens the file. */}
-      <AlertDialog
+      <ConfirmDeleteDialog
         open={pendingDelete !== null}
-        onOpenChange={(open) => {
-          if (!open && !deleting) setPendingDelete(null);
+        title={pendingDelete?.kind === "valid_id" ? "Delete this valid ID?" : "Delete this document?"}
+        description={
+          pendingDelete?.kind === "valid_id"
+            ? `${validIdName(pendingDelete.entry)} will be removed from this member's valid IDs.`
+            : pendingDelete?.kind === "document"
+              ? `${documentName(pendingDelete.doc)} will be removed from this member's documents.`
+              : null
+        }
+        busy={deleting}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => {
+          if (pendingDelete?.kind === "document") handleDeleteDocument(pendingDelete.doc.id);
+          else if (pendingDelete?.kind === "valid_id") handleDeleteValidId(pendingDelete.entry.id);
         }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {pendingDelete?.kind === "valid_id" ? "Delete this valid ID?" : "Delete this document?"}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {pendingDelete?.kind === "valid_id"
-                ? `${validIdName(pendingDelete.entry)} will be removed from this member's valid IDs.`
-                : pendingDelete?.kind === "document"
-                  ? `${documentName(pendingDelete.doc)} will be removed from this member's documents.`
-                  : null}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              disabled={deleting}
-              onClick={() => {
-                if (pendingDelete?.kind === "document") handleDeleteDocument(pendingDelete.doc.id);
-                else if (pendingDelete?.kind === "valid_id") handleDeleteValidId(pendingDelete.entry.id);
-              }}
-            >
-              {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      />
 
       <ImagePreviewDialog
         open={!!preview}

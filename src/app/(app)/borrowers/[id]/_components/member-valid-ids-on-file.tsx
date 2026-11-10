@@ -4,7 +4,7 @@ import { IdCard, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/format";
 import type { BorrowerValidId } from "@/services/borrower.service";
-import { validIdName } from "../_lib/document-delete";
+import { validIdName } from "@/lib/document-delete";
 import type { MemberValidIdsStatus } from "../_hooks/use-member-valid-ids";
 
 interface MemberValidIdsOnFileProps {
