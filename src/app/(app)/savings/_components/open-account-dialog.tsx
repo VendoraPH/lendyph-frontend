@@ -17,12 +17,10 @@ import type { MemberOption } from "@/hooks/use-member-search";
 import { formatCurrency, todayISO } from "@/lib/format";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { savingsService } from "@/services";
-import type { SavingsAccount } from "@/types";
-import {
-  PAYMENT_METHOD_OPTIONS,
-  openingDepositProblem,
-  parseAmountInput,
-} from "../_lib/savings-rules";
+import type { SavingsAccount, SavingsMethod } from "@/types";
+import { useSubmitGuard } from "@/hooks/use-submit-guard";
+import { parseMoneyInput } from "@/lib/money-input";
+import { PAYMENT_METHOD_OPTIONS } from "../_lib/savings-rules";
 import { FormField } from "./field";
 import { OptionSelect } from "./option-select";
 
@@ -37,7 +35,7 @@ const EMPTY = {
   productId: "",
   openedAt: "",
   amount: "",
-  method: "cash",
+  method: "cash" as Exclude<SavingsMethod, "savings">,
   reference: "",
 };
 
@@ -45,7 +43,7 @@ export function OpenAccountDialog({ open, onOpenChange, onOpened }: OpenAccountD
   const { can } = usePermission();
   const [form, setForm] = useState(EMPTY);
   const [submitted, setSubmitted] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const { submitting, run } = useSubmitGuard();
   if (useDialogOpening(open, null)) {
     setForm({ ...EMPTY, openedAt: todayISO() });
     setSubmitted(false);
@@ -56,10 +54,10 @@ export function OpenAccountDialog({ open, onOpenChange, onOpened }: OpenAccountD
   const openable = (products.data ?? []).filter((p) => p.is_active && p.kind === "regular");
   const product = openable.find((p) => String(p.id) === form.productId) ?? null;
 
-  const amount = parseAmountInput(form.amount);
+  const amount = parseMoneyInput(form.amount, { label: "Opening deposit", allowZero: true });
   const memberError = form.member ? null : "Choose the member.";
   const productError = product ? null : "Choose a savings product.";
-  const amountError = openingDepositProblem(amount, product);
+  const amountError = amount.ok ? null : amount.message;
   const dateError = form.openedAt ? null : "Enter the opening date.";
   const valid = !memberError && !productError && !amountError && !dateError;
 
@@ -68,24 +66,22 @@ export function OpenAccountDialog({ open, onOpenChange, onOpened }: OpenAccountD
 
   function submit() {
     setSubmitted(true);
-    if (!valid || !form.member || !product || amount === null) return;
-    setSubmitting(true);
-    savingsService
-      .openAccount({
-        borrower_id: form.member.id,
-        product_id: product.id,
-        opened_at: form.openedAt,
-        initial_deposit: amount,
-        payment_method: form.method,
-        reference: form.reference.trim() || undefined,
-      })
-      .then((account) => {
+    if (!valid || !form.member || !product || !amount.ok) return;
+    const body = {
+      borrower_id: form.member.id,
+      product_id: product.id,
+      opened_at: form.openedAt,
+      initial_deposit: amount.value,
+      payment_method: form.method,
+      reference: form.reference.trim() || undefined,
+    };
+    run((key) => savingsService.openAccount(body, key))
+      ?.then((account) => {
         notifySuccess("Savings account opened", account.account_number);
         onOpenChange(false);
         onOpened(account);
       })
-      .catch((err: unknown) => notifyError(err, "Couldn't open the account."))
-      .then(() => setSubmitting(false));
+      .catch((err: unknown) => notifyError(err, "Couldn't open the account."));
   }
 
   const show = (error: string | null) => (submitted ? error : null);
@@ -118,7 +114,7 @@ export function OpenAccountDialog({ open, onOpenChange, onOpened }: OpenAccountD
             error={show(productError)}
             hint={
               products.unavailable
-                ? "Savings products are not connected yet."
+                ? "Savings products aren't available yet."
                 : product
                   ? `Opens with at least ${formatCurrency(product.minimum_opening_balance)}; maintaining balance ${formatCurrency(product.maintaining_balance)}.`
                   : undefined
@@ -160,7 +156,7 @@ export function OpenAccountDialog({ open, onOpenChange, onOpened }: OpenAccountD
               <OptionSelect
                 id="sv-method"
                 value={form.method}
-                onChange={(v) => set("method", v)}
+                onChange={(v) => set("method", v as (typeof EMPTY)["method"])}
                 options={PAYMENT_METHOD_OPTIONS}
               />
             </FormField>

@@ -13,10 +13,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useApiResource, useDialogOpening } from "@/hooks";
+import { useSubmitGuard } from "@/hooks/use-submit-guard";
 import { formatCurrency, formatRate, todayISO } from "@/lib/format";
 import { notifyError, notifySuccess } from "@/lib/notify";
-import { savingsService } from "@/services";
-import type { TimeDeposit } from "@/types";
+import { moneyPostMessage } from "@/lib/savings/money-post";
+import { timeDepositService } from "@/services";
+import type { SavingsMethod, TimeDeposit } from "@/types";
 import { FormField } from "../../../_components/field";
 import { OptionSelect } from "../../../_components/option-select";
 import { PAYMENT_METHOD_OPTIONS } from "../../../_lib/savings-rules";
@@ -30,10 +32,10 @@ interface PreterminateDialogProps {
 
 export function PreterminateDialog({ open, deposit, onOpenChange, onDone }: PreterminateDialogProps) {
   const [date, setDate] = useState("");
-  const [method, setMethod] = useState("cash");
+  const [method, setMethod] = useState<Exclude<SavingsMethod, "savings">>("cash");
   const [reason, setReason] = useState("");
   const [submitted, setSubmitted] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const { submitting, run } = useSubmitGuard();
   if (useDialogOpening(open, deposit)) {
     setDate(todayISO());
     setMethod("cash");
@@ -42,23 +44,21 @@ export function PreterminateDialog({ open, deposit, onOpenChange, onDone }: Pret
   }
 
   const dateOk = date !== "" && date < deposit.maturity_date;
-  const fetchQuote = useCallback(() => savingsService.preterminationQuote(deposit.id, date), [deposit.id, date]);
+  const fetchQuote = useCallback(() => timeDepositService.preterminationQuote(deposit.id, date), [deposit.id, date]);
   const quote = useApiResource(fetchQuote, open && dateOk);
   const reasonError = reason.trim() ? null : "Say why the placement is being broken early.";
 
   function submit() {
     setSubmitted(true);
     if (reasonError || !dateOk) return;
-    setSubmitting(true);
-    savingsService
-      .preterminateTimeDeposit(deposit.id, { date, reason: reason.trim(), payout_method: method })
-      .then(() => {
-        notifySuccess("Time deposit pre-terminated", deposit.certificate_number);
+    const body = { date, reason: reason.trim(), payout_method: method };
+    run((key) => timeDepositService.preterminate(deposit.id, body, key))
+      ?.then((result) => {
+        notifySuccess(moneyPostMessage(result, "Time deposit pre-terminated"), deposit.certificate_number);
         onOpenChange(false);
         onDone();
       })
-      .catch((err: unknown) => notifyError(err, "Couldn't pre-terminate the time deposit."))
-      .then(() => setSubmitting(false));
+      .catch((err: unknown) => notifyError(err, "Couldn't pre-terminate the time deposit."));
   }
 
   return (
@@ -67,9 +67,9 @@ export function PreterminateDialog({ open, deposit, onOpenChange, onDone }: Pret
         <DialogHeader>
           <DialogTitle>Pre-terminate {deposit.certificate_number}?</DialogTitle>
           <DialogDescription>
-            Breaking the placement before maturity pays interest at the pre-termination rate
+            Breaking the placement before maturity pays the regular savings rate kept at placement
             {deposit.pretermination_rate != null && ` (${formatRate(deposit.pretermination_rate)}% a year)`} for the days
-            held, less withholding tax and any penalty. This can&apos;t be undone.
+            held, less withholding tax. This can&apos;t be undone. Above the approval amount, it waits for approval.
           </DialogDescription>
         </DialogHeader>
 
@@ -79,7 +79,12 @@ export function PreterminateDialog({ open, deposit, onOpenChange, onDone }: Pret
               <Input id="pt-date" type="date" value={date} min={deposit.placement_date} max={todayISO()} onChange={(e) => setDate(e.target.value)} />
             </FormField>
             <FormField id="pt-method" label="Paid out by">
-              <OptionSelect id="pt-method" value={method} onChange={setMethod} options={PAYMENT_METHOD_OPTIONS} />
+              <OptionSelect
+                id="pt-method"
+                value={method}
+                onChange={(v) => setMethod(v as Exclude<SavingsMethod, "savings">)}
+                options={PAYMENT_METHOD_OPTIONS}
+              />
             </FormField>
           </div>
           <FormField id="pt-reason" label="Reason" error={submitted ? reasonError : null}>
@@ -111,8 +116,8 @@ export function PreterminateDialog({ open, deposit, onOpenChange, onDone }: Pret
             ) : (
               <p className="text-muted-foreground">
                 {quote.unavailable
-                  ? "The payout quote isn't connected yet. The server computes the figures when you confirm."
-                  : "Couldn't load the payout quote. The server still computes the figures when you confirm."}
+                  ? "The payout quote isn't available yet. The server works out the figures when you confirm."
+                  : "Couldn't load the payout quote. The server still works out the figures when you confirm."}
               </p>
             )}
           </div>

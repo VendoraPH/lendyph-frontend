@@ -12,10 +12,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useDialogOpening } from "@/hooks";
+import { useSubmitGuard } from "@/hooks/use-submit-guard";
 import { formatCurrency, formatDate, todayISO } from "@/lib/format";
 import { notifyError, notifySuccess } from "@/lib/notify";
-import { savingsService } from "@/services";
-import type { MaturityInstruction, TimeDeposit } from "@/types";
+import { moneyPostMessage } from "@/lib/savings/money-post";
+import { timeDepositService } from "@/services";
+import type { MaturityInstruction, SavingsMethod, TimeDeposit } from "@/types";
 import { FormField } from "../../../_components/field";
 import { OptionSelect } from "../../../_components/option-select";
 import { PAYMENT_METHOD_OPTIONS } from "../../../_lib/savings-rules";
@@ -25,15 +27,15 @@ interface SettleDialogProps {
   open: boolean;
   deposit: TimeDeposit;
   onOpenChange: (open: boolean) => void;
-  /** Called with what the server returns: this placement, or the new one on a rollover. */
-  onSettled: (next: TimeDeposit) => void;
+  /** Called with what the server posted (this placement, or the new one on a rollover), or null when it waits for approval. */
+  onSettled: (next: TimeDeposit | null) => void;
 }
 
 export function SettleDialog({ open, deposit, onOpenChange, onSettled }: SettleDialogProps) {
   const [date, setDate] = useState("");
   const [action, setAction] = useState<MaturityInstruction>(deposit.maturity_instruction);
-  const [method, setMethod] = useState("cash");
-  const [submitting, setSubmitting] = useState(false);
+  const [method, setMethod] = useState<Exclude<SavingsMethod, "savings">>("cash");
+  const { submitting, run } = useSubmitGuard();
   if (useDialogOpening(open, deposit)) {
     setDate(todayISO());
     setAction(deposit.maturity_instruction);
@@ -45,19 +47,18 @@ export function SettleDialog({ open, deposit, onOpenChange, onSettled }: SettleD
 
   function submit() {
     if (!date || tooEarly) return;
-    setSubmitting(true);
-    savingsService
-      .settleTimeDeposit(deposit.id, { date, action, payout_method: method })
-      .then((next) => {
+    const body = { date, action, payout_method: method };
+    run((key) => timeDepositService.settle(deposit.id, body, key))
+      ?.then((result) => {
+        const next = result.kind === "posted" ? result.record : null;
         notifySuccess(
-          action === "payout" ? "Time deposit paid out" : "Time deposit rolled over",
-          next.id !== deposit.id ? `New certificate ${next.certificate_number}` : deposit.certificate_number,
+          moneyPostMessage(result, action === "payout" ? "Time deposit paid out" : "Time deposit rolled over"),
+          next && next.id !== deposit.id ? `New certificate ${next.certificate_number}` : deposit.certificate_number,
         );
         onOpenChange(false);
         onSettled(next);
       })
-      .catch((err: unknown) => notifyError(err, "Couldn't settle the time deposit."))
-      .then(() => setSubmitting(false));
+      .catch((err: unknown) => notifyError(err, "Couldn't settle the time deposit."));
   }
 
   return (
@@ -67,7 +68,8 @@ export function SettleDialog({ open, deposit, onOpenChange, onSettled }: SettleD
           <DialogTitle>Settle {deposit.certificate_number}</DialogTitle>
           <DialogDescription>
             Matured {formatDate(deposit.maturity_date)} with {formatCurrency(deposit.maturity_amount)} due. A rollover
-            opens a new placement at the product&apos;s current rate and links the two.
+            opens a new placement at the rate in force on the maturity date and links the two. Above the approval
+            amount, a payout waits for approval.
           </DialogDescription>
         </DialogHeader>
 
@@ -81,7 +83,12 @@ export function SettleDialog({ open, deposit, onOpenChange, onSettled }: SettleD
             </FormField>
             {paysOut && (
               <FormField id="st-method" label="Paid out by">
-                <OptionSelect id="st-method" value={method} onChange={setMethod} options={PAYMENT_METHOD_OPTIONS} />
+                <OptionSelect
+                  id="st-method"
+                  value={method}
+                  onChange={(v) => setMethod(v as Exclude<SavingsMethod, "savings">)}
+                  options={PAYMENT_METHOD_OPTIONS}
+                />
               </FormField>
             )}
           </div>

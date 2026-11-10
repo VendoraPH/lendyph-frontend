@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Search, Settings2 } from "lucide-react";
+import { BranchFilter, ALL_BRANCHES, branchIdParam } from "@/components/common/branch-filter";
 import { DataState } from "@/components/common/data-state";
 import { PermissionButton } from "@/components/common/permission-button";
 import { PermissionGate } from "@/components/common/permission-gate";
@@ -30,6 +31,7 @@ import { OpenAccountDialog } from "./open-account-dialog";
 export function AccountsScreen() {
   const router = useRouter();
   const [status, setStatus] = useState("all");
+  const [branch, setBranch] = useState(ALL_BRANCHES);
   const [searchDraft, setSearchDraft] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -43,8 +45,9 @@ export function AccountsScreen() {
         per_page: perPage,
         search: search || undefined,
         status: status === "all" ? undefined : status,
+        branch_id: branchIdParam(branch),
       }),
-    [page, perPage, search, status],
+    [page, perPage, search, status, branch],
   );
   const resource = useApiResource(fetcher);
   const meta = resource.data?.meta;
@@ -72,10 +75,10 @@ export function AccountsScreen() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <Kpi label="Accounts" value={meta ? String(tabs[0].count) : "—"} />
+        <Kpi label="Accounts" value={meta?.totals ? String(meta.totals.account_count) : "—"} />
         <Kpi label="Active" value={meta ? String(meta.stats?.active ?? 0) : "—"} />
         <Kpi
-          label={search || status !== "all" ? "Balance (matching)" : "Total balance"}
+          label={search || status !== "all" || branch !== ALL_BRANCHES ? "Balance (matching)" : "Total balance"}
           value={meta?.totals ? formatCurrency(meta.totals.total_balance) : "—"}
         />
       </div>
@@ -92,11 +95,20 @@ export function AccountsScreen() {
             {tabs.map((t) => (
               <TabsTrigger key={t.value} value={t.value}>
                 {t.label}
-                {meta && <span className="ml-1 text-xs text-muted-foreground">{t.count}</span>}
+                {meta && t.count !== null && <span className="ml-1 text-xs text-muted-foreground">{t.count}</span>}
               </TabsTrigger>
             ))}
           </TabsList>
         </Tabs>
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+        <BranchFilter
+          value={branch}
+          onChange={(v) => {
+            setBranch(v);
+            setPage(1);
+          }}
+          className="sm:w-56"
+        />
         <form
           className="flex w-full gap-2 sm:w-auto"
           onSubmit={(e) => {
@@ -116,12 +128,13 @@ export function AccountsScreen() {
             <Search className="h-4 w-4" />
           </Button>
         </form>
+        </div>
       </div>
 
       <DataState
         resource={resource}
         endpoints={["GET /savings/accounts"]}
-        summary="Savings accounts will be listed here, with balances and status, once the backend is connected."
+        summary="Savings accounts will be listed here, with balances and status, once the savings service is connected."
         isEmpty={(res) => res.data.length === 0}
         emptyMessage={search ? "No account matches this search." : "No savings accounts yet."}
       >
@@ -168,7 +181,7 @@ export function AccountsScreen() {
                       <TableCell className="text-right tabular-nums">
                         {formatCurrency(a.available_balance)}
                       </TableCell>
-                      <TableCell>{a.last_transaction_at ? formatDate(a.last_transaction_at) : "—"}</TableCell>
+                      <TableCell>{a.last_member_activity_on ? formatDate(a.last_member_activity_on) : "—"}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

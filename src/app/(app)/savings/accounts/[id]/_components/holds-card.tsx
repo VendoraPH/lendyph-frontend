@@ -18,7 +18,13 @@ import { useApiResource } from "@/hooks";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { savingsService } from "@/services";
 import type { SavingsAccount, SavingsHold } from "@/types";
-import { canPlaceHold } from "../../../_lib/savings-rules";
+import {
+  HOLD_STATUS_LABELS,
+  HOLD_TYPE_LABELS,
+  actorName,
+  canPlaceHold,
+  labelOf,
+} from "../../../_lib/savings-rules";
 import { PlaceHoldDialog } from "./place-hold-dialog";
 import { ReleaseHoldDialog } from "./release-hold-dialog";
 
@@ -59,7 +65,7 @@ export function HoldsCard({ account, onChanged }: HoldsCardProps) {
         <DataState
           resource={resource}
           endpoints={["GET /savings/accounts/{id}/holds"]}
-          summary="Amounts set aside on this account (loan holds, pending withdrawals) will be listed here once the backend is connected."
+          summary="Amounts set aside on this account will be listed here once the savings service is connected."
           isEmpty={(holds) => holds.length === 0}
           emptyMessage="Nothing is on hold on this account."
         >
@@ -69,6 +75,7 @@ export function HoldsCard({ account, onChanged }: HoldsCardProps) {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Placed</TableHead>
+                    <TableHead>Type</TableHead>
                     <TableHead>Reason</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
                     <TableHead>Until</TableHead>
@@ -80,7 +87,8 @@ export function HoldsCard({ account, onChanged }: HoldsCardProps) {
                 <TableBody>
                   {holds.map((h) => (
                     <TableRow key={h.id}>
-                      <TableCell>{formatDate(h.placed_at)}</TableCell>
+                      <TableCell>{formatDate(h.placed_on)}</TableCell>
+                      <TableCell>{labelOf(HOLD_TYPE_LABELS, h.type)}</TableCell>
                       <TableCell className="max-w-64">
                         <p className="truncate">{h.reason}</p>
                         {h.release_reason && (
@@ -96,11 +104,12 @@ export function HoldsCard({ account, onChanged }: HoldsCardProps) {
                           <Badge variant="secondary">On hold</Badge>
                         ) : (
                           <Badge variant="outline">
-                            Released{h.released_at ? ` ${formatDate(h.released_at)}` : ""}
+                            {labelOf(HOLD_STATUS_LABELS, h.status)}
+                            {h.released_on ? ` ${formatDate(h.released_on)}` : ""}
                           </Badge>
                         )}
                       </TableCell>
-                      <TableCell>{h.created_by_user?.name ?? "—"}</TableCell>
+                      <TableCell>{actorName(h.created_by)}</TableCell>
                       <TableCell>
                         {h.status === "active" && (
                           <PermissionButton

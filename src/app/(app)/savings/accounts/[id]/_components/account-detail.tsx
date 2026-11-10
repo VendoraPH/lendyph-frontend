@@ -2,9 +2,18 @@
 
 import { useCallback, useState } from "react";
 import Link from "next/link";
-import { ArrowDownToLine, ArrowLeft, ArrowUpFromLine, Lock, Printer } from "lucide-react";
+import {
+  ArrowDownToLine,
+  ArrowLeft,
+  ArrowLeftRight,
+  ArrowUpFromLine,
+  FileText,
+  Lock,
+  Printer,
+  Snowflake,
+} from "lucide-react";
 import { DataState } from "@/components/common/data-state";
-import { PermissionButton } from "@/components/common/permission-button";
+import { PermissionGate } from "@/components/common/permission-gate";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useApiResource } from "@/hooks";
@@ -12,10 +21,18 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { savingsService } from "@/services";
 import type { SavingsAccount } from "@/types";
 import { AccountStatusBadge } from "../../../_components/account-status-badge";
-import { canClose, canDeposit, canWithdraw } from "../../../_lib/savings-rules";
+import { ActionButton } from "../../../_components/action-button";
+import {
+  canDeposit,
+  canOfferClose,
+  canWithdraw,
+  statusChangeOffer,
+} from "../../../_lib/savings-rules";
 import { printSavingsPassbook } from "../_lib/print-passbook";
 import { CloseAccountDialog } from "./close-account-dialog";
 import { HoldsCard } from "./holds-card";
+import { StatusDialog } from "./status-dialog";
+import { TransferDialog } from "./transfer-dialog";
 import { TransactionDialog, type TransactionMode } from "./transaction-dialog";
 import { TransactionsTable } from "./transactions-table";
 
@@ -25,6 +42,8 @@ export function AccountDetail({ accountId }: { accountId: number }) {
   const [ledgerKey, setLedgerKey] = useState(0);
   const [mode, setMode] = useState<TransactionMode | null>(null);
   const [closing, setClosing] = useState(false);
+  const [transferring, setTransferring] = useState(false);
+  const [changingStatus, setChangingStatus] = useState(false);
   const [printing, setPrinting] = useState(false);
 
   const printPassbook = (account: SavingsAccount) => {
@@ -46,7 +65,7 @@ export function AccountDetail({ accountId }: { accountId: number }) {
       <DataState
         resource={resource}
         endpoints={["GET /savings/accounts/{id}"]}
-        summary="This account's balances and ledger will show here once the backend is connected."
+        summary="This account's balances and ledger will show here once the savings service is connected."
       >
         {(account) => (
           <>
@@ -56,6 +75,8 @@ export function AccountDetail({ accountId }: { accountId: number }) {
               onPrint={() => printPassbook(account)}
               onDeposit={() => setMode("deposit")}
               onWithdraw={() => setMode("withdrawal")}
+              onTransfer={() => setTransferring(true)}
+              onStatus={() => setChangingStatus(true)}
               onClose={() => setClosing(true)}
             />
             <Balances account={account} />
@@ -65,7 +86,7 @@ export function AccountDetail({ accountId }: { accountId: number }) {
                 <CardTitle className="text-base">Transactions</CardTitle>
               </CardHeader>
               <CardContent>
-                <TransactionsTable key={ledgerKey} accountId={account.id} />
+                <TransactionsTable key={ledgerKey} accountId={account.id} onChanged={() => resource.refetch()} />
               </CardContent>
             </Card>
             <TransactionDialog
@@ -73,6 +94,13 @@ export function AccountDetail({ accountId }: { accountId: number }) {
               account={account}
               onOpenChange={(open) => !open && setMode(null)}
               onPosted={reload}
+            />
+            <TransferDialog open={transferring} account={account} onOpenChange={setTransferring} onPosted={reload} />
+            <StatusDialog
+              open={changingStatus}
+              account={account}
+              onOpenChange={setChangingStatus}
+              onChanged={() => resource.refetch()}
             />
             <CloseAccountDialog open={closing} account={account} onOpenChange={setClosing} onClosed={reload} />
           </>
@@ -88,6 +116,8 @@ function Header({
   onPrint,
   onDeposit,
   onWithdraw,
+  onTransfer,
+  onStatus,
   onClose,
 }: {
   account: SavingsAccount;
@@ -95,8 +125,12 @@ function Header({
   onPrint: () => void;
   onDeposit: () => void;
   onWithdraw: () => void;
+  onTransfer: () => void;
+  onStatus: () => void;
   onClose: () => void;
 }) {
+  const statusOffer = statusChangeOffer(account);
+  const notActive = canWithdraw(account) ? null : "Only an active account can be withdrawn from or transferred out of.";
   return (
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="space-y-1">
@@ -112,37 +146,54 @@ function Header({
           {account.branch_name && ` · ${account.branch_name}`}
         </p>
         <p className="text-xs text-muted-foreground">
-          Opened {formatDate(account.opened_at)}
-          {account.closed_at && ` · Closed ${formatDate(account.closed_at)}`}
+          Opened {formatDate(account.opened_on)}
+          {account.dormant_since && ` · Dormant since ${formatDate(account.dormant_since)}`}
+          {account.closed_on && ` · Closed ${formatDate(account.closed_on)}`}
+          {account.interest_credited_through &&
+            ` · Interest credited through ${formatDate(account.interest_credited_through)}`}
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" onClick={onPrint} disabled={printing}>
           <Printer className="h-4 w-4" /> {printing ? "Preparing…" : "Print passbook"}
         </Button>
+        <PermissionGate permission="reports:view">
+          <Button
+            variant="outline"
+            nativeButton={false}
+            render={<Link href={`/reports/savings_statement?account=${account.id}`} />}
+          >
+            <FileText className="h-4 w-4" /> Statement
+          </Button>
+        </PermissionGate>
         {account.status !== "closed" && (
           <>
-            <PermissionButton permission="savings:transact" onClick={onDeposit} disabled={!canDeposit(account)}>
-              <ArrowDownToLine className="h-4 w-4" /> Deposit
-            </PermissionButton>
-            <PermissionButton
+            <ActionButton
               permission="savings:transact"
-              variant="outline"
-              onClick={onWithdraw}
-              disabled={!canWithdraw(account)}
-              title={canWithdraw(account) ? undefined : "Only an active account can be withdrawn from."}
+              onClick={onDeposit}
+              blockedReason={canDeposit(account) ? null : "A frozen account takes no deposits."}
             >
+              <ArrowDownToLine className="h-4 w-4" /> Deposit
+            </ActionButton>
+            <ActionButton permission="savings:transact" variant="outline" onClick={onWithdraw} blockedReason={notActive}>
               <ArrowUpFromLine className="h-4 w-4" /> Withdraw
-            </PermissionButton>
-            <PermissionButton
+            </ActionButton>
+            <ActionButton permission="savings:transact" variant="outline" onClick={onTransfer} blockedReason={notActive}>
+              <ArrowLeftRight className="h-4 w-4" /> Transfer
+            </ActionButton>
+            {statusOffer && (
+              <ActionButton permission="savings:close" variant="outline" onClick={onStatus}>
+                <Snowflake className="h-4 w-4" /> {statusOffer.label}
+              </ActionButton>
+            )}
+            <ActionButton
               permission="savings:close"
               variant="outline"
               onClick={onClose}
-              disabled={!canClose(account)}
-              title={canClose(account) ? undefined : "Release the holds on this account before closing it."}
+              blockedReason={canOfferClose(account) ? null : "This account is already closed."}
             >
               <Lock className="h-4 w-4" /> Close
-            </PermissionButton>
+            </ActionButton>
           </>
         )}
       </div>
@@ -155,10 +206,11 @@ function Balances({ account }: { account: SavingsAccount }) {
     { label: "Balance", value: account.balance, strong: true },
     { label: "Available to withdraw", value: account.available_balance },
     { label: "On hold", value: account.hold_amount },
-    { label: "Accrued interest", value: account.accrued_interest },
+    { label: "Waiting for approval", value: account.pending_amount },
+    { label: "Accrued interest (not yet credited)", value: account.accrued_interest },
   ];
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
       {items.map((i) => (
         <Card key={i.label}>
           <CardContent className="py-4">

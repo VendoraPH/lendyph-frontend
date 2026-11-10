@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { TimeDepositStatus } from "@/types";
+import { labelOf } from "../../_lib/savings-rules";
 import { TD_STATUS_LABELS } from "../../_lib/time-deposit-rules";
 
 const TONE: Record<TimeDepositStatus, string> = {
@@ -13,8 +14,8 @@ const TONE: Record<TimeDepositStatus, string> = {
 
 export function TdStatusBadge({ status }: { status: TimeDepositStatus }) {
   return (
-    <Badge variant="secondary" className={cn("border-0", TONE[status])}>
-      {TD_STATUS_LABELS[status] ?? status}
+    <Badge variant="secondary" className={cn("border-0", TONE[status] ?? TONE.withdrawn)}>
+      {labelOf(TD_STATUS_LABELS, status)}
     </Badge>
   );
 }

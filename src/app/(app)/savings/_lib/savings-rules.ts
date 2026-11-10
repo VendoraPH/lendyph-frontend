@@ -1,24 +1,33 @@
 import type {
-  InterestPosting,
+  InterestCrediting,
+  InterestRunStatus,
   SavingsAccount,
   SavingsAccountStatus,
-  SavingsProduct,
-  SavingsProductInput,
+  SavingsApprovalKind,
+  SavingsApprovalStatus,
+  SavingsHolderType,
+  SavingsHoldStatus,
+  SavingsHoldType,
+  SavingsMethod,
+  SavingsProductKind,
+  SavingsTransaction,
   SavingsTransactionType,
+  SavingsUserRef,
 } from "@/types";
 
-/** A money field as a number: `decimal:2` strings, null and garbage all read safely (garbage as 0). */
-export function toAmount(value: number | string | null | undefined): number {
-  const n = typeof value === "number" ? value : parseFloat(String(value ?? ""));
-  return Number.isFinite(n) ? n : 0;
-}
+/**
+ * Savings words and the rules that decide which actions a screen offers.
+ * Nothing here reads a money figure: balances, holds, pending amounts and
+ * what can be withdrawn are the server's, shown as sent.
+ */
 
-/** A typed amount, or null when it is blank or not a positive number with at most 2 decimals. */
-export function parseAmountInput(raw: string): number | null {
-  const s = raw.trim().replace(/,/g, "");
-  if (!/^\d+(\.\d{1,2})?$/.test(s)) return null;
-  const n = Number(s);
-  return n > 0 ? n : null;
+/** A key the screen has no words for reads as this, never as the raw key. */
+export const UNKNOWN_LABEL = "Other";
+
+/** The words for `key`, or `UNKNOWN_LABEL`; never the key itself. */
+export function labelOf<K extends string>(map: Record<K, string>, key: string | null | undefined): string {
+  if (key === null || key === undefined || key === "") return "—";
+  return Object.prototype.hasOwnProperty.call(map, key) ? map[key as K] : UNKNOWN_LABEL;
 }
 
 export const ACCOUNT_STATUS_LABELS: Record<SavingsAccountStatus, string> = {
@@ -31,123 +40,165 @@ export const ACCOUNT_STATUS_LABELS: Record<SavingsAccountStatus, string> = {
 export const TRANSACTION_TYPE_LABELS: Record<SavingsTransactionType, string> = {
   deposit: "Deposit",
   withdrawal: "Withdrawal",
+  transfer_in: "Transfer in",
+  transfer_out: "Transfer out",
   interest: "Interest",
   withholding_tax: "Withholding tax",
-  fee: "Fee",
-  adjustment: "Adjustment",
   closing: "Closing payout",
+  reversal: "Reversal",
 };
 
-export const INTEREST_POSTING_LABELS: Record<InterestPosting, string> = {
+export const INTEREST_CREDITING_LABELS: Record<InterestCrediting, string> = {
   monthly: "Monthly",
   quarterly: "Quarterly",
   semi_annual: "Semi-annually",
   annual: "Annually",
 };
 
-export const PAYMENT_METHOD_OPTIONS = [
-  { value: "cash", label: "Cash" },
-  { value: "bank_transfer", label: "Bank transfer" },
-  { value: "gcash", label: "GCash" },
-  { value: "maya", label: "Maya" },
-  { value: "check", label: "Check" },
-] as const;
+export const PRODUCT_KIND_LABELS: Record<SavingsProductKind, string> = {
+  regular: "Regular savings",
+  time_deposit: "Time deposit",
+};
+
+export const METHOD_LABELS: Record<SavingsMethod, string> = {
+  cash: "Cash",
+  bank_transfer: "Bank transfer",
+  gcash: "GCash",
+  maya: "Maya",
+  savings: "Savings account",
+};
+
+/** Ways money comes in or goes out over the counter (a savings transfer has its own form). */
+export const PAYMENT_METHOD_OPTIONS: ReadonlyArray<{ value: Exclude<SavingsMethod, "savings">; label: string }> = [
+  { value: "cash", label: METHOD_LABELS.cash },
+  { value: "bank_transfer", label: METHOD_LABELS.bank_transfer },
+  { value: "gcash", label: METHOD_LABELS.gcash },
+  { value: "maya", label: METHOD_LABELS.maya },
+];
+
+export const HOLD_TYPE_LABELS: Record<SavingsHoldType, string> = {
+  legal: "Legal order",
+  manual: "Staff hold",
+  loan_retention: "Loan retention",
+};
+
+/** The hold types staff place by hand (loan retention is v2). */
+export const HOLD_TYPE_OPTIONS: ReadonlyArray<{ value: "legal" | "manual"; label: string }> = [
+  { value: "manual", label: HOLD_TYPE_LABELS.manual },
+  { value: "legal", label: HOLD_TYPE_LABELS.legal },
+];
+
+export const HOLD_STATUS_LABELS: Record<SavingsHoldStatus, string> = {
+  active: "Active",
+  released: "Released",
+  expired: "Expired",
+};
+
+export const APPROVAL_KIND_LABELS: Record<SavingsApprovalKind, string> = {
+  withdrawal: "Withdrawal",
+  close: "Account closing",
+  td_payout: "Time deposit payout",
+  pretermination: "Time deposit pre-termination",
+  reversal: "Reversal",
+};
+
+export const APPROVAL_STATUS_LABELS: Record<SavingsApprovalStatus, string> = {
+  pending: "Pending",
+  approved: "Approved",
+  rejected: "Rejected",
+  cancelled: "Cancelled",
+  expired: "Expired",
+};
+
+export const HOLDER_TYPE_LABELS: Record<SavingsHolderType, string> = {
+  member: "Members",
+  non_member: "Walk-ins",
+};
+
+export const INTEREST_RUN_STATUS_LABELS: Record<InterestRunStatus, string> = {
+  draft: "Draft",
+  approved: "Approved",
+  posted: "Posted",
+  rejected: "Rejected",
+  reversed: "Reversed",
+};
+
+/** Why an interest line earns nothing. */
+export const SKIP_REASON_LABELS: Record<string, string> = {
+  below_minimum_adb: "Average daily balance below the product's minimum",
+  no_balance: "No balance in the period",
+  no_days: "Not open in the period",
+  closed: "Account closed",
+  no_rate: "No rate in force",
+};
+
+/** Who did something; the system when the server sent no user. */
+export function actorName(user: SavingsUserRef | null | undefined): string {
+  return user?.name ?? "System";
+}
 
 /** Deposits are taken on active and dormant accounts (a deposit reactivates a dormant one). */
 export function canDeposit(account: Pick<SavingsAccount, "status">): boolean {
   return account.status === "active" || account.status === "dormant";
 }
 
-/** Withdrawals only from an active account; dormant and frozen ones need staff action first. */
+/** Withdrawals and transfers out only from an active account. */
 export function canWithdraw(account: Pick<SavingsAccount, "status">): boolean {
   return account.status === "active";
 }
 
-export function canClose(account: Pick<SavingsAccount, "status" | "hold_amount">): boolean {
-  return account.status !== "closed" && toAmount(account.hold_amount) === 0;
-}
-
-/**
- * Why an opening deposit is refused, or null. The server re-checks; this is
- * so the teller hears it before submitting.
- */
-export function openingDepositProblem(
-  amount: number | null,
-  product: Pick<SavingsProduct, "minimum_opening_balance"> | null,
-): string | null {
-  if (amount === null) return "Enter the opening deposit.";
-  const min = toAmount(product?.minimum_opening_balance);
-  if (product && amount < min) return `This product needs at least ${min.toFixed(2)} to open.`;
-  return null;
-}
-
-/** Why a withdrawal is refused, or null. `available_balance` already nets out holds and the maintaining balance. */
-export function withdrawalProblem(
-  amount: number | null,
-  account: Pick<SavingsAccount, "available_balance">,
-): string | null {
-  if (amount === null) return "Enter an amount.";
-  const available = toAmount(account.available_balance);
-  if (amount > available) return `Only ${available.toFixed(2)} is available to withdraw.`;
-  return null;
-}
-
-/** Holds go on any account that is not closed; a frozen one can still be earmarked. */
+/** Holds go on any account that is not closed. */
 export function canPlaceHold(account: Pick<SavingsAccount, "status">): boolean {
   return account.status !== "closed";
 }
 
-/**
- * Why a hold is refused, or null. A hold can earmark the balance not already
- * held, maintaining balance included (a loan hold may take the whole
- * balance), and must end after `today` when it ends at all. The server
- * re-checks both.
- */
-export function holdProblem(
-  amount: number | null,
-  expiresOn: string,
-  account: Pick<SavingsAccount, "balance" | "hold_amount">,
-  today: string,
-): string | null {
-  if (amount === null) return "Enter the amount to hold.";
-  const holdable = Math.max(0, toAmount(account.balance) - toAmount(account.hold_amount));
-  if (amount > holdable) return `Only ${holdable.toFixed(2)} of the balance is not already on hold.`;
-  if (expiresOn && expiresOn <= today) return "The hold must end after today, or leave the end date blank.";
+/** Closing is offered while the account is open; the server's closing quote says whether it can go ahead. */
+export function canOfferClose(account: Pick<SavingsAccount, "status">): boolean {
+  return account.status !== "closed";
+}
+
+/** The status change offered on an account, or null: freeze an active or dormant one, unfreeze a frozen one. */
+export function statusChangeOffer(
+  account: Pick<SavingsAccount, "status">,
+): { status: "frozen" | "active"; label: string } | null {
+  if (account.status === "frozen") return { status: "active", label: "Unfreeze" };
+  if (account.status === "active" || account.status === "dormant") return { status: "frozen", label: "Freeze" };
   return null;
 }
 
-/** The fields a product form must fix before saving, by label. */
-export function productProblems(input: SavingsProductInput): string[] {
-  const problems: string[] = [];
-  if (!input.code.trim()) problems.push("Code");
-  if (!input.name.trim()) problems.push("Name");
-  const rate = toAmount(input.annual_interest_rate);
-  if (rate < 0 || rate > 100) problems.push("Interest rate (0–100%)");
-  if (toAmount(input.minimum_opening_balance) < 0) problems.push("Minimum opening balance");
-  if (toAmount(input.maintaining_balance) < 0) problems.push("Maintaining balance");
-  if (toAmount(input.minimum_balance_for_interest) < 0) problems.push("Minimum balance to earn interest");
-  const tax = toAmount(input.withholding_tax_rate);
-  if (tax < 0 || tax > 100) problems.push("Withholding tax (0–100%)");
-  if (input.kind === "time_deposit") {
-    const terms = input.term_options_days ?? [];
-    if (terms.length === 0 || terms.some((d) => !Number.isInteger(d) || d < 1)) problems.push("Terms offered (days)");
-    const pre = toAmount(input.pretermination_rate);
-    if (pre < 0 || pre > rate) problems.push("Pre-termination rate (0 up to the regular rate)");
-  } else if (
-    input.dormant_after_days !== null &&
-    (!Number.isInteger(input.dormant_after_days) || input.dormant_after_days < 1)
-  ) {
-    problems.push("Dormant after (days)");
+const NOT_REVERSIBLE: ReadonlySet<SavingsTransactionType> = new Set([
+  "interest",
+  "withholding_tax",
+  "closing",
+  "reversal",
+]);
+
+/**
+ * Why a transaction can't be reversed, or null when a reversal can be
+ * requested. The server refuses the same rows (422, or 409 when reversed or
+ * pending).
+ */
+export function reversalBlocker(
+  txn: Pick<
+    SavingsTransaction,
+    "type" | "time_deposit_id" | "reversed_by_transaction_id" | "pending_reversal_approval_id"
+  >,
+): string | null {
+  if (NOT_REVERSIBLE.has(txn.type) || txn.time_deposit_id !== null) {
+    return "Interest, tax, closing, time deposit and reversal lines can't be reversed.";
   }
-  return problems;
+  if (txn.reversed_by_transaction_id) return "Already reversed.";
+  if (txn.pending_reversal_approval_id) return "A reversal is waiting for approval.";
+  return null;
 }
 
 /** Status tabs, in display order, with counts from `meta.stats` (0 when absent). */
-export function statusTabs(stats: Record<string, number> | undefined) {
+export function statusTabs(stats: Partial<Record<SavingsAccountStatus, number>> | undefined) {
   const order: SavingsAccountStatus[] = ["active", "dormant", "frozen", "closed"];
-  const counts = order.map((s) => stats?.[s] ?? 0);
   return [
-    { value: "all", label: "All", count: counts.reduce((a, b) => a + b, 0) },
-    ...order.map((s, i) => ({ value: s, label: ACCOUNT_STATUS_LABELS[s], count: counts[i] })),
+    { value: "all", label: "All", count: null as number | null },
+    ...order.map((s) => ({ value: s, label: ACCOUNT_STATUS_LABELS[s], count: stats?.[s] ?? 0 })),
   ];
 }
+
+export { isNilAmount } from "@/lib/savings/amount-text";

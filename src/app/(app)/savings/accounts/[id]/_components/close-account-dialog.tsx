@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -12,11 +12,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { useDialogOpening } from "@/hooks";
+import { DataState } from "@/components/common/data-state";
+import { useApiResource, useDialogOpening } from "@/hooks";
+import { useSubmitGuard } from "@/hooks/use-submit-guard";
 import { formatCurrency, todayISO } from "@/lib/format";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { moneyPostMessage } from "@/lib/savings/money-post";
 import { savingsService } from "@/services";
-import type { SavingsAccount } from "@/types";
+import type { SavingsAccount, SavingsMethod } from "@/types";
 import { FormField } from "../../../_components/field";
 import { OptionSelect } from "../../../_components/option-select";
 import { PAYMENT_METHOD_OPTIONS } from "../../../_lib/savings-rules";
@@ -28,12 +31,19 @@ interface CloseAccountDialogProps {
   onClosed: () => void;
 }
 
+type PayoutMethod = Exclude<SavingsMethod, "savings">;
+
+/**
+ * Close an account on the server's closing quote: the accrued interest is
+ * credited first, then the balance is paid out. Above the approval amount the
+ * close waits for approval (202).
+ */
 export function CloseAccountDialog({ open, account, onOpenChange, onClosed }: CloseAccountDialogProps) {
   const [date, setDate] = useState("");
-  const [method, setMethod] = useState("cash");
+  const [method, setMethod] = useState<PayoutMethod>("cash");
   const [reason, setReason] = useState("");
   const [submitted, setSubmitted] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const { submitting, run } = useSubmitGuard();
   if (useDialogOpening(open, account)) {
     setDate(todayISO());
     setMethod("cash");
@@ -41,21 +51,23 @@ export function CloseAccountDialog({ open, account, onOpenChange, onClosed }: Cl
     setSubmitted(false);
   }
 
+  const fetchQuote = useCallback(() => savingsService.closingQuote(account.id), [account.id]);
+  const quote = useApiResource(fetchQuote, open);
+
   const reasonError = reason.trim() ? null : "Say why the account is being closed.";
+  const canClose = quote.data?.can_close === true;
 
   function submit() {
     setSubmitted(true);
-    if (reasonError || !date) return;
-    setSubmitting(true);
-    savingsService
-      .closeAccount(account.id, { date, reason: reason.trim(), payout_method: method })
-      .then(() => {
-        notifySuccess("Account closed", account.account_number);
+    if (reasonError || !date || !canClose) return;
+    const body = { date, reason: reason.trim(), payout_method: method };
+    run((key) => savingsService.close(account.id, body, key))
+      ?.then((result) => {
+        notifySuccess(moneyPostMessage(result, "Account closed"), account.account_number);
         onOpenChange(false);
         onClosed();
       })
-      .catch((err: unknown) => notifyError(err, "Couldn't close the account."))
-      .then(() => setSubmitting(false));
+      .catch((err: unknown) => notifyError(err, "Couldn't close the account."));
   }
 
   return (
@@ -64,12 +76,38 @@ export function CloseAccountDialog({ open, account, onOpenChange, onClosed }: Cl
         <DialogHeader>
           <DialogTitle>Close {account.account_number}?</DialogTitle>
           <DialogDescription>
-            The balance of {formatCurrency(account.balance)} plus accrued interest of{" "}
-            {formatCurrency(account.accrued_interest)} is paid out, less any closing fee and
-            withholding tax. The server posts the final figures; a closed account takes no further
-            transactions.
+            The accrued interest is credited first, then the balance is paid out. A closed account takes no
+            further transactions. Above the approval amount, the close waits for approval.
           </DialogDescription>
         </DialogHeader>
+
+        <DataState
+          resource={quote}
+          endpoints={["GET /savings/accounts/{id}/closing-quote"]}
+          summary="What closing pays out will show here once the savings service is connected."
+        >
+          {(q) => (
+            <div className="space-y-3">
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-md border p-3 text-sm">
+                <dt className="text-muted-foreground">Balance</dt>
+                <dd className="text-right tabular-nums">{formatCurrency(q.balance)}</dd>
+                <dt className="text-muted-foreground">Interest credited at close</dt>
+                <dd className="text-right tabular-nums">{formatCurrency(q.accrued_interest)}</dd>
+                <dt className="text-muted-foreground">Withholding tax</dt>
+                <dd className="text-right tabular-nums">{formatCurrency(q.withholding_tax)}</dd>
+                <dt className="font-medium">Paid out</dt>
+                <dd className="text-right font-semibold tabular-nums">{formatCurrency(q.payout_amount)}</dd>
+              </dl>
+              {!q.can_close && q.blockers.length > 0 && (
+                <ul className="list-disc space-y-1 pl-5 text-sm text-destructive" role="alert">
+                  {q.blockers.map((b) => (
+                    <li key={b}>{b}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </DataState>
 
         <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -77,7 +115,12 @@ export function CloseAccountDialog({ open, account, onOpenChange, onClosed }: Cl
               <Input id="cl-date" type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} />
             </FormField>
             <FormField id="cl-method" label="Paid out by">
-              <OptionSelect id="cl-method" value={method} onChange={setMethod} options={PAYMENT_METHOD_OPTIONS} />
+              <OptionSelect
+                id="cl-method"
+                value={method}
+                onChange={(v) => setMethod(v as PayoutMethod)}
+                options={PAYMENT_METHOD_OPTIONS}
+              />
             </FormField>
           </div>
           <FormField id="cl-reason" label="Reason" error={submitted ? reasonError : null}>
@@ -89,7 +132,7 @@ export function CloseAccountDialog({ open, account, onOpenChange, onClosed }: Cl
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
             Keep open
           </Button>
-          <Button variant="destructive" onClick={submit} disabled={submitting}>
+          <Button variant="destructive" onClick={submit} disabled={submitting || !canClose}>
             {submitting ? "Closing…" : "Close account"}
           </Button>
         </DialogFooter>

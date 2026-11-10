@@ -199,8 +199,15 @@ export const API_ENDPOINTS = {
     SHARE_CAPITAL: "/reports/share-capital",
     PERFORMANCE: "/reports/performance",
     PROVISIONING: "/reports/provisioning",
+    // Savings & Deposits (savings design §2). reports:view plus savings:view;
+    // CSV needs reports:export. Totals cover the whole filter.
     SAVINGS_BALANCES: "/reports/savings/balances",
+    SAVINGS_TRANSACTIONS: "/reports/savings/transactions",
     TIME_DEPOSIT_MATURITIES: "/reports/savings/time-deposit-maturities",
+    SAVINGS_INTEREST_POSTINGS: "/reports/savings/interest-postings",
+    SAVINGS_DORMANT: "/reports/savings/dormant",
+    SAVINGS_STATEMENT: (accountId: number) => `/reports/savings/statement/${accountId}`,
+    SAVINGS_GL_CONTROL: "/reports/savings/gl-control",
     // Running-balance statement for one member. Separate from SHARE_CAPITAL
     // (the org-wide summary) and from SHARE_CAPITAL.LEDGER_LIST, whose
     // paginator caps at 100 rows and carries no opening/closing balance.
@@ -416,34 +423,62 @@ export const API_ENDPOINTS = {
       `/accounting/expenses/${expenseId}/attachments/${attachmentId}`,
   },
   /**
+   * Savings & Deposits: lendyph-backend's savings design §2 (Phase 3, Wave 1).
+   * Money posts carry an `Idempotency-Key` header. A withdrawal, close,
+   * settlement or pre-termination above the first approval tier answers 202
+   * with `{approval}` instead of 201.
+   */
+  SAVINGS: {
+    SETTINGS: "/savings/settings",
+    TAX_RULES: "/savings/tax-rules",
+
+    PRODUCTS: "/savings/products",
+    PRODUCT: (id: number) => `/savings/products/${id}`,
+    PRODUCT_RATES: (id: number) => `/savings/products/${id}/rates`,
+
+    ACCOUNTS: "/savings/accounts",
+    ACCOUNT: (id: number) => `/savings/accounts/${id}`,
+    ACCOUNT_TRANSACTIONS: (id: number) => `/savings/accounts/${id}/transactions`,
+    DEPOSITS: (id: number) => `/savings/accounts/${id}/deposits`,
+    WITHDRAWALS: (id: number) => `/savings/accounts/${id}/withdrawals`,
+    TRANSFERS: (id: number) => `/savings/accounts/${id}/transfers`,
+    CLOSING_QUOTE: (id: number) => `/savings/accounts/${id}/closing-quote`,
+    CLOSE: (id: number) => `/savings/accounts/${id}/close`,
+    STATUS: (id: number) => `/savings/accounts/${id}/status`,
+    HOLDS: (id: number) => `/savings/accounts/${id}/holds`,
+    HOLD_RELEASE: (holdId: number) => `/savings/holds/${holdId}/release`,
+
+    TRANSACTIONS: "/savings/transactions",
+    TRANSACTION: (id: number) => `/savings/transactions/${id}`,
+    TRANSACTION_REVERSE: (id: number) => `/savings/transactions/${id}/reverse`,
+
+    APPROVALS: "/savings/approvals",
+    APPROVAL_APPROVE: (id: number) => `/savings/approvals/${id}/approve`,
+    APPROVAL_REJECT: (id: number) => `/savings/approvals/${id}/reject`,
+    APPROVAL_CANCEL: (id: number) => `/savings/approvals/${id}/cancel`,
+
+    TIME_DEPOSITS: "/savings/time-deposits",
+    TIME_DEPOSIT: (id: number) => `/savings/time-deposits/${id}`,
+    TIME_DEPOSIT_QUOTE: "/savings/time-deposits/quote",
+    TIME_DEPOSIT_SETTLE: (id: number) => `/savings/time-deposits/${id}/settle`,
+    TIME_DEPOSIT_PRETERMINATE: (id: number) => `/savings/time-deposits/${id}/preterminate`,
+    TIME_DEPOSIT_PRETERMINATION_QUOTE: (id: number) =>
+      `/savings/time-deposits/${id}/pretermination-quote`,
+
+    INTEREST_RUNS: "/savings/interest-runs",
+    INTEREST_RUNS_PREVIEW: "/savings/interest-runs/preview",
+    INTEREST_RUN: (id: number) => `/savings/interest-runs/${id}`,
+    INTEREST_RUN_APPROVE: (id: number) => `/savings/interest-runs/${id}/approve`,
+    INTEREST_RUN_REJECT: (id: number) => `/savings/interest-runs/${id}/reject`,
+    INTEREST_RUN_POST: (id: number) => `/savings/interest-runs/${id}/post`,
+    INTEREST_RUN_REVERSE: (id: number) => `/savings/interest-runs/${id}/reverse`,
+  },
+  /**
    * Credit Scoring (backend PR #240). Every route needs credit_scoring:view,
    * settings or override as docs/CREDIT_SCORING_BACKEND_HANDOFF.md lists; the
    * loan assessment also needs loans:view, and loans:update to save.
    * The screens stay behind NEXT_PUBLIC_ENABLE_CREDIT_SCORING.
    */
-  /**
-   * Savings & Deposits. Not built on the backend yet (Swagger unreachable when
-   * this was written, so unverified): docs/SAVINGS_BACKEND_HANDOFF.md is the
-   * contract. Every screen shows "Not connected yet" on a 404/501.
-   */
-  SAVINGS: {
-    PRODUCTS: "/savings/products",
-    PRODUCT: (id: number) => `/savings/products/${id}`,
-    ACCOUNTS: "/savings/accounts",
-    ACCOUNT: (id: number) => `/savings/accounts/${id}`,
-    TRANSACTIONS: (id: number) => `/savings/accounts/${id}/transactions`,
-    DEPOSITS: (id: number) => `/savings/accounts/${id}/deposits`,
-    WITHDRAWALS: (id: number) => `/savings/accounts/${id}/withdrawals`,
-    CLOSE: (id: number) => `/savings/accounts/${id}/close`,
-    HOLDS: (id: number) => `/savings/accounts/${id}/holds`,
-    HOLD_RELEASE: (holdId: number) => `/savings/holds/${holdId}/release`,
-    TIME_DEPOSITS: "/savings/time-deposits",
-    TIME_DEPOSIT: (id: number) => `/savings/time-deposits/${id}`,
-    TIME_DEPOSIT_SETTLE: (id: number) => `/savings/time-deposits/${id}/settle`,
-    TIME_DEPOSIT_PRETERMINATE: (id: number) => `/savings/time-deposits/${id}/preterminate`,
-    TIME_DEPOSIT_PRETERMINATION_QUOTE: (id: number) =>
-      `/savings/time-deposits/${id}/pretermination-quote`,
-  },
   CREDIT_SCORING: {
     DASHBOARD: "/credit-scoring/dashboard",
     BORROWERS_LIST: "/credit-scoring/borrowers",

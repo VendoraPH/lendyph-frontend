@@ -5,13 +5,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Ban, HandCoins, Printer } from "lucide-react";
 import { DataState } from "@/components/common/data-state";
-import { PermissionButton } from "@/components/common/permission-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useApiResource } from "@/hooks";
 import { formatCurrency, formatDate, formatRate, todayISO } from "@/lib/format";
-import { savingsService } from "@/services";
+import { timeDepositService } from "@/services";
 import type { TimeDeposit } from "@/types";
+import { ActionButton } from "../../../_components/action-button";
+import { METHOD_LABELS, actorName, labelOf } from "../../../_lib/savings-rules";
 import {
   MATURITY_INSTRUCTION_LABELS,
   canPreterminate,
@@ -26,7 +27,7 @@ import { SettleDialog } from "./settle-dialog";
 
 export function TimeDepositDetail({ depositId }: { depositId: number }) {
   const router = useRouter();
-  const fetcher = useCallback(() => savingsService.timeDeposit(depositId), [depositId]);
+  const fetcher = useCallback(() => timeDepositService.get(depositId), [depositId]);
   const resource = useApiResource(fetcher);
   const [settling, setSettling] = useState(false);
   const [breaking, setBreaking] = useState(false);
@@ -37,9 +38,9 @@ export function TimeDepositDetail({ depositId }: { depositId: number }) {
     printTimeDepositCertificate(td).then(() => setPrinting(false));
   }
 
-  function settled(next: TimeDeposit) {
+  function settled(next: TimeDeposit | null) {
     // A rollover hands back the new placement; follow it.
-    if (next.id !== depositId) router.push(`/savings/time-deposits/${next.id}`);
+    if (next && next.id !== depositId) router.push(`/savings/time-deposits/${next.id}`);
     else resource.refetch();
   }
 
@@ -52,7 +53,7 @@ export function TimeDepositDetail({ depositId }: { depositId: number }) {
       <DataState
         resource={resource}
         endpoints={["GET /savings/time-deposits/{id}"]}
-        summary="This placement's terms, maturity and certificate will show here once the backend is connected."
+        summary="This placement's terms, maturity and certificate will show here once the savings service is connected."
       >
         {(td) => {
           const today = todayISO();
@@ -80,23 +81,21 @@ export function TimeDepositDetail({ depositId }: { depositId: number }) {
                   </Button>
                   {(td.status === "active" || td.status === "matured") && (
                     <>
-                      <PermissionButton
+                      <ActionButton
                         permission="savings:transact"
                         onClick={() => setSettling(true)}
-                        disabled={!settleable}
-                        title={settleable ? undefined : `Settles on or after ${formatDate(td.maturity_date)}.`}
+                        blockedReason={settleable ? null : `Settles on or after ${formatDate(td.maturity_date)}.`}
                       >
                         <HandCoins className="h-4 w-4" /> Settle at maturity
-                      </PermissionButton>
-                      <PermissionButton
+                      </ActionButton>
+                      <ActionButton
                         permission="savings:close"
                         variant="outline"
                         onClick={() => setBreaking(true)}
-                        disabled={!breakable}
-                        title={breakable ? undefined : "Only a running placement can be pre-terminated."}
+                        blockedReason={breakable ? null : "Only a running placement before its maturity date can be pre-terminated."}
                       >
                         <Ban className="h-4 w-4" /> Pre-terminate
-                      </PermissionButton>
+                      </ActionButton>
                     </>
                   )}
                 </div>
@@ -119,7 +118,7 @@ function Figures({ td, today }: { td: TimeDeposit; today: string }) {
   const hint = maturityHint(td, today);
   const items = [
     { label: "Principal", value: formatCurrency(td.principal), strong: true },
-    { label: "Rate · term", value: `${formatRate(td.annual_interest_rate)}% · ${termLabel(td.term_days)}` },
+    { label: "Rate · term", value: `${formatRate(td.annual_rate)}% · ${termLabel(td.term_days)}` },
     { label: "Matures on", value: formatDate(td.maturity_date), sub: hint },
     { label: "Amount at maturity", value: formatCurrency(td.maturity_amount) },
   ];
@@ -144,16 +143,29 @@ function Terms({ td }: { td: TimeDeposit }) {
     ["Interest for the term", formatCurrency(td.gross_interest)],
     ["Withholding tax", formatCurrency(td.withholding_tax)],
     ["Net interest", formatCurrency(td.net_interest)],
-    ["At maturity", MATURITY_INSTRUCTION_LABELS[td.maturity_instruction] ?? td.maturity_instruction],
-    ["Pre-termination rate", td.pretermination_rate == null ? "—" : `${formatRate(td.pretermination_rate)}% a year`],
+    ["At maturity", labelOf(MATURITY_INSTRUCTION_LABELS, td.maturity_instruction)],
+    ["Early termination rate", td.pretermination_rate == null ? "—" : `${formatRate(td.pretermination_rate)}% a year`],
+    ["Withholding tax rate", `${formatRate(td.withholding_tax_rate)}%`],
+    ["Paid by", td.funding_method ? labelOf(METHOD_LABELS, td.funding_method) : "—"],
   ];
-  if (td.settled_at) rows.push(["Settled on", formatDate(td.settled_at)]);
+  if (td.payout_account_id)
+    rows.push([
+      "Maturity paid into",
+      <Link key="payout" className="hover:underline" href={`/savings/accounts/${td.payout_account_id}`}>
+        {td.payout_account_number ?? "Savings account"}
+      </Link>,
+    ]);
+  if (td.settled_on) rows.push(["Settled on", formatDate(td.settled_on)]);
+  if (td.settled_interest != null) rows.push(["Interest paid", formatCurrency(td.settled_interest)]);
+  if (td.settled_tax != null) rows.push(["Tax withheld", formatCurrency(td.settled_tax)]);
   if (td.settled_amount != null) rows.push(["Paid to the member", formatCurrency(td.settled_amount)]);
   if (td.rolled_over_from_id)
     rows.push(["Rolled over from", <Link key="from" className="hover:underline" href={`/savings/time-deposits/${td.rolled_over_from_id}`}>Previous placement</Link>]);
   if (td.rolled_over_to_id)
     rows.push(["Rolled over into", <Link key="to" className="hover:underline" href={`/savings/time-deposits/${td.rolled_over_to_id}`}>New placement</Link>]);
-  if (td.created_by_user) rows.push(["Placed by", td.created_by_user.name]);
+  if (td.payout_method) rows.push(["Paid out by", labelOf(METHOD_LABELS, td.payout_method)]);
+  if (td.settled_on) rows.push(["Settled by", actorName(td.settled_by)]);
+  rows.push(["Placed by", actorName(td.created_by)]);
 
   return (
     <Card>

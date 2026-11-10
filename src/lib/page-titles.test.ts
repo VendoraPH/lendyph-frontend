@@ -230,5 +230,9 @@ describe("nestedPageTitle (a page a level further down)", () => {
 test("savings sub-pages read as savings, not loan, pages", () => {
   assert.equal(subPageTitle("savings", "products"), "Savings Products");
   assert.equal(subPageTitle("savings", "time-deposits"), "Time Deposits");
+  assert.equal(subPageTitle("savings", "approvals"), "Savings Approvals");
+  assert.equal(subPageTitle("savings", "interest"), "Savings Interest");
+  assert.equal(subPageTitle("savings", "settings"), "Savings Settings");
+  assert.equal(subPageTitle("savings", "transactions"), "Savings Transactions");
   assert.equal(subPageTitle("loans", "products"), "Loan Products");
 });

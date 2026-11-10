@@ -1,10 +1,9 @@
 import { toast } from "sonner";
-import { fetchAllPages } from "@/lib/paginate";
 import { applyPrintChrome, resolvePrintableOrg } from "@/lib/printables/print-chrome";
 import { openPrintable } from "@/lib/printables/print-open";
 import { buildSavingsPassbookDoc } from "@/lib/printables/templates/savings-passbook";
 import { savingsService } from "@/services";
-import type { SavingsAccount, SavingsTransaction } from "@/types";
+import type { SavingsAccount } from "@/types";
 
 /**
  * Fetch the account's whole ledger, then open its passbook in a new tab to
@@ -15,7 +14,7 @@ import type { SavingsAccount, SavingsTransaction } from "@/types";
 export function printSavingsPassbook(account: SavingsAccount): Promise<void> {
   return Promise.all([
     resolvePrintableOrg(),
-    fetchAllPages<SavingsTransaction>((params) => savingsService.transactions(account.id, params)),
+    savingsService.allAccountTransactions(account.id),
   ])
     .then(([org, ledger]) => {
       const doc = applyPrintChrome(

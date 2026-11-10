@@ -1,75 +1,99 @@
-import type { InterestPosting, SavingsProduct, SavingsProductInput, SavingsProductKind } from "@/types";
-import { productProblems, toAmount } from "../../_lib/savings-rules";
+import { parseMoneyInput } from "@/lib/money-input";
+import type {
+  InterestCrediting,
+  SavingsProduct,
+  SavingsProductCreateInput,
+  SavingsProductKind,
+  SavingsProductUpdateInput,
+} from "@/types";
 import { parseTermOptions } from "../../_lib/time-deposit-rules";
 
-/** The product form as typed. Numbers are read on save. */
+/** The product form as typed. Figures are sent as typed, never worked out. */
 export interface ProductDraft {
   kind: SavingsProductKind;
   code: string;
   name: string;
+  /** The first rate, on create only; later rates go through the rates table. */
   rate: string;
-  posting: InterestPosting;
+  crediting: InterestCrediting;
   minOpening: string;
   maintaining: string;
-  minForInterest: string;
-  dormantDays: string;
-  withholding: string;
+  minAdb: string;
   terms: string;
-  preRate: string;
+  /** Time deposits: the regular product whose rate pays an early termination. */
+  preProductId: string;
   active: boolean;
 }
-
-const text = (v: number | string | null | undefined) => (v == null ? "" : String(toAmount(v)));
 
 export function toDraft(p: SavingsProduct | null, kind: SavingsProductKind = "regular"): ProductDraft {
   return {
     kind: p?.kind ?? kind,
     code: p?.code ?? "",
     name: p?.name ?? "",
-    rate: text(p?.annual_interest_rate),
-    posting: p?.interest_posting ?? "quarterly",
-    minOpening: text(p?.minimum_opening_balance),
-    maintaining: text(p?.maintaining_balance),
-    minForInterest: text(p?.minimum_balance_for_interest),
-    dormantDays: p?.dormant_after_days != null ? String(p.dormant_after_days) : "",
-    withholding: text(p?.withholding_tax_rate),
+    rate: "",
+    crediting: p?.interest_crediting ?? "quarterly",
+    minOpening: p?.minimum_opening_balance ?? "",
+    maintaining: p?.maintaining_balance ?? "",
+    minAdb: p?.minimum_adb_for_interest ?? "",
     terms: p?.term_options_days?.join(", ") ?? "",
-    preRate: text(p?.pretermination_rate),
-    active: p?.is_active ?? true,
+    preProductId: p?.pretermination_product_id ? String(p.pretermination_product_id) : "",
+    // A new product starts off: the server turns it on only once the books are ready.
+    active: p?.is_active ?? false,
   };
 }
 
-/**
- * The input to save, or the labels of the fields to fix. A blank number is 0;
- * a typed value that is not a number is named rather than saved as NaN.
- */
-export function readDraft(d: ProductDraft): { input: SavingsProductInput; problems: string[] } {
-  const bad: string[] = [];
-  const num = (s: string, label: string) => {
-    if (s.trim() === "") return 0;
-    const n = Number(s.replace(/,/g, ""));
-    if (Number.isNaN(n)) bad.push(label);
-    return n;
-  };
+/** A percent per year as typed: digits with up to four decimals, 0 to 100. Sent as typed, never rounded. */
+const RATE = /^\d{1,3}(\.\d{1,4})?$/;
+
+export function rateProblem(raw: string, label = "Interest rate"): string | null {
+  const s = raw.trim();
+  if (!RATE.test(s) || Number(s) > 100) return `${label} (0 to 100%, up to four decimals)`;
+  return null;
+}
+
+/** A peso field as typed, blank read as ₱0.00. */
+function moneyField(raw: string, label: string, bad: string[]): string {
+  if (raw.trim() === "") return "0.00";
+  const parsed = parseMoneyInput(raw, { label, allowZero: true });
+  if (!parsed.ok) {
+    bad.push(label);
+    return "0.00";
+  }
+  return parsed.value;
+}
+
+/** The fields shared by create and update, or the labels to fix. */
+function readTerms(d: ProductDraft): { input: SavingsProductUpdateInput; problems: string[] } {
+  const problems: string[] = [];
   const td = d.kind === "time_deposit";
+  if (!d.code.trim()) problems.push("Code");
+  if (!d.name.trim()) problems.push("Name");
   const terms = td ? parseTermOptions(d.terms) : null;
-  const input: SavingsProductInput = {
-    kind: d.kind,
+  if (td && terms === null) problems.push("Terms offered (days)");
+  const input: SavingsProductUpdateInput = {
     code: d.code.trim(),
     name: d.name.trim(),
-    annual_interest_rate: num(d.rate, "Interest rate"),
     // A time deposit pays its interest at maturity; the schedule is unused.
-    interest_posting: td ? "annual" : d.posting,
-    minimum_opening_balance: num(d.minOpening, td ? "Minimum placement" : "Minimum opening balance"),
-    maintaining_balance: td ? 0 : num(d.maintaining, "Maintaining balance"),
-    minimum_balance_for_interest: td ? 0 : num(d.minForInterest, "Minimum balance to earn interest"),
-    dormant_after_days: td || d.dormantDays.trim() === "" ? null : Number(d.dormantDays),
-    withholding_tax_rate: num(d.withholding, "Withholding tax"),
+    interest_crediting: td ? "annual" : d.crediting,
+    minimum_opening_balance: moneyField(d.minOpening, td ? "Minimum placement" : "Minimum opening balance", problems),
+    maintaining_balance: td ? "0.00" : moneyField(d.maintaining, "Maintaining balance", problems),
+    minimum_adb_for_interest: td ? "0.00" : moneyField(d.minAdb, "Minimum average daily balance to earn interest", problems),
     term_options_days: td ? (terms ?? []) : null,
-    pretermination_rate: td ? num(d.preRate, "Pre-termination rate") : null,
+    pretermination_product_id: td && d.preProductId ? Number(d.preProductId) : null,
     is_active: d.active,
   };
-  const problems = productProblems(input);
-  for (const label of bad) if (!problems.some((p) => p.startsWith(label))) problems.push(label);
   return { input, problems };
+}
+
+/** `POST /savings/products`: the terms plus the first rate. */
+export function readCreateDraft(d: ProductDraft): { input: SavingsProductCreateInput; problems: string[] } {
+  const { input, problems } = readTerms(d);
+  const rateError = rateProblem(d.rate);
+  if (rateError) problems.push(rateError);
+  return { input: { ...input, kind: d.kind, annual_interest_rate: d.rate.trim() }, problems };
+}
+
+/** `PUT /savings/products/{id}`: the terms only; rates are added through the rates table. */
+export function readUpdateDraft(d: ProductDraft): { input: SavingsProductUpdateInput; problems: string[] } {
+  return readTerms(d);
 }

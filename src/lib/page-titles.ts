@@ -23,7 +23,12 @@ export const REPORT_TITLES: Readonly<Record<ReportId, string>> = {
   share_capital: "Share Capital Report",
   provisioning: "Loan Loss Provisioning",
   savings_balances: "Savings Balances",
+  savings_transactions: "Savings Transactions",
   time_deposit_maturities: "Time Deposit Maturities",
+  savings_interest_postings: "Savings Interest Postings",
+  savings_dormant: "Dormant Savings Accounts",
+  savings_statement: "Savings Statement",
+  savings_gl_control: "Savings GL Control",
   portfolio_summary: "Portfolio Summary",
   income_report: "Income Report",
   aging_report: "Aging Report",
@@ -88,7 +93,15 @@ const ID_TITLES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     pledges: "Pledge Entry",
     "auto-credit": "Auto-Credit",
   },
-  savings: { products: "Savings Products", "time-deposits": "Time Deposits" },
+  savings: {
+    accounts: "Savings Accounts",
+    "time-deposits": "Time Deposits",
+    transactions: "Savings Transactions",
+    approvals: "Savings Approvals",
+    interest: "Savings Interest",
+    products: "Savings Products",
+    settings: "Savings Settings",
+  },
 };
 
 /**

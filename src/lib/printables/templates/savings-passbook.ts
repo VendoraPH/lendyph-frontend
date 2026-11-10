@@ -11,6 +11,7 @@
  */
 
 import type { SavingsAccount, SavingsTransaction, SavingsTransactionType } from "@/types";
+import { isNilAmount } from "@/lib/savings/amount-text";
 import type { PrintableDocument, PrintBlock } from "../types";
 import {
   BLANK_ORG,
@@ -19,7 +20,6 @@ import {
   field,
   generatedAt,
   presentFields,
-  toNumber,
   type PrintableBuildOptions,
 } from "./shared";
 
@@ -28,9 +28,10 @@ const TYPE_CODES: Record<SavingsTransactionType, string> = {
   withdrawal: "WDL",
   interest: "INT",
   withholding_tax: "TAX",
-  fee: "FEE",
-  adjustment: "ADJ",
+  transfer_in: "TRI",
+  transfer_out: "TRO",
   closing: "CLS",
+  reversal: "REV",
 };
 
 export interface SavingsPassbookOptions extends PrintableBuildOptions {
@@ -39,9 +40,8 @@ export interface SavingsPassbookOptions extends PrintableBuildOptions {
 }
 
 /** A debit or credit cell: blank, not a dash, on the side a line doesn't touch. */
-function amountCell(value: unknown): number | string {
-  const n = toNumber(value);
-  return n ? n : " ";
+function amountCell(value: string): string {
+  return isNilAmount(value) ? " " : value;
 }
 
 export function buildSavingsPassbookDoc(
@@ -49,18 +49,19 @@ export function buildSavingsPassbookDoc(
   transactions: SavingsTransaction[],
   options: SavingsPassbookOptions = {},
 ): PrintableDocument {
-  // The API pages newest first; a passbook reads top to bottom in time order.
+  // A passbook reads top to bottom in posting order (date, then id), whatever
+  // order the pages came in.
   const ordered = [...transactions].sort((a, b) =>
     a.date === b.date ? a.id - b.id : a.date < b.date ? -1 : 1,
   );
   const rows = ordered.map((t) => ({
     date: t.date,
-    code: TYPE_CODES[t.type] ?? String(t.type).toUpperCase(),
+    code: TYPE_CODES[t.type] ?? "OTH",
     reference: t.reference,
     withdrawal: amountCell(t.debit),
     deposit: amountCell(t.credit),
-    balance: t.running_balance,
-    teller: t.created_by_user?.name ?? null,
+    balance: t.balance_after,
+    teller: t.created_by?.name ?? "System",
   }));
 
   const blocks: PrintBlock[] = [
@@ -74,7 +75,7 @@ export function buildSavingsPassbookDoc(
         field("Member No.", account.borrower_code),
         field("Product", account.product.name),
         field("Branch", account.branch_name),
-        field("Opened", dateOrBlank(account.opened_at)),
+        field("Opened", dateOrBlank(account.opened_on)),
         field("Balance", currencyOrDash(account.balance)),
         field("Available to withdraw", currencyOrDash(account.available_balance)),
         field("On hold", currencyOrDash(account.hold_amount)),
@@ -111,8 +112,8 @@ export function buildSavingsPassbookDoc(
     {
       kind: "note",
       text:
-        "Codes: DEP deposit, WDL withdrawal, INT interest, TAX withholding tax, FEE fee, " +
-        "ADJ adjustment, CLS closing payout. Report any entry you don't recognise to the branch.",
+        "Codes: DEP deposit, WDL withdrawal, TRI transfer in, TRO transfer out, INT interest, " +
+        "TAX withholding tax, CLS closing payout, REV reversal. Report any entry you don't recognise to the branch.",
     },
     {
       kind: "signatures",

@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/table";
 import { useApiResource } from "@/hooks";
 import { formatCurrency, formatDate, formatRate, todayISO } from "@/lib/format";
-import { savingsService } from "@/services";
+import { timeDepositService } from "@/services";
 import { Kpi } from "../../_components/kpi";
 import { maturityHint, tdStatusTabs, termLabel } from "../../_lib/time-deposit-rules";
 import { PlaceTimeDepositDialog } from "./place-time-deposit-dialog";
@@ -37,7 +37,7 @@ export function TimeDepositsScreen() {
 
   const fetcher = useCallback(
     () =>
-      savingsService.timeDeposits({
+      timeDepositService.list({
         page,
         per_page: perPage,
         search: search || undefined,
@@ -86,7 +86,7 @@ export function TimeDepositsScreen() {
             {tabs.map((t) => (
               <TabsTrigger key={t.value} value={t.value}>
                 {t.label}
-                {meta && <span className="ml-1 text-xs text-muted-foreground">{t.count}</span>}
+                {meta && t.count !== null && <span className="ml-1 text-xs text-muted-foreground">{t.count}</span>}
               </TabsTrigger>
             ))}
           </TabsList>
@@ -115,7 +115,7 @@ export function TimeDepositsScreen() {
       <DataState
         resource={resource}
         endpoints={["GET /savings/time-deposits"]}
-        summary="Time deposit placements will be listed here, with their maturity dates, once the backend is connected."
+        summary="Time deposit placements will be listed here, with their maturity dates, once the savings service is connected."
         isEmpty={(res) => res.data.length === 0}
         emptyMessage={search ? "No placement matches this search." : "No time deposits yet."}
       >
@@ -157,7 +157,7 @@ export function TimeDepositsScreen() {
                         </TableCell>
                         <TableCell>{td.product.name}</TableCell>
                         <TableCell className="text-right tabular-nums">{formatCurrency(td.principal)}</TableCell>
-                        <TableCell className="text-right tabular-nums">{formatRate(td.annual_interest_rate)}%</TableCell>
+                        <TableCell className="text-right tabular-nums">{formatRate(td.annual_rate)}%</TableCell>
                         <TableCell>{termLabel(td.term_days)}</TableCell>
                         <TableCell>
                           {formatDate(td.maturity_date)}

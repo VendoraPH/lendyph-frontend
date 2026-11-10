@@ -14,14 +14,16 @@ import { Input } from "@/components/ui/input";
 import { MemberSearchPicker } from "@/components/common/member-search-picker";
 import { useApiResource, useDialogOpening, usePermission } from "@/hooks";
 import type { MemberOption } from "@/hooks/use-member-search";
-import { formatCurrency, formatRate, todayISO } from "@/lib/format";
+import { useSubmitGuard } from "@/hooks/use-submit-guard";
+import { formatCurrency, todayISO } from "@/lib/format";
 import { notifyError, notifySuccess } from "@/lib/notify";
-import { savingsService } from "@/services";
-import type { MaturityInstruction, TimeDeposit } from "@/types";
+import { savingsService, timeDepositService } from "@/services";
+import type { MaturityInstruction, SavingsMethod, TimeDeposit } from "@/types";
 import { FormField } from "../../_components/field";
 import { OptionSelect } from "../../_components/option-select";
-import { PAYMENT_METHOD_OPTIONS, parseAmountInput, toAmount } from "../../_lib/savings-rules";
-import { MATURITY_INSTRUCTION_OPTIONS, placementProblem, termLabel } from "../../_lib/time-deposit-rules";
+import { METHOD_LABELS, PAYMENT_METHOD_OPTIONS } from "../../_lib/savings-rules";
+import { MATURITY_INSTRUCTION_OPTIONS, termLabel } from "../../_lib/time-deposit-rules";
+import { checkPlacement, type PlacementForm } from "../_lib/placement-form";
 import { PlacementPreview } from "./placement-preview";
 
 interface PlaceTimeDepositDialogProps {
@@ -30,22 +32,31 @@ interface PlaceTimeDepositDialogProps {
   onPlaced: (td: TimeDeposit) => void;
 }
 
-const EMPTY = {
-  member: null as MemberOption | null,
+type Form = Omit<PlacementForm, "memberId"> & { member: MemberOption | null };
+
+const EMPTY: Form = {
+  member: null,
   productId: "",
   term: "",
   placementDate: "",
   amount: "",
-  instruction: "payout" as MaturityInstruction,
+  instruction: "payout",
   method: "cash",
+  fundingAccountId: "",
+  payoutAccountId: "",
   reference: "",
 };
 
+const FUNDING_OPTIONS = [
+  ...PAYMENT_METHOD_OPTIONS,
+  { value: "savings" as const, label: `From a ${METHOD_LABELS.savings.toLowerCase()}` },
+];
+
 export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTimeDepositDialogProps) {
   const { can } = usePermission();
-  const [form, setForm] = useState(EMPTY);
+  const [form, setForm] = useState<Form>(EMPTY);
   const [submitted, setSubmitted] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const { submitting, run } = useSubmitGuard();
   if (useDialogOpening(open, null)) {
     setForm({ ...EMPTY, placementDate: todayISO() });
     setSubmitted(false);
@@ -56,44 +67,35 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
   const placeable = (products.data ?? []).filter((p) => p.is_active && p.kind === "time_deposit");
   const product = placeable.find((p) => String(p.id) === form.productId) ?? null;
   const terms = product?.term_options_days ?? [];
-  const term = terms.includes(Number(form.term)) ? Number(form.term) : null;
 
-  const amount = parseAmountInput(form.amount);
-  const errors = {
-    member: form.member ? null : "Choose the member.",
-    product: product ? null : "Choose a time deposit product.",
-    term: term ? null : "Choose the term.",
-    amount: placementProblem(amount, product),
-    date: form.placementDate ? null : "Enter the placement date.",
-  };
-  const valid = Object.values(errors).every((e) => e === null);
+  const memberId = form.member?.id ?? null;
+  const fetchAccounts = useCallback(
+    () => savingsService.accounts({ borrower_id: memberId ?? 0, status: "active", per_page: 100 }),
+    [memberId],
+  );
+  const accounts = useApiResource(fetchAccounts, open && memberId !== null);
+  const accountOptions = (accounts.data?.data ?? [])
+    .filter((a) => a.product.kind === "regular")
+    .map((a) => ({
+      value: String(a.id),
+      label: `${a.account_number} · available ${formatCurrency(a.available_balance)}`,
+    }));
+
+  const { errors, quote, body } = checkPlacement({ ...form, memberId }, product);
   const show = (error: string | null) => (submitted ? error : null);
 
-  const set = <K extends keyof typeof EMPTY>(key: K, value: (typeof EMPTY)[K]) =>
-    setForm((f) => ({ ...f, [key]: value }));
+  const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((f) => ({ ...f, [key]: value }));
 
   function submit() {
     setSubmitted(true);
-    if (!valid || !form.member || !product || !term || amount === null) return;
-    setSubmitting(true);
-    savingsService
-      .placeTimeDeposit({
-        borrower_id: form.member.id,
-        product_id: product.id,
-        principal: amount,
-        term_days: term,
-        placement_date: form.placementDate,
-        maturity_instruction: form.instruction,
-        payment_method: form.method,
-        reference: form.reference.trim() || undefined,
-      })
-      .then((td) => {
+    if (!body) return;
+    run((key) => timeDepositService.place(body, key))
+      ?.then((td) => {
         notifySuccess("Time deposit placed", td.certificate_number);
         onOpenChange(false);
         onPlaced(td);
       })
-      .catch((err: unknown) => notifyError(err, "Couldn't place the time deposit."))
-      .then(() => setSubmitting(false));
+      .catch((err: unknown) => notifyError(err, "Couldn't place the time deposit."));
   }
 
   return (
@@ -109,7 +111,7 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
             <MemberSearchPicker
               id="td-member"
               value={form.member}
-              onChange={(m) => set("member", m)}
+              onChange={(m) => setForm((f) => ({ ...f, member: m, fundingAccountId: "", payoutAccountId: "" }))}
               canSearch={can("borrowers:view")}
               placeholder="Search members"
               showCode
@@ -123,9 +125,9 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
               error={show(errors.product)}
               hint={
                 products.unavailable
-                  ? "Savings products are not connected yet."
+                  ? "Savings products aren't available yet."
                   : product
-                    ? `${formatRate(product.annual_interest_rate)}% a year; at least ${formatCurrency(product.minimum_opening_balance)}.`
+                    ? `At least ${formatCurrency(product.minimum_opening_balance)}. The rate depends on the term.`
                     : undefined
               }
             >
@@ -164,23 +166,47 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
           </FormField>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField id="td-method" label="Received by">
-              <OptionSelect id="td-method" value={form.method} onChange={(v) => set("method", v)} options={PAYMENT_METHOD_OPTIONS} />
+            <FormField id="td-method" label="Paid by">
+              <OptionSelect
+                id="td-method"
+                value={form.method}
+                onChange={(v) => set("method", v as SavingsMethod)}
+                options={FUNDING_OPTIONS}
+              />
             </FormField>
-            <FormField id="td-ref" label="Reference (optional)">
-              <Input id="td-ref" value={form.reference} onChange={(e) => set("reference", e.target.value)} placeholder="OR / transfer no." />
-            </FormField>
+            {form.method === "savings" ? (
+              <FormField id="td-funding" label="From account" error={show(errors.funding)}>
+                <OptionSelect
+                  id="td-funding"
+                  value={form.fundingAccountId}
+                  onChange={(v) => set("fundingAccountId", v)}
+                  options={accountOptions}
+                  placeholder={form.member ? "Choose an account" : "Choose the member first"}
+                  disabled={accountOptions.length === 0}
+                />
+              </FormField>
+            ) : (
+              <FormField id="td-ref" label="Reference (optional)">
+                <Input id="td-ref" value={form.reference} onChange={(e) => set("reference", e.target.value)} placeholder="OR / transfer no." />
+              </FormField>
+            )}
           </div>
 
-          {product && term && amount !== null && form.placementDate && (
-            <PlacementPreview
-              principal={amount}
-              ratePct={toAmount(product.annual_interest_rate)}
-              termDays={term}
-              withholdingPct={toAmount(product.withholding_tax_rate)}
-              placementDate={form.placementDate}
+          <FormField
+            id="td-payout"
+            label="Pay the maturity into (optional)"
+            hint="A savings account of the member. Left blank, staff pay it out at maturity."
+          >
+            <OptionSelect
+              id="td-payout"
+              value={form.payoutAccountId}
+              onChange={(v) => set("payoutAccountId", v)}
+              options={[{ value: "", label: "No account: pay out at maturity" }, ...accountOptions]}
+              disabled={!form.member}
             />
-          )}
+          </FormField>
+
+          <PlacementPreview input={quote} />
         </div>
 
         <DialogFooter>

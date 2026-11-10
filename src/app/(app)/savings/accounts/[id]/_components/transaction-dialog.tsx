@@ -16,14 +16,13 @@ import { useDialogOpening } from "@/hooks";
 import { formatCurrency, todayISO } from "@/lib/format";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { savingsService } from "@/services";
-import type { SavingsAccount } from "@/types";
+import type { SavingsAccount, SavingsMethod } from "@/types";
 import { FormField } from "../../../_components/field";
 import { OptionSelect } from "../../../_components/option-select";
-import {
-  PAYMENT_METHOD_OPTIONS,
-  parseAmountInput,
-  withdrawalProblem,
-} from "../../../_lib/savings-rules";
+import { useSubmitGuard } from "@/hooks/use-submit-guard";
+import { parseMoneyInput } from "@/lib/money-input";
+import { moneyPostMessage } from "@/lib/savings/money-post";
+import { PAYMENT_METHOD_OPTIONS } from "../../../_lib/savings-rules";
 
 export type TransactionMode = "deposit" | "withdrawal";
 
@@ -43,11 +42,11 @@ export function TransactionDialog({ mode, account, onOpenChange, onPosted }: Tra
   const open = mode !== null;
   const [amountRaw, setAmountRaw] = useState("");
   const [date, setDate] = useState("");
-  const [method, setMethod] = useState("cash");
+  const [method, setMethod] = useState<Exclude<SavingsMethod, "savings">>("cash");
   const [reference, setReference] = useState("");
   const [remarks, setRemarks] = useState("");
   const [submitted, setSubmitted] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const { submitting, run } = useSubmitGuard();
   if (useDialogOpening(open, mode)) {
     setAmountRaw("");
     setDate(todayISO());
@@ -57,31 +56,29 @@ export function TransactionDialog({ mode, account, onOpenChange, onPosted }: Tra
     setSubmitted(false);
   }
 
-  const amount = parseAmountInput(amountRaw);
-  const amountError =
-    mode === "withdrawal" ? withdrawalProblem(amount, account) : amount === null ? "Enter an amount." : null;
+  const amount = parseMoneyInput(amountRaw);
+  const amountError = amount.ok ? null : amount.message;
   const dateError = date ? null : "Enter the date.";
   const copy = COPY[mode ?? "deposit"];
 
   function submit() {
     setSubmitted(true);
-    if (!mode || amountError || dateError || amount === null) return;
-    setSubmitting(true);
+    if (!mode || dateError || !amount.ok) return;
     const post = mode === "deposit" ? savingsService.deposit : savingsService.withdraw;
-    post(account.id, {
-      amount,
+    const body = {
+      amount: amount.value,
       date,
       payment_method: method,
       reference: reference.trim() || undefined,
       remarks: remarks.trim() || undefined,
-    })
-      .then(() => {
-        notifySuccess(copy.done, formatCurrency(amount));
+    };
+    run((key) => post(account.id, body, key))
+      ?.then((result) => {
+        notifySuccess(moneyPostMessage(result, copy.done), formatCurrency(amount.value));
         onOpenChange(false);
         onPosted();
       })
-      .catch((err: unknown) => notifyError(err, `Couldn't post the ${mode}.`))
-      .then(() => setSubmitting(false));
+      .catch((err: unknown) => notifyError(err, `Couldn't post the ${mode}.`));
   }
 
   return (
@@ -93,7 +90,7 @@ export function TransactionDialog({ mode, account, onOpenChange, onPosted }: Tra
           </DialogTitle>
           <DialogDescription>
             {mode === "withdrawal"
-              ? `Available to withdraw: ${formatCurrency(account.available_balance)} (after holds and the maintaining balance).`
+              ? `Available to withdraw: ${formatCurrency(account.available_balance)} (after holds, pending requests and the maintaining balance). Above the approval amount, a withdrawal waits for approval.`
               : `Current balance: ${formatCurrency(account.balance)}.`}
           </DialogDescription>
         </DialogHeader>
@@ -116,7 +113,12 @@ export function TransactionDialog({ mode, account, onOpenChange, onPosted }: Tra
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField id="tx-method" label={copy.method}>
-              <OptionSelect id="tx-method" value={method} onChange={setMethod} options={PAYMENT_METHOD_OPTIONS} />
+              <OptionSelect
+                id="tx-method"
+                value={method}
+                onChange={(v) => setMethod(v as Exclude<SavingsMethod, "savings">)}
+                options={PAYMENT_METHOD_OPTIONS}
+              />
             </FormField>
             <FormField id="tx-ref" label="Reference (optional)">
               <Input id="tx-ref" value={reference} onChange={(e) => setReference(e.target.value)} placeholder="OR / transfer no." />

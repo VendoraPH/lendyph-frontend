@@ -47,7 +47,7 @@ export function buildTimeDepositCertificateDoc(
   const member = td.borrower_name?.trim() || null;
   const principal = toNumber(td.principal);
   const maturityAmount = toNumber(td.maturity_amount);
-  const rate = toNumber(td.annual_interest_rate);
+  const rate = toNumber(td.annual_rate);
   const preRate = toNumber(td.pretermination_rate);
   const settled = SETTLED_STATUS[td.status];
 
@@ -108,8 +108,8 @@ export function buildTimeDepositCertificateDoc(
       kind: "note",
       text:
         "This certificate is not negotiable. Withdrawal before maturity is a pre-termination: " +
-        `interest is then paid at ${preRate === null ? "the pre-termination rate" : `${preRate}% per annum`} ` +
-        "for the days held, less withholding tax and any penalty under the cooperative's policy. " +
+        `interest is then paid at ${preRate === null ? "the regular savings rate" : `${preRate}% per annum`} ` +
+        "for the days held, less withholding tax. " +
         "Present this certificate when the deposit is settled.",
     },
     {

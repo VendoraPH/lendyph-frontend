@@ -16,31 +16,33 @@ import { Switch } from "@/components/ui/switch";
 import { useDialogOpening } from "@/hooks";
 import { notifyError, notifySuccess, notifyValidation } from "@/lib/notify";
 import { savingsService } from "@/services";
-import type { InterestPosting, SavingsProduct, SavingsProductKind } from "@/types";
+import type { InterestCrediting, SavingsProduct, SavingsProductKind } from "@/types";
 import { FormField } from "../../_components/field";
 import { OptionSelect } from "../../_components/option-select";
-import { INTEREST_POSTING_LABELS } from "../../_lib/savings-rules";
-import { readDraft, toDraft, type ProductDraft } from "../_lib/product-draft";
+import { INTEREST_CREDITING_LABELS, PRODUCT_KIND_LABELS } from "../../_lib/savings-rules";
+import { readCreateDraft, readUpdateDraft, toDraft, type ProductDraft } from "../_lib/product-draft";
 
 interface ProductDialogProps {
   open: boolean;
   /** The product being edited; null adds one. */
   product: SavingsProduct | null;
+  /** Every product, for the pre-termination product picker. */
+  products: readonly SavingsProduct[];
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
 }
 
-const POSTING_OPTIONS = (Object.keys(INTEREST_POSTING_LABELS) as InterestPosting[]).map((v) => ({
+const CREDITING_OPTIONS = (Object.keys(INTEREST_CREDITING_LABELS) as InterestCrediting[]).map((v) => ({
   value: v,
-  label: INTEREST_POSTING_LABELS[v],
+  label: INTEREST_CREDITING_LABELS[v],
 }));
 
-const KIND_OPTIONS = [
-  { value: "regular", label: "Regular savings (passbook)" },
-  { value: "time_deposit", label: "Time deposit" },
-];
+const KIND_OPTIONS = (Object.keys(PRODUCT_KIND_LABELS) as SavingsProductKind[]).map((v) => ({
+  value: v,
+  label: PRODUCT_KIND_LABELS[v],
+}));
 
-export function ProductDialog({ open, product, onOpenChange, onSaved }: ProductDialogProps) {
+export function ProductDialog({ open, product, products, onOpenChange, onSaved }: ProductDialogProps) {
   const [draft, setDraft] = useState<ProductDraft>(() => toDraft(product));
   const [submitting, setSubmitting] = useState(false);
   if (useDialogOpening(open, product)) setDraft(toDraft(product));
@@ -48,17 +50,25 @@ export function ProductDialog({ open, product, onOpenChange, onSaved }: ProductD
   const set = <K extends keyof ProductDraft>(key: K, value: ProductDraft[K]) =>
     setDraft((d) => ({ ...d, [key]: value }));
   const td = draft.kind === "time_deposit";
+  const regularOptions = products
+    .filter((p) => p.kind === "regular")
+    .map((p) => ({ value: String(p.id), label: `${p.name} (${p.code})` }));
 
   function save() {
-    const { input, problems } = readDraft(draft);
-    if (problems.length) return notifyValidation(problems);
+    let request: Promise<unknown>;
+    if (product) {
+      const { input, problems } = readUpdateDraft(draft);
+      if (problems.length) return notifyValidation(problems);
+      request = savingsService.updateProduct(product.id, input);
+    } else {
+      const { input, problems } = readCreateDraft(draft);
+      if (problems.length) return notifyValidation(problems);
+      request = savingsService.createProduct(input);
+    }
     setSubmitting(true);
-    const request = product
-      ? savingsService.updateProduct(product.id, input)
-      : savingsService.createProduct(input);
     request
       .then(() => {
-        notifySuccess(product ? "Product updated" : "Product added", input.name);
+        notifySuccess(product ? "Product updated" : "Product added", draft.name.trim());
         onOpenChange(false);
         onSaved();
       })
@@ -66,7 +76,7 @@ export function ProductDialog({ open, product, onOpenChange, onSaved }: ProductD
       .then(() => setSubmitting(false));
   }
 
-  const money = (id: string, label: string, key: "minOpening" | "maintaining" | "minForInterest") => (
+  const money = (id: string, label: string, key: "minOpening" | "maintaining" | "minAdb") => (
     <FormField id={id} label={label}>
       <Input id={id} inputMode="decimal" value={draft[key]} onChange={(e) => set(key, e.target.value)} placeholder="0.00" />
     </FormField>
@@ -80,7 +90,8 @@ export function ProductDialog({ open, product, onOpenChange, onSaved }: ProductD
           <DialogDescription>
             {td
               ? "Changes apply to new placements. A running placement keeps the rate it was placed at."
-              : "Changes apply to new postings. Interest already credited is not recalculated."}
+              : "Changes apply from now on. Interest already credited is not recalculated."}{" "}
+            {product ? "Rates are added in the product's rates table." : null}
           </DialogDescription>
         </DialogHeader>
 
@@ -105,16 +116,33 @@ export function ProductDialog({ open, product, onOpenChange, onSaved }: ProductD
             </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField id="pd-rate" label="Interest rate (% per year)">
-              <Input id="pd-rate" inputMode="decimal" value={draft.rate} onChange={(e) => set("rate", e.target.value)} placeholder={td ? "4.00" : "2.00"} />
-            </FormField>
+            {!product && (
+              <FormField
+                id="pd-rate"
+                label="Interest rate (% per year)"
+                hint={td ? "The first rate for every term; set rates by term later." : "The first rate, from today."}
+              >
+                <Input id="pd-rate" inputMode="decimal" value={draft.rate} onChange={(e) => set("rate", e.target.value)} placeholder={td ? "4.00" : "2.00"} />
+              </FormField>
+            )}
             {td ? (
-              <FormField id="pd-pre" label="Pre-termination rate (% per year)" hint="Paid instead if a placement is broken early.">
-                <Input id="pd-pre" inputMode="decimal" value={draft.preRate} onChange={(e) => set("preRate", e.target.value)} placeholder="1.00" />
+              <FormField
+                id="pd-pre"
+                label="Early termination pays the rate of"
+                hint="A regular savings product. Its rate on the placement date is kept for the placement."
+              >
+                <OptionSelect
+                  id="pd-pre"
+                  value={draft.preProductId}
+                  onChange={(v) => set("preProductId", v)}
+                  options={regularOptions}
+                  placeholder="Choose a regular product"
+                  disabled={regularOptions.length === 0}
+                />
               </FormField>
             ) : (
-              <FormField id="pd-posting" label="Interest credited">
-                <OptionSelect id="pd-posting" value={draft.posting} onChange={(v) => set("posting", v as InterestPosting)} options={POSTING_OPTIONS} />
+              <FormField id="pd-crediting" label="Interest credited">
+                <OptionSelect id="pd-crediting" value={draft.crediting} onChange={(v) => set("crediting", v as InterestCrediting)} options={CREDITING_OPTIONS} />
               </FormField>
             )}
           </div>
@@ -129,24 +157,15 @@ export function ProductDialog({ open, product, onOpenChange, onSaved }: ProductD
             <div className="grid gap-4 sm:grid-cols-3">
               {money("pd-min", "Minimum to open", "minOpening")}
               {money("pd-maint", "Maintaining balance", "maintaining")}
-              {money("pd-earn", "Minimum to earn interest", "minForInterest")}
+              {money("pd-earn", "Minimum average daily balance to earn interest", "minAdb")}
             </div>
           )}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField id="pd-tax" label="Withholding tax on interest (%)" hint="0 where the cooperative's members are exempt.">
-              <Input id="pd-tax" inputMode="decimal" value={draft.withholding} onChange={(e) => set("withholding", e.target.value)} placeholder="20" />
-            </FormField>
-            {!td && (
-              <FormField id="pd-dormant" label="Dormant after (days)" hint="Blank: never mark dormant.">
-                <Input id="pd-dormant" inputMode="numeric" value={draft.dormantDays} onChange={(e) => set("dormantDays", e.target.value)} placeholder="730" />
-              </FormField>
-            )}
-          </div>
           <div className="flex items-center justify-between rounded-lg border p-3">
             <div>
               <Label htmlFor="pd-active">{td ? "Available for new placements" : "Available for new accounts"}</Label>
               <p className="text-xs text-muted-foreground">
-                {td ? "Running placements continue either way." : "Existing accounts keep running either way."}
+                {td ? "Running placements continue either way." : "Existing accounts keep running either way."} It
+                can be turned on only once the savings books are set up in Accounting.
               </p>
             </div>
             <Switch id="pd-active" checked={draft.active} onCheckedChange={(v) => set("active", Boolean(v))} />

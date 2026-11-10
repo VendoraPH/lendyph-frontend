@@ -1,50 +1,137 @@
 /**
- * Savings & Deposits, staff side. The backend for these does not exist yet;
- * `docs/SAVINGS_BACKEND_HANDOFF.md` is the contract these shapes follow.
+ * Savings & Deposits, staff side. The contract is lendyph-backend's savings
+ * design §2 (Phase 3, Wave 1); response fields carry the design's column
+ * names (§1), request bodies keep set B's names (`payment_method`,
+ * `reference`, `date`) as the design's account-opening body does.
  *
- * Money arrives as numbers or Laravel `decimal:2` strings; read it through
- * `formatCurrency` or the savings module's `toAmount`.
+ * Money is a two-decimal string ("1234.50") and rates a four-decimal percent
+ * string ("1.2500"). Show them with `formatCurrency` / `formatRate`; the
+ * browser never adds, nets or derives them.
  */
 
 import type { PaginatedResponse } from "./api";
 
+/** A peso figure as the server sends it: two decimals, as text. */
+export type MoneyString = string;
+/** A percent per year as the server sends it ("1.2500"). Never rounded. */
+export type RateString = string;
+
+/** Who did something; `null` means the system did (shown as "System"). */
+export interface SavingsUserRef {
+  id: number;
+  name: string;
+}
+
+// ── Settings and tax rules ──
+
+export type SavingsHolderType = "member" | "non_member";
+
+/** One append-only tax rule; the latest `effective_from` on or before a date is in force. */
+export interface SavingsTaxRule {
+  id: number;
+  holder_type: SavingsHolderType;
+  rate: RateString;
+  effective_from: string;
+  created_at?: string | null;
+}
+
+export interface SavingsSettings {
+  /** Up to this amount, a withdrawal or payout posts at once. */
+  tier1_limit: MoneyString;
+  /** Up to this amount, one checker approves; above it, `tier3_checkers` different checkers. */
+  tier2_limit: MoneyString;
+  tier3_checkers: number;
+  dormancy_months: number;
+  large_transaction_alert: MoneyString;
+  /** The rate in force today per holder type. */
+  current_tax_rates: Record<SavingsHolderType, RateString>;
+  tax_rules: SavingsTaxRule[];
+  updated_at?: string | null;
+}
+
+export interface SavingsSettingsInput {
+  tier1_limit: string;
+  tier2_limit: string;
+  tier3_checkers: number;
+  dormancy_months: number;
+  large_transaction_alert: string;
+}
+
+export interface SavingsTaxRuleInput {
+  holder_type: SavingsHolderType;
+  rate: string;
+  /** On or after today (Manila). */
+  effective_from: string;
+}
+
+// ── Products and rates ──
+
 /** `regular` is a passbook savings account; `time_deposit` is placed for a fixed term. */
 export type SavingsProductKind = "regular" | "time_deposit";
 
-export type InterestPosting = "monthly" | "quarterly" | "semi_annual" | "annual";
+export type InterestCrediting = "monthly" | "quarterly" | "semi_annual" | "annual";
+
+/** One append-only rate row. `term_days` is null on a regular product. */
+export interface SavingsProductRate {
+  id?: number;
+  term_days: number | null;
+  annual_rate: RateString;
+  effective_from: string;
+  created_at?: string | null;
+  created_by?: SavingsUserRef | null;
+}
 
 export interface SavingsProduct {
   id: number;
   code: string;
   name: string;
   kind: SavingsProductKind;
-  /** Percent per year, e.g. 2.5. */
-  annual_interest_rate: number | string;
-  interest_posting: InterestPosting;
-  /** The least an account can be opened with. */
-  minimum_opening_balance: number | string;
+  interest_crediting: InterestCrediting;
+  /** The least an account can be opened with (or a time deposit placed with). */
+  minimum_opening_balance: MoneyString;
   /** A withdrawal may not take the balance below this. */
-  maintaining_balance: number | string;
-  /** Below this daily balance the account earns nothing for the day. */
-  minimum_balance_for_interest: number | string;
-  /** Days without a member transaction before the account turns dormant; null never. */
-  dormant_after_days: number | null;
-  /** Final tax withheld from credited interest, percent (e.g. 20). 0 where the cooperative is exempt. */
-  withholding_tax_rate: number | string;
-  /**
-   * Time deposits only: the terms, in days, a placement may choose (e.g.
-   * [30, 90, 180, 360]). One rate per product, so a cooperative with rates by
-   * term sets up one product per rate. Null on regular products.
-   */
+  maintaining_balance: MoneyString;
+  /** Below this average daily balance the period earns no interest. */
+  minimum_adb_for_interest: MoneyString;
+  /** Time deposits only: the terms, in days, a placement may choose. */
   term_options_days: number[] | null;
-  /** Time deposits only: percent per year paid instead when a placement is broken before maturity. */
-  pretermination_rate: number | string | null;
+  /** Time deposits only: the regular product whose rate pays an early termination. */
+  pretermination_product_id: number | null;
   is_active: boolean;
-  /** Open accounts (or running placements) on this product. A product with any cannot be deleted. */
-  account_count?: number;
+  /** The rate in force today, one per term (one row on a regular product). */
+  current_rates: SavingsProductRate[];
+  /** Accounts and time deposits on this product. */
+  account_count: number;
+  /** False once any account or time deposit exists (delete answers 422). */
+  can_delete: boolean;
 }
 
-export type SavingsProductInput = Omit<SavingsProduct, "id" | "account_count">;
+/** `POST /savings/products`. `annual_interest_rate` becomes the first rate row, on create only. */
+export interface SavingsProductCreateInput {
+  code: string;
+  name: string;
+  kind: SavingsProductKind;
+  interest_crediting: InterestCrediting;
+  minimum_opening_balance: string;
+  maintaining_balance: string;
+  minimum_adb_for_interest: string;
+  term_options_days: number[] | null;
+  pretermination_product_id: number | null;
+  is_active: boolean;
+  annual_interest_rate: string;
+}
+
+/** `PUT /savings/products/{id}`: the product's terms; rates go through the rates endpoint. */
+export type SavingsProductUpdateInput = Omit<SavingsProductCreateInput, "annual_interest_rate" | "kind">;
+
+export interface SavingsRateInput {
+  annual_rate: string;
+  term_days?: number | null;
+  /** On or after today (Manila). */
+  effective_from: string;
+}
+
+// ── Accounts ──
 
 export type SavingsAccountStatus = "active" | "dormant" | "frozen" | "closed";
 
@@ -59,109 +146,171 @@ export interface SavingsAccount {
   product: { id: number; code: string; name: string; kind: SavingsProductKind };
   status: SavingsAccountStatus;
   /** Ledger balance. */
-  balance: number | string;
-  /** Held for pending withdrawals, loan holds, etc. Not withdrawable. */
-  hold_amount: number | string;
-  /** What a withdrawal can take now: balance − holds − maintaining balance, never below 0. Server-computed. */
-  available_balance: number | string;
-  /** Interest earned since the last posting, not yet credited. */
-  accrued_interest: number | string;
-  opened_at: string;
-  closed_at: string | null;
-  last_transaction_at: string | null;
+  balance: MoneyString;
+  /** Active holds. */
+  hold_amount: MoneyString;
+  /** Outflows waiting for approval. */
+  pending_amount: MoneyString;
+  /** What a withdrawal can take now. Server-computed. */
+  available_balance: MoneyString;
+  /** Earned since the last credit, not yet credited (display only). */
+  accrued_interest: MoneyString;
+  interest_credited_through: string | null;
+  opened_on: string;
+  last_member_activity_on: string | null;
+  dormant_since: string | null;
+  closed_on: string | null;
+  close_reason: string | null;
+  remarks: string | null;
 }
 
 /**
- * `GET /savings/accounts`: one page, `meta.stats` (accounts per status, over
- * the whole book) and `meta.totals` (over the rows matching the filters).
+ * `GET /savings/accounts`: one page, `meta.stats` (accounts per status) and
+ * `meta.totals` over the whole filter.
  */
 export interface SavingsAccountsResponse extends PaginatedResponse<SavingsAccount> {
   meta: PaginatedResponse<SavingsAccount>["meta"] & {
-    totals?: { account_count: number; total_balance: number | string };
+    stats?: Partial<Record<SavingsAccountStatus, number>>;
+    totals?: { account_count: number; total_balance: MoneyString };
   };
 }
 
-export type SavingsTransactionType =
-  | "deposit"
-  | "withdrawal"
-  | "interest"
-  | "withholding_tax"
-  | "fee"
-  | "adjustment"
-  | "closing";
-
-/** One ledger line. `credit` adds to the balance, `debit` takes from it; one of them is 0. */
-export interface SavingsTransaction {
-  id: number;
-  account_id: number;
-  date: string;
-  type: SavingsTransactionType;
-  reference: string | null;
-  description: string | null;
-  debit: number | string;
-  credit: number | string;
-  /** The balance after this line, in posting order (date, then id). */
-  running_balance: number | string;
-  payment_method: string | null;
-  created_by_user?: { id: number; name: string } | null;
-  created_at: string | null;
-}
+/** How money came in or went out. `savings` is a transfer from a savings account. */
+export type SavingsMethod = "cash" | "bank_transfer" | "gcash" | "maya" | "savings";
 
 export interface OpenSavingsAccountInput {
   borrower_id: number;
   product_id: number;
   /** YYYY-MM-DD, Asia/Manila. */
   opened_at: string;
-  initial_deposit: number;
-  payment_method: string;
+  initial_deposit: string;
+  payment_method: SavingsMethod;
   reference?: string;
+}
+
+// ── Transactions ──
+
+export type SavingsTransactionType =
+  | "deposit"
+  | "withdrawal"
+  | "transfer_in"
+  | "transfer_out"
+  | "interest"
+  | "withholding_tax"
+  | "closing"
+  | "reversal";
+
+/** One ledger line. `credit` adds to the balance, `debit` takes from it; one of them is "0.00". */
+export interface SavingsTransaction {
+  id: number;
+  account_id: number;
+  account_number?: string | null;
+  borrower_name?: string | null;
+  reference: string;
+  type: SavingsTransactionType;
+  date: string;
+  value_date: string;
+  debit: MoneyString;
+  credit: MoneyString;
+  /** The balance after this line, in posting order. */
+  balance_after: MoneyString;
+  method: SavingsMethod | null;
+  external_reference: string | null;
+  remarks: string | null;
+  counterpart_transaction_id: number | null;
+  reverses_transaction_id: number | null;
+  /** Set when a reversal of this line has posted. */
+  reversed_by_transaction_id?: number | null;
+  /** Set while a reversal request waits for approval. */
+  pending_reversal_approval_id?: number | null;
+  time_deposit_id: number | null;
+  interest_run_id: number | null;
+  approval_id: number | null;
+  /** Null when the system posted it. */
+  created_by: SavingsUserRef | null;
+  created_at: string | null;
+}
+
+/** `GET …/{id}/transactions`: `meta.opening_balance` and `meta.totals` cover the filter. */
+export interface SavingsTransactionsResponse extends PaginatedResponse<SavingsTransaction> {
+  meta: PaginatedResponse<SavingsTransaction>["meta"] & {
+    opening_balance?: MoneyString;
+    totals?: { debit: MoneyString; credit: MoneyString };
+  };
 }
 
 /** A deposit or a withdrawal. */
 export interface SavingsTransactionInput {
-  amount: number;
+  amount: string;
   /** YYYY-MM-DD, Asia/Manila. */
   date: string;
-  payment_method: string;
+  payment_method: SavingsMethod;
   reference?: string;
   remarks?: string;
+}
+
+export interface SavingsTransferInput {
+  to_account_id: number;
+  amount: string;
+  /** YYYY-MM-DD, Asia/Manila. */
+  date: string;
+  remarks?: string;
+}
+
+/** `POST …/{id}/transfers` answers 201 with both legs. */
+export interface SavingsTransferResult {
+  transfer_out: SavingsTransaction;
+  transfer_in: SavingsTransaction;
 }
 
 export interface CloseSavingsAccountInput {
   /** YYYY-MM-DD, Asia/Manila. */
   date: string;
   reason: string;
-  /** How the remaining balance and accrued interest are paid out. */
-  payout_method: string;
+  /** How the balance and the interest credited at close are paid out. */
+  payout_method: SavingsMethod;
+}
+
+/** `GET …/{id}/closing-quote`: what closing today credits and pays. */
+export interface SavingsClosingQuote {
+  balance: MoneyString;
+  accrued_interest: MoneyString;
+  withholding_tax: MoneyString;
+  payout_amount: MoneyString;
+  can_close: boolean;
+  /** Why it can't close, in words. */
+  blockers: string[];
+}
+
+export interface SavingsStatusInput {
+  status: "frozen" | "active";
+  reason: string;
 }
 
 // ── Holds ──
 
-export type SavingsHoldStatus = "active" | "released";
+export type SavingsHoldType = "legal" | "manual" | "loan_retention";
+export type SavingsHoldStatus = "active" | "released" | "expired";
 
-/**
- * Money set aside on an account: a pending withdrawal, a loan's collateral
- * hold, a garnishment. An active hold counts in `hold_amount` and comes off
- * `available_balance`; an account with an active hold cannot be closed.
- */
+/** Money set aside on an account. An active hold comes off `available_balance`. */
 export interface SavingsHold {
   id: number;
   account_id: number;
-  amount: number | string;
+  type: SavingsHoldType;
+  amount: MoneyString;
   reason: string;
-  /** YYYY-MM-DD the hold took effect. */
-  placed_at: string;
-  /** YYYY-MM-DD the server lifts it on its own, or null to hold until released. */
+  placed_on: string;
   expires_on: string | null;
   status: SavingsHoldStatus;
-  released_at: string | null;
+  released_on: string | null;
   release_reason: string | null;
-  created_by_user?: { id: number; name: string } | null;
-  released_by_user?: { id: number; name: string } | null;
+  created_by: SavingsUserRef | null;
+  released_by: SavingsUserRef | null;
 }
 
 export interface PlaceSavingsHoldInput {
-  amount: number;
+  type: Exclude<SavingsHoldType, "loan_retention">;
+  amount: string;
   reason: string;
   /** YYYY-MM-DD, or omitted to hold until released. */
   expires_on?: string;
@@ -169,6 +318,42 @@ export interface PlaceSavingsHoldInput {
 
 export interface ReleaseSavingsHoldInput {
   reason: string;
+}
+
+// ── Approvals (maker-checker) ──
+
+export type SavingsApprovalKind = "withdrawal" | "close" | "td_payout" | "pretermination" | "reversal";
+export type SavingsApprovalStatus = "pending" | "approved" | "rejected" | "cancelled" | "expired";
+
+export interface SavingsApproval {
+  id: number;
+  kind: SavingsApprovalKind;
+  status: SavingsApprovalStatus;
+  account_id: number | null;
+  account_number?: string | null;
+  time_deposit_id: number | null;
+  certificate_number?: string | null;
+  borrower_name?: string | null;
+  branch_name?: string | null;
+  target_transaction_id: number | null;
+  target_reference?: string | null;
+  amount: MoneyString;
+  /** How many different checkers it needs (2 above the second tier). */
+  required_checkers: number;
+  requested_by: SavingsUserRef | null;
+  first_checker: SavingsUserRef | null;
+  decided_by: SavingsUserRef | null;
+  decision_reason: string | null;
+  decided_at: string | null;
+  /** End of the Manila business day it was requested on. */
+  expires_at: string | null;
+  result_transaction_id: number | null;
+  created_at: string | null;
+}
+
+/** A money post above the first tier answers 202 with this instead of the record. */
+export interface SavingsApprovalEnvelope {
+  approval: SavingsApproval;
 }
 
 // ── Time deposits ──
@@ -191,58 +376,83 @@ export interface TimeDeposit {
   branch_id: number | null;
   branch_name: string | null;
   product: { id: number; code: string; name: string };
-  principal: number | string;
-  /** Percent per year, fixed at placement. */
-  annual_interest_rate: number | string;
-  /** Percent per year paid if broken early, fixed at placement. */
-  pretermination_rate: number | string | null;
+  principal: MoneyString;
+  /** Snapshotted at placement. */
+  annual_rate: RateString;
+  pretermination_rate: RateString | null;
+  withholding_tax_rate: RateString;
   term_days: number;
   placement_date: string;
   maturity_date: string;
-  /** Server-computed at placement, for the full term. */
-  gross_interest: number | string;
-  withholding_tax: number | string;
-  net_interest: number | string;
-  /** principal + net_interest. */
-  maturity_amount: number | string;
+  gross_interest: MoneyString;
+  withholding_tax: MoneyString;
+  net_interest: MoneyString;
+  maturity_amount: MoneyString;
   maturity_instruction: MaturityInstruction;
+  funding_method: SavingsMethod | null;
+  payout_account_id: number | null;
+  payout_account_number?: string | null;
   status: TimeDepositStatus;
-  /** When it was paid out, rolled over or pre-terminated. */
-  settled_at: string | null;
-  /** What was paid to the member on settlement (0 for a full rollover). */
-  settled_amount: number | string | null;
-  /** The placement this one was rolled over from / into. */
+  settled_on: string | null;
+  settled_interest: MoneyString | null;
+  settled_tax: MoneyString | null;
+  settled_amount: MoneyString | null;
+  payout_method: SavingsMethod | null;
+  /** Null when the system settled it (shown as "System"). */
+  settled_by: SavingsUserRef | null;
   rolled_over_from_id: number | null;
-  rolled_over_to_id: number | null;
-  created_by_user?: { id: number; name: string } | null;
+  rolled_over_to_id?: number | null;
+  created_by: SavingsUserRef | null;
 }
 
-/**
- * `GET /savings/time-deposits`: one page, `meta.stats` (placements per status)
- * and `meta.totals` over the rows matching the filters.
- */
+/** `GET /savings/time-deposits`: one page, `meta.stats` per status and `meta.totals` over the filter. */
 export interface TimeDepositsResponse extends PaginatedResponse<TimeDeposit> {
   meta: PaginatedResponse<TimeDeposit>["meta"] & {
+    stats?: Partial<Record<TimeDepositStatus, number>>;
     totals?: {
       count: number;
-      total_principal: number | string;
+      total_principal: MoneyString;
       /** Active placements maturing in the next 30 days. */
       maturing_30_days: number;
     };
   };
 }
 
+/** `POST /savings/time-deposits/quote`: the placement's figures, worked out by the server. */
+export interface TimeDepositQuoteInput {
+  borrower_id?: number;
+  product_id: number;
+  principal: string;
+  term_days: number;
+  placement_date: string;
+}
+
+export interface TimeDepositQuote {
+  annual_rate: RateString;
+  withholding_tax_rate: RateString;
+  term_days: number;
+  maturity_date: string;
+  gross_interest: MoneyString;
+  withholding_tax: MoneyString;
+  net_interest: MoneyString;
+  maturity_amount: MoneyString;
+}
+
 export interface PlaceTimeDepositInput {
   borrower_id: number;
   product_id: number;
-  principal: number;
+  principal: string;
   /** One of the product's `term_options_days`. */
   term_days: number;
   /** YYYY-MM-DD, Asia/Manila. */
   placement_date: string;
   maturity_instruction: MaturityInstruction;
-  payment_method: string;
+  payment_method: SavingsMethod;
   reference?: string;
+  /** The savings account paying for it, when `payment_method` is `savings`. */
+  funding_account_id?: number;
+  /** The savings account the maturity pays into, if any. */
+  payout_account_id?: number;
 }
 
 export interface SettleTimeDepositInput {
@@ -250,26 +460,87 @@ export interface SettleTimeDepositInput {
   date: string;
   action: MaturityInstruction;
   /** How anything paid out leaves the cooperative. Ignored for `rollover_all`. */
-  payout_method: string;
+  payout_method: SavingsMethod;
 }
 
 export interface PreterminateTimeDepositInput {
   /** YYYY-MM-DD, before the maturity date. */
   date: string;
   reason: string;
-  payout_method: string;
+  payout_method: SavingsMethod;
 }
 
-/** `GET /savings/time-deposits/{id}/pretermination-quote?date=`: what breaking it on `date` pays. */
+/** `GET …/{id}/pretermination-quote?date=`: what breaking it on `date` pays. */
 export interface PreterminationQuote {
   date: string;
   days_held: number;
-  /** The rate applied: the placement's pre-termination rate. */
-  rate: number | string;
-  gross_interest: number | string;
-  withholding_tax: number | string;
-  /** Any penalty charged on top of the reduced rate. */
-  penalty: number | string;
-  /** principal + gross − tax − penalty. */
-  payout: number | string;
+  /** The regular rate snapshotted at placement. */
+  rate: RateString;
+  gross_interest: MoneyString;
+  withholding_tax: MoneyString;
+  /** "0.00" in v1. */
+  penalty: MoneyString;
+  payout: MoneyString;
+}
+
+// ── Interest runs ──
+
+export type InterestRunStatus = "draft" | "approved" | "posted" | "rejected" | "reversed";
+
+export interface InterestRunLine {
+  account_id: number;
+  account_number: string | null;
+  borrower_name: string | null;
+  days: number;
+  average_daily_balance: MoneyString;
+  rate: RateString;
+  gross_interest: MoneyString;
+  tax_rate: RateString;
+  withholding_tax: MoneyString;
+  net_interest: MoneyString;
+  /** Why the line earns nothing, as a key (`below_minimum_adb`, …). */
+  skip_reason: string | null;
+}
+
+export interface InterestRun {
+  id: number;
+  product: { id: number; code?: string; name: string } | null;
+  branch: { id: number; name: string } | null;
+  period_start: string;
+  period_end: string;
+  status: InterestRunStatus;
+  account_count: number;
+  total_gross: MoneyString;
+  total_tax: MoneyString;
+  total_net: MoneyString;
+  created_by: SavingsUserRef | null;
+  approved_by: SavingsUserRef | null;
+  posted_by: SavingsUserRef | null;
+  rejected_by?: SavingsUserRef | null;
+  reversed_by?: SavingsUserRef | null;
+  reject_reason?: string | null;
+  reverse_reason?: string | null;
+  created_at: string | null;
+  posted_at?: string | null;
+  /** On `GET /savings/interest-runs/{id}`. */
+  lines?: InterestRunLine[];
+}
+
+export interface InterestRunRequest {
+  product_id: number;
+  /** The day after the last posted period (the server checks it). */
+  period_start: string;
+  branch_ids?: number[];
+}
+
+/** `POST /savings/interest-runs/preview`: one draft-to-be per branch. Writes nothing. */
+export interface InterestRunPreview {
+  period_start: string;
+  period_end: string;
+  runs: Array<
+    Pick<InterestRun, "branch" | "account_count" | "total_gross" | "total_tax" | "total_net"> & {
+      lines: InterestRunLine[];
+    }
+  >;
+  totals?: { account_count: number; total_gross: MoneyString; total_tax: MoneyString; total_net: MoneyString };
 }

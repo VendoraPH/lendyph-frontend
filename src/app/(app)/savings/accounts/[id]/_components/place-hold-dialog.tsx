@@ -18,7 +18,9 @@ import { notifyError, notifySuccess } from "@/lib/notify";
 import { savingsService } from "@/services";
 import type { SavingsAccount } from "@/types";
 import { FormField } from "../../../_components/field";
-import { holdProblem, parseAmountInput, toAmount } from "../../../_lib/savings-rules";
+import { OptionSelect } from "../../../_components/option-select";
+import { parseMoneyInput } from "@/lib/money-input";
+import { HOLD_TYPE_OPTIONS } from "../../../_lib/savings-rules";
 
 interface PlaceHoldDialogProps {
   open: boolean;
@@ -29,35 +31,38 @@ interface PlaceHoldDialogProps {
 
 export function PlaceHoldDialog({ open, account, onOpenChange, onPlaced }: PlaceHoldDialogProps) {
   const [amount, setAmount] = useState("");
+  const [type, setType] = useState<"manual" | "legal">("manual");
   const [reason, setReason] = useState("");
   const [expiresOn, setExpiresOn] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   if (useDialogOpening(open, account.id)) {
     setAmount("");
+    setType("manual");
     setReason("");
     setExpiresOn("");
     setSubmitted(false);
   }
 
   const today = todayISO();
-  const parsed = parseAmountInput(amount);
-  const amountError = holdProblem(parsed, expiresOn, account, today);
+  const parsed = parseMoneyInput(amount, { label: "Amount to hold" });
+  const amountError = parsed.ok ? null : parsed.message;
+  const dateError = expiresOn && expiresOn <= today ? "The hold must end after today, or leave the date blank." : null;
   const reasonError = reason.trim() ? null : "Say what the hold is for.";
-  const holdable = Math.max(0, toAmount(account.balance) - toAmount(account.hold_amount));
 
   function submit() {
     setSubmitted(true);
-    if (amountError || reasonError || parsed === null) return;
+    if (!parsed.ok || reasonError || dateError) return;
     setSubmitting(true);
     savingsService
       .placeHold(account.id, {
-        amount: parsed,
+        type,
+        amount: parsed.value,
         reason: reason.trim(),
         ...(expiresOn ? { expires_on: expiresOn } : {}),
       })
       .then(() => {
-        notifySuccess("Hold placed", `${formatCurrency(parsed)} on ${account.account_number}`);
+        notifySuccess("Hold placed", `${formatCurrency(parsed.value)} on ${account.account_number}`);
         onOpenChange(false);
         onPlaced();
       })
@@ -82,7 +87,7 @@ export function PlaceHoldDialog({ open, account, onOpenChange, onPlaced }: Place
               id="hold-amount"
               label="Amount"
               error={submitted ? amountError : null}
-              hint={`Up to ${formatCurrency(holdable)}`}
+              hint={`The balance is ${formatCurrency(account.balance)}, of which ${formatCurrency(account.hold_amount)} is already on hold.`}
             >
               <Input
                 id="hold-amount"
@@ -92,7 +97,12 @@ export function PlaceHoldDialog({ open, account, onOpenChange, onPlaced }: Place
                 placeholder="0.00"
               />
             </FormField>
-            <FormField id="hold-until" label="Until (optional)" hint="Leave blank to hold until released.">
+            <FormField
+              id="hold-until"
+              label="Until (optional)"
+              hint="Leave blank to hold until released."
+              error={submitted ? dateError : null}
+            >
               <Input
                 id="hold-until"
                 type="date"
@@ -102,13 +112,21 @@ export function PlaceHoldDialog({ open, account, onOpenChange, onPlaced }: Place
               />
             </FormField>
           </div>
+          <FormField id="hold-type" label="Type">
+            <OptionSelect
+              id="hold-type"
+              value={type}
+              onChange={(v) => setType(v === "legal" ? "legal" : "manual")}
+              options={HOLD_TYPE_OPTIONS}
+            />
+          </FormField>
           <FormField id="hold-reason" label="Reason" error={submitted ? reasonError : null}>
             <Textarea
               id="hold-reason"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={2}
-              placeholder="e.g. Hold-out for loan LN-0042"
+              placeholder="e.g. Court order no. 123"
             />
           </FormField>
         </div>
