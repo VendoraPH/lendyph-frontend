@@ -115,8 +115,9 @@ import { useLoanPreview } from "@/app/(app)/loans/new/_hooks/use-loan-preview";
 import {
   PAYMENT_FREQUENCY_LABELS,
   PAYMENT_FREQUENCY_OPTIONS,
-  LOAN_STATUS_LABELS,
+  LOAN_STATUS_COLORS,
 } from "@/constants";
+import { loanDisplayStatus, loanRowStatusLabel } from "@/constants/loan-status";
 
 import type { CollateralType, Loan, LoanStatus, StaffMember } from "@/types";
 import { loanMemberOptions } from "@/app/(app)/loans/new/_lib/member-picker";
@@ -882,8 +883,11 @@ function RestructureLoanInner() {
                                 </span>
                                 <span className="text-xs text-muted-foreground">
                                   {formatCurrency(l.principal_amount)} ·{" "}
-                                  <Badge variant="outline" className="text-[10px] py-0 px-1">
-                                    {LOAN_STATUS_LABELS[l.status] ?? l.status}
+                                  <Badge
+                                    variant="outline"
+                                    className={cn("text-[10px] py-0 px-1", LOAN_STATUS_COLORS[loanDisplayStatus(l)])}
+                                  >
+                                    {loanRowStatusLabel(l)}
                                   </Badge>
                                 </span>
                               </div>
