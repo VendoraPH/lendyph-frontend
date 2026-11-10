@@ -8,8 +8,11 @@ import {
   REPORT_TITLES,
   detailPageTitle,
   humanizeSegment,
+  menuTitles,
+  nestedPageTitle,
   subPageTitle,
 } from "./page-titles";
+import { SIDEBAR_NAV } from "@/constants/navigation";
 import { REPORT_CATALOG } from "@/app/(app)/reports/_lib/report-catalog";
 import { PRINTABLE_CATALOG } from "@/lib/printables/catalog";
 
@@ -138,7 +141,7 @@ describe("the loan form's breadcrumb", () => {
 
   test("the header passes the edit id and the page uses the same title", () => {
     const header = readFileSync(join(process.cwd(), "src/components/layout/header.tsx"), "utf8");
-    assert.ok(header.includes('subPageTitle(firstSegment, subSegment, { edit: editParam })'));
+    assert.ok(header.includes('subPageTitle(firstSegment, subSegment, { edit: editParam, menuTitle })'));
     assert.ok(header.includes('useSearchParams().get("edit")'));
     assert.match(header, /<Suspense fallback=\{<Breadcrumb editParam=\{null\} \/>\}>/);
     const form = readFileSync(join(process.cwd(), "src/app/(app)/loans/new/page.tsx"), "utf8");
@@ -169,5 +172,57 @@ describe("each section's new and edit pages", () => {
   test("the header reads a record's page through detailPageTitle", () => {
     const header = readFileSync(join(process.cwd(), "src/components/layout/header.tsx"), "utf8");
     assert.ok(header.includes("detailPageTitle(firstSegment, segments[2])"));
+  });
+});
+
+describe("pages the menu lists read the menu's title", () => {
+  const menuTitle = menuTitles(SIDEBAR_NAV);
+
+  test("an accounting page reads its menu title, not its route", () => {
+    assert.equal(subPageTitle("accounting", "journals", { menuTitle }), "Journal Entries");
+    assert.equal(subPageTitle("accounting", "expenses", { menuTitle }), "Expenses & Payables");
+    assert.equal(subPageTitle("accounting", "cash-bank", { menuTitle }), "Cash & Bank");
+    assert.equal(subPageTitle("settings", "gcash", { menuTitle }), "GCash");
+  });
+
+  test("a page's own title still wins, and an unlisted page reads its words", () => {
+    assert.equal(subPageTitle("collaterals", "new", { menuTitle }), "New Collateral");
+    assert.equal(subPageTitle("loans", "new", { menuTitle }), "New Application");
+    assert.equal(subPageTitle("loans", "new", { edit: "12", menuTitle }), "Edit Loan Application");
+    assert.equal(subPageTitle("borrowers", "registrations", { menuTitle }), "Registrations");
+  });
+
+  test("a section's own title wins over a page at the same route", () => {
+    assert.equal(menuTitle("/loans"), "Loans");
+    assert.equal(menuTitle("/accounting"), "Accounting");
+    assert.equal(menuTitle("/accounting/journals"), "Journal Entries");
+    assert.equal(menuTitle("/nowhere"), undefined);
+  });
+
+  test("the header reads the menu's titles", () => {
+    const header = readFileSync(join(process.cwd(), "src/components/layout/header.tsx"), "utf8");
+    assert.ok(header.includes("menuTitles(SIDEBAR_NAV)"));
+  });
+});
+
+describe("nestedPageTitle (a page a level further down)", () => {
+  const menuTitle = menuTitles(SIDEBAR_NAV);
+
+  test("a nested page reads its own title, a record Detail", () => {
+    assert.equal(nestedPageTitle("accounting", "journals", "new", menuTitle), "New Journal Entry");
+    assert.equal(nestedPageTitle("accounting", "journals", "12", menuTitle), "Detail");
+    assert.equal(nestedPageTitle("accounting", "reconciliation", "3", menuTitle), "Detail");
+    assert.equal(nestedPageTitle("loans", "reminders", "history", menuTitle), "Message History");
+  });
+
+  test("any other nested page reads its words", () => {
+    assert.equal(nestedPageTitle("loans", "reminders", "rules", menuTitle), "Rules");
+    assert.equal(nestedPageTitle("accounting", "journals", "constructor"), "Constructor");
+  });
+
+  test("the header adds the nested part under a page, never under a record", () => {
+    const header = readFileSync(join(process.cwd(), "src/components/layout/header.tsx"), "utf8");
+    assert.ok(header.includes("nestedPageTitle(firstSegment, subSegment, segments[2], menuTitle)"));
+    assert.ok(header.includes("!isId && segments.length > 2"));
   });
 });
