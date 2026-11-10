@@ -116,7 +116,17 @@ export type Module =
   // Phase 2: the backend seeds all four for admin and super_admin only, and
   // the roles screen offers them. Nothing is sent to members: the engine runs
   // on log-only drivers, and the screens show test mode.
-  | "reminders";
+  | "reminders"
+  // ── Savings & Deposits ──
+  //
+  // `view` reads products, accounts, ledgers and reports; `create` opens an
+  // account or a time deposit; `transact` posts deposits, withdrawals,
+  // transfers, holds and reversal requests; `close` closes an account,
+  // freezes or reactivates it, and pre-terminates a time deposit; `approve`
+  // decides approvals and interest runs (never the maker's own); `post` runs
+  // and posts interest; `settings` manages products, rates, tax rules and the
+  // approval tiers. Seeded for admin and super_admin only.
+  | "savings";
 
 export type Action =
   | "view"

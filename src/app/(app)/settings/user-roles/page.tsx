@@ -25,7 +25,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import type { Action, Permission } from "@/types";
-import { MODULE_ACTIONS, type UIModule } from "./_lib/permission-matrix";
+import { MODULE_ACTIONS, moduleActionLabel, type UIModule } from "./_lib/permission-matrix";
 import { OFFERED_MODULE_TOTAL, roleModuleCount } from "./_lib/module-count";
 import {
   roleItemFromApi,
@@ -67,6 +67,7 @@ import {
   Wallet,
   Gauge,
   BellRing,
+  PiggyBank,
   Package,
   Building2,
   type LucideIcon,
@@ -341,6 +342,20 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
       "Configure rules, templates and the SMS and email set-up",
     ],
   },
+  savings: {
+    label: "Savings & Deposits",
+    description: "Members' savings accounts, time deposits, approvals and interest runs.",
+    icon: PiggyBank,
+    features: [
+      "View accounts, time deposits, ledgers and savings reports",
+      "Open savings accounts and place time deposits",
+      "Post deposits, withdrawals, transfers and holds, and request reversals",
+      "Close, freeze and reactivate accounts, and pre-terminate time deposits",
+      "Approve or reject requests and interest runs made by someone else",
+      "Run and post interest",
+      "Manage savings products, rates, tax rules and approval amounts",
+    ],
+  },
 };
 
 
@@ -381,7 +396,9 @@ const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
 function describeMatrixPermission(permission: string): string {
   const [module, action] = permission.split(":");
   const moduleLabel = MODULE_META[module as UIModule]?.label;
-  const actionLabel = ACTION_META[action as Action]?.label;
+  const actionLabel =
+    (MODULE_META[module as UIModule] && moduleActionLabel(module as UIModule, action as Action)) ||
+    ACTION_META[action as Action]?.label;
   return moduleLabel && actionLabel ? `${moduleLabel}: ${actionLabel}` : describePermission(permission);
 }
 
@@ -623,6 +640,7 @@ function RoleFormDialog({
                         const perm = `${mod}:${act}` as Permission;
                         const granted = permissions.has(perm);
                         const lockReason = readOnly ? null : grantLockReason(caller, perm, granted);
+                        const actLabel = moduleActionLabel(mod, act) ?? ACTION_META[act].label;
                         return (
                           <label
                             key={act}
@@ -643,11 +661,11 @@ function RoleFormDialog({
                               className="h-3.5 w-3.5"
                               aria-label={
                                 lockReason
-                                  ? `${meta.label} ${ACTION_META[act].label} (${lockReason})`
-                                  : `${meta.label} ${ACTION_META[act].label}`
+                                  ? `${meta.label} ${actLabel} (${lockReason})`
+                                  : `${meta.label} ${actLabel}`
                               }
                             />
-                            {ACTION_META[act].label}
+                            {actLabel}
                           </label>
                         );
                       })}

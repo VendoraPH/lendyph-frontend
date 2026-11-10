@@ -2447,6 +2447,8 @@ const ALL_REPORT_IDS: Record<ReportId, true> = {
   share_capital: true,
   performance: true,
   provisioning: true,
+  savings_balances: true,
+  time_deposit_maturities: true,
 };
 
 test("every report id has its own reference prefix", () => {

@@ -27,6 +27,25 @@ test("no role but admin and super_admin holds a reminders permission", () => {
   }
 });
 
+const SAVINGS = [
+  "savings:view",
+  "savings:create",
+  "savings:transact",
+  "savings:close",
+  "savings:approve",
+  "savings:post",
+  "savings:settings",
+];
+
+// Phase 3: the seven savings permissions are seeded for admin and super_admin
+// only (savings design §3); other roles get them through the roles screen.
+test("admin and super_admin hold all seven savings permissions, and no other role holds one", () => {
+  for (const [role, config] of Object.entries(ROLES)) {
+    const held = config.permissions.filter((p) => p.startsWith("savings:"));
+    assert.deepEqual(held, role === "admin" || role === "super_admin" ? SAVINGS : [], role);
+  }
+});
+
 // Copied from lendyph-backend `RoleAndPermissionSeeder::ACCOUNTANT_PERMISSIONS`
 // (round C, slice C1, after the review fix on #249 removed `audit_logs:view`,
 // whose rows carry members' personal data). `ROLES.accountant` documents the
@@ -122,6 +141,7 @@ test("general_bookkeeper and manager keep their accounting grants", () => {
 
 // Every permission lendyph-backend creates (RoleAndPermissionSeeder plus the
 // permission migrations), which super_admin holds through Permission::all().
+// The seven savings permissions come with Phase 3's savings foundation (S1).
 const BACKEND_PERMISSIONS = [
   "accounting:allowance",
   "accounting:close",
@@ -197,6 +217,13 @@ const BACKEND_PERMISSIONS = [
   "reminders:view",
   "reports:export",
   "reports:view",
+  "savings:approve",
+  "savings:close",
+  "savings:create",
+  "savings:post",
+  "savings:settings",
+  "savings:transact",
+  "savings:view",
   "settings:delete",
   "settings:update",
   "settings:view",

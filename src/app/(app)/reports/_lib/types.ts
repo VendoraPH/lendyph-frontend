@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import type { SubjectKind } from "@/components/common/subject-picker";
 import { DASH, type FormattableColumn } from "@/lib/report-format";
+import type { Permission } from "@/types";
 
 export type ReportId =
   | "daily_collection"
@@ -19,7 +20,9 @@ export type ReportId =
   | "portfolio_by_product"
   | "share_capital"
   | "performance"
-  | "provisioning";
+  | "provisioning"
+  | "savings_balances"
+  | "time_deposit_maturities";
 
 export type ReportCategory =
   | "operations"
@@ -284,6 +287,14 @@ export interface ReportDefinition {
   subject?: ReportSubject;
   /** Set when the API takes no dates, which hides the date range controls. */
   noDateRange?: boolean;
+  /**
+   * A permission beyond `reports:view` that the report's data needs, such as
+   * `savings:view` for the savings reports. Without it the report is not
+   * listed and its page answers "not found".
+   */
+  permission?: Permission;
+  /** False when the report's module is switched off for this deployment. */
+  available?: boolean;
   build: (ctx: ReportContext) => Promise<ReportDocument>;
 }
 

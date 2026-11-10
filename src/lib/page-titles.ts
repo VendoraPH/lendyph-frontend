@@ -22,6 +22,8 @@ export const REPORT_TITLES: Readonly<Record<ReportId, string>> = {
   cash_flow: "Cash Flow Statement",
   share_capital: "Share Capital Report",
   provisioning: "Loan Loss Provisioning",
+  savings_balances: "Savings Balances",
+  time_deposit_maturities: "Time Deposit Maturities",
   portfolio_summary: "Portfolio Summary",
   income_report: "Income Report",
   aging_report: "Aging Report",
@@ -34,7 +36,14 @@ export const REPORT_TITLES: Readonly<Record<ReportId, string>> = {
   subsidiary_ledger: "Subsidiary Ledger",
 };
 
-export const PRINTABLE_TITLES: Readonly<Record<PrintableId, string>> = {
+/**
+ * Titles of the documents in the `/printables` catalog. The time deposit
+ * certificate and the savings passbook are printed from their own pages, not
+ * the catalog, so they have no route here.
+ */
+export const PRINTABLE_TITLES: Readonly<
+  Record<Exclude<PrintableId, "time_deposit_certificate" | "savings_passbook">, string>
+> = {
   disclosure_statement: "Disclosure Statement",
   promissory_note: "Promissory Note",
   release_voucher: "Loan Release Voucher",
@@ -79,6 +88,7 @@ const ID_TITLES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     pledges: "Pledge Entry",
     "auto-credit": "Auto-Credit",
   },
+  savings: { products: "Savings Products", "time-deposits": "Time Deposits" },
 };
 
 /**

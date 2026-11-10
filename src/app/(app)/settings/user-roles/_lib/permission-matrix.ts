@@ -23,6 +23,10 @@ import type { Action, Module } from "@/types";
  *
  * `reminders` is offered too (Phase 2): the backend seeds
  * `reminders:view|send|pause|settings` for admin and super_admin.
+ *
+ * `savings` is offered too (Phase 3): the backend seeds
+ * `savings:view|create|transact|close|approve|post|settings` for admin and
+ * super_admin.
  */
 export type UIModule = Exclude<Module, "collections" | "loan_adjustments" | "auto_credit">;
 
@@ -77,7 +81,25 @@ export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
   // (all, one member or one loan), `settings` covers rules, templates and the
   // provider set-up.
   reminders: ["view", "send", "pause", "settings"],
+  // `transact` covers deposits, withdrawals, transfers, holds and reversal
+  // requests; `close` covers closing, freezing and pre-terminating; `approve`
+  // decides approvals and interest runs; `post` runs and posts interest.
+  savings: ["view", "create", "transact", "close", "approve", "post", "settings"],
 };
+
+/**
+ * Where an action's general label reads wrong for one module, the module's own
+ * words. `close` is "Close Period" on the books, but on savings it closes,
+ * freezes and pre-terminates accounts; `post` there posts interest.
+ */
+export const MODULE_ACTION_LABELS: Partial<Record<UIModule, Partial<Record<Action, string>>>> = {
+  savings: { close: "Close accounts", post: "Post interest" },
+};
+
+/** The module's own label for an action, or `null` to use the general one. */
+export function moduleActionLabel(mod: UIModule, act: Action): string | null {
+  return MODULE_ACTION_LABELS[mod]?.[act] ?? null;
+}
 
 /**
  * Actions offered with their own checkbox only. The module's "toggle all"

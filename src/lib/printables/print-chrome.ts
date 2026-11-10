@@ -32,6 +32,8 @@ const REFERENCE_PREFIX: Record<PrintableId, string> = {
   amortization_schedule: "AMS",
   share_capital_certificate: "SCC",
   member_ledger_card: "MLC",
+  time_deposit_certificate: "TDC",
+  savings_passbook: "SPB",
 };
 
 /**

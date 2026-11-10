@@ -36,7 +36,7 @@ describe("the title map covers both catalogs", () => {
 
   test("every printable has a title, and the catalog shows that title", () => {
     for (const printable of PRINTABLE_CATALOG) {
-      const title = PRINTABLE_TITLES[printable.id];
+      const title = (PRINTABLE_TITLES as Record<string, string>)[printable.id];
       assert.equal(typeof title, "string", `no title for printable ${printable.id}`);
       assert.notEqual(title.trim(), "", `empty title for printable ${printable.id}`);
       assert.equal(printable.title, title);
@@ -225,4 +225,10 @@ describe("nestedPageTitle (a page a level further down)", () => {
     assert.ok(header.includes("nestedPageTitle(firstSegment, subSegment, segments[2], menuTitle)"));
     assert.ok(header.includes("!isId && segments.length > 2"));
   });
+});
+
+test("savings sub-pages read as savings, not loan, pages", () => {
+  assert.equal(subPageTitle("savings", "products"), "Savings Products");
+  assert.equal(subPageTitle("savings", "time-deposits"), "Time Deposits");
+  assert.equal(subPageTitle("loans", "products"), "Loan Products");
 });

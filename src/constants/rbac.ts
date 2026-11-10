@@ -114,6 +114,15 @@ const EVERY_PERMISSION: Permission[] = [
   "reminders:send",
   "reminders:pause",
   "reminders:settings",
+  // Savings & Deposits (Phase 3). Seeded for admin and super_admin only;
+  // other roles get them only through the roles screen.
+  "savings:view",
+  "savings:create",
+  "savings:transact",
+  "savings:close",
+  "savings:approve",
+  "savings:post",
+  "savings:settings",
 ];
 
 /**
