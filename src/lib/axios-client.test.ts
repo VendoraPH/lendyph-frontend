@@ -25,12 +25,14 @@ interface Seen {
 
 /** What the mocked API holds and what it has answered. */
 const server = {
-  token: "old",
+  token: "old" as string | null,
   refreshCalls: 0,
   refreshStatus: 200,
   refreshNetworkError: false,
   /** A refresh the API never answers (stuck before it rotates anything). */
   refreshHangs: false,
+  /** The API swaps the token only as it answers, so the old one works until then. */
+  rotateOnReply: false,
   seen: [] as Seen[],
   releaseRefresh: () => {},
   refreshGate: Promise.resolve(),
@@ -65,15 +67,18 @@ async function mockFetch(input: RequestInfo | URL, init?: RequestInit): Promise<
     const rotates = !server.refreshNetworkError && server.refreshStatus === 200 && auth === `Bearer ${server.token}`;
     // The API revokes the old token as it issues the new one, so from here a
     // request carrying the old token is answered 401.
-    if (rotates) server.token = "new";
+    if (rotates && !server.rotateOnReply) server.token = "new";
     await server.refreshGate;
+    if (rotates && server.rotateOnReply) server.token = "new";
     if (server.refreshNetworkError) throw new TypeError("fetch failed");
     if (!rotates) return json(server.refreshStatus === 200 ? 401 : server.refreshStatus, { message: "Unauthenticated." });
     return json(200, { token: "new", expires_in: 1800 });
   }
 
-  const status = auth === `Bearer ${server.token}` ? 200 : 401;
+  const status = server.token !== null && auth === `Bearer ${server.token}` ? 200 : 401;
   server.seen.push({ path, auth, status });
+  // Log out revokes the token it was sent with.
+  if (path.endsWith("/auth/logout") && status === 200) server.token = null;
   return json(status, status === 200 ? { data: { path } } : { message: "Unauthenticated." });
 }
 
@@ -143,6 +148,7 @@ beforeEach(() => {
   server.refreshStatus = 200;
   server.refreshNetworkError = false;
   server.refreshHangs = false;
+  server.rotateOnReply = false;
   server.seen = [];
   sessionExpiredEvents = 0;
   holdRefresh();
@@ -262,6 +268,46 @@ describe("requests while a token renewal is running", () => {
 
     mock.timers.tick(REFRESH_TIMEOUT_MS);
     await assert.rejects(renewal);
+  });
+
+  test("a renewal that answers after Log out stores nothing and revokes the token it was given", { timeout: 10_000 }, async () => {
+    server.rotateOnReply = true;
+    const renewal = renewAccessToken();
+    await until(() => server.refreshCalls === 1);
+
+    // Log out finishes first, while the renewal is still out, then clears storage as the header does.
+    assert.equal((await client.post("/auth/logout")).status, 200);
+    tokenManager.clearTokens();
+
+    // Then the refresh answers 200 with a new token.
+    server.releaseRefresh();
+    await assert.rejects(renewal);
+    await until(() => server.seen.length === 2);
+
+    assert.equal(tokenManager.getAccessToken(), null, "the new token is not stored");
+    assert.equal(tokenManager.getAccessTokenLifetime(), null);
+    assert.deepEqual(server.seen, [
+      { path: "/api/auth/logout", auth: "Bearer old", status: 200 },
+      // Revoked with plain axios, carrying the new token.
+      { path: "/api/auth/logout", auth: "Bearer new", status: 200 },
+    ]);
+    assert.equal(server.token, null, "the new token no longer works");
+    // A deliberate Log out never shows "Session Expired".
+    assert.equal(sessionExpiredEvents, 0);
+  });
+
+  test("a renewal that answers after another sign-in replaced the token keeps that one and revokes its own", { timeout: 10_000 }, async () => {
+    server.rotateOnReply = true;
+    const renewal = renewAccessToken();
+    await until(() => server.refreshCalls === 1);
+
+    tokenManager.setAccessToken("someone-else", 1800);
+    server.releaseRefresh();
+
+    assert.equal(await renewal, "someone-else");
+    await until(() => server.seen.length === 1);
+    assert.equal(tokenManager.getAccessToken(), "someone-else");
+    assert.deepEqual(server.seen, [{ path: "/api/auth/logout", auth: "Bearer new", status: 200 }]);
   });
 
   test("a renewal lost to the network keeps the session, and the waiting request uses the token in hand", async () => {

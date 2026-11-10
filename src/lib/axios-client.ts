@@ -12,6 +12,7 @@ import {
   unauthorizedOutcome,
   type TokenLifetime,
 } from "./session-token";
+import { SessionEndedError } from "./session-ended";
 
 const DIRECT_API_URL = process.env.NEXT_PUBLIC_API_URL || env.api.baseUrl;
 
@@ -90,17 +91,7 @@ let renewal: Promise<string> | null = null;
  */
 export const REFRESH_TIMEOUT_MS = 15_000;
 
-/**
- * A request refused in the browser because the session ended while it waited
- * for a renewal. The "Session Expired" dialog is already showing, so it is not
- * sent only to come back 401.
- */
-export class SessionEndedError extends Error {
-  constructor(message = "Your session has ended. Please sign in again.") {
-    super(message);
-    this.name = "SessionEndedError";
-  }
-}
+export { SessionEndedError };
 
 function isLogout(url: string | undefined): boolean {
   return Boolean(url?.includes("/auth/logout"));
@@ -212,6 +203,17 @@ async function rotateToken(): Promise<string> {
       // cannot find as a failed renewal instead.
       throw new MalformedRefreshError();
     }
+    // Store it only over the token it renews. Log out may have cleared
+    // storage while the refresh was out (Log out never waits for it), or
+    // another sign-in or tab replaced it. Storing it then would bring a
+    // signed-out session back on the next page load, so it is revoked
+    // instead.
+    if (tokenManager.getAccessToken() !== sent) {
+      revokeToken(newToken);
+      const current = tokenManager.getAccessToken();
+      if (current !== null) return current;
+      throw new SessionEndedError();
+    }
     tokenManager.setAccessToken(newToken, data?.data?.expires_in ?? data?.expires_in);
     return newToken;
   } catch (renewError) {
@@ -236,6 +238,29 @@ async function rotateToken(): Promise<string> {
 
     throw renewError;
   }
+}
+
+/**
+ * Revoke a token the browser won't keep (a renewal that answered after Log
+ * out). Plain axios with that token, never the client, so it neither waits on
+ * a renewal nor touches stored tokens. Its result doesn't matter: at worst
+ * the token runs out on its own.
+ */
+function revokeToken(token: string): void {
+  axios
+    .post(
+      `${API_BASE_URL}/auth/logout`,
+      {},
+      {
+        timeout: REFRESH_TIMEOUT_MS,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+      }
+    )
+    .catch(() => undefined);
 }
 
 // Response interceptor — a 401 means the token that request carried is dead
