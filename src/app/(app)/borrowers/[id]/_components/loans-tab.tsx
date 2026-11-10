@@ -21,6 +21,7 @@ import { readTermUnit } from "@/lib/loan-terms";
 import { statusInWords } from "@/app/(app)/borrowers/_components/utils";
 import { loanNeedsCoMaker } from "../_lib/co-maker-recommendation";
 import { loanOutstandingCell } from "../_lib/loan-outstanding-cell";
+import { scheduleToRead } from "../_lib/schedule-to-read";
 
 const scheduleStatusColor: Record<string, string> = {
   paid: "bg-green-100 text-green-700 border-green-200",
@@ -86,10 +87,11 @@ export function LoansTab({ loans }: LoansTabProps) {
   }, [schedules]);
 
   useEffect(() => {
-    if (expandedLoan && !schedules[expandedLoan]) {
-      fetchSchedule(expandedLoan);
+    const loanId = scheduleToRead(loans, expandedLoan, schedules);
+    if (loanId !== null) {
+      fetchSchedule(loanId);
     }
-  }, [expandedLoan, schedules, fetchSchedule]);
+  }, [loans, expandedLoan, schedules, fetchSchedule]);
 
   const sortedLoans = [...loans].sort((a, b) => {
     const order: Record<string, number> = {

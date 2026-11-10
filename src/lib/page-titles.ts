@@ -81,6 +81,15 @@ const ID_TITLES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   },
 };
 
+/**
+ * Pages a level further down (`/accounting/journals/new`), by their section and
+ * page, as each page titles itself. A record there reads "Detail".
+ */
+const NESTED_PAGE_TITLES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  "accounting/journals": { new: "New Journal Entry" },
+  "loans/reminders": { history: "Message History" },
+};
+
 /** A record's sub-pages (`/borrowers/{id}/edit`), by section, as each page titles itself. */
 const RECORD_PAGE_TITLES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   borrowers: { edit: "Edit Member" },
@@ -88,6 +97,32 @@ const RECORD_PAGE_TITLES: Readonly<Record<string, Readonly<Record<string, string
 
 function own<T>(map: Readonly<Record<string, T>>, key: string): T | undefined {
   return Object.hasOwn(map, key) ? map[key] : undefined;
+}
+
+/** The menu's title for a route, when the menu lists it. */
+export type MenuTitle = (href: string) => string | undefined;
+
+/** A menu entry as `menuTitles` reads it: the sidebar's sections and their pages. */
+interface MenuEntry {
+  title: string;
+  href: string;
+  children?: readonly { title: string; href: string }[];
+}
+
+/**
+ * The menu's titles by route (`/accounting/journals` reads "Journal Entries").
+ * A section's own title wins over a page at the same route ("Loans", not
+ * "All Loans").
+ */
+export function menuTitles(menu: readonly MenuEntry[]): MenuTitle {
+  const titles = new Map<string, string>();
+  for (const section of menu) {
+    for (const page of section.children ?? []) {
+      if (!titles.has(page.href)) titles.set(page.href, page.title);
+    }
+  }
+  for (const section of menu) titles.set(section.href, section.title);
+  return (href) => titles.get(href);
 }
 
 /** A route segment as words: "cash_flow" and "cash-flow" both read "Cash flow". */
@@ -98,14 +133,14 @@ export function humanizeSegment(segment: string): string {
 /**
  * The breadcrumb label for the segment under `section` (`/reports/cash_flow`
  * reads "Cash Flow Statement"). A report or printable id reads its catalog
- * title, a fixed sub-page its label, and anything else its words. The loan
- * form in edit mode (`?edit={id}`, read as the page reads it) reads the
- * page's own title.
+ * title, a fixed sub-page its label, a page the menu lists the menu's title
+ * (`menuTitle`), and anything else its words. The loan form in edit mode
+ * (`?edit={id}`, read as the page reads it) reads the page's own title.
  */
 export function subPageTitle(
   section: string,
   segment: string,
-  query: { edit?: string | null } = {},
+  query: { edit?: string | null; menuTitle?: MenuTitle } = {},
 ): string {
   if (section === "loans" && segment === "new" && parseEditLoanId(query.edit ?? null) !== null) {
     return EDIT_LOAN_TITLE;
@@ -113,6 +148,27 @@ export function subPageTitle(
   return (
     own(own(ID_TITLES, section) ?? {}, segment) ??
     own(SUB_PAGE_TITLES, segment) ??
+    query.menuTitle?.(`/${section}/${segment}`) ??
+    humanizeSegment(segment)
+  );
+}
+
+/**
+ * The breadcrumb label for a page a level further down, under `section` and
+ * `page`: "Detail" for a record (`/accounting/journals/{id}`), else the page's
+ * own title (`/accounting/journals/new` reads "New Journal Entry"), the menu's,
+ * or its words.
+ */
+export function nestedPageTitle(
+  section: string,
+  page: string,
+  segment: string,
+  menuTitle?: MenuTitle,
+): string {
+  if (/^\d+$/.test(segment)) return "Detail";
+  return (
+    own(own(NESTED_PAGE_TITLES, `${section}/${page}`) ?? {}, segment) ??
+    menuTitle?.(`/${section}/${page}/${segment}`) ??
     humanizeSegment(segment)
   );
 }

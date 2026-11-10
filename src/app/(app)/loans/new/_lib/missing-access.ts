@@ -55,7 +55,8 @@ const RULES: { key: keyof LoanFormAccess; missing: MissingAccess }[] = [
     missing: {
       permission: "share_capital:view",
       grant: "Share Capital → View",
-      effect: "Share-capital collateral can't be valued, so it can't be attached.",
+      effect:
+        "Share capital values are hidden for your role, so a share capital pledge can't be added. One the loan already holds stays attached.",
       blocking: false,
     },
   },

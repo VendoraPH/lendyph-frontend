@@ -2111,7 +2111,9 @@ function NewLoanApplicationInner() {
                       )}
                       {isValueUnknown && (
                         <span className="text-amber-700 dark:text-amber-500">
-                          Share capital ledger unreadable — cannot be attached
+                          {isSelected
+                            ? SHARE_CAPITAL_VALUE_HIDDEN
+                            : `${SHARE_CAPITAL_VALUE_HIDDEN}, so it can't be added`}
                         </span>
                       )}
                     </div>

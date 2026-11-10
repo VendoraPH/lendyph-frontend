@@ -32,7 +32,13 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { authService } from "@/services";
 import { tokenManager } from "@/lib/axios-client";
-import { detailPageTitle, humanizeSegment, subPageTitle } from "@/lib/page-titles";
+import {
+  detailPageTitle,
+  humanizeSegment,
+  menuTitles,
+  nestedPageTitle,
+  subPageTitle,
+} from "@/lib/page-titles";
 import { SIDEBAR_NAV } from "@/constants";
 import type { Permission } from "@/types";
 import { toast } from "sonner";
@@ -46,14 +52,12 @@ interface HeaderProps {
   onMenuClick: () => void;
 }
 
+/** The menu's title for each route the sidebar lists. */
+const menuTitle = menuTitles(SIDEBAR_NAV);
+
 /** Map first path segment to its nav title */
 function getPageTitle(segment: string): string {
-  for (const item of SIDEBAR_NAV) {
-    if (item.href === `/${segment}`) {
-      return item.title;
-    }
-  }
-  return humanizeSegment(segment);
+  return menuTitle(`/${segment}`) ?? humanizeSegment(segment);
 }
 
 /** `editParam`: the `?edit=` value, so the loan form's edit page reads its own title. */
@@ -76,13 +80,26 @@ function Breadcrumb({ editParam }: { editParam: string | null }) {
   const isId = /^\d+$/.test(subSegment);
   const subLabel = isId
     ? detailPageTitle(firstSegment, segments[2])
-    : subPageTitle(firstSegment, subSegment, { edit: editParam });
+    : subPageTitle(firstSegment, subSegment, { edit: editParam, menuTitle });
+  // A page a level further down (`/accounting/journals/new`) adds its own part.
+  const nestedLabel =
+    !isId && segments.length > 2
+      ? nestedPageTitle(firstSegment, subSegment, segments[2], menuTitle)
+      : null;
 
   return (
     <div className="flex items-center gap-1.5 text-sm">
       <span className="text-muted-foreground">{pageTitle}</span>
       <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/60" />
-      <span className="font-medium text-foreground">{subLabel}</span>
+      {nestedLabel === null ? (
+        <span className="font-medium text-foreground">{subLabel}</span>
+      ) : (
+        <>
+          <span className="text-muted-foreground">{subLabel}</span>
+          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/60" />
+          <span className="font-medium text-foreground">{nestedLabel}</span>
+        </>
+      )}
     </div>
   );
 }

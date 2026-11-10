@@ -59,3 +59,14 @@ describe("missingLoanFormAccess", () => {
     );
   });
 });
+
+describe("the share capital notice", () => {
+  test("says a new pledge can't be added and a held one stays attached", () => {
+    const missing = missingLoanFormAccess({ ...ALL, shareCapital: false });
+    const notice = missing.find((m) => m.permission === "share_capital:view");
+    assert.ok(notice);
+    assert.match(notice.effect, /can't be added/);
+    assert.match(notice.effect, /already holds stays attached/);
+    assert.doesNotMatch(notice.effect, /can't be attached/);
+  });
+});
