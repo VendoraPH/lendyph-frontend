@@ -30,6 +30,16 @@ export function formatCurrency(
 }
 
 /**
+ * A server amount taken off another, as the lending screens write a negative:
+ * "-₱4,543.50", with no space. Only the sign is added; the figure is the
+ * server's. Nothing taken off reads ₱0.00.
+ */
+export function formatDeduction(amount: number | string | undefined | null): string {
+  const formatted = formatCurrency(amount);
+  return (parseFloat(String(amount ?? 0)) || 0) > 0 ? `-${formatted}` : formatted;
+}
+
+/**
  * Same output as `formatCurrency`. Kept for the call sites that reached for it
  * when `formatCurrency` still rounded to whole pesos.
  */
