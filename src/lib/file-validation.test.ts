@@ -1,7 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { ID_MIME_TYPES, MAX_UPLOAD_SIZE_BYTES, validateUploadFile } from "./file-validation";
+import {
+  DOCUMENT_ACCEPT,
+  DOCUMENT_EXTENSIONS,
+  ID_MIME_TYPES,
+  MAX_UPLOAD_SIZE_BYTES,
+  validateUploadFile,
+} from "./file-validation";
 
 function aFile(size: number, type = "image/jpeg"): File {
   return new File([new Uint8Array(size)], "id.jpg", { type });
@@ -22,4 +28,12 @@ test("a caller's own limit is the one the message reports", () => {
     ok: false,
     error: "File is too large (max 10MB).",
   });
+});
+
+test("documents and attachments take the same names the server does, .jpe and .jfif included", () => {
+  assert.deepEqual(
+    [...DOCUMENT_EXTENSIONS],
+    [".jpg", ".jpeg", ".jpe", ".jfif", ".png", ".pdf", ".doc", ".docx"],
+  );
+  assert.equal(DOCUMENT_ACCEPT, ".jpg,.jpeg,.jpe,.jfif,.png,.pdf,.doc,.docx");
 });

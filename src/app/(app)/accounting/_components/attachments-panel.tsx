@@ -12,6 +12,7 @@ import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { getErrorMessage, httpStatusOf } from "@/lib/api-error";
 import { notifyError, notifySuccess, notifyWarning } from "@/lib/notify";
 import { formatValue } from "@/lib/report-format";
+import { DOCUMENT_ACCEPT, DOCUMENT_EXTENSIONS } from "@/lib/file-validation";
 import type { Permission } from "@/types";
 import type { AccountingAttachment, ExpenseStatus, JournalStatus } from "@/types/accounting";
 import { DataState } from "./data-state";
@@ -33,7 +34,6 @@ export interface AttachmentCalls {
 export const MAX_ATTACHMENTS = 20;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_REASON_LENGTH = 500;
-const ACCEPTED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".pdf", ".doc", ".docx"];
 /** The signed link lasts 30 minutes; a list older than this is read again before opening. */
 const LINK_FRESH_MS = 5 * 60_000;
 
@@ -90,7 +90,7 @@ export function uploadState(owner: AttachmentOwner, canCreate: boolean, count: n
 export function precheckFile(file: File): string | null {
   const dot = file.name.lastIndexOf(".");
   const extension = dot === -1 ? "" : file.name.slice(dot).toLowerCase();
-  if (!ACCEPTED_EXTENSIONS.includes(extension)) return "Use a JPG, PNG, PDF, DOC or DOCX file.";
+  if (!(DOCUMENT_EXTENSIONS as readonly string[]).includes(extension)) return "Use a JPG, PNG, PDF, DOC or DOCX file.";
   if (file.size > MAX_FILE_BYTES) return "This file is larger than 10 MB.";
   return null;
 }
@@ -297,7 +297,7 @@ export function AttachmentsPanel({ owner, calls }: AttachmentsPanelProps) {
                   id={`${formId}-file`}
                   ref={fileInput}
                   type="file"
-                  accept={ACCEPTED_EXTENSIONS.join(",")}
+                  accept={DOCUMENT_ACCEPT}
                   disabled={Boolean(upload.disabledReason) || !resource.data || uploading}
                   onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                 />

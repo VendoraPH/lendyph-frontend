@@ -6,6 +6,16 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
@@ -20,6 +30,8 @@ import { VALID_ID_OPTIONS } from "@/constants";
 import { fileUrl } from "@/lib/file-url";
 import { ImagePreviewDialog, type PreviewImage } from "@/components/common";
 import { documentTypeFromName } from "@/lib/document-type";
+import { DOCUMENT_ACCEPT } from "@/lib/file-validation";
+import { deleteDocumentLabel, documentName } from "../_lib/document-delete";
 
 interface DocumentsTabProps {
   borrowerId: number;
@@ -37,6 +49,8 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [deletingDoc, setDeletingDoc] = useState<number | null>(null);
+  // The document whose delete is waiting for the user to confirm it.
+  const [confirmDoc, setConfirmDoc] = useState<Document | null>(null);
   const [deletingValidId, setDeletingValidId] = useState<number | null>(null);
   const [preview, setPreview] = useState<{ title: string; images: PreviewImage[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -92,6 +106,7 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
       toast.error("We couldn't delete this document. Please try again.");
     } finally {
       setDeletingDoc(null);
+      setConfirmDoc(null);
     }
   }
 
@@ -140,7 +155,7 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
                 ref={fileInputRef}
                 type="file"
                 className="hidden"
-                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                accept={DOCUMENT_ACCEPT}
                 onChange={handleUpload}
               />
               <Button
@@ -217,7 +232,7 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <span className="text-sm font-medium truncate">{doc.label || `Document #${doc.id}`}</span>
+                        <span className="text-sm font-medium truncate">{documentName(doc)}</span>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -230,9 +245,10 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
                         size="sm"
                         className="h-7 w-7 p-0 text-destructive hover:text-destructive"
                         disabled={deletingDoc === doc.id}
+                        aria-label={deleteDocumentLabel(doc)}
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleDeleteDocument(doc.id);
+                          setConfirmDoc(doc);
                         }}
                       >
                         {deletingDoc === doc.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
@@ -245,6 +261,36 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* Outside the table: a click inside the dialog must not reach the row, which opens the file. */}
+      <AlertDialog
+        open={confirmDoc !== null}
+        onOpenChange={(open) => {
+          if (!open && deletingDoc === null) setConfirmDoc(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this document?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmDoc ? `${documentName(confirmDoc)} will be removed from this member's documents.` : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingDoc !== null}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={deletingDoc !== null}
+              onClick={() => {
+                if (confirmDoc) handleDeleteDocument(confirmDoc.id);
+              }}
+            >
+              {deletingDoc !== null ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <ImagePreviewDialog
         open={!!preview}
