@@ -117,6 +117,7 @@ import {
   PAYMENT_FREQUENCY_LABELS,
 } from "@/constants";
 import { parseEditLoanId } from "./_lib/edit-loan-id";
+import { EDIT_LOAN_TITLE } from "@/lib/page-titles";
 import {
   attachedCollateralRows,
   canChangeCollaterals,
@@ -947,7 +948,7 @@ function NewLoanApplicationInner() {
             {isEditMode ? "Back to Loan" : "Back to Loans"}
           </Link>
           <h1 className="text-2xl font-bold tracking-tight">
-            {isEditMode ? "Edit Loan Application" : "New Loan Application"}
+            {isEditMode ? EDIT_LOAN_TITLE : "New Loan Application"}
           </h1>
           {isEditMode && existingLoan?.application_number && (
             <p className="text-sm text-muted-foreground font-mono">
@@ -2150,7 +2151,7 @@ function NewLoanApplicationInner() {
 // new application the inner guard just repeats the outer one.
 function NewLoanApplicationGuard() {
   const isEditMode = parseEditLoanId(useSearchParams().get("edit")) !== null;
-  const pageName = isEditMode ? "Edit Loan Application" : "New Loan Application";
+  const pageName = isEditMode ? EDIT_LOAN_TITLE : "New Loan Application";
   return (
     <RouteGuard permission={isEditMode ? "loans:update" : "loans:create"} pageName={pageName}>
       <RouteGuard permission={isEditMode ? "loans:view" : "loans:create"} pageName={pageName}>
