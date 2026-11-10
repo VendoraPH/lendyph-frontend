@@ -28,6 +28,7 @@ import type { Document } from "@/services/document.service";
 import { fileUrl } from "@/lib/file-url";
 import { cn } from "@/lib/utils";
 import { documentTypeFromName } from "@/lib/document-type";
+import { DOCUMENT_ACCEPT } from "@/lib/file-validation";
 
 interface LoanDocumentsCardProps {
   loanId: number;
@@ -136,7 +137,7 @@ export function LoanDocumentsCard({
                 ref={fileInputRef}
                 type="file"
                 className="hidden"
-                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                accept={DOCUMENT_ACCEPT}
                 onChange={handleUpload}
               />
               <Button

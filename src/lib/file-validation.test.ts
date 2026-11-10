@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import {
   DOCUMENT_ACCEPT,
@@ -36,4 +38,14 @@ test("documents and attachments take the same names the server does, .jpe and .j
     [".jpg", ".jpeg", ".jpe", ".jfif", ".png", ".pdf", ".doc", ".docx"],
   );
   assert.equal(DOCUMENT_ACCEPT, ".jpg,.jpeg,.jpe,.jfif,.png,.pdf,.doc,.docx");
+});
+
+// A picker that lists JPEG names itself drifts from the server: .jpe and .jfif
+// were missing from every such copy. One that takes image/* already has them.
+test("every document picker that lists JPEG names reads the shared list", () => {
+  const root = join(process.cwd(), "src");
+  const pickers = readdirSync(root, { recursive: true, encoding: "utf8" })
+    .filter((path) => path.endsWith(".tsx"))
+    .filter((path) => /accept="[^"]*\.jpe?g[,"]/.test(readFileSync(join(root, path), "utf8")));
+  assert.deepEqual(pickers, []);
 });
