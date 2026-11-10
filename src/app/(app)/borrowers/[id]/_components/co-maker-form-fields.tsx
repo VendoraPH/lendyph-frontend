@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { RELATIONSHIP_OPTIONS } from "@/constants";
+import { relationshipInWords } from "@/lib/co-maker-relationship";
 import type {
   CoMakerDetailsErrors,
   CoMakerDetailsField,
@@ -34,9 +35,7 @@ const MAX_LENGTH = {
 } as const;
 
 function relationshipLabel(value: string | null): string {
-  if (!value) return "Select relationship";
-  // A value from outside the list (typed on the loan screen) reads as itself.
-  return RELATIONSHIP_OPTIONS.find((option) => option.value === value)?.label ?? value;
+  return value ? relationshipInWords(value) : "Select relationship";
 }
 
 interface CoMakerFormFieldsProps {

@@ -24,6 +24,7 @@ import {
 } from "./co-maker-form-dialog";
 import { CoMakerDocumentsDialog } from "./co-maker-documents-dialog";
 import { coMakerName } from "@/lib/co-maker-name";
+import { relationshipInWords } from "@/lib/co-maker-relationship";
 import { formatCurrency } from "@/lib/format";
 
 interface CoMakersTabProps {
@@ -83,7 +84,7 @@ export function CoMakersTab({
                 <div className="flex items-start justify-between">
                   <div>
                     <CardTitle className="text-base">{coMakerName(cm) || "—"}</CardTitle>
-                    <p className="text-sm text-muted-foreground capitalize">{cm.relationship_to_borrower ?? cm.relationship ?? "—"}</p>
+                    <p className="text-sm text-muted-foreground">{relationshipInWords(cm.relationship_to_borrower ?? cm.relationship)}</p>
                     {cm.co_maker_code && <p className="text-xs text-muted-foreground font-mono">{cm.co_maker_code}</p>}
                     {coMakerLoans.length > 0 && (
                       <div className="mt-1.5 flex flex-wrap gap-1">
