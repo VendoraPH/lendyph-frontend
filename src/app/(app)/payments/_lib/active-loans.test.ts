@@ -309,3 +309,12 @@ test("the loan summary's penalty_months reads as the note, only with a penalty o
   assert.equal(withSummaryPenaltyNote(loan, { penalty_amount: 0, penalty_months: 2 }).penalty_note, null);
   assert.equal(withSummaryPenaltyNote(loan, null).penalty_note, null);
 });
+
+test("whether the loan carries a Share Capital Build-Up comes from its own scb_amount", () => {
+  assert.equal(mapLoanToActiveLoan(summaryRow({ scb_amount: 250 })).has_build_up, true);
+  assert.equal(mapLoanToActiveLoan(summaryRow({ scb_amount: "250.00" })).has_build_up, true);
+  assert.equal(mapLoanToActiveLoan(summaryRow({ scb_amount: 0 })).has_build_up, false);
+  assert.equal(mapLoanToActiveLoan(summaryRow({ scb_amount: "0.00" })).has_build_up, false);
+  // A summary row that doesn't say: unknown until the full loan loads.
+  assert.equal(mapLoanToActiveLoan(summaryRow()).has_build_up, null);
+});

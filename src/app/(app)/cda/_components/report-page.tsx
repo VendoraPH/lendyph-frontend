@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { REPORT_PAGES } from "../_lib/labels";
+import { reportWorkspaceKey } from "../_lib/report-keys";
 import { CdaPage, type CdaPageContext } from "./cda-page";
 import { ReportWorkspace } from "./report-workspace";
 import type { CdaReportType } from "@/types/cda";
@@ -31,7 +32,7 @@ export function ReportPage({
         ctx && (
           <div className="space-y-6">
             {children?.(ctx, reportChanged)}
-            <ReportWorkspace key={ctx.year} registerVersion={version} year={ctx.year} type={type} />
+            <ReportWorkspace key={reportWorkspaceKey(ctx.year)} registerVersion={version} year={ctx.year} type={type} />
           </div>
         )
       }

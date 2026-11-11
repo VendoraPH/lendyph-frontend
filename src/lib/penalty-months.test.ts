@@ -41,4 +41,12 @@ describe("allocationPenaltyNote", () => {
     assert.equal(allocationPenaltyNote(rows, {}), null);
     assert.equal(allocationPenaltyNote([], { schedule_id: 12 }), null);
   });
+
+  test("a preview row whose own penalty reads ₱0.00 (already paid) shows no note beside it", () => {
+    assert.equal(allocationPenaltyNote(rows, { schedule_id: 12, penalty: 0 }), null);
+    assert.equal(allocationPenaltyNote(rows, { schedule_id: 12, penalty: "0.00" }), null);
+    assert.equal(allocationPenaltyNote(rows, { schedule_id: 12, penalty: 0.004 }), null);
+    assert.equal(allocationPenaltyNote(rows, { schedule_id: 12, penalty: 150 }), "Penalty: 2 months late");
+    assert.equal(allocationPenaltyNote(rows, { schedule_id: 12, penalty: "150.00" }), "Penalty: 2 months late");
+  });
 });

@@ -135,15 +135,23 @@ describe("a GCash row's branch on the lists", () => {
     assert.equal(gcashRowBranchLabel({ non_member: { id: 5 }, branch_id: 9 }, listed), "Another branch");
   });
 
-  test("the server's branch_name wins when it is sent (the pending report)", () => {
-    assert.equal(gcashRowBranchLabel({ borrower: { id: 4 }, branch_id: 3, branch_name: "South" }, listed), "South");
-    assert.equal(gcashRowBranchLabel({ non_member: { id: 5 }, branch_id: null, branch_name: "Head office" }, []), "Head office");
-    assert.equal(gcashRowBranchLabel({ non_member: { id: 5 }, branch_id: 9, branch_name: "East" }, listed), "East");
+  test("the pending report's branch_name never names a branch the user can't list: both tabs read alike", () => {
+    // A Main-branch teller: the report sends "P3FU North Branch"; the
+    // Transactions tab says "Another branch" for the same transaction.
+    const own = [main];
+    const walkIn = { non_member: { id: 5 }, branch_id: 2 };
+    assert.equal(gcashRowBranchLabel({ ...walkIn, branch_name: "P3FU North Branch" }, own), "Another branch");
+    assert.equal(gcashRowBranchLabel({ ...walkIn, branch_name: "P3FU North Branch" }, own), gcashRowBranchLabel(walkIn, own));
+    assert.equal(gcashRowBranchLabel({ non_member: { id: 5 }, branch_id: 1, branch_name: "Main" }, own), "Main");
+    assert.equal(gcashRowBranchLabel({ non_member: { id: 5 }, branch_id: null, branch_name: "Head office" }, own), "Head office");
+    // A member's row reads the member's branch on both tabs, whatever the report names.
+    assert.equal(gcashRowBranchLabel({ borrower: { id: 4 }, branch_id: 2, branch_name: "P3FU North Branch" }, own), "Member's branch");
   });
 
   test("an older answer that leaves the branch out entirely shows a dash for a walk-in", () => {
     assert.equal(gcashRowBranchLabel({ non_member: { id: 5 } }, listed), "—");
     assert.equal(gcashRowBranchLabel({ non_member: { id: 5 }, branch_name: "" }, listed), "—");
+    assert.equal(gcashRowBranchLabel({ non_member: { id: 5 }, branch_name: "East" }, listed), "—");
   });
 });
 

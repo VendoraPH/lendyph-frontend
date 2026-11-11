@@ -176,6 +176,11 @@ export interface ActiveLoan {
   schedule_penalties: PenaltyMonthsRow[];
   /** The loan summary's "Penalty: N month(s) late"; null until it is read, or with none. */
   penalty_note: string | null;
+  /**
+   * Whether the loan carries a Share Capital Build-Up (its `scb_amount` above
+   * zero), which decides where a payment's excess goes; null when not sent.
+   */
+  has_build_up: boolean | null;
 }
 
 /** The schedule row fields the penalty note reads, as sent. */
@@ -231,7 +236,13 @@ export function mapLoanToActiveLoan(loan: Loan): ActiveLoan {
     amount_due_now: readAmountDueNow(l.amount_due_now),
     schedule_penalties: schedulePenalties(l.amortization_schedules),
     penalty_note: null,
+    has_build_up: hasBuildUp(l.scb_amount),
   };
+}
+
+function hasBuildUp(raw: unknown): boolean | null {
+  const amount = typeof raw === "number" || typeof raw === "string" ? toNumber(raw) : null;
+  return amount === null ? null : amount > 0;
 }
 
 /**

@@ -78,6 +78,8 @@ import {
   postPaymentErrorMessage,
   previewAllocation,
   previewBadge,
+  previewExcessCells,
+  previewExcessTiles,
   previewTotalOutstandingAfter,
   previewTotalOutstandingBefore,
 } from "./_lib/payment-preview";
@@ -97,6 +99,13 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
 const formatDate = (dateStr: string) => {
   if (!dateStr) return "—";
   return formatShortDate(dateStr);
+};
+
+/** The allocation grid's columns on wider screens, by its cell count. */
+const ALLOCATION_GRID_COLUMNS: Record<number, string> = {
+  4: "sm:grid-cols-4",
+  5: "sm:grid-cols-5",
+  6: "sm:grid-cols-6",
 };
 
 function getLoanPaymentStatus(loan: ActiveLoan) {
@@ -229,6 +238,14 @@ function PaymentsContent() {
   const displayAllocation = useMemo(
     () => (serverPreview ? previewAllocation(serverPreview) : null),
     [serverPreview]
+  );
+  const excessTiles = useMemo(
+    () => (serverPreview ? previewExcessTiles(serverPreview, selectedLoan?.has_build_up ?? null) : []),
+    [serverPreview, selectedLoan?.has_build_up]
+  );
+  const excessCells = useMemo(
+    () => (serverPreview ? previewExcessCells(serverPreview, selectedLoan?.has_build_up ?? null) : []),
+    [serverPreview, selectedLoan?.has_build_up]
   );
   const paymentBadge = useMemo(
     () => (serverPreview ? previewBadge(serverPreview) : null),
@@ -809,7 +826,7 @@ function PaymentsContent() {
                   <div
                     className={cn(
                       "grid grid-cols-2 gap-2",
-                      displayAllocation.insuranceApplied > 0 ? "sm:grid-cols-5" : "sm:grid-cols-4"
+                      ALLOCATION_GRID_COLUMNS[3 + excessCells.length + (displayAllocation.insuranceApplied > 0 ? 1 : 0)]
                     )}
                   >
                     {displayAllocation.insuranceApplied > 0 && (
@@ -845,23 +862,29 @@ function PaymentsContent() {
                         {formatCurrency(displayAllocation.principalApplied)}
                       </p>
                     </div>
-                    <div
-                      className={cn(
-                        "rounded-lg border p-3 text-center",
-                        displayAllocation.scbApplied > 0 &&
-                          "border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/20"
-                      )}
-                    >
-                      <p className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wide">SCB</p>
-                      <p
+                    {excessCells.map((cell) => (
+                      <div
+                        key={cell.key}
                         className={cn(
-                          "text-sm font-semibold tabular-nums",
-                          displayAllocation.scbApplied > 0 && "text-amber-700 dark:text-amber-400"
+                          "rounded-lg border p-3 text-center",
+                          cell.key === "build_up" &&
+                            excessTiles.some((tile) => tile.key === "build_up") &&
+                            "border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/20"
                         )}
                       >
-                        {formatCurrency(displayAllocation.scbApplied)}
-                      </p>
-                    </div>
+                        <p className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wide">{cell.label}</p>
+                        <p
+                          className={cn(
+                            "text-sm font-semibold tabular-nums",
+                            cell.key === "build_up" &&
+                              excessTiles.some((tile) => tile.key === "build_up") &&
+                              "text-amber-700 dark:text-amber-400"
+                          )}
+                        >
+                          {cell.amount}
+                        </p>
+                      </div>
+                    ))}
                   </div>
 
                   {/* Per-schedule allocation table — shows exactly which
@@ -985,19 +1008,32 @@ function PaymentsContent() {
                         </div>
                       )}
 
-                    {displayAllocation.scbApplied > 0 && (
-                      <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-900/20">
+                    {excessTiles.map((tile) => (
+                      <div
+                        key={tile.key}
+                        className={cn(
+                          "rounded-lg border p-3",
+                          tile.key === "build_up"
+                            ? "border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/20"
+                            : "border-blue-300 bg-blue-50 dark:border-blue-700 dark:bg-blue-900/20"
+                        )}
+                      >
                         <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
-                          Excess → Share Capital
+                          {tile.label}
                         </p>
-                        <p className="text-lg font-bold text-amber-700 dark:text-amber-400 tabular-nums">
-                          {formatCurrency(displayAllocation.scbApplied)}
+                        <p
+                          className={cn(
+                            "text-lg font-bold tabular-nums",
+                            tile.key === "build_up"
+                              ? "text-amber-700 dark:text-amber-400"
+                              : "text-blue-700 dark:text-blue-400"
+                          )}
+                        >
+                          {formatCurrency(tile.amount)}
                         </p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
-                          will credit member&apos;s SCB ledger
-                        </p>
+                        {tile.note && <p className="text-[10px] text-muted-foreground mt-0.5">{tile.note}</p>}
                       </div>
-                    )}
+                    ))}
 
                     {displayAllocation.nextInterestApplied > 0 && (
                       <div className="rounded-lg border border-blue-300 bg-blue-50 p-3 dark:border-blue-700 dark:bg-blue-900/20">
