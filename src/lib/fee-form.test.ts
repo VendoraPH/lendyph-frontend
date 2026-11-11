@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildFeePayload, buildFormulaFields, describeFormulaFee, FORMULA_FEE_HELP } from "./fee-form";
+import { buildFeePayload, buildFormulaFields, describeFormulaFee, EMPTY_FORMULA_FIELDS, FORMULA_FEE_HELP } from "./fee-form";
 
 const form = { name: " Release fee ", type: "fixed" as const, value: "500", productIds: [7], conditions: {} };
 
@@ -153,4 +153,42 @@ test("a formula fee reads as its rule, in pesos", () => {
 
 test("the help line says what a formula does", () => {
   assert.equal(FORMULA_FEE_HELP, "Percentage of principal, optionally per month of the term, kept between the minimum and maximum.");
+});
+
+test("a written formula is checked, normalised and replaces the rate", () => {
+  const result = buildFeePayload(
+    { ...form, type: "formula", value: "", formula: { ...EMPTY_FORMULA_FIELDS, mode: "expression", expression: "(principal amount*2.5%)/365", maxAmount: "500" } },
+    { expressions: true },
+  );
+  assert.ok("payload" in result);
+  assert.equal(result.payload.value, 0);
+  assert.equal(result.payload.per_month, false);
+  assert.equal(result.payload.max_amount, 500);
+  assert.equal(result.payload.formula_expression, "(Principal Amount * 2.5%) / 365");
+});
+
+test("an invalid written formula is refused with its reason", () => {
+  const result = buildFeePayload(
+    { ...form, type: "formula", value: "", formula: { ...EMPTY_FORMULA_FIELDS, mode: "expression", expression: "Salary * 2" } },
+    { expressions: true },
+  );
+  assert.ok("error" in result);
+  assert.match(result.error, /^Fee formula: "Salary" is not a variable/);
+});
+
+test("the rate recipe clears a saved expression only where expressions are on", () => {
+  const input = { ...form, type: "formula" as const, value: "2", formula: { ...EMPTY_FORMULA_FIELDS, mode: "rate" as const } };
+  const on = buildFeePayload(input, { expressions: true });
+  assert.ok("payload" in on);
+  assert.equal(on.payload.formula_expression, null);
+  const off = buildFeePayload(input);
+  assert.ok("payload" in off);
+  assert.equal("formula_expression" in off.payload, false);
+});
+
+test("a written formula reads as itself in the list", () => {
+  assert.equal(
+    describeFormulaFee({ value: 0, formula_expression: "Principal Amount * 1%", min_amount: 100 }),
+    "Principal Amount * 1% · min ₱100.00",
+  );
 });

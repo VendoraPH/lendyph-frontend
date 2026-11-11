@@ -93,6 +93,7 @@ import { LoanRemindersCard } from "./_components/loan-reminders-card";
 import { ShareCapitalCard } from "./_components/share-capital-card";
 import { LoanCollateralsCard } from "./_components/loan-collaterals-card";
 import { ReleaseDeductions } from "./_components/release-deductions";
+import { FormulaSnapshot } from "./_components/formula-snapshot";
 import { ReleaseCoMakers } from "./_components/release-co-makers";
 import { InsurancePremiumSection } from "./_components/insurance-premium-section";
 import {
@@ -3130,6 +3131,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                       <span className="text-sm text-muted-foreground">
                         {item.name}
                         {item.fee_id != null && <span className="ml-1.5 text-xs">from Fees settings</span>}
+                        <FormulaSnapshot item={item} />
                       </span>
                       <span className="text-sm font-medium">{formatCurrencyExact(item.amount)}</span>
                     </div>

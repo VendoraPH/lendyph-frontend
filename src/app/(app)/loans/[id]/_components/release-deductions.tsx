@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { formatCurrencyExact } from "@/lib/format";
 import type { ReleasePreviewState } from "../_hooks/use-release-preview";
+import { FormulaSnapshot } from "./formula-snapshot";
 
 interface Props {
   preview: ReleasePreviewState;
@@ -56,6 +57,7 @@ export function ReleaseDeductions({ preview, onRetry }: Props) {
                   {item.fee_id != null && (
                     <span className="ml-1.5 text-xs text-muted-foreground">from Fees settings</span>
                   )}
+                  <FormulaSnapshot item={item} />
                 </dt>
                 <dd className="tabular-nums shrink-0">{formatCurrencyExact(item.amount)}</dd>
               </div>

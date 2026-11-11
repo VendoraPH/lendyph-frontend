@@ -52,6 +52,14 @@ export interface LoanDeduction {
   original_value: number;
   /** Set on an item charged from a fee rule in Settings, at or for release. */
   fee_id?: number;
+  /**
+   * The audit snapshot of a formula fee written as an expression, as charged:
+   * the expression, the loan figures it used (keyed principal_amount,
+   * loan_amount, interest_rate, loan_term) and the amount before rounding.
+   */
+  formula_expression?: string;
+  formula_inputs?: Record<string, number>;
+  raw_amount?: number | string;
 }
 
 /**

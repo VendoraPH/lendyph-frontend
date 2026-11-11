@@ -1,15 +1,28 @@
 import type { CreateFeeData, FeeConditions, FeeType } from "@/types/fee";
 import { formatCurrency, formatRate } from "@/lib/format";
+import { checkFeeFormula } from "@/lib/fee-expression";
 
 /** The help line shown under a formula fee's fields on Fees. */
 export const FORMULA_FEE_HELP =
   "Percentage of principal, optionally per month of the term, kept between the minimum and maximum.";
+
+/** The help line shown above a formula fee's expression field. */
+export const FORMULA_EXPRESSION_HELP =
+  "Write the fee as arithmetic on the loan's figures. It is worked out from each loan's own values at release, then kept between the minimum and maximum.";
+
+/**
+ * A formula fee is either the rate recipe (a percentage of the principal) or,
+ * where the deployment allows it, a written expression.
+ */
+export type FormulaMode = "rate" | "expression";
 
 /** A formula fee's own fields as the form holds them: a flag and two peso inputs. */
 export interface FormulaFieldsInput {
   perMonth: boolean;
   minAmount: string;
   maxAmount: string;
+  mode?: FormulaMode;
+  expression?: string;
 }
 
 export const EMPTY_FORMULA_FIELDS: FormulaFieldsInput = { perMonth: false, minAmount: "", maxAmount: "" };
@@ -18,6 +31,7 @@ export interface FormulaFieldsPayload {
   per_month: boolean;
   min_amount: number | null;
   max_amount: number | null;
+  formula_expression?: string | null;
 }
 
 interface FeeFormInput {
@@ -62,8 +76,8 @@ export function buildFormulaFields(input: FormulaFieldsInput): { fields: Formula
  * How a formula fee reads in a list: "1.5% per month · min ₱150.00 · max
  * ₱1,500.00". The rule only; the amount it comes to is the server's.
  */
-export function describeFormulaFee(fee: { value: number | string; per_month?: boolean | null; min_amount?: number | string | null; max_amount?: number | string | null }): string {
-  const parts = [`${formatRate(fee.value)}%${fee.per_month ? " per month" : ""}`];
+export function describeFormulaFee(fee: { value: number | string; per_month?: boolean | null; min_amount?: number | string | null; max_amount?: number | string | null; formula_expression?: string | null }): string {
+  const parts = [fee.formula_expression || `${formatRate(fee.value)}%${fee.per_month ? " per month" : ""}`];
   if (fee.min_amount != null) parts.push(`min ${formatCurrency(fee.min_amount)}`);
   if (fee.max_amount != null) parts.push(`max ${formatCurrency(fee.max_amount)}`);
   return parts.join(" · ");
@@ -96,20 +110,36 @@ const CONDITION_LABELS = {
  * already-saved contradictory fee looking un-editable because no unrelated
  * edit could get past it without knowing which two numbers to fix.
  */
-export function buildFeePayload(form: FeeFormInput): { payload: CreateFeeData } | { error: string } {
-  const value = Number(form.value);
+export function buildFeePayload(
+  form: FeeFormInput,
+  options: { expressions?: boolean } = {},
+): { payload: CreateFeeData } | { error: string } {
   if (!form.name.trim()) return { error: "Enter a fee name." };
-  if (!form.value.trim() || !Number.isFinite(value) || value < 0) {
-    return { error: "Enter a fee amount or rate of zero or more." };
-  }
-  if (form.type !== "fixed" && value > 100) {
-    return { error: "A percentage fee cannot exceed 100% of the loan amount." };
+  const fields = form.formula ?? EMPTY_FORMULA_FIELDS;
+  // A written expression replaces the rate: `value` is stored as 0 and unused.
+  const writtenFormula = form.type === "formula" && options.expressions && fields.mode === "expression";
+  const value = writtenFormula ? 0 : Number(form.value);
+  if (!writtenFormula) {
+    if (!form.value.trim() || !Number.isFinite(value) || value < 0) {
+      return { error: "Enter a fee amount or rate of zero or more." };
+    }
+    if (form.type !== "fixed" && value > 100) {
+      return { error: "A percentage fee cannot exceed 100% of the loan amount." };
+    }
   }
   let formula: FormulaFieldsPayload | null = null;
   if (form.type === "formula") {
-    const result = buildFormulaFields(form.formula ?? EMPTY_FORMULA_FIELDS);
+    const result = buildFormulaFields(fields);
     if ("error" in result) return result;
     formula = result.fields;
+    if (writtenFormula) {
+      const check = checkFeeFormula(fields.expression ?? "");
+      if (!check.ok) return { error: `Fee formula: ${check.error}` };
+      formula = { ...formula, per_month: false, formula_expression: check.expression };
+    } else if (options.expressions) {
+      // Switching a written formula back to the rate recipe clears it.
+      formula = { ...formula, formula_expression: null };
+    }
   }
   for (const [key, limit] of Object.entries(form.conditions)) {
     if (limit == null) continue;
