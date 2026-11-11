@@ -1,7 +1,8 @@
 import { formatDate } from "@/lib/format";
-import type { CdaColumnFormat, CdaField, CdaFieldInput, CdaFieldValue, CdaIssue, CdaSection } from "@/types/cda";
+import type { CdaColumnFormat, CdaEvidence, CdaField, CdaFieldInput, CdaFieldValue, CdaIssue, CdaSection } from "@/types/cda";
 import { COMPLIANCE_OPTIONS } from "./labels";
 import { asSent, cdaMoney, cdaPercent } from "./money";
+import { cleanEvidence, evidenceEditable } from "./screen-gaps";
 
 /**
  * Unsaved edits to a report, keyed by the field's `field_key`
@@ -15,6 +16,8 @@ export interface FieldDraft {
   override_reason?: string | null;
   /** Go back to the system's figure. */
   revert?: boolean;
+  /** The field's evidence list as edited (a reference and a note each). */
+  evidence?: CdaEvidence[];
 }
 
 export type FieldDrafts = Record<string, FieldDraft>;
@@ -51,6 +54,7 @@ export function missingReasons(sections: CdaSection[], drafts: FieldDrafts): str
 /**
  * The PUT body's fields: only what staff changed, and only on fields the
  * server says may change (editable, overridable, or overridden for a revert).
+ * Evidence goes with the same fields as remarks; a fixed figure takes none.
  */
 export function fieldInputs(sections: CdaSection[], drafts: FieldDrafts): CdaFieldInput[] {
   const inputs: CdaFieldInput[] = [];
@@ -66,8 +70,11 @@ export function fieldInputs(sections: CdaSection[], drafts: FieldDrafts): CdaFie
         input.value = draft.value ?? null;
         if (field.source_key !== null) input.override_reason = (draft.override_reason ?? "").trim();
       }
-      if ("remarks" in draft && (field.editable || field.overridable || field.overridden)) {
+      if ("remarks" in draft && evidenceEditable(field)) {
         input.remarks = draft.remarks ?? null;
+      }
+      if ("evidence" in draft && evidenceEditable(field)) {
+        input.evidence = cleanEvidence(draft.evidence ?? []);
       }
       if (Object.keys(input).length > 1) inputs.push(input);
     }

@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDate } from "@/lib/format";
 import { currentValue, formatCell, formatFieldValue, isOverriding, type FieldDraft, type FieldDrafts } from "../_lib/report-fields";
+import { currentEvidence, evidenceEditable } from "../_lib/screen-gaps";
+import { EvidenceEditor } from "./evidence-editor";
 import { FieldInput } from "./field-input";
 import { ToneBadge } from "./tone-badge";
 import type { CdaField, CdaSection, CdaTableSection } from "@/types/cda";
@@ -89,7 +91,7 @@ function FieldRow({ field, drafts, canEdit, onEdit }: Omit<ReportSectionProps, "
               <Button
                 variant="outline"
                 size="xs"
-                onClick={() => onEdit(field.field_key, { value: field.value, override_reason: field.override_reason ?? "" })}
+                onClick={() => onEdit(field.field_key, { ...draft, value: field.value, override_reason: field.override_reason ?? "" })}
               >
                 Override
               </Button>
@@ -122,6 +124,13 @@ function FieldRow({ field, drafts, canEdit, onEdit }: Omit<ReportSectionProps, "
         ) : (
           remarks && <p className="text-xs text-muted-foreground">Remarks: {remarks}</p>
         )}
+
+        <EvidenceEditor
+          label={field.label}
+          evidence={currentEvidence(field, drafts)}
+          editable={canEdit && evidenceEditable(field)}
+          onChange={(evidence) => onEdit(field.field_key, { ...draft, evidence })}
+        />
       </div>
     </div>
   );
