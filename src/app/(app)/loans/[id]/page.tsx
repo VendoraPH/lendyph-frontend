@@ -55,6 +55,7 @@ import {
   NO_SCHEDULE_TOTALS,
   allocationBuildUp,
   allocationMatches,
+  allocationPenaltyNoteFor,
   rowForAllocation,
   openPeriods,
   readPreviewResponse,
@@ -241,6 +242,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { currencyOrDash } from "@/lib/report-format";
+import { penaltyMonthsNote } from "@/lib/penalty-months";
+import { PenaltyMonthsNote } from "@/components/common/penalty-months-note";
 import {
   formatCurrency,
   formatCurrencyExact,
@@ -1350,6 +1353,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // Everything still owed, premium included, from the summary or the loan
   // (the same figure on both); a dash when neither sent it.
   const loanTotalOutstanding = totalOutstanding(loanSummary, loan);
+  // "Penalty: N month(s) late": the summary's own penalty and count, worded only.
+  const summaryPenaltyNote = penaltyMonthsNote(loanSummary?.penalty_amount, loanSummary?.penalty_months);
   // Principal still owed, from the summary or the loan.
   const loanPrincipalBalance = outstandingPrincipal(loanSummary, loan);
   // Insurance premium left unpaid at release, still owed on the loan (part of
@@ -3449,6 +3454,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   <p className="text-sm font-semibold text-red-600">
                     {currencyOrDash(loanSummary.overdue_amount)}
                   </p>
+                  <PenaltyMonthsNote note={summaryPenaltyNote} className="text-xs" />
                 </div>
               </div>
             )}
@@ -3541,7 +3547,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
                           {storedSchedule.map((row) => (
                             <TableRow key={row.period}>
                               <TableCell className="text-center">{row.periodNumber ?? row.period}</TableCell>
-                              <TableCell>{formatDateObj(row.dueDate)}</TableCell>
+                              <TableCell>
+                                {formatDateObj(row.dueDate)}
+                                <PenaltyMonthsNote note={row.penaltyNote} />
+                              </TableCell>
                               <TableCell className="text-right">{currencyOrDash(row.principal)}</TableCell>
                               <TableCell className="text-right">{currencyOrDash(row.interest)}</TableCell>
                               {hasScb && (
@@ -3593,6 +3602,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                             <p className="text-base font-bold text-destructive tabular-nums">
                               {currencyOrDash(loanSummary.overdue_amount)}
                             </p>
+                            <PenaltyMonthsNote note={summaryPenaltyNote} />
                           </div>
                         )}
                       </div>
@@ -4277,6 +4287,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 >
                   {currencyOrDash(loanSummary?.penalty_amount)}
                 </p>
+                <PenaltyMonthsNote note={summaryPenaltyNote} />
               </div>
             </div>
           </div>
@@ -4953,6 +4964,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
                                   )}
                                 >
                                   {currencyOrDash(a.penalty)}
+                                  {scheduleRows && (
+                                    <PenaltyMonthsNote note={allocationPenaltyNoteFor(scheduleRows, a)} />
+                                  )}
                                 </TableCell>
                                 <TableCell className="text-right text-xs font-semibold tabular-nums">
                                   {currencyOrDash(applied)}

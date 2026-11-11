@@ -91,6 +91,10 @@ export interface PageParams {
   per_page?: number;
 }
 
+export interface ReconciliationListQuery {
+  branch_id?: number | "all";
+}
+
 export interface LedgerQuery {
   account_id?: number;
   from?: string;
@@ -415,17 +419,24 @@ export const accountingService = {
     api.post<JournalEntry>(API_ENDPOINTS.ACCOUNTING.CASH_TRANSFER, data),
 
   // ── Reconciliation ──
+  /**
+   * `branch_id`: one of the caller's branches, or `all` for the "All
+   * branches" reconciliations (branches:view_all only). Left out: every
+   * reconciliation the caller can see.
+   */
   reconciliationsList: (
-    params: PageParams = {},
+    params: PageParams & ReconciliationListQuery = {},
   ): Promise<ListPage<Reconciliation>> =>
     api.getRaw<ListPage<Reconciliation>>(
       API_ENDPOINTS.ACCOUNTING.RECONCILIATIONS_LIST,
       { params },
     ),
 
-  reconciliationsListAll: (): Promise<DrainResult<Reconciliation>> =>
+  reconciliationsListAll: (
+    query: ReconciliationListQuery = {},
+  ): Promise<DrainResult<Reconciliation>> =>
     fetchAllPages<Reconciliation>(({ page, per_page }) =>
-      accountingService.reconciliationsList({ page, per_page }),
+      accountingService.reconciliationsList({ ...query, page, per_page }),
     ),
 
   // ── Periods ──

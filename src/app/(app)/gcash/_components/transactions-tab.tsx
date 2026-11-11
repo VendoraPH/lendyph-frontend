@@ -22,6 +22,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { usePermission } from "@/hooks";
+import { useBranchChoiceSource } from "@/hooks/use-branch-choice-source";
+import { pickableBranches } from "@/lib/branch-choice";
 import { gcashService } from "@/services/gcash.service";
 import { extractGCashErrorMessage } from "@/lib/gcash-errors";
 import { formatCurrencyExact, formatDate } from "@/lib/format";
@@ -34,6 +36,7 @@ import type {
 import { PaidButton } from "./paid-button";
 import { PartyCell } from "./party-cell";
 import { gcashCanMarkPaid } from "../_lib/row-actions";
+import { gcashBranchLabel } from "../_lib/walk-in-branch";
 
 // Passed to <Select items>: Base UI resolves the trigger label from `items`,
 // not from the mounted <SelectItem> children — without it the trigger shows
@@ -61,6 +64,8 @@ function statusBadge(s: GCashTransactionStatus) {
 
 export function TransactionsTab() {
   const { can } = usePermission();
+  // Names for the rows' `branch_id`: every branch with view_all, else the caller's own.
+  const branches = pickableBranches(useBranchChoiceSource());
   const [filters, setFilters] = useState<{
     type: GCashTransactionType | "all";
     status: GCashTransactionStatus | "all";
@@ -192,6 +197,7 @@ export function TransactionsTab() {
               <TableHead>Date</TableHead>
               <TableHead>Reference</TableHead>
               <TableHead>Customer</TableHead>
+              <TableHead>Branch</TableHead>
               <TableHead>Type</TableHead>
               <TableHead className="text-right">Amount</TableHead>
               <TableHead className="text-right">Charge</TableHead>
@@ -204,14 +210,14 @@ export function TransactionsTab() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={10} className="text-center py-8">
+                <TableCell colSpan={11} className="text-center py-8">
                   <Loader2 className="inline h-5 w-5 animate-spin" />
                 </TableCell>
               </TableRow>
             ) : rows.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={10}
+                  colSpan={11}
                   className="text-center text-muted-foreground py-8"
                 >
                   No transactions found.
@@ -227,6 +233,7 @@ export function TransactionsTab() {
                   <TableCell>
                     <PartyCell borrower={r.borrower} nonMember={r.non_member} />
                   </TableCell>
+                  <TableCell>{gcashBranchLabel(r.branch_id, branches) ?? "—"}</TableCell>
                   <TableCell>
                     {r.type === "cash_in" ? "Cash In" : "Cash Out"}
                   </TableCell>

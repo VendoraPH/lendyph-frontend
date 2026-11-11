@@ -1,6 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { branchScopeLabel } from "../_lib/branch-scope";
 import { accountLabel, headerFigures, reconciledLabel } from "../_lib/reconciliation-view";
 import type { ReconciliationDetail } from "../_lib/types";
 import { ReconciledBadge } from "./match-badge";
@@ -8,6 +9,7 @@ import { ReconciledBadge } from "./match-badge";
 /** The server's figures for one reconciliation, exactly as `present()` sends them. */
 export function WorksheetHeader({ reconciliation }: { reconciliation: ReconciliationDetail }) {
   const reconciled = reconciliation.is_reconciled;
+  const branch = branchScopeLabel(reconciliation);
 
   return (
     <Card className={cn("border-2", reconciled ? "border-emerald-500/40" : "border-amber-500/50")}>
@@ -15,6 +17,7 @@ export function WorksheetHeader({ reconciliation }: { reconciliation: Reconcilia
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-0.5">
             <p className="font-medium">{accountLabel(reconciliation)}</p>
+            {branch && <p className="text-sm">Branch: {branch}</p>}
             <p className="text-sm text-muted-foreground">
               {reconciliation.period} · {formatDate(reconciliation.start_date)} to{" "}
               {formatDate(reconciliation.end_date)}

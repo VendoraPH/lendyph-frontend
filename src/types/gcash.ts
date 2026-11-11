@@ -28,6 +28,12 @@ export interface GCashTransaction {
   borrower?: { id: number; full_name: string; borrower_code: string } | null;
   gcash_non_member_id?: number | null;
   non_member?: { id: number; full_name: string; mobile_number?: string | null } | null;
+  /**
+   * The branch a walk-in transaction was done in; null for a member's, for
+   * head office, and for walk-ins recorded before backend #283 (which also
+   * leaves it out).
+   */
+  branch_id?: number | null;
   transactor_user_id: number;
   transactor_user?: { id: number; full_name: string };
   remarks?: string | null;
@@ -71,6 +77,12 @@ export type CreateGCashTransactionData = {
   amount: number;
   is_pending?: boolean;
   remarks?: string;
+  /**
+   * Walk-ins only: one of the caller's branches, or null (view_all only) for
+   * head office. Left out, the server uses the caller's only branch. A
+   * member's transaction never sends it.
+   */
+  branch_id?: number | null;
 } & ({ borrower_id: number } | { gcash_non_member_id: number });
 
 export type GCashListFilters = {

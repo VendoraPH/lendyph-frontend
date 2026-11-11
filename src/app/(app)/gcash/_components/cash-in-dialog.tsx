@@ -20,7 +20,9 @@ import { extractGCashErrorMessage } from "@/lib/gcash-errors";
 import { gcashPartyNoun, gcashPartyPayload } from "@/lib/gcash-party";
 import type { GCashParty } from "@/types";
 import { useGCashChargePreview } from "../_hooks/use-gcash-charge-preview";
+import { useWalkInBranch } from "../_hooks/use-walk-in-branch";
 import { ChargePreviewPanel } from "./charge-preview-panel";
+import { WalkInBranchField } from "./walk-in-branch-field";
 
 interface Props {
   open: boolean;
@@ -39,6 +41,7 @@ export function CashInDialog({
   const [isPending, setIsPending] = useState(false);
   const [remarks, setRemarks] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const branch = useWalkInBranch(party);
 
   useEffect(() => {
     if (open) {
@@ -56,10 +59,13 @@ export function CashInDialog({
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
+    const branchBody = branch.take();
+    if (branchBody === null) return;
     setSubmitting(true);
     try {
       const tx = await gcashService.createTransaction({
         ...gcashPartyPayload(party),
+        ...branchBody,
         type: "cash_in",
         amount: amountNum,
         is_pending: isPending,
@@ -69,6 +75,7 @@ export function CashInDialog({
       onCreated?.();
       onOpenChange(false);
     } catch (err) {
+      branch.showRefusal(err);
       toast.error(extractGCashErrorMessage(err));
     } finally {
       setSubmitting(false);
@@ -100,6 +107,8 @@ export function CashInDialog({
               autoFocus
             />
           </div>
+
+          <WalkInBranchField branch={branch} disabled={submitting} />
 
           <ChargePreviewPanel
             view={preview}

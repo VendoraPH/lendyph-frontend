@@ -589,6 +589,10 @@ export interface LoanSchedule {
   total_payment?: number | null;
   /** The server's period number; it can skip, so it is not the row's position. */
   period_number?: number | null;
+  /** The period's penalty, as the server last charged it; null when it sent none. */
+  penalty_amount?: number | null;
+  /** How many monthly late penalty charges that penalty counts (backend #284). */
+  penalty_months?: number | null;
 }
 
 /**
@@ -714,6 +718,11 @@ export interface LoanSummary {
   interest_paid?: number;
   overdue_amount?: number;
   penalty_amount?: number;
+  /**
+   * The monthly late penalty charges counted in the penalty owed: the most on
+   * any overdue period (backend #284). 0 when none.
+   */
+  penalty_months?: number;
   next_due_date?: string;
   next_due_amount?: number;
 }
