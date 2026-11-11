@@ -1,3 +1,4 @@
+import { httpStatusOf } from "@/lib/api-error";
 import type {
   PortalDecisionInput,
   PortalMoneyDetails,
@@ -58,8 +59,17 @@ export interface DecisionForm {
   money: PortalMoneyDetails;
 }
 
-/** What's still missing before the form can be sent, in words (the server checks again). */
-export function decisionProblems(type: PortalRequestType, form: DecisionForm): string[] {
+/** Whether the server's 2-decimal amount is above ₱0.00 (read as text; nothing is worked out). */
+function aboveZero(amount: string | null | undefined): boolean {
+  return typeof amount === "string" && /^\d+(\.\d+)?$/.test(amount) && !/^0+(\.0+)?$/.test(amount);
+}
+
+/**
+ * What's still missing before the form can be sent, in words (the server
+ * checks again). `amount` is the request's own, as the server sent it: a new
+ * account with an opening deposit needs the deposit's method.
+ */
+export function decisionProblems(type: PortalRequestType, form: DecisionForm, amount: string | null = null): string[] {
   const problems: string[] = [];
   if (needsMessage(form.decision) && form.message.trim() === "") {
     problems.push("Write a message to the member: it is shown on their request.");
@@ -67,6 +77,7 @@ export function decisionProblems(type: PortalRequestType, form: DecisionForm): s
   const money = form.decision === "approve" ? moneyDetailsFor(type) : null;
   if (money && form.money.date === "") problems.push(money === "payout" ? "Enter the payout date." : "Enter the date the deposit was received.");
   if (money === "payout" && form.money.method === "") problems.push("Choose how the money was paid out.");
+  if (money === "deposit" && form.money.method === "" && aboveZero(amount)) problems.push("Choose how the opening deposit was paid.");
   return problems;
 }
 
@@ -103,4 +114,9 @@ export function decisionOutcome(type: PortalRequestType, decision: PortalRequest
   if (type === "savings_withdrawal") return "Withdrawal approved and posted.";
   if (type === "savings_opening") return "Savings account opened.";
   return "Profile change approved and saved to the member's record.";
+}
+
+/** After a 409 (a stale status, access ended, the hold lapsed) the request is read again, so its status and buttons are current. */
+export function reloadAfterFailure(err: unknown): boolean {
+  return httpStatusOf(err) === 409;
 }

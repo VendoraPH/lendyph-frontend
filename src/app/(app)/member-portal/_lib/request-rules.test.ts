@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { decisionBody, decisionOutcome, decisionProblems, decisionsFor, needsMessage, type DecisionForm } from "./request-rules";
+import { reloadAfterFailure, decisionBody, decisionOutcome, decisionProblems, decisionsFor, needsMessage, type DecisionForm } from "./request-rules";
 
 const form = (over: Partial<DecisionForm> = {}): DecisionForm => ({
   decision: "approve",
@@ -64,4 +64,18 @@ test("approving a withdrawal sends the message to the member too", () => {
   const body = decisionBody("savings_withdrawal", form({ message: " Ready at the counter tomorrow. " }));
   assert.equal(body.message, "Ready at the counter tomorrow.");
   assert.deepEqual(decisionBody("profile_update", form({ message: "Saved." })), { decision: "approve", message: "Saved." });
+});
+
+test("a new account with an opening deposit needs the deposit's method; one with nothing to deposit doesn't", () => {
+  const noMethod = form({ money: { date: "2026-11-11", method: "", reference: "" } });
+  assert.deepEqual(decisionProblems("savings_opening", noMethod, "500.00"), ["Choose how the opening deposit was paid."]);
+  assert.deepEqual(decisionProblems("savings_opening", noMethod, "0.00"), []);
+  assert.deepEqual(decisionProblems("savings_opening", noMethod, null), []);
+  assert.deepEqual(decisionProblems("savings_opening", form(), "500.00"), []);
+});
+
+test("a 409 reloads the request, so its status and buttons are current", () => {
+  assert.equal(reloadAfterFailure({ response: { status: 409, data: {} } }), true);
+  assert.equal(reloadAfterFailure({ response: { status: 422, data: {} } }), false);
+  assert.equal(reloadAfterFailure(new Error("offline")), false);
 });

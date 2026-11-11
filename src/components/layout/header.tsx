@@ -40,7 +40,7 @@ import {
   subPageTitle,
 } from "@/lib/page-titles";
 import { SIDEBAR_NAV } from "@/constants";
-import { navItemAllowed } from "@/constants/navigation";
+import { navItemAllowed, navItemHref } from "@/constants/navigation";
 import type { Permission } from "@/types";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -251,7 +251,7 @@ export function Header({ onMenuClick }: HeaderProps) {
             {SIDEBAR_NAV.filter((item) => navItemAllowed(item, can)).map((item) => (
               <CommandItem
                 key={item.href}
-                onSelect={() => handleSelect(item.href)}
+                onSelect={() => handleSelect(navItemHref(item, can))}
               >
                 <item.icon className="mr-2 h-4 w-4" />
                 {item.title}

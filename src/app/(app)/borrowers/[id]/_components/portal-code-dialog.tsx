@@ -24,6 +24,7 @@ import { CODE_KIND_LABELS, IDENTITY_TYPE_LABELS, optionsOf } from "@/app/(app)/m
 import { notifyPortalError } from "@/app/(app)/member-portal/_lib/notify-portal-error";
 import { printCodeSlip } from "@/app/(app)/member-portal/_lib/print-slip";
 import { issueCodeTitle } from "@/app/(app)/member-portal/_lib/access-rules";
+import { closeAllowed, createCodeAttempts } from "@/app/(app)/member-portal/_lib/code-attempts";
 
 const ID_OPTIONS = optionsOf(IDENTITY_TYPE_LABELS);
 
@@ -49,11 +50,13 @@ export function PortalCodeDialog({ kind, borrowerId, memberName, onOpenChange, o
   const [idType, setIdType] = useState("");
   const [issued, setIssued] = useState<PortalIssuedCode | null>(null);
   const { submitting, run } = useSubmitGuard();
+  const [attempts] = useState(createCodeAttempts);
   const cooperative = useBrandingStore((s) => s.organizationName) ?? "";
   if (useDialogOpening(open, kind)) {
     setChecked(false);
     setIdType("");
     setIssued(null);
+    attempts.cancel();
   }
 
   const ready = checked && idType !== "";
@@ -61,16 +64,22 @@ export function PortalCodeDialog({ kind, borrowerId, memberName, onOpenChange, o
   function issue() {
     if (!kind || !ready) return;
     const call = kind === "activation" ? portalAdminService.invite : portalAdminService.resetCode;
+    const attempt = attempts.begin();
     run(() => call(borrowerId, idType as PortalIdentityType))
       ?.then((result) => {
-        setIssued(result);
+        // The card refreshes either way: the member's earlier code was replaced.
         onIssued();
+        if (attempts.isCurrent(attempt)) setIssued(result);
       })
       .catch((err: unknown) => notifyPortalError(err, "The code couldn't be issued. Please try again."));
   }
 
   function close(next: boolean) {
-    if (!next) setIssued(null);
+    if (!closeAllowed(next, submitting)) return;
+    if (!next) {
+      attempts.cancel();
+      setIssued(null);
+    }
     onOpenChange(next);
   }
 

@@ -31,6 +31,7 @@ import {
   decisionProblems,
   moneyDetailsFor,
   needsMessage,
+  reloadAfterFailure,
   type DecisionForm,
 } from "../../_lib/request-rules";
 
@@ -59,6 +60,7 @@ interface DecisionDialogProps {
   /** The decision being made, or null while closed. */
   decision: PortalRequestDecision | null;
   onOpenChange: (open: boolean) => void;
+  /** After a decision, and after a 409, so the request reads as it is now. */
   onDecided: () => void;
 }
 
@@ -81,7 +83,7 @@ export function DecisionDialog({ request, decision, onOpenChange, onDecided }: D
   }
 
   const money = form.decision === "approve" ? moneyDetailsFor(request.type) : null;
-  const problems = decisionProblems(request.type, form);
+  const problems = decisionProblems(request.type, form, request.amount);
   const setMoney = (patch: Partial<DecisionForm["money"]>) => setForm((f) => ({ ...f, money: { ...f.money, ...patch } }));
 
   function submit() {
@@ -93,7 +95,13 @@ export function DecisionDialog({ request, decision, onOpenChange, onDecided }: D
         onOpenChange(false);
         onDecided();
       })
-      .catch((err: unknown) => notifyPortalError(err, "The decision couldn't be saved. Please try again."));
+      .catch((err: unknown) => {
+        notifyPortalError(err, "The decision couldn't be saved. Please try again.");
+        if (reloadAfterFailure(err)) {
+          onOpenChange(false);
+          onDecided();
+        }
+      });
   }
 
   const title = decision ? DECISION_LABELS[decision] : "Decide";

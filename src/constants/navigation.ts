@@ -23,6 +23,7 @@ import {
 import { GCashIcon } from "@/components/icons/gcash-icon";
 import { env } from "@/config/env";
 import { MODULE_ALSO_REQUIRES } from "@/lib/permission-module-names";
+import { meetsPermission } from "@/lib/permission-requirement";
 
 export interface NavSubItem {
   title: string;
@@ -44,6 +45,11 @@ export interface NavSubItem {
    * the same list.
    */
   permission?: PermissionRequirement;
+  /**
+   * Permissions needed as well as `permission`, every one of them: Settings →
+   * Member Portal is company-wide, so it also needs `branches:view_all`.
+   */
+  alsoRequires?: Permission[];
 }
 
 export interface NavItem {
@@ -70,6 +76,22 @@ export interface NavItem {
 export function navItemAllowed(item: NavItem, can: (permission: Permission) => boolean): boolean {
   const opens = item.anyOf ? item.anyOf.some(can) : can(item.permission);
   return opens && (item.alsoRequires ?? []).every(can);
+}
+
+/** Whether the menu shows a page under a section: its own permission, if any, and everything it also requires. */
+export function navChildAllowed(child: NavSubItem, can: (permission: Permission) => boolean): boolean {
+  return (!child.permission || meetsPermission(child.permission, can)) && (child.alsoRequires ?? []).every(can);
+}
+
+/**
+ * Where a section's own link goes (the collapsed rail's icon, the command
+ * palette). A section that opens on any of several permissions (`anyOf`)
+ * goes to the first page the user can open, so a cashier who only decides
+ * Member Portal requests lands on the queue, not on a page they can't open.
+ */
+export function navItemHref(item: NavItem, can: (permission: Permission) => boolean): string {
+  if (!item.anyOf) return item.href;
+  return (item.children ?? []).find((child) => navChildAllowed(child, can))?.href ?? item.href;
 }
 
 /**
@@ -338,9 +360,16 @@ export const SIDEBAR_NAV: NavItem[] = [
       { title: "Role and Permissions", href: "/settings/user-roles" },
       { title: "Approval Workflow", href: "/settings/approval-workflow" },
       { title: "GCash", href: "/settings/gcash" },
-      // Company-wide, so the page also needs branches:view_all (it says so).
+      // Company-wide, so it also needs branches:view_all, as the server does.
       ...(env.features.memberPortal
-        ? [{ title: "Member Portal", href: "/settings/member-portal", permission: "member_portal:settings" as const }]
+        ? [
+            {
+              title: "Member Portal",
+              href: "/settings/member-portal",
+              permission: "member_portal:settings" as const,
+              alsoRequires: ["branches:view_all" as const],
+            },
+          ]
         : []),
       // Lives under Settings because it is admin-only, org-wide, one-time
       // config — and because it belongs to neither Members nor Loans: a single

@@ -37,6 +37,12 @@ const FORBIDDEN: ReadonlyArray<{ name: string; pattern: RegExp }> = [
   { name: "a raw key as a label", pattern: /_LABELS\[[^\]]+\]\s*\?\?|\bhumanize\w*\(|\.replace\(\s*\/_\/g/ },
   { name: "a dollar sign", pattern: /\$\s?\d|[("'`>]\$(?=[)"'`<\s\d])|\bUSD\b/ },
   { name: "the withdrawable fallback", pattern: /available_balance\s*-|maintaining_balance\s*[-+]/ },
+  {
+    // A server key rendered as it is ({r.status}): words come from a map.
+    // An attribute (key={r.status}) or a template part (${r.status}) isn't shown.
+    name: "a bare key in JSX",
+    pattern: /(?<![=$\w])\{\s*[\w?.]+\.(?:status|type|state|kind|audience|\w*reason)\s*\}/,
+  },
 ];
 
 /** The comment-free code of a line; comments may describe what the server adds up. */
@@ -103,6 +109,12 @@ const SEEDED: ReadonlyArray<[string, string]> = [
   ["a raw key as a label", "r.status.replace(/_/g, \" \")"],
   ["a dollar sign", "<span>$1,500.00</span>"],
   ["the withdrawable fallback", "const w = available_balance - maintaining_balance;"],
+  ["a bare key in JSX", "<TableCell>{r.status}</TableCell>"],
+  ["a bare key in JSX", "<span>{card.disabled_reason}</span>"],
+  ["a bare key in JSX", "{a.audience}"],
+  ["a bare key in JSX", "<Badge>{ request.type }</Badge>"],
+  ["a bare key in JSX", "<p>{row.kind}</p>"],
+  ["a bare key in JSX", "<dd>{card.state}</dd>"],
 ];
 
 for (const [name, line] of SEEDED) {
@@ -117,6 +129,10 @@ const CLEAN: readonly string[] = [
   "const n = Number(form.numbers[f.key].trim());",
   'className="text-right tabular-nums"',
   "<Link href={`/savings/accounts/${d.account_id}`}>",
+  "<TabsTrigger key={r.status} value={r.status}>",
+  "{labelOf(REQUEST_STATUS_LABELS, r.status)}",
+  "const text = `${r.status}`;",
+  "<li key={`${row.kind}-${i}`}>",
 ];
 
 for (const line of CLEAN) {

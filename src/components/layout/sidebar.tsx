@@ -4,14 +4,13 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SIDEBAR_NAV } from "@/constants";
-import { navItemAllowed, type NavItem } from "@/constants/navigation";
+import { navChildAllowed, navItemAllowed, navItemHref, type NavItem } from "@/constants/navigation";
 import { usePermission } from "@/hooks";
 import { useRegistrations } from "@/hooks/use-registrations";
 import {
   pendingApprovalsBadgeEnabled,
   usePendingLoanApprovals,
 } from "@/hooks/use-pending-loan-approvals";
-import { meetsPermission } from "@/lib/permission-requirement";
 import { cn } from "@/lib/utils";
 import {
   ChevronDown,
@@ -107,7 +106,7 @@ function NavLink({
   // AccessDenied. A child with no `permission` of its own inherits the
   // parent's, which is why every pre-existing child is untouched by this.
   const visibleChildren = useMemo(
-    () => (item.children ?? []).filter((c) => !c.permission || meetsPermission(c.permission, can)),
+    () => (item.children ?? []).filter((c) => navChildAllowed(c, can)),
     // `can` reads the auth store through a fresh closure on every render, so it
     // is not referentially stable; depending on it would rebuild this array
     // every render and defeat the memo. The permissions it reads only change
@@ -143,7 +142,7 @@ function NavLink({
         <TooltipTrigger
           render={
             <Link
-              href={item.href}
+              href={navItemHref(item, can)}
               onClick={onNavigate}
               // Only an icon shows, so the link is named here, the same way for
               // every item; this also overrides an icon's own alt text.
@@ -196,7 +195,7 @@ function NavLink({
   if (!hasChildren) {
     return (
       <Link
-        href={item.href}
+        href={navItemHref(item, can)}
         onClick={onNavigate}
         className={cn(
           "group flex items-center gap-3 rounded-2xl px-3 py-2.5 text-[13px] font-medium transition-all duration-200",

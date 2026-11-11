@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { env } from "@/config/env";
-import { CDA_NAV, MEMBER_PORTAL_NAV, SIDEBAR_NAV, navItemAllowed } from "./navigation";
+import { CDA_NAV, MEMBER_PORTAL_NAV, SIDEBAR_NAV, navChildAllowed, navItemAllowed, navItemHref } from "./navigation";
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
 const LAYOUT = "src/app/(app)/credit-scoring/layout.tsx";
@@ -147,4 +147,20 @@ test("the staff notice links lead to pages that exist", () => {
   // RequestAlerts links `/member-portal/requests/{id}`; PortalStaffAlerts `/borrowers/{id}`.
   assert.equal(existsSync(resolve(process.cwd(), "src/app/(app)/member-portal/requests/[id]/page.tsx")), true);
   assert.equal(existsSync(resolve(process.cwd(), "src/app/(app)/borrowers/[id]/page.tsx")), true);
+});
+
+test("the Member Portal's own link opens the first page the user can open", () => {
+  const holds = (...held: string[]) => (p: string) => held.includes(p);
+  assert.equal(navItemHref(MEMBER_PORTAL_NAV, holds("member_portal:view", "member_portal:requests")), "/member-portal");
+  assert.equal(navItemHref(MEMBER_PORTAL_NAV, holds("member_portal:requests")), "/member-portal/requests");
+  assert.equal(navItemHref(MEMBER_PORTAL_NAV, holds("member_portal:announcements")), "/member-portal/announcements");
+  assert.equal(navItemHref(CDA_NAV, holds("cda:view")), "/cda");
+});
+
+test("Settings → Member Portal also needs every branch, as its page does", () => {
+  const holds = (...held: string[]) => (p: string) => held.includes(p);
+  const child = { title: "Member Portal", href: "/settings/member-portal", permission: "member_portal:settings" as const, alsoRequires: ["branches:view_all" as const] };
+  assert.equal(navChildAllowed(child, holds("member_portal:settings")), false);
+  assert.equal(navChildAllowed(child, holds("member_portal:settings", "branches:view_all")), true);
+  assert.equal(navChildAllowed({ title: "Profile", href: "/settings/profile" }, holds()), true);
 });
