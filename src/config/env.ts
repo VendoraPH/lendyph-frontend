@@ -164,6 +164,11 @@ export const env = {
     // default: the menu and every /cda route stay hidden. Turned on for
     // staging only, where the backend serves /cda. Literal reference, as above.
     cda: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_CDA),
+    // Member Portal (members' own sign-in under /member, plus the staff portal
+    // screens). Off by default: /member and the staff portal menu stay hidden.
+    // Turned on for staging only, where the backend serves /portal and
+    // /portal-admin. Literal reference, as above.
+    memberPortal: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_MEMBER_PORTAL),
     // Credit Scoring. Off by default: the menu and every route stay hidden until
     // its endpoints stop answering 501. Literal reference for the same reason.
     creditScoring: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_CREDIT_SCORING),

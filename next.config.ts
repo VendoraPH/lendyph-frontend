@@ -10,7 +10,22 @@ import type { NextConfig } from "next";
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
 const apiUrl = new URL(API_URL);
 
+// The Member Portal's pages (portal design §1): never framed by another site,
+// and the full address never sent on as a referrer. These are page headers
+// only; the portal's API answers carry their own `Cache-Control: no-store`.
+const MEMBER_PORTAL_HEADERS = [
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+  { key: "Referrer-Policy", value: "same-origin" },
+];
+
 const nextConfig: NextConfig = {
+  async headers() {
+    return [
+      { source: "/member", headers: MEMBER_PORTAL_HEADERS },
+      { source: "/member/:path*", headers: MEMBER_PORTAL_HEADERS },
+    ];
+  },
   experimental: {
     // A valid-ID registration posts front_file AND back_file, each allowed up
     // to 10 MB by the API (`max:10240` KB), so a legitimate request can carry
