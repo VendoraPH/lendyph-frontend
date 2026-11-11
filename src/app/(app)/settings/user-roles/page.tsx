@@ -68,6 +68,7 @@ import {
   Gauge,
   BellRing,
   PiggyBank,
+  ClipboardCheck,
   Package,
   Building2,
   type LucideIcon,
@@ -356,6 +357,23 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
       "Manage savings products, rates, tax rules and approval amounts",
     ],
   },
+  cda: {
+    label: "CDA Compliance",
+    description:
+      "The cooperative's annual CDA reports, registers and filings. Every CDA permission also needs See all branches.",
+    icon: ClipboardCheck,
+    features: [
+      "View the CDA dashboard, calendar, reports and registers",
+      "Prepare reports and send them for review",
+      "Upload compliance documents",
+      "Return a report for changes",
+      "Approve a report someone else sent for review",
+      "Finalize, reopen, record the filing and export reports",
+      "Keep the officers, trainings, social programs and mediation registers",
+      "See the restricted mediation, audit and tax reports",
+      "Configure the regulatory profile, deadlines and extensions",
+    ],
+  },
 };
 
 
@@ -390,6 +408,18 @@ const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   pay: { label: "Pay", colorClass: "bg-green-500/10 text-green-700 border-green-500/30" },
   manage: { label: "Manage", colorClass: "bg-orange-500/10 text-orange-700 border-orange-500/30" },
   view_all: { label: "See all branches", colorClass: "bg-sky-500/10 text-sky-700 border-sky-500/30" },
+  prepare: { label: "Prepare", colorClass: "bg-blue-500/10 text-blue-700 border-blue-500/30" },
+  upload: { label: "Upload", colorClass: "bg-cyan-500/10 text-cyan-700 border-cyan-500/30" },
+  review: { label: "Review", colorClass: "bg-amber-500/10 text-amber-700 border-amber-500/30" },
+  finalize: { label: "Finalize", colorClass: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30" },
+  reopen: { label: "Reopen", colorClass: "bg-orange-500/10 text-orange-700 border-orange-500/30" },
+  submit: { label: "Record filing", colorClass: "bg-teal-500/10 text-teal-700 border-teal-500/30" },
+  manage_officers: { label: "Manage officers", colorClass: "bg-violet-500/10 text-violet-700 border-violet-500/30" },
+  manage_social: { label: "Manage social programs", colorClass: "bg-lime-500/10 text-lime-700 border-lime-500/30" },
+  manage_mediation: { label: "Manage mediation", colorClass: "bg-rose-500/10 text-rose-700 border-rose-500/30" },
+  view_mediation: { label: "See mediation", colorClass: "bg-rose-500/10 text-rose-700 border-rose-500/30" },
+  view_audit: { label: "See audit reports", colorClass: "bg-indigo-500/10 text-indigo-700 border-indigo-500/30" },
+  view_tax: { label: "See tax reports", colorClass: "bg-indigo-500/10 text-indigo-700 border-indigo-500/30" },
 };
 
 /** "credit_scoring:settings" → "Credit Scoring: Configure", as the matrix labels it. */

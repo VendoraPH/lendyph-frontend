@@ -163,7 +163,29 @@ export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
   reminder_failed: "Reminder not sent",
   savings_gl_difference: "Savings books don't match the savings records",
   savings_large_transaction: "Large savings transaction",
+  cda_approval_needed: "CDA report awaiting approval",
+  cda_report_returned: "CDA report returned",
+  cda_report_finalized: "CDA report finalized",
+  cda_report_for_correction: "CDA report needs correction",
+  cda_deadline_reminder: "CDA deadline reminder",
+  cda_document_expiring: "CDA document expiring",
+  cda_training_incomplete: "Officer training incomplete",
 };
+
+/**
+ * Kinds whose server title always names the kind ("CDA report returned",
+ * "CDA report due in 3 days"), so the bell doesn't announce the kind again in
+ * other words.
+ */
+const KIND_IN_TITLE: ReadonlySet<string> = new Set([
+  "cda_approval_needed",
+  "cda_report_returned",
+  "cda_report_finalized",
+  "cda_report_for_correction",
+  "cda_deadline_reminder",
+  "cda_document_expiring",
+  "cda_training_incomplete",
+]);
 
 /** The kind in words, or "Notification" for a kind added on the server later. */
 export function notificationTypeLabel(type: string): string {
@@ -177,20 +199,27 @@ export function notificationTone(type: string): NotificationTone {
   switch (type) {
     case "approval_needed":
     case "adjustment_pending":
+    case "cda_approval_needed":
       return "approval";
     case "loan_approved":
     case "loan_released":
+    case "cda_report_finalized":
       return "success";
     case "loan_rejected":
     case "payment_voided":
     case "reminder_failed":
     case "savings_gl_difference":
+    case "cda_report_for_correction":
       return "danger";
     case "loan_sent_back":
     case "loan_past_due":
     case "reminder_contact_invalid":
     case "reminder_follow_up":
     case "savings_large_transaction":
+    case "cda_report_returned":
+    case "cda_deadline_reminder":
+    case "cda_document_expiring":
+    case "cda_training_incomplete":
       return "warning";
     default:
       return "info";
@@ -245,6 +274,11 @@ export interface NotificationFeedItem {
   tone: NotificationTone;
   /** The kind in words ("Large savings transaction"). */
   kind: string;
+  /**
+   * Whether the bell names the kind beside the icon for screen readers: not
+   * when the title already says it, so a row never reads twice.
+   */
+  announceKind: boolean;
   /** As the server wrote it, ₱ amounts included. */
   title: string;
   /** As the server wrote it; null when it sent none. */
@@ -286,18 +320,23 @@ export function buildFeed(
       if (byTime !== 0 && !Number.isNaN(byTime)) return byTime;
       return a.index - b.index;
     });
-  return ordered.slice(0, Math.max(0, limit)).map(({ row }) => ({
-    id: String(row.id),
-    type: row.type,
-    tone: notificationTone(row.type),
-    kind: notificationTypeLabel(row.type),
-    title: typeof row.title === "string" && row.title !== "" ? row.title : notificationTypeLabel(row.type),
-    body: typeof row.body === "string" && row.body !== "" ? row.body : null,
-    href: safeAppPath(row.url),
-    unread: !row.read_at,
-    createdAt: row.created_at,
-    relativeTime: formatRelativeTime(row.created_at, nowMs),
-  }));
+  return ordered.slice(0, Math.max(0, limit)).map(({ row }) => {
+    const kind = notificationTypeLabel(row.type);
+    const title = typeof row.title === "string" && row.title !== "" ? row.title : kind;
+    return {
+      id: String(row.id),
+      type: row.type,
+      tone: notificationTone(row.type),
+      kind,
+      announceKind: !KIND_IN_TITLE.has(row.type) && kind !== title,
+      title,
+      body: typeof row.body === "string" && row.body !== "" ? row.body : null,
+      href: safeAppPath(row.url),
+      unread: !row.read_at,
+      createdAt: row.created_at,
+      relativeTime: formatRelativeTime(row.created_at, nowMs),
+    };
+  });
 }
 
 /** The rows with one marked read (optimistically), and whether it was unread. */

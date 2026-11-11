@@ -27,6 +27,10 @@ import type { Action, Module } from "@/types";
  * `savings` is offered too (Phase 3): the backend seeds
  * `savings:view|create|transact|close|approve|post|settings` for admin and
  * super_admin.
+ *
+ * `cda` is offered too (Phase 3): the backend seeds all sixteen `cda:*`
+ * permissions for admin and super_admin (`CdaAccess::PERMISSIONS`). Each
+ * works only with `branches:view_all`.
  */
 export type UIModule = Exclude<Module, "collections" | "loan_adjustments" | "auto_credit">;
 
@@ -85,6 +89,26 @@ export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
   // requests; `close` covers closing, freezing and pre-terminating; `approve`
   // decides approvals and interest runs; `post` runs and posts interest.
   savings: ["view", "create", "transact", "close", "approve", "post", "settings"],
+  // The report workflow's steps, the three registers' `manage_*` verbs, and
+  // the three read-restricted report families, in the server's order.
+  cda: [
+    "view",
+    "prepare",
+    "upload",
+    "review",
+    "approve",
+    "finalize",
+    "reopen",
+    "submit",
+    "export",
+    "settings",
+    "manage_officers",
+    "manage_social",
+    "manage_mediation",
+    "view_mediation",
+    "view_audit",
+    "view_tax",
+  ],
 };
 
 /**
@@ -94,6 +118,24 @@ export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
  */
 export const MODULE_ACTION_LABELS: Partial<Record<UIModule, Partial<Record<Action, string>>>> = {
   savings: { close: "Close accounts", post: "Post interest" },
+  cda: {
+    view: "View reports and registers",
+    prepare: "Prepare reports",
+    upload: "Upload documents",
+    review: "Return for changes",
+    approve: "Approve reports",
+    finalize: "Finalize reports",
+    reopen: "Reopen reports",
+    submit: "Record filings with CDA",
+    export: "Export reports",
+    settings: "Configure CDA settings",
+    manage_officers: "Manage officers and trainings",
+    manage_social: "Manage social programs",
+    manage_mediation: "Manage mediation cases",
+    view_mediation: "See mediation reports",
+    view_audit: "See audit reports",
+    view_tax: "See tax reports",
+  },
 };
 
 /** The module's own label for an action, or `null` to use the general one. */
@@ -110,6 +152,9 @@ export function moduleActionLabel(mod: UIModule, act: Action): string | null {
 const OWN_CHECKBOX_ONLY: Partial<Record<UIModule, readonly Action[]>> = {
   loans: ["write_off"],
   accounting: ["allowance"],
+  // Mediation cases are confidential, and audit and tax reports are
+  // restricted: each is granted on its own, never swept in with the rest.
+  cda: ["view_mediation", "view_audit", "view_tax"],
 };
 
 /** The actions a module's "toggle all" checkbox covers. */

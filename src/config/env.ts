@@ -160,6 +160,10 @@ export const env = {
     // /savings route stay hidden. Turned on for staging only, where the
     // backend serves the /savings endpoints. Literal reference, as above.
     savings: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_SAVINGS),
+    // CDA Compliance (the annual CDA reports, registers and filings). Off by
+    // default: the menu and every /cda route stay hidden. Turned on for
+    // staging only, where the backend serves /cda. Literal reference, as above.
+    cda: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_CDA),
     // Credit Scoring. Off by default: the menu and every route stay hidden until
     // its endpoints stop answering 501. Literal reference for the same reason.
     creditScoring: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_CREDIT_SCORING),

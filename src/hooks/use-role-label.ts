@@ -19,7 +19,18 @@ export function useRoleLabel(key: string | null | undefined): string {
   const { can } = usePermission();
   const canListRoles = can("users:view");
   const ownRoles = useAuthStore((state) => state.user?.role_details);
+  const ownKeys = useAuthStore((state) => state.user?.roles);
+  const refreshUser = useAuthStore((state) => state.refreshUser);
   const [roles, setRoles] = useState<ApiRole[] | undefined>(undefined);
+
+  // A session signed in from the login response has no `role_details` (only
+  // `GET /auth/me` sends them), so the user's own role would read as its key.
+  // Ask for them once when this label is the user's own role and there is no
+  // other way to its saved name.
+  const needsOwnDetails = !!key && !canListRoles && ownRoles === undefined && (ownKeys ?? []).includes(key);
+  useEffect(() => {
+    if (needsOwnDetails) void refreshUser();
+  }, [needsOwnDetails, refreshUser]);
 
   useEffect(() => {
     if (!key || !canListRoles) return;

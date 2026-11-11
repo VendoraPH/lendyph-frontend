@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { MODULE_ACTIONS, moduleToggleActions } from "./permission-matrix";
+import { MODULE_ACTIONS, moduleActionLabel, moduleToggleActions } from "./permission-matrix";
 
 const offered = Object.entries(MODULE_ACTIONS).flatMap(([mod, actions]) =>
   actions.map((action) => `${mod}:${action}`)
@@ -87,4 +87,41 @@ test("the matrix offers the four expenses permissions, pay included", () => {
     "expenses:pay",
   ]);
   assert.ok(moduleToggleActions("expenses").includes("pay"));
+});
+
+// Phase 3: the API seeds exactly these sixteen (`CdaAccess::PERMISSIONS`, for
+// admin and super_admin). Any other `cda:*` would be refused whole on save.
+test("the matrix offers exactly the sixteen CDA permissions, in the server's order", () => {
+  assert.deepEqual(offered.filter((p) => p.startsWith("cda:")), [
+    "cda:view",
+    "cda:prepare",
+    "cda:upload",
+    "cda:review",
+    "cda:approve",
+    "cda:finalize",
+    "cda:reopen",
+    "cda:submit",
+    "cda:export",
+    "cda:settings",
+    "cda:manage_officers",
+    "cda:manage_social",
+    "cda:manage_mediation",
+    "cda:view_mediation",
+    "cda:view_audit",
+    "cda:view_tax",
+  ]);
+});
+
+test("CDA's toggle-all leaves the three restricted views to their own checkboxes", () => {
+  const swept = moduleToggleActions("cda");
+  for (const view of ["view_mediation", "view_audit", "view_tax"] as const) assert.equal(swept.includes(view), false);
+  assert.ok(swept.includes("view"));
+  assert.equal(swept.length, 13);
+});
+
+test("every CDA permission reads in CDA's own words", () => {
+  for (const action of MODULE_ACTIONS.cda) {
+    const label = moduleActionLabel("cda", action);
+    assert.ok(label && !label.includes("_"), action);
+  }
 });

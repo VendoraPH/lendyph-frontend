@@ -236,3 +236,13 @@ test("savings sub-pages read as savings, not loan, pages", () => {
   assert.equal(subPageTitle("savings", "transactions"), "Savings Transactions");
   assert.equal(subPageTitle("loans", "products"), "Loan Products");
 });
+
+test("CDA pages read their menu titles, whether or not the CDA menu is built in", async () => {
+  const { CDA_NAV } = await import("@/constants/navigation");
+  for (const child of CDA_NAV.children ?? []) {
+    const segment = child.href.split("/")[2];
+    if (!segment) continue;
+    assert.equal(subPageTitle("cda", segment), child.title, child.href);
+  }
+  assert.equal(subPageTitle("cda", "settings"), "CDA Settings");
+});

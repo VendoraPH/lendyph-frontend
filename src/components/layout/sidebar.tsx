@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SIDEBAR_NAV } from "@/constants";
-import type { NavItem } from "@/constants/navigation";
+import { navItemAllowed, type NavItem } from "@/constants/navigation";
 import { usePermission } from "@/hooks";
 import { useRegistrations } from "@/hooks/use-registrations";
 import {
@@ -392,7 +392,7 @@ function SidebarContent({
               Navigation
             </span>
           )}
-          {SIDEBAR_NAV.filter((item) => can(item.permission)).map((item) => (
+          {SIDEBAR_NAV.filter((item) => navItemAllowed(item, can)).map((item) => (
             <NavLink
               key={item.href}
               item={item}

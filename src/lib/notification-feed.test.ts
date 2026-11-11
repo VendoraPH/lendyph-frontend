@@ -488,3 +488,42 @@ describe("savings notifications", () => {
     assert.equal(item.kind, "Large savings transaction");
   });
 });
+
+// The CDA notice keys the backend sends: C2's WorkflowNotices, C4's
+// DeadlineReminders and C3's RegisterNotices.
+describe("CDA notifications", () => {
+  const CDA_KINDS: Record<string, [string, string]> = {
+    cda_approval_needed: ["CDA report awaiting approval", "approval"],
+    cda_report_returned: ["CDA report returned", "warning"],
+    cda_report_finalized: ["CDA report finalized", "success"],
+    cda_report_for_correction: ["CDA report needs correction", "danger"],
+    cda_deadline_reminder: ["CDA deadline reminder", "warning"],
+    cda_document_expiring: ["CDA document expiring", "warning"],
+    cda_training_incomplete: ["Officer training incomplete", "warning"],
+  };
+
+  for (const [type, [label, tone]] of Object.entries(CDA_KINDS)) {
+    test(`${type} reads "${label}" and is ${tone}`, () => {
+      assert.equal(notificationTypeLabel(type), label);
+      assert.equal(notificationTone(type), tone);
+    });
+  }
+});
+
+describe("a notice reads its title once", () => {
+  test("a CDA notice's server title already names its kind, so the kind isn't announced again", () => {
+    const [item] = buildFeed([row({ id: "c1", type: "cda_deadline_reminder", title: "CDA report due in 3 days" })], NOW);
+    assert.equal(item.title, "CDA report due in 3 days");
+    assert.equal(item.announceKind, false);
+  });
+
+  test("a row whose title is its kind doesn't announce it twice", () => {
+    const [item] = buildFeed([row({ id: "n2", type: "savings_large_transaction", title: "" })], NOW);
+    assert.equal(item.announceKind, false);
+  });
+
+  test("other kinds still name the kind beside a title of the server's own", () => {
+    const [item] = buildFeed([row({ id: "n3", type: "loan_approved", title: "LN-000123 approved" })], NOW);
+    assert.equal(item.announceKind, true);
+  });
+});

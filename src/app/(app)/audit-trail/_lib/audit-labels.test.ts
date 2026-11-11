@@ -13,6 +13,7 @@ import {
   auditFieldLabel,
   auditModuleLabel,
   auditTargetType,
+  auditTargetLabel,
   auditTargetTypeLine,
   auditUserName,
   auditUserRole,
@@ -119,7 +120,7 @@ test("accounting and GCash rows read by their module names", () => {
 test("the module filter offers exactly the modules the server filters by", () => {
   assert.deepEqual(
     AUDIT_MODULE_OPTIONS.map((o) => o.value).sort(),
-    ["accounting", "auth", "borrowers", "collections", "gcash", "loans", "payments", "roles", "savings", "system", "users"]
+    ["accounting", "auth", "borrowers", "cda", "collections", "gcash", "loans", "payments", "roles", "savings", "system", "users"]
   );
   assert.ok(AUDIT_MODULE_OPTIONS.every((o) => o.label === auditModuleLabel({ module: o.value, target: null })));
 });
@@ -245,7 +246,7 @@ test("a target with no name reads once: the type and id line is skipped when it 
 
 test("a named target keeps its type and id line", () => {
   assert.equal(
-    auditTargetTypeLine({ id: 12, type: "JournalEntry", label: "JE-000012" }),
+    auditTargetTypeLine({ id: 12, type: "AccountingJournal", label: "JE-000012" }),
     "Journal entry #12",
   );
   // Another record of the same type is not a repeat.
@@ -431,4 +432,73 @@ test("savings id fields read without \"id\"", () => {
   assert.equal(auditFieldLabel("run_id", { type: "SavingsInterestRunLine" }), "interest run");
   // Outside savings a plain id keeps its general words.
   assert.equal(auditFieldLabel("account_id", { type: "AccountingJournalLine" }), "account id");
+});
+
+test("CDA rows read their module, actions and targets in words", () => {
+  assert.equal(auditModuleLabel({ module: "cda", target: null }), "CDA Compliance");
+  assert.equal(auditActionLabel("cda_workflow"), "Report workflow");
+  assert.equal(auditActionLabel("cda_report_saved"), "Report saved");
+  assert.equal(auditActionLabel("cda_report_refreshed"), "Report refreshed");
+  assert.equal(auditActionLabel("cda_export_generated"), "Report exported");
+  assert.equal(auditActionLabel("year_end_captured"), "Year-end figures captured");
+  assert.equal(auditTargetType("CdaReport"), "CDA report");
+  assert.equal(auditTargetType("CdaMediationCase"), "Mediation case");
+  assert.equal(auditTargetType("CdaOfficerTraining"), "Officer training");
+  assert.equal(auditTargetType("CdaReportingPeriod"), "CDA reporting period");
+  assert.equal(auditFieldLabel("due_override_on"), "due override on");
+  // A CDA class the screen has no words of its own for still reads "CDA …".
+  assert.equal(auditTargetType("CdaDocument"), "CDA document");
+  assert.equal(auditTargetType("CdaExportTemplateFile"), "CDA export template file");
+  assert.equal(auditTargetType("CdaNoticeSent"), "CDA notice");
+});
+
+test("the type and id line shows as worded, never re-cased by CSS", () => {
+  // "CDA document #1" stays "CDA document #1" (a `capitalize` class made it
+  // "CDA Document #1"); the other types read exactly as before, in their words.
+  assert.equal(auditTargetTypeLine({ id: 1, type: "CdaDocument", label: "Signed CAPR" }), "CDA document #1");
+  assert.equal(auditTargetTypeLine({ id: 12, type: "AccountingJournal", label: "JE-000012" }), "Journal entry #12");
+  assert.equal(auditTargetTypeLine({ id: 4, type: "TimeDeposit", label: "TD-2026-000004" }), "Time deposit #4");
+  assert.equal(auditTargetTypeLine({ id: 7, type: "Borrower", label: "Ana Cruz" }), "Member #7");
+  const page = readFileSync(join(process.cwd(), "src/app/(app)/audit-trail/page.tsx"), "utf8");
+  const line = page.split("\n").findIndex((l) => l.includes("{auditTargetTypeLine(log.target)}"));
+  assert.ok(line > 0);
+  assert.doesNotMatch(page.split("\n")[line - 1], /capitalize/);
+});
+
+// The target types the server sends are the audited models' class basenames
+// (AuditLogResource, `class_basename($auditable_type)`); `JournalEntry` is a
+// frontend type the server never sends.
+test("the server's accounting and other odd class names read as the menu names them", () => {
+  const words: Record<string, string> = {
+    AccountingJournal: "Journal entry",
+    AccountingJournalLine: "Journal entry line",
+    AccountingAccount: "Account",
+    AccountingAccountMapping: "Account mapping",
+    AccountingAllowancePosting: "Allowance for credit losses posting",
+    AccountingExpense: "Expense",
+    AccountingExpensePayment: "Expense payment",
+    AccountingOpeningBalance: "Opening balance",
+    AccountingYearClose: "Year-end close",
+    GCashNonMember: "GCash walk-in",
+    CsvImportRun: "Data import",
+  };
+  for (const [type, label] of Object.entries(words)) assert.equal(auditTargetType(type), label, type);
+});
+
+test("names that already read right are kept", () => {
+  assert.equal(auditTargetType("AccountingReconciliationLine"), "Accounting reconciliation line");
+  assert.equal(auditTargetType("AccountingPeriod"), "Accounting period");
+  assert.equal(auditTargetType("LoanApprovalStep"), "Loan approval step");
+  assert.equal(auditTargetType("ShareCapitalPledge"), "Share capital pledge");
+  assert.equal(auditTargetType("GCashTransaction"), "GCash transaction");
+});
+
+test("a target the server could only name by its class reads in this screen's words, once", () => {
+  const draft = { id: 557, type: "AccountingJournal", label: "Accounting journal #557" };
+  assert.equal(auditTargetLabel(draft), "Journal entry #557");
+  assert.equal(auditTargetTypeLine(draft), null);
+  const posted = { id: 1, type: "AccountingJournal", label: "JE-2026-000001" };
+  assert.equal(auditTargetLabel(posted), "JE-2026-000001");
+  assert.equal(auditTargetTypeLine(posted), "Journal entry #1");
+  assert.equal(auditTargetLabel({ id: 3, type: "CdaDocument", label: "CDA document #3" }), "CDA document #3");
 });

@@ -25,6 +25,7 @@ const MODULE_LABELS: Record<AuditModule, string> = {
   accounting: "Accounting",
   gcash: "GCash",
   savings: "Savings",
+  cda: "CDA Compliance",
   system: "System",
 };
 
@@ -33,7 +34,7 @@ const MODULE_LABELS: Record<AuditModule, string> = {
  * `module` parameter accepts (anything else is refused with 422).
  */
 export const AUDIT_MODULE_OPTIONS: { value: AuditModule; label: string }[] = (
-  ["auth", "borrowers", "loans", "payments", "collections", "users", "roles", "accounting", "gcash", "savings", "system"] as const
+  ["auth", "borrowers", "loans", "payments", "collections", "users", "roles", "accounting", "gcash", "savings", "cda", "system"] as const
 ).map((value) => ({ value, label: MODULE_LABELS[value] }));
 
 const ACTION_LABELS: Record<string, string> = {
@@ -63,6 +64,11 @@ const ACTION_LABELS: Record<string, string> = {
   time_deposit_matured: "Time deposit matured",
   time_deposit_settled: "Time deposit settled",
   time_deposit_preterminated: "Time deposit pre-terminated",
+  cda_workflow: "Report workflow",
+  cda_report_saved: "Report saved",
+  cda_report_refreshed: "Report refreshed",
+  cda_export_generated: "Report exported",
+  year_end_captured: "Year-end figures captured",
 };
 
 /**
@@ -96,6 +102,10 @@ export const AUDIT_ACTION_OPTIONS: { value: AuditAction; label: string }[] = (
     "time_deposit_matured",
     "time_deposit_settled",
     "time_deposit_preterminated",
+    "cda_workflow",
+    "cda_report_saved",
+    "cda_report_refreshed",
+    "cda_export_generated",
   ] as const
 ).map((value) => ({ value, label: ACTION_LABELS[value] }));
 
@@ -119,6 +129,19 @@ export function auditModuleLabel(log: Pick<AuditLog, "module" | "target">): stri
  * reminders models (backend #232, module `reminders`).
  */
 const TARGET_TYPE_LABELS: Record<string, string> = {
+  // Accounting models, as the Accounting menu names what they hold
+  // ("Journal Entries", "Chart of Accounts", "Expenses & Payables", …).
+  AccountingJournal: "Journal entry",
+  AccountingJournalLine: "Journal entry line",
+  AccountingAccount: "Account",
+  AccountingAccountMapping: "Account mapping",
+  AccountingAllowancePosting: "Allowance for credit losses posting",
+  AccountingExpense: "Expense",
+  AccountingExpensePayment: "Expense payment",
+  AccountingOpeningBalance: "Opening balance",
+  AccountingYearClose: "Year-end close",
+  GCashNonMember: "GCash walk-in",
+  CsvImportRun: "Data import",
   SavingsAccount: "Savings account",
   SavingsHold: "Savings hold",
   SavingsApproval: "Savings approval request",
@@ -134,6 +157,21 @@ const TARGET_TYPE_LABELS: Record<string, string> = {
   ReminderTemplate: "Reminder template",
   ReminderPause: "Reminder pause",
   BorrowerNotificationPreference: "Member reminder preferences",
+  CdaRegulatoryProfile: "CDA regulatory profile",
+  CdaSetting: "CDA settings",
+  CdaReportTemplate: "CDA report template",
+  CdaReportingPeriod: "CDA reporting period",
+  CdaReport: "CDA report",
+  CdaReportValue: "CDA report figure",
+  CdaReportSnapshot: "CDA report version",
+  CdaSubmission: "CDA filing",
+  CdaDocument: "CDA document",
+  CdaDocumentVersion: "CDA document version",
+  CdaOfficer: "CDA officer",
+  CdaOfficerTraining: "Officer training",
+  CdaSocialProgram: "Social program",
+  CdaMediationCase: "Mediation case",
+  CdaNoticeSent: "CDA notice",
 };
 
 /**
@@ -142,12 +180,22 @@ const TARGET_TYPE_LABELS: Record<string, string> = {
  */
 export function auditTargetType(type: string): string {
   if (Object.hasOwn(TARGET_TYPE_LABELS, type)) return TARGET_TYPE_LABELS[type];
+  return classInWords(type);
+}
+
+/**
+ * A class name in words, the rule the server's `AuditLogResource::typeInWords`
+ * also follows for a target it has nothing else to name by ("Accounting
+ * journal #557").
+ */
+function classInWords(type: string): string {
   return type
     .replace(/^Borrower/, "Member")
+    .replace(/^Cda(?=[A-Z])/, "CDA ")
     .replace(/CoMaker/g, "Co-maker")
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .split(" ")
-    .map((word, i) => (i === 0 || word === "GCash" ? word : word.toLowerCase()))
+    .map((word, i) => (i === 0 || word === "GCash" || word === "CDA" ? word : word.toLowerCase()))
     .join(" ");
 }
 
@@ -164,7 +212,18 @@ function compact(text: string): string {
  */
 export function auditTargetTypeLine(target: { id: number; type: string; label: string }): string | null {
   const line = `${auditTargetType(target.type)} #${target.id}`;
-  return compact(line) === compact(target.label) ? null : line;
+  return compact(line) === compact(auditTargetLabel(target)) ? null : line;
+}
+
+/**
+ * The target's heading: the server's label, except where the server had
+ * nothing to name it by and fell back on its class in words ("Accounting
+ * journal #557"); that reads in this screen's words instead ("Journal entry
+ * #557"), so the heading and the type line never say one thing two ways.
+ */
+export function auditTargetLabel(target: { id: number; type: string; label: string }): string {
+  const fallback = `${classInWords(target.type)} #${target.id}`;
+  return compact(target.label) === compact(fallback) ? `${auditTargetType(target.type)} #${target.id}` : target.label;
 }
 
 /** The row's action: a known label, or the server's key in words. */

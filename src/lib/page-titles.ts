@@ -102,6 +102,22 @@ const ID_TITLES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     products: "Savings Products",
     settings: "Savings Settings",
   },
+  cda: {
+    calendar: "Compliance Calendar",
+    capr: "CAPR",
+    "financial-statements": "Financial Statements",
+    "performance-audit": "Performance Audit",
+    "social-audit": "Social Audit",
+    pesos: "Enhanced PESOS",
+    "loan-classification": "Loan Classification",
+    officers: "Officers & Trainings",
+    mediation: "Mediation & Conciliation",
+    "sworn-statement": "Sworn Statement",
+    "tax-reports": "ATIR & ABR",
+    documents: "Compliance Documents",
+    submissions: "Submission History",
+    settings: "CDA Settings",
+  },
 };
 
 /**

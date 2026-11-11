@@ -126,7 +126,20 @@ export type Module =
   // decides approvals and interest runs (never the maker's own); `post` runs
   // and posts interest; `settings` manages products, rates, tax rules and the
   // approval tiers. Seeded for admin and super_admin only.
-  | "savings";
+  | "savings"
+  // ── CDA Compliance ──
+  //
+  // The annual CDA reports, their registers and filings. `view` reads the
+  // dashboard, reports and registers; `prepare` edits drafts and sends them
+  // for review; `upload` adds compliance documents; `review` returns a report;
+  // `approve`, `finalize`, `reopen` and `submit` (recording the filing) are
+  // each their own step; `export` asks the server for a PDF or Excel copy;
+  // `settings` covers the regulatory profile, deadlines and extensions. The
+  // registers have their own `manage_*` verbs. Mediation, audit and tax
+  // reports are also read-restricted (`view_mediation`, `view_audit`,
+  // `view_tax`). Every CDA permission works only with `branches:view_all`.
+  // Seeded for admin and super_admin only.
+  | "cda";
 
 export type Action =
   | "view"
@@ -183,7 +196,20 @@ export type Action =
   // Expenses: settle a payable (`expenses:pay`, seeded by the server).
   | "pay"
   // Branch access: see every branch, not only the ones a user is assigned to.
-  | "view_all";
+  | "view_all"
+  // ── CDA Compliance verbs (see the `cda` module above) ──
+  | "prepare"
+  | "upload"
+  | "review"
+  | "finalize"
+  | "reopen"
+  | "submit"
+  | "manage_officers"
+  | "manage_social"
+  | "manage_mediation"
+  | "view_mediation"
+  | "view_audit"
+  | "view_tax";
 
 export type Permission = `${Module}:${Action}`;
 
