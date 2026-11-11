@@ -66,6 +66,13 @@ export interface GCashPendingItem {
   transaction_date: string;
   borrower?: { id: number; full_name: string; borrower_code: string } | null;
   non_member?: { id: number; full_name: string } | null;
+  /**
+   * Optional (backend B-FU): the walk-in's own branch, the member's branch,
+   * or null for head office. Older answers leave both out.
+   */
+  branch_id?: number | null;
+  /** The branch in words, "Head office" for none. */
+  branch_name?: string | null;
   amount: number;
   charge_amount: number;
   total_amount: number;

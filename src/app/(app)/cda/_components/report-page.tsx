@@ -16,7 +16,10 @@ export function ReportPage({
   children,
 }: {
   type: CdaReportType;
-  /** `reportChanged` reloads the report after a register write, so it shows Refresh. */
+  /**
+   * `reportChanged` reads the report again after a register write, so it shows
+   * Refresh, and keeps the unsaved report edits.
+   */
   children?: (ctx: CdaPageContext, reportChanged: () => void) => ReactNode;
 }) {
   const page = REPORT_PAGES[type];
@@ -28,7 +31,7 @@ export function ReportPage({
         ctx && (
           <div className="space-y-6">
             {children?.(ctx, reportChanged)}
-            <ReportWorkspace key={`${ctx.year}-${version}`} year={ctx.year} type={type} />
+            <ReportWorkspace key={ctx.year} registerVersion={version} year={ctx.year} type={type} />
           </div>
         )
       }

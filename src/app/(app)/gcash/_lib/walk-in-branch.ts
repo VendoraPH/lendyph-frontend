@@ -5,6 +5,7 @@ import {
   type BranchChoiceSource,
   type NamedBranch,
 } from "@/lib/branch-choice";
+import { extractGCashErrorMessage } from "@/lib/gcash-errors";
 import type { BranchSelectItem } from "@/lib/user-branches";
 import type { GCashParty } from "@/types";
 
@@ -22,8 +23,9 @@ export const HEAD_OFFICE_LABEL = "None (head office)";
 /** The server's own words for a missing pick, so the form and a 422 read alike. */
 export const PICK_BRANCH = "Pick the branch where this walk-in transaction is done.";
 
+/** The server's own words (its 422 on `branch_id`), so the form and a refusal read alike. */
 export const NO_BRANCH_EXPLANATION =
-  "You have no branch assigned, so you can't record a walk-in transaction. Ask an administrator to assign you a branch.";
+  "You have no branch assigned, so you cannot record a walk-in transaction. Ask an administrator to assign you a branch.";
 
 export type WalkInBranchChoice =
   /** A member's transaction: no picker, no key. */
@@ -56,6 +58,14 @@ export function walkInBranchChoice<T extends NamedBranch>(
   };
 }
 
+/**
+ * Whether Record Cash In / Record Cash Out is disabled: a walk-in for a caller
+ * with no branch and no view_all, which the server always refuses.
+ */
+export function walkInBranchBlocked(choice: WalkInBranchChoice): boolean {
+  return choice.kind === "unassigned";
+}
+
 export type WalkInBranchBody = Record<string, never> | { branch_id: number | null };
 
 /** The `branch_id` part of the create body, or why the form can't send it yet. */
@@ -80,6 +90,42 @@ export function gcashBranchLabel(
 ): string | null {
   if (branchId === null || branchId === undefined) return null;
   return branches.find((b) => b.id === branchId)?.name ?? "Another branch";
+}
+
+export const MEMBERS_BRANCH_LABEL = "Member's branch";
+export const HEAD_OFFICE_ROW_LABEL = "Head office";
+
+/** A Transactions or Pending Payments row, as far as its branch goes. */
+export interface GCashBranchRow {
+  borrower?: unknown;
+  non_member?: unknown;
+  /** Absent on answers from before backend #283; null for none. */
+  branch_id?: number | null;
+  /** Sent by the pending report since backend B-FU; optional. */
+  branch_name?: string | null;
+}
+
+/**
+ * The Branch cell of a GCash list. The server's `branch_name` when it sends
+ * one. Otherwise a member's row posts in the member's branch, which the row
+ * doesn't name; a walk-in row with no branch is head office's; and an answer
+ * that leaves the branch out entirely reads a dash.
+ */
+export function gcashRowBranchLabel(row: GCashBranchRow, branches: readonly NamedBranch[]): string {
+  const sent = row.branch_name?.trim();
+  if (sent) return sent;
+  if (row.borrower) return MEMBERS_BRANCH_LABEL;
+  if (!("branch_id" in row) || row.branch_id === undefined) return "—";
+  return gcashBranchLabel(row.branch_id, branches) ?? HEAD_OFFICE_ROW_LABEL;
+}
+
+/**
+ * Where a refused Cash In / Cash Out save is shown, once: the server's words
+ * about the branch beside the field, anything else as a toast.
+ */
+export function gcashSaveFailure(err: unknown): { field: string | null; toast: string | null } {
+  const field = branchRefusal(err);
+  return field !== null ? { field, toast: null } : { field: null, toast: extractGCashErrorMessage(err) };
 }
 
 /** The server's 422 on `branch_id`, in its words; null for any other failure. */

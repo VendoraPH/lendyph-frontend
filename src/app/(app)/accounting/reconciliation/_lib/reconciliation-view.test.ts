@@ -15,6 +15,7 @@ import {
   headerFigures,
   ledgerLineText,
   loadFailure,
+  loadRecovery,
   matchFailure,
   pairedFiguresCaption,
   matchLabel,
@@ -304,6 +305,18 @@ describe("refusals", () => {
       loadFailure(httpError(404, {}), { canViewAll: false }),
       "This reconciliation doesn't exist, or it covers a branch you don't have access to.",
     );
+  });
+});
+
+describe("what the not-found page offers", () => {
+  test("a 404 (or a 403) can't be helped by trying again, so it offers the way back to the list", () => {
+    assert.equal(loadRecovery(httpError(404, {})), "back");
+    assert.equal(loadRecovery(httpError(403, {})), "back");
+  });
+
+  test("anything else may pass, so it offers to try again", () => {
+    assert.equal(loadRecovery(httpError(500, {})), "retry");
+    assert.equal(loadRecovery(new Error("Network Error")), "retry");
   });
 });
 

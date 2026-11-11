@@ -22,6 +22,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { usePermission } from "@/hooks";
+import { useBranchChoiceSource } from "@/hooks/use-branch-choice-source";
+import { pickableBranches } from "@/lib/branch-choice";
 import { gcashService } from "@/services/gcash.service";
 import { extractGCashErrorMessage } from "@/lib/gcash-errors";
 import { formatCurrencyExact, formatDate, formatDateISO } from "@/lib/format";
@@ -29,6 +31,7 @@ import type { GCashIncomeReport, GCashPendingItem } from "@/types";
 import { PaidButton } from "./paid-button";
 import { PartyCell } from "./party-cell";
 import { gcashCanMarkPendingPaid } from "../_lib/row-actions";
+import { gcashRowBranchLabel } from "../_lib/walk-in-branch";
 
 // First and last day of the current month. Both bounds are built at LOCAL
 // midnight, which toISOString() then rolled back a day in Manila (UTC+8) — the
@@ -44,6 +47,8 @@ function defaultRange(): { start: string; end: string } {
 export function ReportsTab() {
   const { can } = usePermission();
   const canMarkPaid = gcashCanMarkPendingPaid(can);
+  // Names for a row's `branch_id` when the report sends no `branch_name`.
+  const branches = pickableBranches(useBranchChoiceSource());
   const [{ start, end }, setRange] = useState(defaultRange);
   const [report, setReport] = useState<GCashIncomeReport | null>(null);
   const [pending, setPending] = useState<GCashPendingItem[]>([]);
@@ -196,6 +201,7 @@ export function ReportsTab() {
                   <TableHead>Date</TableHead>
                   <TableHead>Reference</TableHead>
                   <TableHead>Customer</TableHead>
+                  <TableHead>Branch</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
                   <TableHead className="text-right">Charge</TableHead>
                   <TableHead className="text-right">Total</TableHead>
@@ -206,14 +212,14 @@ export function ReportsTab() {
               <TableBody>
                 {pendingLoading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8">
+                    <TableCell colSpan={9} className="text-center py-8">
                       <Loader2 className="inline h-5 w-5 animate-spin" />
                     </TableCell>
                   </TableRow>
                 ) : pending.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={8}
+                      colSpan={9}
                       className="text-center text-muted-foreground py-8"
                     >
                       No pending payments.
@@ -232,6 +238,7 @@ export function ReportsTab() {
                           nonMember={p.non_member}
                         />
                       </TableCell>
+                      <TableCell>{gcashRowBranchLabel(p, branches)}</TableCell>
                       <TableCell className="text-right">
                         {formatCurrencyExact(p.amount)}
                       </TableCell>

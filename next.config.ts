@@ -19,9 +19,22 @@ const MEMBER_PORTAL_HEADERS = [
   { key: "Referrer-Policy", value: "same-origin" },
 ];
 
+// The staff app's pages: framed only by the app itself, never by another site
+// (clickjacking). Nothing in the app embeds its own pages across origins:
+// printables open in a new tab, files open in a new tab, and logos are images.
+const STAFF_APP_HEADERS = [
+  { key: "X-Frame-Options", value: "SAMEORIGIN" },
+  { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
+];
+
+// Every path except /member and /member/..., which keep the portal's stricter
+// headers above (/member-portal, the staff screens, is matched here).
+const STAFF_APP_SOURCE = "/((?!member(?:/|$)).*)";
+
 const nextConfig: NextConfig = {
   async headers() {
     return [
+      { source: STAFF_APP_SOURCE, headers: STAFF_APP_HEADERS },
       { source: "/member", headers: MEMBER_PORTAL_HEADERS },
       { source: "/member/:path*", headers: MEMBER_PORTAL_HEADERS },
     ];

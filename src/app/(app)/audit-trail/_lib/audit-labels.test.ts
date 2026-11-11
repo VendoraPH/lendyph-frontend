@@ -120,9 +120,36 @@ test("accounting and GCash rows read by their module names", () => {
 test("the module filter offers exactly the modules the server filters by", () => {
   assert.deepEqual(
     AUDIT_MODULE_OPTIONS.map((o) => o.value).sort(),
-    ["accounting", "auth", "borrowers", "cda", "collections", "gcash", "loans", "member_portal", "payments", "roles", "savings", "system", "users"]
+    // Backend AuditLogModules::all(): every module in MODULE_MAP, plus auth and system.
+    [
+      "accounting",
+      "auth",
+      "borrowers",
+      "cda",
+      "collections",
+      "credit_scoring",
+      "gcash",
+      "loans",
+      "member_portal",
+      "payments",
+      "reminders",
+      "roles",
+      "savings",
+      "system",
+      "users",
+    ]
   );
   assert.ok(AUDIT_MODULE_OPTIONS.every((o) => o.label === auditModuleLabel({ module: o.value, target: null })));
+});
+
+test("every module filter option reads in words, by its menu name", () => {
+  const labels = Object.fromEntries(AUDIT_MODULE_OPTIONS.map((o) => [o.value, o.label]));
+  assert.equal(labels.reminders, "Reminders");
+  assert.equal(labels.credit_scoring, "Credit Scoring");
+  assert.equal(labels.savings, "Savings");
+  assert.equal(labels.cda, "CDA Compliance");
+  assert.equal(labels.member_portal, "Member Portal");
+  assert.ok(AUDIT_MODULE_OPTIONS.every((o) => !/_/.test(o.label) && o.label !== o.value));
 });
 
 test("a deleted row with no description lists the old values, without id or timestamps", () => {

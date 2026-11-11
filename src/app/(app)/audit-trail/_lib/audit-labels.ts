@@ -24,6 +24,8 @@ const MODULE_LABELS: Record<AuditModule, string> = {
   roles: "Roles",
   accounting: "Accounting",
   gcash: "GCash",
+  reminders: "Reminders",
+  credit_scoring: "Credit Scoring",
   savings: "Savings",
   cda: "CDA Compliance",
   member_portal: "Member Portal",
@@ -35,7 +37,23 @@ const MODULE_LABELS: Record<AuditModule, string> = {
  * `module` parameter accepts (anything else is refused with 422).
  */
 export const AUDIT_MODULE_OPTIONS: { value: AuditModule; label: string }[] = (
-  ["auth", "borrowers", "loans", "payments", "collections", "users", "roles", "accounting", "gcash", "savings", "cda", "member_portal", "system"] as const
+  [
+    "auth",
+    "borrowers",
+    "loans",
+    "payments",
+    "collections",
+    "users",
+    "roles",
+    "accounting",
+    "gcash",
+    "reminders",
+    "credit_scoring",
+    "savings",
+    "cda",
+    "member_portal",
+    "system",
+  ] as const
 ).map((value) => ({ value, label: MODULE_LABELS[value] }));
 
 const ACTION_LABELS: Record<string, string> = {

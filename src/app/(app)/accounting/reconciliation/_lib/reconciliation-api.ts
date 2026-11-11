@@ -1,11 +1,13 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
+import { httpStatusOf } from "@/lib/api-error";
 import { accountingService } from "@/services/accounting.service";
 import type {
   ReconcileLineAsExpenseBody,
   ReconcileLineAsTransferBody,
   ReconcileLineToSuspenseBody,
 } from "@/types";
+import type { StartAccountsAnswer } from "./start-accounts";
 import type {
   CreateReconciliationBody,
   LineActionKind,
@@ -21,6 +23,22 @@ import type {
  * line actions go through the accounting service, read whole so `created`
  * survives beside `data`. Every answer is the worksheet as `present()` sends it.
  */
+
+/**
+ * `GET /accounting/reconciliations/accounts` (`accounting:reconcile`): the
+ * cash and bank accounts a reconciliation can be started on, so a role with
+ * reconcile but no `chart_of_accounts:view` can start one. Not yet in
+ * `API_ENDPOINTS`. An older backend answers 404, and the form then falls back
+ * to the chart's money accounts.
+ */
+export const RECONCILABLE_ACCOUNTS_PATH = "/accounting/reconciliations/accounts";
+
+export function reconciliationAccounts(): Promise<StartAccountsAnswer> {
+  return api.get<unknown>(RECONCILABLE_ACCOUNTS_PATH).then(
+    (rows): StartAccountsAnswer => (Array.isArray(rows) ? { state: "list", accounts: rows } : { state: "failed" }),
+    (err: unknown): StartAccountsAnswer => (httpStatusOf(err) === 404 ? { state: "missing" } : { state: "failed" }),
+  );
+}
 
 export function reconciliationShow(id: number): Promise<ReconciliationDetail> {
   return api.get<ReconciliationDetail>(API_ENDPOINTS.ACCOUNTING.RECONCILIATIONS_SHOW(id));

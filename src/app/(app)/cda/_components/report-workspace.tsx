@@ -13,7 +13,16 @@ import { notifyError, notifyInfo, notifySuccess, notifyValidation } from "@/lib/
 import { formatDate, formatDateTime } from "@/lib/format";
 import { useCdaReport } from "../_hooks/use-cda-report";
 import { STAGE_LABELS, labelOf, reportName } from "../_lib/labels";
-import { fieldInputs, missingReasons, needsDocument, type FieldDraft, type FieldDrafts } from "../_lib/report-fields";
+import {
+  draftsAfterReload,
+  draftsForReport,
+  fieldInputs,
+  missingReasons,
+  needsDocument,
+  type FieldDraft,
+  type ReportDrafts,
+  type ReportReload,
+} from "../_lib/report-fields";
 import { DeadlineBadge, ReportStatusBadge, ToneBadge } from "./tone-badge";
 import { ExportPanel } from "./export-panel";
 import { ReadinessBreakdown } from "./readiness-breakdown";
@@ -87,12 +96,23 @@ function Notices({ report, onRefresh, refreshing }: { report: CdaReport; onRefre
   );
 }
 
-function ReportBody({ report, onChange, onReload }: { report: CdaReport; onChange: (r: CdaReport) => void; onReload: () => void }) {
+interface ReportBodyProps {
+  report: CdaReport;
+  /** Held by the workspace, so a reload of the report (a spinner) doesn't drop them. */
+  drafts: ReportDrafts;
+  setDrafts: (drafts: ReportDrafts) => void;
+  /** The report is being read again; Save waits for it. */
+  reloading: boolean;
+  onChange: (r: CdaReport) => void;
+  /** After a 409: read the report again, from the server's figures. */
+  onReload: () => void;
+}
+
+function ReportBody({ report, drafts, setDrafts, reloading, onChange, onReload }: ReportBodyProps) {
   const { can } = usePermission();
-  const [drafts, setDrafts] = useState<{ reportId: number; values: FieldDrafts }>({ reportId: report.id, values: {} });
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const values = drafts.reportId === report.id ? drafts.values : {};
+  const values = draftsForReport(drafts, report);
   const canEdit = report.status === "draft" && report.applicable && !report.locked && can("cda:prepare");
   const dirty = Object.keys(values).length > 0;
 
@@ -149,7 +169,7 @@ function ReportBody({ report, onChange, onReload }: { report: CdaReport; onChang
       <div className="flex flex-wrap items-center justify-between gap-2">
         <WorkflowActions report={report} onChange={onChange} onReload={onReload} />
         {canEdit && (
-          <PermissionButton permission="cda:prepare" size="sm" onClick={save} disabled={!dirty || saving}>
+          <PermissionButton permission="cda:prepare" size="sm" onClick={save} disabled={!dirty || saving || reloading}>
             <Save className="mr-1 h-4 w-4" />
             {saving ? "Saving…" : "Save changes"}
           </PermissionButton>
@@ -185,19 +205,50 @@ export function ReportWorkspace({
   year,
   type,
   part,
+  registerVersion = 0,
 }: {
   year: number;
   type: CdaReportType;
   part?: CdaReportPart;
+  /** Bumped by the page after a register write: read the report again, keeping the edits. */
+  registerVersion?: number;
 }) {
   const { resource, replace } = useCdaReport(year, type, part);
+  const [drafts, setDrafts] = useState<ReportDrafts>({ reportId: 0, values: {} });
+
+  const reload = (reason: ReportReload) => {
+    setDrafts(draftsAfterReload(drafts, reason));
+    resource.refetch();
+  };
+
+  // A register write on the page: the report is read again in place, and the
+  // unsaved edits stay, shown over the reloaded figures.
+  const [seenRegisterVersion, setSeenRegisterVersion] = useState(registerVersion);
+  if (seenRegisterVersion !== registerVersion) {
+    setSeenRegisterVersion(registerVersion);
+    reload("register");
+  }
+
+  // While a reload runs, the report already shown stays on screen.
+  const reloading = resource.loading && resource.data !== null;
+  const shown = reloading ? { ...resource, loading: false } : resource;
+
   return (
     <DataState
-      resource={resource}
+      resource={shown}
       endpoints={[`GET ${API_ENDPOINTS.CDA.REPORT_BY_TYPE(year, type)}`]}
       summary={`The ${year} ${reportName(type, part)}, with its issues and workflow`}
     >
-      {(report) => <ReportBody report={report} onChange={replace} onReload={resource.refetch} />}
+      {(report) => (
+        <ReportBody
+          report={report}
+          drafts={drafts}
+          setDrafts={setDrafts}
+          reloading={reloading}
+          onChange={replace}
+          onReload={() => reload("conflict")}
+        />
+      )}
     </DataState>
   );
 }

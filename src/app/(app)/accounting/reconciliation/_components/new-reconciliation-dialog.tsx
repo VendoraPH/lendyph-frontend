@@ -16,7 +16,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { BranchSelectField } from "@/components/common/branch-select-field";
 import { useDialogOpening } from "@/hooks";
 import type { BranchChoiceState } from "@/hooks/use-branch-choice-source";
-import type { Account } from "@/types";
 import { AccountSelect } from "../../_components/account-select";
 import { reconciliationBranchChoice } from "../_lib/branch-scope";
 import { reconciliationCreate } from "../_lib/reconciliation-api";
@@ -30,6 +29,7 @@ import {
   parsePastedLines,
   type StatementForm,
 } from "../_lib/statement-form";
+import type { StartAccount } from "../_lib/start-accounts";
 import type { ReconciliationDetail } from "../_lib/types";
 import { StatementLinesEditor } from "./statement-lines-editor";
 
@@ -48,8 +48,8 @@ const PASTE_HINT =
 
 interface NewReconciliationDialogProps {
   open: boolean;
-  /** Money accounts only: the ones carrying a cash kind. */
-  accounts: Account[];
+  /** The reconcilable money accounts (useStartAccounts). */
+  accounts: StartAccount[];
   /** The page's `useBranchChoiceSource()`, so the list's filter and this form read one branch list. */
   branchSource: BranchChoiceState;
   onOpenChange: (open: boolean) => void;

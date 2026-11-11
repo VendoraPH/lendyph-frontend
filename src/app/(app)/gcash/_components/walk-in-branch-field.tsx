@@ -40,12 +40,14 @@ export function WalkInBranchField({ branch, disabled }: { branch: WalkInBranch; 
           <span>{choice.branch.name}</span>
         </div>
       ) : (
-        <p role="note" className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-          {NO_BRANCH_EXPLANATION}
+        // The reason Record is disabled, said once: a refusal of the same
+        // thing replaces it rather than repeating it below.
+        <p id={branch.reasonId} role="note" className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+          {error ?? NO_BRANCH_EXPLANATION}
         </p>
       )}
       {choice.kind === "fixed" && <p className="text-xs text-muted-foreground">{POSTS_HERE}</p>}
-      {error && (
+      {error && choice.kind === "fixed" && (
         <p role="alert" className="text-sm text-destructive">
           {error}
         </p>

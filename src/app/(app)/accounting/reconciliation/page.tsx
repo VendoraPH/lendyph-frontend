@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
@@ -16,7 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useAccountingResource, useChartOfAccounts } from "@/hooks";
+import { useAccountingResource } from "@/hooks";
 import { useBranchChoiceSource } from "@/hooks/use-branch-choice-source";
 import { pickableBranches } from "@/lib/branch-choice";
 import { accountingService } from "@/services";
@@ -33,6 +33,7 @@ import { FigureWithNote } from "./_components/figure-with-note";
 import { ReconciledBadge, RowMatchBadge } from "./_components/match-badge";
 import { NewReconciliationDialog } from "./_components/new-reconciliation-dialog";
 import { ReasonButton } from "./_components/reason-button";
+import { useStartAccounts } from "./_components/use-start-accounts";
 import {
   ANY_BRANCH,
   branchScopeLabel,
@@ -42,6 +43,7 @@ import {
 } from "./_lib/branch-scope";
 import { NO_BRANCH_ASSIGNED, accountLabel, reconciledLabel, rowFigures } from "./_lib/reconciliation-view";
 import { signedCentavos } from "./_lib/signed-money";
+import { startAccountsReason } from "./_lib/start-accounts";
 import type { ReconciliationDetail } from "./_lib/types";
 
 const DESCRIPTION = "Prove each money account against its statement.";
@@ -52,18 +54,15 @@ function detailHref(id: number): string {
 
 function ReconciliationContent() {
   const router = useRouter();
-  const { postable, isTemplate, loading: chartLoading } = useChartOfAccounts();
+  const startAccounts = useStartAccounts();
+  const accountsLoading = startAccounts.status === "loading";
+  const moneyAccounts = startAccounts.status === "ready" ? startAccounts.accounts : [];
   const [accountId, setAccountId] = useState<number | null>(null);
   const [branchFilter, setBranchFilter] = useState(ANY_BRANCH);
   const [creating, setCreating] = useState(false);
   const branchSource = useBranchChoiceSource();
   const unassigned = reconciliationBranchChoice(branchSource).kind === "unassigned";
   const filterItems = reconciliationFilterItems(branchSource.viewAll, pickableBranches(branchSource));
-
-  const moneyAccounts = useMemo(
-    () => postable.filter((a) => Boolean(a.cash_kind)),
-    [postable],
-  );
 
   // Drained. The account filter below narrows what is already in hand, so a
   // short page makes "No reconciliation for this account" a lie rather than an
@@ -79,13 +78,7 @@ function ReconciliationContent() {
   );
   const resource = useAccountingResource<DrainResult<ReconciliationDetail>>(fetcher);
 
-  const createReason = unassigned
-    ? NO_BRANCH_ASSIGNED
-    : isTemplate
-    ? "The chart of accounts isn't available, so no account can be picked."
-    : moneyAccounts.length === 0
-      ? "No money account is set up yet."
-      : null;
+  const createReason = unassigned ? NO_BRANCH_ASSIGNED : startAccountsReason(startAccounts);
 
   const created = (reconciliation: ReconciliationDetail) => {
     setCreating(false);
@@ -100,7 +93,7 @@ function ReconciliationContent() {
         title="Reconciliation"
         description={DESCRIPTION}
         actions={
-          <ReasonButton reason={chartLoading ? null : createReason} disabled={chartLoading} onClick={() => setCreating(true)}>
+          <ReasonButton reason={accountsLoading ? null : createReason} disabled={accountsLoading} onClick={() => setCreating(true)}>
             <Plus className="mr-1 size-4" />
             New reconciliation
           </ReasonButton>
@@ -128,7 +121,7 @@ function ReconciliationContent() {
           accounts={moneyAccounts}
           value={accountId}
           onChange={setAccountId}
-          placeholder={chartLoading ? "Loading…" : "All money accounts"}
+          placeholder={accountsLoading ? "Loading…" : "All money accounts"}
         />
       </FilterBar>
 

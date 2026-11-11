@@ -88,7 +88,7 @@ export const expenseStatusItems: readonly SelectItemOption[] = [
  * The `items` for an account `<Select>`. Base UI resolves the closed trigger's
  * label from `items`, so without them it shows the account id.
  */
-export function accountSelectItems(accounts: readonly Account[]): SelectItemOption[] {
+export function accountSelectItems(accounts: readonly Pick<Account, "id" | "code" | "name">[]): SelectItemOption[] {
   return accounts.map((a) => ({ value: String(a.id), label: `${a.code} ${a.name}` }));
 }
 
