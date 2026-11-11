@@ -268,6 +268,15 @@ jobs:
             echo "::warning title=Proxy secret missing::PROXY_SECRET_LENDYPH_STAGING is not set; the box keeps its last one, if any."
             exit 1
           fi
+          # Exactly 64 lowercase hex characters, as `openssl rand -hex 32` makes it.
+          # Anything else is refused, a pasted trailing newline included: the
+          # backend file's line 2 is the allowed-source list, and a stray newline
+          # would push it to line 3, which nothing reads.
+          secret_format='^[0-9a-f]{64}$'
+          if ! [[ $PROXY_SECRET =~ $secret_format ]]; then
+            echo "::warning title=Proxy secret not delivered::PROXY_SECRET_LENDYPH_STAGING is not exactly 64 lowercase hex characters (a trailing newline counts); the box keeps its last one, if any."
+            exit 1
+          fi
           umask 077
           key="$RUNNER_TEMP/vps_key"
           trap 'rm -f "$key"' EXIT
