@@ -204,7 +204,7 @@ function AuditDetailDrawer({
                 <div className="flex-1">
                   <p className="text-sm font-medium">{log.target.label}</p>
                   {auditTargetTypeLine(log.target) !== null && (
-                    <p className="text-xs text-muted-foreground capitalize">
+                    <p className="text-xs text-muted-foreground">
                       {auditTargetTypeLine(log.target)}
                     </p>
                   )}

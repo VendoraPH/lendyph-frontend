@@ -450,3 +450,16 @@ test("CDA rows read their module, actions and targets in words", () => {
   assert.equal(auditTargetType("CdaExportTemplateFile"), "CDA export template file");
   assert.equal(auditTargetType("CdaNoticeSent"), "CDA notice");
 });
+
+test("the type and id line shows as worded, never re-cased by CSS", () => {
+  // "CDA document #1" stays "CDA document #1" (a `capitalize` class made it
+  // "CDA Document #1"); the other types read exactly as before, in their words.
+  assert.equal(auditTargetTypeLine({ id: 1, type: "CdaDocument", label: "Signed CAPR" }), "CDA document #1");
+  assert.equal(auditTargetTypeLine({ id: 12, type: "JournalEntry", label: "JE-000012" }), "Journal entry #12");
+  assert.equal(auditTargetTypeLine({ id: 4, type: "TimeDeposit", label: "TD-2026-000004" }), "Time deposit #4");
+  assert.equal(auditTargetTypeLine({ id: 7, type: "Borrower", label: "Ana Cruz" }), "Member #7");
+  const page = readFileSync(join(process.cwd(), "src/app/(app)/audit-trail/page.tsx"), "utf8");
+  const line = page.split("\n").findIndex((l) => l.includes("{auditTargetTypeLine(log.target)}"));
+  assert.ok(line > 0);
+  assert.doesNotMatch(page.split("\n")[line - 1], /capitalize/);
+});

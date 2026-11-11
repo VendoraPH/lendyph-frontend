@@ -198,6 +198,8 @@ export const cdaService = {
 
   // ── Templates (super_admin) ──
   listTemplates: () => api.get<CdaTemplate[]>(C.TEMPLATES),
+  /** One template with its definition (cda:view). */
+  getTemplate: (id: number) => api.get<CdaTemplate>(C.TEMPLATE(id)),
   createTemplate: (data: CdaTemplateInput) => api.post<CdaTemplate>(C.TEMPLATES, data),
   /** A draft's report type is fixed, so it isn't sent. */
   updateTemplate: (id: number, data: CdaTemplateInput) =>

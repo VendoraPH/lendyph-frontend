@@ -7,20 +7,43 @@ import { usePermission } from "@/hooks";
 import { cdaService } from "@/services";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import type { CdaReport } from "@/types/cda";
+import { documentPreset } from "../_lib/document-preset";
 import { reportName } from "../_lib/labels";
+import type { RecordDraft } from "../_lib/record-form";
 import { toUpload, uploadCategories, uploadFields } from "../documents/_lib/document-form";
 import { CDA_FILE_ACCEPT, RecordFormDialog } from "./record-form-dialog";
 
 /**
- * Upload a document for this report from the report itself. The report is
- * read again straight after, so an issue the upload settles (a document
- * needed to file a finalized report included) clears without a reload, and
- * unsaved edits stay.
+ * Upload a document for this report from the report itself. The form starts
+ * on what the open document issue needs (its category, from the report's
+ * template, and a final copy); both can be changed. The report is read again
+ * straight after, so an issue the upload settles (a document needed to file a
+ * finalized report included) clears without a reload, and unsaved edits stay.
  */
 export function ReportDocumentUpload({ report, onChange }: { report: CdaReport; onChange: (report: CdaReport) => void }) {
   const { can } = usePermission();
-  const [open, setOpen] = useState(false);
-  const fields = uploadFields(uploadCategories(can), [{ value: String(report.id), label: reportName(report.report_type, report.part) }]);
+  const [defaults, setDefaults] = useState<RecordDraft | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const categories = uploadCategories(can);
+  const fields = uploadFields(categories, [{ value: String(report.id), label: reportName(report.report_type, report.part) }]);
+
+  function open() {
+    setPreparing(true);
+    const definition = report.template
+      ? cdaService.getTemplate(report.template.id).then((t) => t.definition, () => null)
+      : Promise.resolve(null);
+    definition
+      .then((def) => {
+        const preset = documentPreset(report.issues, def);
+        const offered = preset.category !== null && categories.some((c) => c.value === preset.category);
+        setDefaults({
+          report_id: String(report.id),
+          category: offered ? (preset.category ?? "") : "",
+          final: preset.final ? "1" : "",
+        });
+      })
+      .finally(() => setPreparing(false));
+  }
 
   function upload(values: Record<string, string | number | boolean | null>, file: File | null): Promise<unknown> {
     if (!file) return Promise.reject(new Error("No file"));
@@ -38,16 +61,16 @@ export function ReportDocumentUpload({ report, onChange }: { report: CdaReport; 
 
   return (
     <>
-      <PermissionButton permission="cda:upload" size="sm" variant="outline" onClick={() => setOpen(true)}>
-        <Upload className="mr-1 h-4 w-4" /> Upload a document for this report
+      <PermissionButton permission="cda:upload" size="sm" variant="outline" onClick={open} disabled={preparing}>
+        <Upload className="mr-1 h-4 w-4" /> {preparing ? "Opening…" : "Upload a document for this report"}
       </PermissionButton>
       <RecordFormDialog
-        open={open}
-        onOpenChange={setOpen}
+        open={defaults !== null}
+        onOpenChange={(next) => !next && setDefaults(null)}
         title="Upload a document"
         description={reportName(report.report_type, report.part)}
         fields={fields}
-        defaults={{ report_id: String(report.id) }}
+        defaults={defaults ?? undefined}
         file={{ label: "File", required: true, accept: CDA_FILE_ACCEPT }}
         onSubmit={upload}
       />
