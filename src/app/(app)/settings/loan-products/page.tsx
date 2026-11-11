@@ -1,5 +1,6 @@
 "use client";
 
+import { env } from "@/config/env";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useDialogOpening, usePermission } from "@/hooks";
@@ -564,6 +565,11 @@ function ProductFormDialog({
                   value={form.penalty_rate}
                   onChange={(e) => update("penalty_rate", e.target.value)}
                 />
+                {env.features.penaltyConfigs && (
+                  <p className="text-xs text-muted-foreground">
+                    Used only when no active configuration in Settings → Penalties covers this product.
+                  </p>
+                )}
               </div>
             </div>
 

@@ -16,6 +16,7 @@ export { loanAdjustmentService } from "./loan-adjustment.service";
 export { repaymentService } from "./repayment.service";
 export { systemService } from "./system.service";
 export { feeService } from "./fee.service";
+export { penaltyConfigService } from "./penalty-config.service";
 export { dashboardService } from "./dashboard.service";
 export { loanApprovalService } from "./loan-approval.service";
 export { approvalWorkflowService } from "./approval-workflow.service";

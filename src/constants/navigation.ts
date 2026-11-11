@@ -306,6 +306,11 @@ export const SIDEBAR_NAV: NavItem[] = [
       { title: "Branches", href: "/settings/branches" },
       { title: "Loan Products", href: "/settings/loan-products" },
       { title: "Fees", href: "/settings/fees", permission: "fees:view" },
+      // Gated on NEXT_PUBLIC_ENABLE_PENALTY_CONFIGS at build time; the route
+      // answers not found when it is off (settings/penalties/layout.tsx).
+      ...(env.features.penaltyConfigs
+        ? [{ title: "Penalties", href: "/settings/penalties", permission: "penalties:view" as const }]
+        : []),
       { title: "Collateral Types", href: "/settings/collateral-types" },
       { title: "Role and Permissions", href: "/settings/user-roles" },
       { title: "Approval Workflow", href: "/settings/approval-workflow" },

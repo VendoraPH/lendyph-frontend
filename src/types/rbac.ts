@@ -43,6 +43,8 @@ export type Module =
   | "reports"
   | "settings"
   | "fees"
+  // Settings → Penalties (overdue-day penalty brackets per loan product).
+  | "penalties"
   | "users"
   // Branch access. `branches:view_all` sees every branch's data; without it
   // the API limits a user to the branches they are assigned to (another

@@ -172,6 +172,11 @@ export const env = {
     // Credit Scoring. Off by default: the menu and every route stay hidden until
     // its endpoints stop answering 501. Literal reference for the same reason.
     creditScoring: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_CREDIT_SCORING),
+    // Settings → Penalties: overdue-day penalty brackets assigned to loan
+    // products. Off by default until the backend serves /penalty-configs.
+    // While on, the single "Penalty Rate" input leaves the loan product form.
+    // Literal reference, as above.
+    penaltyConfigs: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_PENALTY_CONFIGS),
   },
   debug: {
     enabled: getBoolEnvVar("NEXT_PUBLIC_DEBUG", false),

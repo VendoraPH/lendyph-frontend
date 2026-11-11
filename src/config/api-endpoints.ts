@@ -159,6 +159,15 @@ export const API_ENDPOINTS = {
     UPDATE: (id: number) => `/fees/${id}`,
     DELETE: (id: number) => `/fees/${id}`,
   },
+  // Settings → Penalties. Not built on the backend yet (handoff on ClickUp
+  // 14zfbg0d0dh); the screen is behind NEXT_PUBLIC_ENABLE_PENALTY_CONFIGS.
+  PENALTY_CONFIGS: {
+    LIST: "/penalty-configs",
+    CREATE: "/penalty-configs",
+    UPDATE: (id: number) => `/penalty-configs/${id}`,
+    STATUS: (id: number) => `/penalty-configs/${id}/status`,
+    DELETE: (id: number) => `/penalty-configs/${id}`,
+  },
   COLLATERAL_TYPES: {
     LIST: "/collateral-types",
     CREATE: "/collateral-types",

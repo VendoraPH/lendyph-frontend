@@ -13,6 +13,9 @@ import type { Action, Module } from "@/types";
  *   has never offered it, and a role keeps whatever it holds on save.
  * - `auto_credit` (`auto_credit:process`) is named so the catalog can list the
  *   API's full set; the matrix doesn't offer it either.
+ * - `penalties` (Settings → Penalties, ClickUp 14zfbg0d0dh) is named so the
+ *   page can check it; the API doesn't seed `penalties:*` yet, so offering it
+ *   would 422 every save. Offer it once the backend seeds it.
  *
  * `credit_scoring` is offered again: the backend seeds
  * `credit_scoring:view|override|settings` (admin and super_admin hold them by
@@ -32,7 +35,7 @@ import type { Action, Module } from "@/types";
  * permissions for admin and super_admin (`CdaAccess::PERMISSIONS`). Each
  * works only with `branches:view_all`.
  */
-export type UIModule = Exclude<Module, "collections" | "loan_adjustments" | "auto_credit">;
+export type UIModule = Exclude<Module, "collections" | "loan_adjustments" | "auto_credit" | "penalties">;
 
 // Applicable actions per module — only the actions that make sense for each area
 export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
