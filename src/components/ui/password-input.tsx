@@ -11,6 +11,10 @@ import { Input } from "./input";
  *
  * Takes everything `<Input>` takes except `type`, which it owns.
  *
+ * Spellcheck, autocorrect and auto-capitalisation are off: once "Show
+ * password" turns the field into text, a browser or OS spellcheck service
+ * could otherwise read the password, or change it as it is typed.
+ *
  * The toggle is a real `<button type="button">`, not a styled `<span>`, so it
  * is reachable by keyboard and announced. `type="button"` is load-bearing: the
  * default inside a `<form>` is `submit`, which would post the form on every
@@ -31,6 +35,9 @@ function PasswordInput({
   return (
     <div className="relative">
       <Input
+        spellCheck={false}
+        autoCorrect="off"
+        autoCapitalize="none"
         {...props}
         type={visible ? "text" : "password"}
         className={cn("pr-9", className)}
