@@ -20,6 +20,13 @@ export interface Repayment {
   excess_amount?: number;
   /** Insurance premium owed on the loan that this payment collected first. */
   insurance_applied?: number;
+  /**
+   * What the payment credited to the member's Share Capital Build-Up, as a
+   * 2-decimal string or null (backend B-FU). Absent on older answers.
+   */
+  build_up_credited?: string | null;
+  /** What the payment kept as an advance or overpayment, likewise. */
+  overpayment_kept?: string | null;
 }
 
 /**

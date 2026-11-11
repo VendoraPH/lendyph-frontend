@@ -3462,7 +3462,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
       )}
 
 
-      {/* Amortization Schedule — collapsible, collapsed by default. Shown for
+      {/* Amortization Schedule — collapsible, open by default. Shown for
           every loan that has a server schedule to read, rows or not: loading,
           failed and empty each say so in place of the rows. */}
       {scheduleSource !== null && (

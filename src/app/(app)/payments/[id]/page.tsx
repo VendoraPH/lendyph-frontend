@@ -16,6 +16,7 @@ import { INSURANCE_PREMIUM_LABEL, repaymentInsuranceApplied } from "@/lib/insura
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
 import { readablePaymentRemarks } from "@/lib/printables/legacy-remarks";
+import { receiptExtraLines, type ReceiptExtraLine } from "@/lib/receipt-extras";
 import { voidedByName } from "../history/_lib/payment-history";
 import type { Repayment } from "@/types";
 
@@ -37,6 +38,8 @@ interface ReceiptData {
   principal: number;
   /** Insurance premium owed on the loan that this payment collected first. */
   insurance: number | null;
+  /** Share Capital Build-Up and Advance / Overpayment, as the server sent them. */
+  extras: ReceiptExtraLine[];
   total: number;
   previous_balance: number;
   new_balance: number;
@@ -119,6 +122,7 @@ function mapPaymentToReceipt(payment: Repayment): ReceiptData {
     interest: (p.interest_amount as number) || (p.interest_paid as number) || 0,
     principal: (p.principal_amount as number) || (p.principal_paid as number) || 0,
     insurance: repaymentInsuranceApplied(p),
+    extras: receiptExtraLines(p),
     total: p.amount_paid,
     previous_balance: (p.previous_balance as number) || 0,
     new_balance: (p.new_balance as number) || 0,
@@ -459,6 +463,9 @@ function PaymentReceiptContent({
                     label="Principal"
                     value={formatCurrency(receipt.principal)}
                   />
+                  {receipt.extras.map((line) => (
+                    <ReceiptRow key={line.label} label={line.label} value={line.amount} />
+                  ))}
                 </div>
                 <Separator className="my-1" />
                 <div className="flex justify-between text-sm font-bold">
