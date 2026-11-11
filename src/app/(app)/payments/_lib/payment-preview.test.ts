@@ -1,5 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { RepaymentPreview } from "@/services/repayment.service";
 import {
   postPaymentErrorMessage,
@@ -168,4 +170,12 @@ test("the server's split fills one cell per part", () => {
     ["Share Capital", "₱250.00"],
     ["Overpayment", "₱416.66"],
   ]);
+});
+
+test("the loan page's Record Payment names the excess by the same rule as Payment Entry", () => {
+  const page = readFileSync(join(process.cwd(), "src/app/(app)/loans/[id]/page.tsx"), "utf8");
+  assert.doesNotMatch(page, /Excess \/ SCB/);
+  assert.doesNotMatch(page, /Excess → Share Capital \/ Future Periods/);
+  assert.match(page, /previewExcessCells\(paymentPreview, loanHasBuildUp\(loan\?\.scb_amount\)\)/);
+  assert.match(page, /previewExcessTiles\(paymentPreview, loanHasBuildUp\(loan\?\.scb_amount\)\)/);
 });

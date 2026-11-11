@@ -10,6 +10,7 @@ import {
   activeLoanCardParams,
   activeLoanDueCell,
   activeLoanListParams,
+  loanHasBuildUp,
   mapLoanToActiveLoan,
   normaliseLoanSearch,
   pageAfterEmptyAnswer,
@@ -317,4 +318,11 @@ test("whether the loan carries a Share Capital Build-Up comes from its own scb_a
   assert.equal(mapLoanToActiveLoan(summaryRow({ scb_amount: "0.00" })).has_build_up, false);
   // A summary row that doesn't say: unknown until the full loan loads.
   assert.equal(mapLoanToActiveLoan(summaryRow()).has_build_up, null);
+});
+
+test("a loan's build-up, read from scb_amount wherever the loan is shown", () => {
+  assert.equal(loanHasBuildUp(500), true);
+  assert.equal(loanHasBuildUp("0.00"), false);
+  assert.equal(loanHasBuildUp(undefined), null);
+  assert.equal(loanHasBuildUp(null), null);
 });

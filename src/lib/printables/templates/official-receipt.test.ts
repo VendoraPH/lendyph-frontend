@@ -121,23 +121,48 @@ test("official receipt: a null split figure prints a dash, never ₱0.00", () =>
   assert.equal(hasChargeLine(doc, "Advance / Overpayment"), false);
 });
 
-test("official receipt: overpayment is only shown when there is one", () => {
+test("official receipt: an older answer's combined excess prints once, under a neutral label", () => {
   const doc = buildOfficialReceiptDoc(PAYMENT);
-  assert.throws(() => chargeAmount(doc, "Advance / Overpayment"));
+  assert.equal(hasChargeLine(doc, "Build-Up / Overpayment"), false);
 
   const withExcess = buildOfficialReceiptDoc({
     ...PAYMENT,
     overpayment: 500,
     amount_paid: 19166.67,
   });
-  assert.equal(
-    chargeAmount(withExcess, "Advance / Overpayment"),
-    formatCurrency(500)
-  );
+  assert.equal(chargeAmount(withExcess, "Build-Up / Overpayment"), formatCurrency(500));
+  assert.equal(hasChargeLine(withExcess, "Advance / Overpayment"), false);
   assert.equal(
     chargeAmount(withExcess, "TOTAL AMOUNT PAID"),
     formatCurrency(16666.67 + 1800 + 200 + 500)
   );
+});
+
+test("official receipt: both split figures null keep the combined line, so the breakdown still adds up", () => {
+  // An old build-up payment the server can't split: ₱750.00 over the periods.
+  const doc = buildOfficialReceiptDoc({
+    ...PAYMENT,
+    overpayment: 750,
+    build_up_credited: null,
+    overpayment_kept: null,
+    amount_paid: 19416.67,
+  });
+  assert.equal(chargeAmount(doc, "Build-Up / Overpayment"), formatCurrency(750));
+  assert.equal(hasChargeLine(doc, "Share Capital Build-Up"), false);
+  assert.equal(hasChargeLine(doc, "Advance / Overpayment"), false);
+  assert.equal(chargeAmount(doc, "TOTAL AMOUNT PAID"), formatCurrency(16666.67 + 1800 + 200 + 750));
+});
+
+test("official receipt: one split figure and one null print the split, the null as a dash", () => {
+  const doc = buildOfficialReceiptDoc({
+    ...PAYMENT,
+    overpayment: 750,
+    build_up_credited: "250.00",
+    overpayment_kept: null,
+  });
+  assert.equal(chargeAmount(doc, "Share Capital Build-Up"), formatCurrency(250));
+  assert.equal(chargeAmount(doc, "Advance / Overpayment"), "—");
+  assert.equal(hasChargeLine(doc, "Build-Up / Overpayment"), false);
 });
 
 test("official receipt: insurance premium collected first is its own line, only when there is one", () => {

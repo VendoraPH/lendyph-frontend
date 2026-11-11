@@ -13,7 +13,7 @@
  */
 
 import { knownPaymentMethodName } from "@/constants/payment-methods";
-import { hasReceiptSplit, receiptExtraLines } from "@/lib/receipt-extras";
+import { receiptExtraLines } from "@/lib/receipt-extras";
 import { amountInWords } from "../amount-in-words";
 import { readablePaymentRemarks } from "../legacy-remarks";
 import type { PrintableDocument, PrintBlock, PrintChargeLine } from "../types";
@@ -94,7 +94,6 @@ export function buildOfficialReceiptDoc(
     "penalty_paid",
     "penalty",
   ]);
-  const overpayment = pickNumber(payment, ["overpayment", "excess_amount"]);
   // Insurance premium owed on the loan, collected before penalty, interest
   // and principal. Shown only when this payment collected some.
   const insurance = pickNumber(payment, ["insurance_applied"]);
@@ -121,19 +120,10 @@ export function buildOfficialReceiptDoc(
       indent: true,
     });
   }
-  if (hasReceiptSplit(payment)) {
-    // `overpayment` also holds the build-up on a build-up loan, so the server's
-    // own two figures label each part (backend B-FU).
-    for (const line of receiptExtraLines(payment)) {
-      breakdown.push({ label: line.label, amount: line.amount, indent: true });
-    }
-  } else if ((overpayment ?? 0) > 0) {
-    // An older backend sends only the combined figure.
-    breakdown.push({
-      label: "Advance / Overpayment",
-      amount: formatCurrency(overpayment ?? 0),
-      indent: true,
-    });
+  // Build-up and overpayment as the server split them, or its one combined
+  // figure when it sent no split (receipt-extras).
+  for (const line of receiptExtraLines(payment)) {
+    breakdown.push({ label: line.label, amount: line.amount, indent: true });
   }
   breakdown.push({
     label: "TOTAL AMOUNT PAID",

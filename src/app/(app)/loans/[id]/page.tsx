@@ -134,6 +134,8 @@ import {
   freshInterestLabel,
 } from "./_lib/extension-preview";
 import { checkPaymentAmount } from "@/app/(app)/payments/_lib/payment-amount";
+import { previewExcessCells, previewExcessTiles } from "@/app/(app)/payments/_lib/payment-preview";
+import { loanHasBuildUp } from "@/app/(app)/payments/_lib/active-loans";
 import { previewRefusalMessage, recordPaymentErrorMessage } from "./_lib/payment-errors";
 import {
   dueNowHasOpenPeriod,
@@ -324,6 +326,13 @@ function canUserActOnStep(
 // ── Borrower's Active Loans Component ──
 
 const VISIBLE_LOAN_COUNT = 3;
+
+/** The Record Payment allocation grid's columns on wider screens, by its cell count. */
+const PAYMENT_PREVIEW_GRID_COLUMNS: Record<number, string> = {
+  4: "sm:grid-cols-4",
+  5: "sm:grid-cols-5",
+  6: "sm:grid-cols-6",
+};
 
 function BorrowerActiveLoans({ loans, loading, truncated = false, approvalSteps, approvalRounds, loanStatus, loan }: { loans: Loan[]; loading: boolean; truncated?: boolean; approvalSteps: LoanApprovalStep[]; approvalRounds: LoanApprovalRound[]; loanStatus: string; loan?: Loan }) {
   const [expanded, setExpanded] = useState(false);
@@ -1362,6 +1371,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
   const insuranceOwed = loanInsuranceOwed(loan);
   // What the previewed payment will collect of it first; null when none.
   const paymentPreviewInsurance = previewInsuranceApplied(paymentPreview);
+  // Where the preview's excess goes, by the same rule as Payment Entry: the
+  // server's split when sent, else the loan's own build-up, else "Excess".
+  const paymentExcessTiles = paymentPreview ? previewExcessTiles(paymentPreview, loanHasBuildUp(loan?.scb_amount)) : [];
+  const paymentExcessCells = paymentPreview ? previewExcessCells(paymentPreview, loanHasBuildUp(loan?.scb_amount)) : [];
   // What a payment must be today to clear the premium owed and the first
   // open period, with its parts: the server's, null when it sent none.
   const amountDueNow = readAmountDueNow(loan?.amount_due_now);
@@ -4838,7 +4851,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 <div
                   className={cn(
                     "grid grid-cols-2 gap-2",
-                    paymentPreviewInsurance !== null ? "sm:grid-cols-5" : "sm:grid-cols-4"
+                    PAYMENT_PREVIEW_GRID_COLUMNS[3 + paymentExcessCells.length + (paymentPreviewInsurance !== null ? 1 : 0)]
                   )}
                 >
                   {paymentPreviewInsurance !== null && (
@@ -4874,23 +4887,29 @@ function LoanDetail({ loanId }: { loanId: number }) {
                       {currencyOrDash(paymentPreview.total_principal)}
                     </p>
                   </div>
-                  <div
-                    className={cn(
-                      "rounded-lg border p-2 sm:p-3 text-center min-w-0",
-                      (paymentPreview.excess ?? 0) > 0 &&
-                        "border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/20"
-                    )}
-                  >
-                    <p className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wide">Excess / SCB</p>
-                    <p
+                  {paymentExcessCells.map((cell) => (
+                    <div
+                      key={cell.key}
                       className={cn(
-                        "text-sm font-semibold tabular-nums truncate",
-                        (paymentPreview.excess ?? 0) > 0 && "text-amber-700 dark:text-amber-400"
+                        "rounded-lg border p-2 sm:p-3 text-center min-w-0",
+                        cell.key === "build_up" &&
+                          paymentExcessTiles.some((tile) => tile.key === "build_up") &&
+                          "border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/20"
                       )}
                     >
-                      {currencyOrDash(paymentPreview.excess)}
-                    </p>
-                  </div>
+                      <p className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wide">{cell.label}</p>
+                      <p
+                        className={cn(
+                          "text-sm font-semibold tabular-nums truncate",
+                          cell.key === "build_up" &&
+                            paymentExcessTiles.some((tile) => tile.key === "build_up") &&
+                            "text-amber-700 dark:text-amber-400"
+                        )}
+                      >
+                        {cell.amount}
+                      </p>
+                    </div>
+                  ))}
                 </div>
 
                 {/* Per-schedule allocation table */}
@@ -5013,19 +5032,30 @@ function LoanDetail({ loanId }: { loanId: number }) {
                     </p>
                   </div>
 
-                  {(paymentPreview.excess ?? 0) > 0 && (
-                    <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-900/20 min-w-0">
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
-                        Excess → Share Capital / Future Periods
+                  {paymentExcessTiles.map((tile) => (
+                    <div
+                      key={tile.key}
+                      className={cn(
+                        "rounded-lg border p-3 min-w-0",
+                        tile.key === "build_up"
+                          ? "border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/20"
+                          : "border-blue-300 bg-blue-50 dark:border-blue-700 dark:bg-blue-900/20"
+                      )}
+                    >
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">{tile.label}</p>
+                      <p
+                        className={cn(
+                          "text-lg font-bold tabular-nums break-words",
+                          tile.key === "build_up"
+                            ? "text-amber-700 dark:text-amber-400"
+                            : "text-blue-700 dark:text-blue-400"
+                        )}
+                      >
+                        {formatCurrency(tile.amount)}
                       </p>
-                      <p className="text-lg font-bold text-amber-700 dark:text-amber-400 tabular-nums break-words">
-                        {formatCurrency(paymentPreview.excess ?? 0)}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5 break-words">
-                        will be applied per allocation rules
-                      </p>
+                      {tile.note && <p className="text-[10px] text-muted-foreground mt-0.5 break-words">{tile.note}</p>}
                     </div>
-                  )}
+                  ))}
                 </div>
 
                 {/* Reconciliation footer */}

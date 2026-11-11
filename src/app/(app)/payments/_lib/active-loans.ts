@@ -236,11 +236,16 @@ export function mapLoanToActiveLoan(loan: Loan): ActiveLoan {
     amount_due_now: readAmountDueNow(l.amount_due_now),
     schedule_penalties: schedulePenalties(l.amortization_schedules),
     penalty_note: null,
-    has_build_up: hasBuildUp(l.scb_amount),
+    has_build_up: loanHasBuildUp(l.scb_amount),
   };
 }
 
-function hasBuildUp(raw: unknown): boolean | null {
+/**
+ * Whether a loan carries a Share Capital Build-Up, from its own `scb_amount`:
+ * the server credits a payment's excess to share capital only when it is above
+ * zero. Null when the loan didn't say.
+ */
+export function loanHasBuildUp(raw: unknown): boolean | null {
   const amount = typeof raw === "number" || typeof raw === "string" ? toNumber(raw) : null;
   return amount === null ? null : amount > 0;
 }

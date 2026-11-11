@@ -114,3 +114,12 @@ describe("the report page reloads the report in place", () => {
     }
   });
 });
+
+describe("workflow steps wait for a reload, as Save does", () => {
+  test("the workspace hands its reload state to the workflow buttons", () => {
+    const workspace = read("_components/report-workspace.tsx");
+    assert.match(workspace.match(/<WorkflowActions[^>]*>/)?.[0] ?? "", /reloading=\{reloading\}/);
+    const actions = read("_components/workflow-actions.tsx");
+    assert.match(actions, /disabled=\{busy !== null \|\| reloading\}/);
+  });
+});
