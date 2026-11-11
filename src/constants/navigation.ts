@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { GCashIcon } from "@/components/icons/gcash-icon";
 import { env } from "@/config/env";
+import { MODULE_ALSO_REQUIRES } from "@/lib/permission-module-names";
 
 export interface NavSubItem {
   title: string;
@@ -73,7 +74,7 @@ export const CDA_NAV: NavItem = {
   href: "/cda",
   icon: ClipboardCheck,
   permission: "cda:view",
-  alsoRequires: ["branches:view_all"],
+  alsoRequires: MODULE_ALSO_REQUIRES.cda as Permission[],
   children: [
     { title: "CDA Dashboard", href: "/cda" },
     { title: "Compliance Calendar", href: "/cda/calendar" },
