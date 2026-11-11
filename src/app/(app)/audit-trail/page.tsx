@@ -60,6 +60,7 @@ import {
   auditDescription,
   auditFieldLabel,
   auditModuleLabel,
+  auditTargetLabel,
   auditTargetTypeLine,
   auditUserName,
   auditUserRole,
@@ -202,7 +203,7 @@ function AuditDetailDrawer({
               </h4>
               <div className="flex items-center gap-2 rounded-lg border p-3">
                 <div className="flex-1">
-                  <p className="text-sm font-medium">{log.target.label}</p>
+                  <p className="text-sm font-medium">{auditTargetLabel(log.target)}</p>
                   {auditTargetTypeLine(log.target) !== null && (
                     <p className="text-xs text-muted-foreground">
                       {auditTargetTypeLine(log.target)}

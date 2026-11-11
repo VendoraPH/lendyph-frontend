@@ -129,6 +129,19 @@ export function auditModuleLabel(log: Pick<AuditLog, "module" | "target">): stri
  * reminders models (backend #232, module `reminders`).
  */
 const TARGET_TYPE_LABELS: Record<string, string> = {
+  // Accounting models, as the Accounting menu names what they hold
+  // ("Journal Entries", "Chart of Accounts", "Expenses & Payables", …).
+  AccountingJournal: "Journal entry",
+  AccountingJournalLine: "Journal entry line",
+  AccountingAccount: "Account",
+  AccountingAccountMapping: "Account mapping",
+  AccountingAllowancePosting: "Allowance for credit losses posting",
+  AccountingExpense: "Expense",
+  AccountingExpensePayment: "Expense payment",
+  AccountingOpeningBalance: "Opening balance",
+  AccountingYearClose: "Year-end close",
+  GCashNonMember: "GCash walk-in",
+  CsvImportRun: "Data import",
   SavingsAccount: "Savings account",
   SavingsHold: "Savings hold",
   SavingsApproval: "Savings approval request",
@@ -167,6 +180,15 @@ const TARGET_TYPE_LABELS: Record<string, string> = {
  */
 export function auditTargetType(type: string): string {
   if (Object.hasOwn(TARGET_TYPE_LABELS, type)) return TARGET_TYPE_LABELS[type];
+  return classInWords(type);
+}
+
+/**
+ * A class name in words, the rule the server's `AuditLogResource::typeInWords`
+ * also follows for a target it has nothing else to name by ("Accounting
+ * journal #557").
+ */
+function classInWords(type: string): string {
   return type
     .replace(/^Borrower/, "Member")
     .replace(/^Cda(?=[A-Z])/, "CDA ")
@@ -190,7 +212,18 @@ function compact(text: string): string {
  */
 export function auditTargetTypeLine(target: { id: number; type: string; label: string }): string | null {
   const line = `${auditTargetType(target.type)} #${target.id}`;
-  return compact(line) === compact(target.label) ? null : line;
+  return compact(line) === compact(auditTargetLabel(target)) ? null : line;
+}
+
+/**
+ * The target's heading: the server's label, except where the server had
+ * nothing to name it by and fell back on its class in words ("Accounting
+ * journal #557"); that reads in this screen's words instead ("Journal entry
+ * #557"), so the heading and the type line never say one thing two ways.
+ */
+export function auditTargetLabel(target: { id: number; type: string; label: string }): string {
+  const fallback = `${classInWords(target.type)} #${target.id}`;
+  return compact(target.label) === compact(fallback) ? `${auditTargetType(target.type)} #${target.id}` : target.label;
 }
 
 /** The row's action: a known label, or the server's key in words. */
