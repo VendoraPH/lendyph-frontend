@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useDialogOpening } from "@/hooks";
 import { formatCurrency, todayISO } from "@/lib/format";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { isReceiptTransaction } from "@/lib/printables/templates/savings-receipt";
 import { savingsService } from "@/services";
 import type { SavingsAccount, SavingsMethod } from "@/types";
 import { FormField } from "../../../_components/field";
@@ -23,6 +24,7 @@ import { useSubmitGuard } from "@/hooks/use-submit-guard";
 import { parseMoneyInput } from "@/lib/money-input";
 import { moneyPostMessage } from "@/lib/savings/money-post";
 import { PAYMENT_METHOD_OPTIONS } from "../../../_lib/savings-rules";
+import { printSavingsReceipt } from "../_lib/print-receipt";
 
 export type TransactionMode = "deposit" | "withdrawal";
 
@@ -74,7 +76,12 @@ export function TransactionDialog({ mode, account, onOpenChange, onPosted }: Tra
     };
     run((key) => post(account.id, body, key))
       ?.then((result) => {
-        notifySuccess(moneyPostMessage(result, copy.done), formatCurrency(amount.value));
+        // A posted line can be receipted at once; one sent for approval has
+        // nothing to receipt until it posts.
+        const posted = result.kind === "posted" && isReceiptTransaction(result.record) ? result.record : null;
+        notifySuccess(moneyPostMessage(result, copy.done), formatCurrency(amount.value), posted
+          ? { label: "Print receipt", onClick: () => void printSavingsReceipt(account, posted) }
+          : undefined);
         onOpenChange(false);
         onPosted();
       })

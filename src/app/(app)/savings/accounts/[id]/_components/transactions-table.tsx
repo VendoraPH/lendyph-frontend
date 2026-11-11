@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { Undo2 } from "lucide-react";
+import { Printer, Undo2 } from "lucide-react";
 import { DataState } from "@/components/common/data-state";
 import { TablePagination } from "@/components/common/table-pagination";
 import {
@@ -12,10 +12,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
 import { useApiResource } from "@/hooks";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { savingsService } from "@/services";
-import type { SavingsTransaction } from "@/types";
+import { isReceiptTransaction } from "@/lib/printables/templates/savings-receipt";
+import type { SavingsAccount, SavingsTransaction } from "@/types";
 import { ActionButton } from "../../../_components/action-button";
 import { ReverseTransactionDialog } from "../../../_components/reverse-transaction-dialog";
 import {
@@ -26,15 +28,25 @@ import {
   labelOf,
   reversalBlocker,
 } from "../../../_lib/savings-rules";
+import { printSavingsReceipt } from "../_lib/print-receipt";
 
 /**
  * One account's ledger, paged on the server, with the server's balance after
- * each line. The parent remounts it (`key`) after a posting.
+ * each line. The parent remounts it (`key`) after a posting. A deposit or
+ * withdrawal line prints its receipt.
  */
-export function TransactionsTable({ accountId, onChanged }: { accountId: number; onChanged: () => void }) {
+export function TransactionsTable({ account, onChanged }: { account: SavingsAccount; onChanged: () => void }) {
+  const accountId = account.id;
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(20);
   const [reversing, setReversing] = useState<SavingsTransaction | null>(null);
+  const [printingId, setPrintingId] = useState<number | null>(null);
+
+  const printReceipt = (t: SavingsTransaction) => {
+    if (!isReceiptTransaction(t)) return;
+    setPrintingId(t.id);
+    printSavingsReceipt(account, t).then(() => setPrintingId(null));
+  };
 
   const fetcher = useCallback(
     () => savingsService.accountTransactions(accountId, { page, per_page: perPage }),
@@ -96,7 +108,19 @@ export function TransactionsTable({ accountId, onChanged }: { accountId: number;
                         {formatCurrency(t.balance_after)}
                       </TableCell>
                       <TableCell>{actorName(t.created_by)}</TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {isReceiptTransaction(t) && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={printingId === t.id}
+                            onClick={() => printReceipt(t)}
+                            aria-label={`Print receipt for ${t.reference}`}
+                            title="Print receipt"
+                          >
+                            <Printer className="h-4 w-4" />
+                          </Button>
+                        )}
                         <ActionButton
                           permission="savings:transact"
                           size="sm"
