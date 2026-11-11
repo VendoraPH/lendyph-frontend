@@ -71,6 +71,8 @@ import {
 } from "./_lib/active-loans";
 import { buildPaymentBody, referenceAfterMethodChange } from "./_lib/payment-body";
 import { useActiveLoanPage, useSelectedLoan } from "./_lib/use-active-loan-page";
+import { allocationPenaltyNote } from "@/lib/penalty-months";
+import { PenaltyMonthsNote } from "@/components/common/penalty-months-note";
 import { checkPaymentAmount } from "./_lib/payment-amount";
 import {
   postPaymentErrorMessage,
@@ -666,6 +668,9 @@ function PaymentsContent() {
                         >
                           {currencyOrDash(part.amount)}
                         </p>
+                        {part.key === "penalty" && owed && (
+                          <PenaltyMonthsNote note={selectedLoan.penalty_note} />
+                        )}
                       </div>
                     );
                   })}
@@ -914,6 +919,9 @@ function PaymentsContent() {
                                     )}
                                   >
                                     {formatCurrency(a.penalty ?? 0)}
+                                    <PenaltyMonthsNote
+                                      note={allocationPenaltyNote(selectedLoan.schedule_penalties, a)}
+                                    />
                                   </TableCell>
                                   <TableCell className="text-right text-xs font-semibold tabular-nums">
                                     {formatCurrency(applied)}

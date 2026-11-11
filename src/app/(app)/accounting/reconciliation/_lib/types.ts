@@ -50,6 +50,13 @@ export interface ReconciliationDetail extends Reconciliation {
   id: number;
   account_code: string | null;
   account_name: string | null;
+  /**
+   * The branch whose journal lines it proves; null for "All branches". Absent
+   * from an API older than backend #283.
+   */
+  branch_id?: number | null;
+  /** The branch's name, or "All branches" when `branch_id` is null. */
+  branch_name?: string | null;
   start_date: string;
   end_date: string;
   /** Centavos. */
@@ -91,6 +98,8 @@ export interface NewStatementLine {
 
 export interface CreateReconciliationBody {
   account_id: number;
+  /** The branch whose entries it proves; null for "All branches" (view_all only). */
+  branch_id: number | null;
   /** Left out when blank: the server names the period from the dates. */
   period?: string;
   start_date: string;

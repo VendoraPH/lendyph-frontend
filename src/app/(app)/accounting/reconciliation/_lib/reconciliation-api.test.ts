@@ -28,11 +28,16 @@ const REFUSALS: Record<string, { status: number; body: unknown }> = {
 
 let server: Server;
 let requests: Recorded[] = [];
+/** Each request's query string, kept apart so the recorded requests above stay as they were. */
+let queries: string[] = [];
 let api: typeof import("./reconciliation-api");
+let accountingService: typeof import("@/services/accounting.service").accountingService;
 
 before(async () => {
   server = createServer((req, res) => {
-    const path = new URL(req.url ?? "/", "http://127.0.0.1").pathname.replace(/^\/api/, "");
+    const url = new URL(req.url ?? "/", "http://127.0.0.1");
+    const path = url.pathname.replace(/^\/api/, "");
+    queries.push(url.search);
     const chunks: Buffer[] = [];
     req.on("data", (c: Buffer) => chunks.push(c));
     req.on("end", () => {
@@ -48,6 +53,9 @@ before(async () => {
         res.statusCode = 201;
         return res.end(JSON.stringify({ data: WORKSHEET, created: CREATED }));
       }
+      if (req.method === "GET" && path === "/accounting/reconciliations") {
+        return res.end(JSON.stringify({ data: [WORKSHEET], meta: { current_page: 1, last_page: 1, total: 1 } }));
+      }
       if (req.method === "POST" && path === "/accounting/reconciliations") res.statusCode = 201;
       return res.end(JSON.stringify({ data: WORKSHEET }));
     });
@@ -57,6 +65,7 @@ before(async () => {
   // Set BEFORE importing: axios-client resolves its baseURL at module init.
   process.env.NEXT_PUBLIC_API_URL = `http://127.0.0.1:${port}/api`;
   api = await import("./reconciliation-api");
+  ({ accountingService } = await import("@/services/accounting.service"));
 });
 
 after(() => {
@@ -65,6 +74,7 @@ after(() => {
 
 beforeEach(() => {
   requests = [];
+  queries = [];
 });
 
 function onlyRequest(): Recorded {
@@ -82,6 +92,7 @@ describe("reading and writing the worksheet", () => {
   test("create POSTs the body as built", async () => {
     const body = {
       account_id: 2,
+      branch_id: 3,
       start_date: "2026-10-01",
       end_date: "2026-10-31",
       statement_balance: 2_485_050,
@@ -90,6 +101,15 @@ describe("reading and writing the worksheet", () => {
     const result = await api.reconciliationCreate(body);
     assert.deepEqual(onlyRequest(), { method: "POST", path: "/accounting/reconciliations", body });
     assert.equal(result.id, 7);
+  });
+
+  test("the list sends the branch filter: a branch id, all, or nothing", async () => {
+    await accountingService.reconciliationsListAll({ branch_id: 3 });
+    assert.match(queries[0], /[?&]branch_id=3(&|$)/);
+    await accountingService.reconciliationsListAll({ branch_id: "all" });
+    assert.match(queries[1], /[?&]branch_id=all(&|$)/);
+    await accountingService.reconciliationsListAll();
+    assert.doesNotMatch(queries[2], /branch_id/);
   });
 
   test("match POSTs a pairing, an unmatch or accept_suggestions", async () => {

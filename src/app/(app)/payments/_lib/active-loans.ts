@@ -1,4 +1,6 @@
 import type { Loan, PaginatedResponse } from "@/types";
+import type { LoanSummary } from "@/types/loan";
+import { penaltyMonthsNote, type PenaltyMonthsRow } from "@/lib/penalty-months";
 import { daysFromToday } from "@/lib/format";
 import { currencyOrDash, toNumber } from "@/lib/report-format";
 import { dueAmountCell, readAmountDueNow, type AmountDueNow } from "@/lib/payment-figures";
@@ -167,6 +169,34 @@ export interface ActiveLoan {
   overdue_amount: number;
   /** The server's amount due now and its parts; null when it sent none. */
   amount_due_now: AmountDueNow | null;
+  /**
+   * Each schedule row's penalty and `penalty_months`, for the preview's
+   * "Penalty: N month(s) late"; empty on a summary row, which has no schedule.
+   */
+  schedule_penalties: PenaltyMonthsRow[];
+  /** The loan summary's "Penalty: N month(s) late"; null until it is read, or with none. */
+  penalty_note: string | null;
+}
+
+/** The schedule row fields the penalty note reads, as sent. */
+function schedulePenalties(raw: unknown): PenaltyMonthsRow[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object")
+    .map((row) => ({
+      id: row.id,
+      period_number: row.period_number,
+      penalty_amount: row.penalty_amount,
+      penalty_months: row.penalty_months,
+    }));
+}
+
+/** The loan with the summary's note (`GET /loans/{id}/summary` `penalty_months`). */
+export function withSummaryPenaltyNote(
+  loan: ActiveLoan,
+  summary: Pick<LoanSummary, "penalty_amount" | "penalty_months"> | null,
+): ActiveLoan {
+  return { ...loan, penalty_note: penaltyMonthsNote(summary?.penalty_amount, summary?.penalty_months) };
 }
 
 /** The list row fields this screen reads that `Loan` does not declare. */
@@ -199,6 +229,8 @@ export function mapLoanToActiveLoan(loan: Loan): ActiveLoan {
     next_due_amount: toNumber(l.next_due_amount),
     overdue_amount: (l.overdue_amount as number) || 0,
     amount_due_now: readAmountDueNow(l.amount_due_now),
+    schedule_penalties: schedulePenalties(l.amortization_schedules),
+    penalty_note: null,
   };
 }
 

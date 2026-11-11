@@ -167,8 +167,16 @@ export function afterAction(answer: ReconciliationActionAnswer): WorksheetState 
   return { reconciliation: answer.data, notice: createdNotice(answer.created) };
 }
 
+/** A branch user with no branch: each reconciliation proves one branch's books, so they can't start one. */
+export const NO_BRANCH_ASSIGNED =
+  "You have no branch assigned, so you can't start a reconciliation. Ask an administrator to assign you a branch.";
+
+/**
+ * A 403 to a branch user. Each branch reconciles its own books; the "All
+ * branches" reconciliations, and other branches', need wider access.
+ */
 export const BRANCH_ACCESS_EXPLANATION =
-  "Reconciliation reads every branch's books, so it is done at head office and needs access to all branches. Ask an administrator to give your role access to all branches.";
+  "You can reconcile your own branches' books only. The reconciliations of all branches, and of other branches, need access to those branches. Ask an administrator if you need it.";
 
 interface AccessContext {
   canViewAll: boolean;
@@ -231,7 +239,11 @@ export function matchFailure(err: unknown, context: AccessContext): RequestFailu
 export function loadFailure(err: unknown, { canViewAll }: AccessContext): string {
   const status = httpStatusOf(err);
   if (status === 403 && !canViewAll) return BRANCH_ACCESS_EXPLANATION;
-  if (status === 404) return "This reconciliation doesn't exist, or it was removed.";
+  if (status === 404) {
+    return canViewAll
+      ? "This reconciliation doesn't exist, or it was removed."
+      : "This reconciliation doesn't exist, or it covers a branch you don't have access to.";
+  }
   return getErrorMessage(err, "The reconciliation couldn't be loaded.");
 }
 

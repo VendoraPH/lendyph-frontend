@@ -1,6 +1,7 @@
 import { toCentavos } from "@/lib/accounting/money";
 import { getErrorMessage, httpStatusOf } from "@/lib/api-error";
 import { parseCsv } from "@/lib/csv-parse";
+import { startBranchId } from "./branch-scope";
 import { BRANCH_ACCESS_EXPLANATION } from "./reconciliation-view";
 import type { CreateReconciliationBody, NewStatementLine } from "./types";
 
@@ -28,6 +29,8 @@ export const BLANK_LINE: DraftLine = { date: "", description: "", amount: "", re
 
 export interface StatementForm {
   accountId: number | null;
+  /** The branch Select's value: a branch id, `NO_BRANCH` for "All branches", or null until picked. */
+  branch: string | null;
   period: string;
   startDate: string;
   endDate: string;
@@ -135,8 +138,10 @@ export function buildCreateBody(form: StatementForm): CreateBodyResult {
   const period = form.period.trim();
   const statementBalance = signedCentavos(form.statementBalance);
   const lines = form.lines.filter((line) => !isBlankLine(line));
+  const branch = startBranchId(form.branch);
 
   if (form.accountId === null) errors.push("Choose the money account.");
+  if (!branch.ok) errors.push("Choose the branch whose entries this reconciliation proves.");
   if (period.length > PERIOD_MAX) errors.push(`The period can be at most ${PERIOD_MAX} characters.`);
   if (!form.startDate || !form.endDate) {
     errors.push("Enter the start and end dates.");
@@ -152,7 +157,7 @@ export function buildCreateBody(form: StatementForm): CreateBodyResult {
     lines.forEach((line, index) => errors.push(...lineErrors(line, `Line ${index + 1}`)));
   }
 
-  if (errors.length > 0 || form.accountId === null || statementBalance === null) {
+  if (errors.length > 0 || form.accountId === null || statementBalance === null || !branch.ok) {
     return { ok: false, errors };
   }
 
@@ -160,6 +165,7 @@ export function buildCreateBody(form: StatementForm): CreateBodyResult {
     ok: true,
     body: {
       account_id: form.accountId,
+      branch_id: branch.branchId,
       ...(period ? { period } : {}),
       start_date: form.startDate,
       end_date: form.endDate,

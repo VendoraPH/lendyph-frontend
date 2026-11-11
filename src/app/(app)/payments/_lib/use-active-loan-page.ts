@@ -8,6 +8,7 @@ import {
   activeLoanCardParams,
   activeLoanListParams,
   mapLoanToActiveLoan,
+  withSummaryPenaltyNote,
   normaliseLoanSearch,
   pageAfterEmptyAnswer,
   readActiveLoanPage,
@@ -161,7 +162,8 @@ export function useActiveLoanPage() {
 }
 
 /**
- * The selected loan's full data, read only once it is selected. Until it
+ * The selected loan's full data and its summary's penalty note, read only
+ * once it is selected. Until it
  * arrives, `loan` is the table's row. `attempt` makes every read its own, so a
  * loan reopened after a payment never shows the figures from before it.
  */
@@ -174,14 +176,20 @@ export function useSelectedLoan() {
   useEffect(() => {
     if (loanId === null) return;
     let cancelled = false;
-    loanService
-      .detail(loanId)
-      .then((loan) => {
-        if (!cancelled) setAnswer({ attempt, loan: mapLoanToActiveLoan(loan), error: null });
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setAnswer({ attempt, loan: null, error: getErrorMessage(err) });
-      });
+    // The summary only adds the penalty's "N month(s) late" note: when it
+    // fails, the loan's figures still show, without the note.
+    Promise.allSettled([loanService.detail(loanId), loanService.summary(loanId)]).then(([detail, summary]) => {
+      if (cancelled) return;
+      if (detail.status === "rejected") {
+        setAnswer({ attempt, loan: null, error: getErrorMessage(detail.reason) });
+        return;
+      }
+      const loan = withSummaryPenaltyNote(
+        mapLoanToActiveLoan(detail.value),
+        summary.status === "fulfilled" ? summary.value : null,
+      );
+      setAnswer({ attempt, loan, error: null });
+    });
     return () => {
       cancelled = true;
     };

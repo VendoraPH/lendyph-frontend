@@ -285,20 +285,25 @@ describe("refusals", () => {
     }
   });
 
-  test("a 403 for someone without access to all branches is explained", () => {
+  test("a 403 for a branch user says they reconcile their own branches", () => {
     const err = httpError(403, { message: "This action is unauthorized." });
     assert.deepEqual(requestFailure(err, { canViewAll: false }), {
       reload: false,
       message: BRANCH_ACCESS_EXPLANATION,
     });
+    assert.match(BRANCH_ACCESS_EXPLANATION, /your own branches/);
     assert.match(BRANCH_ACCESS_EXPLANATION, /all branches/);
     assert.doesNotMatch(BRANCH_ACCESS_EXPLANATION, /branches:view_all/);
     assert.equal(requestFailure(err, { canViewAll: true }).message, "You don't have permission to do that.");
   });
 
-  test("loading: a 403 is explained, a 404 says it doesn't exist", () => {
+  test("loading: a 403 is explained; a 404 says it doesn't exist, or for a branch user isn't theirs", () => {
     assert.equal(loadFailure(httpError(403, {}), { canViewAll: false }), BRANCH_ACCESS_EXPLANATION);
-    assert.match(loadFailure(httpError(404, {}), { canViewAll: true }), /doesn't exist/);
+    assert.equal(loadFailure(httpError(404, {}), { canViewAll: true }), "This reconciliation doesn't exist, or it was removed.");
+    assert.equal(
+      loadFailure(httpError(404, {}), { canViewAll: false }),
+      "This reconciliation doesn't exist, or it covers a branch you don't have access to.",
+    );
   });
 });
 
