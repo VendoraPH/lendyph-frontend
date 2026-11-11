@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useId, useState } from "react";
+import { toast } from "sonner";
 import { useBranchChoiceSource } from "@/hooks/use-branch-choice-source";
 import type { GCashParty } from "@/types";
 import {
-  branchRefusal,
+  gcashSaveFailure,
+  walkInBranchBlocked,
   walkInBranchChoice,
   walkInBranchPayload,
   type WalkInBranchBody,
@@ -17,10 +19,17 @@ export interface WalkInBranch {
   /** The form's or the server's words about the branch. */
   error: string | null;
   loading: boolean;
+  /** No branch and no view_all: Record stays disabled, and the field says why. */
+  blocked: boolean;
+  /** The id of the field's reason, for the disabled Record button's `aria-describedby`. */
+  reasonId: string;
   /** The body's `branch_id` part, or null after showing why it can't be sent. */
   take: () => WalkInBranchBody | null;
-  /** Shows the server's refusal of `branch_id` (422) beside the field. */
-  showRefusal: (err: unknown) => void;
+  /**
+   * Shows a refused save once: the server's words about `branch_id` (422)
+   * beside the field, any other refusal as a toast.
+   */
+  showFailure: (err: unknown) => void;
 }
 
 /**
@@ -33,6 +42,7 @@ export function useWalkInBranch(party: GCashParty): WalkInBranch {
   const choice = walkInBranchChoice(party.kind, source);
   const [picked, setPicked] = useState<{ value: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const reasonId = useId();
   const value = picked ? picked.value : choice.kind === "pick" ? choice.preselected : null;
 
   return {
@@ -44,12 +54,18 @@ export function useWalkInBranch(party: GCashParty): WalkInBranch {
     },
     error,
     loading: source.loading,
+    blocked: walkInBranchBlocked(choice),
+    reasonId,
     take: () => {
       const payload = walkInBranchPayload(choice, value);
       if (payload.ok) return payload.body;
       setError(payload.message);
       return null;
     },
-    showRefusal: (err) => setError(branchRefusal(err)),
+    showFailure: (err) => {
+      const failure = gcashSaveFailure(err);
+      setError(failure.field);
+      if (failure.toast !== null) toast.error(failure.toast);
+    },
   };
 }

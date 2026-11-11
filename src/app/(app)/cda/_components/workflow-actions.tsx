@@ -25,10 +25,13 @@ export function WorkflowActions({
   report,
   onChange,
   onReload,
+  reloading = false,
 }: {
   report: CdaReport;
   onChange: (report: CdaReport) => void;
   onReload: () => void;
+  /** The report is being read again (after a register write): the steps wait for it. */
+  reloading?: boolean;
 }) {
   const { can } = usePermission();
   const userId = useAuthStore((s) => s.user?.id);
@@ -76,7 +79,7 @@ export function WorkflowActions({
           key={action}
           size="sm"
           variant={QUIET.has(action) ? "outline" : "default"}
-          disabled={busy !== null}
+          disabled={busy !== null || reloading}
           onClick={() => start(action)}
         >
           {busy === action ? "Working…" : labelOf(ACTION_LABELS, action)}

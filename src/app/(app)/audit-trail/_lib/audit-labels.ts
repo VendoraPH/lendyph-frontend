@@ -24,6 +24,8 @@ const MODULE_LABELS: Record<AuditModule, string> = {
   roles: "Roles",
   accounting: "Accounting",
   gcash: "GCash",
+  reminders: "Reminders",
+  credit_scoring: "Credit Scoring",
   savings: "Savings",
   cda: "CDA Compliance",
   member_portal: "Member Portal",
@@ -35,7 +37,23 @@ const MODULE_LABELS: Record<AuditModule, string> = {
  * `module` parameter accepts (anything else is refused with 422).
  */
 export const AUDIT_MODULE_OPTIONS: { value: AuditModule; label: string }[] = (
-  ["auth", "borrowers", "loans", "payments", "collections", "users", "roles", "accounting", "gcash", "savings", "cda", "member_portal", "system"] as const
+  [
+    "auth",
+    "borrowers",
+    "loans",
+    "payments",
+    "collections",
+    "users",
+    "roles",
+    "accounting",
+    "gcash",
+    "reminders",
+    "credit_scoring",
+    "savings",
+    "cda",
+    "member_portal",
+    "system",
+  ] as const
 ).map((value) => ({ value, label: MODULE_LABELS[value] }));
 
 const ACTION_LABELS: Record<string, string> = {
@@ -55,6 +73,20 @@ const ACTION_LABELS: Record<string, string> = {
   uploaded: "Uploaded",
   attachment_removed: "Attachment removed",
   loan_chain_cancelled: "Approvals cancelled",
+  penalty_waived: "Penalty waived",
+  password_changed: "Password changed",
+  password_change_required: "Password change required",
+  profile_updated: "Profile updated",
+  branches_changed: "Branches changed",
+  accounting_opening_balance_created: "Opening balance created",
+  accounting_opening_balance_saved: "Opening balance saved",
+  accounting_opening_balance_finalised: "Opening balance finalised",
+  accounting_opening_balances_posted: "Opening balances posted",
+  allowance_posted: "Allowance posted",
+  chart_of_accounts_seeded: "Chart of accounts set up",
+  periods_closed: "Periods closed",
+  savings_approval_cancelled: "Request cancelled",
+  scorecard_reviewed: "Scorecard reviewed",
   savings_account_frozen: "Account frozen",
   savings_account_unfrozen: "Account unfrozen",
   savings_account_reactivated: "Account reactivated",
@@ -367,6 +399,33 @@ const SAVINGS_STATUS_LABELS: Record<string, Record<string, string>> = {
 };
 
 /**
+ * A CDA report's workflow steps (`ReportWorkflow::ACTIONS`), as a
+ * `cda_workflow` row's `action` value: what happened to the report, in the
+ * words the CDA screens use for the step.
+ */
+const CDA_WORKFLOW_ACTION_LABELS: Record<string, string> = {
+  refresh: "Refreshed",
+  validate: "Refreshed",
+  submit_for_review: "Submitted for review",
+  return: "Returned for changes",
+  approve: "Approved",
+  finalize: "Finalized",
+  mark_submitted: "Filing recorded with CDA",
+  mark_accepted: "Marked as accepted",
+  mark_for_correction: "Marked for correction",
+  reopen: "Reopened",
+  set_stage: "Moved to another stage",
+};
+
+/** An `action` value in words: a CDA workflow step, else as the Action column reads it. */
+function actionValueInWords(log: Pick<AuditLog, "target">, value: string): string {
+  if (log.target?.type === "CdaReport" && Object.hasOwn(CDA_WORKFLOW_ACTION_LABELS, value)) {
+    return CDA_WORKFLOW_ACTION_LABELS[value];
+  }
+  return auditActionLabel(value);
+}
+
+/**
  * A changed value as the row shows it. A status reads in words with a capital
  * ("Draft", "Posted"): a loan's `status` reads the app's own label, and
  * `for_review` is "For Approval" on every record. The server words every other
@@ -379,6 +438,7 @@ export function auditChangeValue(
 ): string | null {
   if (value === null) return value;
   if (field === "permissions") return permissionsInWords(value);
+  if (field === "action") return actionValueInWords(log, value);
   if (!isStatusField(field)) return value;
   const savingsStatuses = log.target ? SAVINGS_STATUS_LABELS[log.target.type] : undefined;
   if (field === "status" && savingsStatuses && Object.hasOwn(savingsStatuses, value)) return savingsStatuses[value];

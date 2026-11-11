@@ -247,6 +247,15 @@ export function loadFailure(err: unknown, { canViewAll }: AccessContext): string
   return getErrorMessage(err, "The reconciliation couldn't be loaded.");
 }
 
+/**
+ * What the page offers when a reconciliation can't be loaded: trying again
+ * can't help a 404 (or a 403), so those offer the way back to the list.
+ */
+export function loadRecovery(err: unknown): "back" | "retry" {
+  const status = httpStatusOf(err);
+  return status === 404 || status === 403 ? "back" : "retry";
+}
+
 /** The suspense role's default account, as C5's confirm names it. */
 export const SUSPENSE_ACCOUNT = "2390 Suspense Account";
 

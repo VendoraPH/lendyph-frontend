@@ -556,3 +556,9 @@ test("a payment preview allocation reads its own period's note", () => {
   assert.equal(allocationPenaltyNoteFor(schedule, { schedule_id: 501 }), null);
   assert.equal(allocationPenaltyNoteFor(schedule, { schedule_id: 999 }), null);
 });
+
+test("a preview allocation that applies ₱0.00 to penalty shows no note beside it", () => {
+  const { schedule } = readScheduleRows(LATE_ROWS, 42)!;
+  assert.equal(allocationPenaltyNoteFor(schedule, { schedule_id: 502, penalty: 0 }), null);
+  assert.equal(allocationPenaltyNoteFor(schedule, { schedule_id: 502, penalty: 120 }), "Penalty: 2 months late");
+});

@@ -16,7 +16,6 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { gcashService } from "@/services/gcash.service";
-import { extractGCashErrorMessage } from "@/lib/gcash-errors";
 import { gcashPartyNoun, gcashPartyPayload } from "@/lib/gcash-party";
 import type { GCashParty } from "@/types";
 import { useGCashChargePreview } from "../_hooks/use-gcash-charge-preview";
@@ -55,7 +54,7 @@ export function CashInDialog({
   // The charge and total are the server's preview for this exact amount; the
   // browser never works them out. Recording waits until that preview is in.
   const { view: preview, retry: retryPreview } = useGCashChargePreview("cash_in", amountNum);
-  const canSubmit = !submitting && preview.status === "ready";
+  const canSubmit = !submitting && !branch.blocked && preview.status === "ready";
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -75,8 +74,7 @@ export function CashInDialog({
       onCreated?.();
       onOpenChange(false);
     } catch (err) {
-      branch.showRefusal(err);
-      toast.error(extractGCashErrorMessage(err));
+      branch.showFailure(err);
     } finally {
       setSubmitting(false);
     }
@@ -154,7 +152,11 @@ export function CashInDialog({
           >
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={!canSubmit}>
+          <Button
+            onClick={handleSubmit}
+            disabled={!canSubmit}
+            aria-describedby={branch.blocked ? branch.reasonId : undefined}
+          >
             {submitting ? "Saving…" : "Record Cash In"}
           </Button>
         </DialogFooter>

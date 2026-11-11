@@ -120,9 +120,36 @@ test("accounting and GCash rows read by their module names", () => {
 test("the module filter offers exactly the modules the server filters by", () => {
   assert.deepEqual(
     AUDIT_MODULE_OPTIONS.map((o) => o.value).sort(),
-    ["accounting", "auth", "borrowers", "cda", "collections", "gcash", "loans", "member_portal", "payments", "roles", "savings", "system", "users"]
+    // Backend AuditLogModules::all(): every module in MODULE_MAP, plus auth and system.
+    [
+      "accounting",
+      "auth",
+      "borrowers",
+      "cda",
+      "collections",
+      "credit_scoring",
+      "gcash",
+      "loans",
+      "member_portal",
+      "payments",
+      "reminders",
+      "roles",
+      "savings",
+      "system",
+      "users",
+    ]
   );
   assert.ok(AUDIT_MODULE_OPTIONS.every((o) => o.label === auditModuleLabel({ module: o.value, target: null })));
+});
+
+test("every module filter option reads in words, by its menu name", () => {
+  const labels = Object.fromEntries(AUDIT_MODULE_OPTIONS.map((o) => [o.value, o.label]));
+  assert.equal(labels.reminders, "Reminders");
+  assert.equal(labels.credit_scoring, "Credit Scoring");
+  assert.equal(labels.savings, "Savings");
+  assert.equal(labels.cda, "CDA Compliance");
+  assert.equal(labels.member_portal, "Member Portal");
+  assert.ok(AUDIT_MODULE_OPTIONS.every((o) => !/_/.test(o.label) && o.label !== o.value));
 });
 
 test("a deleted row with no description lists the old values, without id or timestamps", () => {
@@ -545,4 +572,50 @@ test("every Member Portal action and target reads in words", () => {
   assert.equal(auditTargetType("PortalRequest"), "Portal request");
   assert.equal(auditTargetType("PortalUser"), "Portal account");
   assert.equal(auditTargetType("PortalSetting"), "Member Portal settings");
+});
+
+test("a CDA workflow row's action reads in words, never its key (ReportWorkflow::ACTIONS)", () => {
+  const cda = { target: { id: 3, type: "CdaReport", label: "Annual report 2026" } };
+  const words: Record<string, string> = {
+    refresh: "Refreshed",
+    validate: "Refreshed",
+    submit_for_review: "Submitted for review",
+    return: "Returned for changes",
+    approve: "Approved",
+    finalize: "Finalized",
+    mark_submitted: "Filing recorded with CDA",
+    mark_accepted: "Marked as accepted",
+    mark_for_correction: "Marked for correction",
+    reopen: "Reopened",
+    set_stage: "Moved to another stage",
+  };
+  for (const [key, label] of Object.entries(words)) {
+    assert.equal(auditChangeValue(cda, "action", key), label, key);
+  }
+  assert.equal(auditChangePair(cda, { field: "action", old: null, new: "return" }).new, "Returned for changes");
+});
+
+test("an action value from another module reads like the Action column, never its key", () => {
+  assert.equal(auditChangeValue({ target: null }, "action", "penalty_waived"), "Penalty waived");
+  assert.equal(auditChangeValue({ target: null }, "action", "some_new_action"), "Some new action");
+});
+
+test("every action the backend writes has its own words", () => {
+  const words: Record<string, string> = {
+    accounting_opening_balance_created: "Opening balance created",
+    accounting_opening_balance_saved: "Opening balance saved",
+    accounting_opening_balance_finalised: "Opening balance finalised",
+    accounting_opening_balances_posted: "Opening balances posted",
+    allowance_posted: "Allowance posted",
+    branches_changed: "Branches changed",
+    chart_of_accounts_seeded: "Chart of accounts set up",
+    password_change_required: "Password change required",
+    password_changed: "Password changed",
+    penalty_waived: "Penalty waived",
+    periods_closed: "Periods closed",
+    profile_updated: "Profile updated",
+    savings_approval_cancelled: "Request cancelled",
+    scorecard_reviewed: "Scorecard reviewed",
+  };
+  for (const [key, label] of Object.entries(words)) assert.equal(auditActionLabel(key), label, key);
 });

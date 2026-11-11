@@ -13,7 +13,7 @@ import { accountSelectItems } from "../_lib/select-items";
 
 interface AccountSelectProps {
   label?: string;
-  accounts: Account[];
+  accounts: readonly Pick<Account, "id" | "code" | "name">[];
   value: number | null;
   onChange: (id: number | null) => void;
   placeholder?: string;

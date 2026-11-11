@@ -2,13 +2,15 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { reconciliationShow } from "../_lib/reconciliation-api";
-import { loadFailure, type WorksheetState } from "../_lib/reconciliation-view";
+import { loadFailure, loadRecovery, type WorksheetState } from "../_lib/reconciliation-view";
 
 interface Loaded {
   id: number;
   reloadCount: number;
   state: WorksheetState | null;
   error: string | null;
+  /** What the page offers after a failed load: the way back (404, 403) or trying again. */
+  recovery: "back" | "retry";
 }
 
 /**
@@ -25,10 +27,16 @@ export function useWorksheet(id: number, canViewAll: boolean) {
     let cancelled = false;
     reconciliationShow(id)
       .then((reconciliation) => {
-        if (!cancelled) setLoaded({ id, reloadCount, state: { reconciliation, notice: null }, error: null });
+        if (!cancelled) setLoaded({ id, reloadCount, state: { reconciliation, notice: null }, error: null, recovery: "retry" });
       })
       .catch((err: unknown) => {
-        if (!cancelled) setLoaded({ id, reloadCount, state: null, error: loadFailure(err, { canViewAll }) });
+        if (!cancelled) setLoaded({
+            id,
+            reloadCount,
+            state: null,
+            error: loadFailure(err, { canViewAll }),
+            recovery: loadRecovery(err),
+          });
       });
     return () => {
       cancelled = true;
@@ -36,7 +44,7 @@ export function useWorksheet(id: number, canViewAll: boolean) {
   }, [id, reloadCount, canViewAll]);
 
   const replace = useCallback(
-    (state: WorksheetState) => setLoaded({ id, reloadCount, state, error: null }),
+    (state: WorksheetState) => setLoaded({ id, reloadCount, state, error: null, recovery: "retry" }),
     [id, reloadCount],
   );
   const reload = useCallback(() => setReloadCount((n) => n + 1), []);
@@ -47,6 +55,7 @@ export function useWorksheet(id: number, canViewAll: boolean) {
   return {
     state: mine?.state ?? null,
     error: settled ? mine.error : null,
+    recovery: mine?.recovery ?? "retry",
     loading: !settled,
     replace,
     reload,

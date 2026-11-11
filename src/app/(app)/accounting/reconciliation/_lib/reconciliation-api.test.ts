@@ -26,6 +26,13 @@ const REFUSALS: Record<string, { status: number; body: unknown }> = {
   "/accounting/reconciliations/7/lines/99": { status: 409, body: { message: COLLISION } },
 };
 
+const RECONCILABLE = [
+  { id: 2, code: "1010", name: "Cash on Hand", type: "Cash" },
+  { id: 3, code: "1020", name: "Cash in Bank", type: "Bank" },
+];
+/** How the stub answers the reconcilable-accounts list. */
+let accountsAnswer: "list" | "missing" | "refused" = "list";
+
 let server: Server;
 let requests: Recorded[] = [];
 /** Each request's query string, kept apart so the recorded requests above stay as they were. */
@@ -53,6 +60,17 @@ before(async () => {
         res.statusCode = 201;
         return res.end(JSON.stringify({ data: WORKSHEET, created: CREATED }));
       }
+      if (req.method === "GET" && path === "/accounting/reconciliations/accounts") {
+        if (accountsAnswer === "missing") {
+          res.statusCode = 404;
+          return res.end(JSON.stringify({ message: "Not Found" }));
+        }
+        if (accountsAnswer === "refused") {
+          res.statusCode = 403;
+          return res.end(JSON.stringify({ message: "This action is unauthorized." }));
+        }
+        return res.end(JSON.stringify({ data: RECONCILABLE }));
+      }
       if (req.method === "GET" && path === "/accounting/reconciliations") {
         return res.end(JSON.stringify({ data: [WORKSHEET], meta: { current_page: 1, last_page: 1, total: 1 } }));
       }
@@ -75,12 +93,31 @@ after(() => {
 beforeEach(() => {
   requests = [];
   queries = [];
+  accountsAnswer = "list";
 });
 
 function onlyRequest(): Recorded {
   assert.equal(requests.length, 1);
   return requests[0];
 }
+
+describe("the start form's reconcilable accounts", () => {
+  test("GETs the reconcile-only list and reads id, code, name and type", async () => {
+    const answer = await api.reconciliationAccounts();
+    assert.deepEqual(onlyRequest(), { method: "GET", path: "/accounting/reconciliations/accounts", body: null });
+    assert.deepEqual(answer, { state: "list", accounts: RECONCILABLE });
+  });
+
+  test("an older backend's 404 asks for today's list instead", async () => {
+    accountsAnswer = "missing";
+    assert.deepEqual(await api.reconciliationAccounts(), { state: "missing" });
+  });
+
+  test("any other refusal is a failure, never the fallback", async () => {
+    accountsAnswer = "refused";
+    assert.deepEqual(await api.reconciliationAccounts(), { state: "failed" });
+  });
+});
 
 describe("reading and writing the worksheet", () => {
   test("show GETs one reconciliation and reads its data", async () => {

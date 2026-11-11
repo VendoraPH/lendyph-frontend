@@ -227,6 +227,8 @@ export interface AllocationRef {
   schedule_id?: number;
   /** The server's `period_number`. */
   period?: number;
+  /** What the payment applies to the period's penalty; the note shows only above ₱0.00. */
+  penalty?: unknown;
 }
 
 /**

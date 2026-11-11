@@ -46,6 +46,12 @@ export type AuditModule =
   | "roles"
   | "accounting"
   | "gcash"
+  // Reminders (Phase 2): settings, branch settings, rules, templates, pauses
+  // and members' notification preferences.
+  | "reminders"
+  // Credit Scoring (Phase 2): settings, scorecard revisions, application
+  // details and credit decisions.
+  | "credit_scoring"
   // Savings & Deposits (Phase 3): accounts, holds, approvals, time deposits,
   // interest runs, products, rates, tax rules and settings.
   | "savings"

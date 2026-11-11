@@ -36,7 +36,7 @@ import type {
 import { PaidButton } from "./paid-button";
 import { PartyCell } from "./party-cell";
 import { gcashCanMarkPaid } from "../_lib/row-actions";
-import { gcashBranchLabel } from "../_lib/walk-in-branch";
+import { gcashRowBranchLabel } from "../_lib/walk-in-branch";
 
 // Passed to <Select items>: Base UI resolves the trigger label from `items`,
 // not from the mounted <SelectItem> children — without it the trigger shows
@@ -233,7 +233,7 @@ export function TransactionsTab() {
                   <TableCell>
                     <PartyCell borrower={r.borrower} nonMember={r.non_member} />
                   </TableCell>
-                  <TableCell>{gcashBranchLabel(r.branch_id, branches) ?? "—"}</TableCell>
+                  <TableCell>{gcashRowBranchLabel(r, branches)}</TableCell>
                   <TableCell>
                     {r.type === "cash_in" ? "Cash In" : "Cash Out"}
                   </TableCell>

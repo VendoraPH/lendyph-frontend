@@ -75,6 +75,41 @@ export function fieldInputs(sections: CdaSection[], drafts: FieldDrafts): CdaFie
   return inputs;
 }
 
+/** Unsaved edits, held for the report they were typed on. */
+export interface ReportDrafts {
+  reportId: number;
+  values: FieldDrafts;
+}
+
+/**
+ * The unsaved edits that carry over a reload of the report (after a register
+ * write): each one the reloaded report would still take, by the same rule as
+ * the PUT body, shown over the reloaded figures. An edit on a field that is
+ * gone, or can no longer change, is dropped rather than sent.
+ */
+export function carriedDrafts(sections: CdaSection[], drafts: FieldDrafts): FieldDrafts {
+  const kept: FieldDrafts = {};
+  for (const [fieldKey, draft] of Object.entries(drafts)) {
+    if (fieldInputs(sections, { [fieldKey]: draft }).length > 0) kept[fieldKey] = draft;
+  }
+  return kept;
+}
+
+/** The edits that apply to this report: none when they were typed on another. */
+export function draftsForReport(drafts: ReportDrafts, report: { id: number; sections: CdaSection[] }): FieldDrafts {
+  return drafts.reportId === report.id ? carriedDrafts(report.sections, drafts.values) : {};
+}
+
+/**
+ * Why the report is read again. A register write keeps the unsaved edits; a
+ * conflict (409) starts from the server's report, as it always has.
+ */
+export type ReportReload = "register" | "conflict";
+
+export function draftsAfterReload(drafts: ReportDrafts, reason: ReportReload): ReportDrafts {
+  return reason === "register" ? drafts : { reportId: drafts.reportId, values: {} };
+}
+
 /** What an input's text becomes on the wire: blank is null, everything else as typed. */
 export function fromInputText(raw: string): CdaFieldValue {
   return raw.trim() === "" ? null : raw;

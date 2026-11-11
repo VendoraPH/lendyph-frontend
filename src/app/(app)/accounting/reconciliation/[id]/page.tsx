@@ -21,11 +21,11 @@ import { WorksheetTable } from "../_components/worksheet-table";
 const LIST_HREF = "/accounting/reconciliation";
 const NO_SUGGESTION_REASON = "There are no possible matches to accept.";
 
-function BackLink() {
+function BackLink({ label = "All reconciliations" }: { label?: string }) {
   return (
     <Link href={LIST_HREF} className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
       <ArrowLeft className="mr-1 size-4" />
-      All reconciliations
+      {label}
     </Link>
   );
 }
@@ -41,14 +41,22 @@ function WorksheetContent({ id }: { id: number }) {
   if (reconciliation === null) {
     return (
       <div className="space-y-6">
-        <AccountingPageHeader title="Reconciliation" description="One account's statement, line by line." actions={<BackLink />} />
+        <AccountingPageHeader
+          title="Reconciliation"
+          description="One account's statement, line by line."
+          actions={worksheet.error && worksheet.recovery === "back" ? undefined : <BackLink />}
+        />
         {worksheet.error ? (
           <Card>
             <CardContent className="space-y-3 py-8 text-sm">
               <p className="text-muted-foreground">{worksheet.error}</p>
-              <Button variant="outline" size="sm" onClick={worksheet.reload}>
-                Try again
-              </Button>
+              {worksheet.recovery === "back" ? (
+                <BackLink label="Back to reconciliations" />
+              ) : (
+                <Button variant="outline" size="sm" onClick={worksheet.reload}>
+                  Try again
+                </Button>
+              )}
             </CardContent>
           </Card>
         ) : (

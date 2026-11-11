@@ -34,22 +34,31 @@ export interface PenaltyMonthsRow {
   penalty_months?: unknown;
 }
 
-/** What a payment preview allocation names its period by. */
+/** What a payment preview allocation names its period by, and the penalty it applies. */
 export interface PenaltyAllocationRef {
   schedule_id?: number;
   period?: number;
+  /** What this payment applies to the period's penalty, as the preview row shows it. */
+  penalty?: unknown;
 }
 
 /**
  * The note for a payment preview allocation's period, from that period's own
  * schedule row: by schedule id when the allocation has one, else by the
  * server's period number (never by position: numbers can skip). Null when the
- * schedule has no row for it or the row reads no note.
+ * schedule has no row for it, the row reads no note, or the allocation's own
+ * penalty reads ₱0.00.
  */
 export function allocationPenaltyNote(
   rows: readonly PenaltyMonthsRow[],
   allocation: PenaltyAllocationRef,
 ): string | null {
+  // The note sits beside the row's own penalty: none beside ₱0.00 (a penalty
+  // already paid, or one this payment doesn't reach).
+  if ("penalty" in allocation) {
+    const applied = serverNumber(allocation.penalty);
+    if (applied === null || Math.round(applied * 100) <= 0) return null;
+  }
   const row =
     typeof allocation.schedule_id === "number"
       ? rows.find((r) => serverNumber(r.id) === allocation.schedule_id)

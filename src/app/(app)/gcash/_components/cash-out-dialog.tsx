@@ -15,7 +15,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { gcashService } from "@/services/gcash.service";
-import { extractGCashErrorMessage } from "@/lib/gcash-errors";
 import { gcashPartyNoun, gcashPartyPayload } from "@/lib/gcash-party";
 import type { GCashParty } from "@/types";
 import { useGCashChargePreview } from "../_hooks/use-gcash-charge-preview";
@@ -53,7 +52,7 @@ export function CashOutDialog({
   // browser never works them out. A Cash Out the charge would take all of is
   // the server's 422, shown as it words it. Recording waits for the preview.
   const { view: preview, retry: retryPreview } = useGCashChargePreview("cash_out", amountNum);
-  const canSubmit = !submitting && preview.status === "ready";
+  const canSubmit = !submitting && !branch.blocked && preview.status === "ready";
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -72,8 +71,7 @@ export function CashOutDialog({
       onCreated?.();
       onOpenChange(false);
     } catch (err) {
-      branch.showRefusal(err);
-      toast.error(extractGCashErrorMessage(err));
+      branch.showFailure(err);
     } finally {
       setSubmitting(false);
     }
@@ -134,7 +132,11 @@ export function CashOutDialog({
           >
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={!canSubmit}>
+          <Button
+            onClick={handleSubmit}
+            disabled={!canSubmit}
+            aria-describedby={branch.blocked ? branch.reasonId : undefined}
+          >
             {submitting ? "Saving…" : "Record Cash Out"}
           </Button>
         </DialogFooter>
