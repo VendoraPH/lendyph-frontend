@@ -13,6 +13,7 @@ import {
 import { idlePhase, type IdlePhase } from "@/lib/portal/idle";
 import { portalService } from "@/lib/portal/portal-api";
 import { endPortalSession, lastActivity, SESSION_END_WORDS } from "@/lib/portal/portal-client";
+import { signOutMember } from "@/lib/portal/sign-out";
 
 const CHECK_MS = 5_000;
 
@@ -32,10 +33,7 @@ export function IdleNotice({ idleMinutes }: { idleMinutes: number }) {
       setPhase(next);
       if (next === "expired") {
         window.clearInterval(timer);
-        portalService
-          .logout()
-          .catch(() => undefined)
-          .then(() => endPortalSession(SESSION_END_WORDS.session_idle));
+        void signOutMember(() => endPortalSession(SESSION_END_WORDS.session_idle));
       }
     }, CHECK_MS);
     return () => window.clearInterval(timer);

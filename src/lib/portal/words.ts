@@ -27,19 +27,34 @@ export function plural(count: number, one: string, many: string = `${one}s`): st
   return `${count} ${count === 1 ? one : many}`;
 }
 
+/** A made-up origin to resolve links against; a link that resolves anywhere else is refused. */
+const LINK_BASE = "https://portal.invalid";
+
 /**
- * A notification's link, kept only when it is a path inside the member
- * portal: `/member` or `/member/...`. Anything else (another site, a staff
- * screen, a protocol-relative `//host`, a backslash or a `..` step) is
- * dropped, so a notice can never send a member out of the portal.
+ * A notification's link, kept only when it resolves to a path inside the
+ * member portal: `/member` or `/member/...`. The link is resolved as a URL
+ * first, so dot segments, percent-encoded ones included (`%2e%2e`, `.%2E`),
+ * are applied before the check, and the resolved path is what is returned.
+ * Anything else (another site, a staff screen, a protocol-relative `//host`,
+ * a backslash or a control character) is dropped, so a notice can never send
+ * a member out of the portal.
  */
 export function safeMemberLink(link: string | null | undefined): string | null {
   if (typeof link !== "string") return null;
   const value = link.trim();
-  if (value !== "/member" && !value.startsWith("/member/")) return null;
-  if (value.includes("\\") || value.includes("//") || /(^|\/)\.\.?(\/|$|\?|#)/.test(value)) return null;
+  if (!value.startsWith("/") || value.startsWith("//") || value.includes("\\")) return null;
   if ([...value].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127)) return null;
-  return value;
+  let url: URL;
+  try {
+    url = new URL(value, LINK_BASE);
+  } catch {
+    return null;
+  }
+  if (url.origin !== LINK_BASE) return null;
+  const { pathname } = url;
+  if (pathname !== "/member" && !pathname.startsWith("/member/")) return null;
+  if (pathname.includes("//") || /%2e/i.test(pathname)) return null;
+  return `${pathname}${url.search}${url.hash}`;
 }
 
 /** The monthly late penalty in words ("Penalty: 2 months late"); null when no month was charged. */

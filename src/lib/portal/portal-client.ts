@@ -1,7 +1,7 @@
-import axios, { type AxiosRequestConfig, type AxiosResponse } from "axios";
+import axios, { type AxiosRequestConfig, type AxiosResponse, type InternalAxiosRequestConfig } from "axios";
 import { env } from "@/config/env";
 import { parseTokenLifetime, tokenLifetime, type TokenLifetime } from "@/lib/session-token";
-import { PORTAL_PUBLIC_PATHS } from "./endpoints";
+import { PORTAL_ENDPOINTS, PORTAL_PUBLIC_PATHS } from "./endpoints";
 
 /**
  * The member portal's own HTTP client (carried over from #511 by Augustin,
@@ -124,8 +124,12 @@ export const portalHttp = axios.create({
   headers: { "Content-Type": "application/json", Accept: "application/json" },
 });
 
+/** The one call that may carry a token the tab has already forgotten: signing out. */
+const SIGN_OUT_TOKEN = "portalSignOutToken";
+type SignOutConfig = InternalAxiosRequestConfig & { [SIGN_OUT_TOKEN]?: string };
+
 portalHttp.interceptors.request.use((config) => {
-  const token = portalTokens.get();
+  const token = (config as SignOutConfig)[SIGN_OUT_TOKEN] ?? portalTokens.get();
   // Set or removed on every request, so nothing but the member's own token
   // (from sessionStorage) can ever ride along.
   if (token) config.headers.set("Authorization", `Bearer ${token}`);
@@ -218,3 +222,15 @@ export const portalApi = {
     return { blob: response.data, filename: filenameFrom(response.headers?.["content-disposition"]) };
   },
 };
+
+/** How long signing out waits for the server before giving up (best effort). */
+export const SIGN_OUT_TIMEOUT_MS = 5_000;
+
+/**
+ * Asks the server to end the session of `token`, which the tab has usually
+ * forgotten already, so the member is signed out here whatever the answer.
+ */
+export function logoutWith(token: string): Promise<unknown> {
+  const config = { timeout: SIGN_OUT_TIMEOUT_MS, [SIGN_OUT_TOKEN]: token } as AxiosRequestConfig;
+  return portalHttp.post(PORTAL_ENDPOINTS.LOGOUT, undefined, config);
+}

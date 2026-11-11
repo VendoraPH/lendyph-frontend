@@ -69,7 +69,6 @@ export const portalService = {
   verifyOtp: (step_token: string, otp: string) => portalApi.post<{ verified: boolean }>(E.CODE_OTP, { step_token, otp }),
   completeCode: (body: CompleteCodeBody) => portalApi.postConfirmed<LoginResponse>(E.CODE_COMPLETE, body),
 
-  logout: () => portalApi.post<unknown>(E.LOGOUT),
   me: () => portalApi.get<MeResponse>(E.ME),
   acceptTerms: (version: string, ecomm_consent: boolean) =>
     portalApi.postConfirmed<{ terms_version: string; terms_required: boolean }>(E.TERMS_ACCEPT, { version, ecomm_consent }),

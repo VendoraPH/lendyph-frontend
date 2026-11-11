@@ -41,6 +41,7 @@ let portalTokens: Client["portalTokens"];
 let portalNotice: Client["portalNotice"];
 let portalApi: Client["portalApi"];
 let publicAssetUrl: Client["publicAssetUrl"];
+let logoutWith: Client["logoutWith"];
 
 interface Answer {
   status: number;
@@ -51,7 +52,7 @@ let answer: Answer = { status: 200, data: { success: true, data: {} } };
 
 before(async () => {
   const client = await import("./portal-client");
-  ({ portalTokens, portalNotice, portalApi, publicAssetUrl } = client);
+  ({ portalTokens, portalNotice, portalApi, publicAssetUrl, logoutWith } = client);
   client.portalHttp.defaults.adapter = async (config) => {
     sent.push(config);
     const response = { status: answer.status, statusText: "", headers: {}, config, data: answer.data };
@@ -134,4 +135,17 @@ test("the logo is a plain same-origin address from the config's path, nothing el
   for (const bad of [null, undefined, "", "https://evil.example/logo.png", "//evil.example/x", "/branding/../auth/me", "javascript:alert(1)", "/a b"]) {
     assert.equal(publicAssetUrl(bad), null, String(bad));
   }
+});
+
+test("the sign-out call carries the token it was given, with a short timeout, after the tab forgot it", async () => {
+  portalTokens.clear();
+  events.length = 0;
+  answer = { status: 401, data: { message: "Unauthenticated." } };
+  await assert.rejects(logoutWith("OLD-TOKEN"));
+  const call = sent.at(-1);
+  assert.equal(authorization(call), "Bearer OLD-TOKEN");
+  assert.equal(call?.timeout, 5000);
+  assert.equal(call?.url, "/portal/auth/logout");
+  assert.deepEqual(events, [], "an already-ended token on sign-out ends nothing further");
+  answer = { status: 200, data: { success: true, data: {} } };
 });

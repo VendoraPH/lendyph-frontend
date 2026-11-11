@@ -9,6 +9,7 @@ import { TermsConsent } from "@/components/portal/terms-consent";
 import { useConfirmedSubmit } from "@/lib/portal/hooks/use-confirmed-submit";
 import { portalService } from "@/lib/portal/portal-api";
 import { usePortalSession } from "@/lib/portal/portal-session";
+import { signOutMember } from "@/lib/portal/sign-out";
 import { CONFIRMS } from "@/lib/portal/server-confirm";
 
 /**
@@ -35,14 +36,12 @@ export default function TermsPage() {
       },
     });
 
+  const [signingOut, setSigningOut] = useState(false);
+
   const leave = () => {
-    portalService
-      .logout()
-      .catch(() => undefined)
-      .then(() => {
-        signOut();
-        router.replace("/member/login");
-      });
+    if (signingOut) return;
+    setSigningOut(true);
+    signOutMember(signOut).then(() => router.replace("/member/login"));
   };
 
   return (
@@ -54,7 +53,7 @@ export default function TermsPage() {
               {submitting && <Spinner className="h-4 w-4" />}
               Accept and continue
             </Button>
-            <Button variant="outline" className="h-10 flex-1" onClick={leave} disabled={submitting}>
+            <Button variant="outline" className="h-10 flex-1" onClick={leave} disabled={submitting || signingOut}>
               Sign out
             </Button>
           </div>

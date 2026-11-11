@@ -51,3 +51,22 @@ test("the monthly penalty note shows only for a charged month", () => {
   assert.equal(penaltyMonthsText(3), "Penalty: 3 months late");
   assert.equal(penaltyMonthsText(1.5), null);
 });
+
+test("percent-encoded dot segments can't step out of the member portal", () => {
+  for (const dropped of [
+    "/member/%2e%2e/loans/1",
+    "/member/.%2e/loans/1",
+    "/member/%2e./loans/1",
+    "/member/%2E%2E/loans/1",
+    "/member/%2e%2E/settings",
+    "/member/x/%2E%2e/%2e%2e/users",
+  ]) {
+    assert.equal(safeMemberLink(dropped), null, dropped);
+  }
+});
+
+test("a kept link is the resolved path, inside /member", () => {
+  assert.equal(safeMemberLink("/member/requests/./12"), "/member/requests/12");
+  assert.equal(safeMemberLink("/member/x/%2e%2e/requests/12"), "/member/requests/12");
+  assert.equal(safeMemberLink("/member/loans/9?tab=x#top"), "/member/loans/9?tab=x#top");
+});

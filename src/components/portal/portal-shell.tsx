@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -22,8 +23,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { isActivePath, visibleNav, type PortalNavIcon, type PortalNavItem } from "@/lib/portal/nav";
-import { portalService } from "@/lib/portal/portal-api";
 import { usePortalSession } from "@/lib/portal/portal-session";
+import { signOutMember } from "@/lib/portal/sign-out";
 import type { PortalMember } from "@/lib/portal/types";
 import { cn } from "@/lib/utils";
 import { NotificationBell } from "./notification-bell";
@@ -60,14 +61,12 @@ export function PortalShell({ member, children }: { member: PortalMember; childr
   const tabs = nav.filter((item) => item.tab);
   const more = nav.filter((item) => !item.tab);
 
+  const [signingOut, setSigningOut] = useState(false);
+
   const logout = () => {
-    portalService
-      .logout()
-      .catch(() => undefined)
-      .then(() => {
-        signOut();
-        router.replace("/member/login");
-      });
+    if (signingOut) return;
+    setSigningOut(true);
+    signOutMember(signOut).then(() => router.replace("/member/login"));
   };
 
   return (
@@ -105,7 +104,7 @@ export function PortalShell({ member, children }: { member: PortalMember; childr
           <div className="ml-auto flex items-center gap-1">
             <NotificationBell />
             <span className="hidden max-w-40 truncate text-sm text-muted-foreground xl:inline">{member.full_name || member.first_name}</span>
-            <Button variant="ghost" size="sm" onClick={logout}>
+            <Button variant="ghost" size="sm" onClick={logout} disabled={signingOut} aria-busy={signingOut}>
               <LogOut className="h-4 w-4" aria-hidden />
               <span className="sr-only sm:not-sr-only">Sign out</span>
             </Button>

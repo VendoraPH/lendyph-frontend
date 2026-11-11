@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import nextConfig from "../../../../next.config";
-import { memberSources } from "./sources";
+import { readdirSync } from "node:fs";
+import { join, relative } from "node:path";
+import { SRC, memberSources } from "./sources";
 
 // With NEXT_PUBLIC_ENABLE_MEMBER_PORTAL off, every /member route is a plain
 // 404 and nothing calls the API: the /member layout is a server component
@@ -45,4 +47,23 @@ test("the parts left for v2 have no member page (design §3, Not built in v1)", 
     assert.ok(!pages.some((file) => file.includes(`${dropped}/`)), dropped);
   }
   assert.ok(!pages.some((file) => /gcash/i.test(file)), "no GCash payment");
+});
+
+// A route handler (route.ts), a metadata image (icon, opengraph-image), a
+// sitemap or any other route-level file would answer under /member without the
+// layout's switch check. Only pages and layouts sit at route level; everything
+// else lives in a `_` folder, which Next never routes.
+function filesUnder(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    return entry.isDirectory() ? filesUnder(path) : [path];
+  });
+}
+
+test("nothing under /member answers without the layout: pages and layouts only at route level", () => {
+  const offenders = filesUnder(join(SRC, "app/member"))
+    .map((path) => relative(join(SRC, "app/member"), path))
+    .filter((file) => !file.split("/").some((part) => part.startsWith("_")))
+    .filter((file) => !/(^|\/)(page|layout)\.tsx$/.test(file));
+  assert.deepEqual(offenders, []);
 });

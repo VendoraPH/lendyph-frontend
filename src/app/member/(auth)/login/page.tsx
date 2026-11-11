@@ -112,6 +112,7 @@ function LoginForm() {
               I have a code from my branch
             </Link>
           </p>
+          <p className="text-center text-xs text-muted-foreground">Using a shared computer? Sign out when you&apos;re done.</p>
           <p className="text-center text-xs text-muted-foreground">
             First time here, or forgot your password? Ask your branch for a code, then use the link above.
           </p>

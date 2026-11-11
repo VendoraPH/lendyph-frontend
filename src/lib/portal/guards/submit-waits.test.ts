@@ -33,8 +33,9 @@ test("every member write hands its caller the server's status", () => {
   const service = memberSources([SERVICE])[0].text;
   const unconfirmed = [...service.matchAll(/(\w+): \([^)]*\)[^=]*=>\s*portalApi\.(?:post|put|delete)</g)].map((m) => m[1]);
   // Plain posts: the code checks (their answer is the next step, not a
-  // success message), signing out, and marking a notice or announcement read.
-  assert.deepEqual(unconfirmed, ["verifyCode", "verifyOtp", "logout", "readNotification", "readAnnouncement"]);
+  // success message) and marking a notice or announcement read. Signing out
+  // is `logoutWith` in the client, which clears the tab first (sign-out.ts).
+  assert.deepEqual(unconfirmed, ["verifyCode", "verifyOtp", "readNotification", "readAnnouncement"]);
   assert.ok(/postConfirmed/.test(service) && /deleteConfirmed/.test(service));
 });
 

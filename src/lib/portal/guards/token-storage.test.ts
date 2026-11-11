@@ -34,3 +34,11 @@ test("the member store holds no money", () => {
   const store = memberSources(["lib/portal/portal-session.ts"])[0].text;
   assert.deepEqual(linesMatching(store, /balance|amount|outstanding|withdrawable|paid_up/i), []);
 });
+
+test("only the member store persists anything, and nothing writes cookies or logs", () => {
+  for (const { file, text } of FILES) {
+    if (file !== "lib/portal/portal-session.ts") assert.deepEqual(linesMatching(text, /\bpersist\s*\(/), [], `${file}: persist(`);
+    assert.deepEqual(linesMatching(text, /document\.cookie/), [], `${file}: document.cookie`);
+    assert.deepEqual(linesMatching(text, /\bconsole\./), [], `${file}: console.`);
+  }
+});
