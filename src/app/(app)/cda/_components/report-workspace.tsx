@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { Lock, RefreshCw, Save } from "lucide-react";
 import { DataState } from "@/components/common/data-state";
 import { PermissionButton } from "@/components/common/permission-button";
@@ -183,25 +183,19 @@ export function ReportWorkspace({
   year,
   type,
   part,
-  children,
 }: {
   year: number;
   type: CdaReportType;
   part?: CdaReportPart;
-  /** Module content shown above the report (PESOS score, registers, …). */
-  children?: ReactNode;
 }) {
   const { resource, replace } = useCdaReport(year, type, part);
   return (
-    <div className="space-y-6">
-      {children}
-      <DataState
-        resource={resource}
-        endpoints={[`GET ${API_ENDPOINTS.CDA.REPORT_BY_TYPE(year, type)}`]}
-        summary={`The ${year} ${reportName(type, part)}, with its issues and workflow`}
-      >
-        {(report) => <ReportBody report={report} onChange={replace} onReload={resource.refetch} />}
-      </DataState>
-    </div>
+    <DataState
+      resource={resource}
+      endpoints={[`GET ${API_ENDPOINTS.CDA.REPORT_BY_TYPE(year, type)}`]}
+      summary={`The ${year} ${reportName(type, part)}, with its issues and workflow`}
+    >
+      {(report) => <ReportBody report={report} onChange={replace} onReload={resource.refetch} />}
+    </DataState>
   );
 }

@@ -11,6 +11,7 @@ import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { httpStatusOf } from "@/lib/api-error";
 import { formatDateTime } from "@/lib/format";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { labelOf } from "../_lib/labels";
 import { signedUrl } from "../_lib/safe-url";
 import { ToneBadge } from "./tone-badge";
 import type { CdaExport, CdaExportFormat } from "@/types/cda";
@@ -31,7 +32,7 @@ function ExportRow({ item }: { item: CdaExport }) {
     <li className="flex flex-wrap items-start justify-between gap-2 py-2 text-sm">
       <div className="min-w-0 space-y-0.5">
         <p className="flex flex-wrap items-center gap-2 font-medium">
-          {FORMAT_LABELS[item.format] ?? "File"} · version {item.version}
+          {labelOf(FORMAT_LABELS, item.format)} · version {item.version}
           {item.is_draft && <ToneBadge tone="warning" label="DRAFT" />}
         </p>
         <p className="text-xs text-muted-foreground">

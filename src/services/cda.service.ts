@@ -199,7 +199,9 @@ export const cdaService = {
   // ── Templates (super_admin) ──
   listTemplates: () => api.get<CdaTemplate[]>(C.TEMPLATES),
   createTemplate: (data: CdaTemplateInput) => api.post<CdaTemplate>(C.TEMPLATES, data),
-  updateTemplate: (id: number, data: Omit<CdaTemplateInput, "report_type">) => api.put<CdaTemplate>(C.TEMPLATE(id), data),
+  /** A draft's report type is fixed, so it isn't sent. */
+  updateTemplate: (id: number, data: CdaTemplateInput) =>
+    api.put<CdaTemplate>(C.TEMPLATE(id), { ...data, report_type: undefined }),
   activateTemplate: (id: number) => api.post<CdaTemplate>(C.TEMPLATE_ACTIVATE(id)),
   retireTemplate: (id: number, reason: string) => api.post<CdaTemplate>(C.TEMPLATE_RETIRE(id), { reason }),
   attachWorkbook: (id: number, file: File) => api.upload<CdaTemplate>(C.TEMPLATE_EXCEL_FILE(id), toFormData({}, file)),
