@@ -16,7 +16,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useAccountingResource, useChartOfAccounts, usePermission } from "@/hooks";
+import { useAccountingResource, useChartOfAccounts } from "@/hooks";
+import { useBranchChoiceSource } from "@/hooks/use-branch-choice-source";
+import { pickableBranches } from "@/lib/branch-choice";
 import { accountingService } from "@/services";
 import { cn } from "@/lib/utils";
 import type { DrainResult } from "@/lib/paginate";
@@ -26,11 +28,19 @@ import { DataState } from "../_components/data-state";
 import { FilterBar } from "../_components/accounting-filters";
 import { AccountSelect } from "../_components/account-select";
 import { BranchAccessNotice } from "./_components/branch-access-notice";
+import { BranchScopeFilter } from "./_components/branch-scope-filter";
 import { FigureWithNote } from "./_components/figure-with-note";
 import { ReconciledBadge, RowMatchBadge } from "./_components/match-badge";
 import { NewReconciliationDialog } from "./_components/new-reconciliation-dialog";
 import { ReasonButton } from "./_components/reason-button";
-import { accountLabel, reconciledLabel, rowFigures } from "./_lib/reconciliation-view";
+import {
+  ANY_BRANCH,
+  branchScopeLabel,
+  reconciliationBranchChoice,
+  reconciliationFilterItems,
+  reconciliationFilterParams,
+} from "./_lib/branch-scope";
+import { NO_BRANCH_ASSIGNED, accountLabel, reconciledLabel, rowFigures } from "./_lib/reconciliation-view";
 import { signedCentavos } from "./_lib/signed-money";
 import type { ReconciliationDetail } from "./_lib/types";
 
@@ -44,7 +54,11 @@ function ReconciliationContent() {
   const router = useRouter();
   const { postable, isTemplate, loading: chartLoading } = useChartOfAccounts();
   const [accountId, setAccountId] = useState<number | null>(null);
+  const [branchFilter, setBranchFilter] = useState(ANY_BRANCH);
   const [creating, setCreating] = useState(false);
+  const branchSource = useBranchChoiceSource();
+  const unassigned = reconciliationBranchChoice(branchSource).kind === "unassigned";
+  const filterItems = reconciliationFilterItems(branchSource.viewAll, pickableBranches(branchSource));
 
   const moneyAccounts = useMemo(
     () => postable.filter((a) => Boolean(a.cash_kind)),
@@ -55,13 +69,19 @@ function ReconciliationContent() {
   // short page makes "No reconciliation for this account" a lie rather than an
   // empty state. The list answers the same worksheet as the reconciliation's
   // own page, ids and counts included.
+  // The branch filter is the server's (`branch_id`), so changing it reads the list again.
   const fetcher = useCallback(
-    () => accountingService.reconciliationsListAll() as Promise<DrainResult<ReconciliationDetail>>,
-    [],
+    () =>
+      accountingService.reconciliationsListAll(reconciliationFilterParams(branchFilter)) as Promise<
+        DrainResult<ReconciliationDetail>
+      >,
+    [branchFilter],
   );
   const resource = useAccountingResource<DrainResult<ReconciliationDetail>>(fetcher);
 
-  const createReason = isTemplate
+  const createReason = unassigned
+    ? NO_BRANCH_ASSIGNED
+    : isTemplate
     ? "The chart of accounts isn't available, so no account can be picked."
     : moneyAccounts.length === 0
       ? "No money account is set up yet."
@@ -69,7 +89,8 @@ function ReconciliationContent() {
 
   const created = (reconciliation: ReconciliationDetail) => {
     setCreating(false);
-    toast.success(`Reconciliation started for ${reconciliation.period}`);
+    const branch = branchScopeLabel(reconciliation);
+    toast.success(`Reconciliation started for ${reconciliation.period}${branch ? `, ${branch}` : ""}`);
     router.push(detailHref(reconciliation.id));
   };
 
@@ -98,7 +119,10 @@ function ReconciliationContent() {
         than adjusting the balance.
       </div>
 
+      {unassigned && <BranchAccessNotice message={NO_BRANCH_ASSIGNED} />}
+
       <FilterBar>
+        <BranchScopeFilter items={filterItems} value={branchFilter} onChange={setBranchFilter} />
         <AccountSelect
           label="Account"
           accounts={moneyAccounts}
@@ -117,7 +141,9 @@ function ReconciliationContent() {
           "POST /accounting/reconciliations/{id}/match",
         ]}
         isEmpty={(drain) => drain.rows.length === 0}
-        emptyMessage="No reconciliation has been started."
+        emptyMessage={
+          branchFilter === ANY_BRANCH ? "No reconciliation has been started." : "No reconciliation for this branch."
+        }
       >
         {({ rows: items, truncated, total }) => {
           const shown =
@@ -161,6 +187,7 @@ function ReconciliationContent() {
       <NewReconciliationDialog
         open={creating}
         accounts={moneyAccounts}
+        branchSource={branchSource}
         onOpenChange={setCreating}
         onCreated={created}
       />
@@ -168,22 +195,10 @@ function ReconciliationContent() {
   );
 }
 
-/** Reconciliation reads every branch's books, so the list is asked for only with access to all branches. */
-function ReconciliationGate() {
-  const canViewAll = usePermission().can("branches:view_all");
-  if (canViewAll) return <ReconciliationContent />;
-  return (
-    <div className="space-y-6">
-      <AccountingPageHeader title="Reconciliation" description={DESCRIPTION} />
-      <BranchAccessNotice />
-    </div>
-  );
-}
-
 export default function ReconciliationPage() {
   return (
     <RouteGuard permission="accounting:reconcile" pageName="Reconciliation">
-      <ReconciliationGate />
+      <ReconciliationContent />
     </RouteGuard>
   );
 }
@@ -195,6 +210,7 @@ function ReconciliationCard({
 }) {
   const clean = reconciliation.is_reconciled;
   const href = detailHref(reconciliation.id);
+  const branch = branchScopeLabel(reconciliation);
 
   return (
     <Card className={cn("border-2", clean ? "border-emerald-500/40" : "border-amber-500/50")}>
@@ -204,7 +220,10 @@ function ReconciliationCard({
             <Link href={href} className="font-medium underline-offset-2 hover:underline">
               {reconciliation.period}
             </Link>
-            <p className="text-sm text-muted-foreground">{accountLabel(reconciliation)}</p>
+            <p className="text-sm text-muted-foreground">
+              {accountLabel(reconciliation)}
+              {branch && <> · {branch}</>}
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <ReconciledBadge reconciled={clean} label={reconciledLabel(reconciliation)} />

@@ -2,7 +2,7 @@ import { ShieldAlert } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { BRANCH_ACCESS_EXPLANATION } from "../_lib/reconciliation-view";
 
-/** Shown instead of the screen to someone without access to all branches (the server answers 403). */
+/** A notice in place of what the caller can't use: no branch assigned, or a reconciliation that isn't there. */
 export function BranchAccessNotice({ message = BRANCH_ACCESS_EXPLANATION }: { message?: string }) {
   return (
     <Card>

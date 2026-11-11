@@ -14,14 +14,17 @@ import { branchService, type ApiBranch } from "@/services/branch.service";
  * An incomplete list counts as an error — a filter missing a branch cannot
  * select it, and nothing on screen would say why.
  */
-export function useBranches() {
+export function useBranches(enabled = true) {
   const [branches, setBranches] = useState<ApiBranch[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Loads once per mount, so the initial state above already reads "loading,
-  // no error" — there is nothing to reset before the request goes out.
+  // no error" — there is nothing to reset before the request goes out. A
+  // caller that doesn't need the list passes `enabled: false` and nothing is
+  // requested.
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     branchService
       .listAll()
@@ -40,7 +43,7 @@ export function useBranches() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [enabled]);
 
-  return { branches, loading, error };
+  return { branches, loading: enabled && loading, error };
 }

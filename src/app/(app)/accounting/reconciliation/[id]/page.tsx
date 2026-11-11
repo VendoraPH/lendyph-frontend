@@ -118,16 +118,16 @@ function WorksheetContent({ id }: { id: number }) {
   );
 }
 
+/**
+ * Branch users open their own branches' reconciliations; the server answers
+ * 404 for any other, which the worksheet's load explains.
+ */
 function WorksheetGate({ id }: { id: number }) {
-  const canViewAll = usePermission().can("branches:view_all");
-
-  if (!canViewAll || !Number.isInteger(id) || id < 1) {
+  if (!Number.isInteger(id) || id < 1) {
     return (
       <div className="space-y-6">
         <AccountingPageHeader title="Reconciliation" description="One account's statement, line by line." actions={<BackLink />} />
-        <BranchAccessNotice
-          message={canViewAll ? "This reconciliation doesn't exist, or it was removed." : undefined}
-        />
+        <BranchAccessNotice message="This reconciliation doesn't exist, or it was removed." />
       </div>
     );
   }

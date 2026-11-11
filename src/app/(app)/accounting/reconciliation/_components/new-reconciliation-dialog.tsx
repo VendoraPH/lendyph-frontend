@@ -13,10 +13,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { useDialogOpening, usePermission } from "@/hooks";
+import { BranchSelectField } from "@/components/common/branch-select-field";
+import { useDialogOpening } from "@/hooks";
+import type { BranchChoiceState } from "@/hooks/use-branch-choice-source";
 import type { Account } from "@/types";
 import { AccountSelect } from "../../_components/account-select";
+import { reconciliationBranchChoice } from "../_lib/branch-scope";
 import { reconciliationCreate } from "../_lib/reconciliation-api";
+import { NO_BRANCH_ASSIGNED } from "../_lib/reconciliation-view";
 import {
   BLANK_LINE,
   PERIOD_MAX,
@@ -31,6 +35,7 @@ import { StatementLinesEditor } from "./statement-lines-editor";
 
 const EMPTY_FORM: StatementForm = {
   accountId: null,
+  branch: null,
   period: "",
   startDate: "",
   endDate: "",
@@ -45,12 +50,26 @@ interface NewReconciliationDialogProps {
   open: boolean;
   /** Money accounts only: the ones carrying a cash kind. */
   accounts: Account[];
+  /** The page's `useBranchChoiceSource()`, so the list's filter and this form read one branch list. */
+  branchSource: BranchChoiceState;
   onOpenChange: (open: boolean) => void;
   onCreated: (reconciliation: ReconciliationDetail) => void;
 }
 
-export function NewReconciliationDialog({ open, accounts, onOpenChange, onCreated }: NewReconciliationDialogProps) {
-  const canViewAll = usePermission().can("branches:view_all");
+const BRANCH_HELP =
+  "The branch whose entries this statement proves. All branches reads every entry on the account, whatever its branch.";
+const BRANCH_HELP_OWN = "The branch whose entries this statement proves.";
+
+export function NewReconciliationDialog({
+  open,
+  accounts,
+  branchSource,
+  onOpenChange,
+  onCreated,
+}: NewReconciliationDialogProps) {
+  const canViewAll = branchSource.viewAll;
+  const branchChoice = reconciliationBranchChoice(branchSource);
+  const preselected = branchChoice.kind === "pick" ? branchChoice.preselected : null;
   const [form, setForm] = useState<StatementForm>(EMPTY_FORM);
   const [paste, setPaste] = useState("");
   const [pasteErrors, setPasteErrors] = useState<string[]>([]);
@@ -58,7 +77,7 @@ export function NewReconciliationDialog({ open, accounts, onOpenChange, onCreate
   const [submitting, setSubmitting] = useState(false);
 
   if (useDialogOpening(open, EMPTY_FORM)) {
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM, branch: preselected });
     setPaste("");
     setPasteErrors([]);
     setErrors([]);
@@ -110,6 +129,21 @@ export function NewReconciliationDialog({ open, accounts, onOpenChange, onCreate
             placeholder="Select a money account"
             className="w-full"
           />
+          {branchChoice.kind === "pick" ? (
+            <BranchSelectField
+              label="Branch"
+              items={branchChoice.items}
+              value={form.branch}
+              onChange={(value) => set("branch", value)}
+              loading={branchSource.loading}
+              disabled={submitting}
+              description={canViewAll ? BRANCH_HELP : BRANCH_HELP_OWN}
+            />
+          ) : (
+            <p role="note" className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+              {NO_BRANCH_ASSIGNED}
+            </p>
+          )}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="reconcile-period">Period (optional)</Label>

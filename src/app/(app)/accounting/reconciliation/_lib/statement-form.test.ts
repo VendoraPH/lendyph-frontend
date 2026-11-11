@@ -1,5 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
+import { NO_BRANCH } from "@/lib/branch-choice";
 import {
   BLANK_LINE,
   STATEMENT_LINES_MAX,
@@ -63,6 +64,7 @@ describe("pasted statement rows", () => {
 describe("the create payload", () => {
   const form = (overrides: Partial<StatementForm> = {}): StatementForm => ({
     accountId: 2,
+    branch: "3",
     period: "",
     startDate: "2026-10-01",
     endDate: "2026-10-31",
@@ -80,6 +82,7 @@ describe("the create payload", () => {
       ok: true,
       body: {
         account_id: 2,
+        branch_id: 3,
         start_date: "2026-10-01",
         end_date: "2026-10-31",
         statement_balance: 2_485_050,
@@ -104,6 +107,7 @@ describe("the create payload", () => {
   test("every problem is listed in words, lines by number", () => {
     const result = buildCreateBody({
       accountId: null,
+      branch: null,
       period: "",
       startDate: "2026-10-31",
       endDate: "2026-10-01",
@@ -117,6 +121,7 @@ describe("the create payload", () => {
     assert.equal(result.ok, false);
     assert.deepEqual(!result.ok && result.errors, [
       "Choose the money account.",
+      "Choose the branch whose entries this reconciliation proves.",
       "The end date can't be before the start date.",
       "Enter the statement closing balance in pesos, for example 24,850.50 or -1,500.00.",
       "Line 1: enter the date as YYYY-MM-DD.",
@@ -125,6 +130,13 @@ describe("the create payload", () => {
       "Line 2: the reference can be at most 64 characters.",
       "Line 3: enter the amount in pesos; money out is negative.",
     ]);
+  });
+
+  test("All branches is sent as an explicit null", () => {
+    const result = buildCreateBody(form({ branch: NO_BRANCH }));
+    assert.ok(result.ok);
+    assert.equal(result.body.branch_id, null);
+    assert.ok("branch_id" in result.body);
   });
 
   test("missing dates, and more lines than the server takes", () => {
@@ -164,10 +176,22 @@ describe("the server's refusals on create", () => {
     ]);
   });
 
-  test("a 403 without access to all branches is explained", () => {
+  test("a 403 for a branch user is explained", () => {
     const [message] = createErrorMessages(httpError(403, { message: "This action is unauthorized." }), {
       canViewAll: false,
     });
-    assert.match(message, /all branches/);
+    assert.match(message, /your own branches/);
+  });
+
+  test("the server's branch refusal and a start collision read in its words", () => {
+    assert.deepEqual(
+      createErrorMessages(
+        httpError(422, { errors: { branch_id: ["Pick the branch whose entries this reconciliation proves."] } }),
+        { canViewAll: false },
+      ),
+      ["Pick the branch whose entries this reconciliation proves."],
+    );
+    const collided = "Someone else was starting a reconciliation at the same moment. Nothing was saved; try again.";
+    assert.deepEqual(createErrorMessages(httpError(409, { message: collided }), { canViewAll: true }), [collided]);
   });
 });
