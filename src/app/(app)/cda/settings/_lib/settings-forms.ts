@@ -8,6 +8,7 @@ import {
   toOptions,
 } from "../../_lib/labels";
 import { fromDraft, type RecordDraft, type RecordField } from "../../_lib/record-form";
+import { officerIdOf } from "../../_lib/screen-gaps";
 
 /**
  * CDA settings forms (carried over from #510 by Augustin, on the server's
@@ -48,9 +49,30 @@ export const PROFILE_FIELDS: RecordField[] = [
   { key: "satellite_offices", label: "Satellite offices", type: "number" },
 ];
 
-/** The profile's body: every field, blank as null. */
-export function toProfile(draft: RecordDraft): Partial<CdaProfileFields> {
-  return fromDraft(PROFILE_FIELDS, draft) as Partial<CdaProfileFields>;
+/**
+ * The authorised representative: an officer from the register (the server
+ * takes `authorized_rep_officer_id`; the name and position come from the
+ * officer). Its choices are the register's, filled in by the form.
+ */
+export const PROFILE_REP_FIELD: RecordField = {
+  key: "authorized_rep_officer_id",
+  label: "Authorised representative",
+  type: "select",
+  options: [],
+  help: "Pick from CDA › Officers. The name and position come from the officer's record.",
+};
+
+/**
+ * The profile's body: every field, blank as null. `extra` are fields shown
+ * only when their choices loaded (the representative), so a failed officer
+ * list never clears the stored pick.
+ */
+export function toProfile(draft: RecordDraft, extra: RecordField[] = []): Partial<CdaProfileFields> {
+  const body = fromDraft([...PROFILE_FIELDS, ...extra], draft) as Partial<CdaProfileFields>;
+  if (extra.some((f) => f.key === PROFILE_REP_FIELD.key)) {
+    body.authorized_rep_officer_id = officerIdOf(draft[PROFILE_REP_FIELD.key]);
+  }
+  return body;
 }
 
 /** The pulled values' words, in the order the profile shows them. */

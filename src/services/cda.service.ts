@@ -32,6 +32,9 @@ import type {
   CdaReportRow,
   CdaReportType,
   CdaSettings,
+  CdaSnapshot,
+  CdaSnapshotCheck,
+  CdaSnapshotSummary,
   CdaSocialProgram,
   CdaSocialTotals,
   CdaSubmission,
@@ -116,8 +119,15 @@ export const cdaService = {
   getReport: (id: number) => api.get<CdaReport>(C.REPORT(id)),
   saveReport: (id: number, fields: CdaFieldInput[]) => api.put<CdaReport>(C.REPORT(id), { fields }),
   runWorkflow: (id: number, input: CdaWorkflowInput) => api.post<CdaReport>(C.REPORT_WORKFLOW(id), input),
+  /** The report's own deadline (cda:settings); null removes it. Answers the report row with the server's deadline. */
   setReportDeadline: (id: number, overrideOn: string | null, reference: string | null) =>
     api.patch<CdaReportRow>(C.REPORT_DEADLINE(id), { override_on: overrideOn, reference }),
+  /** Every finalized version, newest first, kept when a reopen supersedes it. */
+  listSnapshots: (id: number) => api.get<CdaSnapshotSummary[]>(C.REPORT_SNAPSHOTS(id)),
+  getSnapshot: (id: number, version: number) => api.get<CdaSnapshot>(`${C.REPORT_SNAPSHOTS(id)}/${version}`),
+  /** The server recomputes the stored payload's SHA-256 against its checksum. */
+  verifySnapshot: (id: number, version: number) =>
+    api.post<CdaSnapshotCheck>(`${C.REPORT_SNAPSHOTS(id)}/${version}/verify`),
   listExports: (id: number) => api.get<CdaExport[]>(C.REPORT_EXPORTS(id)),
   createExport: (id: number, format: CdaExportFormat) => api.post<CdaExport>(C.REPORT_EXPORTS(id), { format }),
 
@@ -127,7 +137,7 @@ export const cdaService = {
   getPesos: (year: number) => api.get<CdaPesos>(C.PESOS(year)),
 
   // ── Officers and trainings ──
-  listOfficers: (params?: { year?: number }) => drain<CdaOfficer>(C.OFFICERS, params),
+  listOfficers: (params?: { year?: number; status?: CdaOfficer["status"] }) => drain<CdaOfficer>(C.OFFICERS, params),
   createOfficer: (data: CdaOfficerInput) => api.post<CdaOfficer>(C.OFFICERS, data),
   updateOfficer: (id: number, data: CdaOfficerInput) => api.put<CdaOfficer>(C.OFFICER(id), data),
   deleteOfficer: (id: number) => api.delete<void>(C.OFFICER(id)),

@@ -28,13 +28,15 @@ import { ExportPanel } from "./export-panel";
 import { ReadinessBreakdown } from "./readiness-breakdown";
 import { ReportDocumentUpload } from "./report-document-upload";
 import { ReadinessMeter } from "./readiness-meter";
+import { ReportDeadline } from "./report-deadline";
 import { ReportSection } from "./report-section";
+import { SnapshotHistory } from "./snapshot-history";
 import { ValidationPanel } from "./validation-panel";
 import { WorkflowActions } from "./workflow-actions";
 import { WorkflowHistory } from "./workflow-history";
 import type { CdaReport, CdaReportPart, CdaReportType } from "@/types/cda";
 
-function Summary({ report }: { report: CdaReport }) {
+function Summary({ report, onChange }: { report: CdaReport; onChange: (r: CdaReport) => void }) {
   return (
     <Card>
       <CardContent className="flex flex-wrap items-center justify-between gap-4 pt-6">
@@ -50,11 +52,14 @@ function Summary({ report }: { report: CdaReport }) {
               </span>
             )}
           </div>
-          <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            Due {formatDate(report.effective_deadline)}
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span>Due {formatDate(report.effective_deadline)}</span>
             <DeadlineBadge daysRemaining={report.days_remaining} filed={report.status === "submitted" || report.status === "accepted"} />
-            {report.due_override_on && report.due_override_reference && <span>({report.due_override_reference})</span>}
-          </p>
+            {report.due_override_on && report.due_override_reference && (
+              <span>(this report&apos;s own deadline: {report.due_override_reference})</span>
+            )}
+            <ReportDeadline report={report} onChange={onChange} />
+          </div>
           {report.updated_at && <p className="text-xs text-muted-foreground">Last updated {formatDateTime(report.updated_at)}</p>}
         </div>
         <ReadinessMeter value={report.readiness} critical={report.critical_count} label={report.readiness_label} className="w-full sm:w-64" />
@@ -163,7 +168,7 @@ function ReportBody({ report, drafts, setDrafts, reloading, onChange, onReload }
 
   return (
     <div className="space-y-4">
-      <Summary report={report} />
+      <Summary report={report} onChange={onChange} />
       <Notices report={report} onRefresh={refresh} refreshing={refreshing} />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -187,6 +192,7 @@ function ReportBody({ report, drafts, setDrafts, reloading, onChange, onReload }
           {report.applicable && needsDocument(report) && <ReportDocumentUpload report={report} onChange={onChange} />}
           {report.readiness_breakdown && <ReadinessBreakdown breakdown={report.readiness_breakdown} sections={report.sections} />}
           <ExportPanel reportId={report.id} />
+          <SnapshotHistory key={`${report.id}:${report.snapshot?.id ?? 0}:${report.status}`} reportId={report.id} />
           <WorkflowHistory events={report.history} />
         </div>
       </div>

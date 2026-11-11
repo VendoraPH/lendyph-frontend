@@ -301,6 +301,27 @@ export interface CdaSnapshotSummary {
   reopen_reason: string | null;
 }
 
+/**
+ * `GET /cda/reports/{id}/snapshots/{version}`: one finalized version with the
+ * frozen report as it was filed. Only the parts the screen shows are typed.
+ */
+export interface CdaSnapshot extends CdaSnapshotSummary {
+  payload: {
+    template: { name: string; version: string; verified: boolean } | null;
+    readiness: number;
+    warnings_confirmed: boolean;
+    issues: CdaIssue[];
+    values: Record<string, unknown>;
+  } | null;
+}
+
+/** `POST /cda/reports/{id}/snapshots/{version}/verify`: the server's check of the stored payload. Writes nothing. */
+export interface CdaSnapshotCheck {
+  version: number;
+  checksum: string;
+  checksum_matches: boolean;
+}
+
 export interface CdaHistoryEvent {
   id: number;
   /** A workflow action key, or `save` / `refresh`. */
