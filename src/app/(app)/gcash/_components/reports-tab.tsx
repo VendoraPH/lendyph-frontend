@@ -47,7 +47,7 @@ function defaultRange(): { start: string; end: string } {
 export function ReportsTab() {
   const { can } = usePermission();
   const canMarkPaid = gcashCanMarkPendingPaid(can);
-  // Names for a row's `branch_id` when the report sends no `branch_name`.
+  // Names for a row's `branch_id`: the same rule as the Transactions tab.
   const branches = pickableBranches(useBranchChoiceSource());
   const [{ start, end }, setRange] = useState(defaultRange);
   const [report, setReport] = useState<GCashIncomeReport | null>(null);

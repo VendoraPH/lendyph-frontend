@@ -172,7 +172,7 @@ function ReportBody({ report, drafts, setDrafts, reloading, onChange, onReload }
       <Notices report={report} onRefresh={refresh} refreshing={refreshing} />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <WorkflowActions report={report} onChange={onChange} onReload={onReload} />
+        <WorkflowActions report={report} onChange={onChange} onReload={onReload} reloading={reloading} />
         {canEdit && (
           <PermissionButton permission="cda:prepare" size="sm" onClick={save} disabled={!dirty || saving || reloading}>
             <Save className="mr-1 h-4 w-4" />

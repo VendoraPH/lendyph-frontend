@@ -101,19 +101,21 @@ export interface GCashBranchRow {
   non_member?: unknown;
   /** Absent on answers from before backend #283; null for none. */
   branch_id?: number | null;
-  /** Sent by the pending report since backend B-FU; optional. */
+  /**
+   * Sent by the pending report since backend B-FU. Not shown: the cell names
+   * a branch only when it is one of the user's, as the Transactions tab does.
+   */
   branch_name?: string | null;
 }
 
 /**
- * The Branch cell of a GCash list. The server's `branch_name` when it sends
- * one. Otherwise a member's row posts in the member's branch, which the row
- * doesn't name; a walk-in row with no branch is head office's; and an answer
- * that leaves the branch out entirely reads a dash.
+ * The Branch cell of a GCash list, one rule for both tabs, so they agree on
+ * the same transaction. A member's row posts in the member's branch, which
+ * the Transactions row doesn't name. A walk-in row reads its branch's name
+ * when the user can list it, "Another branch" when they can't, and "Head
+ * office" with none. An answer that leaves the branch out reads a dash.
  */
 export function gcashRowBranchLabel(row: GCashBranchRow, branches: readonly NamedBranch[]): string {
-  const sent = row.branch_name?.trim();
-  if (sent) return sent;
   if (row.borrower) return MEMBERS_BRANCH_LABEL;
   if (!("branch_id" in row) || row.branch_id === undefined) return "—";
   return gcashBranchLabel(row.branch_id, branches) ?? HEAD_OFFICE_ROW_LABEL;

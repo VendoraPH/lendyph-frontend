@@ -573,3 +573,49 @@ test("every Member Portal action and target reads in words", () => {
   assert.equal(auditTargetType("PortalUser"), "Portal account");
   assert.equal(auditTargetType("PortalSetting"), "Member Portal settings");
 });
+
+test("a CDA workflow row's action reads in words, never its key (ReportWorkflow::ACTIONS)", () => {
+  const cda = { target: { id: 3, type: "CdaReport", label: "Annual report 2026" } };
+  const words: Record<string, string> = {
+    refresh: "Refreshed",
+    validate: "Refreshed",
+    submit_for_review: "Submitted for review",
+    return: "Returned for changes",
+    approve: "Approved",
+    finalize: "Finalized",
+    mark_submitted: "Filing recorded with CDA",
+    mark_accepted: "Marked as accepted",
+    mark_for_correction: "Marked for correction",
+    reopen: "Reopened",
+    set_stage: "Moved to another stage",
+  };
+  for (const [key, label] of Object.entries(words)) {
+    assert.equal(auditChangeValue(cda, "action", key), label, key);
+  }
+  assert.equal(auditChangePair(cda, { field: "action", old: null, new: "return" }).new, "Returned for changes");
+});
+
+test("an action value from another module reads like the Action column, never its key", () => {
+  assert.equal(auditChangeValue({ target: null }, "action", "penalty_waived"), "Penalty waived");
+  assert.equal(auditChangeValue({ target: null }, "action", "some_new_action"), "Some new action");
+});
+
+test("every action the backend writes has its own words", () => {
+  const words: Record<string, string> = {
+    accounting_opening_balance_created: "Opening balance created",
+    accounting_opening_balance_saved: "Opening balance saved",
+    accounting_opening_balance_finalised: "Opening balance finalised",
+    accounting_opening_balances_posted: "Opening balances posted",
+    allowance_posted: "Allowance posted",
+    branches_changed: "Branches changed",
+    chart_of_accounts_seeded: "Chart of accounts set up",
+    password_change_required: "Password change required",
+    password_changed: "Password changed",
+    penalty_waived: "Penalty waived",
+    periods_closed: "Periods closed",
+    profile_updated: "Profile updated",
+    savings_approval_cancelled: "Request cancelled",
+    scorecard_reviewed: "Scorecard reviewed",
+  };
+  for (const [key, label] of Object.entries(words)) assert.equal(auditActionLabel(key), label, key);
+});

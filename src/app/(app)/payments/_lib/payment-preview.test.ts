@@ -1,10 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { RepaymentPreview } from "@/services/repayment.service";
 import {
   postPaymentErrorMessage,
   previewAllocation,
   previewBadge,
+  previewExcessCells,
+  previewExcessTiles,
   previewTotalOutstandingAfter,
   previewTotalOutstandingBefore,
 } from "./payment-preview";
@@ -58,7 +62,6 @@ test("the allocation is read from the server preview, not estimated", () => {
     penaltyApplied: 0,
     interestApplied: 1800,
     principalApplied: 8200,
-    scbApplied: 0,
     nextInterestApplied: 0,
     nextPrincipalApplied: 0,
     insuranceApplied: 0,
@@ -112,4 +115,67 @@ test("a refused Post Payment states the server's field error", () => {
 
 test("a Post Payment that failed with nothing to explain keeps the fallback", () => {
   assert.equal(postPaymentErrorMessage(new Error("boom")), "We couldn't post the payment. Please try again.");
+});
+
+// LN-000001 has no build-up: ₱416.66 over the instalment was kept as an
+// overpayment, but the preview said "will credit member's SCB ledger".
+test("on a loan with no build-up, the excess is an advance / overpayment, never share capital", () => {
+  const tiles = previewExcessTiles({ ...partial, excess: 416.66 }, false);
+  assert.deepEqual(tiles.map((t) => [t.label, t.amount]), [["Advance / Overpayment", 416.66]]);
+  assert.ok(tiles.every((t) => !/share capital|SCB/i.test(`${t.label} ${t.note}`)));
+});
+
+test("on a build-up loan, the excess goes to the member's share capital", () => {
+  const tiles = previewExcessTiles({ ...partial, excess: 250 }, true);
+  assert.deepEqual(tiles.map((t) => [t.key, t.amount]), [["build_up", 250]]);
+  assert.match(tiles[0].note ?? "", /share capital/i);
+});
+
+test("while it isn't known whether the loan has a build-up, the excess claims neither", () => {
+  const tiles = previewExcessTiles({ ...partial, excess: 100 }, null);
+  assert.deepEqual(tiles.map((t) => [t.key, t.label, t.amount]), [["excess", "Excess", 100]]);
+});
+
+test("the server's own split wins when the preview sends it", () => {
+  const split = { ...partial, excess: 666.66, build_up_credited: "250.00", overpayment_kept: "416.66" };
+  assert.deepEqual(
+    previewExcessTiles(split, true).map((t) => [t.key, t.amount]),
+    [["build_up", 250], ["overpayment", 416.66]],
+  );
+  // A build-up the server credited nothing to shows no share capital tile.
+  const kept = { ...partial, excess: 416.66, build_up_credited: "0.00", overpayment_kept: "416.66" };
+  assert.deepEqual(previewExcessTiles(kept, true).map((t) => t.key), ["overpayment"]);
+});
+
+test("no excess, no tile", () => {
+  assert.deepEqual(previewExcessTiles(partial, true), []);
+  assert.deepEqual(previewExcessTiles({ ...partial, excess: undefined }, false), []);
+});
+
+test("the allocation grid's excess cell is named by the loan, never SCB on a loan without build-up", () => {
+  const ln1 = { ...partial, excess: 416.66 };
+  assert.deepEqual(previewExcessCells(ln1, false), [{ key: "overpayment", label: "Overpayment", amount: "₱416.66" }]);
+  assert.deepEqual(previewExcessCells(ln1, true), [{ key: "build_up", label: "Share Capital", amount: "₱416.66" }]);
+  assert.deepEqual(previewExcessCells(ln1, null), [{ key: "excess", label: "Excess", amount: "₱416.66" }]);
+});
+
+test("with nothing over, the cell shows the server's ₱0.00; with no figure, a dash", () => {
+  assert.deepEqual(previewExcessCells(partial, false), [{ key: "overpayment", label: "Overpayment", amount: "₱0.00" }]);
+  assert.deepEqual(previewExcessCells({ ...partial, excess: undefined }, true), [{ key: "build_up", label: "Share Capital", amount: "—" }]);
+});
+
+test("the server's split fills one cell per part", () => {
+  const split = { ...partial, excess: 666.66, build_up_credited: "250.00", overpayment_kept: "416.66" };
+  assert.deepEqual(previewExcessCells(split, true).map((c) => [c.label, c.amount]), [
+    ["Share Capital", "₱250.00"],
+    ["Overpayment", "₱416.66"],
+  ]);
+});
+
+test("the loan page's Record Payment names the excess by the same rule as Payment Entry", () => {
+  const page = readFileSync(join(process.cwd(), "src/app/(app)/loans/[id]/page.tsx"), "utf8");
+  assert.doesNotMatch(page, /Excess \/ SCB/);
+  assert.doesNotMatch(page, /Excess → Share Capital \/ Future Periods/);
+  assert.match(page, /previewExcessCells\(paymentPreview, loanHasBuildUp\(loan\?\.scb_amount\)\)/);
+  assert.match(page, /previewExcessTiles\(paymentPreview, loanHasBuildUp\(loan\?\.scb_amount\)\)/);
 });

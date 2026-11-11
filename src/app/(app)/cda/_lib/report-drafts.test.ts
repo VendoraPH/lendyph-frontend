@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { CdaField, CdaSection } from "@/types/cda";
 import { carriedDrafts, draftsAfterReload, draftsForReport } from "./report-fields";
+import { reportWorkspaceKey } from "./report-keys";
 
 function field(overrides: Partial<CdaField>): CdaField {
   return {
@@ -88,12 +89,37 @@ describe("unsaved report edits across a reload after a register write", () => {
   });
 });
 
+const read = (path: string) => readFileSync(join(process.cwd(), "src/app/(app)/cda", path), "utf8");
+
 describe("the report page reloads the report in place", () => {
   test("a register write no longer remounts the report, which dropped the edits", () => {
-    const page = readFileSync(join(process.cwd(), "src/app/(app)/cda/_components/report-page.tsx"), "utf8");
-    const workspace = page.match(/<ReportWorkspace[^>]*>/)?.[0] ?? "";
+    const workspace = read("_components/report-page.tsx").match(/<ReportWorkspace[^>]*>/)?.[0] ?? "";
     assert.ok(workspace.length > 0);
-    assert.match(workspace, /key=\{ctx\.year\}/);
+    assert.match(workspace, /key=\{reportWorkspaceKey\(ctx\.year\)\}/);
     assert.match(workspace, /registerVersion=\{/);
+    assert.doesNotMatch(workspace, /key=\{[^}]*version/i);
+  });
+
+  test("the report and the page's register never share a key (React's duplicate-key warning)", () => {
+    for (const year of [2025, 2026]) {
+      assert.notEqual(reportWorkspaceKey(year), String(year));
+      assert.equal(reportWorkspaceKey(year), reportWorkspaceKey(year));
+    }
+    assert.notEqual(reportWorkspaceKey(2025), reportWorkspaceKey(2026));
+    // Each page's own child beside the report is keyed by the plain year.
+    for (const page of ["officers/page.tsx", "social-audit/page.tsx", "pesos/page.tsx"]) {
+      const keys = [...read(page).matchAll(/key=\{([^}]+)\}/g)].map((m) => m[1].trim());
+      assert.ok(keys.length > 0, page);
+      for (const key of keys) assert.equal(key, "ctx.year", page);
+    }
+  });
+});
+
+describe("workflow steps wait for a reload, as Save does", () => {
+  test("the workspace hands its reload state to the workflow buttons", () => {
+    const workspace = read("_components/report-workspace.tsx");
+    assert.match(workspace.match(/<WorkflowActions[^>]*>/)?.[0] ?? "", /reloading=\{reloading\}/);
+    const actions = read("_components/workflow-actions.tsx");
+    assert.match(actions, /disabled=\{busy !== null \|\| reloading\}/);
   });
 });
