@@ -510,6 +510,30 @@ describe("CDA notifications", () => {
   }
 });
 
+// The Member Portal's staff notices (backend RequestAlerts and PortalStaffAlerts).
+describe("Member Portal notifications", () => {
+  const PORTAL_KINDS: Record<string, [string, string]> = {
+    portal_request_submitted: ["New member portal request", "approval"],
+    portal_login_reported: ["Portal sign-in reported", "warning"],
+  };
+
+  for (const [type, [label, tone]] of Object.entries(PORTAL_KINDS)) {
+    test(`${type} reads "${label}" and is ${tone}`, () => {
+      assert.equal(notificationTypeLabel(type), label);
+      assert.equal(notificationTone(type), tone);
+    });
+  }
+
+  test("a request notice opens the request in the staff queue, and reads its title once", () => {
+    const [item] = buildFeed(
+      [row({ id: "p1", type: "portal_request_submitted", title: "New member portal request", url: "/member-portal/requests/12" })],
+      NOW,
+    );
+    assert.equal(item.href, "/member-portal/requests/12");
+    assert.equal(item.announceKind, false);
+  });
+});
+
 describe("a notice reads its title once", () => {
   test("a CDA notice's server title already names its kind, so the kind isn't announced again", () => {
     const [item] = buildFeed([row({ id: "c1", type: "cda_deadline_reminder", title: "CDA report due in 3 days" })], NOW);

@@ -7,6 +7,7 @@ import {
   APPROVAL_STATUS_LABELS,
   HOLDER_TYPE_LABELS,
   HOLD_TYPE_LABELS,
+  HOLD_TYPE_OPTIONS,
   INTEREST_CREDITING_LABELS,
   METHOD_LABELS,
   PAYMENT_METHOD_OPTIONS,
@@ -17,6 +18,8 @@ import {
   canOfferClose,
   canPlaceHold,
   canWithdraw,
+  heldForRequestsNote,
+  holdReleaseOffer,
   labelOf,
   reversalBlocker,
   statusChangeOffers,
@@ -92,4 +95,47 @@ test("status tabs read counts from meta.stats and add no total in the browser", 
   const tabs = statusTabs({ active: 4, closed: 1 });
   assert.equal(tabs[0].count, null);
   assert.deepEqual(tabs.slice(1).map((t) => t.count), [4, 0, 0, 1]);
+});
+
+// lendyph-backend `SavingsHold::TYPES`: a Member Portal withdrawal request
+// reserves its money with a `member_request` hold.
+test("every hold type the backend sends reads in words", () => {
+  for (const type of ["legal", "manual", "loan_retention", "member_request"]) {
+    assert.notEqual(labelOf(HOLD_TYPE_LABELS, type), UNKNOWN_LABEL, type);
+  }
+  assert.equal(labelOf(HOLD_TYPE_LABELS, "member_request"), "Member request");
+});
+
+test("staff can't place a member request hold by hand", () => {
+  assert.deepEqual(HOLD_TYPE_OPTIONS.map((o) => o.value), ["manual", "legal"]);
+});
+
+// Backend P4 (#292): `held_for_requests`, the part of the holds that members'
+// portal withdrawal requests reserve (the member sees it as "Pending withdrawal").
+test("the holds card says how much is held for member requests, when there is some", () => {
+  assert.equal(
+    heldForRequestsNote({ held_for_requests: "10000.00" }),
+    "of which ₱10,000.00 for member requests (a pending withdrawal in the Member Portal)",
+  );
+  assert.equal(heldForRequestsNote({ held_for_requests: "0.00" }), null);
+  assert.equal(heldForRequestsNote({ held_for_requests: "0" }), null);
+  assert.equal(heldForRequestsNote({}), null);
+  assert.equal(heldForRequestsNote({ held_for_requests: null }), null);
+});
+
+// A member request's hold is released only by deciding the request: the
+// server refuses `POST /savings/holds/{id}/release` on it (422).
+test("an active member request hold offers no Release, only where it is decided", () => {
+  assert.deepEqual(holdReleaseOffer({ type: "member_request", status: "active" }), {
+    release: false,
+    note: "Decided in Member Portal → Requests",
+  });
+});
+
+test("other active holds offer Release; a released or expired one offers nothing", () => {
+  for (const type of ["manual", "legal", "loan_retention"] as const) {
+    assert.deepEqual(holdReleaseOffer({ type, status: "active" }), { release: true, note: null }, type);
+  }
+  assert.deepEqual(holdReleaseOffer({ type: "manual", status: "released" }), { release: false, note: null });
+  assert.deepEqual(holdReleaseOffer({ type: "member_request", status: "expired" }), { release: false, note: null });
 });

@@ -31,6 +31,10 @@ import type { Action, Module } from "@/types";
  * `cda` is offered too (Phase 3): the backend seeds all sixteen `cda:*`
  * permissions for admin and super_admin (`CdaAccess::PERMISSIONS`). Each
  * works only with `branches:view_all`.
+ *
+ * `member_portal` is offered too (Phase 3): the backend seeds its six staff
+ * permissions for admin and super_admin (migration 2026_11_11_700200).
+ * `settings` works only with `branches:view_all`.
  */
 export type UIModule = Exclude<Module, "collections" | "loan_adjustments" | "auto_credit">;
 
@@ -109,6 +113,8 @@ export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
     "view_audit",
     "view_tax",
   ],
+  // The Member Portal's staff side, in the server's order.
+  member_portal: ["view", "invite", "manage", "requests", "announcements", "settings"],
 };
 
 /**
@@ -135,6 +141,14 @@ export const MODULE_ACTION_LABELS: Partial<Record<UIModule, Partial<Record<Actio
     view_mediation: "See mediation reports",
     view_audit: "See audit reports",
     view_tax: "See tax reports",
+  },
+  member_portal: {
+    view: "View portal access and counts",
+    invite: "Issue activation and reset codes",
+    manage: "Turn access off or on, unlock, sign out and share files",
+    requests: "Decide members' requests",
+    announcements: "Write announcements",
+    settings: "Configure the portal and publish terms",
   },
 };
 

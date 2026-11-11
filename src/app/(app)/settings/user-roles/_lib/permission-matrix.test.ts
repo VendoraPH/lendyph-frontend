@@ -125,3 +125,24 @@ test("every CDA permission reads in CDA's own words", () => {
     assert.ok(label && !label.includes("_"), action);
   }
 });
+
+// Phase 3: the API seeds exactly these six Member Portal staff permissions
+// (migration 2026_11_11_700200, for admin and super_admin).
+test("the matrix offers exactly the six Member Portal permissions, in the server's order", () => {
+  assert.deepEqual(offered.filter((p) => p.startsWith("member_portal:")), [
+    "member_portal:view",
+    "member_portal:invite",
+    "member_portal:manage",
+    "member_portal:requests",
+    "member_portal:announcements",
+    "member_portal:settings",
+  ]);
+  assert.deepEqual(moduleToggleActions("member_portal"), MODULE_ACTIONS.member_portal);
+});
+
+test("every Member Portal permission reads in its own words", () => {
+  for (const action of MODULE_ACTIONS.member_portal) {
+    const label = moduleActionLabel("member_portal", action);
+    assert.ok(label && !label.includes("_"), action);
+  }
+});

@@ -180,6 +180,12 @@ export interface SavingsAccount {
   balance: MoneyString;
   /** Active holds. */
   hold_amount: MoneyString;
+  /**
+   * The part of `hold_amount` that members' portal withdrawal requests
+   * reserve (the member sees it as "Pending withdrawal"). Sent by backends
+   * from P4 (#292) on; absent before.
+   */
+  held_for_requests?: MoneyString | null;
   /** Outflows waiting for approval. */
   pending_amount: MoneyString;
   /** What a withdrawal can take now. Server-computed. */
@@ -320,7 +326,8 @@ export interface SavingsStatusInput {
 
 // ── Holds ──
 
-export type SavingsHoldType = "legal" | "manual" | "loan_retention";
+/** `member_request`: a Member Portal withdrawal request's reservation (placed and released by the request). */
+export type SavingsHoldType = "legal" | "manual" | "loan_retention" | "member_request";
 export type SavingsHoldStatus = "active" | "released" | "expired";
 
 /** Money set aside on an account. An active hold comes off `available_balance`. */

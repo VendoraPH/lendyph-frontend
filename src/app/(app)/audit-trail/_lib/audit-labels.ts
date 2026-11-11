@@ -26,6 +26,7 @@ const MODULE_LABELS: Record<AuditModule, string> = {
   gcash: "GCash",
   savings: "Savings",
   cda: "CDA Compliance",
+  member_portal: "Member Portal",
   system: "System",
 };
 
@@ -34,7 +35,7 @@ const MODULE_LABELS: Record<AuditModule, string> = {
  * `module` parameter accepts (anything else is refused with 422).
  */
 export const AUDIT_MODULE_OPTIONS: { value: AuditModule; label: string }[] = (
-  ["auth", "borrowers", "loans", "payments", "collections", "users", "roles", "accounting", "gcash", "savings", "cda", "system"] as const
+  ["auth", "borrowers", "loans", "payments", "collections", "users", "roles", "accounting", "gcash", "savings", "cda", "member_portal", "system"] as const
 ).map((value) => ({ value, label: MODULE_LABELS[value] }));
 
 const ACTION_LABELS: Record<string, string> = {
@@ -69,6 +70,38 @@ const ACTION_LABELS: Record<string, string> = {
   cda_report_refreshed: "Report refreshed",
   cda_export_generated: "Report exported",
   year_end_captured: "Year-end figures captured",
+  // Member Portal: staff actions, members' own actions and the system's.
+  portal_code_issued: "Portal code issued",
+  portal_activated: "Portal activated",
+  portal_password_reset: "Portal password reset with a code",
+  portal_password_changed: "Portal password changed",
+  portal_signed_in: "Signed in to the portal",
+  portal_signed_out: "Signed out of the portal by staff",
+  portal_sessions_signed_out: "Portal sessions signed out",
+  portal_access_disabled: "Portal access turned off",
+  portal_access_enabled: "Portal access turned back on",
+  portal_unlocked: "Portal account unlocked",
+  portal_locked_out: "Portal account locked after wrong passwords",
+  portal_hard_locked: "Portal account locked until staff unlock",
+  portal_login_reported: "Portal sign-in reported",
+  portal_terms_accepted: "Portal terms accepted",
+  portal_terms_published: "Portal terms published",
+  portal_statement_downloaded: "Statement downloaded in the portal",
+  portal_document_downloaded: "Document downloaded in the portal",
+  portal_document_shared: "Document shared with the member",
+  portal_document_unshared: "Document no longer shared with the member",
+  portal_request_submitted: "Portal request sent",
+  portal_request_cancelled: "Portal request cancelled",
+  portal_request_replied: "Member replied to a portal request",
+  portal_request_decided: "Portal request decided",
+  portal_request_expired: "Portal request expired",
+  portal_request_hold_placed: "Money held for a portal request",
+  portal_request_hold_released: "Money held for a portal request released",
+  portal_announcement_created: "Announcement drafted",
+  portal_announcement_updated: "Announcement edited",
+  portal_announcement_published: "Announcement published",
+  portal_announcement_withdrawn: "Announcement withdrawn",
+  portal_announcement_deleted: "Announcement draft deleted",
 };
 
 /**
@@ -172,6 +205,12 @@ const TARGET_TYPE_LABELS: Record<string, string> = {
   CdaSocialProgram: "Social program",
   CdaMediationCase: "Mediation case",
   CdaNoticeSent: "CDA notice",
+  PortalUser: "Portal account",
+  PortalCode: "Portal code",
+  PortalSetting: "Member Portal settings",
+  PortalTermsVersion: "Portal terms",
+  PortalRequest: "Portal request",
+  PortalAnnouncement: "Portal announcement",
 };
 
 /**
@@ -231,13 +270,19 @@ export function auditActionLabel(action: string): string {
   return ACTION_LABELS[action] ?? inWords(action);
 }
 
-/** Who did it. A row with no user (a login attempt, a job) is the System. */
-export function auditUserName(log: Pick<AuditLog, "user">): string {
+/**
+ * Who did it. A member's own portal action reads as the server names it
+ * ("Member: Juan Dela Cruz (BRW-000012)"); a row with no user (a login
+ * attempt, a job) is the System.
+ */
+export function auditUserName(log: Pick<AuditLog, "user" | "actor_type" | "actor_label">): string {
+  if (log.actor_type === "member") return log.actor_label?.trim() || "Member";
   return log.user?.full_name?.trim() || "System";
 }
 
-/** The user's role by its label (catalog, else the key in words). */
-export function auditUserRole(log: Pick<AuditLog, "user">): string {
+/** The user's role by its label (catalog, else the key in words); "Member Portal" for a member's own action. */
+export function auditUserRole(log: Pick<AuditLog, "user" | "actor_type">): string {
+  if (log.actor_type === "member") return "Member Portal";
   return roleLabelForKey(log.user?.roles?.[0], undefined);
 }
 

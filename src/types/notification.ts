@@ -38,7 +38,12 @@ export type NotificationType =
   | "cda_report_for_correction"
   | "cda_deadline_reminder"
   | "cda_document_expiring"
-  | "cda_training_incomplete";
+  | "cda_training_incomplete"
+  // Member Portal (Phase 3): a member sent a request (to the branch's
+  // member_portal:requests holders), and a member reported a sign-in they
+  // don't recognise (to the branch's member_portal:manage holders).
+  | "portal_request_submitted"
+  | "portal_login_reported";
 
 /**
  * One row of `GET /notifications`, the signed-in user's own notifications.

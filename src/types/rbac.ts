@@ -139,7 +139,17 @@ export type Module =
   // reports are also read-restricted (`view_mediation`, `view_audit`,
   // `view_tax`). Every CDA permission works only with `branches:view_all`.
   // Seeded for admin and super_admin only.
-  | "cda";
+  | "cda"
+  // ── Member Portal (staff side) ──
+  //
+  // `view` reads the portal counts, the accounts list, a member's access card
+  // and communications; `invite` issues activation and password reset codes;
+  // `manage` turns a member's access off or on, unlocks, signs out everywhere
+  // and shares documents; `requests` works the members' requests queue;
+  // `announcements` writes announcements to members; `settings` covers the
+  // portal settings and terms (with `branches:view_all`). Everything is
+  // branch-scoped by the server. Seeded for admin and super_admin only.
+  | "member_portal";
 
 export type Action =
   | "view"
@@ -209,7 +219,11 @@ export type Action =
   | "manage_mediation"
   | "view_mediation"
   | "view_audit"
-  | "view_tax";
+  | "view_tax"
+  // ── Member Portal verbs (see the `member_portal` module above) ──
+  | "invite"
+  | "requests"
+  | "announcements";
 
 export type Permission = `${Module}:${Action}`;
 

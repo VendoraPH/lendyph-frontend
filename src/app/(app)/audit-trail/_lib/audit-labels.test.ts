@@ -120,7 +120,7 @@ test("accounting and GCash rows read by their module names", () => {
 test("the module filter offers exactly the modules the server filters by", () => {
   assert.deepEqual(
     AUDIT_MODULE_OPTIONS.map((o) => o.value).sort(),
-    ["accounting", "auth", "borrowers", "cda", "collections", "gcash", "loans", "payments", "roles", "savings", "system", "users"]
+    ["accounting", "auth", "borrowers", "cda", "collections", "gcash", "loans", "member_portal", "payments", "roles", "savings", "system", "users"]
   );
   assert.ok(AUDIT_MODULE_OPTIONS.every((o) => o.label === auditModuleLabel({ module: o.value, target: null })));
 });
@@ -501,4 +501,48 @@ test("a target the server could only name by its class reads in this screen's wo
   assert.equal(auditTargetLabel(posted), "JE-2026-000001");
   assert.equal(auditTargetTypeLine(posted), "Journal entry #1");
   assert.equal(auditTargetLabel({ id: 3, type: "CdaDocument", label: "CDA document #3" }), "CDA document #3");
+});
+
+// Member Portal (portal design §5): a member's own action has no staff user;
+// the server names them in `actor_label`.
+test("a member's own portal action reads as the server names the member, under Member Portal", () => {
+  const row = log({
+    user: null as unknown as AuditLog["user"],
+    actor_type: "member",
+    actor_label: "Member: Juan Dela Cruz (BRW-000012)",
+    action: "portal_signed_in" as AuditLog["action"],
+    module: "member_portal",
+  });
+  assert.equal(auditUserName(row), "Member: Juan Dela Cruz (BRW-000012)");
+  assert.equal(auditUserRole(row), "Member Portal");
+  assert.equal(auditModuleLabel(row), "Member Portal");
+  assert.equal(auditActionLabel("portal_signed_in"), "Signed in to the portal");
+});
+
+test("a member row without a label still reads as a member, never the System", () => {
+  const row = log({ user: null as unknown as AuditLog["user"], actor_type: "member", actor_label: null });
+  assert.equal(auditUserName(row), "Member");
+});
+
+test("staff and system rows read as before", () => {
+  assert.equal(auditUserName(log({ actor_type: "staff" })), "Ana Reyes");
+  assert.equal(auditUserName(log({ user: null as unknown as AuditLog["user"], actor_type: "system" })), "System");
+});
+
+test("every Member Portal action and target reads in words", () => {
+  for (const action of [
+    "portal_code_issued",
+    "portal_access_disabled",
+    "portal_request_decided",
+    "portal_request_hold_placed",
+    "portal_announcement_published",
+    "portal_document_shared",
+    "portal_terms_published",
+  ]) {
+    assert.ok(!auditActionLabel(action).includes("_"), action);
+    assert.notEqual(auditActionLabel(action), action);
+  }
+  assert.equal(auditTargetType("PortalRequest"), "Portal request");
+  assert.equal(auditTargetType("PortalUser"), "Portal account");
+  assert.equal(auditTargetType("PortalSetting"), "Member Portal settings");
 });

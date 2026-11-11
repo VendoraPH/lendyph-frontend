@@ -18,10 +18,12 @@ import {
   Gauge,
   PiggyBank,
   ClipboardCheck,
+  MonitorSmartphone,
 } from "lucide-react";
 import { GCashIcon } from "@/components/icons/gcash-icon";
 import { env } from "@/config/env";
 import { MODULE_ALSO_REQUIRES } from "@/lib/permission-module-names";
+import { meetsPermission } from "@/lib/permission-requirement";
 
 export interface NavSubItem {
   title: string;
@@ -43,6 +45,11 @@ export interface NavSubItem {
    * the same list.
    */
   permission?: PermissionRequirement;
+  /**
+   * Permissions needed as well as `permission`, every one of them: Settings →
+   * Member Portal is company-wide, so it also needs `branches:view_all`.
+   */
+  alsoRequires?: Permission[];
 }
 
 export interface NavItem {
@@ -56,13 +63,55 @@ export interface NavItem {
    * `branches:view_all`, as each of its pages does.
    */
   alsoRequires?: Permission[];
+  /**
+   * When set, the section shows for any one of these instead of `permission`
+   * alone: the Member Portal's pages each need a different one, and a cashier
+   * who only decides requests still needs the menu.
+   */
+  anyOf?: Permission[];
   children?: NavSubItem[];
 }
 
 /** Whether the menu shows a section: its permission and everything it also requires. */
 export function navItemAllowed(item: NavItem, can: (permission: Permission) => boolean): boolean {
-  return can(item.permission) && (item.alsoRequires ?? []).every(can);
+  const opens = item.anyOf ? item.anyOf.some(can) : can(item.permission);
+  return opens && (item.alsoRequires ?? []).every(can);
 }
+
+/** Whether the menu shows a page under a section: its own permission, if any, and everything it also requires. */
+export function navChildAllowed(child: NavSubItem, can: (permission: Permission) => boolean): boolean {
+  return (!child.permission || meetsPermission(child.permission, can)) && (child.alsoRequires ?? []).every(can);
+}
+
+/**
+ * Where a section's own link goes (the collapsed rail's icon, the command
+ * palette). A section that opens on any of several permissions (`anyOf`)
+ * goes to the first page the user can open, so a cashier who only decides
+ * Member Portal requests lands on the queue, not on a page they can't open.
+ */
+export function navItemHref(item: NavItem, can: (permission: Permission) => boolean): string {
+  if (!item.anyOf) return item.href;
+  return (item.children ?? []).find((child) => navChildAllowed(child, can))?.href ?? item.href;
+}
+
+/**
+ * The Member Portal's staff side: who has access, members' requests and
+ * announcements. Each page needs its own permission, and the server shows
+ * only the caller's branches. Shown only when NEXT_PUBLIC_ENABLE_MEMBER_PORTAL
+ * is on. Settings → Member Portal sits under Settings.
+ */
+export const MEMBER_PORTAL_NAV: NavItem = {
+  title: "Member Portal",
+  href: "/member-portal",
+  icon: MonitorSmartphone,
+  permission: "member_portal:view",
+  anyOf: ["member_portal:view", "member_portal:requests", "member_portal:announcements"],
+  children: [
+    { title: "Portal Access", href: "/member-portal", permission: "member_portal:view" },
+    { title: "Portal Requests", href: "/member-portal/requests", permission: "member_portal:requests" },
+    { title: "Portal Announcements", href: "/member-portal/announcements", permission: "member_portal:announcements" },
+  ],
+};
 
 /**
  * CDA Compliance. Every page needs `cda:view` and `branches:view_all`; the
@@ -233,6 +282,7 @@ export const SIDEBAR_NAV: NavItem[] = [
   // answer not found when the flag is off (credit-scoring/layout.tsx).
   ...(env.features.creditScoring ? [CREDIT_SCORING_NAV] : []),
   ...(env.features.cda ? [CDA_NAV] : []),
+  ...(env.features.memberPortal ? [MEMBER_PORTAL_NAV] : []),
   {
     title: "Accounting",
     href: "/accounting",
@@ -310,6 +360,17 @@ export const SIDEBAR_NAV: NavItem[] = [
       { title: "Role and Permissions", href: "/settings/user-roles" },
       { title: "Approval Workflow", href: "/settings/approval-workflow" },
       { title: "GCash", href: "/settings/gcash" },
+      // Company-wide, so it also needs branches:view_all, as the server does.
+      ...(env.features.memberPortal
+        ? [
+            {
+              title: "Member Portal",
+              href: "/settings/member-portal",
+              permission: "member_portal:settings" as const,
+              alsoRequires: ["branches:view_all" as const],
+            },
+          ]
+        : []),
       // Lives under Settings because it is admin-only, org-wide, one-time
       // config — and because it belongs to neither Members nor Loans: a single
       // run writes both.
