@@ -54,7 +54,7 @@ export function ExtensionForm({ period, onSaved }: { period: CdaPeriod; onSaved:
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-2">
             <Label htmlFor="cda-extension">Extended to</Label>
-            <Input id="cda-extension" type="date" value={date} onChange={(e) => setDate(e.target.value)} disabled={disabled} />
+            <Input id="cda-extension" type="date" value={date} onChange={(e) => setDate(e.target.value)} disabled={disabled} readOnly={disabled} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="cda-extension-ref">Reference</Label>
@@ -64,6 +64,7 @@ export function ExtensionForm({ period, onSaved }: { period: CdaPeriod; onSaved:
               value={reference}
               onChange={(e) => setReference(e.target.value)}
               disabled={disabled}
+              readOnly={disabled}
             />
           </div>
           <PermissionButton permission="cda:settings" onClick={() => (date ? save(date) : notifyValidation(["Extended to"]))} disabled={busy}>

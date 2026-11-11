@@ -7,14 +7,34 @@ import { Textarea } from "@/components/ui/textarea";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import type { RecordDraft, RecordField } from "../_lib/record-form";
 
-function FieldControl({ field, value, onChange }: { field: RecordField; value: string; onChange: (v: string) => void }) {
+function FieldControl({
+  field,
+  value,
+  onChange,
+  disabled,
+}: {
+  field: RecordField;
+  value: string;
+  onChange: (v: string) => void;
+  /** Read only: the control can't be changed, whatever wraps it. */
+  disabled?: boolean;
+}) {
   const id = `rec-${field.key}`;
   if (field.type === "textarea") {
-    return <Textarea id={id} value={value} onChange={(e) => onChange(e.target.value)} placeholder={field.placeholder} />;
+    return (
+      <Textarea
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={field.placeholder}
+        readOnly={disabled}
+        disabled={disabled}
+      />
+    );
   }
   if (field.type === "select") {
     return (
-      <NativeSelect id={id} value={value} onChange={(e) => onChange(e.target.value)}>
+      <NativeSelect id={id} value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled}>
         <NativeSelectOption value="">Select…</NativeSelectOption>
         {(field.options ?? []).map((o) => (
           <NativeSelectOption key={o.value} value={o.value}>
@@ -25,7 +45,9 @@ function FieldControl({ field, value, onChange }: { field: RecordField; value: s
     );
   }
   if (field.type === "checkbox") {
-    return <Checkbox id={id} checked={value === "1"} onCheckedChange={(checked) => onChange(checked ? "1" : "")} />;
+    return (
+      <Checkbox id={id} checked={value === "1"} onCheckedChange={(checked) => onChange(checked ? "1" : "")} disabled={disabled} />
+    );
   }
   return (
     <Input
@@ -35,6 +57,8 @@ function FieldControl({ field, value, onChange }: { field: RecordField; value: s
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={field.placeholder ?? (field.type === "money" ? "0.00" : undefined)}
+      readOnly={disabled}
+      disabled={disabled}
     />
   );
 }
@@ -62,13 +86,12 @@ export function RecordFields({
           <Label htmlFor={`rec-${field.key}`}>
             {field.label} {field.required && <span className="text-destructive">*</span>}
           </Label>
-          <fieldset disabled={disabled} className="contents">
-            <FieldControl
-              field={field}
-              value={draft[field.key] ?? ""}
-              onChange={(v) => onChange({ ...draft, [field.key]: v })}
-            />
-          </fieldset>
+          <FieldControl
+            field={field}
+            value={draft[field.key] ?? ""}
+            onChange={(v) => onChange({ ...draft, [field.key]: v })}
+            disabled={disabled}
+          />
           {field.help && <p className="text-xs text-muted-foreground">{field.help}</p>}
         </div>
       ))}

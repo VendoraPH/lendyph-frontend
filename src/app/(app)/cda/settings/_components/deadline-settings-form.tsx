@@ -18,7 +18,7 @@ function Field({ id, label, help, ...input }: { id: string; label: string; help?
   return (
     <div className="space-y-2">
       <Label htmlFor={id}>{label}</Label>
-      <Input id={id} {...input} />
+      <Input id={id} readOnly={input.disabled} {...input} />
       {help && <p className="text-xs text-muted-foreground">{help}</p>}
     </div>
   );

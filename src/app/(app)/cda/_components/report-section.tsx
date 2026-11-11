@@ -112,17 +112,16 @@ function FieldRow({ field, drafts, canEdit, onEdit }: Omit<ReportSectionProps, "
           </div>
         )}
 
-        {field.type === "compliance" &&
-          (canEdit && field.editable ? (
-            <Input
-              aria-label={`${field.label} remarks`}
-              placeholder="Evidence or remarks"
-              value={remarks}
-              onChange={(e) => onEdit(field.field_key, { ...draft, remarks: e.target.value || null })}
-            />
-          ) : (
-            remarks && <p className="text-xs text-muted-foreground">Remarks: {remarks}</p>
-          ))}
+        {editable ? (
+          <Input
+            aria-label={`${field.label} remarks`}
+            placeholder={field.type === "compliance" ? "Evidence or remarks" : "Remarks (optional)"}
+            value={remarks}
+            onChange={(e) => onEdit(field.field_key, { ...draft, remarks: e.target.value || null })}
+          />
+        ) : (
+          remarks && <p className="text-xs text-muted-foreground">Remarks: {remarks}</p>
+        )}
       </div>
     </div>
   );

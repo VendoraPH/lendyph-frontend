@@ -102,18 +102,21 @@ function PageBody({ title, description, actions, noPeriod, yearless, children }:
   const ctx: CdaPageContext | null =
     year !== null && period !== null ? { year, period, periods, reloadPeriods: resource.refetch } : null;
 
+  const body = () =>
+    ctx === null && !yearless ? (noPeriod ? noPeriod(resource.refetch) : <DefaultNoPeriod />) : children(ctx);
+
   return (
     <div className="space-y-6">
       <Header title={title} description={description} periods={periods} year={year} actions={actions?.(ctx)} />
-      <DataState
-        resource={resource}
-        endpoints={[`GET ${API_ENDPOINTS.CDA.PERIODS}`]}
-        summary="The CDA reporting periods"
-      >
-        {() =>
-          ctx === null && !yearless ? (noPeriod ? noPeriod(resource.refetch) : <DefaultNoPeriod />) : children(ctx)
-        }
-      </DataState>
+      {resource.data !== null && !resource.error ? (
+        // A reload (after opening a year or saving an extension) keeps the
+        // page in place instead of swapping it for a spinner.
+        body()
+      ) : (
+        <DataState resource={resource} endpoints={[`GET ${API_ENDPOINTS.CDA.PERIODS}`]} summary="The CDA reporting periods">
+          {body}
+        </DataState>
+      )}
     </div>
   );
 }
