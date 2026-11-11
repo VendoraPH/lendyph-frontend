@@ -38,11 +38,11 @@ interface RegisterTableProps<T extends { id: number }> {
   resource: ApiResource<DrainResult<T>>;
   endpoints: string[];
   columns: RegisterColumn<T>[];
-  fields: RecordField[];
+  fields?: RecordField[];
   /** Who may add, edit and delete rows. */
   permission: Permission;
   file?: FileSlot;
-  onCreate: (values: RecordValues, file: File | null) => Promise<unknown>;
+  onCreate?: (values: RecordValues, file: File | null) => Promise<unknown>;
   onUpdate?: (id: number, values: RecordValues, file: File | null) => Promise<unknown>;
   onDelete?: (id: number) => Promise<unknown>;
   /** Extra per-row buttons (versions, view proof, …). */
@@ -53,6 +53,16 @@ interface RegisterTableProps<T extends { id: number }> {
   defaults?: RecordDraft;
   /** Fields for editing, when they differ from the new row's. */
   editFields?: RecordField[];
+  /**
+   * A form of the register's own in place of the field-list one (an officer's
+   * member link). `submit` takes its request and says how it went.
+   */
+  renderForm?: (form: {
+    open: boolean;
+    record: T | null;
+    onOpenChange: (open: boolean) => void;
+    submit: (request: Promise<unknown>) => Promise<unknown>;
+  }) => ReactNode;
 }
 
 /**
@@ -61,16 +71,24 @@ interface RegisterTableProps<T extends { id: number }> {
  * field-list form. The server's message says what went wrong.
  */
 export function RegisterTable<T extends { id: number }>(props: RegisterTableProps<T>) {
-  const { title, description, noun, resource, endpoints, columns, fields, permission, file, readOnly } = props;
+  const { title, description, noun, resource, endpoints, columns, fields = [], permission, file, readOnly } = props;
   const [editing, setEditing] = useState<T | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<T | null>(null);
-  const canEdit = !readOnly && !!props.onUpdate;
+  const canEdit = !readOnly && (!!props.onUpdate || !!props.renderForm);
+  const canCreate = !readOnly && (!!props.onCreate || !!props.renderForm);
   const canDelete = !readOnly && !!props.onDelete;
   const hasActions = canEdit || canDelete || !!props.rowActions;
 
   function save(values: RecordValues, attachment: File | null): Promise<unknown> {
-    const request = editing && props.onUpdate ? props.onUpdate(editing.id, values, attachment) : props.onCreate(values, attachment);
+    const request =
+      editing && props.onUpdate
+        ? props.onUpdate(editing.id, values, attachment)
+        : (props.onCreate?.(values, attachment) ?? Promise.resolve());
+    return submit(request);
+  }
+
+  function submit(request: Promise<unknown>): Promise<unknown> {
     return request
       .then(() => {
         notifySuccess(editing ? `${capitalize(noun[0])} updated` : `${capitalize(noun[0])} added`);
@@ -80,6 +98,13 @@ export function RegisterTable<T extends { id: number }>(props: RegisterTableProp
         notifyError(err, `Could not save the ${noun[0]}`);
         throw err;
       });
+  }
+
+  function closeForm(open: boolean) {
+    if (!open) {
+      setCreating(false);
+      setEditing(null);
+    }
   }
 
   function remove(row: T) {
@@ -100,7 +125,7 @@ export function RegisterTable<T extends { id: number }>(props: RegisterTableProp
           <CardTitle className="text-base">{title}</CardTitle>
           {description && <CardDescription>{description}</CardDescription>}
         </div>
-        {!readOnly && (
+        {canCreate && (
           <PermissionButton permission={permission} size="sm" onClick={() => setCreating(true)}>
             <Plus className="mr-1 h-4 w-4" /> Add {noun[0]}
           </PermissionButton>
@@ -183,21 +208,20 @@ export function RegisterTable<T extends { id: number }>(props: RegisterTableProp
         </DataState>
       </CardContent>
 
-      <RecordFormDialog
-        open={creating || editing !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setCreating(false);
-            setEditing(null);
-          }
-        }}
-        title={editing ? `Edit ${noun[0]}` : `Add ${noun[0]}`}
-        fields={editing && props.editFields ? props.editFields : fields}
-        record={editing}
-        defaults={props.defaults}
-        file={file}
-        onSubmit={save}
-      />
+      {props.renderForm ? (
+        props.renderForm({ open: creating || editing !== null, record: editing, onOpenChange: closeForm, submit })
+      ) : (
+        <RecordFormDialog
+          open={creating || editing !== null}
+          onOpenChange={closeForm}
+          title={editing ? `Edit ${noun[0]}` : `Add ${noun[0]}`}
+          fields={editing && props.editFields ? props.editFields : fields}
+          record={editing}
+          defaults={props.defaults}
+          file={file}
+          onSubmit={save}
+        />
+      )}
 
       <AlertDialog open={deleting !== null} onOpenChange={(open) => !open && setDeleting(null)}>
         <AlertDialogContent>
