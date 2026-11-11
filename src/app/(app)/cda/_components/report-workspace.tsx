@@ -13,10 +13,11 @@ import { notifyError, notifyInfo, notifySuccess, notifyValidation } from "@/lib/
 import { formatDate, formatDateTime } from "@/lib/format";
 import { useCdaReport } from "../_hooks/use-cda-report";
 import { STAGE_LABELS, labelOf, reportName } from "../_lib/labels";
-import { fieldInputs, missingReasons, type FieldDraft, type FieldDrafts } from "../_lib/report-fields";
+import { fieldInputs, missingReasons, needsDocument, type FieldDraft, type FieldDrafts } from "../_lib/report-fields";
 import { DeadlineBadge, ReportStatusBadge, ToneBadge } from "./tone-badge";
 import { ExportPanel } from "./export-panel";
 import { ReadinessBreakdown } from "./readiness-breakdown";
+import { ReportDocumentUpload } from "./report-document-upload";
 import { ReadinessMeter } from "./readiness-meter";
 import { ReportSection } from "./report-section";
 import { ValidationPanel } from "./validation-panel";
@@ -163,6 +164,7 @@ function ReportBody({ report, onChange, onReload }: { report: CdaReport; onChang
         </div>
         <div className="space-y-4">
           <ValidationPanel issues={report.issues} critical={report.critical_count} warnings={report.warning_count} />
+          {report.applicable && needsDocument(report) && <ReportDocumentUpload report={report} onChange={onChange} />}
           {report.readiness_breakdown && <ReadinessBreakdown breakdown={report.readiness_breakdown} sections={report.sections} />}
           <ExportPanel reportId={report.id} />
           <WorkflowHistory events={report.history} />

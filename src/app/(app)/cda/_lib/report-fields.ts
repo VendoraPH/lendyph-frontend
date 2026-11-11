@@ -1,5 +1,5 @@
 import { formatDate } from "@/lib/format";
-import type { CdaColumnFormat, CdaField, CdaFieldInput, CdaFieldValue, CdaSection } from "@/types/cda";
+import type { CdaColumnFormat, CdaField, CdaFieldInput, CdaFieldValue, CdaIssue, CdaSection } from "@/types/cda";
 import { COMPLIANCE_OPTIONS } from "./labels";
 import { asSent, cdaMoney, cdaPercent } from "./money";
 
@@ -118,4 +118,9 @@ function formatByFormat(format: string, value: CdaFieldValue): string {
 
 function optionLabel(options: { value: string; label: string }[], value: CdaFieldValue): string {
   return options.find((o) => o.value === value)?.label ?? "Other";
+}
+
+/** Whether the report is waiting on a document: an issue about one is open now. */
+export function needsDocument(report: { issues: CdaIssue[] }): boolean {
+  return report.issues.some((i) => i.component === "documents" || i.category === "compliance_document");
 }

@@ -70,7 +70,9 @@ export type CdaIssueCategory =
   | "officer_data"
   | "training"
   | "compliance_document"
-  | "financial_data";
+  | "financial_data"
+  /** The template, or the PESOS rules, still to be checked against CDA's own form. */
+  | "template_unverified";
 
 export type CdaIssueComponent = "fields" | "sources" | "documents" | "accounting" | "approvals";
 

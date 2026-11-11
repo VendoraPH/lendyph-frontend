@@ -14,9 +14,11 @@ import {
   trainingKeyLabel,
 } from "./labels";
 import { asSent, cdaMoney, cdaPercent } from "./money";
-import { currentValue, fieldInputs, formatCell, formatFieldValue, fromInputText, missingReasons } from "./report-fields";
+import { currentValue, fieldInputs, formatCell, formatFieldValue, fromInputText, missingReasons, needsDocument } from "./report-fields";
 import { fromDraft, missingFields, toDraft, type RecordField } from "./record-form";
 import { signedUrl } from "./safe-url";
+import { getErrorMessage } from "@/lib/api-error";
+import { ISSUE_CATEGORY_LABELS } from "./labels";
 import { parseYear, resolveYear } from "./year";
 
 function field(overrides: Partial<CdaField>): CdaField {
@@ -217,5 +219,37 @@ describe("years and links come from the server", () => {
     assert.equal(signedUrl("https://api.example/api/files/documents/1?signature=x"), "https://api.example/api/files/documents/1?signature=x");
     assert.equal(signedUrl("javascript:alert(1)"), null);
     assert.equal(signedUrl(null), null);
+  });
+});
+
+describe("backend C5 (#285) display changes", () => {
+  test("the template-not-verified category reads in words", () => {
+    assert.equal(labelOf(ISSUE_CATEGORY_LABELS, "template_unverified"), "Template not yet verified");
+  });
+
+  test("a profile figure the server sends in words shows as sent, never mapped from a key", () => {
+    const f = field({ type: "text", value: "Primary", source_key: "profile.field", source_value: "Primary" });
+    assert.equal(formatFieldValue(f, f.value), "Primary");
+    assert.equal(formatFieldValue(f, f.source_value), "Primary");
+  });
+
+  test("a refused filing shows the server's sentence naming what to upload", () => {
+    const err = {
+      response: {
+        status: 422,
+        data: {
+          message: "Upload the signed CAPR (final copy) before recording the filing.",
+          errors: { action: ["Upload the signed CAPR (final copy) before recording the filing."] },
+          issues: [],
+        },
+      },
+    };
+    assert.equal(getErrorMessage(err, "Could not record the filing"), "Upload the signed CAPR (final copy) before recording the filing.");
+  });
+
+  test("a report waiting on a document offers the upload; one that isn't doesn't", () => {
+    const issue = { id: "rule:capr_signed", rule_id: "capr_signed", severity: "critical" as const, category: "compliance_document", component: "documents", message: "x", section_key: null, field_key: null, fix_href: "/cda/documents", stage: "submit" };
+    assert.equal(needsDocument({ issues: [issue] }), true);
+    assert.equal(needsDocument({ issues: [{ ...issue, category: "missing_required_data", component: "fields" }] }), false);
   });
 });

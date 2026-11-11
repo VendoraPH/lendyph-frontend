@@ -445,4 +445,8 @@ test("CDA rows read their module, actions and targets in words", () => {
   assert.equal(auditTargetType("CdaOfficerTraining"), "Officer training");
   assert.equal(auditTargetType("CdaReportingPeriod"), "CDA reporting period");
   assert.equal(auditFieldLabel("due_override_on"), "due override on");
+  // A CDA class the screen has no words of its own for still reads "CDA …".
+  assert.equal(auditTargetType("CdaDocument"), "CDA document");
+  assert.equal(auditTargetType("CdaExportTemplateFile"), "CDA export template file");
+  assert.equal(auditTargetType("CdaNoticeSent"), "CDA notice");
 });

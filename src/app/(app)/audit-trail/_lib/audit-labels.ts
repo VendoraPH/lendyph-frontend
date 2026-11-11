@@ -169,10 +169,11 @@ export function auditTargetType(type: string): string {
   if (Object.hasOwn(TARGET_TYPE_LABELS, type)) return TARGET_TYPE_LABELS[type];
   return type
     .replace(/^Borrower/, "Member")
+    .replace(/^Cda(?=[A-Z])/, "CDA ")
     .replace(/CoMaker/g, "Co-maker")
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .split(" ")
-    .map((word, i) => (i === 0 || word === "GCash" ? word : word.toLowerCase()))
+    .map((word, i) => (i === 0 || word === "GCash" || word === "CDA" ? word : word.toLowerCase()))
     .join(" ");
 }
 

@@ -208,6 +208,7 @@ export const ISSUE_CATEGORY_LABELS: Record<string, string> = {
   training: "Training",
   compliance_document: "Compliance document",
   financial_data: "Financial data",
+  template_unverified: "Template not yet verified",
 };
 
 export const COMPONENT_LABELS: Record<string, string> = {
