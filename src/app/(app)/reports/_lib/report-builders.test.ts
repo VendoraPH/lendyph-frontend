@@ -5078,3 +5078,44 @@ test("releases list: a loan past grace reads Past Due, from the server's display
   );
   assert.deepEqual(rows.map((r) => r.status), ["Past Due", "Current", "Current"]);
 });
+
+test("statement of account lists each monthly penalty charge as its own server line", () => {
+  const penaltyLine = (date: string, description: string) => ({
+    type: "charge",
+    kind: "penalty_charge",
+    voided: false,
+    date,
+    receipt_number: null,
+    payment_method: null,
+    reference_number: null,
+    description,
+    particulars: description,
+    amount_paid: 0,
+    debit: 90,
+    credit: null,
+    principal_applied: 0,
+    interest_applied: 0,
+    penalty_applied: -90,
+    principal_balance: 42000,
+  });
+  const doc = buildStatementOfAccountDoc(
+    {
+      ...SOA_PAYLOAD,
+      transactions: [
+        ...SOA_PAYLOAD.transactions,
+        penaltyLine("2026-04-04", "Late penalty, period 2"),
+        penaltyLine("2026-05-01", "Late penalty, period 2, month 2"),
+      ],
+    },
+    RANGE
+  );
+  const rows = namedTable(doc, "Transaction History").rows.slice(1);
+
+  assert.deepEqual(
+    rows.map((r) => [r.date, r.particulars, r.debit, r.credit, r.amount_paid, r.penalty_applied]),
+    [
+      ["2026-04-04", "Late penalty, period 2", 90, null, null, null],
+      ["2026-05-01", "Late penalty, period 2, month 2", 90, null, null, null],
+    ],
+  );
+});

@@ -15,6 +15,7 @@ import {
   pageAfterEmptyAnswer,
   readActiveLoanPage,
   readLoanListTotals,
+  withSummaryPenaltyNote,
 } from "./active-loans";
 
 /** A `GET /loans?view=summary` row: the agreed fields, and no schedule. */
@@ -279,4 +280,32 @@ test("the payments screen asks isDueSoon instead of counting from the computer's
   const page = readFileSync(join(process.cwd(), "src/app/(app)/payments/page.tsx"), "utf8");
   assert.match(page, /isDueSoon\(loan\.next_due_date\)/);
   assert.doesNotMatch(page, /new Date\(loan\.next_due_date\)/);
+});
+
+// ── the monthly late penalty's note (backend #284) ─────────────────────────
+
+test("a summary row has no schedule, so no period carries a note and the summary note waits", () => {
+  const loan = mapLoanToActiveLoan(summaryRow());
+  assert.deepEqual(loan.schedule_penalties, []);
+  assert.equal(loan.penalty_note, null);
+});
+
+test("the full loan keeps each schedule row's penalty and penalty_months as sent", () => {
+  const rows = [
+    { id: 71, period_number: 1, penalty_amount: 0, penalty_months: 0, principal_due: 1000 },
+    { id: 72, period_number: 2, penalty_amount: 150, penalty_months: 3, principal_due: 1000 },
+  ];
+  const loan = mapLoanToActiveLoan(summaryRow({ amortization_schedules: rows }));
+  assert.deepEqual(loan.schedule_penalties, [
+    { id: 71, period_number: 1, penalty_amount: 0, penalty_months: 0 },
+    { id: 72, period_number: 2, penalty_amount: 150, penalty_months: 3 },
+  ]);
+});
+
+test("the loan summary's penalty_months reads as the note, only with a penalty owed", () => {
+  const loan = mapLoanToActiveLoan(summaryRow());
+  assert.equal(withSummaryPenaltyNote(loan, { penalty_amount: 300, penalty_months: 2 }).penalty_note, "Penalty: 2 months late");
+  assert.equal(withSummaryPenaltyNote(loan, { penalty_amount: 100, penalty_months: 1 }).penalty_note, "Penalty: 1 month late");
+  assert.equal(withSummaryPenaltyNote(loan, { penalty_amount: 0, penalty_months: 2 }).penalty_note, null);
+  assert.equal(withSummaryPenaltyNote(loan, null).penalty_note, null);
 });

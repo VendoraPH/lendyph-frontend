@@ -10,6 +10,7 @@ import {
   readPreviewResponse,
   readScheduleRows,
   readScheduleTotals,
+  allocationPenaltyNoteFor,
   toDisplaySchedule,
 } from "./server-schedule";
 
@@ -87,6 +88,8 @@ test("persisted rows map their *_due fields and fold the paid columns", () => {
     share_capital_build_up: 50,
     total_payment: 4210,
     period_number: 2,
+    penalty_amount: 0,
+    penalty_months: null,
   });
   // The raw rows are kept untouched for the figures that need interest_paid.
   assert.equal(read.raw, ZERO_BALANCE_ROWS as unknown);
@@ -260,6 +263,7 @@ test("an upon-maturity schedule collapses, for display, into one row of the serv
       totalPayment: 11201.52,
       balance: 0,
       status: "pending",
+      penaltyNote: null,
     },
   ]);
 });
@@ -289,6 +293,7 @@ test("the amount to pay is the open period's own total payment, never the merged
     totalPayment: 10400,
     balance: 0,
     status: "pending",
+    penaltyNote: null,
   });
 });
 
@@ -430,6 +435,8 @@ test("preview rows are read from their *_due fields", () => {
     share_capital_build_up: null,
     total_payment: null,
     period_number: 1,
+    penalty_amount: null,
+    penalty_months: null,
   });
 });
 
@@ -515,4 +522,37 @@ test("due dates read the server's day on a computer west of UTC (New York)", () 
   } finally {
     process.env.TZ = original;
   }
+});
+
+// ── the monthly late penalty's note (backend #284) ─────────────────────────
+
+const LATE_ROWS = [
+  persisted(1, { principal_due: 4000, interest_due: 240, remaining_balance: 8000, principal_paid: 4000, interest_paid: 240, status: "paid", due_date: "2026-08-31" }),
+  { ...persisted(2, { principal_due: 4000, interest_due: 160, remaining_balance: 4000, status: "overdue", due_date: "2026-09-30" }), penalty_amount: 240, penalty_months: 2 },
+  { ...persisted(3, { principal_due: 4000, interest_due: 80, remaining_balance: 0, status: "overdue", due_date: "2026-10-31" }), penalty_amount: "120.00", penalty_months: 1 },
+];
+
+test("each schedule row reads the server's penalty_months as a note", () => {
+  const read = readScheduleRows(LATE_ROWS, 42)!;
+  assert.equal(read.schedule[1].penalty_amount, 240);
+  assert.equal(read.schedule[1].penalty_months, 2);
+  const rows = toDisplaySchedule(read.schedule, DISPLAY);
+  assert.deepEqual(
+    rows.map((r) => r.penaltyNote),
+    [null, "Penalty: 2 months late", "Penalty: 1 month late"],
+  );
+});
+
+test("the merged upon-maturity row takes the open period's note", () => {
+  const read = readScheduleRows(LATE_ROWS, 42)!;
+  const [merged] = toDisplaySchedule(read.schedule, { ...DISPLAY, isUponMaturity: true });
+  assert.equal(merged.penaltyNote, "Penalty: 1 month late");
+});
+
+test("a payment preview allocation reads its own period's note", () => {
+  const { schedule } = readScheduleRows(LATE_ROWS, 42)!;
+  assert.equal(allocationPenaltyNoteFor(schedule, { schedule_id: 502 }), "Penalty: 2 months late");
+  assert.equal(allocationPenaltyNoteFor(schedule, { period: 3 }), "Penalty: 1 month late");
+  assert.equal(allocationPenaltyNoteFor(schedule, { schedule_id: 501 }), null);
+  assert.equal(allocationPenaltyNoteFor(schedule, { schedule_id: 999 }), null);
 });

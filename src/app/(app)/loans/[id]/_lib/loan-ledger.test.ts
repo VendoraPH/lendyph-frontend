@@ -206,3 +206,36 @@ test("ledgerShowsScb: the schedule's rule, or any row whose build-up is not 0", 
   assert.equal(ledgerShowsScb(false, withScb), true);
   assert.equal(ledgerShowsScb(false, null), false);
 });
+
+test("the monthly late penalty reads one Ledger row per charge, each as the server sent it", () => {
+  const charge = (date: string, description: string, penalty: number, running: number) => ({
+    date,
+    kind: "penalty_charge",
+    repayment_id: null,
+    loan_adjustment_id: null,
+    description,
+    principal: 0,
+    interest: 0,
+    penalty,
+    insurance: 0,
+    scb: 0,
+    balances: balances(9000, 400, running, 0),
+  });
+  const view = readLoanLedger({
+    rows: [
+      charge("2026-10-04", "Late penalty, period 2", 90, 90),
+      charge("2026-11-01", "Late penalty, period 2, month 2", 90, 180),
+    ],
+    closing: balances(9000, 400, 180, 0),
+  })!;
+
+  assert.deepEqual(
+    view.rows.map((r) => [r.date, r.label, r.description, r.penalty.debit, r.penalty.credit, r.balances.penalty]),
+    [
+      ["2026-10-04", "Penalty charged", "Late penalty, period 2", 90, null, 90],
+      ["2026-11-01", "Penalty charged", "Late penalty, period 2, month 2", 90, null, 180],
+    ],
+  );
+  assert.notEqual(view.rows[0].key, view.rows[1].key);
+  assert.equal(view.closing.penalty, 180);
+});

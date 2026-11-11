@@ -1,5 +1,6 @@
 import type { ApiScheduleRow } from "@/lib/amortization";
 import { calendarDate } from "@/lib/format";
+import { allocationPenaltyNote, penaltyMonthsNote } from "@/lib/penalty-months";
 import type { LoanSchedule } from "@/types/loan";
 
 /**
@@ -20,6 +21,8 @@ export interface AmortizationRow {
   totalPayment: number | null;
   balance: number;
   status?: "pending" | "paid" | "partial" | "overdue";
+  /** "Penalty: N month(s) late" from the server's `penalty_months`; null when none. */
+  penaltyNote: string | null;
 }
 
 /**
@@ -140,6 +143,8 @@ export function readScheduleRows(
           share_capital_build_up: serverFigure(r.share_capital_build_up),
           total_payment: serverFigure(r.total_payment),
           period_number: serverId(r.period_number),
+          penalty_amount: serverFigure(r.penalty_amount),
+          penalty_months: serverFigure(r.penalty_months),
         }) as LoanSchedule)
       : rows as unknown as LoanSchedule[],
   };
@@ -181,6 +186,8 @@ export function toDisplaySchedule(
       totalPayment: totals.totalPayment,
       balance: parseFloat(String(lastRow.balance)) || 0,
       status: lastRow.status,
+      // The open period is the last row; the settled cycle before it is paid.
+      penaltyNote: penaltyMonthsNote(lastRow.penalty_amount, lastRow.penalty_months),
     }];
   }
   // The Balance column is the server's `remaining_balance` on every row, zero
@@ -196,6 +203,7 @@ export function toDisplaySchedule(
     totalPayment: serverFigure(row.total_payment),
     balance: parseFloat(String(row.balance)) || 0,
     status: row.status,
+    penaltyNote: penaltyMonthsNote(row.penalty_amount, row.penalty_months),
   }));
 }
 
@@ -248,4 +256,13 @@ export function rowForAllocation(schedule: readonly LoanSchedule[], allocation: 
  */
 export function allocationBuildUp(schedule: readonly LoanSchedule[], allocation: AllocationRef): number | null {
   return rowForAllocation(schedule, allocation)?.shareCapitalBuildUp ?? null;
+}
+
+/**
+ * "Penalty: N month(s) late" for a payment preview allocation's period, from
+ * that period's own server row; null when the schedule has none or it reads
+ * no note.
+ */
+export function allocationPenaltyNoteFor(schedule: readonly LoanSchedule[], allocation: AllocationRef): string | null {
+  return allocationPenaltyNote(schedule, allocation);
 }
