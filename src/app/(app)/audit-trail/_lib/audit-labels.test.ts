@@ -119,7 +119,7 @@ test("accounting and GCash rows read by their module names", () => {
 test("the module filter offers exactly the modules the server filters by", () => {
   assert.deepEqual(
     AUDIT_MODULE_OPTIONS.map((o) => o.value).sort(),
-    ["accounting", "auth", "borrowers", "collections", "gcash", "loans", "payments", "roles", "savings", "system", "users"]
+    ["accounting", "auth", "borrowers", "cda", "collections", "gcash", "loans", "payments", "roles", "savings", "system", "users"]
   );
   assert.ok(AUDIT_MODULE_OPTIONS.every((o) => o.label === auditModuleLabel({ module: o.value, target: null })));
 });
@@ -431,4 +431,18 @@ test("savings id fields read without \"id\"", () => {
   assert.equal(auditFieldLabel("run_id", { type: "SavingsInterestRunLine" }), "interest run");
   // Outside savings a plain id keeps its general words.
   assert.equal(auditFieldLabel("account_id", { type: "AccountingJournalLine" }), "account id");
+});
+
+test("CDA rows read their module, actions and targets in words", () => {
+  assert.equal(auditModuleLabel({ module: "cda", target: null }), "CDA Compliance");
+  assert.equal(auditActionLabel("cda_workflow"), "Report workflow");
+  assert.equal(auditActionLabel("cda_report_saved"), "Report saved");
+  assert.equal(auditActionLabel("cda_report_refreshed"), "Report refreshed");
+  assert.equal(auditActionLabel("cda_export_generated"), "Report exported");
+  assert.equal(auditActionLabel("year_end_captured"), "Year-end figures captured");
+  assert.equal(auditTargetType("CdaReport"), "CDA report");
+  assert.equal(auditTargetType("CdaMediationCase"), "Mediation case");
+  assert.equal(auditTargetType("CdaOfficerTraining"), "Officer training");
+  assert.equal(auditTargetType("CdaReportingPeriod"), "CDA reporting period");
+  assert.equal(auditFieldLabel("due_override_on"), "due override on");
 });

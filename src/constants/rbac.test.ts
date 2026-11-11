@@ -46,6 +46,34 @@ test("admin and super_admin hold all seven savings permissions, and no other rol
   }
 });
 
+// Phase 3: the sixteen CDA permissions (`CdaAccess::PERMISSIONS`, backend #277)
+// are seeded for admin and super_admin only.
+const CDA = [
+  "cda:view",
+  "cda:prepare",
+  "cda:upload",
+  "cda:review",
+  "cda:approve",
+  "cda:finalize",
+  "cda:reopen",
+  "cda:submit",
+  "cda:export",
+  "cda:settings",
+  "cda:manage_officers",
+  "cda:manage_social",
+  "cda:manage_mediation",
+  "cda:view_mediation",
+  "cda:view_audit",
+  "cda:view_tax",
+];
+
+test("admin and super_admin hold all sixteen CDA permissions, and no other role holds one", () => {
+  for (const [role, config] of Object.entries(ROLES)) {
+    const held = config.permissions.filter((p) => p.startsWith("cda:"));
+    assert.deepEqual(held, role === "admin" || role === "super_admin" ? CDA : [], role);
+  }
+});
+
 // Copied from lendyph-backend `RoleAndPermissionSeeder::ACCOUNTANT_PERMISSIONS`
 // (round C, slice C1, after the review fix on #249 removed `audit_logs:view`,
 // whose rows carry members' personal data). `ROLES.accountant` documents the
@@ -141,7 +169,8 @@ test("general_bookkeeper and manager keep their accounting grants", () => {
 
 // Every permission lendyph-backend creates (RoleAndPermissionSeeder plus the
 // permission migrations), which super_admin holds through Permission::all().
-// The seven savings permissions come with Phase 3's savings foundation (S1).
+// The seven savings permissions come with Phase 3's savings foundation (S1),
+// and the sixteen CDA permissions with the CDA foundation (backend #277).
 const BACKEND_PERMISSIONS = [
   "accounting:allowance",
   "accounting:close",
@@ -162,6 +191,22 @@ const BACKEND_PERMISSIONS = [
   "branches:view_all",
   "cash_accounts:transfer",
   "cash_accounts:view",
+  "cda:approve",
+  "cda:export",
+  "cda:finalize",
+  "cda:manage_mediation",
+  "cda:manage_officers",
+  "cda:manage_social",
+  "cda:prepare",
+  "cda:reopen",
+  "cda:review",
+  "cda:settings",
+  "cda:submit",
+  "cda:upload",
+  "cda:view",
+  "cda:view_audit",
+  "cda:view_mediation",
+  "cda:view_tax",
   "chart_of_accounts:create",
   "chart_of_accounts:delete",
   "chart_of_accounts:update",

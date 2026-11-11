@@ -45,8 +45,8 @@ test("admin's module count never exceeds the modules offered", () => {
 
 // Admin is also granted `branches:view_all` (backend migration
 // 2026_11_02_210000), the one permission of the Branch Access module, and the
-// four reminders permissions (Phase 2), and savings:view (Phase 3).
-const REMINDERS = ["reminders:view", "reminders:send", "reminders:pause", "reminders:settings", "savings:view"];
+// four reminders permissions (Phase 2), and savings:view and cda:view (Phase 3).
+const REMINDERS = ["reminders:view", "reminders:send", "reminders:pause", "reminders:settings", "savings:view", "cda:view"];
 
 test("admin holding loan_products:manage, branches:view_all and reminders is in every offered module", () => {
   assert.equal(
@@ -84,6 +84,12 @@ test("savings has seven checkboxes and counts as one module", () => {
   assert.deepEqual(MODULE_ACTIONS.savings, ["view", "create", "transact", "close", "approve", "post", "settings"]);
   assert.equal(roleModuleCount(["savings:view"]), 1);
   assert.equal(roleModuleCount(MODULE_ACTIONS.savings.map((a) => `savings:${a}`)), 1);
+});
+
+test("CDA has sixteen checkboxes and counts as one module", () => {
+  assert.equal(MODULE_ACTIONS.cda.length, 16);
+  assert.equal(roleModuleCount(["cda:view_tax"]), 1);
+  assert.equal(roleModuleCount(MODULE_ACTIONS.cda.map((a) => `cda:${a}`)), 1);
 });
 
 test("reminders has checkboxes and counts as one module", () => {

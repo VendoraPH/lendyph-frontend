@@ -163,6 +163,13 @@ export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
   reminder_failed: "Reminder not sent",
   savings_gl_difference: "Savings books don't match the savings records",
   savings_large_transaction: "Large savings transaction",
+  cda_approval_needed: "CDA report waiting for approval",
+  cda_report_returned: "CDA report returned",
+  cda_report_finalized: "CDA report finalized",
+  cda_report_for_correction: "CDA report needs correction",
+  cda_deadline_reminder: "CDA deadline reminder",
+  cda_document_expiring: "CDA document expiring",
+  cda_training_incomplete: "Officer trainings incomplete",
 };
 
 /** The kind in words, or "Notification" for a kind added on the server later. */
@@ -177,20 +184,27 @@ export function notificationTone(type: string): NotificationTone {
   switch (type) {
     case "approval_needed":
     case "adjustment_pending":
+    case "cda_approval_needed":
       return "approval";
     case "loan_approved":
     case "loan_released":
+    case "cda_report_finalized":
       return "success";
     case "loan_rejected":
     case "payment_voided":
     case "reminder_failed":
     case "savings_gl_difference":
+    case "cda_report_for_correction":
       return "danger";
     case "loan_sent_back":
     case "loan_past_due":
     case "reminder_contact_invalid":
     case "reminder_follow_up":
     case "savings_large_transaction":
+    case "cda_report_returned":
+    case "cda_deadline_reminder":
+    case "cda_document_expiring":
+    case "cda_training_incomplete":
       return "warning";
     default:
       return "info";

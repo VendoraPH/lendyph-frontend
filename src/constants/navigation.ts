@@ -17,6 +17,7 @@ import {
   BookOpenCheck,
   Gauge,
   PiggyBank,
+  ClipboardCheck,
 } from "lucide-react";
 import { GCashIcon } from "@/components/icons/gcash-icon";
 import { env } from "@/config/env";
@@ -48,8 +49,49 @@ export interface NavItem {
   href: string;
   icon: ComponentType<{ className?: string }>;
   permission: Permission;
+  /**
+   * Permissions needed as well as `permission`, every one of them. CDA
+   * Compliance covers the whole cooperative, so it also needs
+   * `branches:view_all`, as each of its pages does.
+   */
+  alsoRequires?: Permission[];
   children?: NavSubItem[];
 }
+
+/** Whether the menu shows a section: its permission and everything it also requires. */
+export function navItemAllowed(item: NavItem, can: (permission: Permission) => boolean): boolean {
+  return can(item.permission) && (item.alsoRequires ?? []).every(can);
+}
+
+/**
+ * CDA Compliance. Every page needs `cda:view` and `branches:view_all`; the
+ * mediation, audit and tax reports also need their restricted view, and the
+ * menu hides them without it. Shown only when NEXT_PUBLIC_ENABLE_CDA is on.
+ */
+export const CDA_NAV: NavItem = {
+  title: "CDA Compliance",
+  href: "/cda",
+  icon: ClipboardCheck,
+  permission: "cda:view",
+  alsoRequires: ["branches:view_all"],
+  children: [
+    { title: "CDA Dashboard", href: "/cda" },
+    { title: "Compliance Calendar", href: "/cda/calendar" },
+    { title: "CAPR", href: "/cda/capr" },
+    { title: "Financial Statements", href: "/cda/financial-statements", permission: "cda:view_audit" },
+    { title: "Performance Audit", href: "/cda/performance-audit", permission: "cda:view_audit" },
+    { title: "Social Audit", href: "/cda/social-audit" },
+    { title: "Enhanced PESOS", href: "/cda/pesos" },
+    { title: "Loan Classification", href: "/cda/loan-classification" },
+    { title: "Officers & Trainings", href: "/cda/officers" },
+    { title: "Mediation & Conciliation", href: "/cda/mediation", permission: "cda:view_mediation" },
+    { title: "Sworn Statement", href: "/cda/sworn-statement" },
+    { title: "ATIR & ABR", href: "/cda/tax-reports", permission: "cda:view_tax" },
+    { title: "Compliance Documents", href: "/cda/documents" },
+    { title: "Submission History", href: "/cda/submissions" },
+    { title: "CDA Settings", href: "/cda/settings" },
+  ],
+};
 
 const CREDIT_SCORING_NAV: NavItem = {
   title: "Credit Scoring",
@@ -189,6 +231,7 @@ export const SIDEBAR_NAV: NavItem[] = [
   // Gated on NEXT_PUBLIC_ENABLE_CREDIT_SCORING at build time. The routes also
   // answer not found when the flag is off (credit-scoring/layout.tsx).
   ...(env.features.creditScoring ? [CREDIT_SCORING_NAV] : []),
+  ...(env.features.cda ? [CDA_NAV] : []),
   {
     title: "Accounting",
     href: "/accounting",

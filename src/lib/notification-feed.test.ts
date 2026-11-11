@@ -488,3 +488,24 @@ describe("savings notifications", () => {
     assert.equal(item.kind, "Large savings transaction");
   });
 });
+
+// The CDA notice keys the backend sends: C2's WorkflowNotices, C4's
+// DeadlineReminders and C3's RegisterNotices.
+describe("CDA notifications", () => {
+  const CDA_KINDS: Record<string, [string, string]> = {
+    cda_approval_needed: ["CDA report waiting for approval", "approval"],
+    cda_report_returned: ["CDA report returned", "warning"],
+    cda_report_finalized: ["CDA report finalized", "success"],
+    cda_report_for_correction: ["CDA report needs correction", "danger"],
+    cda_deadline_reminder: ["CDA deadline reminder", "warning"],
+    cda_document_expiring: ["CDA document expiring", "warning"],
+    cda_training_incomplete: ["Officer trainings incomplete", "warning"],
+  };
+
+  for (const [type, [label, tone]] of Object.entries(CDA_KINDS)) {
+    test(`${type} reads "${label}" and is ${tone}`, () => {
+      assert.equal(notificationTypeLabel(type), label);
+      assert.equal(notificationTone(type), tone);
+    });
+  }
+});

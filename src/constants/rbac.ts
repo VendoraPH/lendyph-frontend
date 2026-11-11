@@ -1,6 +1,29 @@
 import type { Permission, Role, RoleConfig } from "@/types";
 
 /**
+ * The sixteen CDA Compliance permissions, as lendyph-backend seeds them
+ * (`CdaAccess::PERMISSIONS`), in that order.
+ */
+export const CDA_PERMISSIONS: readonly Permission[] = [
+  "cda:view",
+  "cda:prepare",
+  "cda:upload",
+  "cda:review",
+  "cda:approve",
+  "cda:finalize",
+  "cda:reopen",
+  "cda:submit",
+  "cda:export",
+  "cda:settings",
+  "cda:manage_officers",
+  "cda:manage_social",
+  "cda:manage_mediation",
+  "cda:view_mediation",
+  "cda:view_audit",
+  "cda:view_tax",
+];
+
+/**
  * Every permission lendyph-backend creates (RoleAndPermissionSeeder and the
  * permission migrations). The seeder syncs `Permission::all()` to both
  * super_admin and admin, and each permission migration grants both, so both
@@ -123,6 +146,10 @@ const EVERY_PERMISSION: Permission[] = [
   "savings:approve",
   "savings:post",
   "savings:settings",
+  // CDA Compliance (Phase 3). Seeded for admin and super_admin only; other
+  // roles get them only through the roles screen, and each needs
+  // `branches:view_all` to work.
+  ...CDA_PERMISSIONS,
 ];
 
 /**

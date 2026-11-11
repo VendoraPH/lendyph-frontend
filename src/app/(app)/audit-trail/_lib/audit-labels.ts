@@ -25,6 +25,7 @@ const MODULE_LABELS: Record<AuditModule, string> = {
   accounting: "Accounting",
   gcash: "GCash",
   savings: "Savings",
+  cda: "CDA Compliance",
   system: "System",
 };
 
@@ -33,7 +34,7 @@ const MODULE_LABELS: Record<AuditModule, string> = {
  * `module` parameter accepts (anything else is refused with 422).
  */
 export const AUDIT_MODULE_OPTIONS: { value: AuditModule; label: string }[] = (
-  ["auth", "borrowers", "loans", "payments", "collections", "users", "roles", "accounting", "gcash", "savings", "system"] as const
+  ["auth", "borrowers", "loans", "payments", "collections", "users", "roles", "accounting", "gcash", "savings", "cda", "system"] as const
 ).map((value) => ({ value, label: MODULE_LABELS[value] }));
 
 const ACTION_LABELS: Record<string, string> = {
@@ -63,6 +64,11 @@ const ACTION_LABELS: Record<string, string> = {
   time_deposit_matured: "Time deposit matured",
   time_deposit_settled: "Time deposit settled",
   time_deposit_preterminated: "Time deposit pre-terminated",
+  cda_workflow: "Report workflow",
+  cda_report_saved: "Report saved",
+  cda_report_refreshed: "Report refreshed",
+  cda_export_generated: "Report exported",
+  year_end_captured: "Year-end figures captured",
 };
 
 /**
@@ -96,6 +102,10 @@ export const AUDIT_ACTION_OPTIONS: { value: AuditAction; label: string }[] = (
     "time_deposit_matured",
     "time_deposit_settled",
     "time_deposit_preterminated",
+    "cda_workflow",
+    "cda_report_saved",
+    "cda_report_refreshed",
+    "cda_export_generated",
   ] as const
 ).map((value) => ({ value, label: ACTION_LABELS[value] }));
 
@@ -134,6 +144,21 @@ const TARGET_TYPE_LABELS: Record<string, string> = {
   ReminderTemplate: "Reminder template",
   ReminderPause: "Reminder pause",
   BorrowerNotificationPreference: "Member reminder preferences",
+  CdaRegulatoryProfile: "CDA regulatory profile",
+  CdaSetting: "CDA settings",
+  CdaReportTemplate: "CDA report template",
+  CdaReportingPeriod: "CDA reporting period",
+  CdaReport: "CDA report",
+  CdaReportValue: "CDA report figure",
+  CdaReportSnapshot: "CDA report version",
+  CdaSubmission: "CDA filing",
+  CdaDocument: "CDA document",
+  CdaDocumentVersion: "CDA document version",
+  CdaOfficer: "CDA officer",
+  CdaOfficerTraining: "Officer training",
+  CdaSocialProgram: "Social program",
+  CdaMediationCase: "Mediation case",
+  CdaNoticeSent: "CDA notice",
 };
 
 /**

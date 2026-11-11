@@ -531,6 +531,48 @@ export const API_ENDPOINTS = {
   LINDA: {
     CHAT: "/linda/chat",
   },
+  /**
+   * CDA Compliance (CDA design §3). Every route needs `branches:view_all` plus
+   * its own `cda:*` permission; mediation, audit and tax reports and documents
+   * need their restricted view as well. Reports and their workflow are
+   * addressed by id; `REPORT_BY_TYPE` is the year and type alias.
+   */
+  CDA: {
+    PERIODS: "/cda/periods",
+    PERIOD: (year: number) => `/cda/periods/${year}`,
+    DASHBOARD: (year: number) => `/cda/periods/${year}/dashboard`,
+    CALENDAR: (year: number) => `/cda/periods/${year}/calendar`,
+    REPORT_BY_TYPE: (year: number, type: string) => `/cda/periods/${year}/reports/${type}`,
+    REPORT: (id: number) => `/cda/reports/${id}`,
+    REPORT_WORKFLOW: (id: number) => `/cda/reports/${id}/workflow`,
+    REPORT_DEADLINE: (id: number) => `/cda/reports/${id}/deadline`,
+    REPORT_SNAPSHOTS: (id: number) => `/cda/reports/${id}/snapshots`,
+    REPORT_EXPORTS: (id: number) => `/cda/reports/${id}/exports`,
+    LOAN_CLASSIFICATION: (year: number) => `/cda/periods/${year}/loan-classification`,
+    PESOS: (year: number) => `/cda/periods/${year}/pesos`,
+    OFFICERS: "/cda/officers",
+    OFFICER: (id: number) => `/cda/officers/${id}`,
+    TRAININGS: "/cda/trainings",
+    TRAINING: (id: number) => `/cda/trainings/${id}`,
+    SOCIAL_PROGRAMS: (year: number) => `/cda/periods/${year}/social-programs`,
+    SOCIAL_PROGRAM: (id: number) => `/cda/social-programs/${id}`,
+    MEDIATION_CASES: (year: number) => `/cda/periods/${year}/mediation-cases`,
+    MEDIATION_CASE: (id: number) => `/cda/mediation-cases/${id}`,
+    DOCUMENTS: (year: number) => `/cda/periods/${year}/documents`,
+    DOCUMENT_VERSIONS: (id: number) => `/cda/documents/${id}/versions`,
+    DOCUMENT_WITHDRAW: (id: number) => `/cda/documents/${id}/withdraw`,
+    SUBMISSIONS: (year: number) => `/cda/periods/${year}/submissions`,
+    SUBMISSION: (id: number) => `/cda/submissions/${id}`,
+    SUBMISSION_PROOF: (id: number) => `/cda/submissions/${id}/proof`,
+    REGULATORY_PROFILE: "/cda/regulatory-profile",
+    SETTINGS: "/cda/settings",
+    TEMPLATES: "/cda/templates",
+    TEMPLATE: (id: number) => `/cda/templates/${id}`,
+    TEMPLATE_ACTIVATE: (id: number) => `/cda/templates/${id}/activate`,
+    TEMPLATE_RETIRE: (id: number) => `/cda/templates/${id}/retire`,
+    TEMPLATE_EXCEL_FILE: (id: number) => `/cda/templates/${id}/excel-file`,
+    TEMPLATE_VALIDATE: "/cda/templates/validate",
+  },
   /** The signed-in staff user's own in-app notifications (the header bell). */
   NOTIFICATIONS: {
     LIST: "/notifications",

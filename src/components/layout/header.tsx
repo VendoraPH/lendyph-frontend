@@ -40,6 +40,7 @@ import {
   subPageTitle,
 } from "@/lib/page-titles";
 import { SIDEBAR_NAV } from "@/constants";
+import { navItemAllowed } from "@/constants/navigation";
 import type { Permission } from "@/types";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -247,7 +248,7 @@ export function Header({ onMenuClick }: HeaderProps) {
         <CommandList>
           <CommandEmpty>No results found.</CommandEmpty>
           <CommandGroup heading="Navigation">
-            {SIDEBAR_NAV.filter((item) => can(item.permission)).map((item) => (
+            {SIDEBAR_NAV.filter((item) => navItemAllowed(item, can)).map((item) => (
               <CommandItem
                 key={item.href}
                 onSelect={() => handleSelect(item.href)}

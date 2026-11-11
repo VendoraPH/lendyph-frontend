@@ -27,7 +27,18 @@ export type NotificationType =
   // books (2050, 2060) apart, for holders of savings:post; a savings
   // transaction at or above the large-transaction alert.
   | "savings_gl_difference"
-  | "savings_large_transaction";
+  | "savings_large_transaction"
+  // CDA Compliance (Phase 3): the report workflow (a report waiting for
+  // approval, returned, finalized, marked for correction), the deadline
+  // reminders, a compliance document expiring within 30 days, and an
+  // officer's mandatory trainings still incomplete.
+  | "cda_approval_needed"
+  | "cda_report_returned"
+  | "cda_report_finalized"
+  | "cda_report_for_correction"
+  | "cda_deadline_reminder"
+  | "cda_document_expiring"
+  | "cda_training_incomplete";
 
 /**
  * One row of `GET /notifications`, the signed-in user's own notifications.

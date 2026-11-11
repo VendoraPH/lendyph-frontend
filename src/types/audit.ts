@@ -27,7 +27,14 @@ export type AuditAction =
   | "savings_approval_expired"
   | "time_deposit_matured"
   | "time_deposit_settled"
-  | "time_deposit_preterminated";
+  | "time_deposit_preterminated"
+  // CDA Compliance: a report's workflow step, a save, a refresh that changed
+  // figures, a server export, and the year-end capture.
+  | "cda_workflow"
+  | "cda_report_saved"
+  | "cda_report_refreshed"
+  | "cda_export_generated"
+  | "year_end_captured";
 
 export type AuditModule =
   | "auth"
@@ -42,6 +49,9 @@ export type AuditModule =
   // Savings & Deposits (Phase 3): accounts, holds, approvals, time deposits,
   // interest runs, products, rates, tax rules and settings.
   | "savings"
+  // CDA Compliance (Phase 3): reports, periods, templates, settings, the
+  // registers and the document repository.
+  | "cda"
   | "system";
 
 export interface AuditChange {
