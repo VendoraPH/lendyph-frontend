@@ -573,6 +573,32 @@ export const API_ENDPOINTS = {
     TEMPLATE_EXCEL_FILE: (id: number) => `/cda/templates/${id}/excel-file`,
     TEMPLATE_VALIDATE: "/cda/templates/validate",
   },
+  /**
+   * The Member Portal's staff side (`/portal-admin`, staff token, branch-scoped
+   * by the server). The member side has its own client and endpoints
+   * (`src/lib/portal/`), never these.
+   */
+  PORTAL_ADMIN: {
+    SETTINGS: "/portal-admin/settings",
+    TERMS: "/portal-admin/terms",
+    STATS: "/portal-admin/stats",
+    ACCOUNTS: "/portal-admin/accounts",
+    MEMBER_ACCESS: (borrowerId: number) => `/portal-admin/members/${borrowerId}/access`,
+    MEMBER_INVITE: (borrowerId: number) => `/portal-admin/members/${borrowerId}/invite`,
+    MEMBER_RESET_CODE: (borrowerId: number) => `/portal-admin/members/${borrowerId}/reset-code`,
+    MEMBER_UNLOCK: (borrowerId: number) => `/portal-admin/members/${borrowerId}/unlock`,
+    MEMBER_SIGN_OUT: (borrowerId: number) => `/portal-admin/members/${borrowerId}/sign-out`,
+    MEMBER_COMMUNICATIONS: (borrowerId: number) => `/portal-admin/members/${borrowerId}/communications`,
+    DOCUMENT_SHARE: (borrowerId: number) => `/portal-admin/members/${borrowerId}/documents/share`,
+    DOCUMENT_UNSHARE: (borrowerId: number) => `/portal-admin/members/${borrowerId}/documents/unshare`,
+    REQUESTS: "/portal-admin/requests",
+    REQUEST: (id: number) => `/portal-admin/requests/${id}`,
+    REQUEST_DECISION: (id: number) => `/portal-admin/requests/${id}/decision`,
+    ANNOUNCEMENTS: "/portal-admin/announcements",
+    ANNOUNCEMENT: (id: number) => `/portal-admin/announcements/${id}`,
+    ANNOUNCEMENT_PUBLISH: (id: number) => `/portal-admin/announcements/${id}/publish`,
+    ANNOUNCEMENT_WITHDRAW: (id: number) => `/portal-admin/announcements/${id}/withdraw`,
+  },
   /** The signed-in staff user's own in-app notifications (the header bell). */
   NOTIFICATIONS: {
     LIST: "/notifications",

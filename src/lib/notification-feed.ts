@@ -170,6 +170,8 @@ export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
   cda_deadline_reminder: "CDA deadline reminder",
   cda_document_expiring: "CDA document expiring",
   cda_training_incomplete: "Officer training incomplete",
+  portal_request_submitted: "New member portal request",
+  portal_login_reported: "Portal sign-in reported",
 };
 
 /**
@@ -200,6 +202,7 @@ export function notificationTone(type: string): NotificationTone {
     case "approval_needed":
     case "adjustment_pending":
     case "cda_approval_needed":
+    case "portal_request_submitted":
       return "approval";
     case "loan_approved":
     case "loan_released":
@@ -220,6 +223,7 @@ export function notificationTone(type: string): NotificationTone {
     case "cda_deadline_reminder":
     case "cda_document_expiring":
     case "cda_training_incomplete":
+    case "portal_login_reported":
       return "warning";
     default:
       return "info";

@@ -52,6 +52,9 @@ export type AuditModule =
   // CDA Compliance (Phase 3): reports, periods, templates, settings, the
   // registers and the document repository.
   | "cda"
+  // Member Portal (Phase 3): portal accounts, codes, settings, terms,
+  // requests and announcements, and members' own portal actions.
+  | "member_portal"
   | "system";
 
 export interface AuditChange {
@@ -67,6 +70,13 @@ export interface AuditLog {
     full_name: string;
     roles: string[];
   };
+  /**
+   * Who wrote the row: `staff` (`user`), `member` (a member's own portal
+   * action: `user` is null and `actor_label` names them) or `system`.
+   */
+  actor_type?: "staff" | "member" | "system";
+  /** "Member: <name> (<number>)" on a member's row, else null. */
+  actor_label?: string | null;
   action: AuditAction;
   module: AuditModule;
   description: string;

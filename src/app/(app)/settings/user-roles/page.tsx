@@ -69,6 +69,7 @@ import {
   BellRing,
   PiggyBank,
   ClipboardCheck,
+  MonitorSmartphone,
   Package,
   Building2,
   type LucideIcon,
@@ -374,6 +375,20 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
       "Configure the regulatory profile, deadlines and extensions",
     ],
   },
+  member_portal: {
+    label: "Member Portal",
+    description:
+      "Members' online access, their requests and announcements. Changing the portal settings also needs See all branches.",
+    icon: MonitorSmartphone,
+    features: [
+      "See portal counts, the accounts list and a member's access card",
+      "Issue activation and password reset codes after checking a valid ID",
+      "Turn a member's access off or on, unlock, sign out everywhere and share files",
+      "Decide members' profile change, withdrawal and new account requests",
+      "Write, publish and withdraw announcements to members",
+      "Configure the portal and publish its terms",
+    ],
+  },
 };
 
 
@@ -420,6 +435,9 @@ const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   view_mediation: { label: "See mediation", colorClass: "bg-rose-500/10 text-rose-700 border-rose-500/30" },
   view_audit: { label: "See audit reports", colorClass: "bg-indigo-500/10 text-indigo-700 border-indigo-500/30" },
   view_tax: { label: "See tax reports", colorClass: "bg-indigo-500/10 text-indigo-700 border-indigo-500/30" },
+  invite: { label: "Issue codes", colorClass: "bg-blue-500/10 text-blue-700 border-blue-500/30" },
+  requests: { label: "Decide requests", colorClass: "bg-teal-500/10 text-teal-700 border-teal-500/30" },
+  announcements: { label: "Announcements", colorClass: "bg-violet-500/10 text-violet-700 border-violet-500/30" },
 };
 
 /** "credit_scoring:settings" → "Credit Scoring: Configure", as the matrix labels it. */

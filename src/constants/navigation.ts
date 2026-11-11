@@ -18,6 +18,7 @@ import {
   Gauge,
   PiggyBank,
   ClipboardCheck,
+  MonitorSmartphone,
 } from "lucide-react";
 import { GCashIcon } from "@/components/icons/gcash-icon";
 import { env } from "@/config/env";
@@ -56,13 +57,39 @@ export interface NavItem {
    * `branches:view_all`, as each of its pages does.
    */
   alsoRequires?: Permission[];
+  /**
+   * When set, the section shows for any one of these instead of `permission`
+   * alone: the Member Portal's pages each need a different one, and a cashier
+   * who only decides requests still needs the menu.
+   */
+  anyOf?: Permission[];
   children?: NavSubItem[];
 }
 
 /** Whether the menu shows a section: its permission and everything it also requires. */
 export function navItemAllowed(item: NavItem, can: (permission: Permission) => boolean): boolean {
-  return can(item.permission) && (item.alsoRequires ?? []).every(can);
+  const opens = item.anyOf ? item.anyOf.some(can) : can(item.permission);
+  return opens && (item.alsoRequires ?? []).every(can);
 }
+
+/**
+ * The Member Portal's staff side: who has access, members' requests and
+ * announcements. Each page needs its own permission, and the server shows
+ * only the caller's branches. Shown only when NEXT_PUBLIC_ENABLE_MEMBER_PORTAL
+ * is on. Settings → Member Portal sits under Settings.
+ */
+export const MEMBER_PORTAL_NAV: NavItem = {
+  title: "Member Portal",
+  href: "/member-portal",
+  icon: MonitorSmartphone,
+  permission: "member_portal:view",
+  anyOf: ["member_portal:view", "member_portal:requests", "member_portal:announcements"],
+  children: [
+    { title: "Portal Access", href: "/member-portal", permission: "member_portal:view" },
+    { title: "Portal Requests", href: "/member-portal/requests", permission: "member_portal:requests" },
+    { title: "Portal Announcements", href: "/member-portal/announcements", permission: "member_portal:announcements" },
+  ],
+};
 
 /**
  * CDA Compliance. Every page needs `cda:view` and `branches:view_all`; the
@@ -233,6 +260,7 @@ export const SIDEBAR_NAV: NavItem[] = [
   // answer not found when the flag is off (credit-scoring/layout.tsx).
   ...(env.features.creditScoring ? [CREDIT_SCORING_NAV] : []),
   ...(env.features.cda ? [CDA_NAV] : []),
+  ...(env.features.memberPortal ? [MEMBER_PORTAL_NAV] : []),
   {
     title: "Accounting",
     href: "/accounting",
@@ -310,6 +338,10 @@ export const SIDEBAR_NAV: NavItem[] = [
       { title: "Role and Permissions", href: "/settings/user-roles" },
       { title: "Approval Workflow", href: "/settings/approval-workflow" },
       { title: "GCash", href: "/settings/gcash" },
+      // Company-wide, so the page also needs branches:view_all (it says so).
+      ...(env.features.memberPortal
+        ? [{ title: "Member Portal", href: "/settings/member-portal", permission: "member_portal:settings" as const }]
+        : []),
       // Lives under Settings because it is admin-only, org-wide, one-time
       // config — and because it belongs to neither Members nor Loans: a single
       // run writes both.

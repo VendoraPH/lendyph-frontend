@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { env } from "@/config/env";
-import { CDA_NAV, SIDEBAR_NAV, navItemAllowed } from "./navigation";
+import { CDA_NAV, MEMBER_PORTAL_NAV, SIDEBAR_NAV, navItemAllowed } from "./navigation";
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
 const LAYOUT = "src/app/(app)/credit-scoring/layout.tsx";
@@ -96,4 +96,55 @@ test("a section without alsoRequires opens on its permission alone", () => {
   const item = SIDEBAR_NAV.find((i) => i.href === "/reports");
   assert.ok(item);
   assert.equal(navItemAllowed(item, (p) => p === "reports:view"), true);
+});
+
+test("the Member Portal is off when the flag isn't set, and its staff routes answer not found", () => {
+  assert.equal(env.features.memberPortal, false);
+  assert.equal(SIDEBAR_NAV.some((item) => item.href === "/member-portal"), false);
+  const settings = SIDEBAR_NAV.find((item) => item.href === "/settings");
+  assert.equal(settings?.children?.some((c) => c.href === "/settings/member-portal"), false);
+  assert.match(read("src/config/env.ts"), /process\.env\.NEXT_PUBLIC_ENABLE_MEMBER_PORTAL/);
+  assert.match(read(".env.example"), /^NEXT_PUBLIC_ENABLE_MEMBER_PORTAL=false$/m);
+  for (const layout of ["src/app/(app)/member-portal/layout.tsx", "src/app/(app)/settings/member-portal/layout.tsx"]) {
+    const text = read(layout);
+    assert.match(text, /env\.features\.memberPortal/, layout);
+    assert.match(text, /notFound\(\)/, layout);
+    assert.doesNotMatch(text, /"use client"/, layout);
+  }
+});
+
+test("the Member Portal menu opens on any of its three page permissions, each page on its own", () => {
+  const holds = (...held: string[]) => (p: string) => held.includes(p);
+  assert.equal(navItemAllowed(MEMBER_PORTAL_NAV, holds()), false);
+  assert.equal(navItemAllowed(MEMBER_PORTAL_NAV, holds("member_portal:settings")), false);
+  for (const p of ["member_portal:view", "member_portal:requests", "member_portal:announcements"]) {
+    assert.equal(navItemAllowed(MEMBER_PORTAL_NAV, holds(p)), true, p);
+  }
+  assert.deepEqual(
+    (MEMBER_PORTAL_NAV.children ?? []).map((c) => [c.href, c.permission]),
+    [
+      ["/member-portal", "member_portal:view"],
+      ["/member-portal/requests", "member_portal:requests"],
+      ["/member-portal/announcements", "member_portal:announcements"],
+    ],
+  );
+});
+
+test("each Member Portal staff page is guarded by the permission its menu entry names", () => {
+  const pages: [string, string][] = [
+    ["src/app/(app)/member-portal/page.tsx", "member_portal:view"],
+    ["src/app/(app)/member-portal/requests/page.tsx", "member_portal:requests"],
+    ["src/app/(app)/member-portal/requests/[id]/page.tsx", "member_portal:requests"],
+    ["src/app/(app)/member-portal/announcements/page.tsx", "member_portal:announcements"],
+    ["src/app/(app)/settings/member-portal/page.tsx", "member_portal:settings"],
+  ];
+  for (const [page, permission] of pages) {
+    assert.match(read(page), new RegExp(`<RouteGuard permission="${permission}"`), page);
+  }
+});
+
+test("the staff notice links lead to pages that exist", () => {
+  // RequestAlerts links `/member-portal/requests/{id}`; PortalStaffAlerts `/borrowers/{id}`.
+  assert.equal(existsSync(resolve(process.cwd(), "src/app/(app)/member-portal/requests/[id]/page.tsx")), true);
+  assert.equal(existsSync(resolve(process.cwd(), "src/app/(app)/borrowers/[id]/page.tsx")), true);
 });

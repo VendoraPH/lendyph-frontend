@@ -6,6 +6,7 @@ import type {
   SavingsApprovalKind,
   SavingsApprovalStatus,
   SavingsHolderType,
+  SavingsHold,
   SavingsHoldStatus,
   SavingsHoldType,
   SavingsMethod,
@@ -14,6 +15,8 @@ import type {
   SavingsTransactionType,
   SavingsUserRef,
 } from "@/types";
+
+import { formatCurrency } from "@/lib/format";
 
 /**
  * Savings words and the rules that decide which actions a screen offers.
@@ -80,6 +83,7 @@ export const HOLD_TYPE_LABELS: Record<SavingsHoldType, string> = {
   legal: "Legal order",
   manual: "Staff hold",
   loan_retention: "Loan retention",
+  member_request: "Member request",
 };
 
 /** The hold types staff place by hand (loan retention is v2). */
@@ -87,6 +91,33 @@ export const HOLD_TYPE_OPTIONS: ReadonlyArray<{ value: "legal" | "manual"; label
   { value: "manual", label: HOLD_TYPE_LABELS.manual },
   { value: "legal", label: HOLD_TYPE_LABELS.legal },
 ];
+
+/**
+ * The line under the account's "On hold" figure naming what members' portal
+ * withdrawal requests reserve, in the server's figure; null when there is
+ * none or the backend doesn't send it. The member sees the same money as
+ * "Pending withdrawal".
+ */
+export function heldForRequestsNote(account: Pick<SavingsAccount, "held_for_requests">): string | null {
+  const held = account.held_for_requests;
+  if (typeof held !== "string" || !/^\d+(\.\d+)?$/.test(held) || /^0+(\.0+)?$/.test(held)) return null;
+  return `of which ${formatCurrency(held)} for member requests (a pending withdrawal in the Member Portal)`;
+}
+
+/** Where a member request's hold is released instead: deciding the request. */
+export const MEMBER_REQUEST_HOLD_NOTE = "Decided in Member Portal → Requests";
+
+/**
+ * Whether the holds table offers Release on a hold. A Member Portal
+ * withdrawal request's hold (`member_request`) is released only by deciding
+ * the request (the server refuses a release here with 422), so it shows
+ * where that happens instead.
+ */
+export function holdReleaseOffer(hold: Pick<SavingsHold, "type" | "status">): { release: boolean; note: string | null } {
+  if (hold.status !== "active") return { release: false, note: null };
+  if (hold.type === "member_request") return { release: false, note: MEMBER_REQUEST_HOLD_NOTE };
+  return { release: true, note: null };
+}
 
 export const HOLD_STATUS_LABELS: Record<SavingsHoldStatus, string> = {
   active: "Active",

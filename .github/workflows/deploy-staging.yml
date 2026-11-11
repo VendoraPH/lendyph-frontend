@@ -81,6 +81,8 @@ jobs:
         export NEXT_PUBLIC_ENABLE_SAVINGS=true
         # Staging only: CDA Compliance is on for testing (Arvin, 2026-11-10, Phase 3 plan).
         export NEXT_PUBLIC_ENABLE_CDA=true
+        # Staging only: the Member Portal is on for testing (Arvin, 2026-11-10, Phase 3 plan).
+        export NEXT_PUBLIC_ENABLE_MEMBER_PORTAL=true
 
         flock -w 2400 /var/lock/lendyph-frontend-build.lock bash /var/www/lendyph-com-frontend-staging/deploy.sh
 

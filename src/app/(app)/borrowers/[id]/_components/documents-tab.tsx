@@ -28,6 +28,9 @@ import {
   validIdLabel,
   validIdName,
 } from "@/lib/document-delete";
+import { env } from "@/config/env";
+import { usePermission } from "@/hooks";
+import { PortalShareControl, sharedFromList } from "./portal-share-control";
 
 interface DocumentsTabProps {
   borrowerId: number;
@@ -49,6 +52,10 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
   const [deletingValidId, setDeletingValidId] = useState<number | null>(null);
   const [preview, setPreview] = useState<{ title: string; images: PreviewImage[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { can } = usePermission();
+  // "Share with member" (Member Portal): member_portal:manage and borrowers:view, as the server checks.
+  const canShare = env.features.memberPortal && can("member_portal:manage") && can("borrowers:view");
+  const [sharedById, setSharedById] = useState<Record<number, boolean>>({});
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -238,6 +245,15 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{formatDate(doc.created_at)}</TableCell>
                     <TableCell className="text-right">
+                      {canShare && (
+                        <PortalShareControl
+                          borrowerId={borrowerId}
+                          documentId={doc.id}
+                          documentName={documentName(doc)}
+                          shared={sharedById[doc.id] ?? sharedFromList(doc)}
+                          onChanged={(shared) => setSharedById((prev) => ({ ...prev, [doc.id]: shared }))}
+                        />
+                      )}
                       <Button
                         variant="ghost"
                         size="sm"

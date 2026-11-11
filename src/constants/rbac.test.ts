@@ -74,6 +74,24 @@ test("admin and super_admin hold all sixteen CDA permissions, and no other role 
   }
 });
 
+// Phase 3: the six Member Portal staff permissions (backend migration
+// 2026_11_11_700200) are seeded for admin and super_admin only.
+const MEMBER_PORTAL = [
+  "member_portal:view",
+  "member_portal:invite",
+  "member_portal:manage",
+  "member_portal:requests",
+  "member_portal:announcements",
+  "member_portal:settings",
+];
+
+test("admin and super_admin hold all six Member Portal permissions, and no other role holds one", () => {
+  for (const [role, config] of Object.entries(ROLES)) {
+    const held = config.permissions.filter((p) => p.startsWith("member_portal:"));
+    assert.deepEqual(held, role === "admin" || role === "super_admin" ? MEMBER_PORTAL : [], role);
+  }
+});
+
 // Copied from lendyph-backend `RoleAndPermissionSeeder::ACCOUNTANT_PERMISSIONS`
 // (round C, slice C1, after the review fix on #249 removed `audit_logs:view`,
 // whose rows carry members' personal data). `ROLES.accountant` documents the
@@ -170,7 +188,8 @@ test("general_bookkeeper and manager keep their accounting grants", () => {
 // Every permission lendyph-backend creates (RoleAndPermissionSeeder plus the
 // permission migrations), which super_admin holds through Permission::all().
 // The seven savings permissions come with Phase 3's savings foundation (S1),
-// and the sixteen CDA permissions with the CDA foundation (backend #277).
+// the sixteen CDA permissions with the CDA foundation (backend #277), and the
+// six Member Portal permissions with the portal foundation (backend #287).
 const BACKEND_PERMISSIONS = [
   "accounting:allowance",
   "accounting:close",
@@ -252,6 +271,12 @@ const BACKEND_PERMISSIONS = [
   "loans:view",
   "loans:void",
   "loans:write_off",
+  "member_portal:announcements",
+  "member_portal:invite",
+  "member_portal:manage",
+  "member_portal:requests",
+  "member_portal:settings",
+  "member_portal:view",
   "payments:create",
   "payments:update",
   "payments:view",

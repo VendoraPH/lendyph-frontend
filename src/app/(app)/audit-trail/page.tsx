@@ -46,6 +46,7 @@ import {
   Monitor,
   X,
   Cog,
+  UserRound,
   ShieldAlert,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -112,6 +113,7 @@ const ACTION_FILTER_ITEMS = [{ value: "all", label: "All Actions" }, ...AUDIT_AC
 
 /** A user's initials, or a system mark for a row no user made. */
 function AuditAvatarContent({ log, iconClassName }: { log: AuditLog; iconClassName: string }) {
+  if (log.actor_type === "member") return <UserRound className={iconClassName} aria-hidden="true" />;
   if (!log.user?.full_name?.trim()) return <Cog className={iconClassName} aria-hidden="true" />;
   return <>{getInitials(log.user.full_name)}</>;
 }

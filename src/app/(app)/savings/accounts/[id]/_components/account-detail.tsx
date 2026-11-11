@@ -26,6 +26,7 @@ import {
   canDeposit,
   canOfferClose,
   canWithdraw,
+  heldForRequestsNote,
   statusChangeOffers,
   type StatusOffer,
 } from "../../../_lib/savings-rules";
@@ -206,7 +207,7 @@ function Balances({ account }: { account: SavingsAccount }) {
   const items = [
     { label: "Balance", value: account.balance, strong: true },
     { label: "Available to withdraw", value: account.available_balance },
-    { label: "On hold", value: account.hold_amount },
+    { label: "On hold", value: account.hold_amount, note: heldForRequestsNote(account) },
     { label: "Waiting for approval", value: account.pending_amount },
     { label: "Accrued interest (not yet credited)", value: account.accrued_interest },
   ];
@@ -219,6 +220,7 @@ function Balances({ account }: { account: SavingsAccount }) {
             <p className={`mt-1 tabular-nums ${i.strong ? "text-2xl font-semibold" : "text-xl font-medium"}`}>
               {formatCurrency(i.value)}
             </p>
+            {"note" in i && i.note && <p className="mt-1 text-xs text-muted-foreground">{i.note}</p>}
           </CardContent>
         </Card>
       ))}

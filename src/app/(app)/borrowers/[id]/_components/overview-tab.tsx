@@ -6,6 +6,9 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import type { Borrower, BorrowerLoanSummary, Loan, CoMaker } from "@/types";
 import { loanNeedsCoMaker } from "../_lib/co-maker-recommendation";
 import { NotificationPreferencesCard } from "./notification-preferences-card";
+import { PortalAccessCard } from "./portal-access-card";
+import { env } from "@/config/env";
+import { usePermission } from "@/hooks";
 // Constants removed — valid_id_type not in API response
 
 interface OverviewTabProps {
@@ -32,6 +35,10 @@ function InfoItem({ label, value }: { label: string; value?: string | null }) {
 export function OverviewTab({ borrower, loans, coMakers, summary }: OverviewTabProps) {
   const money = (amount: number | undefined) => (amount === undefined ? "—" : formatCurrency(amount));
   const count = (n: number | undefined) => (n === undefined ? "—" : String(n));
+  const { can } = usePermission();
+  // Members only: an applicant still pending (or rejected) has no portal access to manage.
+  const showPortal =
+    env.features.memberPortal && can("member_portal:view") && borrower.status !== "pending" && borrower.status !== "rejected";
 
   const totalCoMakers = coMakers.length;
   const loansNeedingCoMaker = loans.filter(loanNeedsCoMaker).length;
@@ -135,6 +142,8 @@ export function OverviewTab({ borrower, loans, coMakers, summary }: OverviewTabP
       </Card>
 
       <NotificationPreferencesCard borrowerId={borrower.id} />
+
+      {showPortal && <PortalAccessCard borrowerId={borrower.id} memberName={borrower.full_name} />}
     </div>
   );
 }

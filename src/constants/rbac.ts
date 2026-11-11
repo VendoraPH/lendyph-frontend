@@ -24,6 +24,19 @@ export const CDA_PERMISSIONS: readonly Permission[] = [
 ];
 
 /**
+ * The six Member Portal staff permissions, as lendyph-backend seeds them
+ * (migration 2026_11_11_700200), in that order.
+ */
+export const MEMBER_PORTAL_PERMISSIONS: readonly Permission[] = [
+  "member_portal:view",
+  "member_portal:invite",
+  "member_portal:manage",
+  "member_portal:requests",
+  "member_portal:announcements",
+  "member_portal:settings",
+];
+
+/**
  * Every permission lendyph-backend creates (RoleAndPermissionSeeder and the
  * permission migrations). The seeder syncs `Permission::all()` to both
  * super_admin and admin, and each permission migration grants both, so both
@@ -150,6 +163,10 @@ const EVERY_PERMISSION: Permission[] = [
   // roles get them only through the roles screen, and each needs
   // `branches:view_all` to work.
   ...CDA_PERMISSIONS,
+  // Member Portal, staff side (Phase 3). Seeded for admin and super_admin
+  // only. Suggested, not granted: a manager view, invite, manage and requests;
+  // a cashier requests; a loan officer view and invite.
+  ...MEMBER_PORTAL_PERMISSIONS,
 ];
 
 /**

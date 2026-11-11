@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import Link from "next/link";
 import { Plus } from "lucide-react";
 import { DataState } from "@/components/common/data-state";
 import { PermissionButton } from "@/components/common/permission-button";
@@ -14,7 +15,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useApiResource } from "@/hooks";
+import { env } from "@/config/env";
+import { useApiResource, usePermission } from "@/hooks";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { savingsService } from "@/services";
 import type { SavingsAccount, SavingsHold } from "@/types";
@@ -23,6 +25,7 @@ import {
   HOLD_TYPE_LABELS,
   actorName,
   canPlaceHold,
+  holdReleaseOffer,
   labelOf,
 } from "../../../_lib/savings-rules";
 import { PlaceHoldDialog } from "./place-hold-dialog";
@@ -111,16 +114,7 @@ export function HoldsCard({ account, onChanged }: HoldsCardProps) {
                       </TableCell>
                       <TableCell>{actorName(h.created_by)}</TableCell>
                       <TableCell>
-                        {h.status === "active" && (
-                          <PermissionButton
-                            permission="savings:transact"
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setReleasing(h)}
-                          >
-                            Release
-                          </PermissionButton>
-                        )}
+                        <HoldAction hold={h} onRelease={() => setReleasing(h)} />
                       </TableCell>
                     </TableRow>
                   ))}
@@ -139,5 +133,30 @@ export function HoldsCard({ account, onChanged }: HoldsCardProps) {
         onReleased={changed}
       />
     </Card>
+  );
+}
+
+/**
+ * Release for a hold staff placed. A member request's hold is released by
+ * deciding the request, so it links there (for those who decide requests)
+ * or says so.
+ */
+function HoldAction({ hold, onRelease }: { hold: SavingsHold; onRelease: () => void }) {
+  const { can } = usePermission();
+  const offer = holdReleaseOffer(hold);
+  if (offer.note) {
+    return env.features.memberPortal && can("member_portal:requests") ? (
+      <Link href="/member-portal/requests" className="text-xs text-muted-foreground underline">
+        {offer.note}
+      </Link>
+    ) : (
+      <span className="text-xs text-muted-foreground">{offer.note}</span>
+    );
+  }
+  if (!offer.release) return null;
+  return (
+    <PermissionButton permission="savings:transact" size="sm" variant="ghost" onClick={onRelease}>
+      Release
+    </PermissionButton>
   );
 }
