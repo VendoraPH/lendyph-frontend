@@ -2454,6 +2454,15 @@ const ALL_REPORT_IDS: Record<ReportId, true> = {
   savings_dormant: true,
   savings_statement: true,
   savings_gl_control: true,
+  savings_summary: true,
+  savings_accounts: true,
+  savings_deposits: true,
+  savings_withdrawals: true,
+  savings_large_transactions: true,
+  savings_time_deposits: true,
+  savings_interest_accrual: true,
+  savings_account_activity: true,
+  savings_member_statement: true,
 };
 
 test("every report id has its own reference prefix", () => {

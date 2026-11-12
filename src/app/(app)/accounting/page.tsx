@@ -48,6 +48,7 @@ import { FigureCard, FigureSection } from "./_components/dashboard/figure-card";
 import { CashAccountsTable } from "./_components/dashboard/cash-accounts-table";
 import { ReceivablesSection } from "./_components/dashboard/receivables-section";
 import { TrendCharts } from "./_components/dashboard/trend-charts";
+import { SavingsGlBannerCard } from "./_components/dashboard/savings-gl-banner";
 import { journalSourceLabel } from "./_lib/display-labels";
 import { journalHref } from "./journals/_lib/journal-register";
 import { centavosOrDash } from "./_lib/dashboard-figures";
@@ -183,6 +184,8 @@ function DashboardBody({ data }: { data: AccountingDashboard }) {
           )}
         </CardContent>
       </Card>
+
+      <SavingsGlBannerCard data={data} />
 
       <div className="space-y-4">
         <FigureSection title="Money" className="sm:grid-cols-3">

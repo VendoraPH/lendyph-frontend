@@ -221,6 +221,17 @@ export const API_ENDPOINTS = {
     SAVINGS_STATEMENT: (accountId: number) => `/reports/savings/statement/${accountId}`,
     SAVINGS_GL_CONTROL: "/reports/savings/gl-control",
     SAVINGS_EXPORT: (report: string) => `/reports/savings/${report}/export`,
+    // The rest of the Savings task's deposit reports (gap round S5): every one
+    // takes `product_id`; the summary also `group_by` (branch or product).
+    SAVINGS_SUMMARY: "/reports/savings/summary",
+    SAVINGS_ACCOUNT_LIST: "/reports/savings/accounts",
+    SAVINGS_DEPOSITS: "/reports/savings/deposits",
+    SAVINGS_WITHDRAWALS: "/reports/savings/withdrawals",
+    SAVINGS_LARGE_TRANSACTIONS: "/reports/savings/large-transactions",
+    SAVINGS_TIME_DEPOSITS: "/reports/savings/time-deposits",
+    SAVINGS_INTEREST_ACCRUAL: "/reports/savings/interest-accrual",
+    SAVINGS_ACCOUNT_ACTIVITY: "/reports/savings/account-activity",
+    SAVINGS_MEMBER_STATEMENT: (borrowerId: number) => `/reports/savings/member-statement/${borrowerId}`,
     // Running-balance statement for one member. Separate from SHARE_CAPITAL
     // (the org-wide summary) and from SHARE_CAPITAL.LEDGER_LIST, whose
     // paginator caps at 100 rows and carries no opening/closing balance.
@@ -442,6 +453,9 @@ export const API_ENDPOINTS = {
    * with `{approval}` instead of 201.
    */
   SAVINGS: {
+    // The Savings dashboard (gap round S5): `from`, `to`, `branch_id`, `product_id`.
+    DASHBOARD: "/savings/dashboard",
+
     SETTINGS: "/savings/settings",
     PREPARE_BOOKS: "/savings/settings/prepare-books",
     TAX_RULES: "/savings/tax-rules",

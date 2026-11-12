@@ -9,7 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { FileStack, Printer, Search, Table2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { PRINTABLE_CATALOG } from "@/lib/printables/catalog";
+import { visiblePrintables } from "@/lib/printables/catalog";
+import { usePermission } from "@/hooks";
 import { SUBJECT_ACCENT, SUBJECT_META } from "@/lib/printables/types";
 import type { PrintableDefinition, PrintableSubject } from "@/lib/printables/types";
 
@@ -23,12 +24,22 @@ import type { PrintableDefinition, PrintableSubject } from "@/lib/printables/typ
  * they behave differently.
  */
 
-const ORDERED_SUBJECTS: PrintableSubject[] = ["loan", "borrower", "repayment"];
+const ORDERED_SUBJECTS: PrintableSubject[] = [
+  "loan",
+  "borrower",
+  "repayment",
+  "savings_account",
+  "savings_withdrawal",
+  "time_deposit",
+];
 
 const SUBJECT_DESCRIPTION: Record<PrintableSubject, string> = {
   loan: "Documents issued against a single loan account",
   borrower: "Statements and certificates issued to a member",
   repayment: "Receipts issued for a payment",
+  savings_account: "Forms, agreements and notices for a savings account",
+  savings_withdrawal: "Slips for a posted savings withdrawal",
+  time_deposit: "Notices and forms for a time deposit",
 };
 
 /**
@@ -47,10 +58,13 @@ const IMPORT_TEMPLATE = {
 
 export default function PrintablesPage() {
   const [query, setQuery] = useState("");
+  const { can } = usePermission();
+  // Savings documents only where savings is switched on, for savings:view.
+  const catalog = visiblePrintables(can);
 
   const grouped = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    const filtered = PRINTABLE_CATALOG.filter((p) => {
+    const filtered = catalog.filter((p) => {
       if (!needle) return true;
       return (
         p.title.toLowerCase().includes(needle) ||
@@ -64,7 +78,7 @@ export default function PrintablesPage() {
       bySubject.set(p.subject, list);
     });
     return bySubject;
-  }, [query]);
+  }, [query, catalog]);
 
   const templateMatches = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -105,7 +119,7 @@ export default function PrintablesPage() {
                     Print-ready
                   </Badge>
                   <span className="text-muted-foreground">
-                    {PRINTABLE_CATALOG.length} documents available
+                    {catalog.length} documents available
                   </span>
                 </div>
               </div>

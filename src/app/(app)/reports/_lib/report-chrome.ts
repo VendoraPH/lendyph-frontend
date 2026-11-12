@@ -48,6 +48,15 @@ const REFERENCE_PREFIX: Record<ReportId, string> = {
   savings_dormant: "SDR",
   savings_statement: "SSA",
   savings_gl_control: "SGC",
+  savings_summary: "SDS",
+  savings_accounts: "SAL",
+  savings_deposits: "SDP",
+  savings_withdrawals: "SWR",
+  savings_large_transactions: "SLT",
+  savings_time_deposits: "STO",
+  savings_interest_accrual: "SIA",
+  savings_account_activity: "SAA",
+  savings_member_statement: "MDS",
 };
 
 /** The prefixes of savings records' own numbers, which no report reference may start with. */
@@ -224,7 +233,7 @@ export async function applyChrome(
   if (hasSignatures) return withMeta;
 
   const signatures: ReportSection =
-    doc.reportId === "statement_of_account"
+    doc.reportId === "statement_of_account" || doc.reportId === "savings_member_statement"
       ? STATEMENT_SIGNATURES
       : { kind: "signatures", roles: SIGNATORY_ROLES };
   return { ...withMeta, sections: [...withMeta.sections, signatures] };

@@ -27,13 +27,27 @@ export type PrintableId =
   | "member_ledger_card"
   | "time_deposit_certificate"
   | "savings_passbook"
-  | "savings_receipt";
+  | "savings_receipt"
+  // Savings documents in the catalog (gap round F4c).
+  | "savings_opening_form"
+  | "savings_agreement"
+  | "savings_closure_form"
+  | "savings_dormancy_notice"
+  | "savings_withdrawal_slip"
+  | "time_deposit_maturity_notice"
+  | "time_deposit_early_termination";
 
 /**
  * What a template needs picked before it can run. Mirrors the reports'
  * `ReportSubject`, extended with the repayment a receipt is printed from.
  */
-export type PrintableSubject = "loan" | "borrower" | "repayment";
+export type PrintableSubject =
+  | "loan"
+  | "borrower"
+  | "repayment"
+  | "savings_account"
+  | "savings_withdrawal"
+  | "time_deposit";
 
 /**
  * Letterhead identity.
@@ -200,6 +214,14 @@ export interface PrintableDefinition {
   /** lucide-react icon, as in `REPORT_CATALOG`. */
   icon: import("lucide-react").LucideIcon;
   /**
+   * A permission beyond `reports:view` that the document's data needs, such as
+   * `savings:view` for the savings documents. Without it the document is not
+   * listed and its page answers "not found".
+   */
+  permission?: import("@/types").Permission;
+  /** False when the document's module is switched off for this deployment. */
+  available?: boolean;
+  /**
    * Fetch + map. Fails soft the way report builders do: a rejected request
    * still yields a document, with blanks where the data would have been, so a
    * form can always be printed and completed by hand.
@@ -214,6 +236,9 @@ export const SUBJECT_META: Record<
   loan: { label: "Loan", placeholder: "Search loan or member…" },
   borrower: { label: "Member", placeholder: "Search member…" },
   repayment: { label: "Payment", placeholder: "Search receipt number…" },
+  savings_account: { label: "Savings Account", placeholder: "Search account number or member…" },
+  savings_withdrawal: { label: "Withdrawal", placeholder: "Search reference or member…" },
+  time_deposit: { label: "Time Deposit", placeholder: "Search certificate number or member…" },
 };
 
 /**
@@ -231,4 +256,7 @@ export const SUBJECT_ACCENT: Record<
   loan: { text: "text-blue-600", bg: "bg-blue-50", ring: "ring-blue-200" },
   borrower: { text: "text-purple-600", bg: "bg-purple-50", ring: "ring-purple-200" },
   repayment: { text: "text-emerald-600", bg: "bg-emerald-50", ring: "ring-emerald-200" },
+  savings_account: { text: "text-teal-600", bg: "bg-teal-50", ring: "ring-teal-200" },
+  savings_withdrawal: { text: "text-orange-600", bg: "bg-orange-50", ring: "ring-orange-200" },
+  time_deposit: { text: "text-amber-600", bg: "bg-amber-50", ring: "ring-amber-200" },
 };

@@ -31,7 +31,7 @@ import type {
  */
 
 /** A row with `field` put into words through `map`. */
-function inWords(
+export function inWords(
   row: Record<string, unknown>,
   fields: Record<string, Record<string, string>>,
 ): Record<string, unknown> {
@@ -48,7 +48,7 @@ function asOfText(raw: unknown): string {
   return formatValue(pick(asRecord(raw), ["as_of"]) ?? new Date(), "date");
 }
 
-function pointInTimeMeta(title: string, subtitle: string, raw: unknown): ReportDocument["meta"] {
+export function pointInTimeMeta(title: string, subtitle: string, raw: unknown): ReportDocument["meta"] {
   return { title, subtitle, asOf: asOfText(raw), generatedAt: formatGeneratedAt(), org: "" };
 }
 
@@ -206,7 +206,7 @@ const MATURITY_COLUMNS: ReportColumn[] = [
  * have ready to pay out or roll over.
  */
 /** A rate as every savings screen shows it ("4%", "2.5%"), or a dash when absent. */
-function rateText(value: unknown): string {
+export function rateText(value: unknown): string {
   return typeof value === "string" || typeof value === "number" ? `${formatRate(value)}%` : "—";
 }
 
@@ -389,7 +389,7 @@ const STATEMENT_COLUMNS: ReportColumn[] = [
   { key: "balance_after", header: "Balance", format: "currency", align: "right", width: 130 },
 ];
 
-function text(value: unknown): string {
+export function text(value: unknown): string {
   return typeof value === "string" && value.trim() ? value : "—";
 }
 
