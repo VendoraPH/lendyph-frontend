@@ -23,6 +23,7 @@ import {
   STAFF_PAGE_SIZE,
   isStaffListForbidden,
   normaliseStaffQuery,
+  staffListParams,
   staffSearchStatus,
 } from "@/lib/staff-search";
 
@@ -84,6 +85,8 @@ const staff = seedStaff();
 let requests: Array<{ path: string; query: Record<string, string> }> = [];
 // Whether the caller holds `loans:create` or `loans:update`.
 let permitted = true;
+// Whether the caller holds `savings:create` (gap round S4: lets `for=savings` through).
+let savingsCreate = false;
 
 let staffService: typeof import("./staff.service").staffService;
 
@@ -99,12 +102,13 @@ before(async () => {
       res.statusCode = 404;
       return res.end(JSON.stringify({ message: "not stubbed" }));
     }
-    if (!permitted) {
+    // ListStaffRequest::authorize(): the loan permissions, or savings:create with for=savings.
+    if (!permitted && !(query.for === "savings" && savingsCreate)) {
       res.statusCode = 403;
       return res.end(JSON.stringify({ message: "This action is unauthorized." }));
     }
     const perPage = perPageFor(query.per_page);
-    if (perPage === null || (query.search ?? "").length > 100) {
+    if (perPage === null || (query.search ?? "").length > 100 || (query.for !== undefined && query.for !== "savings")) {
       res.statusCode = 422;
       return res.end(JSON.stringify({ message: "The given data was invalid." }));
     }
@@ -195,5 +199,26 @@ describe("staffService.list", () => {
       assert.equal(isStaffListForbidden(err), false);
       return true;
     });
+  });
+
+  test("the savings opening form asks with for=savings, which a teller with only savings:create may read", async () => {
+    permitted = false;
+    savingsCreate = true;
+    requests = [];
+    try {
+      const res = await staffService.list(staffListParams("savings", "juan"));
+      assert.deepEqual(requests, [
+        { path: "/staff", query: { for: "savings", search: "juan", per_page: String(STAFF_PAGE_SIZE) } },
+      ]);
+      assert.deepEqual(res.data, [{ id: 100, full_name: "Juan Dela Cruz" }]);
+      // The loan pickers send no `for`, so the same teller is refused there.
+      await assert.rejects(staffService.list(staffListParams("loans", "")), (err: unknown) =>
+        isStaffListForbidden(err),
+      );
+      assert.deepEqual(requests[1].query, { per_page: String(STAFF_PAGE_SIZE) });
+    } finally {
+      permitted = true;
+      savingsCreate = false;
+    }
   });
 });

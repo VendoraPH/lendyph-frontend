@@ -13,8 +13,9 @@ import {
   ComboboxList,
   ComboboxTrigger,
 } from "@/components/ui/combobox";
+import { usePermission } from "@/hooks/use-permission";
 import { useStaffSearch } from "@/hooks/use-staff-search";
-import { STAFF_SEARCH_MAX_LENGTH } from "@/lib/staff-search";
+import { STAFF_PICKER_PURPOSES, STAFF_SEARCH_MAX_LENGTH, type StaffPickerPurpose } from "@/lib/staff-search";
 import { cn } from "@/lib/utils";
 import type { StaffMember } from "@/types";
 
@@ -34,6 +35,11 @@ interface StaffPickerProps {
   disabled?: boolean;
   placeholder?: string;
   className?: string;
+  /**
+   * `savings` for the savings opening form: asks `GET /staff?for=savings` and
+   * is open to `savings:create`. Defaults to the loan forms' rule.
+   */
+  purpose?: StaffPickerPurpose;
 }
 
 /**
@@ -55,8 +61,13 @@ export function StaffPicker({
   disabled = false,
   placeholder = "Select account officer",
   className,
+  purpose = "loans",
 }: StaffPickerProps) {
-  const search = useStaffSearch();
+  const { canAny } = usePermission();
+  const rule = STAFF_PICKER_PURPOSES[purpose];
+  // The savings form knows up front whether its user may read the list; the
+  // loan forms keep relying on the server's 403, as before.
+  const search = useStaffSearch(purpose, purpose === "loans" || canAny([...rule.permissions]));
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const noteId = useId();
@@ -161,8 +172,7 @@ export function StaffPicker({
       {search.forbidden && (
         <p id={noteId} className="flex items-start gap-1.5 text-xs text-muted-foreground">
           <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-          Choosing an account officer needs permission to create, edit or
-          restructure loans, which your role does not have.
+          {rule.lockedNote}
         </p>
       )}
     </div>

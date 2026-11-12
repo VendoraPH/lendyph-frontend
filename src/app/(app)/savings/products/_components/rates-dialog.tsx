@@ -28,7 +28,8 @@ import type { SavingsProduct } from "@/types";
 import { FormField } from "../../_components/field";
 import { OptionSelect } from "../../_components/option-select";
 import { actorName } from "../../_lib/savings-rules";
-import { rateTermLabel, readRateDraft, type RateDraft } from "../_lib/rate-draft";
+import { ladderLines, rateTermLabel, readRateDraft, tierLabel, type RateDraft } from "../_lib/rate-draft";
+import { TierRateForm } from "./tier-rate-form";
 
 interface RatesDialogProps {
   product: SavingsProduct | null;
@@ -37,9 +38,10 @@ interface RatesDialogProps {
 }
 
 /**
- * A product's rates by term: the rate in force today, the full history, and
- * "Add rate". Rates are append-only: a new rate takes effect on its date and
- * never rewrites interest already credited.
+ * A product's rates: on a time deposit one per term, on a regular product a
+ * ladder of balance tiers (gap round S2). Shows what is in force today, the
+ * full history, and the form to add rates. Rates are append-only: new rates
+ * take effect on their date and never rewrite interest already credited.
  */
 export function RatesDialog({ product, onOpenChange, onAdded }: RatesDialogProps) {
   const open = product !== null;
@@ -54,6 +56,11 @@ export function RatesDialog({ product, onOpenChange, onAdded }: RatesDialogProps
   const history = useApiResource(fetchHistory, open);
   const td = product?.kind === "time_deposit";
 
+  const added = () => {
+    history.refetch();
+    onAdded();
+  };
+
   function add() {
     if (!product) return;
     const { input, problems } = readRateDraft(draft, product, today);
@@ -62,8 +69,7 @@ export function RatesDialog({ product, onOpenChange, onAdded }: RatesDialogProps
       ?.then(() => {
         notifySuccess("Rate added", `${formatRate(input.annual_rate)}% from ${formatDate(input.effective_from)}`);
         setDraft((d) => ({ ...d, rate: "" }));
-        history.refetch();
-        onAdded();
+        added();
       })
       .catch((err: unknown) => notifyError(err, "Couldn't add the rate."));
   }
@@ -87,8 +93,14 @@ export function RatesDialog({ product, onOpenChange, onAdded }: RatesDialogProps
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Term</TableHead>
-                  <TableHead className="text-right">Annual rate</TableHead>
+                  {td ? (
+                    <>
+                      <TableHead>Term</TableHead>
+                      <TableHead className="text-right">Annual rate</TableHead>
+                    </>
+                  ) : (
+                    <TableHead colSpan={2}>Balance and annual rate</TableHead>
+                  )}
                   <TableHead>Since</TableHead>
                 </TableRow>
               </TableHeader>
@@ -100,13 +112,22 @@ export function RatesDialog({ product, onOpenChange, onAdded }: RatesDialogProps
                     </TableCell>
                   </TableRow>
                 ) : (
-                  product?.current_rates.map((r) => (
-                    <TableRow key={`${r.term_days ?? "all"}-${r.effective_from}`}>
-                      <TableCell>{rateTermLabel(r.term_days)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{formatRate(r.annual_rate)}%</TableCell>
-                      <TableCell>{formatDate(r.effective_from)}</TableCell>
-                    </TableRow>
-                  ))
+                  product?.current_rates.map((r) =>
+                    td ? (
+                      <TableRow key={`${r.term_days ?? "all"}-${r.effective_from}`}>
+                        <TableCell>{rateTermLabel(r.term_days)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{formatRate(r.annual_rate)}%</TableCell>
+                        <TableCell>{formatDate(r.effective_from)}</TableCell>
+                      </TableRow>
+                    ) : (
+                      ladderLines(r.tiers?.length ? r.tiers : [{ min_balance: null, annual_rate: r.annual_rate }]).map((line, i) => (
+                        <TableRow key={`${r.effective_from}-${i}`}>
+                          <TableCell colSpan={2}>{line}</TableCell>
+                          <TableCell>{formatDate(r.effective_from)}</TableCell>
+                        </TableRow>
+                      ))
+                    ),
+                  )
                 )}
               </TableBody>
             </Table>
@@ -115,41 +136,45 @@ export function RatesDialog({ product, onOpenChange, onAdded }: RatesDialogProps
 
         <section aria-labelledby="rates-add" className="space-y-2">
           <h3 id="rates-add" className="text-sm font-medium">
-            Add rate
+            {td ? "Add rate" : "Add rates"}
           </h3>
-          <div className="grid items-end gap-3 sm:grid-cols-4">
-            {td && (
-              <FormField id="rt-term" label="Term">
-                <OptionSelect
-                  id="rt-term"
-                  value={draft.termDays}
-                  onChange={(v) => setDraft((d) => ({ ...d, termDays: v }))}
-                  options={(product?.term_options_days ?? []).map((t) => ({ value: String(t), label: rateTermLabel(t) }))}
+          {product && !td ? (
+            <TierRateForm key={product.id} product={product} today={today} onAdded={added} />
+          ) : (
+            <div className="grid items-end gap-3 sm:grid-cols-4">
+              {td && (
+                <FormField id="rt-term" label="Term">
+                  <OptionSelect
+                    id="rt-term"
+                    value={draft.termDays}
+                    onChange={(v) => setDraft((d) => ({ ...d, termDays: v }))}
+                    options={(product?.term_options_days ?? []).map((t) => ({ value: String(t), label: rateTermLabel(t) }))}
+                  />
+                </FormField>
+              )}
+              <FormField id="rt-rate" label="Annual rate (%)">
+                <Input
+                  id="rt-rate"
+                  inputMode="decimal"
+                  value={draft.rate}
+                  onChange={(e) => setDraft((d) => ({ ...d, rate: e.target.value }))}
+                  placeholder="1.2500"
                 />
               </FormField>
-            )}
-            <FormField id="rt-rate" label="Annual rate (%)">
-              <Input
-                id="rt-rate"
-                inputMode="decimal"
-                value={draft.rate}
-                onChange={(e) => setDraft((d) => ({ ...d, rate: e.target.value }))}
-                placeholder="1.2500"
-              />
-            </FormField>
-            <FormField id="rt-from" label="Effective from">
-              <Input
-                id="rt-from"
-                type="date"
-                min={today}
-                value={draft.effectiveFrom}
-                onChange={(e) => setDraft((d) => ({ ...d, effectiveFrom: e.target.value }))}
-              />
-            </FormField>
-            <PermissionButton permission="savings:settings" onClick={add} disabled={submitting}>
-              {submitting ? "Adding…" : "Add rate"}
-            </PermissionButton>
-          </div>
+              <FormField id="rt-from" label="Effective from">
+                <Input
+                  id="rt-from"
+                  type="date"
+                  min={today}
+                  value={draft.effectiveFrom}
+                  onChange={(e) => setDraft((d) => ({ ...d, effectiveFrom: e.target.value }))}
+                />
+              </FormField>
+              <PermissionButton permission="savings:settings" onClick={add} disabled={submitting}>
+                {submitting ? "Adding…" : "Add rate"}
+              </PermissionButton>
+            </div>
+          )}
         </section>
 
         <section aria-labelledby="rates-history" className="space-y-2">
@@ -169,7 +194,7 @@ export function RatesDialog({ product, onOpenChange, onAdded }: RatesDialogProps
                   <TableHeader>
                     <TableRow>
                       <TableHead>Effective from</TableHead>
-                      <TableHead>Term</TableHead>
+                      <TableHead>{td ? "Term" : "Balance"}</TableHead>
                       <TableHead className="text-right">Annual rate</TableHead>
                       <TableHead>Added by</TableHead>
                     </TableRow>
@@ -178,7 +203,7 @@ export function RatesDialog({ product, onOpenChange, onAdded }: RatesDialogProps
                     {rows.map((r, i) => (
                       <TableRow key={r.id ?? `${r.term_days ?? "all"}-${r.effective_from}-${i}`}>
                         <TableCell>{formatDate(r.effective_from)}</TableCell>
-                        <TableCell>{rateTermLabel(r.term_days)}</TableCell>
+                        <TableCell>{td ? rateTermLabel(r.term_days) : tierLabel(r.min_balance)}</TableCell>
                         <TableCell className="text-right tabular-nums">{formatRate(r.annual_rate)}%</TableCell>
                         <TableCell>{actorName(r.created_by)}</TableCell>
                       </TableRow>

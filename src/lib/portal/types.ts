@@ -288,7 +288,10 @@ export interface SavingsAccount {
   maintaining_balance: Pesos;
   available_balance: Pesos;
   withdrawable: Pesos;
+  /** The tier the ledger balance reaches today (gap round S2). */
   annual_rate: string | null;
+  /** The ladder in force today, base tier (`min_balance` null) first. Absent before S2. */
+  rate_tiers?: Array<{ min_balance: Pesos | null; annual_rate: string }>;
   accrued_interest: Pesos;
   interest_credited_through: string | null;
   opened_on: string | null;

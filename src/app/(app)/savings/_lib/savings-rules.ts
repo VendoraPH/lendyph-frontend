@@ -156,6 +156,7 @@ export const SKIP_REASON_LABELS: Record<string, string> = {
   no_days: "Not open in the period",
   closed: "Account closed",
   no_rate: "No rate in force",
+  below_earning_tier: "Below the first tier that earns interest",
 };
 
 /** Who did something; the system when the server sent no user. */

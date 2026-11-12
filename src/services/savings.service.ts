@@ -26,6 +26,7 @@ import type {
   SavingsAccountsResponse,
   SavingsClosingQuote,
   SavingsHold,
+  SavingsOpeningCheck,
   SavingsProduct,
   SavingsProductCreateInput,
   SavingsProductRate,
@@ -36,6 +37,7 @@ import type {
   SavingsStatusInput,
   SavingsTaxRule,
   SavingsTaxRuleInput,
+  SavingsTierRateInput,
   SavingsTransaction,
   SavingsTransactionInput,
   SavingsTransactionsResponse,
@@ -82,6 +84,12 @@ export const savingsService = {
   rates: (id: number) => api.get<SavingsProductRate[]>(E.PRODUCT_RATES(id)),
   /** Append-only: a new row, `effective_from` on or after today. */
   addRate: (id: number, data: SavingsRateInput) => api.post<SavingsProductRate>(E.PRODUCT_RATES(id), data),
+  /**
+   * A ladder for one date (regular products; gap round S2), base tier first.
+   * It replaces that date's whole ladder; answers the ladder now in force.
+   */
+  addRateTiers: (id: number, data: SavingsTierRateInput) =>
+    api.post<SavingsProductRate[]>(E.PRODUCT_RATES(id), data),
 
   // ── Accounts ──
 
@@ -93,6 +101,13 @@ export const savingsService = {
   accounts: (params?: Record<string, unknown>) =>
     api.getRaw<SavingsAccountsResponse>(E.ACCOUNTS, { params }),
   account: (id: number) => api.get<SavingsAccount>(E.ACCOUNT(id)),
+  /**
+   * The member check before opening (gap round S1): standing, loans, share
+   * capital, accounts and the products the member may open. 404 for a member
+   * outside the caller's branches.
+   */
+  openingCheck: (borrowerId: number) =>
+    api.get<SavingsOpeningCheck>(E.OPENING_CHECK, { params: { borrower_id: borrowerId } }),
   openAccount: (data: OpenSavingsAccountInput, key: string | null) =>
     api.post<SavingsAccount>(E.ACCOUNTS, data, idempotencyHeaders(key)),
 

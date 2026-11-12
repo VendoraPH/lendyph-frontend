@@ -5,6 +5,11 @@ import type { PaginatedResponse, StaffMember } from "@/types";
 /** The query `StaffController::index()` accepts (`ListStaffRequest::rules()`). */
 export interface StaffListFilters {
   /**
+   * `savings`: the savings opening form's picker, also allowed with
+   * `savings:create` (gap round S4). Left out by the loan pickers.
+   */
+  for?: "savings";
+  /**
    * Matches first name, last name, or "first last" — never username or email.
    * More than 100 characters is a 422.
    */

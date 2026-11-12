@@ -3,7 +3,9 @@ import type {
   InterestCrediting,
   SavingsProduct,
   SavingsProductCreateInput,
+  SavingsMemberType,
   SavingsProductKind,
+  SavingsProductRulesInput,
   SavingsProductUpdateInput,
 } from "@/types";
 import { parseTermOptions } from "../../_lib/time-deposit-rules";
@@ -23,7 +25,28 @@ export interface ProductDraft {
   /** Time deposits: the regular product whose rate pays an early termination. */
   preProductId: string;
   active: boolean;
+  // Rules (regular products; a time deposit keeps only eligibility). Blank is no limit.
+  maxBalance: string;
+  minDeposit: string;
+  maxDeposit: string;
+  minWithdrawal: string;
+  maxWithdrawal: string;
+  /** Blank is unlimited. */
+  freeWithdrawals: string;
+  /** Beyond the free count: charge `excessFee`, or refuse the withdrawal. */
+  excessMode: "fee" | "refuse";
+  excessFee: string;
+  allowDeposits: boolean;
+  allowWithdrawals: boolean;
+  allowTransfers: boolean;
+  /** None picked is every member type. */
+  memberTypes: SavingsMemberType[];
+  /** None picked is every branch. */
+  branchIds: number[];
 }
+
+/** The member types in the order the server stores them. */
+export const MEMBER_TYPES: readonly SavingsMemberType[] = ["regular", "associate"];
 
 export function toDraft(p: SavingsProduct | null, kind: SavingsProductKind = "regular"): ProductDraft {
   return {
@@ -39,6 +62,20 @@ export function toDraft(p: SavingsProduct | null, kind: SavingsProductKind = "re
     preProductId: p?.pretermination_product_id ? String(p.pretermination_product_id) : "",
     // A new product starts off: the server turns it on only once the books are ready.
     active: p?.is_active ?? false,
+    maxBalance: p?.max_balance ?? "",
+    minDeposit: p?.min_deposit ?? "",
+    maxDeposit: p?.max_deposit ?? "",
+    minWithdrawal: p?.min_withdrawal ?? "",
+    maxWithdrawal: p?.max_withdrawal ?? "",
+    freeWithdrawals: p?.free_withdrawals_per_month == null ? "" : String(p.free_withdrawals_per_month),
+    // A stored product with a free count and no fee refuses beyond it.
+    excessMode: p && p.free_withdrawals_per_month != null && p.excess_withdrawal_fee == null ? "refuse" : "fee",
+    excessFee: p?.excess_withdrawal_fee ?? "",
+    allowDeposits: p?.allow_deposits ?? true,
+    allowWithdrawals: p?.allow_withdrawals ?? true,
+    allowTransfers: p?.allow_transfers ?? true,
+    memberTypes: p?.eligible_member_types ?? [],
+    branchIds: p?.eligible_branch_ids ?? [],
   };
 }
 
@@ -60,6 +97,57 @@ function moneyField(raw: string, label: string, bad: string[]): string {
     return "0.00";
   }
   return parsed.value;
+}
+
+/** A limit as typed: blank is no limit (null), else two-decimal text. */
+function limitField(raw: string, label: string, bad: string[]): string | null {
+  if (raw.trim() === "") return null;
+  const parsed = parseMoneyInput(raw, { label, allowZero: true });
+  if (!parsed.ok) {
+    bad.push(label);
+    return null;
+  }
+  return parsed.value;
+}
+
+/**
+ * The rule fields to send. A time deposit product takes only eligibility (the
+ * server refuses the rest there). Nothing is compared here: the server checks
+ * each minimum against its maximum and answers in words.
+ */
+function readRules(d: ProductDraft, problems: string[]): SavingsProductRulesInput {
+  const eligibility: SavingsProductRulesInput = {
+    eligible_member_types: d.memberTypes.length ? MEMBER_TYPES.filter((t) => d.memberTypes.includes(t)) : null,
+    eligible_branch_ids: d.branchIds.length ? [...new Set(d.branchIds)].sort((a, b) => a - b) : null,
+  };
+  if (d.kind === "time_deposit") return eligibility;
+
+  const free = d.freeWithdrawals.trim();
+  let freeCount: number | null = null;
+  if (free !== "") {
+    if (/^\d{1,4}$/.test(free) && Number(free) <= 1000) freeCount = Number(free);
+    else problems.push("Free withdrawals a month (a whole number, or blank for no limit)");
+  }
+  let fee: string | null = null;
+  if (free !== "" && d.excessMode === "fee") {
+    const parsed = parseMoneyInput(d.excessFee, { label: "Excess-withdrawal fee", allowZero: true });
+    if (parsed.ok) fee = parsed.value;
+    else problems.push("Excess-withdrawal fee");
+  }
+
+  return {
+    max_balance: limitField(d.maxBalance, "Maximum balance", problems),
+    min_deposit: limitField(d.minDeposit, "Minimum deposit", problems),
+    max_deposit: limitField(d.maxDeposit, "Maximum deposit", problems),
+    min_withdrawal: limitField(d.minWithdrawal, "Minimum withdrawal", problems),
+    max_withdrawal: limitField(d.maxWithdrawal, "Maximum withdrawal", problems),
+    free_withdrawals_per_month: freeCount,
+    excess_withdrawal_fee: fee,
+    allow_deposits: d.allowDeposits,
+    allow_withdrawals: d.allowWithdrawals,
+    allow_transfers: d.allowTransfers,
+    ...eligibility,
+  };
 }
 
 /** The fields shared by create and update, or the labels to fix. */
@@ -86,6 +174,7 @@ function readTerms(d: ProductDraft): { input: SavingsProductUpdateInput; problem
           pretermination_product_id: d.preProductId ? Number(d.preProductId) : null,
         }
       : {}),
+    ...readRules(d, problems),
   };
   return { input, problems };
 }

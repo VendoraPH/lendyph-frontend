@@ -32,7 +32,7 @@ import { savingsService } from "@/services";
 import type { SavingsProduct } from "@/types";
 import { INTEREST_CREDITING_LABELS, PRODUCT_KIND_LABELS, labelOf } from "../../_lib/savings-rules";
 import { termLabel } from "../../_lib/time-deposit-rules";
-import { rateTermLabel } from "../_lib/rate-draft";
+import { ladderLines, rateTermLabel } from "../_lib/rate-draft";
 import { ProductDialog } from "./product-dialog";
 import { RatesDialog } from "./rates-dialog";
 
@@ -93,7 +93,7 @@ export function ProductsScreen() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Product</TableHead>
-                  <TableHead>Rate today</TableHead>
+                  <TableHead>Rates today</TableHead>
                   <TableHead>Credited</TableHead>
                   <TableHead className="text-right">Min. to open</TableHead>
                   <TableHead className="text-right">Maintaining</TableHead>
@@ -116,12 +116,22 @@ export function ProductsScreen() {
                     <TableCell className="tabular-nums">
                       {p.current_rates.length === 0
                         ? "—"
-                        : p.current_rates.map((r) => (
-                            <span key={`${r.term_days ?? "all"}`} className="block whitespace-nowrap">
-                              {p.kind === "time_deposit" && `${rateTermLabel(r.term_days)}: `}
-                              {formatRate(r.annual_rate)}%
-                            </span>
-                          ))}
+                        : p.kind === "time_deposit"
+                          ? p.current_rates.map((r) => (
+                              <span key={`${r.term_days ?? "all"}`} className="block whitespace-nowrap">
+                                {`${rateTermLabel(r.term_days)}: `}
+                                {formatRate(r.annual_rate)}%
+                              </span>
+                            ))
+                          : p.current_rates.flatMap((r) =>
+                              ladderLines(r.tiers?.length ? r.tiers : [{ min_balance: null, annual_rate: r.annual_rate }]).map(
+                                (line) => (
+                                  <span key={line} className="block whitespace-nowrap">
+                                    {line}
+                                  </span>
+                                ),
+                              ),
+                            )}
                     </TableCell>
                     <TableCell>
                       {p.kind === "time_deposit"

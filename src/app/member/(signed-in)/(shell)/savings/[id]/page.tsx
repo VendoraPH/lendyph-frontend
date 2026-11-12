@@ -17,6 +17,7 @@ import { featureOn } from "@/lib/portal/nav";
 import { portalService } from "@/lib/portal/portal-api";
 import { usePortalSession } from "@/lib/portal/portal-session";
 import { rateText } from "@/lib/portal/words";
+import { ladderLines } from "@/lib/savings/rate-ladder";
 import { Passbook } from "./_components/passbook";
 import { SavingsStatement } from "./_components/savings-statement";
 
@@ -64,7 +65,22 @@ export default function SavingsAccountPage() {
                   { label: "Maintaining balance", value: <Money value={data.maintaining_balance} /> },
                   { label: "Interest earned, not yet credited", value: <Money value={data.accrued_interest} /> },
                   { label: "Interest credited up to", value: date(data.interest_credited_through) },
-                  { label: "Interest rate", value: `${rateText(data.annual_rate)} a year` },
+                  // The tier the balance reaches today (gap round S2); the whole ladder below when there are tiers.
+                  { label: "Your current rate", value: `${rateText(data.annual_rate)} a year` },
+                  ...((data.rate_tiers?.length ?? 0) > 1
+                    ? [
+                        {
+                          label: "Rates by balance",
+                          value: (
+                            <ul className="space-y-0.5">
+                              {ladderLines(data.rate_tiers ?? []).map((line) => (
+                                <li key={line}>{line}</li>
+                              ))}
+                            </ul>
+                          ),
+                        },
+                      ]
+                    : []),
                   { label: "Opened on", value: date(data.opened_on) },
                   { label: "Branch", value: data.branch_name ?? NONE },
                   { label: "Last transaction", value: date(data.last_transaction_on) },

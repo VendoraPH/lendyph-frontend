@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useDialogOpening } from "@/hooks";
+import { getFieldErrors, httpStatusOf } from "@/lib/api-error";
 import { notifyError, notifySuccess, notifyValidation } from "@/lib/notify";
 import { savingsService } from "@/services";
 import type { InterestCrediting, SavingsProduct, SavingsProductKind } from "@/types";
@@ -21,6 +22,7 @@ import { FormField } from "../../_components/field";
 import { OptionSelect } from "../../_components/option-select";
 import { INTEREST_CREDITING_LABELS, PRODUCT_KIND_LABELS } from "../../_lib/savings-rules";
 import { readCreateDraft, readUpdateDraft, toDraft, type ProductDraft } from "../_lib/product-draft";
+import { ProductRulesFields } from "./product-rules-fields";
 
 interface ProductDialogProps {
   open: boolean;
@@ -45,7 +47,12 @@ const KIND_OPTIONS = (Object.keys(PRODUCT_KIND_LABELS) as SavingsProductKind[]).
 export function ProductDialog({ open, product, products, onOpenChange, onSaved }: ProductDialogProps) {
   const [draft, setDraft] = useState<ProductDraft>(() => toDraft(product));
   const [submitting, setSubmitting] = useState(false);
-  if (useDialogOpening(open, product)) setDraft(toDraft(product));
+  // The server's 422 field messages, in its words, until the next save.
+  const [serverErrors, setServerErrors] = useState<string[]>([]);
+  if (useDialogOpening(open, product)) {
+    setDraft(toDraft(product));
+    setServerErrors([]);
+  }
 
   const set = <K extends keyof ProductDraft>(key: K, value: ProductDraft[K]) =>
     setDraft((d) => ({ ...d, [key]: value }));
@@ -66,13 +73,17 @@ export function ProductDialog({ open, product, products, onOpenChange, onSaved }
       request = savingsService.createProduct(input);
     }
     setSubmitting(true);
+    setServerErrors([]);
     request
       .then(() => {
         notifySuccess(product ? "Product updated" : "Product added", draft.name.trim());
         onOpenChange(false);
         onSaved();
       })
-      .catch((err: unknown) => notifyError(err, "Couldn't save the product."))
+      .catch((err: unknown) => {
+        if (httpStatusOf(err) === 422) setServerErrors(getFieldErrors(err));
+        notifyError(err, "Couldn't save the product.");
+      })
       .then(() => setSubmitting(false));
   }
 
@@ -84,7 +95,7 @@ export function ProductDialog({ open, product, products, onOpenChange, onSaved }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{product ? `Edit ${product.name}` : "Add a savings product"}</DialogTitle>
           <DialogDescription>
@@ -170,6 +181,17 @@ export function ProductDialog({ open, product, products, onOpenChange, onSaved }
             </div>
             <Switch id="pd-active" checked={draft.active} onCheckedChange={(v) => set("active", Boolean(v))} />
           </div>
+          <ProductRulesFields draft={draft} set={set} open={open} />
+          {serverErrors.length > 0 && (
+            <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+              <p className="font-medium">The product wasn&apos;t saved:</p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                {serverErrors.map((message) => (
+                  <li key={message}>{message}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
 
         <DialogFooter>

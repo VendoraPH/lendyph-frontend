@@ -21,7 +21,15 @@ import type { SavingsAccount, SavingsMethod } from "@/types";
 import { useSubmitGuard } from "@/hooks/use-submit-guard";
 import { parseMoneyInput } from "@/lib/money-input";
 import { PAYMENT_METHOD_OPTIONS } from "../_lib/savings-rules";
+import {
+  EMPTY_OPENING_DETAILS,
+  openingProductOptions,
+  readOpeningDetails,
+  type OpeningDetailsDraft,
+} from "../_lib/opening-draft";
 import { FormField } from "./field";
+import { MemberCheckPanel } from "./member-check-panel";
+import { OpeningDetailsFields } from "./opening-details-fields";
 import { OptionSelect } from "./option-select";
 
 interface OpenAccountDialogProps {
@@ -42,24 +50,36 @@ const EMPTY = {
 export function OpenAccountDialog({ open, onOpenChange, onOpened }: OpenAccountDialogProps) {
   const { can } = usePermission();
   const [form, setForm] = useState(EMPTY);
+  const [details, setDetails] = useState<OpeningDetailsDraft>(EMPTY_OPENING_DETAILS);
   const [submitted, setSubmitted] = useState(false);
   const { submitting, run } = useSubmitGuard();
   if (useDialogOpening(open, null)) {
     setForm({ ...EMPTY, openedAt: todayISO() });
+    setDetails(EMPTY_OPENING_DETAILS);
     setSubmitted(false);
   }
 
   const fetchProducts = useCallback(() => savingsService.products(), []);
   const products = useApiResource(fetchProducts, open);
-  const openable = (products.data ?? []).filter((p) => p.is_active && p.kind === "regular");
+  const memberId = form.member?.id ?? null;
+  const fetchCheck = useCallback(() => savingsService.openingCheck(memberId ?? 0), [memberId]);
+  const check = useApiResource(fetchCheck, open && memberId !== null);
+  // The products the server says this member may open; every active regular
+  // product only when the check couldn't be read (the server still checks).
+  const checkFailed = !check.loading && (check.unavailable || check.error !== null);
+  const eligibleIds = new Set(openingProductOptions(check.data).map((o) => o.value));
+  const openable = (products.data ?? []).filter(
+    (p) => p.is_active && p.kind === "regular" && (checkFailed || eligibleIds.has(String(p.id))),
+  );
   const product = openable.find((p) => String(p.id) === form.productId) ?? null;
+  const opening = readOpeningDetails(details);
 
   const amount = parseMoneyInput(form.amount, { label: "Opening deposit", allowZero: true });
   const memberError = form.member ? null : "Choose the member.";
   const productError = product ? null : "Choose a savings product.";
   const amountError = amount.ok ? null : amount.message;
   const dateError = form.openedAt ? null : "Enter the opening date.";
-  const valid = !memberError && !productError && !amountError && !dateError;
+  const valid = !memberError && !productError && !amountError && !dateError && opening.problems.length === 0;
 
   const set = <K extends keyof typeof EMPTY>(key: K, value: (typeof EMPTY)[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
@@ -74,6 +94,7 @@ export function OpenAccountDialog({ open, onOpenChange, onOpened }: OpenAccountD
       initial_deposit: amount.value,
       payment_method: form.method,
       reference: form.reference.trim() || undefined,
+      ...opening.input,
     };
     run((key) => savingsService.openAccount(body, key))
       ?.then((account) => {
@@ -88,7 +109,7 @@ export function OpenAccountDialog({ open, onOpenChange, onOpened }: OpenAccountD
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Open a savings account</DialogTitle>
           <DialogDescription>
@@ -101,12 +122,14 @@ export function OpenAccountDialog({ open, onOpenChange, onOpened }: OpenAccountD
             <MemberSearchPicker
               id="sv-member"
               value={form.member}
-              onChange={(m) => set("member", m)}
+              onChange={(m) => setForm((f) => ({ ...f, member: m, productId: "" }))}
               canSearch={can("borrowers:view")}
               placeholder="Search members"
               showCode
             />
           </FormField>
+
+          {memberId !== null && <MemberCheckPanel check={check} />}
 
           <FormField
             id="sv-product"
@@ -125,8 +148,16 @@ export function OpenAccountDialog({ open, onOpenChange, onOpened }: OpenAccountD
               value={form.productId}
               onChange={(v) => set("productId", v)}
               options={openable.map((p) => ({ value: String(p.id), label: `${p.name} (${p.code})` }))}
-              placeholder={products.loading ? "Loading…" : "Choose a product"}
-              disabled={products.loading || openable.length === 0}
+              placeholder={
+                products.loading || check.loading
+                  ? "Loading…"
+                  : memberId === null
+                    ? "Choose the member first"
+                    : openable.length === 0
+                      ? "No product the member can open"
+                      : "Choose a product"
+              }
+              disabled={products.loading || check.loading || memberId === null || openable.length === 0}
             />
           </FormField>
 
@@ -169,6 +200,12 @@ export function OpenAccountDialog({ open, onOpenChange, onOpened }: OpenAccountD
               />
             </FormField>
           </div>
+
+          <OpeningDetailsFields
+            value={details}
+            onChange={(key, value) => setDetails((d) => ({ ...d, [key]: value }))}
+            sourceError={show(opening.problems[0] ?? null)}
+          />
         </div>
 
         <DialogFooter>

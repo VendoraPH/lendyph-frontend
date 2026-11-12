@@ -95,12 +95,130 @@ export interface SavingsProductRate {
   product_id?: number;
   term_days: number | null;
   annual_rate: RateString;
+  /** The tier's least balance; null (or absent before tiers) is the base tier. */
+  min_balance?: MoneyString | null;
   effective_from: string;
   created_at?: string | null;
   created_by?: SavingsUserRef | null;
+  /**
+   * On `current_rates` only: the whole ladder in force, base tier first. One
+   * row on a single-rate product and on each time deposit term.
+   */
+  tiers?: SavingsRateTier[];
 }
 
-export interface SavingsProduct {
+// ── Product rules, tiers and opening (gap round F4a; backend S1 and S2) ──
+
+/** One step of a rate ladder: from `min_balance` up (null is the base tier, any balance). */
+export interface SavingsRateTier {
+  min_balance: MoneyString | null;
+  annual_rate: RateString;
+  effective_from?: string;
+}
+
+/** The member types a product may be open to. */
+export type SavingsMemberType = "regular" | "associate";
+
+/**
+ * A regular product's rules (S1). A null limit is no limit; a null
+ * `free_withdrawals_per_month` is unlimited; a null `excess_withdrawal_fee`
+ * refuses withdrawals beyond the free count. Null eligibility lists mean
+ * everyone. A time deposit product takes only the eligibility fields.
+ */
+export interface SavingsProductRules {
+  max_balance: MoneyString | null;
+  min_deposit: MoneyString | null;
+  max_deposit: MoneyString | null;
+  min_withdrawal: MoneyString | null;
+  max_withdrawal: MoneyString | null;
+  free_withdrawals_per_month: number | null;
+  excess_withdrawal_fee: MoneyString | null;
+  allow_deposits: boolean;
+  allow_withdrawals: boolean;
+  allow_transfers: boolean;
+  eligible_member_types: SavingsMemberType[] | null;
+  eligible_branch_ids: number[] | null;
+}
+
+/** The rule fields a create or update sends; a time deposit product sends only the eligibility ones. */
+export type SavingsProductRulesInput = Partial<SavingsProductRules>;
+
+/** `POST /savings/products/{id}/rates` with a ladder (regular products only): base tier first. */
+export interface SavingsTierRateInput {
+  tiers: Array<{ min_balance: string | null; annual_rate: string }>;
+  /** On or after today (Manila). */
+  effective_from: string;
+}
+
+/** Where the opening money comes from (`source_of_funds`). */
+export type SavingsSourceOfFunds = "salary" | "business" | "remittance" | "pension" | "savings" | "other";
+
+export interface SavingsBeneficiary {
+  name: string | null;
+  relationship: string | null;
+  /** Null without borrowers:view and the member's branch (round fz rule). */
+  contact_number: string | null;
+}
+
+/** The opening details an account carries (S1). */
+export interface SavingsOpeningDetails {
+  account_officer?: SavingsUserRef | null;
+  source_of_funds?: SavingsSourceOfFunds | null;
+  source_of_funds_other?: string | null;
+  /** In words ("Other: Rental income"). */
+  source_of_funds_label?: string | null;
+  beneficiary?: SavingsBeneficiary | null;
+}
+
+/** The opening details `POST /savings/accounts` takes, each optional. */
+export interface SavingsOpeningDetailsInput {
+  account_officer_id?: number;
+  source_of_funds?: SavingsSourceOfFunds;
+  /** Required with `other`. */
+  source_of_funds_other?: string;
+  beneficiary?: { name?: string; relationship?: string; contact_number?: string };
+}
+
+/**
+ * `GET /savings/opening-check?borrower_id=`: the member's standing before an
+ * account is opened. Every figure is the server's; a null is a figure the
+ * caller may not see (loans without loans:view, share capital without
+ * share_capital:view) or one the member doesn't have.
+ */
+export interface SavingsOpeningCheck {
+  member: {
+    id: number;
+    name: string | null;
+    borrower_code: string | null;
+    membership_number: string | null;
+    status: string | null;
+    branch_id: number | null;
+    branch_name: string | null;
+    membership_date: string | null;
+    member_type: SavingsMemberType | null;
+  };
+  loans: { collectible_count: number | null; total_outstanding: MoneyString | null };
+  share_capital_balance: MoneyString | null;
+  savings_accounts: Array<{
+    id: number;
+    account_number: string;
+    product_id: number;
+    product_name: string | null;
+    product_kind: SavingsProductKind | null;
+    status: SavingsAccountStatus;
+    balance: MoneyString;
+  }>;
+  /** Active regular products the member may open and holds no open account on. */
+  eligible_products: Array<{
+    id: number;
+    code: string;
+    name: string;
+    minimum_opening_balance: MoneyString;
+    maintaining_balance: MoneyString;
+  }>;
+}
+
+export interface SavingsProduct extends Partial<SavingsProductRules> {
   id: number;
   code: string;
   name: string;
@@ -126,7 +244,7 @@ export interface SavingsProduct {
 }
 
 /** `POST /savings/products`. `annual_interest_rate` becomes the first rate row, on create only. */
-export interface SavingsProductCreateInput {
+export interface SavingsProductCreateInput extends SavingsProductRulesInput {
   code: string;
   name: string;
   kind: SavingsProductKind;
@@ -166,7 +284,7 @@ export interface SavingsRateInput {
 
 export type SavingsAccountStatus = "active" | "dormant" | "frozen" | "closed";
 
-export interface SavingsAccount {
+export interface SavingsAccount extends SavingsOpeningDetails {
   id: number;
   account_number: string;
   borrower_id: number;
@@ -215,7 +333,7 @@ export interface SavingsAccountsResponse extends PaginatedResponse<SavingsAccoun
 /** How money came in or went out. `savings` is a transfer from a savings account. */
 export type SavingsMethod = "cash" | "bank_transfer" | "gcash" | "maya" | "savings";
 
-export interface OpenSavingsAccountInput {
+export interface OpenSavingsAccountInput extends SavingsOpeningDetailsInput {
   borrower_id: number;
   product_id: number;
   /** YYYY-MM-DD, Asia/Manila. */
@@ -572,6 +690,21 @@ export interface InterestRunLine {
   net_interest: MoneyString;
   /** Why the line earns nothing, as a key (`below_minimum_adb`, …). */
   skip_reason: string | null;
+  /** The rates behind the line, one segment per rate set in the period (gap round S2). */
+  rate_segments?: InterestRateSegment[];
+}
+
+/**
+ * One rate set over part of a run line's period. A tiered segment adds its
+ * ladder (`tiers`) and, for each tier the balance used, the days and
+ * centavo-days the server counted (`by_tier`); a single-rate one has neither.
+ */
+export interface InterestRateSegment {
+  from: string;
+  to: string;
+  rate: RateString;
+  tiers?: Array<{ min_balance: MoneyString | null; rate: RateString }>;
+  by_tier?: Array<{ min_balance: MoneyString | null; rate: RateString; days: number; balance_days: number }>;
 }
 
 export interface InterestRun {
