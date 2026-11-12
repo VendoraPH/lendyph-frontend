@@ -214,6 +214,7 @@ test("disclosure: every rate frequency is quoted in its own words", () => {
     ["bi_weekly", "2% per bi-weekly period"],
     ["semi_monthly", "2% per semi-monthly period"],
     ["monthly", "2% per month"],
+    ["annual", "2% per year"],
     ["quarterly", "2% per period"],
   ] as const;
 
@@ -260,6 +261,44 @@ test("disclosure: without a rate frequency the contractual rate is quoted per mo
     rates: ratesWithoutFrequency,
   });
   assert.equal(fieldValue(doc, "Contractual Interest Rate"), "2% per month");
+});
+
+test("disclosure: the late payment penalty is stated under Rate Information", () => {
+  assert.equal(
+    fieldValue(buildDisclosureDoc(PAYLOAD), "Late Payment Penalty"),
+    "3% of a late installment's unpaid principal, charged after a 3-day grace period and again each month it stays unpaid"
+  );
+
+  const brackets = buildDisclosureDoc({
+    ...PAYLOAD,
+    loan_terms: {
+      ...PAYLOAD.loan_terms,
+      penalty_rate: 0,
+      penalty_config_name: "Standard Loan Penalty",
+      penalty_brackets: [
+        { days_from: 1, days_to: 30, rate: 3 },
+        { days_from: 31, days_to: null, rate: 5 },
+      ],
+    },
+  });
+  assert.equal(
+    fieldValue(brackets, "Late Payment Penalty"),
+    "1–30 days late: 3%; 31 days or more: 5%, of a late installment's unpaid principal, charged after a 3-day grace period and again each month it stays unpaid"
+  );
+
+  const none = buildDisclosureDoc({ ...PAYLOAD, loan_terms: { ...PAYLOAD.loan_terms, penalty_rate: 0 } });
+  assert.equal(fieldValue(none, "Late Payment Penalty"), "None");
+
+  // The field sits in VI. Rate Information, after the rates.
+  const rateBlock = buildDisclosureDoc(PAYLOAD).blocks.find(
+    (b) => b.kind === "fields" && b.title === "VI. Rate Information"
+  );
+  assert.ok(rateBlock && rateBlock.kind === "fields");
+  assert.ok(rateBlock.items.some((item) => item.label === "Late Payment Penalty"));
+});
+
+test("disclosure: penalty terms the server did not send print a rule to complete", () => {
+  assert.ok(isBlankField(buildDisclosureDoc(null), "Late Payment Penalty"));
 });
 
 test("disclosure: finance charges are interest and the coop's own fees, as the server classifies them", () => {

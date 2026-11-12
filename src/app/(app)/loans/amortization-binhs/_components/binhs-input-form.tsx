@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { BinhsInput } from "@/lib/binhs";
+import { BINHS_MAX_TERM_MONTHS, type BinhsInput } from "@/lib/binhs";
 
 interface Props {
   value: BinhsInput;
@@ -25,12 +25,11 @@ export function BinhsInputForm({ value, onChange }: Props) {
           <Input
             id="binhs-principal"
             type="number"
-            min={0}
+            min={1}
             step="0.01"
+            inputMode="decimal"
             value={value.principal}
-            onChange={(e) =>
-              update({ principal: Number(e.target.value) || 0 })
-            }
+            onChange={(e) => update({ principal: e.target.value })}
           />
         </div>
         <div className="space-y-1">
@@ -39,11 +38,11 @@ export function BinhsInputForm({ value, onChange }: Props) {
             id="binhs-rate"
             type="number"
             min={0}
-            step="0.01"
-            value={value.annualInterestRate}
-            onChange={(e) =>
-              update({ annualInterestRate: Number(e.target.value) || 0 })
-            }
+            max={100}
+            step="0.0001"
+            inputMode="decimal"
+            value={value.annualRate}
+            onChange={(e) => update({ annualRate: e.target.value })}
           />
         </div>
         <div className="space-y-1">
@@ -52,12 +51,11 @@ export function BinhsInputForm({ value, onChange }: Props) {
             id="binhs-term"
             type="number"
             min={1}
-            max={60}
+            max={BINHS_MAX_TERM_MONTHS}
             step="1"
+            inputMode="numeric"
             value={value.termMonths}
-            onChange={(e) =>
-              update({ termMonths: Number(e.target.value) || 0 })
-            }
+            onChange={(e) => update({ termMonths: e.target.value })}
           />
         </div>
         <div className="space-y-1">
@@ -67,10 +65,9 @@ export function BinhsInputForm({ value, onChange }: Props) {
             type="number"
             min={0}
             step="0.01"
+            inputMode="decimal"
             value={value.scbuPerPeriod}
-            onChange={(e) =>
-              update({ scbuPerPeriod: Number(e.target.value) || 0 })
-            }
+            onChange={(e) => update({ scbuPerPeriod: e.target.value })}
           />
         </div>
         <div className="space-y-1">
@@ -83,7 +80,7 @@ export function BinhsInputForm({ value, onChange }: Props) {
           />
         </div>
         <div className="space-y-1">
-          <Label>Penalty rate</Label>
+          <p className="text-sm font-medium leading-none">Penalty rate</p>
           <div className="flex h-9 items-center rounded-md border bg-muted px-3 text-sm text-muted-foreground">
             20% (BINHS standard)
           </div>

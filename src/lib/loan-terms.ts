@@ -11,22 +11,37 @@
  *   1 / 7 / 14 / 15 / 30 days, ending in a shorter instalment when the term
  *   does not split evenly.
  * - Each instalment is charged interest for the days it covers, at the rate
- *   quoted per `interest_rate_frequency`.
+ *   quoted per `interest_rate_frequency`. A rate can be quoted per year
+ *   (`annual`), but a loan is never paid yearly: `annual` is a rate period
+ *   only, never a payment frequency.
  */
 
 export type TermUnit = "months" | "days";
 
-export type RateFrequency = "daily" | "weekly" | "bi_weekly" | "semi_monthly" | "monthly";
+export type RateFrequency = "daily" | "weekly" | "bi_weekly" | "semi_monthly" | "monthly" | "annual";
 
 export const DAYS_PER_MONTH = 30;
 
-/** Days in one period of each frequency, on the 30-day-month convention. */
-export const PERIOD_DAYS: Record<RateFrequency, number> = {
+/** The payment frequencies that step by a fixed number of days. */
+type SteppedFrequency = Exclude<RateFrequency, "annual">;
+
+/** Days in one payment period, on the 30-day-month convention. No `annual`. */
+const PAYMENT_PERIOD_DAYS: Record<SteppedFrequency, number> = {
   daily: 1,
   weekly: 7,
   bi_weekly: 14,
   semi_monthly: 15,
   monthly: DAYS_PER_MONTH,
+};
+
+/**
+ * Days in one rate period, as the backend's `LoanTermSchedule::PERIOD_DAYS`:
+ * the payment periods plus a 360-day year for a rate quoted per year. Its keys
+ * are the rate periods a rate can be quoted per.
+ */
+export const PERIOD_DAYS: Record<RateFrequency, number> = {
+  ...PAYMENT_PERIOD_DAYS,
+  annual: 12 * DAYS_PER_MONTH,
 };
 
 /** The unit a payload names; anything else is the backend default, months. */
@@ -46,9 +61,10 @@ const RATE_PERIOD_WORD: Record<RateFrequency, string> = {
   bi_weekly: "bi-weekly period",
   semi_monthly: "semi-monthly period",
   monthly: "month",
+  annual: "year",
 };
 
-/** "week", "month" — as in "3% per week". */
+/** "week", "month", "year" — as in "3% per week". */
 export function ratePeriodWord(rateFrequency: RateFrequency): string {
   return RATE_PERIOD_WORD[rateFrequency];
 }
@@ -88,8 +104,9 @@ export function addMonthsAnchored(start: Date, months: number): Date {
   return result;
 }
 
+/** A payment frequency's step; never the rate-only `annual` year. */
 function periodDays(frequency: string): number {
-  return PERIOD_DAYS[frequency as RateFrequency] ?? DAYS_PER_MONTH;
+  return PAYMENT_PERIOD_DAYS[frequency as SteppedFrequency] ?? DAYS_PER_MONTH;
 }
 
 export interface Instalment {

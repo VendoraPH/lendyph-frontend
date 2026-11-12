@@ -77,6 +77,7 @@ import {
   toNumber,
   type PrintableBuildOptions,
 } from "./shared";
+import { penaltyShortText, readDocumentPenaltyTerms } from "@/lib/penalty-terms";
 
 /** Long schedules get their own page so the terms above stay on page one. */
 const SCHEDULE_PAGE_BREAK_AT = 12;
@@ -208,6 +209,7 @@ export function buildDisclosureDoc(
   const contractualRate =
     pickNumber(rates, ["contractual_rate"]) ?? pickNumber(terms, ["interest_rate", "rate"]);
   const rateFrequency = pick(rates, ["rate_frequency"]) ?? rateFrequencyFrom(terms);
+  const penaltyTerms = readDocumentPenaltyTerms(terms);
 
   const scheduleRows = asArray(
     pick(root, ["amortization_schedule", "amortization_schedules", "schedule"])
@@ -355,6 +357,9 @@ export function buildDisclosureDoc(
           `${interestMethod ?? "Diminishing"} Balance`
         ),
         field("Total Amount Payable", currencyOrDash(totalPayable)),
+        // The loan's own late penalty terms in short form (wording in
+        // src/lib/penalty-terms.ts); terms not sent print a rule to complete.
+        field("Late Payment Penalty", penaltyTerms ? penaltyShortText(penaltyTerms) : null),
       ]),
     },
   ];
