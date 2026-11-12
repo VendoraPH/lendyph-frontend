@@ -97,6 +97,18 @@ import { FormulaSnapshot, type FormulaSnapshotItem } from "./_components/formula
 import { PenaltyTerms } from "@/components/loans/penalty-terms";
 import { env } from "@/config/env";
 import { ReleaseCoMakers } from "./_components/release-co-makers";
+import { ForwardToPicker } from "./_components/forward-to-picker";
+import {
+  ANYONE_WITH_THE_ROLE,
+  assignedToText,
+  canUserActOnStep,
+  forwardFieldError,
+  forwardPickFor,
+  forwardPickName,
+  notYourStepMessage,
+  withForwardTo,
+  type ForwardPick,
+} from "./_lib/approval-forward";
 import { InsurancePremiumSection } from "./_components/insurance-premium-section";
 import {
   releaseDialogView,
@@ -310,21 +322,8 @@ const adjustmentStatusColors: Record<string, string> = {
 // On any "Approved? = No" the loan is sent back for revision (the chain does
 // NOT support terminal rejection — "Void Loan" is the escape hatch for drafts).
 
-/**
- * ADVISORY ONLY. The gate is `step.can_act`, which the server computes for the
- * requesting user, and behind that the endpoints themselves. This exists so a
- * button can be disabled before the round trip when the signed-in user plainly
- * lacks the role; it must never be the reason an action is considered allowed.
- */
-function canUserActOnStep(
-  step: LoanApprovalStep,
-  userRoles: string[] | undefined
-): boolean {
-  if (!userRoles || userRoles.length === 0) return false;
-  // Admins (client) and super_admin (developer) can act on any step.
-  if (userRoles.includes("admin") || userRoles.includes("super_admin")) return true;
-  return userRoles.includes(step.role);
-}
+// The advisory "can act" check, `canUserActOnStep`, lives in
+// `_lib/approval-forward.ts`: a step forwarded to a named user is theirs.
 
 // ── Borrower's Active Loans Component ──
 
@@ -1165,6 +1164,14 @@ function LoanDetail({ loanId }: { loanId: number }) {
   } = useLoanApproval(loan?.id, loan?.status);
   const [stepRemarks, setStepRemarks] = useState("");
   const [stepActionLoading, setStepActionLoading] = useState(false);
+  // "Forward to" on Submit for Approval and Approve & Forward, tied to the
+  // step it was picked on (a draft is "draft"), so a new step starts at the
+  // role default. The server's 422 on the pick is kept the same way.
+  const [forwardPick, setForwardPick] = useState<ForwardPick>({
+    key: "",
+    userId: ANYONE_WITH_THE_ROLE,
+  });
+  const [forwardError, setForwardError] = useState<{ key: string; message: string } | null>(null);
   // Index of the step an approver is sending the loan back to. Defaults to
   // the most recent prior approver, falling back to the Loan Processor. See
   // `sendBackTargets` below for the list of valid choices.
@@ -1624,13 +1631,36 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // evaluated for the requesting user; the client role check is only a fallback
   // for a payload that omits the flag.
   const canActOnCurrentStep = currentStep
-    ? currentStep.can_act ?? canUserActOnStep(currentStep, currentUser?.roles)
+    ? currentStep.can_act ?? canUserActOnStep(currentStep, currentUser)
     : false;
   // Advisory second opinion, used to disable the action buttons before the
   // round trip. It can only ever narrow what `can_act` offers, never widen it.
   const clientCanActOnCurrentStep = currentStep
-    ? canUserActOnStep(currentStep, currentUser?.roles)
+    ? canUserActOnStep(currentStep, currentUser)
     : false;
+  // The current step, forwarded to the signed-in user.
+  const currentStepIsMine =
+    !!currentStep?.assigned_to && currentStep.assigned_to.id === currentUser?.id;
+  // A step forwarded to someone else.
+  const currentStepForwardedElsewhere = !!currentStep?.assigned_to && !currentStepIsMine;
+
+  // The pick and its error for the step on screen (a draft has none yet).
+  const forwardKey = currentStep ? String(currentStep.id) : "draft";
+  const forwardTo = forwardPickFor(forwardPick, forwardKey);
+  const forwardErrorMessage = forwardError?.key === forwardKey ? forwardError.message : null;
+  const handleForwardChange = (userId: string, name: string) => {
+    setForwardPick({ key: forwardKey, userId, name });
+    setForwardError(null);
+  };
+  /** Keeps the server's 422 on the pick beside the picker; the toast says it too. */
+  const rememberForwardError = (err: unknown, key: string) => {
+    const message = forwardFieldError(err);
+    if (message) setForwardError({ key, message });
+  };
+  const clearForwardPick = () => {
+    setForwardPick({ key: "", userId: ANYONE_WITH_THE_ROLE });
+    setForwardError(null);
+  };
 
   /**
    * Re-read the loan AND its chain after acting on a step.
@@ -1667,7 +1697,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
   const assertCanActOnStep = (verb: string): boolean => {
     if (!currentStep) return false;
     if (!canActOnCurrentStep || !clientCanActOnCurrentStep) {
-      toast.error(`Only a user with the ${roleLabel(currentStep.role)} role can ${verb}`);
+      toast.error(notYourStepMessage(currentStep, roleLabel(currentStep.role), verb));
       return false;
     }
     return true;
@@ -1691,7 +1721,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // Loan Processor's submit step.
   //
   // Two different calls behind one button, chosen on the loan's server status:
-  //   * `draft`  → `loanService.submit()`. This is the draft → for_review hop,
+  //   * `draft`  → `loanApprovalService.submit()`. This is the draft → for_review hop,
   //     and it is what SEEDS the chain server-side. There is no chain to act on
   //     before it runs.
   //   * anything else → the loan is already `for_review` and has been sent back
@@ -1710,19 +1740,27 @@ function LoanDetail({ loanId }: { loanId: number }) {
       if (!currentStep || currentStep.kind !== "submit") return;
       if (!assertCanActOnStep("submit the draft")) return;
     }
+    const key = forwardKey;
+    const forwardedName = forwardPickName(forwardPick, key);
     try {
       setStepActionLoading(true);
       if (loan.status === "draft") {
-        await loanService.submit(loan.id);
+        await loanApprovalService.submit(loan.id, withForwardTo({}, forwardTo));
       } else {
-        await loanApprovalService.approve(loan.id, currentStep!.id, {
-          remarks: stepRemarks.trim() || undefined,
-        });
+        await loanApprovalService.approve(
+          loan.id,
+          currentStep!.id,
+          withForwardTo({ remarks: stepRemarks.trim() || undefined }, forwardTo),
+        );
       }
       await refreshAfterStepAction();
       setStepRemarks("");
-      toast.success("Submitted for approval");
+      clearForwardPick();
+      toast.success(
+        forwardedName ? `Submitted for approval. Forwarded to ${forwardedName}.` : "Submitted for approval"
+      );
     } catch (err) {
+      rememberForwardError(err, key);
       notifyError(err, "We couldn't submit for approval. Please try again.");
     } finally {
       setStepActionLoading(false);
@@ -1739,20 +1777,30 @@ function LoanDetail({ loanId }: { loanId: number }) {
     if (!currentStep || currentStep.kind !== "approve") return;
     if (!assertCanActOnStep("approve this step")) return;
     const actedStepName = currentStep.name;
-    const forwardedTo = nextStep?.name;
+    const key = forwardKey;
+    const forwardedName = forwardPickName(forwardPick, key);
+    const forwardedTo = nextStep
+      ? forwardedName
+        ? `${forwardedName} (${nextStep.name})`
+        : nextStep.name
+      : undefined;
     try {
       setStepActionLoading(true);
-      await loanApprovalService.approve(loan.id, currentStep.id, {
-        remarks: stepRemarks.trim() || undefined,
-      });
+      await loanApprovalService.approve(
+        loan.id,
+        currentStep.id,
+        withForwardTo({ remarks: stepRemarks.trim() || undefined }, forwardTo),
+      );
       await refreshAfterStepAction();
       setStepRemarks("");
+      clearForwardPick();
       toast.success(
         forwardedTo
           ? `Approved by ${actedStepName}. Forwarded to ${forwardedTo}.`
           : `Approved by ${actedStepName}`
       );
     } catch (err) {
+      rememberForwardError(err, key);
       notifyError(err, "We couldn't record this approval. Please try again.");
     } finally {
       setStepActionLoading(false);
@@ -2438,6 +2486,16 @@ function LoanDetail({ loanId }: { loanId: number }) {
                     </p>
                   </div>
                 </div>
+                {canSubmitDraft && (
+                  <ForwardToPicker
+                    key={`forward-${loan.id}-draft`}
+                    loanId={loan.id}
+                    value={forwardTo}
+                    onChange={handleForwardChange}
+                    disabled={stepActionLoading}
+                    error={forwardErrorMessage}
+                  />
+                )}
                 {/* Void and Edit live in the submit-step panel below, which a
                     never-submitted draft never reaches — so without these the
                     draft could not be submitted, edited OR voided from its own
@@ -2564,6 +2622,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
                               Cancelled
                             </span>
                           )}
+                          {!isCancelled && assignedToText(step) && (
+                            <span className="block font-normal text-muted-foreground">
+                              {assignedToText(step)}
+                            </span>
+                          )}
                         </span>
                       </div>
                       {!isLast && (
@@ -2671,6 +2734,14 @@ function LoanDetail({ loanId }: { loanId: number }) {
                         >
                           Pending your action
                         </Badge>
+                        {currentStepIsMine && (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] px-1.5 py-0 h-4"
+                          >
+                            Forwarded to you
+                          </Badge>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -2711,10 +2782,20 @@ function LoanDetail({ loanId }: { loanId: number }) {
                           className="text-xs text-amber-700 dark:text-amber-400 mt-1"
                           role="status"
                         >
-                          Your signed-in roles don&rsquo;t include{" "}
-                          <span className="font-medium">{roleLabel(currentStep.role)}</span>
-                          , so the actions below are disabled. Sign in again if your
-                          access changed recently.
+                          {currentStepForwardedElsewhere ? (
+                            <>
+                              This step was forwarded to{" "}
+                              <span className="font-medium">{currentStep.assigned_to?.name}</span>
+                              , so the actions below are disabled.
+                            </>
+                          ) : (
+                            <>
+                              Your signed-in roles don&rsquo;t include{" "}
+                              <span className="font-medium">{roleLabel(currentStep.role)}</span>
+                              , so the actions below are disabled. Sign in again if your
+                              access changed recently.
+                            </>
+                          )}
                         </p>
                       )}
                     </div>
@@ -2743,6 +2824,17 @@ function LoanDetail({ loanId }: { loanId: number }) {
                           className="min-h-[80px] text-sm bg-background"
                         />
                       </div>
+                    )}
+
+                    {currentStep.kind !== "release" && clientCanActOnCurrentStep && (
+                      <ForwardToPicker
+                        key={`forward-${loan.id}-${currentStep.id}`}
+                        loanId={loan.id}
+                        value={forwardTo}
+                        onChange={handleForwardChange}
+                        disabled={stepActionLoading}
+                        error={forwardErrorMessage}
+                      />
                     )}
 
                     <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
@@ -2877,7 +2969,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   <Clock className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
                   <div className="text-xs">
                     <p className="font-medium">
-                      Waiting for {currentStep.name}{" "}
+                      Waiting for{" "}
+                      {currentStep.assigned_to
+                        ? `${currentStep.assigned_to.name} (${currentStep.name})`
+                        : currentStep.name}{" "}
                       {currentStep.kind === "submit"
                         ? "to submit the draft"
                         : currentStep.kind === "release"
@@ -2885,9 +2980,21 @@ function LoanDetail({ loanId }: { loanId: number }) {
                           : "to approve"}
                     </p>
                     <p className="text-muted-foreground mt-0.5">
-                      Only users with the{" "}
-                      <span className="font-medium">{roleLabel(currentStep.role)}</span>{" "}
-                      role can act on this step. You are signed in as{" "}
+                      {currentStep.assigned_to ? (
+                        <>
+                          This step was forwarded to{" "}
+                          <span className="font-medium">{currentStep.assigned_to.name}</span>
+                          , who acts on it with the{" "}
+                          <span className="font-medium">{roleLabel(currentStep.role)}</span>{" "}
+                          role. You are signed in as{" "}
+                        </>
+                      ) : (
+                        <>
+                          Only users with the{" "}
+                          <span className="font-medium">{roleLabel(currentStep.role)}</span>{" "}
+                          role can act on this step. You are signed in as{" "}
+                        </>
+                      )}
                       {currentUserDisplayName}
                       {currentUser?.roles && currentUser.roles.length > 0
                         ? ` (${currentUser.roles.map((role) => roleLabel(role)).join(", ")})`

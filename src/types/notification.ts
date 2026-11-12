@@ -16,6 +16,9 @@ export type NotificationType =
   | "extension_applied"
   | "restructure_applied"
   | "adjustment_pending"
+  // An approved loan waiting at its Release step: to the step's assignee, or
+  // else its role's holders who hold loans:release.
+  | "loan_ready_for_release"
   // Reminders (backend #232), about a member's reminders; never sent to the
   // member. A reminder showed the member's contact is bad; a loan reached the
   // long-past-due rule and needs the officer's follow up; a reminder could not
