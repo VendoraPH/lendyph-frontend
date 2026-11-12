@@ -224,7 +224,8 @@ export interface LoanFormPreviewDeductions {
   stated_total: number;
   configured_fees: (LoanFormPreviewDeduction & { fee_id: number })[];
   configured_total: number;
-  total_deductions: number;
+  /** Null when a configured fee can't be worked out; the forms show a dash. */
+  total_deductions: number | null;
   /** Null when `error` is set. */
   net_proceeds: number | null;
   /** The guard a save would fail on (deductions above the principal), else null. */

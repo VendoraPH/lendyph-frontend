@@ -11,6 +11,7 @@ import {
   activeProductOwners,
   appendRow,
   buildPenaltyPayload,
+  configUsage,
   configProductNames,
   describeCondition,
   parseConditions,
@@ -134,7 +135,18 @@ test("the picker's hint names the other active configuration covering a product"
 test("the form says when charges fall and which rate each uses", () => {
   assert.equal(
     CHARGE_DAYS_NOTE,
-    "Penalties are charged when grace ends and then once a month while unpaid; each charge uses the rate for how many days late it is that day.",
+    "Penalties are charged when grace ends, then at 2 months late, 3 months late and so on while unpaid. Each charge uses the rate for how many days late it is that day, so a range shorter than a month may never be used.",
   );
   assert.match(read(`${DIR}/_components/penalty-form-dialog.tsx`), /<ConditionsEditor[^\n]*\/>\s*<p[^>]*>\s*\{CHARGE_DAYS_NOTE\}/);
+});
+
+test("the View dialog says how many loans use the configuration, from the server", () => {
+  const base = config(1, "active", [1]);
+  assert.deepEqual(configUsage({ ...base, in_use: true, loans_count: 12 }), {
+    text: "Used by 12 loans",
+    whyNoDelete: "It can't be deleted while loans use it. Deactivate it instead; loans keep the terms they were created with.",
+  });
+  assert.equal(configUsage({ ...base, in_use: true, loans_count: 1 }).text, "Used by 1 loan");
+  assert.deepEqual(configUsage({ ...base, in_use: false, loans_count: 0 }), { text: "Not used by any loan yet", whyNoDelete: null });
+  assert.match(read(`${DIR}/_components/penalty-view-dialog.tsx`), /configUsage\(config\)/);
 });

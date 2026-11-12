@@ -22,12 +22,13 @@ export const PENALTY_FORM_NOTE =
   "Changes apply to loans created after you save. Loans already created keep the penalty terms they were created with.";
 
 /**
- * When charges fall (the owner's monthly rule): when grace ends, then once a
- * month while unpaid, each at the bracket for that day's days late. So a short
- * bracket between two charge days may never apply. Words only.
+ * When charges fall (the owner's monthly rule): when grace ends, then at each
+ * full month late from the second while unpaid, each at the bracket for that
+ * day's days late. So a short bracket between two charge days may never
+ * apply. Words only.
  */
 export const CHARGE_DAYS_NOTE =
-  "Penalties are charged when grace ends and then once a month while unpaid; each charge uses the rate for how many days late it is that day.";
+  "Penalties are charged when grace ends, then at 2 months late, 3 months late and so on while unpaid. Each charge uses the rate for how many days late it is that day, so a range shorter than a month may never be used.";
 
 /** What deactivating changes: new loans only. */
 export const DEACTIVATE_NOTE = "New loans on these products will use no configuration.";
@@ -127,6 +128,25 @@ export function configProductNames(
 ): string[] {
   const served = new Map((config.products ?? []).map((p) => [p.id, p.name]));
   return config.applicable_product_ids.map((id) => served.get(id) ?? loadedNames?.get(id) ?? (loadedNames ? "—" : "Loading…"));
+}
+
+/**
+ * How many loans carry the configuration, from the server's `loans_count`, and
+ * why Delete isn't offered while any do. Null text when the server sent
+ * neither figure.
+ */
+export function configUsage(config: Pick<PenaltyConfig, "in_use" | "loans_count">): {
+  text: string | null;
+  whyNoDelete: string | null;
+} {
+  const count = config.loans_count;
+  const inUse = config.in_use ?? (count !== undefined ? count > 0 : undefined);
+  const whyNoDelete = inUse
+    ? "It can't be deleted while loans use it. Deactivate it instead; loans keep the terms they were created with."
+    : null;
+  if (count !== undefined && count > 0) return { text: `Used by ${count} ${count === 1 ? "loan" : "loans"}`, whyNoDelete };
+  if (inUse === false) return { text: "Not used by any loan yet", whyNoDelete };
+  return { text: inUse ? "Used by loans" : null, whyNoDelete };
 }
 
 /** The whole form as the API body, or the first incomplete field in words. */

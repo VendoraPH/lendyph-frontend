@@ -7,6 +7,7 @@ import {
 import { formatRate } from "@/lib/format";
 import { bracketRangeLabel } from "@/components/loans/penalty-terms";
 import type { PenaltyConfig } from "@/types/penalty";
+import { configUsage } from "../_lib/penalty-form";
 
 interface PenaltyViewDialogProps {
   config: PenaltyConfig | null;
@@ -18,6 +19,7 @@ interface PenaltyViewDialogProps {
 /** Read-only detail: products and the bracket table. */
 export function PenaltyViewDialog({ config, productNames, onOpenChange }: PenaltyViewDialogProps) {
   const names = config ? productNames(config) : [];
+  const usage = config ? configUsage(config) : null;
 
   return (
     <Dialog open={config !== null} onOpenChange={onOpenChange}>
@@ -46,6 +48,14 @@ export function PenaltyViewDialog({ config, productNames, onOpenChange }: Penalt
                 <p className="text-sm text-muted-foreground">None. An active configuration needs at least one.</p>
               )}
             </section>
+
+            {usage?.text && (
+              <section className="space-y-1">
+                <h3 className="text-sm font-medium">Loans</h3>
+                <p className="text-sm">{usage.text}</p>
+                {usage.whyNoDelete && <p className="text-xs text-muted-foreground">{usage.whyNoDelete}</p>}
+              </section>
+            )}
 
             <section className="space-y-2">
               <h3 className="text-sm font-medium">Penalty conditions</h3>
