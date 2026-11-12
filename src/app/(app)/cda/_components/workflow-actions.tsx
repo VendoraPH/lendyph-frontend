@@ -5,11 +5,10 @@ import { Button } from "@/components/ui/button";
 import { usePermission } from "@/hooks";
 import { useAuthStore } from "@/store";
 import { cdaService } from "@/services";
-import { httpStatusOf } from "@/lib/api-error";
 import { notifySuccess } from "@/lib/notify";
 import { ACTION_LABELS, NEEDS_REASON, STAGES_BY_TYPE, labelOf } from "../_lib/labels";
 import { notifyCdaError } from "../_lib/notify-cda";
-import { approveInput, approveNote, reviewRound } from "../_lib/review-chain";
+import { approveInput, approveNote, reloadsReport, reviewRound } from "../_lib/review-chain";
 import { ReasonDialog } from "./reason-dialog";
 import { ApproveStepDialog, FilingDialog, FinalizeDialog, StageDialog } from "./workflow-dialogs";
 import type { CdaReport, CdaWorkflowAction, CdaWorkflowInput } from "@/types/cda";
@@ -52,7 +51,7 @@ export function WorkflowActions({
       })
       .catch((err: unknown) => {
         notifyCdaError(err, `Could not ${labelOf(ACTION_LABELS, input.action).toLowerCase()}`);
-        if (httpStatusOf(err) === 409) onReload();
+        if (reloadsReport(err)) onReload();
         throw err;
       })
       .finally(() => setBusy(null));

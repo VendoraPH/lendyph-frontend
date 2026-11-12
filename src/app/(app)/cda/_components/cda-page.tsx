@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, type ReactNode } from "react";
+import { Suspense, useCallback, useEffect, type ReactNode } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { DataState } from "@/components/common/data-state";
 import { Card, CardContent } from "@/components/ui/card";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
@@ -11,7 +12,7 @@ import { API_ENDPOINTS } from "@/config/api-endpoints";
 import type { Permission } from "@/types";
 import type { CdaPeriod } from "@/types/cda";
 import { useCdaYearStore } from "../_hooks/use-cda-year";
-import { resolveYear } from "../_lib/year";
+import { parseYear, pickYear, withoutYearParam } from "../_lib/year";
 import { CdaGuard } from "./cda-guard";
 
 export interface CdaPageContext {
@@ -41,14 +42,15 @@ function Header({
   periods,
   year,
   actions,
+  onPick,
 }: {
   title: string;
   description: string;
   periods: CdaPeriod[];
   year: number | null;
   actions?: ReactNode;
+  onPick: (year: number) => void;
 }) {
-  const setPreferred = useCdaYearStore((s) => s.setPreferred);
   return (
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
@@ -62,7 +64,7 @@ function Header({
             <NativeSelect
               aria-label="Reporting year"
               value={String(year)}
-              onChange={(e) => setPreferred(Number(e.target.value))}
+              onChange={(e) => onPick(Number(e.target.value))}
               className="w-28"
             >
               {periods.map((p) => (
@@ -96,8 +98,25 @@ function DefaultNoPeriod() {
 function PageBody({ title, description, actions, noPeriod, yearless, children }: CdaPageProps) {
   const resource = useApiResource(useCallback(() => cdaService.listPeriods(), []));
   const preferred = useCdaYearStore((s) => s.preferred);
+  const setPreferred = useCdaYearStore((s) => s.setPreferred);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const linked = searchParams.get("year");
   const periods = resource.data ?? [];
-  const year = resolveYear(preferred, periods);
+  // A link's ?year= (a notice's) wins over the remembered year while it names
+  // an open period, and becomes the remembered one, so the other CDA pages
+  // follow it. Picking a year by hand drops it from the address.
+  const year = pickYear(linked, preferred, periods);
+  const linkedYear = year !== null && year === parseYear(linked ?? "") ? year : null;
+  useEffect(() => {
+    if (linkedYear !== null) setPreferred(linkedYear);
+  }, [linkedYear, setPreferred]);
+
+  function pick(next: number) {
+    setPreferred(next);
+    if (linked !== null) router.replace(withoutYearParam(pathname, searchParams.toString()));
+  }
   const period = periods.find((p) => p.year === year) ?? null;
   const ctx: CdaPageContext | null =
     year !== null && period !== null ? { year, period, periods, reloadPeriods: resource.refetch } : null;
@@ -107,7 +126,7 @@ function PageBody({ title, description, actions, noPeriod, yearless, children }:
 
   return (
     <div className="space-y-6">
-      <Header title={title} description={description} periods={periods} year={year} actions={actions?.(ctx)} />
+      <Header title={title} description={description} periods={periods} year={year} actions={actions?.(ctx)} onPick={pick} />
       {resource.data !== null && !resource.error ? (
         // A reload (after opening a year or saving an extension) keeps the
         // page in place instead of swapping it for a spinner.
@@ -130,7 +149,10 @@ function PageBody({ title, description, actions, noPeriod, yearless, children }:
 export function CdaPage(props: CdaPageProps & { pageName?: string }) {
   return (
     <CdaGuard pageName={props.pageName ?? props.title} restriction={props.restriction ?? null}>
-      <PageBody {...props} />
+      {/* The page reads ?year=, so it renders inside a Suspense boundary. */}
+      <Suspense fallback={null}>
+        <PageBody {...props} />
+      </Suspense>
     </CdaGuard>
   );
 }

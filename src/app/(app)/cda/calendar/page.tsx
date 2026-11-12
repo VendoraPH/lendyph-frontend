@@ -4,13 +4,16 @@ import { useCallback, useState } from "react";
 import { Plus } from "lucide-react";
 import { DataState } from "@/components/common/data-state";
 import { PermissionButton } from "@/components/common/permission-button";
+import { ConfirmDeleteDialog } from "@/components/common/confirm-delete-dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useApiResource, usePermission } from "@/hooks";
 import { cdaService } from "@/services";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
+import { notifySuccess } from "@/lib/notify";
 import type { CdaRequirement } from "@/types/cda";
 import { CdaPage } from "../_components/cda-page";
+import { notifyCdaError } from "../_lib/notify-cda";
 import { calendarRowKey, isRequirementRow } from "../_lib/review-chain";
 import { ReportRow, RequirementRow } from "./_components/calendar-rows";
 import { MarkFiledDialog } from "./_components/mark-filed-dialog";
@@ -21,6 +24,22 @@ function Calendar({ year }: { year: number }) {
   const canPrepare = usePermission().can("cda:prepare");
   const [editing, setEditing] = useState<{ requirement: CdaRequirement | null } | null>(null);
   const [filing, setFiling] = useState<CdaRequirement | null>(null);
+  const [deleting, setDeleting] = useState<CdaRequirement | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  function confirmDelete() {
+    if (!deleting) return;
+    setBusy(true);
+    cdaService
+      .deleteRequirement(deleting.id)
+      .then(() => {
+        notifySuccess("Requirement deleted");
+        setDeleting(null);
+        resource.refetch();
+      })
+      .catch((err: unknown) => notifyCdaError(err, "Could not delete the requirement"))
+      .finally(() => setBusy(false));
+  }
 
   return (
     <div className="space-y-4">
@@ -68,6 +87,7 @@ function Calendar({ year }: { year: number }) {
                         canPrepare={canPrepare}
                         onEdit={() => setEditing({ requirement: row })}
                         onMarkFiled={() => setFiling(row)}
+                        onDelete={() => setDeleting(row)}
                       />
                     ) : (
                       <ReportRow key={calendarRowKey(row)} row={row} withActions={canPrepare} />
@@ -88,6 +108,18 @@ function Calendar({ year }: { year: number }) {
         onSaved={resource.refetch}
       />
       <MarkFiledDialog requirement={filing} onOpenChange={(open) => !open && setFiling(null)} onSaved={resource.refetch} />
+      <ConfirmDeleteDialog
+        open={deleting !== null}
+        title="Delete this requirement?"
+        description={
+          deleting
+            ? `“${deleting.title}” will be removed from the ${year} compliance calendar and gets no more reminders. The audit trail keeps a record of it.`
+            : null
+        }
+        busy={busy}
+        onCancel={() => setDeleting(null)}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }
@@ -95,7 +127,7 @@ function Calendar({ year }: { year: number }) {
 /**
  * Every deadline of the year, in the server's order (soonest first): each
  * report with CDA's extensions, and the custom compliance requirements staff
- * with `cda:prepare` add, edit and mark filed.
+ * with `cda:prepare` add, edit, mark filed and delete.
  */
 export default function Page() {
   return (

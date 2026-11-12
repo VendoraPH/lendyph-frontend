@@ -95,6 +95,17 @@ export function approveInput(pending: CdaApprovalStep | null, remarks: string | 
   return remarks ? { action: "approve", step_id: pending.id, reason: remarks } : { action: "approve", step_id: pending.id };
 }
 
+/**
+ * Whether a refused step means the report moved on and is read again: a 409
+ * (a stale step or status), or a 422 that names `step_id` (the page didn't
+ * know the report had a review step).
+ */
+export function reloadsReport(err: unknown): boolean {
+  const response = (err as { response?: { status?: number; data?: { errors?: Record<string, unknown> } } } | null)?.response;
+  if (response?.status === 409) return true;
+  return response?.status === 422 && Object.hasOwn(response.data?.errors ?? {}, "step_id");
+}
+
 // ── Custom compliance requirements ──
 
 export const REQUIREMENT_STATUS_META: Record<CdaRequirementStatus, { label: string; tone: Tone }> = {

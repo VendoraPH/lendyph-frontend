@@ -123,6 +123,7 @@ export const cdaService = {
     api.post<CdaRequirement>(C.REQUIREMENTS(year), data),
   updateRequirement: (id: number, data: Partial<CdaRequirementInput>) =>
     api.put<CdaRequirement>(C.REQUIREMENT(id), data),
+  deleteRequirement: (id: number) => api.delete<void>(C.REQUIREMENT(id)),
 
   // ── The review chain (Settings → Approval Workflow, `cda`; cda:settings and every branch) ──
   getReviewChain: () =>

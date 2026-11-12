@@ -39,17 +39,19 @@ export function ReportRow({ row, withActions }: { row: CdaCalendarReportRow; wit
   );
 }
 
-/** A custom compliance requirement's row, with Edit and Mark filed for `cda:prepare`. */
+/** A custom compliance requirement's row, with Mark filed, Edit and Delete for `cda:prepare`. */
 export function RequirementRow({
   row,
   canPrepare,
   onEdit,
   onMarkFiled,
+  onDelete,
 }: {
   row: CdaRequirement;
   canPrepare: boolean;
   onEdit: () => void;
   onMarkFiled: () => void;
+  onDelete: () => void;
 }) {
   const status = requirementStatusMeta(row.display_status);
   return (
@@ -78,6 +80,15 @@ export function RequirementRow({
             )}
             <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onEdit} aria-label={`Edit ${row.title}`}>
               Edit
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 text-xs text-destructive hover:bg-destructive/5"
+              onClick={onDelete}
+              aria-label={`Delete ${row.title}`}
+            >
+              Delete
             </Button>
           </div>
         </TableCell>
