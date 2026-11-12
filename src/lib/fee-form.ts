@@ -267,18 +267,58 @@ export function buildFeeFormulaCheckRequest(
   };
 }
 
+type ValidationReply = { response?: { status?: number; data?: { errors?: Record<string, unknown> } } };
+
+/** The server's 422 field messages, or null for any other failure. */
+function validationErrors(err: unknown): Record<string, unknown> | null {
+  if (!err || typeof err !== "object" || !("response" in err)) return null;
+  const response = (err as ValidationReply).response;
+  if (response?.status !== 422) return null;
+  return response.data?.errors ?? null;
+}
+
+function firstMessage(messages: unknown): string | null {
+  if (!Array.isArray(messages)) return null;
+  return messages.find((m): m is string => typeof m === "string" && m.trim() !== "") ?? null;
+}
+
 /**
  * The server's 422 message on the formula itself (`formula_expression`), as
  * sent, or null when the refusal is about something else.
  */
 export function formulaExpressionError(err: unknown): string | null {
-  if (!err || typeof err !== "object" || !("response" in err)) return null;
-  const response = (err as { response?: { status?: number; data?: { errors?: Record<string, unknown> } } }).response;
-  if (response?.status !== 422) return null;
-  const messages = response.data?.errors?.formula_expression;
-  if (!Array.isArray(messages)) return null;
-  const first = messages.find((m): m is string => typeof m === "string" && m.trim() !== "");
-  return first ?? null;
+  return firstMessage(validationErrors(err)?.formula_expression);
+}
+
+/**
+ * What a formula check's 422 refused. A refusal of the formula itself
+ * (`formula_expression`) blocks saving. Anything else (`sample`, when the
+ * sample loan divides by zero or goes below ₱0.00, or a sample figure) is
+ * about the sample loan only: the formula is fine, and saving goes ahead.
+ * Null when the reply carries no field message.
+ */
+export function formulaCheckRefusal(err: unknown): { on: "formula" | "sample"; message: string } | null {
+  const errors = validationErrors(err);
+  if (!errors) return null;
+  const formula = firstMessage(errors.formula_expression);
+  if (formula) return { on: "formula", message: formula };
+  const sample = firstMessage(errors.sample) ?? Object.values(errors).map(firstMessage).find((m) => m !== null) ?? null;
+  return sample ? { on: "sample", message: sample } : null;
+}
+
+const RAW_FIGURE = /^(-?)(\d+)(\.\d+)?$/;
+
+/**
+ * A server figure before rounding, as sent, with thousands separators on its
+ * whole part: "1000.000000" reads "₱1,000.000000". Only the text is grouped;
+ * the decimals stay exactly as sent and nothing is parsed or rounded.
+ */
+export function formatRawPesos(raw: string): string {
+  const text = raw.trim();
+  const match = RAW_FIGURE.exec(text);
+  if (!match) return `₱${text}`;
+  const [, sign, whole, decimals = ""] = match;
+  return `${sign}₱${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}${decimals}`;
 }
 
 /** "monthly" → "month"; null for a period the screen doesn't know. */
@@ -337,6 +377,6 @@ export function describeFormulaSnapshot(item: {
 }): FormulaSnapshotView | null {
   const formula = item.formula_expression?.trim();
   if (!formula) return null;
-  const raw = item.raw_amount != null && String(item.raw_amount).trim() !== "" ? `₱${String(item.raw_amount).trim()}` : null;
+  const raw = item.raw_amount != null && String(item.raw_amount).trim() !== "" ? formatRawPesos(String(item.raw_amount)) : null;
   return { formula, figures: describeFormulaInputs(item.formula_inputs), beforeRounding: raw };
 }

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { feeService } from "@/services";
-import { firstFieldError, getErrorMessage, httpStatusOf } from "@/lib/api-error";
+import { getErrorMessage } from "@/lib/api-error";
 import {
-  buildFeeFormulaCheckRequest, DEFAULT_FORMULA_SAMPLE, formulaExpressionError, type FormulaSampleInput,
+  buildFeeFormulaCheckRequest, DEFAULT_FORMULA_SAMPLE, formulaCheckRefusal, type FormulaSampleInput,
 } from "@/lib/fee-form";
 import type { FeeFormulaCheck, FeeFormulaCheckRequest } from "@/types/fee";
 
@@ -15,6 +15,8 @@ export type FormulaCheckState =
   | { status: "checking" }
   | { status: "valid"; result: FeeFormulaCheck }
   | { status: "invalid"; message: string }
+  /** The formula is fine; only the sample loan can't be worked out (a note). */
+  | { status: "sample"; message: string }
   | { status: "failed"; message: string };
 
 interface Answer {
@@ -24,17 +26,16 @@ interface Answer {
 }
 
 function answerFor(err: unknown): FormulaCheckState {
-  if (httpStatusOf(err) === 422) {
-    const message = formulaExpressionError(err) ?? firstFieldError(err);
-    if (message) return { status: "invalid", message };
-  }
+  const refusal = formulaCheckRefusal(err);
+  if (refusal) return { status: refusal.on === "formula" ? "invalid" : "sample", message: refusal.message };
   return { status: "failed", message: getErrorMessage(err, "We couldn't check the formula. Please try again.") };
 }
 
 /**
  * The server's check of a written formula on an editable sample loan, sent
  * about 400 ms after typing stops. Only the latest answer counts: an older
- * reply never overwrites a newer formula's, and saving waits for `valid`.
+ * reply never overwrites a newer formula's. Saving waits for an answer that
+ * accepts the formula: a valid one, or one that refuses only the sample loan.
  */
 export function useFormulaCheck(input: { enabled: boolean; expression: string; minAmount: string; maxAmount: string }) {
   const { enabled, expression, minAmount, maxAmount } = input;
@@ -84,8 +85,8 @@ export function useFormulaCheck(input: { enabled: boolean; expression: string; m
     sample,
     setSample,
     state,
-    /** Saving needs the server's answer for exactly what's on screen. */
-    valid: state.status === "valid",
+    /** Saving needs the server to accept the formula exactly as on screen. */
+    valid: state.status === "valid" || state.status === "sample",
     retry: () => setAttempt((n) => n + 1),
   };
 }
