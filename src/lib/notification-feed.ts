@@ -348,7 +348,7 @@ export function buildFeed(
     });
   return ordered.slice(0, Math.max(0, limit)).map(({ row }) => {
     const kind = notificationTypeLabel(row.type);
-    const title = typeof row.title === "string" && row.title !== "" ? row.title : kind;
+    const title = typeof row.title === "string" && row.title !== "" ? row.title : fallbackTitle(row, kind);
     return {
       id: String(row.id),
       type: row.type,
@@ -363,6 +363,16 @@ export function buildFeed(
       relativeTime: formatRelativeTime(row.created_at, nowMs),
     };
   });
+}
+
+/**
+ * The title for a row the server sent none for: its kind in words, except a
+ * savings approval waiting for its second checker, read from `data.stage`
+ * (gap round B7), never from `checkers_left`.
+ */
+function fallbackTitle(row: AppNotification, kind: string): string {
+  if (row.type === "savings_approval_waiting" && row.data?.stage === "second") return "Second savings approval waiting";
+  return kind;
 }
 
 /** The rows with one marked read (optimistically), and whether it was unread. */

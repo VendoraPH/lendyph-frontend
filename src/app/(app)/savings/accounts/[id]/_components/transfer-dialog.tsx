@@ -22,6 +22,7 @@ import { savingsService } from "@/services";
 import type { SavingsAccount } from "@/types";
 import { FormField } from "../../../_components/field";
 import { OptionSelect } from "../../../_components/option-select";
+import { outflowHoldNote } from "../../../_lib/savings-rules";
 import { transferTargets } from "../_lib/transfer-targets";
 
 interface TransferDialogProps {
@@ -98,6 +99,9 @@ export function TransferDialog({ open, account, onOpenChange, onPosted }: Transf
             To another savings account of the same member in the same branch. Available to transfer:{" "}
             {formatCurrency(account.available_balance)}.
           </DialogDescription>
+          {outflowHoldNote(account) && (
+            <p className="text-xs font-medium text-amber-700 dark:text-amber-400">{outflowHoldNote(account)}</p>
+          )}
         </DialogHeader>
 
         {confirming && target && amount.ok ? (

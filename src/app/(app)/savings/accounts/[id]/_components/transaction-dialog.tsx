@@ -23,9 +23,15 @@ import { OptionSelect } from "../../../_components/option-select";
 import { useSubmitGuard } from "@/hooks/use-submit-guard";
 import { parseMoneyInput } from "@/lib/money-input";
 import { moneyPostMessage } from "@/lib/savings/money-post";
-import { feeOf, postedWithdrawalText, withFeeText, withdrawalFeeRuleHint } from "@/lib/savings/withdrawal-fee";
+import {
+  feeOf,
+  nextWithdrawalFeeText,
+  postedWithdrawalText,
+  totalWithFeeOf,
+  withFeeText,
+} from "@/lib/savings/withdrawal-fee";
 import type { SavingsWithdrawalRule } from "@/types/savings-servicing";
-import { PAYMENT_METHOD_OPTIONS } from "../../../_lib/savings-rules";
+import { PAYMENT_METHOD_OPTIONS, outflowHoldNote } from "../../../_lib/savings-rules";
 import { printSavingsReceipt } from "../_lib/print-receipt";
 
 export type TransactionMode = "deposit" | "withdrawal";
@@ -60,12 +66,14 @@ export function TransactionDialog({ mode, account, onOpenChange, onPosted }: Tra
     setSubmitted(false);
   }
 
-  // The product's fee rule, from the server's product, shown before posting.
-  // The staff API sends no per-account preview of the month's count.
+  // The product's rule, from the server's product: only read when the account
+  // detail sends no next fee (an older server), and to say why one is refused.
   const fetchProducts = useCallback(() => savingsService.products(), []);
   const products = useApiResource(fetchProducts, mode === "withdrawal");
   const rule = (products.data?.find((p) => p.id === account.product.id) ?? null) as SavingsWithdrawalRule | null;
-  const feeHint = mode === "withdrawal" ? withdrawalFeeRuleHint(rule) : null;
+  // The account detail's next fee (gap round B9), else the product's rule from an older server.
+  const feeHint = mode === "withdrawal" ? nextWithdrawalFeeText(account, rule) : null;
+  const holdNote = mode === "withdrawal" ? outflowHoldNote(account) : null;
 
   const amount = parseMoneyInput(amountRaw);
   const amountError = amount.ok ? null : amount.message;
@@ -95,7 +103,7 @@ export function TransactionDialog({ mode, account, onOpenChange, onPosted }: Tra
             ? postedWithdrawalText(posted)
             : formatCurrency(receiptAmount(posted))
           : result.kind === "sent_for_approval"
-            ? withFeeText(result.approval.amount, feeOf(result.approval))
+            ? withFeeText(result.approval.amount, feeOf(result.approval), totalWithFeeOf(result.approval))
             : undefined;
         notifySuccess(
           moneyPostMessage(result, copy.done),
@@ -151,6 +159,7 @@ export function TransactionDialog({ mode, account, onOpenChange, onPosted }: Tra
               <Input id="tx-ref" value={reference} onChange={(e) => setReference(e.target.value)} placeholder="OR / transfer no." />
             </FormField>
           </div>
+          {holdNote && <p className="text-xs font-medium text-amber-700 dark:text-amber-400">{holdNote}</p>}
           {feeHint && <p className="text-xs text-muted-foreground">{feeHint}</p>}
           <FormField id="tx-remarks" label="Remarks (optional)">
             <Textarea id="tx-remarks" value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={2} />

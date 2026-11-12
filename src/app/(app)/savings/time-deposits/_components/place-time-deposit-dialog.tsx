@@ -21,8 +21,11 @@ import { savingsService, timeDepositService } from "@/services";
 import type { MaturityInstruction, SavingsMethod, TimeDeposit } from "@/types";
 import { FormField } from "../../_components/field";
 import { OptionSelect } from "../../_components/option-select";
+import { ProductChoiceNotice } from "../../_components/product-choice-notice";
+import { useBooksReady } from "../../_hooks/use-books-ready";
+import { productChoice, termChoice } from "@/lib/savings/product-choice";
 import { METHOD_LABELS, PAYMENT_METHOD_OPTIONS } from "../../_lib/savings-rules";
-import { MATURITY_INSTRUCTION_OPTIONS, termLabel, termsOfferedText } from "../../_lib/time-deposit-rules";
+import { MATURITY_INSTRUCTION_OPTIONS, termsOfferedText } from "../../_lib/time-deposit-rules";
 import { checkPlacement, type PlacementForm } from "../_lib/placement-form";
 import { PlacementPreview } from "./placement-preview";
 
@@ -64,9 +67,21 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
 
   const fetchProducts = useCallback(() => savingsService.products(), []);
   const products = useApiResource(fetchProducts, open);
-  const placeable = (products.data ?? []).filter((p) => p.is_active && p.kind === "time_deposit");
-  const product = placeable.find((p) => String(p.id) === form.productId) ?? null;
+  const noneActive =
+    products.data !== null && !products.data.some((p) => p.is_active && p.kind === "time_deposit");
+  const books = useBooksReady(open && noneActive);
+  const choice = productChoice({
+    products: products.data,
+    kind: "time_deposit",
+    booksReady: books.ready,
+    canManage: books.canManage,
+  });
+  const product = choice.options.some((o) => o.value === form.productId && !o.disabled)
+    ? ((products.data ?? []).find((p) => String(p.id) === form.productId) ?? null)
+    : null;
   const terms = product?.term_options_days ?? [];
+  const term = termChoice(product);
+  const choosing = products.loading || books.loading;
 
   const memberId = form.member?.id ?? null;
   const fetchAccounts = useCallback(
@@ -126,18 +141,20 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
               hint={
                 products.unavailable
                   ? "Savings products aren't available yet."
-                  : product
-                    ? `At least ${formatCurrency(product.minimum_opening_balance)}. The rate depends on the term.`
-                    : undefined
+                  : products.error
+                    ? "Couldn't load the savings products. Close this and try again."
+                    : product
+                      ? `At least ${formatCurrency(product.minimum_opening_balance)}. The rate depends on the term.`
+                      : undefined
               }
             >
               <OptionSelect
                 id="td-product"
                 value={form.productId}
                 onChange={(v) => setForm((f) => ({ ...f, productId: v, term: "" }))}
-                options={placeable.map((p) => ({ value: String(p.id), label: `${p.name} (${p.code})` }))}
-                placeholder={products.loading ? "Loading…" : "Choose a product"}
-                disabled={products.loading || placeable.length === 0}
+                options={choice.options}
+                placeholder={choosing ? "Loading…" : choice.selectable === 0 ? "No product to choose" : "Choose a product"}
+                disabled={choosing || choice.options.length === 0}
               />
             </FormField>
             <FormField id="td-term" label="Term" error={show(errors.term)} hint={termsOfferedText(terms)}>
@@ -145,12 +162,13 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
                 id="td-term"
                 value={form.term}
                 onChange={(v) => set("term", v)}
-                options={terms.map((d) => ({ value: String(d), label: termLabel(d) }))}
-                placeholder={product ? "Choose a term" : "Choose a product first"}
-                disabled={terms.length === 0}
+                options={term.options}
+                placeholder={term.placeholder}
+                disabled={term.options.length === 0}
               />
             </FormField>
           </div>
+          {!choosing && choice.empty && <ProductChoiceNotice empty={choice.empty} />}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField id="td-amount" label="Amount placed" error={show(errors.amount)}>

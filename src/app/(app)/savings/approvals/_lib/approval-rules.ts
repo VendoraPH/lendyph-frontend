@@ -1,5 +1,5 @@
 import { formatCurrency } from "@/lib/format";
-import { feeOf } from "@/lib/savings/withdrawal-fee";
+import { feeOf, totalWithFeeOf } from "@/lib/savings/withdrawal-fee";
 import type { SavingsApproval } from "@/types";
 
 export interface ApprovalOffer {
@@ -65,8 +65,10 @@ export function approvalAmountText(approval: Pick<SavingsApproval, "kind" | "amo
   return approval.kind === "reactivation" ? "—" : formatCurrency(approval.amount);
 }
 
-/** The excess-withdrawal fee the request carries besides its amount, in the server's figure; null when none. */
-export function approvalFeeText(approval: Pick<SavingsApproval, "fee_amount">): string | null {
+/** The excess-withdrawal fee the request carries besides its amount, and the server's total with it; null when none. */
+export function approvalFeeText(approval: Pick<SavingsApproval, "fee_amount" | "total_with_fee">): string | null {
   const fee = feeOf(approval);
-  return fee ? `Excess-withdrawal fee ${formatCurrency(fee)}` : null;
+  if (!fee) return null;
+  const total = totalWithFeeOf(approval);
+  return `Excess-withdrawal fee ${formatCurrency(fee)}${total ? ` · ${formatCurrency(total)} in all` : ""}`;
 }

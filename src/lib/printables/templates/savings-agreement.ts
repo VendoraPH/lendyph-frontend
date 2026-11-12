@@ -8,7 +8,10 @@
  * "Depositor".
  */
 
+import { env } from "@/config/env";
 import { formatRate } from "@/lib/format";
+import { isNilAmount } from "@/lib/savings/amount-text";
+import { ladderLines } from "@/lib/savings/rate-ladder";
 import { INTEREST_CREDITING_LABELS, labelOf } from "@/app/(app)/savings/_lib/savings-rules";
 import type { PrintableDocument, PrintBlock } from "../types";
 import {
@@ -26,30 +29,30 @@ import {
 } from "./shared";
 import { part, productName, str } from "./savings-shared";
 
-/** A tier's floor as a peso figure, or null for the base tier (any balance). */
-function floorOf(value: unknown): string | null {
-  return value === null || value === undefined || value === "" ? null : currencyOrDash(value);
-}
-
 /**
  * The product's rate ladders in force (S2: one `current_rates` row per term,
- * its whole ladder in `tiers`), one line a tier, in the rate dialog's words:
- * "Below ₱50,000.00: 1% a year", "₱50,000.00 and up: 2.125% a year", or "Any
- * balance: 1% a year" with no tier above the base. A row from a server with no
- * `tiers` prints its base rate. Rates are printed as stored, never rounded.
+ * its whole ladder in `tiers`), one line a tier, in the rate dialog's words
+ * (`ladderLines`): "Below ₱50,000.00: 1% a year", "₱50,000.00 and up: 2.125% a
+ * year", or "Any balance: 1% a year" with no tier above the base. A row from a
+ * server with no `tiers` prints its base rate. Rates are printed as stored,
+ * never rounded.
  */
 export function rateLines(product: Record<string, unknown> | null): string[] {
   return asArray(pick(product, ["current_rates"])).flatMap((rate) => {
     const listed = asArray(rate.tiers);
-    const tiers = listed.length > 0 ? listed : [{ min_balance: null, annual_rate: rate.annual_rate }];
-    return tiers.flatMap((tier, i) => {
-      if (tier.annual_rate === null || tier.annual_rate === undefined || tier.annual_rate === "") return [];
-      const floor = floorOf(tier.min_balance);
-      const next = floorOf(tiers[i + 1]?.min_balance);
-      const band = floor ? `${floor} and up` : next ? `Below ${next}` : "Any balance";
-      return [`${band}: ${formatRate(tier.annual_rate as string)}% a year`];
-    });
+    const tiers = (listed.length > 0 ? listed : [{ min_balance: null, annual_rate: rate.annual_rate }])
+      .filter((tier) => tier.annual_rate !== null && tier.annual_rate !== undefined && tier.annual_rate !== "")
+      .map((tier) => ({
+        min_balance: tier.min_balance === null || tier.min_balance === undefined || tier.min_balance === "" ? null : String(tier.min_balance),
+        annual_rate: String(tier.annual_rate),
+      }));
+    return ladderLines(tiers);
   });
+}
+
+/** A ladder line inside a sentence: "below ₱50,000.00: …" and "any balance: …", never a capital mid-sentence. */
+function inSentence(line: string): string {
+  return /^(Below|Any) /.test(line) ? line.charAt(0).toLowerCase() + line.slice(1) : line;
 }
 
 const clause = (n: number, title: string, body: string) =>
@@ -60,7 +63,8 @@ export function buildSavingsAgreementDoc(raw: unknown, options: PrintableBuildOp
   const product = part(raw, "product");
   const settings = part(raw, "settings");
   const depositor = str(account, "borrower_name");
-  const org = options.org?.name?.trim() || null;
+  // The cooperative's name from Branding, else the app's name: never a blank line.
+  const org = options.org?.name?.trim() || env.app.name;
   const money = (key: string) => {
     const value = str(product, key);
     return value === null ? null : escapeHtml(currencyOrDash(value));
@@ -68,10 +72,11 @@ export function buildSavingsAgreementDoc(raw: unknown, options: PrintableBuildOp
 
   const rates = rateLines(product);
   const crediting = str(product, "interest_crediting");
-  const minAdb = money("minimum_adb_for_interest");
+  // A ₱0.00 floor means every balance earns interest, so there's no sentence for it.
+  const minAdb = isNilAmount(str(product, "minimum_adb_for_interest")) ? null : money("minimum_adb_for_interest");
   const interest =
     (rates.length > 0
-      ? `Interest is paid at ${rates.map(escapeHtml).join("; ")}`
+      ? `Interest is paid at these rates by balance (${rates.map((line) => escapeHtml(inSentence(line))).join("; ")})`
       : "Interest is paid at the rate the Cooperative sets for this product") +
     ", on the average daily balance, counting the actual days over a 365-day year" +
     (crediting ? `, credited ${escapeHtml(labelOf(INTEREST_CREDITING_LABELS, crediting).toLowerCase())}` : "") +

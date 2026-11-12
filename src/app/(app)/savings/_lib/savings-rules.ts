@@ -16,7 +16,7 @@ import type {
   SavingsUserRef,
 } from "@/types";
 
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatDate } from "@/lib/format";
 import { METHOD_LABELS } from "@/lib/savings/method-labels";
 
 /**
@@ -99,6 +99,17 @@ export function heldForRequestsNote(account: Pick<SavingsAccount, "held_for_requ
   const held = account.held_for_requests;
   if (typeof held !== "string" || !/^\d+(\.\d+)?$/.test(held) || /^0+(\.0+)?$/.test(held)) return null;
   return `of which ${formatCurrency(held)} for member requests (a pending withdrawal in the Member Portal)`;
+}
+
+/**
+ * The reactivation hold (gap round B7, `outflow_hold`): after a deposit
+ * reactivated the account, every outflow waits for a checker until one is
+ * approved. Shown before a withdrawal or transfer is started; null when off.
+ */
+export function outflowHoldNote(account: Pick<SavingsAccount, "outflow_hold">): string | null {
+  const since = account.outflow_hold?.since;
+  if (!since) return null;
+  return `This account was reactivated by a deposit on ${formatDate(since)}; money going out needs a checker until one outflow is approved.`;
 }
 
 /** Where a member request's hold is released instead: deciding the request. */

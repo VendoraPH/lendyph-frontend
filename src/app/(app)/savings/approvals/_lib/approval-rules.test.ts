@@ -65,5 +65,10 @@ test("an approval's money reads the amount and its fee as the server sent them",
   assert.equal(approvalAmountText(base), "₱500.00");
   assert.equal(approvalFeeText(base), "Excess-withdrawal fee ₱25.00");
   assert.equal(approvalFeeText({ ...base, fee_amount: "0.00" }), null);
+  // Gap round B9: the server's total with the fee.
+  assert.equal(
+    approvalFeeText({ ...base, fee_amount: "25.00", total_with_fee: "525.00" }),
+    "Excess-withdrawal fee ₱25.00 · ₱525.00 in all",
+  );
   assert.equal(approvalAmountText({ ...base, kind: "reactivation", amount: "0.00" }), "—");
 });

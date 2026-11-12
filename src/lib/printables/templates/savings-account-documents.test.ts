@@ -17,6 +17,7 @@ import {
   signatureLabels,
   titleBlock,
 } from "./doc-assertions";
+import { env } from "@/config/env";
 import { buildSavingsAgreementDoc, rateLines } from "./savings-agreement";
 import { buildSavingsClosureFormDoc } from "./savings-closure-form";
 import { buildSavingsDormancyNoticeDoc } from "./savings-dormancy-notice";
@@ -128,7 +129,8 @@ test("the agreement states the product's terms from the server, rates unrounded"
   assertPrintableShape(doc, "savings_agreement");
   const text = prose(doc);
   assert.match(text, /Binhs Multi-Purpose Cooperative/);
-  assert.match(text, /Below ₱50,000.00: 1% a year; ₱50,000.00 and up: 2.125% a year/);
+  assert.match(text, /Interest is paid at these rates by balance \(below ₱50,000.00: 1% a year; ₱50,000.00 and up: 2.125% a year\)/);
+  assert.doesNotMatch(text, /paid at Below/);
   assert.match(text, /credited quarterly/);
   assert.match(text, /below ₱1,000.00 earns no interest/);
   assert.match(text, /maintaining balance of ₱300.00/);
@@ -137,6 +139,18 @@ test("the agreement states the product's terms from the server, rates unrounded"
   assert.match(text, /for members it is currently 0%/);
   assert.match(text, /Depositor/);
   assert.doesNotMatch(text, /\$/);
+});
+
+// Re-check 3b: no "below ₱0.00 earns no interest", and never a blank cooperative name.
+test("a product whose interest floor is ₱0.00 prints no floor sentence", () => {
+  const doc = buildSavingsAgreementDoc({ account: ACCOUNT, product: { ...PRODUCT, minimum_adb_for_interest: "0.00" }, settings: SETTINGS }, { org: ORG });
+  assert.doesNotMatch(prose(doc), /earns no interest/);
+});
+
+test("with no cooperative name in Branding, the agreement names the app instead of a blank line", () => {
+  const doc = buildSavingsAgreementDoc({ account: ACCOUNT, product: PRODUCT, settings: SETTINGS }, { org: { name: "  ", logoUrl: null } });
+  assert.ok(env.app.name.trim() !== "");
+  assert.ok(prose(doc).includes(`between <strong><u>${env.app.name}</u></strong> (the "Cooperative")`));
 });
 
 test("a product that refuses withdrawals beyond the free count says so", () => {

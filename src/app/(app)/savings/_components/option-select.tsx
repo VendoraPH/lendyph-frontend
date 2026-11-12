@@ -11,6 +11,8 @@ import {
 export interface Option {
   value: string;
   label: string;
+  /** Listed but can't be picked (for example, a product that isn't active yet). */
+  disabled?: boolean;
 }
 
 interface OptionSelectProps {
@@ -37,7 +39,7 @@ export function OptionSelect({ id, value, onChange, options, placeholder, classN
       </SelectTrigger>
       <SelectContent>
         {options.map((o) => (
-          <SelectItem key={o.value} value={o.value}>
+          <SelectItem key={o.value} value={o.value} disabled={o.disabled}>
             {o.label}
           </SelectItem>
         ))}
