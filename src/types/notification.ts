@@ -39,6 +39,10 @@ export type NotificationType =
   | "cda_deadline_reminder"
   | "cda_document_expiring"
   | "cda_training_incomplete"
+  // CDA gap round (backend B6): a filing recorded with CDA, and the nightly
+  // notice that a report not yet filed still misses required fields.
+  | "cda_submission_recorded"
+  | "cda_missing_requirement"
   // Member Portal (Phase 3): a member sent a request (to the branch's
   // member_portal:requests holders), and a member reported a sign-in they
   // don't recognise (to the branch's member_portal:manage holders).

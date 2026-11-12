@@ -500,6 +500,9 @@ describe("CDA notifications", () => {
     cda_deadline_reminder: ["CDA deadline reminder", "warning"],
     cda_document_expiring: ["CDA document expiring", "warning"],
     cda_training_incomplete: ["Officer training incomplete", "warning"],
+    // Gap round B6.
+    cda_submission_recorded: ["CDA submission recorded", "success"],
+    cda_missing_requirement: ["CDA missing requirement", "warning"],
   };
 
   for (const [type, [label, tone]] of Object.entries(CDA_KINDS)) {
@@ -539,6 +542,16 @@ describe("a notice reads its title once", () => {
     const [item] = buildFeed([row({ id: "c1", type: "cda_deadline_reminder", title: "CDA report due in 3 days" })], NOW);
     assert.equal(item.title, "CDA report due in 3 days");
     assert.equal(item.announceKind, false);
+  });
+
+  test("the B6 notices' server titles name their kind too", () => {
+    for (const [type, title] of [
+      ["cda_submission_recorded", "CDA filing recorded"],
+      ["cda_missing_requirement", "CDA report incomplete"],
+    ]) {
+      const [item] = buildFeed([row({ id: type, type, title })], NOW);
+      assert.equal(item.announceKind, false, type);
+    }
   });
 
   test("a row whose title is its kind doesn't announce it twice", () => {

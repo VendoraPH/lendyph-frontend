@@ -188,11 +188,57 @@ export interface CdaDashboard {
   issues: CdaIssue[];
 }
 
-export interface CdaCalendarRow extends CdaReportRow {
+/** A report on the compliance calendar (`kind: report`). */
+export interface CdaCalendarReportRow extends CdaReportRow {
+  kind: "report";
   display_status: CdaDisplayStatus;
   readiness: number;
   filed: boolean;
 }
+
+/** A custom compliance requirement's status (`CdaComplianceRequirement::STATUSES`). */
+export type CdaRequirementStatus = "pending" | "filed" | "not_applicable";
+
+/**
+ * A custom compliance calendar item (`RequirementPresenter::row`), on its own
+ * list and as a calendar row. `effective_deadline` (the extension, else the
+ * due date) and `days_remaining` are the server's.
+ */
+export interface CdaRequirement {
+  kind: "requirement";
+  id: number;
+  year: number;
+  title: string;
+  description: string | null;
+  reference: string | null;
+  status: CdaRequirementStatus;
+  display_status: CdaRequirementStatus;
+  applicable: boolean;
+  filed: boolean;
+  filed_on: string | null;
+  default_due_on: string;
+  extended_due_on: string | null;
+  effective_deadline: string;
+  days_remaining: number;
+  created_by: CdaUserRef | null;
+  updated_by: CdaUserRef | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+/** `POST /cda/periods/{year}/requirements` and `PUT /cda/requirements/{id}` (every field optional on PUT). */
+export interface CdaRequirementInput {
+  title: string;
+  description: string | null;
+  default_due_on: string;
+  extended_due_on: string | null;
+  reference: string | null;
+  status: CdaRequirementStatus;
+  filed_on: string | null;
+}
+
+/** One calendar row: a report or a custom requirement, by effective deadline. */
+export type CdaCalendarRow = CdaCalendarReportRow | CdaRequirement;
 
 export type CdaFieldType =
   | "text"
@@ -335,6 +381,47 @@ export interface CdaHistoryEvent {
   created_at: string;
 }
 
+/** A review step's status on a report (`CdaReportApprovalStep`). */
+export type CdaApprovalStepStatus = "waiting" | "pending" | "approved" | "returned" | "cancelled";
+
+/**
+ * One step of the report's latest review round (`CdaApprovalChain::present`),
+ * as it was copied from the CDA review chain at submit for review. `closed`
+ * once the round ended (a return, a return from approved or a reopen).
+ */
+export interface CdaApprovalStep {
+  id: number;
+  round: number;
+  step_order: number;
+  name: string;
+  role: string;
+  role_label: string;
+  status_label: string | null;
+  status: CdaApprovalStepStatus;
+  acted_by: CdaUserRef | null;
+  acted_by_name: string | null;
+  acted_at: string | null;
+  remarks: string | null;
+  closed: boolean;
+}
+
+/** A step of the `cda` chain in Settings → Approval Workflow: approve-only, by role. */
+export interface CdaReviewChainStep {
+  /** `cda-step-N`, given by the server on save. */
+  id?: string;
+  name: string;
+  role: string;
+  kind?: "approve";
+  status?: string | null;
+}
+
+/** `GET /settings/approval-workflow?type=cda`; no steps is the single review. */
+export interface CdaReviewChain {
+  type: "cda";
+  steps: CdaReviewChainStep[];
+  is_default: boolean;
+}
+
 /** `GET /cda/reports/{id}` (and the year and type alias). */
 export interface CdaReport extends CdaReportRow {
   type: CdaReportType;
@@ -362,6 +449,8 @@ export interface CdaReport extends CdaReportRow {
   approved_by: CdaUserRef | null;
   approved_at: string | null;
   finalized_by: CdaUserRef | null;
+  /** The review chain's latest round, in step order; empty on the single review. */
+  approval_steps: CdaApprovalStep[];
   available_actions: CdaWorkflowAction[];
   history: CdaHistoryEvent[];
 }
@@ -390,6 +479,8 @@ export interface CdaSubmissionInput {
 
 export interface CdaWorkflowInput {
   action: CdaWorkflowAction;
+  /** Approve on a review chain: the pending step's id (409 when it isn't the pending step any more). */
+  step_id?: number;
   reason?: string;
   confirm_warnings?: boolean;
   stage?: string;

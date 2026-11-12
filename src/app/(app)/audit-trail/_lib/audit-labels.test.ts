@@ -474,6 +474,7 @@ test("CDA rows read their module, actions and targets in words", () => {
   assert.equal(auditActionLabel("cda_report_saved"), "Report saved");
   assert.equal(auditActionLabel("cda_report_refreshed"), "Report refreshed");
   assert.equal(auditActionLabel("cda_export_generated"), "Report exported");
+  assert.equal(auditActionLabel("cda_review_chain_updated"), "Review chain changed");
   assert.equal(auditActionLabel("year_end_captured"), "Year-end figures captured");
   assert.equal(auditTargetType("CdaReport"), "CDA report");
   assert.equal(auditTargetType("CdaMediationCase"), "Mediation case");
@@ -596,6 +597,7 @@ test("a CDA workflow row's action reads in words, never its key (ReportWorkflow:
     mark_for_correction: "Marked for correction",
     reopen: "Reopened",
     set_stage: "Moved to another stage",
+    approve_step: "Approved a review step",
   };
   for (const [key, label] of Object.entries(words)) {
     assert.equal(auditChangeValue(cda, "action", key), label, key);
