@@ -209,6 +209,7 @@ const TARGET_TYPE_LABELS: Record<string, string> = {
   AccountingYearClose: "Year-end close",
   GCashNonMember: "GCash walk-in",
   CsvImportRun: "Data import",
+  PenaltyConfig: "Penalty configuration",
   SavingsAccount: "Savings account",
   SavingsHold: "Savings hold",
   SavingsApproval: "Savings approval request",

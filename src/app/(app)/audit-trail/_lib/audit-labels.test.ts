@@ -515,6 +515,7 @@ test("the server's accounting and other odd class names read as the menu names t
     AccountingYearClose: "Year-end close",
     GCashNonMember: "GCash walk-in",
     CsvImportRun: "Data import",
+    PenaltyConfig: "Penalty configuration",
   };
   for (const [type, label] of Object.entries(words)) assert.equal(auditTargetType(type), label, type);
 });
