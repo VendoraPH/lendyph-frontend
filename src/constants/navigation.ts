@@ -118,6 +118,13 @@ export const MEMBER_PORTAL_NAV: NavItem = {
  * mediation, audit and tax reports also need their restricted view, and the
  * menu hides them without it. Shown only when NEXT_PUBLIC_ENABLE_CDA is on.
  */
+/** Settings → Penalties, for `penalties:view`, shown only while its flag is on. */
+export const PENALTIES_SETTINGS_NAV: NavSubItem = {
+  title: "Penalties",
+  href: "/settings/penalties",
+  permission: "penalties:view",
+};
+
 export const CDA_NAV: NavItem = {
   title: "CDA Compliance",
   href: "/cda",
@@ -356,6 +363,9 @@ export const SIDEBAR_NAV: NavItem[] = [
       { title: "Branches", href: "/settings/branches" },
       { title: "Loan Products", href: "/settings/loan-products" },
       { title: "Fees", href: "/settings/fees", permission: "fees:view" },
+      // Gated on NEXT_PUBLIC_ENABLE_PENALTY_CONFIGS at build time; the route
+      // answers not found when it is off (settings/penalties/layout.tsx).
+      ...(env.features.penaltyConfigs ? [PENALTIES_SETTINGS_NAV] : []),
       { title: "Collateral Types", href: "/settings/collateral-types" },
       { title: "Role and Permissions", href: "/settings/user-roles" },
       { title: "Approval Workflow", href: "/settings/approval-workflow" },

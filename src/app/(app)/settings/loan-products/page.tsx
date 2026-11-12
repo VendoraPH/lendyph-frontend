@@ -1,5 +1,6 @@
 "use client";
 
+import { env } from "@/config/env";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useDialogOpening, usePermission } from "@/hooks";
@@ -84,6 +85,8 @@ import {
   retiredCustomFeesNotice,
   type ProductForm,
 } from "./_lib/product-form";
+import type { PenaltySource } from "./_lib/penalty-source";
+import { PenaltySourceLine } from "./_components/penalty-source-line";
 
 // ── Helpers ──
 
@@ -157,6 +160,7 @@ function ProductFormDialog({
   onSubmit,
   initialData,
   retiredFeesNotice,
+  penaltySource,
   title,
   description,
 }: {
@@ -166,6 +170,8 @@ function ProductFormDialog({
   initialData?: ProductForm;
   /** Shown read-only when the product still holds retired `custom_fees`. */
   retiredFeesNotice?: string | null;
+  /** The server's `penalty_source`, shown in place of the rate while penalty configurations are on. */
+  penaltySource?: PenaltySource | null;
   title: string;
   description: string;
 }) {
@@ -553,18 +559,29 @@ function ProductFormDialog({
                   onChange={(e) => update("notarial_fee", e.target.value)}
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="penalty-rate">{PRODUCT_FIELD_LABELS.penalty_rate} (% per month)</Label>
-                <Input
-                  id="penalty-rate"
-                  type="number"
-                  min={0}
-                  step="0.0001"
-                  placeholder="3"
-                  value={form.penalty_rate}
-                  onChange={(e) => update("penalty_rate", e.target.value)}
-                />
-              </div>
+              {env.features.penaltyConfigs ? (
+                // Penalty terms are set in Settings → Penalties; the stored rate
+                // is sent back unchanged, so the server's answer decides.
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Penalty</p>
+                  <p className="text-sm text-muted-foreground">
+                    <PenaltySourceLine source={penaltySource} isNew={!initialData} />
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label htmlFor="penalty-rate">{PRODUCT_FIELD_LABELS.penalty_rate} (% per month)</Label>
+                  <Input
+                    id="penalty-rate"
+                    type="number"
+                    min={0}
+                    step="0.0001"
+                    placeholder="3"
+                    value={form.penalty_rate}
+                    onChange={(e) => update("penalty_rate", e.target.value)}
+                  />
+                </div>
+              )}
             </div>
 
             {/* Grace Period Toggle */}
@@ -874,6 +891,7 @@ function ProductActionsCell({
         onSubmit={onEdit}
         initialData={initialData}
         retiredFeesNotice={retiredFeesNotice}
+        penaltySource={product.penalty_source}
         title="Edit Loan Product"
         description={`Update the configuration for ${product.name}.`}
       />
@@ -1100,7 +1118,11 @@ function LoanProductsContent() {
                 <div>
                   <p className="text-xs text-muted-foreground">Penalty</p>
                   <p className="text-xs">
-                    {formatRate(product.penalty_rate)}%/mo
+                    {env.features.penaltyConfigs ? (
+                      <PenaltySourceLine source={product.penalty_source} />
+                    ) : (
+                      `${formatRate(product.penalty_rate)}%/mo`
+                    )}
                     {Number(getProductField(product, "grace_period_days")) > 0 && ` · ${getProductField(product, "grace_period_days")}d grace`}
                   </p>
                 </div>

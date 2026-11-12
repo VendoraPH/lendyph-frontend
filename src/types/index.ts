@@ -23,6 +23,7 @@ export type {
 export { APPROVAL_CHAIN_HIDDEN_STATUSES, isApprovalChainHidden, loanShouldHaveAChain } from "./loan-approval";
 export type { Repayment, CreateRepaymentData, VoidRepaymentData } from "./repayment";
 export type { Fee, FeeType, FeeConditions, CreateFeeData, UpdateFeeData } from "./fee";
+export type { PenaltyCondition, PenaltyConfig, PenaltyConfigStatus, SavePenaltyConfigData } from "./penalty";
 export type { ShareCapitalLedgerEntry, ShareCapitalMember, ShareCapitalMemberPeriod, ShareCapitalMembersResponse, ShareCapitalBookTotals, Pledge, AutoCreditStatus, AutoCreditMember, AutoCreditProcessResult, CreateLedgerEntryData, UpdatePledgeData, CreatePledgeEntryData, BulkPledgeEntryData } from "./share-capital";
 export type { CollateralType, Collateral, LoanCollateral, CollateralWithMeta, CollateralSource, SecurityStatus, RegisterCollateral, CollateralRegisterGroup, CollateralRegisterSort, CollateralRegisterDirection, CollateralRegisterParams, CollateralRegisterTotals, CollateralRegisterResponse } from "./collateral";
 export { computeSecurityStatus, securityStatusLabel } from "./collateral";

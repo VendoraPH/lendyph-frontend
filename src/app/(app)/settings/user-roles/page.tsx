@@ -66,6 +66,7 @@ import {
   ReceiptText,
   Wallet,
   Gauge,
+  AlarmClock,
   BellRing,
   PiggyBank,
   ClipboardCheck,
@@ -109,6 +110,16 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
     description: "Reusable fees, loan product applicability, and conditions.",
     icon: CreditCard,
     features: ["View fee rules", "Create and edit fees for selected products", "Delete fee rules"],
+  },
+  penalties: {
+    label: "Penalties",
+    description: "Late penalty rates by days late, for loan products. New loans copy their product's configuration.",
+    icon: AlarmClock,
+    features: [
+      "View penalty configurations",
+      "Create and edit configurations, and activate or deactivate them",
+      "Delete configurations no loan carries",
+    ],
   },
   dashboard: {
     label: "Dashboard",

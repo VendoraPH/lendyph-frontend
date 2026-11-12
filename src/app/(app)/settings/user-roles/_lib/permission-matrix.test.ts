@@ -146,3 +146,28 @@ test("every Member Portal permission reads in its own words", () => {
     assert.ok(label && !label.includes("_"), action);
   }
 });
+
+// Phase 4 (B2): the API seeds exactly these four for admin and super_admin.
+test("the matrix offers exactly the four penalties permissions", () => {
+  assert.deepEqual(offered.filter((p) => p.startsWith("penalties:")), [
+    "penalties:view",
+    "penalties:create",
+    "penalties:update",
+    "penalties:delete",
+  ]);
+  assert.deepEqual(moduleToggleActions("penalties"), ["view", "create", "update", "delete"]);
+});
+
+// The general `delete` label reads "Deactivate"; on penalties deactivating is
+// `update`, and `delete` really deletes, so each action has its own words.
+test("the penalties actions read in their own words", () => {
+  assert.equal(moduleActionLabel("penalties", "view"), "View penalty configurations");
+  assert.equal(moduleActionLabel("penalties", "create"), "Create configurations");
+  assert.equal(moduleActionLabel("penalties", "update"), "Edit, activate and deactivate");
+  assert.equal(moduleActionLabel("penalties", "delete"), "Delete unused configurations");
+});
+
+test("the roles screen describes the Penalties module", () => {
+  const page = readFileSync(resolve(process.cwd(), "src/app/(app)/settings/user-roles/page.tsx"), "utf8");
+  assert.match(page, /penalties: \{\n\s+label: "Penalties"/);
+});
