@@ -29,6 +29,7 @@ const MODULE_LABELS: Record<AuditModule, string> = {
   savings: "Savings",
   cda: "CDA Compliance",
   member_portal: "Member Portal",
+  penalties: "Penalties",
   system: "System",
 };
 
@@ -52,6 +53,7 @@ export const AUDIT_MODULE_OPTIONS: { value: AuditModule; label: string }[] = (
     "savings",
     "cda",
     "member_portal",
+    "penalties",
     "system",
   ] as const
 ).map((value) => ({ value, label: MODULE_LABELS[value] }));
@@ -207,6 +209,7 @@ const TARGET_TYPE_LABELS: Record<string, string> = {
   AccountingYearClose: "Year-end close",
   GCashNonMember: "GCash walk-in",
   CsvImportRun: "Data import",
+  PenaltyConfig: "Penalty configuration",
   SavingsAccount: "Savings account",
   SavingsHold: "Savings hold",
   SavingsApproval: "Savings approval request",

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { env } from "@/config/env";
-import { CDA_NAV, MEMBER_PORTAL_NAV, SIDEBAR_NAV, navChildAllowed, navItemAllowed, navItemHref } from "./navigation";
+import { CDA_NAV, MEMBER_PORTAL_NAV, PENALTIES_SETTINGS_NAV, SIDEBAR_NAV, navChildAllowed, navItemAllowed, navItemHref } from "./navigation";
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
 const LAYOUT = "src/app/(app)/credit-scoring/layout.tsx";
@@ -163,4 +163,22 @@ test("Settings → Member Portal also needs every branch, as its page does", () 
   assert.equal(navChildAllowed(child, holds("member_portal:settings")), false);
   assert.equal(navChildAllowed(child, holds("member_portal:settings", "branches:view_all")), true);
   assert.equal(navChildAllowed({ title: "Profile", href: "/settings/profile" }, holds()), true);
+});
+
+test("Settings → Penalties is off when the flag isn't set, and its route answers not found", () => {
+  assert.equal(env.features.penaltyConfigs, false);
+  const settings = SIDEBAR_NAV.find((item) => item.href === "/settings");
+  assert.equal(settings?.children?.some((c) => c.href === "/settings/penalties"), false);
+  const layout = read("src/app/(app)/settings/penalties/layout.tsx");
+  assert.match(layout, /env\.features\.penaltyConfigs/);
+  assert.match(layout, /notFound\(\)/);
+  assert.doesNotMatch(layout, /"use client"/);
+  assert.match(read("src/constants/navigation.ts"), /env\.features\.penaltyConfigs \? \[PENALTIES_SETTINGS_NAV\]/);
+});
+
+test("Settings → Penalties needs penalties:view, as its page does", () => {
+  const holds = (...held: string[]) => (p: string) => held.includes(p);
+  assert.equal(navChildAllowed(PENALTIES_SETTINGS_NAV, holds()), false);
+  assert.equal(navChildAllowed(PENALTIES_SETTINGS_NAV, holds("penalties:view")), true);
+  assert.match(read("src/app/(app)/settings/penalties/page.tsx"), /<RouteGuard permission="penalties:view"/);
 });

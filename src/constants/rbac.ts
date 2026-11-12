@@ -83,6 +83,11 @@ const EVERY_PERMISSION: Permission[] = [
   "fees:create",
   "fees:update",
   "fees:delete",
+  // Settings → Penalties (Phase 4). Seeded for admin and super_admin only.
+  "penalties:view",
+  "penalties:create",
+  "penalties:update",
+  "penalties:delete",
   "users:view",
   "users:create",
   "users:update",

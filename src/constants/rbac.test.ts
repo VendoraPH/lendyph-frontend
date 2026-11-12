@@ -92,6 +92,16 @@ test("admin and super_admin hold all six Member Portal permissions, and no other
   }
 });
 
+// Phase 4 (B2): Settings → Penalties' four permissions are seeded for admin
+// and super_admin only.
+test("admin and super_admin hold all four penalties permissions, and no other role holds one", () => {
+  const PENALTIES = ["penalties:view", "penalties:create", "penalties:update", "penalties:delete"];
+  for (const [role, config] of Object.entries(ROLES)) {
+    const held = config.permissions.filter((p) => p.startsWith("penalties:"));
+    assert.deepEqual(held, role === "admin" || role === "super_admin" ? PENALTIES : [], role);
+  }
+});
+
 // Copied from lendyph-backend `RoleAndPermissionSeeder::ACCOUNTANT_PERMISSIONS`
 // (round C, slice C1, after the review fix on #249 removed `audit_logs:view`,
 // whose rows carry members' personal data). `ROLES.accountant` documents the
@@ -281,6 +291,10 @@ const BACKEND_PERMISSIONS = [
   "payments:update",
   "payments:view",
   "payments:void",
+  "penalties:create",
+  "penalties:delete",
+  "penalties:update",
+  "penalties:view",
   "reminders:pause",
   "reminders:send",
   "reminders:settings",

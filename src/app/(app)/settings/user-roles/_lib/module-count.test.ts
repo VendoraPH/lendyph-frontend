@@ -45,8 +45,8 @@ test("admin's module count never exceeds the modules offered", () => {
 
 // Admin is also granted `branches:view_all` (backend migration
 // 2026_11_02_210000), the one permission of the Branch Access module, and the
-// four reminders permissions (Phase 2), and savings:view, cda:view and
-// member_portal:view (Phase 3).
+// four reminders permissions (Phase 2), savings:view, cda:view and
+// member_portal:view (Phase 3), and penalties:view (Phase 4).
 const REMINDERS = [
   "reminders:view",
   "reminders:send",
@@ -55,6 +55,7 @@ const REMINDERS = [
   "savings:view",
   "cda:view",
   "member_portal:view",
+  "penalties:view",
 ];
 
 test("admin holding loan_products:manage, branches:view_all and reminders is in every offered module", () => {

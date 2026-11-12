@@ -35,12 +35,18 @@ import type { Action, Module } from "@/types";
  * `member_portal` is offered too (Phase 3): the backend seeds its six staff
  * permissions for admin and super_admin (migration 2026_11_11_700200).
  * `settings` works only with `branches:view_all`.
+ *
+ * `penalties` is offered too (Phase 4, Settings → Penalties): the backend
+ * seeds `penalties:view|create|update|delete` for admin and super_admin.
  */
 export type UIModule = Exclude<Module, "collections" | "loan_adjustments" | "auto_credit">;
 
 // Applicable actions per module — only the actions that make sense for each area
 export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
   fees: ["view", "create", "update", "delete"],
+  // `update` covers editing, activating and deactivating; `delete` removes a
+  // configuration no loan carries (the server answers 409 otherwise).
+  penalties: ["view", "create", "update", "delete"],
   dashboard: ["view"],
   borrowers: ["view", "create", "update", "delete", "approve"],
   // `write_off` (writing off a restructure's shortfall) is seeded for admin
@@ -124,6 +130,13 @@ export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
  */
 export const MODULE_ACTION_LABELS: Partial<Record<UIModule, Partial<Record<Action, string>>>> = {
   savings: { close: "Close accounts", post: "Post interest" },
+  // The general `delete` reads "Deactivate", which on penalties is `update`.
+  penalties: {
+    view: "View penalty configurations",
+    create: "Create configurations",
+    update: "Edit, activate and deactivate",
+    delete: "Delete unused configurations",
+  },
   cda: {
     view: "View reports and registers",
     prepare: "Prepare reports",

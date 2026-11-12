@@ -61,6 +61,8 @@ export type AuditModule =
   // Member Portal (Phase 3): portal accounts, codes, settings, terms,
   // requests and announcements, and members' own portal actions.
   | "member_portal"
+  // Penalty configurations (Phase 4, Settings → Penalties).
+  | "penalties"
   | "system";
 
 export interface AuditChange {

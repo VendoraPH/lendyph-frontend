@@ -94,6 +94,8 @@ import { ShareCapitalCard } from "./_components/share-capital-card";
 import { LoanCollateralsCard } from "./_components/loan-collaterals-card";
 import { ReleaseDeductions } from "./_components/release-deductions";
 import { FormulaSnapshot, type FormulaSnapshotItem } from "./_components/formula-snapshot";
+import { PenaltyTerms } from "@/components/loans/penalty-terms";
+import { env } from "@/config/env";
 import { ReleaseCoMakers } from "./_components/release-co-makers";
 import { InsurancePremiumSection } from "./_components/insurance-premium-section";
 import {
@@ -3068,6 +3070,13 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   {(PAYMENT_FREQUENCY_LABELS[loanFrequency as keyof typeof PAYMENT_FREQUENCY_LABELS] ?? loanFrequency) || "N/A"}
                 </p>
               </div>
+              {/* The penalty terms the loan was created with, from the server. */}
+              {env.features.penaltyConfigs && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Penalty</p>
+                  <PenaltyTerms loan={loan} className="font-medium" />
+                </div>
+              )}
             </div>
 
             <Separator />

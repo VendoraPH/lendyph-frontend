@@ -1491,7 +1491,9 @@ function RestructureLoanInner() {
                   <div className="flex justify-between text-red-600 dark:text-red-400">
                     <span>Total Deductions</span>
                     <span>
-                      {previewDeductions ? formatDeduction(previewDeductions.total_deductions) : "—"}
+                      {previewDeductions?.total_deductions == null
+                        ? "—"
+                        : formatDeduction(previewDeductions.total_deductions)}
                     </span>
                   </div>
                   <Separator />
