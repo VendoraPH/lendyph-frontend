@@ -1,5 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { isActiveLoanStatus } from "@/constants";
 import { LOAN_PICKER_TABS, loanPickerCounts, loanPickerTab, memberLoanParams } from "./member-loans";
 
 describe("one member's loans on the printable picker", () => {
@@ -21,8 +22,15 @@ describe("the picker's tabs", () => {
     }
   });
 
+  test("a defaulted loan is still collectible, so it is listed under Active, never Closed", () => {
+    // The usual subject of a demand letter. Only the picker groups it so; the
+    // shared active-loan rule elsewhere still reads it as inactive.
+    assert.equal(loanPickerTab("defaulted"), "active");
+    assert.equal(isActiveLoanStatus("defaulted"), false);
+  });
+
   test("finished and never-released loans are Closed", () => {
-    for (const status of ["completed", "closed", "defaulted", "restructured", "rejected", "void"]) {
+    for (const status of ["completed", "closed", "restructured", "rejected", "void"]) {
       assert.equal(loanPickerTab(status), "closed", status);
     }
   });
@@ -42,7 +50,8 @@ describe("the picker's tabs", () => {
       { status: "ongoing" },
       { status: "completed" },
       { status: "draft" },
+      { status: "defaulted" },
     ]);
-    assert.deepEqual(counts, { active: 1, not_released: 2, closed: 1, all: 4 });
+    assert.deepEqual(counts, { active: 2, not_released: 2, closed: 1, all: 5 });
   });
 });
