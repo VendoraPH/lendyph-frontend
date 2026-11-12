@@ -75,6 +75,47 @@ export function newExpenseForm(today: string): NewExpenseForm {
   };
 }
 
+/** What `createExpense()` takes. Centavos. */
+export interface NewExpensePayload {
+  date: string;
+  payee: string;
+  expense_account_id: number;
+  amount: number;
+  payment_account_id: number | null;
+  due_date: string | null;
+  reference: string | null;
+  description: string | null;
+  /** Sent only for a `branches:view_all` caller; see `buildNewExpensePayload`. */
+  branch_id?: number | null;
+}
+
+/**
+ * The New Expense body, or null while the form can't be sent: a payee, an
+ * expense category, an amount above zero, and the money account when it is
+ * paid now. `branchId` is the branch a `branches:view_all` caller picked
+ * (null: No branch); a branch user passes none, so nothing is sent and the
+ * server records their own branch.
+ */
+export function buildNewExpensePayload(form: NewExpenseForm, branchId?: number | null): NewExpensePayload | null {
+  const payee = form.payee.trim();
+  const amount = toCentavos(form.amount);
+  if (!payee || form.expenseAccountId === null || amount === null || amount <= 0) return null;
+  if (form.paidNow && form.paymentAccountId === null) return null;
+
+  const payload: NewExpensePayload = {
+    date: form.date,
+    payee,
+    expense_account_id: form.expenseAccountId,
+    amount,
+    payment_account_id: form.paidNow ? form.paymentAccountId : null,
+    due_date: form.paidNow ? null : form.dueDate || null,
+    reference: form.reference.trim() || null,
+    description: form.description.trim() || null,
+  };
+  if (branchId !== undefined) payload.branch_id = branchId;
+  return payload;
+}
+
 /** The descriptive fields, the only ones an expense's edit can change. */
 export interface ExpenseEditForm {
   payee: string;

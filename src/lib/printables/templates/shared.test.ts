@@ -11,6 +11,7 @@ import {
   parseApiDate,
   periodsPerYear,
   rateLabel,
+  readFrequency,
   termLabel,
   termLabelFrom,
 } from "./shared";
@@ -195,4 +196,14 @@ test("dates: dateTimeField keeps the minute a void happened at", () => {
     "2026-08-27 10:02:00"
   );
   assert.equal(dateOrBlank(null), BLANK_LINE);
+});
+
+test("rate: an annual rate reads per year, from the rate period, never per period", () => {
+  assert.equal(rateLabel(18, "annual"), "18% per year");
+  assert.equal(rateLabel(18, " Annual "), "18% per year");
+  assert.notEqual(rateLabel(18, "annual"), "18% per period");
+  // `annual` is a rate period only: it is not a payment frequency, so it has
+  // no periods a year here and is never annualised by the browser.
+  assert.equal(readFrequency("annual"), null);
+  assert.equal(periodsPerYear("annual"), null);
 });

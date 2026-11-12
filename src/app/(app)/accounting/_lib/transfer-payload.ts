@@ -12,6 +12,12 @@ export interface TransferForm {
   charge: string;
   reference: string;
   description: string;
+  /**
+   * The branch picked by a `branches:view_all` caller (null: No branch).
+   * Undefined for a branch user, who sees no picker: nothing is sent and the
+   * server records their own branch.
+   */
+  branchId?: number | null;
 }
 
 /** What `POST /accounting/cash-accounts/transfer` takes. Centavos. */
@@ -24,6 +30,8 @@ export interface TransferPayload {
   description: string;
   /** Left out when blank, so a transfer without one sends the same body as before. */
   reference?: string;
+  /** Sent only for a `branches:view_all` caller; see `TransferForm.branchId`. */
+  branch_id?: number | null;
 }
 
 /**
@@ -51,5 +59,6 @@ export function buildTransferPayload(form: TransferForm): TransferPayload | null
   };
   if (charge !== null) payload.charge = charge;
   if (reference) payload.reference = reference;
+  if (form.branchId !== undefined) payload.branch_id = form.branchId;
   return payload;
 }

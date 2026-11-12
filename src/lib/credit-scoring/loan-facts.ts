@@ -11,12 +11,14 @@ export function yesNoOrDash(value: boolean | null | undefined): string {
 
 /**
  * The member list's filters as sent. Without loans:view the server answers
- * 422 to the past-due and active-loan filters, so they're never sent then.
+ * 422 to the past-due, active-loan and loan product filters, so they're never
+ * sent then.
  */
 export function borrowerScoreFilters(filters: BorrowerScoreFilters, canViewLoans: boolean): BorrowerScoreFilters {
   if (canViewLoans) return filters;
   const sent = { ...filters };
   delete sent.past_due;
   delete sent.has_active_loan;
+  delete sent.loan_product_id;
   return sent;
 }

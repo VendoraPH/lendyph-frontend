@@ -112,6 +112,18 @@ test("promissory note: the rate promised is the rate the schedule charges", () =
   assert.doesNotMatch(text, /1% per month/);
 });
 
+test("promissory note: an annual rate is promised per year", () => {
+  const text = prose(
+    buildPromissoryNoteDoc({
+      ...PAYLOAD,
+      loan_terms: { ...PAYLOAD.loan_terms, interest_rate: 18, interest_rate_frequency: "annual" },
+    })
+  );
+
+  assert.match(text, /at the rate of <strong><u>18% per year<\/u><\/strong>/);
+  assert.doesNotMatch(text, /per period/);
+});
+
 test("promissory note: the installment clause reads the schedule, not the release date", () => {
   const text = prose(buildPromissoryNoteDoc(PAYLOAD));
 
@@ -136,6 +148,60 @@ test("promissory note: all six standard clauses survive word for word", () => {
   assert.match(text, /<strong>5\. WAIVER\.<\/strong> I\/We hereby waive demand, presentment for payment, notice of non-payment, notice of dishonor, protest, and notice of protest/);
   assert.match(text, /<strong>6\. SEVERABILITY\.<\/strong>/);
   assert.match(text, /IN WITNESS WHEREOF, I\/We have hereunto set my\/our hand\(s\) this/);
+});
+
+test("promissory note: the penalty clause states the loan's own rate and grace", () => {
+  const text = prose(buildPromissoryNoteDoc(PAYLOAD));
+
+  assert.match(
+    text,
+    /<strong>1\. DEFAULT \/ PENALTY\.<\/strong> If any installment is not paid in full within 3 days after its due date, a penalty of 3% of the unpaid principal of that installment shall be charged when the grace period ends, and again on each monthly anniversary of its due date while it remains unpaid\./
+  );
+  assert.match(text, /without prejudice to the right of the holder to exercise any or all remedies/);
+  assert.doesNotMatch(text, /amount in arrears/);
+});
+
+test("promissory note: a configuration's day ranges are listed in the clause", () => {
+  const text = prose(
+    buildPromissoryNoteDoc({
+      ...PAYLOAD,
+      loan_terms: {
+        ...PAYLOAD.loan_terms,
+        penalty_rate: 0,
+        penalty_config_name: "Standard Loan Penalty",
+        penalty_brackets: [
+          { days_from: 1, days_to: 30, rate: 3 },
+          { days_from: 31, days_to: 60, rate: 4 },
+          { days_from: 61, days_to: null, rate: 5 },
+        ],
+      },
+    })
+  );
+
+  assert.match(
+    text,
+    /each charge at the rate for the number of days the installment is late: 1–30 days late: 3%; 31–60 days late: 4%; 61 days or more: 5%\./
+  );
+  // The configuration's own name is staff's label, not a term of the note.
+  assert.doesNotMatch(text, /Standard Loan Penalty/);
+});
+
+test("promissory note: no penalty, and no grace, read in words", () => {
+  const none = prose(
+    buildPromissoryNoteDoc({ ...PAYLOAD, loan_terms: { ...PAYLOAD.loan_terms, penalty_rate: 0 } })
+  );
+  assert.match(none, /<strong>1\. DEFAULT \/ PENALTY\.<\/strong> No penalty is charged on late installments\./);
+
+  const noGrace = prose(
+    buildPromissoryNoteDoc({ ...PAYLOAD, loan_terms: { ...PAYLOAD.loan_terms, grace_period_days: 0 } })
+  );
+  assert.match(noGrace, /If any installment is not paid in full on its due date, a penalty of 3% of the unpaid principal of that installment shall be charged on the day after its due date/);
+});
+
+test("promissory note: unknown penalty terms print a rule to complete, never a guess", () => {
+  const text = prose(buildPromissoryNoteDoc(null));
+  assert.match(text, /<strong>1\. DEFAULT \/ PENALTY\.<\/strong> If any installment is not paid in full when due, a penalty of <strong><u>_+<\/u><\/strong>/);
+  assert.doesNotMatch(text, /No penalty is charged/);
 });
 
 test("promissory note: the co-maker is bound solidarily and primarily", () => {

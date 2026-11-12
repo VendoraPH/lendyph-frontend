@@ -83,6 +83,7 @@ export const API_ENDPOINTS = {
     CREATE: "/loans",
     PREVIEW: "/loans/preview",
     AMORTIZATION_CALCULATOR: "/loans/amortization-calculator",
+    AMORTIZATION_CALCULATOR_BINHS: "/loans/amortization-calculator/binhs",
     UPDATE: (id: number) => `/loans/${id}`,
     DELETE: (id: number) => `/loans/${id}`,
     RELEASE: (id: number) => `/loans/${id}/release`,
@@ -127,6 +128,8 @@ export const API_ENDPOINTS = {
       `/loans/${loanId}/approval-steps/${stepId}/approve`,
     SEND_BACK_STEP: (loanId: number, stepId: number | string) =>
       `/loans/${loanId}/approval-steps/${stepId}/send-back`,
+    /** Who the next step can be forwarded to (`forward_to_user_id` on submit and approve). */
+    FORWARD_CANDIDATES: (loanId: number) => `/loans/${loanId}/approval/forward-candidates`,
   },
   LOAN_ADJUSTMENTS: {
     LIST: (loanId: number) => `/loans/${loanId}/adjustments`,
@@ -360,6 +363,7 @@ export const API_ENDPOINTS = {
     INCOME_STATEMENT: "/accounting/statements/income-statement",
     CASH_FLOW: "/accounting/statements/cash-flow",
     EQUITY_CHANGES: "/accounting/statements/equity-changes",
+    STATEMENT_NOTES: "/accounting/statements/notes",
     RECEIVABLE_AGING: "/accounting/loans/aging",
 
     // Loan Accounting: the summary is one document, the loans list pages.
@@ -563,6 +567,8 @@ export const API_ENDPOINTS = {
     PERIOD: (year: number) => `/cda/periods/${year}`,
     DASHBOARD: (year: number) => `/cda/periods/${year}/dashboard`,
     CALENDAR: (year: number) => `/cda/periods/${year}/calendar`,
+    REQUIREMENTS: (year: number) => `/cda/periods/${year}/requirements`,
+    REQUIREMENT: (id: number) => `/cda/requirements/${id}`,
     REPORT_BY_TYPE: (year: number, type: string) => `/cda/periods/${year}/reports/${type}`,
     REPORT: (id: number) => `/cda/reports/${id}`,
     REPORT_WORKFLOW: (id: number) => `/cda/reports/${id}/workflow`,

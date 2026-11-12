@@ -158,6 +158,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
   extension_applied: "Extension applied",
   restructure_applied: "Restructure applied",
   adjustment_pending: "Adjustment waiting for approval",
+  loan_ready_for_release: "Ready for release",
   reminder_contact_invalid: "Member contact needs fixing",
   reminder_follow_up: "Reminder follow-up",
   reminder_failed: "Reminder not sent",
@@ -174,6 +175,8 @@ export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
   cda_deadline_reminder: "CDA deadline reminder",
   cda_document_expiring: "CDA document expiring",
   cda_training_incomplete: "Officer training incomplete",
+  cda_submission_recorded: "CDA submission recorded",
+  cda_missing_requirement: "CDA missing requirement",
   portal_request_submitted: "New member portal request",
   portal_login_reported: "Portal sign-in reported",
 };
@@ -184,6 +187,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
  * other words.
  */
 const KIND_IN_TITLE: ReadonlySet<string> = new Set([
+  "loan_ready_for_release",
   "cda_approval_needed",
   "cda_report_returned",
   "cda_report_finalized",
@@ -191,6 +195,8 @@ const KIND_IN_TITLE: ReadonlySet<string> = new Set([
   "cda_deadline_reminder",
   "cda_document_expiring",
   "cda_training_incomplete",
+  "cda_submission_recorded",
+  "cda_missing_requirement",
   // Savings servicing (gap round S4): "Second savings approval waiting", "Time
   // deposit matures today" and the rest already say what they are.
   "savings_approval_waiting",
@@ -211,6 +217,7 @@ export function notificationTone(type: string): NotificationTone {
   switch (type) {
     case "approval_needed":
     case "adjustment_pending":
+    case "loan_ready_for_release":
     case "cda_approval_needed":
     case "portal_request_submitted":
     case "savings_approval_waiting":
@@ -218,6 +225,7 @@ export function notificationTone(type: string): NotificationTone {
     case "loan_approved":
     case "loan_released":
     case "cda_report_finalized":
+    case "cda_submission_recorded":
       return "success";
     case "loan_rejected":
     case "payment_voided":
@@ -236,6 +244,7 @@ export function notificationTone(type: string): NotificationTone {
     case "cda_deadline_reminder":
     case "cda_document_expiring":
     case "cda_training_incomplete":
+    case "cda_missing_requirement":
     case "portal_login_reported":
       return "warning";
     default:

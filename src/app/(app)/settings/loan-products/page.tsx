@@ -139,7 +139,8 @@ function getInterestRateDisplay(product: LoanProduct): string {
   const min = formatRate(getProductField(product, "min_interest_rate"));
   const max = formatRate(getProductField(product, "max_interest_rate"));
   const freq = getProductField(product, "interest_rate_frequency");
-  const freqLabel = PAYMENT_FREQUENCY_LABELS[freq] ?? freq;
+  // The rate period, not a payment frequency: "annual" reads "Annual".
+  const freqLabel = INTEREST_RATE_FREQUENCY_OPTIONS.find((o) => o.value === freq)?.label ?? freq;
   const rate = min && max && min !== max ? `${min}% – ${max}%` : `${min || max}%`;
   return `${rate} / ${freqLabel}`;
 }
@@ -553,6 +554,7 @@ function ProductFormDialog({
                   id="notarial-fee"
                   type="number"
                   min={0}
+                  max={100}
                   step="0.0001"
                   placeholder="1"
                   value={form.notarial_fee}

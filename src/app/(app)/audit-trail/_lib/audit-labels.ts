@@ -108,6 +108,7 @@ const ACTION_LABELS: Record<string, string> = {
   cda_report_saved: "Report saved",
   cda_report_refreshed: "Report refreshed",
   cda_export_generated: "Report exported",
+  cda_review_chain_updated: "Review chain changed",
   year_end_captured: "Year-end figures captured",
   // Member Portal: staff actions, members' own actions and the system's.
   portal_code_issued: "Portal code issued",
@@ -425,6 +426,7 @@ const CDA_WORKFLOW_ACTION_LABELS: Record<string, string> = {
   mark_for_correction: "Marked for correction",
   reopen: "Reopened",
   set_stage: "Moved to another stage",
+  approve_step: "Approved a review step",
 };
 
 /** An `action` value in words: a CDA workflow step, else as the Action column reads it. */

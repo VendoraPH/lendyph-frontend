@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/format";
-import { HISTORY_ACTION_LABELS, labelOf, statusMeta } from "../_lib/labels";
+import { labelOf, statusMeta } from "../_lib/labels";
+import { REVIEW_HISTORY_LABELS } from "../_lib/review-chain";
 import type { CdaHistoryEvent } from "@/types/cda";
 
 /** The report's history, newest first, as the server recorded it (carried over from #510 by Augustin). */
@@ -18,7 +19,7 @@ export function WorkflowHistory({ events }: { events: CdaHistoryEvent[] }) {
             {events.map((e) => (
               <li key={e.id} className="text-sm">
                 <p>
-                  <span className="font-medium">{e.user_name}</span> · {labelOf(HISTORY_ACTION_LABELS, e.action)}
+                  <span className="font-medium">{e.user_name}</span> · {labelOf(REVIEW_HISTORY_LABELS, e.action)}
                 </p>
                 {e.from_status && e.to_status && e.from_status !== e.to_status && (
                   <p className="text-xs text-muted-foreground">

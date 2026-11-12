@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { loanService } from "@/services/loan.service";
+import { loanApprovalService } from "@/services/loan-approval.service";
 import { tokenManager } from "@/lib/axios-client";
 import { createUnreadPoller, isUnauthorizedError, type UnreadPoller } from "@/lib/session-poller";
 import type { Permission } from "@/types";
@@ -56,10 +56,11 @@ export function createPendingApprovalsPoller(deps: PendingApprovalsPollerDeps): 
 }
 
 /**
- * How many loan applications are waiting on the signed-in user's approval:
- * For Approval loans whose current pending approval step belongs to one of
- * the user's roles (`GET /loans?awaiting_me=1`). An application waiting on
- * another role's step is not counted.
+ * How many loans are waiting on the signed-in user (`GET /loans?awaiting_me=1`):
+ * For Approval loans whose current step is theirs (forwarded to them, or
+ * unassigned and one of their roles'), and, for holders of `loans:release`,
+ * Approved loans whose Release step is theirs by the same rule. A step
+ * waiting on another role, or forwarded to someone else, is not counted.
  *
  * One integer off `meta.total` of a `per_page: 1` read, like the Members
  * badge: the count covers the whole filtered query at any page size.
@@ -81,7 +82,7 @@ export function usePendingLoanApprovals(enabled: boolean): number {
     if (!enabled) return;
     let cancelled = false;
     const poller = createPendingApprovalsPoller({
-      count: () => loanService.countAwaitingMyApproval(),
+      count: () => loanApprovalService.countAwaitingMe(),
       onCount: (n) => {
         if (!cancelled) setTotal(n);
       },

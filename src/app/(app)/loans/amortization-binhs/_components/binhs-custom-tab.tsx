@@ -1,56 +1,29 @@
 "use client";
 
-import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  buildCustomSchedule,
-  isValidBinhsInput,
-  type BinhsInput,
-} from "@/lib/binhs";
+import type { BinhsScenario } from "@/lib/binhs";
 import { BinhsScheduleTable } from "./binhs-schedule-table";
 
-export function BinhsCustomTab({ input }: { input: BinhsInput }) {
-  const valid = isValidBinhsInput(input);
-  const [paidMap, setPaidMap] = useState<Record<number, boolean>>({});
+interface Props {
+  scenario: BinhsScenario | null;
+  paidFlags: boolean[];
+  onTogglePaid: (index: number, paid: boolean) => void;
+  onMarkAll: (paid: boolean) => void;
+  emptyMessage: string;
+  busy?: boolean;
+}
 
-  const paidFlags = useMemo(() => {
-    const n = valid ? input.termMonths : 0;
-    return Array.from({ length: n }, (_, i) => paidMap[i] ?? false);
-  }, [paidMap, input.termMonths, valid]);
-
-  const rows = useMemo(
-    () => buildCustomSchedule(input, paidFlags),
-    [input, paidFlags],
-  );
-
-  const togglePaid = (index: number, paid: boolean) =>
-    setPaidMap((prev) => ({ ...prev, [index]: paid }));
-
-  const markAll = (paid: boolean) => {
-    const next: Record<number, boolean> = {};
-    for (let i = 0; i < input.termMonths; i++) next[i] = paid;
-    setPaidMap(next);
-  };
+/** The Custom schedule: staff tick which dues are paid, and the server reworks it. */
+export function BinhsCustomTab({ scenario, paidFlags, onTogglePaid, onMarkAll, emptyMessage, busy }: Props) {
+  const disabled = paidFlags.length === 0;
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => markAll(true)}
-          disabled={!valid}
-        >
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={() => onMarkAll(true)} disabled={disabled}>
           Mark all paid
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => markAll(false)}
-          disabled={!valid}
-        >
+        <Button type="button" variant="outline" size="sm" onClick={() => onMarkAll(false)} disabled={disabled}>
           Mark all unpaid
         </Button>
         <span className="text-xs text-muted-foreground">
@@ -60,9 +33,11 @@ export function BinhsCustomTab({ input }: { input: BinhsInput }) {
         </span>
       </div>
       <BinhsScheduleTable
-        rows={rows}
+        scenario={scenario}
         paidFlags={paidFlags}
-        onTogglePaid={togglePaid}
+        onTogglePaid={onTogglePaid}
+        emptyMessage={emptyMessage}
+        busy={busy}
       />
     </div>
   );
