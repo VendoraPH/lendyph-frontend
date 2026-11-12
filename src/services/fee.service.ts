@@ -2,6 +2,7 @@ import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { fetchAllPages, type DrainResult } from "@/lib/paginate";
 import type { Fee, CreateFeeData, UpdateFeeData } from "@/types";
+import type { FeeFormulaCheck, FeeFormulaCheckRequest } from "@/types/fee";
 
 export const feeService = {
   /**
@@ -31,4 +32,12 @@ export const feeService = {
 
   delete: (id: number) =>
     api.delete(API_ENDPOINTS.FEES.DELETE(id)),
+
+  /**
+   * The server's check of a written formula, with the fee it gives on a sample
+   * loan. Writes nothing. A mistake answers 422 on `formula_expression` (or on
+   * `sample` when the sample loan divides by zero or goes negative).
+   */
+  checkFormula: (body: FeeFormulaCheckRequest, signal?: AbortSignal) =>
+    api.post<FeeFormulaCheck>(API_ENDPOINTS.FEES.FORMULA_CHECK, body, { signal }),
 };
