@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { Account, Expense } from "@/types";
 import {
   buildExpenseEditPayload,
+  buildNewExpensePayload,
   buildPayExpensePayload,
   canPayExpense,
   expenseEditForm,
@@ -151,4 +152,57 @@ test("a New Expense opens blank, dated today, with Paid now on", () => {
     reference: "",
     description: "",
   });
+});
+
+const NEW_EXPENSE = {
+  ...newExpenseForm("2026-11-09"),
+  payee: " Meralco ",
+  expenseAccountId: 51,
+  amount: "2,500.00",
+  paymentAccountId: 11,
+  reference: " OR-123 ",
+};
+
+test("a New Expense paid now sends whole centavos and the money account", () => {
+  assert.deepEqual(buildNewExpensePayload(NEW_EXPENSE), {
+    date: "2026-11-09",
+    payee: "Meralco",
+    expense_account_id: 51,
+    amount: 250_000,
+    payment_account_id: 11,
+    due_date: null,
+    reference: "OR-123",
+    description: null,
+  });
+});
+
+test("a New Expense owed sends its due date and no money account", () => {
+  const payload = buildNewExpensePayload({ ...NEW_EXPENSE, paidNow: false, dueDate: "2026-11-30" });
+  assert.equal(payload?.payment_account_id, null);
+  assert.equal(payload?.due_date, "2026-11-30");
+});
+
+test("with branches:view_all, a New Expense sends the picked branch, and No branch as null", () => {
+  assert.equal(buildNewExpensePayload(NEW_EXPENSE, 2)?.branch_id, 2);
+  const headOffice = buildNewExpensePayload(NEW_EXPENSE, null);
+  assert.equal(headOffice !== null && "branch_id" in headOffice, true);
+  assert.equal(headOffice?.branch_id, null);
+});
+
+test("a branch user's New Expense sends no branch, so the server records their own", () => {
+  const payload = buildNewExpensePayload(NEW_EXPENSE);
+  assert.equal(payload !== null && "branch_id" in payload, false);
+});
+
+test("the edit payload never carries a branch", () => {
+  const payload = buildExpenseEditPayload({ payee: "Meralco", reference: "", description: "", dueDate: "" });
+  assert.equal(payload !== null && "branch_id" in payload, false);
+});
+
+test("an incomplete New Expense is refused before sending", () => {
+  assert.equal(buildNewExpensePayload({ ...NEW_EXPENSE, payee: "  " }), null);
+  assert.equal(buildNewExpensePayload({ ...NEW_EXPENSE, expenseAccountId: null }), null);
+  assert.equal(buildNewExpensePayload({ ...NEW_EXPENSE, amount: "0" }), null);
+  assert.equal(buildNewExpensePayload({ ...NEW_EXPENSE, paymentAccountId: null }), null);
+  assert.ok(buildNewExpensePayload({ ...NEW_EXPENSE, paidNow: false, paymentAccountId: null }));
 });

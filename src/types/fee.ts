@@ -1,3 +1,4 @@
+import type { RateFrequency } from "@/lib/loan-terms";
 import type { FeeFormulaInputs } from "./loan";
 
 export interface FeeConditions {
@@ -60,7 +61,7 @@ export interface FeeFormulaCheckRequest {
   formula_expression: string;
   principal_amount: string;
   interest_rate: string;
-  interest_rate_frequency: "daily" | "weekly" | "bi_weekly" | "semi_monthly" | "monthly";
+  interest_rate_frequency: RateFrequency;
   term: number;
   term_unit: "months" | "days";
   min_amount: string | null;

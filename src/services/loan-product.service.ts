@@ -1,3 +1,4 @@
+import type { RateFrequency } from "@/lib/loan-terms";
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { fetchAllPages, type DrainResult } from "@/lib/paginate";
@@ -8,7 +9,7 @@ export interface CreateLoanProductData {
   min_interest_rate: number;
   max_interest_rate: number;
   interest_method: "straight" | "diminishing" | "upon_maturity";
-  interest_rate_frequency?: "daily" | "weekly" | "bi_weekly" | "semi_monthly" | "monthly";
+  interest_rate_frequency?: RateFrequency;
   min_term: number;
   max_term: number;
   term_unit?: "months" | "days";

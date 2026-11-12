@@ -83,6 +83,7 @@ export const API_ENDPOINTS = {
     CREATE: "/loans",
     PREVIEW: "/loans/preview",
     AMORTIZATION_CALCULATOR: "/loans/amortization-calculator",
+    AMORTIZATION_CALCULATOR_BINHS: "/loans/amortization-calculator/binhs",
     UPDATE: (id: number) => `/loans/${id}`,
     DELETE: (id: number) => `/loans/${id}`,
     RELEASE: (id: number) => `/loans/${id}/release`,

@@ -4,6 +4,7 @@
  * never carries `custom_fees` (see `retiredCustomFeesNotice`).
  */
 
+import type { RateFrequency } from "@/lib/loan-terms";
 import { decimalInputValue } from "@/lib/percent";
 import type { LoanProduct } from "@/types/loan";
 
@@ -196,12 +197,7 @@ export function formToApiPayload(form: ProductForm) {
     min_interest_rate: Number(form.min_interest_rate),
     max_interest_rate: Number(form.max_interest_rate),
     interest_method: form.interest_method as "straight" | "diminishing" | "upon_maturity",
-    interest_rate_frequency: form.interest_rate_frequency as
-      | "daily"
-      | "weekly"
-      | "bi_weekly"
-      | "semi_monthly"
-      | "monthly",
+    interest_rate_frequency: form.interest_rate_frequency as RateFrequency,
     min_term: Number(form.min_term),
     max_term: Number(form.max_term),
     term: Number(form.term),

@@ -26,7 +26,7 @@ import { useAuthStore } from "@/store";
 import type { JournalEntryDraft, JournalLineDraft } from "@/types";
 import { JournalLineRows } from "../../_components/journal-line-rows";
 import { saveDraftState } from "../_lib/journal-actions";
-import { journalBranchField, journalBranchId } from "../_lib/journal-branch";
+import { journalBranchField, journalBranchId } from "../../_lib/journal-branch";
 import { JournalActionButton } from "./journal-action-button";
 import { JournalBalancePanel } from "./journal-balance-panel";
 import { useJournalPreview } from "./use-journal-preview";
