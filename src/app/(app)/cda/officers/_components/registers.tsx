@@ -10,6 +10,7 @@ import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { formatDate } from "@/lib/format";
 import type { CdaOfficer, CdaTraining } from "@/types/cda";
 import { RegisterTable, type RegisterColumn } from "../../_components/register-table";
+import { AttachButton, useAttachDocument } from "../../_components/attach-document";
 import { CDA_FILE_ACCEPT } from "../../_components/record-form-dialog";
 import { ToneBadge } from "../../_components/tone-badge";
 import {
@@ -80,7 +81,7 @@ const TRAINING_COLUMNS: RegisterColumn<CdaTraining>[] = [
       <div>
         <p className="font-medium">{r.title}</p>
         <p className="text-xs text-muted-foreground">
-          {[r.is_mandatory ? "Mandatory" : null, r.requirement_key ? trainingKeyLabel(r.requirement_key) : null].filter(Boolean).join(" · ") || "Optional"}
+          {[r.training_type, r.is_mandatory ? "Mandatory" : null, r.requirement_key ? trainingKeyLabel(r.requirement_key) : null].filter(Boolean).join(" · ") || "Optional"}
         </p>
       </div>
     ),
@@ -112,6 +113,13 @@ function trainingFields(officers: CdaOfficer[]): RecordField[] {
     },
     { key: "title", label: "Training", type: "text", required: true },
     {
+      key: "training_type",
+      label: "Training type",
+      type: "text",
+      placeholder: "e.g. Seminar",
+      help: "Up to 40 characters, such as seminar, workshop or online course.",
+    },
+    {
       key: "requirement_key",
       label: "Meets requirement",
       type: "text",
@@ -140,6 +148,7 @@ export function OfficerRegisters({ year, onChanged }: { year: number; onChanged:
   const officers = useApiResource(useCallback(() => cdaService.listOfficers({ year }), [year]));
   const trainings = useApiResource(useCallback(() => cdaService.listTrainings({ year }), [year]));
   const fields = useMemo(() => trainingFields(officers.data?.rows ?? []), [officers.data]);
+  const attach = useAttachDocument(year);
   const changed = () => {
     officers.refetch();
     onChanged();
@@ -190,19 +199,25 @@ export function OfficerRegisters({ year, onChanged }: { year: number; onChanged:
           onDelete={(id) => cdaService.deleteTraining(id).then(changed)}
           rowActions={(r) => {
             const url = signedUrl(r.certificate?.url);
-            return url ? (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label="Open certificate"
-                nativeButton={false}
-                render={<a href={url} target="_blank" rel="noopener noreferrer" />}
-              >
-                <FileText className="h-4 w-4" />
-              </Button>
-            ) : null;
+            return (
+              <>
+                {url && (
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Open certificate"
+                    nativeButton={false}
+                    render={<a href={url} target="_blank" rel="noopener noreferrer" />}
+                  >
+                    <FileText className="h-4 w-4" />
+                  </Button>
+                )}
+                <AttachButton subject={{ type: "training", id: r.id, name: r.title }} onAttach={attach.open} />
+              </>
+            );
           }}
         />
+        {attach.dialog}
       </TabsContent>
     </Tabs>
   );

@@ -7,6 +7,7 @@ import { cdaService, type CdaSocialProgramInput } from "@/services/cda.service";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { formatDate } from "@/lib/format";
 import type { CdaSocialProgram, CdaSocialTotals } from "@/types/cda";
+import { AttachButton, useAttachDocument } from "../../_components/attach-document";
 import { RegisterTable, type RegisterColumn } from "../../_components/register-table";
 import { FUNDING_SOURCE_LABELS, SOCIAL_CATEGORY_LABELS, SOCIAL_STATUS_LABELS, labelOf, toOptions } from "../../_lib/labels";
 import { cdaCount, cdaMoney } from "../../_lib/money";
@@ -120,6 +121,7 @@ export function SocialPrograms({ year, onChanged }: { year: number; onChanged: (
   );
   const officers = useApiResource(useCallback(() => cdaService.listOfficers({ year }), [year]));
   const changed = () => onChanged();
+  const attach = useAttachDocument(year);
 
   const fields = useMemo(() => {
     if (!officers.data) return FIELDS;
@@ -144,7 +146,9 @@ export function SocialPrograms({ year, onChanged }: { year: number; onChanged: (
         onCreate={(v) => cdaService.createSocialProgram(year, asProgram(v)).then(changed)}
         onUpdate={(id, v) => cdaService.updateSocialProgram(id, asProgram(v)).then(changed)}
         onDelete={(id) => cdaService.deleteSocialProgram(id).then(changed)}
+        rowActions={(r) => <AttachButton subject={{ type: "program", id: r.id, name: r.name }} onAttach={attach.open} />}
       />
+      {attach.dialog}
     </div>
   );
 }

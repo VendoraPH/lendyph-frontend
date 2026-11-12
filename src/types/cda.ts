@@ -528,6 +528,29 @@ export interface CdaPesos {
   disclosure: string;
 }
 
+/**
+ * The year's Enhanced PESOS rating quoted in the notes to the financial
+ * statements (`GET /accounting/statements/notes`): the finalized PESOS
+ * report's frozen figures, else the live result marked provisional. Every
+ * figure is null when the year has no CDA reporting period.
+ */
+export interface StatementNotesPesos {
+  year: number;
+  /** A 2-decimal string. */
+  score: string | null;
+  /** Null until every indicator is scored. */
+  rating: string | null;
+  source: "finalized" | "live" | null;
+  provisional: boolean | null;
+  finalized_at: string | null;
+  verified: boolean;
+  disclosure: string | null;
+}
+
+export interface StatementNotes {
+  pesos: StatementNotesPesos;
+}
+
 // ── Registers ──
 
 export type CdaOfficerPosition =
@@ -614,6 +637,8 @@ export interface CdaTraining {
 }
 
 export type CdaSocialCategory =
+  | "member_education"
+  | "financial_literacy"
   | "education"
   | "health"
   | "environment"
