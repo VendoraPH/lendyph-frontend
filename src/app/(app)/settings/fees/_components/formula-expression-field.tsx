@@ -120,7 +120,7 @@ export function FormulaExpressionField({ value, onChange, check, saveError }: Pr
           <p className="flex items-start gap-1.5 text-amber-700 dark:text-amber-400">
             <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
             <span>
-              On the sample loan: {state.message} The formula itself is accepted; change the sample loan to see an amount.
+              {state.message} The formula itself is accepted; change the sample loan to see an amount.
             </span>
           </p>
         )}
