@@ -70,8 +70,12 @@ test("a server error that isn't a refusal still falls back to the blank form", a
   }
 });
 
-test("both places that open a document show a refusal's own message", () => {
-  for (const file of ["src/hooks/use-printables.ts", "src/app/(app)/printables/[printableId]/page.tsx"]) {
+test("every place that opens a document shows a refusal's own message", () => {
+  for (const file of [
+    "src/hooks/use-printables.ts",
+    "src/app/(app)/printables/[printableId]/page.tsx",
+    "src/lib/savings/print-document.ts",
+  ]) {
     const source = readFileSync(resolve(process.cwd(), file), "utf8");
     assert.match(source, /err instanceof PrintableRefusedError\s*\?\s*err\.message/, file);
   }

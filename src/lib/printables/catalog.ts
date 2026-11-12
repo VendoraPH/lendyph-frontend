@@ -53,7 +53,9 @@ import {
   fetchTimeDepositPayload,
 } from "./savings-fetchers";
 import { PRINTABLE_TITLES } from "@/lib/page-titles";
-import { getErrorMessage, httpStatusOf } from "@/lib/api-error";
+import { refusedOrNull } from "./refusal";
+
+export { PrintableRefusedError } from "./refusal";
 
 /**
  * Fetch wiring + the catalog itself, mirroring
@@ -71,29 +73,8 @@ type TemplateBuilder = (
 ) => PrintableDocument;
 
 /**
- * The server refused to give this record's document (a 422: a disclosure for a
- * loan that's still for approval, say). That isn't the API being unreachable,
- * so no blank form opens: the message, in the server's words, says why.
- */
-export class PrintableRefusedError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "PrintableRefusedError";
-  }
-}
-
-function refusedOrNull(err: unknown): null {
-  if (httpStatusOf(err) === 422) {
-    throw new PrintableRefusedError(
-      getErrorMessage(err, "This document can't be printed for this record yet."),
-    );
-  }
-  return null;
-}
-
-/**
  * A failed request must still produce a document, unless the server refused
- * it (`PrintableRefusedError`, above).
+ * it (`PrintableRefusedError`, in `./refusal`).
  *
  * This is the printables' version of `reportBuilder`'s soft failure, and it
  * matters more here than it does for a report: a blank release voucher or
