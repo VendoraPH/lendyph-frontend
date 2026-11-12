@@ -43,11 +43,11 @@ export const REPORT_TITLES: Readonly<Record<ReportId, string>> = {
 
 /**
  * Titles of the documents in the `/printables` catalog. The time deposit
- * certificate and the savings passbook are printed from their own pages, not
- * the catalog, so they have no route here.
+ * certificate, the savings passbook and the savings receipt are printed from
+ * their own pages, not the catalog, so they have no route here.
  */
 export const PRINTABLE_TITLES: Readonly<
-  Record<Exclude<PrintableId, "time_deposit_certificate" | "savings_passbook">, string>
+  Record<Exclude<PrintableId, "time_deposit_certificate" | "savings_passbook" | "savings_receipt">, string>
 > = {
   disclosure_statement: "Disclosure Statement",
   promissory_note: "Promissory Note",

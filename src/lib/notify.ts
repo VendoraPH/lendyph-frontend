@@ -29,9 +29,15 @@ export function notifyError(
   );
 }
 
+/** A follow-up the success toast offers, e.g. printing what was just posted. */
+export interface NotifyAction {
+  label: string;
+  onClick: () => void;
+}
+
 /** Confirm an action succeeded. `message` states what happened, plainly. */
-export function notifySuccess(message: string, description?: string): void {
-  toast.success(message, description ? { description } : undefined);
+export function notifySuccess(message: string, description?: string, action?: NotifyAction): void {
+  toast.success(message, description || action ? { description, action } : undefined);
 }
 
 export function notifyInfo(message: string, description?: string): void {

@@ -17,6 +17,7 @@ import type {
 } from "@/types";
 
 import { formatCurrency } from "@/lib/format";
+import { METHOD_LABELS } from "@/lib/savings/method-labels";
 
 /**
  * Savings words and the rules that decide which actions a screen offers.
@@ -63,13 +64,7 @@ export const PRODUCT_KIND_LABELS: Record<SavingsProductKind, string> = {
   time_deposit: "Time deposit",
 };
 
-export const METHOD_LABELS: Record<SavingsMethod, string> = {
-  cash: "Cash",
-  bank_transfer: "Bank transfer",
-  gcash: "GCash",
-  maya: "Maya",
-  savings: "Savings account",
-};
+export { METHOD_LABELS };
 
 /** Ways money comes in or goes out over the counter (a savings transfer has its own form). */
 export const PAYMENT_METHOD_OPTIONS: ReadonlyArray<{ value: Exclude<SavingsMethod, "savings">; label: string }> = [
