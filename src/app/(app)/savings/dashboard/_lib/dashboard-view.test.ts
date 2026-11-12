@@ -1,7 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { SavingsDashboardKpis } from "@/types/savings-insight";
-import { bucketPoints, compactPesoAxis, glNotice, kpiCards, seriesPoints, signOf } from "./dashboard-view";
+import {
+  SERIES_LABELS,
+  SERIES_NOTE,
+  bucketPoints,
+  compactPesoAxis,
+  glNotice,
+  kpiCards,
+  seriesPoints,
+  signOf,
+} from "./dashboard-view";
 import { periodError, presetPeriod } from "./dashboard-period";
 
 const KPIS: SavingsDashboardKpis = {
@@ -15,6 +24,7 @@ const KPIS: SavingsDashboardKpis = {
   net_deposit_movement: "-2000.25",
   interest_credited: { gross: "120.00", tax: "0.00", net: "120.00" },
   fees_charged: { count: 1, amount: "15.00" },
+  share_capital_transfers: { count: 2, amount: "1700.00" },
   time_deposit_interest_paid: { gross: "300.00", tax: "0.00" },
   maturing_30_days: { count: 1, principal: "20000.00", maturity_amount: "20150.75" },
   gl_control: {
@@ -45,6 +55,21 @@ test("each card shows the server's figure with ₱ and two decimals, counts in w
   assert.equal(card("fees_charged").value, "₱15.00");
   assert.equal(card("dormant_accounts").value, "3");
   assert.match(card("active_accounts").caption ?? "", /As of Nov 12, 2026/);
+});
+
+test("the period card says it is deposits less withdrawals, and transfers to share capital have their own card", () => {
+  const net = card("net_deposit_movement");
+  assert.equal(net.label, "Deposits less Withdrawals");
+  assert.match(net.caption ?? "", /fees, transfers to share capital and interest are not in it/i);
+  assert.equal(card("share_capital_transfers").label, "Transfers to Share Capital");
+  assert.equal(card("share_capital_transfers").value, "₱1,700.00");
+  assert.equal(card("share_capital_transfers").caption, "2 transfers");
+  assert.equal(kpiCards(KPIS).some((c) => /net/i.test(c.label)), false, "no card is called a net movement");
+});
+
+test("the monthly figure is named for what it holds: the change in total deposits", () => {
+  assert.equal(SERIES_LABELS.net_movement, "Change in total deposits");
+  assert.match(SERIES_NOTE, /after interest, fees and transfers/);
 });
 
 test("the net movement takes its colour from the server's sign, and a zero stays neutral", () => {

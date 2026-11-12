@@ -64,8 +64,9 @@ const SUMMARY_MOVEMENT: readonly [key: string, header: string][] = [
   ["interest_credited", "Interest"],
   ["tax_withheld", "Tax Withheld"],
   ["fees_charged", "Fees"],
+  ["share_capital_transfers", "To Share Capital"],
   ["other_movements", "Other"],
-  ["net_movement", "Net Movement"],
+  ["net_movement", "Change in Balance"],
   ["closing_balance", "Closing"],
 ];
 
@@ -101,10 +102,11 @@ export function buildSavingsSummaryDoc(raw: unknown, range: DateRange): ReportDo
         kpi("Opening Balance", money("opening_balance")),
         kpi("Deposits", money("deposits"), { tone: "positive" }),
         kpi("Withdrawals", money("withdrawals"), { hint: "Withdrawals and closing payouts" }),
-        kpi("Net Movement", money("net_movement"), { hint: "Closing less opening" }),
+        kpi("Change in Balance", money("net_movement"), { hint: "Closing less opening" }),
         kpi("Closing Balance", money("closing_balance")),
         kpi("Interest Credited", money("interest_credited")),
         kpi("Fees Charged", money("fees_charged"), { hint: "Excess-withdrawal fees, the cooperative's income" }),
+        kpi("Transfers to Share Capital", money("share_capital_transfers"), { hint: "Savings moved to share capital" }),
         kpi("Total Deposits", money("total_deposits"), { hint: "Savings plus time deposits outstanding" }),
       ],
     },
@@ -142,7 +144,7 @@ export function buildSavingsSummaryDoc(raw: unknown, range: DateRange): ReportDo
     },
     {
       kind: "note",
-      text: "Totals are the server's figures for the whole filter. Fees are excess-withdrawal fees, never counted as withdrawals; money moved between a member's savings and their time deposits is neither a deposit nor a withdrawal. Reversed transactions count in no flow.",
+      text: "Totals are the server's figures for the whole filter. Opening plus deposits, interest and other movements, less withdrawals, tax, fees and transfers to share capital, is the closing balance. Fees are excess-withdrawal fees and transfers to share capital move savings to share capital; neither is counted as a withdrawal. Money moved between a member's savings and their time deposits is neither a deposit nor a withdrawal. Reversed transactions count in no flow.",
     },
   ];
 

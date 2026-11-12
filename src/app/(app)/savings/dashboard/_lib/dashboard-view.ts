@@ -70,9 +70,9 @@ export function kpiCards(k: SavingsDashboardKpis | null | undefined): KpiCard[] 
     },
     {
       key: "net_deposit_movement",
-      label: "Net Deposit Movement",
+      label: "Deposits less Withdrawals",
       value: currencyOrDash(k.net_deposit_movement),
-      caption: "Deposits less withdrawals",
+      caption: "Member money in less money out; fees, transfers to share capital and interest are not in it",
       signed: signOf(k.net_deposit_movement),
     },
     {
@@ -92,6 +92,12 @@ export function kpiCards(k: SavingsDashboardKpis | null | undefined): KpiCard[] 
       label: "Fees Charged",
       value: currencyOrDash(k.fees_charged?.amount),
       caption: `${plural(k.fees_charged?.count, "excess-withdrawal fee", "excess-withdrawal fees")}`,
+    },
+    {
+      key: "share_capital_transfers",
+      label: "Transfers to Share Capital",
+      value: currencyOrDash(k.share_capital_transfers?.amount),
+      caption: plural(k.share_capital_transfers?.count, "transfer", "transfers"),
     },
     {
       key: "dormant_accounts",
@@ -132,6 +138,20 @@ export function glNotice(k: SavingsDashboardKpis | null | undefined): GlNotice |
     productNote,
   };
 }
+
+/** The series' figures in words, for the tooltips and the screen-reader tables. */
+export const SERIES_LABELS: Record<keyof SeriesPoint["text"], string> = {
+  savings_balance: "Savings",
+  time_deposits: "Time deposits",
+  total_deposits: "Total deposits",
+  deposits: "Deposits",
+  withdrawals: "Withdrawals",
+  net_movement: "Change in total deposits",
+};
+
+/** What the monthly change holds, unlike the period's deposits less withdrawals. */
+export const SERIES_NOTE =
+  "Change in total deposits is each month's closing savings and time deposits less the month before, after interest, fees and transfers.";
 
 /** One month of the charts: figures as numbers to plot, and the server's strings for the tooltip. */
 export interface SeriesPoint {

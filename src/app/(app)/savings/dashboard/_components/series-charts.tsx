@@ -11,7 +11,7 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import type { SavingsDashboardMonth } from "@/types/savings-insight";
-import { compactPesoAxis, seriesPoints, type SeriesPoint } from "../_lib/dashboard-view";
+import { SERIES_LABELS, SERIES_NOTE, compactPesoAxis, seriesPoints, type SeriesPoint } from "../_lib/dashboard-view";
 
 const GROWTH_CONFIG = {
   savings_balance: { label: "Savings", color: "var(--chart-1)" },
@@ -24,14 +24,7 @@ const FLOW_CONFIG = {
 } satisfies ChartConfig;
 
 type SeriesKey = keyof SeriesPoint["text"];
-const LABELS: Record<SeriesKey, string> = {
-  savings_balance: "Savings",
-  time_deposits: "Time deposits",
-  total_deposits: "Total deposits",
-  deposits: "Deposits",
-  withdrawals: "Withdrawals",
-  net_movement: "Net movement",
-};
+const LABELS = SERIES_LABELS;
 
 /** The tooltip shows the server's figure to the centavo, read from the point itself. */
 function tooltip(keys: SeriesKey[]) {
@@ -146,10 +139,11 @@ export function SeriesCharts({ series }: { series: readonly SavingsDashboardMont
             </BarChart>
           </ChartContainer>
           <ScreenReaderTable
-            caption="Deposits, withdrawals and net movement by month"
+            caption="Deposits, withdrawals and the change in total deposits by month"
             points={points}
             keys={["deposits", "withdrawals", "net_movement"]}
           />
+          <p className="mt-2 text-xs text-muted-foreground">{SERIES_NOTE}</p>
         </CardContent>
       </Card>
     </div>

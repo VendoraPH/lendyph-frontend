@@ -40,6 +40,8 @@ export interface SavingsDashboardKpis {
   interest_credited: { gross: MoneyString; tax: MoneyString; net: MoneyString };
   /** Excess-withdrawal fees: the cooperative's income, never a withdrawal. */
   fees_charged: SavingsCountAmount;
+  /** Savings moved to the member's share capital: its own figure, never a withdrawal. */
+  share_capital_transfers: SavingsCountAmount;
   time_deposit_interest_paid: { gross: MoneyString; tax: MoneyString };
   maturing_30_days: { count: number; principal: MoneyString; maturity_amount: MoneyString };
   gl_control: SavingsDashboardGlControl;
@@ -60,6 +62,7 @@ export interface SavingsDashboardMonth {
   withdrawal_count: number;
   withdrawals: MoneyString;
   interest_credited: MoneyString;
+  /** The month's change in total deposits (savings plus time deposits), after interest, fees and transfers. */
   net_movement: MoneyString;
 }
 
@@ -74,6 +77,8 @@ export interface SavingsSummaryLine {
   tax_withheld: MoneyString;
   fee_count: number;
   fees_charged: MoneyString;
+  share_capital_transfer_count: number;
+  share_capital_transfers: MoneyString;
   other_movements: MoneyString;
   net_movement: MoneyString;
   closing_balance: MoneyString;

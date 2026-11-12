@@ -52,6 +52,8 @@ const SUMMARY_LINE = {
   tax_withheld: "0.00",
   fee_count: 1,
   fees_charged: "15.00",
+  share_capital_transfer_count: 1,
+  share_capital_transfers: "1700.00",
   other_movements: "5.00",
   net_movement: "300.00",
   closing_balance: "1300.00",
@@ -95,6 +97,20 @@ test("the deposit summary prints the server's totals and names its grouping", ()
   assert.equal(total(movement, "closing_balance"), "₱9,999.99");
   assert.equal(total(movement, "deposits"), "₱777.77");
   assert.equal(total(holdings, "total_deposits"), "₱123,456.78");
+});
+
+test("every figure that makes up the closing has its own column and totals cell, transfers to share capital included", () => {
+  const doc = buildSavingsSummaryDoc(SUMMARY, RANGE);
+  const [movement] = tables(doc);
+  assert.deepEqual(
+    movement.columns.map((c) => c.header),
+    ["Product", "Opening", "Deposits", "Withdrawals", "Interest", "Tax Withheld", "Fees", "To Share Capital", "Other", "Change in Balance", "Closing"],
+  );
+  assert.equal(movement.rows[0].share_capital_transfers, "1700.00");
+  assert.equal(total(movement, "share_capital_transfers"), "₱1,700.00");
+  assert.equal(kpiValue(doc, "Transfers to Share Capital"), "₱1,700.00");
+  assert.equal(kpiValue(doc, "Change in Balance"), "₱300.00");
+  assert.equal(kpiValue(doc, "Net Movement"), undefined, "no label that reads like the dashboard's deposits less withdrawals");
 });
 
 test("the deposit summary by branch reads Branch, and a failed request shows dashes", () => {

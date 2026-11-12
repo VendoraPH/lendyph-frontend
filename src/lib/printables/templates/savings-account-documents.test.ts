@@ -73,9 +73,17 @@ const PRODUCT = {
   excess_withdrawal_fee: "15.00",
   allow_deposits: true,
   allow_withdrawals: true,
+  // S2's shape: one row per term, the base rate and the whole ladder in `tiers`.
   current_rates: [
-    { annual_rate: "2.0000", term_days: null, effective_from: "2026-01-01", min_balance: null },
-    { annual_rate: "2.1250", term_days: null, effective_from: "2026-01-01", min_balance: "50000.00" },
+    {
+      annual_rate: "1.0000",
+      term_days: null,
+      effective_from: "2026-01-01",
+      tiers: [
+        { min_balance: null, annual_rate: "1.0000", effective_from: "2026-01-01" },
+        { min_balance: "50000.00", annual_rate: "2.1250", effective_from: "2026-01-01" },
+      ],
+    },
   ],
 };
 
@@ -120,7 +128,7 @@ test("the agreement states the product's terms from the server, rates unrounded"
   assertPrintableShape(doc, "savings_agreement");
   const text = prose(doc);
   assert.match(text, /Binhs Multi-Purpose Cooperative/);
-  assert.match(text, /Any balance: 2% per annum; ₱50,000.00 and up: 2.125% per annum/);
+  assert.match(text, /Below ₱50,000.00: 1% a year; ₱50,000.00 and up: 2.125% a year/);
   assert.match(text, /credited quarterly/);
   assert.match(text, /below ₱1,000.00 earns no interest/);
   assert.match(text, /maintaining balance of ₱300.00/);
@@ -136,8 +144,14 @@ test("a product that refuses withdrawals beyond the free count says so", () => {
   assert.match(prose(doc), /further withdrawals in the month are refused/);
 });
 
-test("rate lines read each tier in words", () => {
-  assert.deepEqual(rateLines(PRODUCT), ["Any balance: 2% per annum", "₱50,000.00 and up: 2.125% per annum"]);
+test("rate lines print the whole ladder the server sends, in the rate dialog's words", () => {
+  assert.deepEqual(rateLines(PRODUCT), ["Below ₱50,000.00: 1% a year", "₱50,000.00 and up: 2.125% a year"]);
+  // A product with no tiers above its base reads "Any balance".
+  assert.deepEqual(rateLines({ current_rates: [{ annual_rate: "1.5000", tiers: [{ min_balance: null, annual_rate: "1.5000" }] }] }), [
+    "Any balance: 1.5% a year",
+  ]);
+  // An older server with no `tiers` still prints the base rate.
+  assert.deepEqual(rateLines({ current_rates: [{ annual_rate: "1.5000" }] }), ["Any balance: 1.5% a year"]);
   assert.deepEqual(rateLines(null), []);
 });
 
