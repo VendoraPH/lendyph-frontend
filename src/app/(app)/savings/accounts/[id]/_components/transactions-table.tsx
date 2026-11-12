@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { Printer, Undo2 } from "lucide-react";
+import { FileText, Printer, Undo2 } from "lucide-react";
 import { DataState } from "@/components/common/data-state";
 import { TablePagination } from "@/components/common/table-pagination";
 import {
@@ -29,6 +29,8 @@ import {
   reversalBlocker,
 } from "../../../_lib/savings-rules";
 import { printSavingsReceipt } from "../_lib/print-receipt";
+import { WITHDRAWAL_SLIP } from "@/lib/savings/documents";
+import { printSavingsDocument } from "@/lib/savings/print-document";
 
 /**
  * One account's ledger, paged on the server, with the server's balance after
@@ -46,6 +48,11 @@ export function TransactionsTable({ account, onChanged }: { account: SavingsAcco
     if (!isReceiptTransaction(t)) return;
     setPrintingId(t.id);
     printSavingsReceipt(account, t).then(() => setPrintingId(null));
+  };
+
+  const printSlip = (t: SavingsTransaction) => {
+    setPrintingId(t.id);
+    printSavingsDocument(WITHDRAWAL_SLIP, t.id).then(() => setPrintingId(null));
   };
 
   const fetcher = useCallback(
@@ -119,6 +126,18 @@ export function TransactionsTable({ account, onChanged }: { account: SavingsAcco
                             title="Print receipt"
                           >
                             <Printer className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {t.type === "withdrawal" && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={printingId === t.id}
+                            onClick={() => printSlip(t)}
+                            aria-label={`Print withdrawal slip for ${t.reference}`}
+                            title="Print withdrawal slip"
+                          >
+                            <FileText className="h-4 w-4" />
                           </Button>
                         )}
                         <ActionButton

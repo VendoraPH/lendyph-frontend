@@ -34,6 +34,10 @@ export function readMoneyPost<T>(status: number, data: unknown): MoneyPostResult
 /** The toast after a money post: what happened, in words. */
 export function moneyPostMessage(result: MoneyPostResult<unknown>, postedText: string): string {
   if (result.kind === "posted") return postedText;
+  // A checker is needed for a reason other than the amount (gap round S4: the
+  // first money out on the day a deposit reactivated the account): say why.
+  const reason = result.approval.check_reason?.trim();
+  if (reason) return `Sent for approval. ${reason}`;
   const checkers = result.approval.required_checkers;
   return checkers > 1
     ? `Sent for approval. ${checkers} different approvers must approve it before it posts.`

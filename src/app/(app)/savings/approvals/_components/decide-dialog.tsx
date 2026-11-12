@@ -97,6 +97,9 @@ export function DecideDialog({ approval, decision, onOpenChange, onDecided }: De
               : ""}
           </DialogDescription>
         </DialogHeader>
+        {approval?.check_reason && (
+          <p className="rounded-md border bg-muted/40 p-3 text-sm">{approval.check_reason}</p>
+        )}
         {decision !== "approve" && (
           <FormField
             id="ap-reason"

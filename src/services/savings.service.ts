@@ -15,6 +15,7 @@ import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { fetchAllPages } from "@/lib/paginate";
 import { idempotencyHeaders } from "@/lib/idempotency-key";
 import { readMoneyPost, type MoneyPostResult } from "@/lib/savings/money-post";
+import { readStatusChange } from "@/lib/savings/status-change";
 import type {
   CloseSavingsAccountInput,
   OpenSavingsAccountInput,
@@ -42,6 +43,14 @@ import type {
   SavingsTransferInput,
   SavingsTransferResult,
 } from "@/types";
+import type {
+  DormancyListResponse,
+  SavingsAccountNote,
+  SavingsAccountNotesResponse,
+  SavingsStatusResult,
+  ShareCapitalTransferInput,
+  ShareCapitalTransferResult,
+} from "@/types/savings-servicing";
 
 const E = API_ENDPOINTS.SAVINGS;
 
@@ -122,8 +131,14 @@ export const savingsService = {
   /** 201 with the closed account, or 202 with `{approval}`. */
   close: (id: number, data: CloseSavingsAccountInput, key: string | null) =>
     postMoney<SavingsAccount>(E.CLOSE(id), data, key),
-  /** Freeze, unfreeze or reactivate, with a reason. */
-  setStatus: (id: number, data: SavingsStatusInput) => api.post<SavingsAccount>(E.STATUS(id), data),
+  /**
+   * Freeze or unfreeze (200, the account), or ask to reactivate a dormant
+   * account (202 with `{approval}`: a checker approves it; gap round S4).
+   */
+  setStatus: async (id: number, data: SavingsStatusInput): Promise<SavingsStatusResult> => {
+    const response = await axiosClient.post<unknown>(E.STATUS(id), data);
+    return readStatusChange(response.status, response.data);
+  },
 
   // ── Holds ──
 
@@ -147,4 +162,26 @@ export const savingsService = {
   /** Always 202 with the approval: a reversal posts only once someone else approves it. */
   requestReversal: (id: number, reason: string, key: string | null) =>
     postMoney<SavingsTransaction>(E.TRANSACTION_REVERSE(id), { reason }, key),
+
+  // ── Servicing (gap round S3 and S4) ──
+
+  /**
+   * Savings to the member's share capital (savings:post and
+   * share_capital:create): 201 posted, or 202 with `{approval}` above the
+   * first tier. Dated today; never reversed.
+   */
+  shareCapitalTransfer: (id: number, data: ShareCapitalTransferInput, key: string | null) =>
+    postMoney<ShareCapitalTransferResult>(E.SHARE_CAPITAL_TRANSFERS(id), data, key),
+  /** The account's notes, newest first, `getRaw` so `meta` survives (`per_page` ≤ 100). */
+  notes: (id: number, params?: Record<string, unknown>) =>
+    api.getRaw<SavingsAccountNotesResponse>(E.ACCOUNT_NOTES(id), { params }),
+  /** savings:post. Up to 1,000 characters; never edited or deleted. */
+  addNote: (id: number, note: string) => api.post<SavingsAccountNote>(E.ACCOUNT_NOTES(id), { note }),
+  /**
+   * The dormant accounts, or with `list=approaching` the active accounts that
+   * turn dormant soon, on `GET /reports/savings/dormant` (reports:view and
+   * savings:view). `meta.totals` answers both lists' cards.
+   */
+  dormancyList: <Row>(params: Record<string, unknown>) =>
+    api.getRaw<DormancyListResponse<Row>>(API_ENDPOINTS.REPORTS.SAVINGS_DORMANT, { params }),
 };

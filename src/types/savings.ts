@@ -235,7 +235,11 @@ export type SavingsTransactionType =
   | "interest"
   | "withholding_tax"
   | "closing"
-  | "reversal";
+  | "reversal"
+  // Gap round S1 and S3: an excess-withdrawal fee (linked to its withdrawal)
+  // and a transfer to the member's share capital (never reversed).
+  | "fee"
+  | "share_capital_transfer";
 
 /** One ledger line. `credit` adds to the balance, `debit` takes from it; one of them is "0.00". */
 export interface SavingsTransaction {
@@ -360,7 +364,16 @@ export interface ReleaseSavingsHoldInput {
 
 // ── Approvals (maker-checker) ──
 
-export type SavingsApprovalKind = "withdrawal" | "close" | "td_payout" | "pretermination" | "reversal";
+export type SavingsApprovalKind =
+  | "withdrawal"
+  | "close"
+  | "td_payout"
+  | "pretermination"
+  | "reversal"
+  // Gap round S3 and S4: a transfer to share capital above the first tier, and
+  // a staff reactivation of a dormant account (one checker, ₱0.00).
+  | "share_capital_transfer"
+  | "reactivation";
 export type SavingsApprovalStatus = "pending" | "approved" | "rejected" | "cancelled" | "expired";
 
 export interface SavingsApproval {
@@ -387,6 +400,11 @@ export interface SavingsApproval {
   expires_at: string | null;
   result_transaction_id: number | null;
   created_at: string | null;
+  /**
+   * Why it needs a checker when its amount alone wouldn't (gap round S4): the
+   * first money out on the day a deposit reactivated the account. In words.
+   */
+  check_reason?: string | null;
 }
 
 /** A money post above the first tier answers 202 with this instead of the record. */

@@ -149,7 +149,12 @@ export function ApprovalsScreen() {
                             <span className="block text-xs text-muted-foreground">Expires {formatDateTime(a.expires_at)}</span>
                           )}
                         </TableCell>
-                        <TableCell>{labelOf(APPROVAL_KIND_LABELS, a.kind)}</TableCell>
+                        <TableCell>
+                          {labelOf(APPROVAL_KIND_LABELS, a.kind)}
+                          {a.check_reason && (
+                            <span className="block max-w-56 text-xs text-muted-foreground">{a.check_reason}</span>
+                          )}
+                        </TableCell>
                         <TableCell className="font-mono text-xs">
                           {href ? (
                             <Link href={href} className="hover:underline">

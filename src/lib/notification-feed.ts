@@ -163,6 +163,10 @@ export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
   reminder_failed: "Reminder not sent",
   savings_gl_difference: "Savings books don't match the savings records",
   savings_large_transaction: "Large savings transaction",
+  savings_approval_waiting: "Savings approval waiting",
+  savings_time_deposit_maturing: "Time deposit maturing",
+  savings_dormancy_warning: "Savings account dormant soon",
+  savings_account_dormant: "Savings account dormant",
   cda_approval_needed: "CDA report awaiting approval",
   cda_report_returned: "CDA report returned",
   cda_report_finalized: "CDA report finalized",
@@ -187,6 +191,12 @@ const KIND_IN_TITLE: ReadonlySet<string> = new Set([
   "cda_deadline_reminder",
   "cda_document_expiring",
   "cda_training_incomplete",
+  // Savings servicing (gap round S4): "Second savings approval waiting", "Time
+  // deposit matures today" and the rest already say what they are.
+  "savings_approval_waiting",
+  "savings_time_deposit_maturing",
+  "savings_dormancy_warning",
+  "savings_account_dormant",
 ]);
 
 /** The kind in words, or "Notification" for a kind added on the server later. */
@@ -203,6 +213,7 @@ export function notificationTone(type: string): NotificationTone {
     case "adjustment_pending":
     case "cda_approval_needed":
     case "portal_request_submitted":
+    case "savings_approval_waiting":
       return "approval";
     case "loan_approved":
     case "loan_released":
@@ -219,6 +230,8 @@ export function notificationTone(type: string): NotificationTone {
     case "reminder_contact_invalid":
     case "reminder_follow_up":
     case "savings_large_transaction":
+    case "savings_dormancy_warning":
+    case "savings_account_dormant":
     case "cda_report_returned":
     case "cda_deadline_reminder":
     case "cda_document_expiring":

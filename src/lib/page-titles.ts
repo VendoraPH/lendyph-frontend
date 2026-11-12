@@ -99,6 +99,8 @@ const ID_TITLES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     transactions: "Savings Transactions",
     approvals: "Savings Approvals",
     interest: "Savings Interest",
+    "auto-credit": "Savings Auto-Credit",
+    dormant: "Dormant Accounts",
     products: "Savings Products",
     settings: "Savings Settings",
   },
