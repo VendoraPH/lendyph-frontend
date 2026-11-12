@@ -360,6 +360,7 @@ export const API_ENDPOINTS = {
     INCOME_STATEMENT: "/accounting/statements/income-statement",
     CASH_FLOW: "/accounting/statements/cash-flow",
     EQUITY_CHANGES: "/accounting/statements/equity-changes",
+    STATEMENT_NOTES: "/accounting/statements/notes",
     RECEIVABLE_AGING: "/accounting/loans/aging",
 
     // Loan Accounting: the summary is one document, the loans list pages.

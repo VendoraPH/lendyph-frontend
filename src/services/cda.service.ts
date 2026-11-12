@@ -87,10 +87,16 @@ export type CdaMediationCaseInput = Partial<
   Omit<CdaMediationCase, "id" | "case_number" | "year" | "halves" | "status_label">
 >;
 
+/** The register rows a document can be attached to (`CdaDocumentRequest::SUBJECT_TYPES`). */
+export type CdaDocumentSubjectType = "training" | "program" | "case";
+
 export interface CdaDocumentUpload {
   title: string;
   category: string;
   report_id?: number | null;
+  /** The register row the document is about (Attach on a training, program or case). */
+  subject_type?: CdaDocumentSubjectType;
+  subject_id?: number;
   description?: string | null;
   expires_on?: string | null;
   version_label?: string | null;

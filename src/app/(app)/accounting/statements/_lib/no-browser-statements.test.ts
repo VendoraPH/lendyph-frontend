@@ -10,6 +10,8 @@ const SOURCES = [
   "src/app/(app)/accounting/statements/_components/income-statement-report.tsx",
   "src/app/(app)/accounting/statements/_components/cash-flow-report.tsx",
   "src/app/(app)/accounting/statements/_components/equity-changes-report.tsx",
+  "src/app/(app)/accounting/statements/_components/statement-notes-report.tsx",
+  "src/app/(app)/accounting/statements/_lib/statement-notes.ts",
   "src/app/(app)/accounting/trial-balance/page.tsx",
   "src/app/(app)/accounting/_components/report-section.tsx",
   "src/app/(app)/accounting/statements/_lib/statement-lines.ts",
