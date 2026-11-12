@@ -11,6 +11,7 @@ import {
   notYourStepMessage,
   withForwardTo,
 } from "./approval-forward";
+import { getErrorMessage } from "@/lib/api-error";
 import type { ForwardCandidates, LoanApprovalStep } from "@/types/loan-approval";
 
 function step(overrides: Partial<LoanApprovalStep> = {}): LoanApprovalStep {
@@ -158,6 +159,18 @@ describe("the server's 422 on forward_to_user_id", () => {
       },
     };
     assert.equal(forwardFieldError(err), "Ana Cruz can't see this loan's branch.");
+  });
+
+  test("the server's one fixed refusal is shown exactly as sent, beside the picker and in the toast", () => {
+    const fixed = "The selected user can't be given this approval step.";
+    const err = {
+      response: {
+        status: 422,
+        data: { message: fixed, errors: { forward_to_user_id: [fixed] } },
+      },
+    };
+    assert.equal(forwardFieldError(err), fixed);
+    assert.equal(getErrorMessage(err, "We couldn't record this approval. Please try again."), fixed);
   });
 
   test("anything else is not a forward error", () => {
