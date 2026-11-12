@@ -39,6 +39,26 @@ export interface ShareCapitalTransferResult {
   share_capital_balance: MoneyString | null;
 }
 
+// ── Account details (S1) and the product's withdrawal rule ──
+
+/**
+ * The opening details an account carries since S1. The beneficiary's contact
+ * number is null when the caller may not see the member's contact details.
+ */
+export interface SavingsAccountDetails {
+  account_officer?: SavingsUserRef | null;
+  source_of_funds?: string | null;
+  /** In words ("Other: Rental income"). */
+  source_of_funds_label?: string | null;
+  beneficiary?: { name: string | null; relationship: string | null; contact_number: string | null } | null;
+}
+
+/** The product fields that decide the excess-withdrawal fee (S1; null is no limit, or no fee). */
+export interface SavingsWithdrawalRule {
+  free_withdrawals_per_month?: number | null;
+  excess_withdrawal_fee?: MoneyString | null;
+}
+
 // ── Status change (S4) ──
 
 /**

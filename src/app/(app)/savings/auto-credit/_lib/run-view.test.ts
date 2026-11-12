@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { SavingsAutoCreditRunResult } from "@/types/savings-servicing";
-import { canProcess, processedMessage, runHeadline, runTotalCards } from "./run-view";
+import { canProcess, processedMessage, runHeadline, runLineAccount, runTotalCards } from "./run-view";
 
 // A stubbed server answer: one credit, one skip in words, one reversed credit.
 const stub: SavingsAutoCreditRunResult = {
@@ -70,4 +70,12 @@ test("Process is offered only when the preview has a credit to post", () => {
   assert.equal(canProcess(null), false);
   assert.equal(canProcess(stub), true);
   assert.equal(canProcess({ ...stub, totals: { ...stub.totals, credit_count: 0 } }), false);
+});
+
+test("a run line names its account and member, never only the instruction number", () => {
+  assert.deepEqual(runLineAccount(stub.credits[0]), { account: "SA-0010", member: "Ana Cruz" });
+  assert.deepEqual(runLineAccount({ ...stub.credits[0], account_number: null, borrower_name: null }), {
+    account: "Account #10",
+    member: "—",
+  });
 });

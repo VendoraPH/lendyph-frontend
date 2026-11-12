@@ -1,5 +1,5 @@
 import { formatCurrency, formatDateLong } from "@/lib/format";
-import type { SavingsAutoCreditRunResult } from "@/types/savings-servicing";
+import type { AutoCreditRunLine, SavingsAutoCreditRunResult } from "@/types/savings-servicing";
 
 /** The run's headline figures, all the server's. */
 export function runTotalCards(result: SavingsAutoCreditRunResult, posted: boolean): Array<{ label: string; value: string }> {
@@ -33,4 +33,9 @@ export function processedMessage(result: SavingsAutoCreditRunResult): { title: s
 /** Whether Process is offered: the preview has something to post. */
 export function canProcess(preview: SavingsAutoCreditRunResult | null): boolean {
   return preview !== null && preview.totals.credit_count > 0;
+}
+
+/** A run line's account and member, as the server named them. */
+export function runLineAccount(line: AutoCreditRunLine): { account: string; member: string } {
+  return { account: line.account_number ?? `Account #${line.account_id}`, member: line.borrower_name ?? "—" };
 }

@@ -22,6 +22,7 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { ACCOUNT_DOCUMENTS } from "@/lib/savings/documents";
 import { savingsService } from "@/services";
 import type { SavingsAccount } from "@/types";
+import type { SavingsAccountDetails } from "@/types/savings-servicing";
 import { AccountStatusBadge } from "../../../_components/account-status-badge";
 import { ActionButton } from "../../../_components/action-button";
 import { DocumentsMenu } from "../../../_components/documents-menu";
@@ -34,6 +35,7 @@ import {
   type StatusOffer,
 } from "../../../_lib/savings-rules";
 import { printSavingsPassbook } from "../_lib/print-passbook";
+import { accountDetailItems } from "../_lib/account-details";
 import { shareCapitalTransferBlocker } from "../_lib/share-capital-transfer";
 import { AccountNotesPanel } from "./account-notes-panel";
 import { CloseAccountDialog } from "./close-account-dialog";
@@ -90,6 +92,7 @@ export function AccountDetail({ accountId }: { accountId: number }) {
               onClose={() => setClosing(true)}
             />
             <Balances account={account} />
+            <OpeningDetails account={account} />
             <HoldsCard account={account} onChanged={() => resource.refetch()} />
             <Card>
               <CardHeader>
@@ -264,5 +267,23 @@ function Balances({ account }: { account: SavingsAccount }) {
         </Card>
       ))}
     </div>
+  );
+}
+
+/** The opening details (gap round S1): officer, source of funds and beneficiary, as the server sent them. */
+function OpeningDetails({ account }: { account: SavingsAccount & SavingsAccountDetails }) {
+  return (
+    <Card>
+      <CardContent className="py-4">
+        <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+          {accountDetailItems(account).map((item) => (
+            <div key={item.label}>
+              <dt className="text-xs text-muted-foreground">{item.label}</dt>
+              <dd className="mt-0.5 font-medium">{item.value}</dd>
+            </div>
+          ))}
+        </dl>
+      </CardContent>
+    </Card>
   );
 }

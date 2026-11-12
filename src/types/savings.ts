@@ -267,6 +267,11 @@ export interface SavingsTransaction {
   time_deposit_id: number | null;
   interest_run_id: number | null;
   approval_id: number | null;
+  /** On a withdrawal that charged an excess-withdrawal fee (gap round S1): its linked `fee` row and amount. */
+  fee_transaction_id?: number | null;
+  fee_amount?: MoneyString | null;
+  /** On a `fee` row: the withdrawal it was charged on. */
+  fee_for_transaction_id?: number | null;
   /** Null when the system posted it. */
   created_by: SavingsUserRef | null;
   created_at: string | null;
@@ -389,6 +394,8 @@ export interface SavingsApproval {
   target_transaction_id: number | null;
   target_reference?: string | null;
   amount: MoneyString;
+  /** The excess-withdrawal fee it carries besides `amount` ("0.00" when none; gap round S1). */
+  fee_amount?: MoneyString;
   /** How many different checkers it needs (2 above the second tier). */
   required_checkers: number;
   requested_by: SavingsUserRef | null;

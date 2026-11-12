@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { useDialogOpening } from "@/hooks";
+import { useApiResource, useDialogOpening } from "@/hooks";
 import { formatCurrency, todayISO } from "@/lib/format";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { isReceiptTransaction, receiptAmount } from "@/lib/printables/templates/savings-receipt";
@@ -23,6 +23,8 @@ import { OptionSelect } from "../../../_components/option-select";
 import { useSubmitGuard } from "@/hooks/use-submit-guard";
 import { parseMoneyInput } from "@/lib/money-input";
 import { moneyPostMessage } from "@/lib/savings/money-post";
+import { feeOf, postedWithdrawalText, withFeeText, withdrawalFeeRuleHint } from "@/lib/savings/withdrawal-fee";
+import type { SavingsWithdrawalRule } from "@/types/savings-servicing";
 import { PAYMENT_METHOD_OPTIONS } from "../../../_lib/savings-rules";
 import { printSavingsReceipt } from "../_lib/print-receipt";
 
@@ -58,6 +60,13 @@ export function TransactionDialog({ mode, account, onOpenChange, onPosted }: Tra
     setSubmitted(false);
   }
 
+  // The product's fee rule, from the server's product, shown before posting.
+  // The staff API sends no per-account preview of the month's count.
+  const fetchProducts = useCallback(() => savingsService.products(), []);
+  const products = useApiResource(fetchProducts, mode === "withdrawal");
+  const rule = (products.data?.find((p) => p.id === account.product.id) ?? null) as SavingsWithdrawalRule | null;
+  const feeHint = mode === "withdrawal" ? withdrawalFeeRuleHint(rule) : null;
+
   const amount = parseMoneyInput(amountRaw);
   const amountError = amount.ok ? null : amount.message;
   const dateError = date ? null : "Enter the date.";
@@ -80,10 +89,17 @@ export function TransactionDialog({ mode, account, onOpenChange, onPosted }: Tra
         // nothing to receipt until it posts. The toast states the server's
         // figure (the posted line's, or the approval's), never the typed one.
         const posted = result.kind === "posted" && isReceiptTransaction(result.record) ? result.record : null;
-        const serverAmount = posted ? receiptAmount(posted) : result.kind === "sent_for_approval" ? result.approval.amount : null;
+        // A withdrawal names its excess-withdrawal fee beside the amount, both the server's.
+        const description = posted
+          ? posted.type === "withdrawal"
+            ? postedWithdrawalText(posted)
+            : formatCurrency(receiptAmount(posted))
+          : result.kind === "sent_for_approval"
+            ? withFeeText(result.approval.amount, feeOf(result.approval))
+            : undefined;
         notifySuccess(
           moneyPostMessage(result, copy.done),
-          serverAmount === null ? undefined : formatCurrency(serverAmount),
+          description,
           posted ? { label: "Print receipt", onClick: () => void printSavingsReceipt(account, posted) } : undefined,
         );
         onOpenChange(false);
@@ -135,6 +151,7 @@ export function TransactionDialog({ mode, account, onOpenChange, onPosted }: Tra
               <Input id="tx-ref" value={reference} onChange={(e) => setReference(e.target.value)} placeholder="OR / transfer no." />
             </FormField>
           </div>
+          {feeHint && <p className="text-xs text-muted-foreground">{feeHint}</p>}
           <FormField id="tx-remarks" label="Remarks (optional)">
             <Textarea id="tx-remarks" value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={2} />
           </FormField>

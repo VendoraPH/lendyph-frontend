@@ -1,3 +1,5 @@
+import { formatCurrency } from "@/lib/format";
+import { feeOf } from "@/lib/savings/withdrawal-fee";
 import type { SavingsApproval } from "@/types";
 
 export interface ApprovalOffer {
@@ -56,4 +58,15 @@ export function approvalHref(approval: SavingsApproval): string | null {
 /** True when the server answered with an HTTP status (a refusal), as opposed to no reply at all. */
 export function serverAnswered(err: unknown): boolean {
   return typeof (err as { response?: { status?: unknown } } | null)?.response?.status === "number";
+}
+
+/** The amount column: a reactivation moves no money, so it reads a dash rather than ₱0.00. */
+export function approvalAmountText(approval: Pick<SavingsApproval, "kind" | "amount">): string {
+  return approval.kind === "reactivation" ? "—" : formatCurrency(approval.amount);
+}
+
+/** The excess-withdrawal fee the request carries besides its amount, in the server's figure; null when none. */
+export function approvalFeeText(approval: Pick<SavingsApproval, "fee_amount">): string | null {
+  const fee = feeOf(approval);
+  return fee ? `Excess-withdrawal fee ${formatCurrency(fee)}` : null;
 }

@@ -23,12 +23,12 @@ import { ReverseTransactionDialog } from "../../../_components/reverse-transacti
 import {
   METHOD_LABELS,
   TRANSACTION_TYPE_LABELS,
-  actorName,
   isNilAmount,
   labelOf,
   reversalBlocker,
 } from "../../../_lib/savings-rules";
 import { printSavingsReceipt } from "../_lib/print-receipt";
+import { postedByText } from "../_lib/account-details";
 import { WITHDRAWAL_SLIP } from "@/lib/savings/documents";
 import { printSavingsDocument } from "@/lib/savings/print-document";
 
@@ -114,7 +114,12 @@ export function TransactionsTable({ account, onChanged }: { account: SavingsAcco
                       <TableCell className="text-right font-medium tabular-nums">
                         {formatCurrency(t.balance_after)}
                       </TableCell>
-                      <TableCell>{actorName(t.created_by)}</TableCell>
+                      <TableCell>
+                        {postedByText(t).primary}
+                        {postedByText(t).secondary && (
+                          <span className="block text-xs text-muted-foreground">{postedByText(t).secondary}</span>
+                        )}
+                      </TableCell>
                       <TableCell className="whitespace-nowrap">
                         {isReceiptTransaction(t) && (
                           <Button

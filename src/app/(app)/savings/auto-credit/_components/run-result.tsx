@@ -5,15 +5,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatCurrency } from "@/lib/format";
 import type { AutoCreditRunLine, SavingsAutoCreditRunResult } from "@/types/savings-servicing";
 import { Kpi } from "../../_components/kpi";
-import { runHeadline, runTotalCards } from "../_lib/run-view";
+import { runHeadline, runLineAccount, runTotalCards } from "../_lib/run-view";
 
 function AccountCell({ line }: { line: AutoCreditRunLine }) {
+  const { account, member } = runLineAccount(line);
   return (
     <TableCell>
       <Link href={`/savings/accounts/${line.account_id}`} className="font-mono text-xs hover:underline">
-        {line.account_number ?? `Account #${line.account_id}`}
+        {account}
       </Link>
-      <span className="block text-xs text-muted-foreground">{line.borrower_name ?? "—"}</span>
+      <span className="block text-xs text-muted-foreground">{member}</span>
     </TableCell>
   );
 }
@@ -51,7 +52,6 @@ export function RunResult({ result, posted }: { result: SavingsAutoCreditRunResu
           <TableHeader>
             <TableRow>
               <TableHead>Account</TableHead>
-              <TableHead>Instruction</TableHead>
               <TableHead>Reference</TableHead>
               <TableHead className="text-right">Amount</TableHead>
             </TableRow>
@@ -60,7 +60,6 @@ export function RunResult({ result, posted }: { result: SavingsAutoCreditRunResu
             {result.credits.map((c) => (
               <TableRow key={c.instruction_id}>
                 <AccountCell line={c} />
-                <TableCell>#{c.instruction_id}</TableCell>
                 <TableCell className="font-mono text-xs">{c.reference ?? "—"}</TableCell>
                 <TableCell className="text-right tabular-nums">{formatCurrency(c.amount)}</TableCell>
               </TableRow>
