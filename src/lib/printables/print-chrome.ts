@@ -34,6 +34,7 @@ const REFERENCE_PREFIX: Record<PrintableId, string> = {
   member_ledger_card: "MLC",
   time_deposit_certificate: "TDC",
   savings_passbook: "SPB",
+  savings_receipt: "SRC",
 };
 
 /**

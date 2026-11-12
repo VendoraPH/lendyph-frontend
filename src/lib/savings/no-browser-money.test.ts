@@ -17,6 +17,7 @@ const ROOTS = [
   "services/savings-approval.service.ts",
   "services/savings-interest.service.ts",
   "lib/printables/templates/savings-passbook.ts",
+  "lib/printables/templates/savings-receipt.ts",
   "lib/printables/templates/time-deposit-certificate.ts",
   "app/(app)/reports/_lib/savings-report-builders.ts",
 ];
@@ -55,6 +56,11 @@ const ALLOWED: ReadonlyArray<{ file: string; line: string; reason: string }> = [
     file: "lib/printables/templates/time-deposit-certificate.ts",
     line: "const maturityAmount = toNumber(td.maturity_amount);",
     reason: "the certificate prints the server's figure in words; nothing is worked out",
+  },
+  {
+    file: "lib/printables/templates/savings-receipt.ts",
+    line: "const figure = toNumber(amountText);",
+    reason: "the receipt prints the server's figure in words; nothing is worked out",
   },
 ];
 
