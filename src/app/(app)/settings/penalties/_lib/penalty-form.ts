@@ -21,6 +21,14 @@ export interface PenaltyFormInput {
 export const PENALTY_FORM_NOTE =
   "Changes apply to loans created after you save. Loans already created keep the penalty terms they were created with.";
 
+/**
+ * When charges fall (the owner's monthly rule): when grace ends, then once a
+ * month while unpaid, each at the bracket for that day's days late. So a short
+ * bracket between two charge days may never apply. Words only.
+ */
+export const CHARGE_DAYS_NOTE =
+  "Penalties are charged when grace ends and then once a month while unpaid; each charge uses the rate for how many days late it is that day.";
+
 /** What deactivating changes: new loans only. */
 export const DEACTIVATE_NOTE = "New loans on these products will use no configuration.";
 

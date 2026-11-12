@@ -15,7 +15,7 @@ import { penaltyConfigService } from "@/services";
 import type { LoanProduct } from "@/types/loan";
 import type { PenaltyConfig } from "@/types/penalty";
 import {
-  PENALTY_FORM_NOTE, activeProductOwners, appendRow, buildPenaltyPayload, toRow, type ConditionRow,
+  CHARGE_DAYS_NOTE, PENALTY_FORM_NOTE, activeProductOwners, appendRow, buildPenaltyPayload, toRow, type ConditionRow,
 } from "../_lib/penalty-form";
 import { ConditionsEditor } from "./conditions-editor";
 import { ProductMultiSelect } from "./product-multi-select";
@@ -136,6 +136,9 @@ export function PenaltyFormDialog({ open, onOpenChange, config, configs, product
               Penalty Conditions <span className="text-destructive">*</span>
             </Label>
             <ConditionsEditor rows={rows} onChange={setRows} onAdd={addRow} />
+            <p className="text-xs text-muted-foreground">
+              {CHARGE_DAYS_NOTE}
+            </p>
           </div>
 
           <p className="rounded-md bg-muted/60 p-3 text-xs text-muted-foreground">

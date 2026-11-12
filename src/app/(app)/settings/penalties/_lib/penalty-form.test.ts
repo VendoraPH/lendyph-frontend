@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import type { PenaltyConfig } from "@/types/penalty";
 import * as penaltyForm from "./penalty-form";
 import {
+  CHARGE_DAYS_NOTE,
   DEACTIVATE_NOTE,
   PENALTY_FORM_NOTE,
   activeProductOwners,
@@ -126,4 +127,14 @@ const config = (id: number, status: "active" | "inactive", ids: number[]): Penal
 test("the picker's hint names the other active configuration covering a product", () => {
   const owners = activeProductOwners([config(1, "active", [10, 11]), config(2, "inactive", [12]), config(3, "active", [13])], 3);
   assert.deepEqual([...owners], [[10, "Policy 1"], [11, "Policy 1"]]);
+});
+
+// Default A: charges fall when grace ends and then monthly, so a short bracket
+// between two charge days may never apply. The form says so, in words only.
+test("the form says when charges fall and which rate each uses", () => {
+  assert.equal(
+    CHARGE_DAYS_NOTE,
+    "Penalties are charged when grace ends and then once a month while unpaid; each charge uses the rate for how many days late it is that day.",
+  );
+  assert.match(read(`${DIR}/_components/penalty-form-dialog.tsx`), /<ConditionsEditor[^\n]*\/>\s*<p[^>]*>\s*\{CHARGE_DAYS_NOTE\}/);
 });

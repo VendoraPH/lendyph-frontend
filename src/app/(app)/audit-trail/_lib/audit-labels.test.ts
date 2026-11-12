@@ -112,6 +112,11 @@ test("system rows (accounting, GCash, imports, no record) read System", () => {
   assert.equal(auditModuleLabel(log({ module: "system", target: null })), "System");
 });
 
+// Phase 4 (B2): penalty configuration rows carry module `penalties`.
+test("penalty configuration rows read under Penalties", () => {
+  assert.equal(auditModuleLabel(log({ module: "penalties", target: null })), "Penalties");
+});
+
 test("accounting and GCash rows read by their module names", () => {
   assert.equal(auditModuleLabel(log({ module: "accounting", target: null })), "Accounting");
   assert.equal(auditModuleLabel(log({ module: "gcash", target: null })), "GCash");
@@ -132,6 +137,7 @@ test("the module filter offers exactly the modules the server filters by", () =>
       "loans",
       "member_portal",
       "payments",
+      "penalties",
       "reminders",
       "roles",
       "savings",
@@ -149,6 +155,7 @@ test("every module filter option reads in words, by its menu name", () => {
   assert.equal(labels.savings, "Savings");
   assert.equal(labels.cda, "CDA Compliance");
   assert.equal(labels.member_portal, "Member Portal");
+  assert.equal(labels.penalties, "Penalties");
   assert.ok(AUDIT_MODULE_OPTIONS.every((o) => !/_/.test(o.label) && o.label !== o.value));
 });
 
