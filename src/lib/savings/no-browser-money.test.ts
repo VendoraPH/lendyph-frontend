@@ -16,10 +16,23 @@ const ROOTS = [
   "services/savings-time-deposit.service.ts",
   "services/savings-approval.service.ts",
   "services/savings-interest.service.ts",
+  "services/savings-auto-credit.service.ts",
   "lib/printables/templates/savings-passbook.ts",
   "lib/printables/templates/savings-receipt.ts",
   "lib/printables/templates/time-deposit-certificate.ts",
   "app/(app)/reports/_lib/savings-report-builders.ts",
+  // Gap round F4c: the dashboard, the rest of the deposit reports and the savings documents.
+  "services/savings-dashboard.service.ts",
+  "app/(app)/reports/_lib/savings-insight-report-builders.ts",
+  "lib/printables/savings-fetchers.ts",
+  "lib/printables/templates/savings-shared.ts",
+  "lib/printables/templates/savings-opening-form.ts",
+  "lib/printables/templates/savings-agreement.ts",
+  "lib/printables/templates/savings-closure-form.ts",
+  "lib/printables/templates/savings-dormancy-notice.ts",
+  "lib/printables/templates/savings-withdrawal-slip.ts",
+  "lib/printables/templates/savings-td-maturity-notice.ts",
+  "lib/printables/templates/savings-td-early-termination.ts",
 ];
 
 /** A name that holds money on the savings screens (an id, such as `payoutAccountId`, doesn't). */
@@ -61,6 +74,11 @@ const ALLOWED: ReadonlyArray<{ file: string; line: string; reason: string }> = [
     file: "lib/printables/templates/savings-receipt.ts",
     line: "const figure = toNumber(amountText);",
     reason: "the receipt prints the server's figure in words; nothing is worked out",
+  },
+  {
+    file: "lib/printables/templates/savings-withdrawal-slip.ts",
+    line: "const figure = toNumber(amount);",
+    reason: "the slip prints the server's figure in words; nothing is worked out",
   },
 ];
 

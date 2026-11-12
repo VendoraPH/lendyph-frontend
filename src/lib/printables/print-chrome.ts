@@ -35,6 +35,13 @@ const REFERENCE_PREFIX: Record<PrintableId, string> = {
   time_deposit_certificate: "TDC",
   savings_passbook: "SPB",
   savings_receipt: "SRC",
+  savings_opening_form: "SOF",
+  savings_agreement: "SAG",
+  savings_closure_form: "SCF",
+  savings_dormancy_notice: "SDN",
+  savings_withdrawal_slip: "SWS",
+  time_deposit_maturity_notice: "TMN",
+  time_deposit_early_termination: "TET",
 };
 
 /**

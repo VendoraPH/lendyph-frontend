@@ -31,6 +31,8 @@ import { DocumentsTab } from "./_components/documents-tab";
 import { LedgerTab } from "./_components/ledger-tab";
 import { ShareCapitalTab } from "./_components/share-capital-tab";
 import { CollateralsTab } from "./_components/collaterals-tab";
+import { SavingsTab } from "./_components/savings-tab";
+import { env } from "@/config/env";
 
 function BorrowerDetailContent() {
   const params = useParams();
@@ -263,6 +265,7 @@ function BorrowerDetailContent() {
           <TabsTrigger value="ledger">Ledger</TabsTrigger>
           <TabsTrigger value="share-capital">Share Capital</TabsTrigger>
           <TabsTrigger value="collaterals">Collaterals</TabsTrigger>
+          {env.features.savings && can("savings:view") && <TabsTrigger value="savings">Savings</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="overview" className="pt-4">
@@ -302,6 +305,12 @@ function BorrowerDetailContent() {
         <TabsContent value="collaterals" className="pt-4">
           <CollateralsTab borrowerId={borrower.id} />
         </TabsContent>
+
+        {env.features.savings && can("savings:view") && (
+          <TabsContent value="savings" className="pt-4">
+            <SavingsTab borrowerId={borrower.id} />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

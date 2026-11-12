@@ -166,6 +166,27 @@ export async function collectReportPages(
   return { rows, total, pagesFetched, complete, totals };
 }
 
+/**
+ * The savings reports the server writes a CSV for (`/reports/savings/{report}/export`).
+ * The per-account statement has none; the member statement's path carries the member.
+ */
+export type SavingsCsvReport =
+  | "balances"
+  | "transactions"
+  | "time-deposit-maturities"
+  | "interest-postings"
+  | "dormant"
+  | "gl-control"
+  | "summary"
+  | "accounts"
+  | "deposits"
+  | "withdrawals"
+  | "large-transactions"
+  | "time-deposits"
+  | "interest-accrual"
+  | "account-activity"
+  | `member-statement/${number}`;
+
 export const reportService = {
   // The three list endpoints return a Laravel paginator envelope
   // ({ data, meta, totals }) rather than the { success, data } wrapper, so they
@@ -305,10 +326,38 @@ export const reportService = {
    * (reports:export plus savings:view). The statement has none: it's a
    * printable.
    */
-  exportSavingsReport: (
-    report: "balances" | "transactions" | "time-deposit-maturities" | "interest-postings" | "dormant" | "gl-control",
-    params?: Record<string, unknown>,
-  ) => api.download(API_ENDPOINTS.REPORTS.SAVINGS_EXPORT(report), { params }),
+  exportSavingsReport: (report: SavingsCsvReport, params?: Record<string, unknown>) =>
+    api.download(API_ENDPOINTS.REPORTS.SAVINGS_EXPORT(report), { params }),
+
+  // The rest of the deposit reports (gap round S5). The lists are paginator
+  // envelopes with `totals` over the whole filter (getRaw); the summary and
+  // the member statement are one object each.
+  savingsSummary: (params?: Record<string, unknown>) =>
+    api.get(API_ENDPOINTS.REPORTS.SAVINGS_SUMMARY, { params }),
+
+  savingsAccountList: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.SAVINGS_ACCOUNT_LIST, { params }),
+
+  savingsDeposits: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.SAVINGS_DEPOSITS, { params }),
+
+  savingsWithdrawals: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.SAVINGS_WITHDRAWALS, { params }),
+
+  savingsLargeTransactions: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.SAVINGS_LARGE_TRANSACTIONS, { params }),
+
+  savingsTimeDeposits: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.SAVINGS_TIME_DEPOSITS, { params }),
+
+  savingsInterestAccrual: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.SAVINGS_INTEREST_ACCRUAL, { params }),
+
+  savingsAccountActivity: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.SAVINGS_ACCOUNT_ACTIVITY, { params }),
+
+  savingsMemberStatement: (borrowerId: number, params?: Record<string, unknown>) =>
+    api.get(API_ENDPOINTS.REPORTS.SAVINGS_MEMBER_STATEMENT(borrowerId), { params }),
 
   exportReleases: (params?: Record<string, unknown>) =>
     api.download(API_ENDPOINTS.REPORTS.EXPORT_RELEASES, { params }),

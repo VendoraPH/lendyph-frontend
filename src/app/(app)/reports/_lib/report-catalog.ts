@@ -1,6 +1,14 @@
 import {
+  Activity,
   AlertTriangle,
+  ArrowDownToLine,
   ArrowLeftRight,
+  ArrowUpFromLine,
+  ChartColumn,
+  List,
+  Percent,
+  Siren,
+  UserRound,
   Banknote,
   BookOpen,
   ClipboardList,
@@ -55,6 +63,17 @@ import {
   buildSavingsTransactionsDoc,
   buildTimeDepositMaturitiesDoc,
 } from "./savings-report-builders";
+import {
+  buildSavingsAccountActivityDoc,
+  buildSavingsAccountListDoc,
+  buildSavingsDepositsDoc,
+  buildSavingsInterestAccrualDoc,
+  buildSavingsLargeTransactionsDoc,
+  buildSavingsMemberStatementDoc,
+  buildSavingsSummaryDoc,
+  buildSavingsTimeDepositsDoc,
+  buildSavingsWithdrawalsDoc,
+} from "./savings-insight-report-builders";
 import type { Permission } from "@/types";
 import type {
   DateRange,
@@ -69,6 +88,19 @@ import type {
  */
 
 type Fetcher = (params: Record<string, unknown>) => Promise<unknown>;
+
+/**
+ * The scope filters a report sends, preview and CSV alike: `branch_id`,
+ * `product_id` and `group_by`, each only when chosen. Sending `branch_id=null`
+ * would be a filter value to the API, not the absence of one.
+ */
+export function reportScopeParams(ctx: ReportContext): Record<string, unknown> {
+  return {
+    ...(ctx.branchId ? { branch_id: ctx.branchId } : {}),
+    ...(ctx.productId ? { product_id: ctx.productId } : {}),
+    ...(ctx.groupBy ? { group_by: ctx.groupBy } : {}),
+  };
+}
 type Mapper = (raw: unknown, range: DateRange) => ReportDocument;
 
 /**
@@ -83,7 +115,7 @@ function reportBuilder(fetcher: Fetcher, map: Mapper, extraParams: Record<string
     const raw = await fetcher({
       date_from: ctx.range.from,
       date_to: ctx.range.to,
-      ...(ctx.branchId ? { branch_id: ctx.branchId } : {}),
+      ...reportScopeParams(ctx),
       ...extraParams,
     }).catch(() => null);
     return map(raw, ctx.range);
@@ -117,7 +149,7 @@ function subjectReportBuilder(
  */
 function pointInTimeBuilder(fetcher: Fetcher, map: Mapper) {
   return async (ctx: ReportContext): Promise<ReportDocument> => {
-    const raw = await fetcher(ctx.branchId ? { branch_id: ctx.branchId } : {}).catch(() => null);
+    const raw = await fetcher(reportScopeParams(ctx)).catch(() => null);
     return map(raw, ctx.range);
   };
 }
@@ -394,6 +426,8 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     icon: Wallet,
     accent: ACCENT.emerald,
     supportsBranch: true,
+    supportsProduct: true,
+    productKind: "regular",
     noDateRange: true,
     ...SAVINGS_REPORT,
     build: pointInTimeBuilder(
@@ -409,6 +443,8 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     icon: ArrowLeftRight,
     accent: ACCENT.blue,
     supportsBranch: true,
+    supportsProduct: true,
+    productKind: "regular",
     ...SAVINGS_REPORT,
     build: reportBuilder(reportService.savingsTransactions, buildSavingsTransactionsDoc, listParams),
   },
@@ -420,6 +456,8 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     icon: Hourglass,
     accent: ACCENT.amber,
     supportsBranch: true,
+    supportsProduct: true,
+    productKind: "time_deposit",
     ...SAVINGS_REPORT,
     defaultPeriod: "whole_month",
     build: reportBuilder(reportService.timeDepositMaturities, buildTimeDepositMaturitiesDoc, listParams),
@@ -432,6 +470,8 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     icon: Coins,
     accent: ACCENT.green,
     supportsBranch: true,
+    supportsProduct: true,
+    productKind: "regular",
     ...SAVINGS_REPORT,
     build: reportBuilder(reportService.savingsInterestPostings, buildSavingsInterestPostingsDoc, listParams),
   },
@@ -443,6 +483,8 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     icon: MoonStar,
     accent: ACCENT.indigo,
     supportsBranch: true,
+    supportsProduct: true,
+    productKind: "regular",
     noDateRange: true,
     ...SAVINGS_REPORT,
     build: pointInTimeBuilder(
@@ -479,6 +521,144 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     noDateRange: true,
     ...SAVINGS_REPORT,
     build: pointInTimeBuilder(reportService.savingsGlControl, (raw) => buildSavingsGlControlDoc(raw)),
+  },
+  // The rest of the Savings task's deposit reports (gap round S5). Every one
+  // takes the product filter; the GL control above has no product.
+  {
+    id: "savings_summary",
+    title: REPORT_TITLES.savings_summary,
+    description: "Opening balance, deposits, withdrawals, interest, fees and closing balance, by branch or by product.",
+    category: "savings",
+    icon: ChartColumn,
+    accent: ACCENT.emerald,
+    supportsBranch: true,
+    supportsProduct: true,
+    groupBy: {
+      label: "Group by",
+      options: [
+        { value: "branch", label: "Branch" },
+        { value: "product", label: "Product" },
+      ],
+    },
+    ...SAVINGS_REPORT,
+    build: reportBuilder(reportService.savingsSummary, buildSavingsSummaryDoc),
+  },
+  {
+    id: "savings_accounts",
+    title: REPORT_TITLES.savings_accounts,
+    description: "Every savings account, closed ones too, with its status, balance, dates and account officer.",
+    category: "savings",
+    icon: List,
+    accent: ACCENT.blue,
+    supportsBranch: true,
+    supportsProduct: true,
+    productKind: "regular",
+    noDateRange: true,
+    ...SAVINGS_REPORT,
+    build: pointInTimeBuilder(
+      (params) => reportService.savingsAccountList({ ...params, ...listParams }),
+      (raw) => buildSavingsAccountListDoc(raw),
+    ),
+  },
+  {
+    id: "savings_deposits",
+    title: REPORT_TITLES.savings_deposits,
+    description: "Deposits posted in the period; reversed ones are listed and left out of the totals.",
+    category: "savings",
+    icon: ArrowDownToLine,
+    accent: ACCENT.green,
+    supportsBranch: true,
+    supportsProduct: true,
+    productKind: "regular",
+    ...SAVINGS_REPORT,
+    build: reportBuilder(reportService.savingsDeposits, buildSavingsDepositsDoc, listParams),
+  },
+  {
+    id: "savings_withdrawals",
+    title: REPORT_TITLES.savings_withdrawals,
+    description: "Withdrawals and closing payouts posted in the period; reversed ones are listed and left out of the totals.",
+    category: "savings",
+    icon: ArrowUpFromLine,
+    accent: ACCENT.orange,
+    supportsBranch: true,
+    supportsProduct: true,
+    productKind: "regular",
+    ...SAVINGS_REPORT,
+    build: reportBuilder(reportService.savingsWithdrawals, buildSavingsWithdrawalsDoc, listParams),
+  },
+  {
+    id: "savings_large_transactions",
+    title: REPORT_TITLES.savings_large_transactions,
+    description: "Deposits, withdrawals and payouts at the large-transaction alert amount or more.",
+    category: "savings",
+    icon: Siren,
+    accent: ACCENT.red,
+    supportsBranch: true,
+    supportsProduct: true,
+    productKind: "regular",
+    ...SAVINGS_REPORT,
+    build: reportBuilder(reportService.savingsLargeTransactions, buildSavingsLargeTransactionsDoc, listParams),
+  },
+  {
+    id: "savings_time_deposits",
+    title: REPORT_TITLES.savings_time_deposits,
+    description: "Time deposits placed and not yet settled today, with the days left to maturity.",
+    category: "savings",
+    icon: Hourglass,
+    accent: ACCENT.amber,
+    supportsBranch: true,
+    supportsProduct: true,
+    productKind: "time_deposit",
+    noDateRange: true,
+    ...SAVINGS_REPORT,
+    build: pointInTimeBuilder(
+      (params) => reportService.savingsTimeDeposits({ ...params, ...listParams }),
+      (raw) => buildSavingsTimeDepositsDoc(raw),
+    ),
+  },
+  {
+    id: "savings_interest_accrual",
+    title: REPORT_TITLES.savings_interest_accrual,
+    description: "Interest earned and not yet credited on each open account, today. Shown only; nothing posts.",
+    category: "savings",
+    icon: Percent,
+    accent: ACCENT.green,
+    supportsBranch: true,
+    supportsProduct: true,
+    productKind: "regular",
+    noDateRange: true,
+    ...SAVINGS_REPORT,
+    build: pointInTimeBuilder(
+      (params) => reportService.savingsInterestAccrual({ ...params, ...listParams }),
+      (raw) => buildSavingsInterestAccrualDoc(raw),
+    ),
+  },
+  {
+    id: "savings_account_activity",
+    title: REPORT_TITLES.savings_account_activity,
+    description: "Each account's opening balance, money in and out, and closing balance for the period.",
+    category: "savings",
+    icon: Activity,
+    accent: ACCENT.indigo,
+    supportsBranch: true,
+    supportsProduct: true,
+    productKind: "regular",
+    ...SAVINGS_REPORT,
+    build: reportBuilder(reportService.savingsAccountActivity, buildSavingsAccountActivityDoc, listParams),
+  },
+  {
+    id: "savings_member_statement",
+    title: REPORT_TITLES.savings_member_statement,
+    description: "One member's savings accounts and time deposits for the period, account by account.",
+    category: "savings",
+    icon: UserRound,
+    accent: ACCENT.purple,
+    subject: "borrower",
+    ...SAVINGS_REPORT,
+    build: subjectReportBuilder(
+      (id, params) => reportService.savingsMemberStatement(id, params),
+      buildSavingsMemberStatementDoc,
+    ),
   },
 ];
 

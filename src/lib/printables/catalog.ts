@@ -1,13 +1,21 @@
 import {
+  BellRing,
   BookUser,
   CalendarClock,
   FileSignature,
   FileText,
+  FileX,
+  HandCoins,
   Landmark,
+  MoonStar,
   ReceiptText,
   ScrollText,
+  TimerOff,
+  UserPlus,
   Wallet,
 } from "lucide-react";
+import { env } from "@/config/env";
+import type { Permission } from "@/types";
 import {
   loanDocumentService,
   loanService,
@@ -32,6 +40,18 @@ import {
   toShareCapitalLedgerFallback,
 } from "./templates/share-capital-certificate";
 import { PRINT_PAGE_SIZE, type PrintableBuildOptions } from "./templates/shared";
+import { buildSavingsAgreementDoc } from "./templates/savings-agreement";
+import { buildSavingsClosureFormDoc } from "./templates/savings-closure-form";
+import { buildSavingsDormancyNoticeDoc } from "./templates/savings-dormancy-notice";
+import { buildSavingsOpeningFormDoc } from "./templates/savings-opening-form";
+import { buildTimeDepositEarlyTerminationDoc } from "./templates/savings-td-early-termination";
+import { buildTimeDepositMaturityNoticeDoc } from "./templates/savings-td-maturity-notice";
+import { buildSavingsWithdrawalSlipDoc } from "./templates/savings-withdrawal-slip";
+import {
+  fetchSavingsAccountPayload,
+  fetchSavingsWithdrawalPayload,
+  fetchTimeDepositPayload,
+} from "./savings-fetchers";
 import { PRINTABLE_TITLES } from "@/lib/page-titles";
 import { getErrorMessage, httpStatusOf } from "@/lib/api-error";
 
@@ -129,6 +149,9 @@ async function fetchShareCapitalStatement(borrowerId: number): Promise<unknown> 
     : toShareCapitalLedgerFallback(ledger, PRINT_PAGE_SIZE);
 }
 
+/** Savings documents need `savings:view` and the deployment's savings switch. */
+const SAVINGS_DOCUMENT = { permission: "savings:view", available: env.features.savings } as const;
+
 // ---------------------------------------------------------------------------
 // Exported catalog
 // ---------------------------------------------------------------------------
@@ -225,7 +248,92 @@ export const PRINTABLE_CATALOG: PrintableDefinition[] = [
       buildMemberLedgerCardDoc
     ),
   },
+  // Savings & Deposits (the Savings task's TASK 39): listed only where
+  // NEXT_PUBLIC_ENABLE_SAVINGS is on, to users who hold savings:view.
+  {
+    id: "savings_opening_form",
+    title: PRINTABLE_TITLES.savings_opening_form,
+    description: "The account, depositor, beneficiary and source of funds, for the depositor to sign.",
+    subject: "savings_account",
+    icon: UserPlus,
+    ...SAVINGS_DOCUMENT,
+    build: printableBuilder(
+      (id) => fetchSavingsAccountPayload(id, { member: true, product: true }),
+      buildSavingsOpeningFormDoc
+    ),
+  },
+  {
+    id: "savings_agreement",
+    title: PRINTABLE_TITLES.savings_agreement,
+    description: "The product's interest, balance, withdrawal, fee and dormancy terms, signed by both sides.",
+    subject: "savings_account",
+    icon: FileSignature,
+    ...SAVINGS_DOCUMENT,
+    build: printableBuilder(
+      (id) => fetchSavingsAccountPayload(id, { product: true, settings: true }),
+      buildSavingsAgreementDoc
+    ),
+  },
+  {
+    id: "savings_closure_form",
+    title: PRINTABLE_TITLES.savings_closure_form,
+    description: "The request to close an account, with today's closing figures from the server.",
+    subject: "savings_account",
+    icon: FileX,
+    ...SAVINGS_DOCUMENT,
+    build: printableBuilder(
+      (id) => fetchSavingsAccountPayload(id, { closing: true }),
+      buildSavingsClosureFormDoc
+    ),
+  },
+  {
+    id: "savings_dormancy_notice",
+    title: PRINTABLE_TITLES.savings_dormancy_notice,
+    description: "A notice that an account is dormant, or a reminder before it becomes dormant.",
+    subject: "savings_account",
+    icon: MoonStar,
+    ...SAVINGS_DOCUMENT,
+    build: printableBuilder(
+      (id) => fetchSavingsAccountPayload(id, { settings: true }),
+      buildSavingsDormancyNoticeDoc
+    ),
+  },
+  {
+    id: "savings_withdrawal_slip",
+    title: PRINTABLE_TITLES.savings_withdrawal_slip,
+    description: "A posted withdrawal in figures and words, for the depositor and the teller to sign.",
+    subject: "savings_withdrawal",
+    icon: HandCoins,
+    ...SAVINGS_DOCUMENT,
+    build: printableBuilder(fetchSavingsWithdrawalPayload, buildSavingsWithdrawalSlipDoc),
+  },
+  {
+    id: "time_deposit_maturity_notice",
+    title: PRINTABLE_TITLES.time_deposit_maturity_notice,
+    description: "The maturity date, the amount due and what happens at maturity.",
+    subject: "time_deposit",
+    icon: BellRing,
+    ...SAVINGS_DOCUMENT,
+    build: printableBuilder((id) => fetchTimeDepositPayload(id, false), buildTimeDepositMaturityNoticeDoc),
+  },
+  {
+    id: "time_deposit_early_termination",
+    title: PRINTABLE_TITLES.time_deposit_early_termination,
+    description: "The request to end a time deposit early, with today's figures from the server.",
+    subject: "time_deposit",
+    icon: TimerOff,
+    ...SAVINGS_DOCUMENT,
+    build: printableBuilder((id) => fetchTimeDepositPayload(id, true), buildTimeDepositEarlyTerminationDoc),
+  },
 ];
+
+/**
+ * The documents this user may open: their module is switched on for this
+ * deployment, and they hold any extra permission the document's data needs.
+ */
+export function visiblePrintables(can: (permission: Permission) => boolean): PrintableDefinition[] {
+  return PRINTABLE_CATALOG.filter((p) => p.available !== false && (!p.permission || can(p.permission)));
+}
 
 /** Catalog lookup by id, for the detail route. */
 export function findPrintable(id: string | undefined): PrintableDefinition | undefined {

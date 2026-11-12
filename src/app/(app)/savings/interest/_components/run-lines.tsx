@@ -2,12 +2,12 @@ import Link from "next/link";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCurrency, formatRate } from "@/lib/format";
 import type { InterestRunLine } from "@/types";
-import { skipReasonText } from "../_lib/run-rules";
+import { runLineTierLines, skipReasonText } from "../_lib/run-rules";
 
 /**
  * Per-account figures with the inputs behind them (days, average daily
- * balance, rate, tax rate), so a checker can review any line. All server
- * figures.
+ * balance, rate and, on a tiered product, each tier the balance used with
+ * its days; tax rate), so a checker can review any line. All server figures.
  */
 export function RunLines({ lines }: { lines: readonly InterestRunLine[] }) {
   if (lines.length === 0) {
@@ -36,6 +36,7 @@ export function RunLines({ lines }: { lines: readonly InterestRunLine[] }) {
         <TableBody>
           {lines.map((line) => {
             const skipped = skipReasonText(line);
+            const tiers = runLineTierLines(line);
             return (
               <TableRow key={line.account_id}>
                 <TableCell className="font-medium">
@@ -46,7 +47,16 @@ export function RunLines({ lines }: { lines: readonly InterestRunLine[] }) {
                 <TableCell>{line.borrower_name ?? "—"}</TableCell>
                 <TableCell className="text-right tabular-nums">{line.days}</TableCell>
                 <TableCell className="text-right tabular-nums">{formatCurrency(line.average_daily_balance)}</TableCell>
-                <TableCell className="text-right tabular-nums">{formatRate(line.rate)}%</TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {formatRate(line.rate)}%
+                  {tiers.length > 0 && (
+                    <ul className="mt-0.5 space-y-0.5 text-xs font-normal whitespace-nowrap text-muted-foreground">
+                      {tiers.map((tier) => (
+                        <li key={tier}>{tier}</li>
+                      ))}
+                    </ul>
+                  )}
+                </TableCell>
                 <TableCell className="text-right tabular-nums">{formatCurrency(line.gross_interest)}</TableCell>
                 <TableCell className="text-right tabular-nums">{formatRate(line.tax_rate)}%</TableCell>
                 <TableCell className="text-right tabular-nums">{formatCurrency(line.withholding_tax)}</TableCell>

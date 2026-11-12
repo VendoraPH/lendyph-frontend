@@ -4,7 +4,9 @@ import {
   STAFF_SEARCH_MAX_LENGTH,
   isStaffListForbidden,
   normaliseStaffQuery,
+  STAFF_PICKER_PURPOSES,
   staffEmptyMessage,
+  staffListParams,
   staffSearchStatus,
   viewStaffSearch,
   type StaffPage,
@@ -165,5 +167,21 @@ describe("staffEmptyMessage", () => {
     assert.equal(staffEmptyMessage(view({ shown: 0, pending: true })), null);
     assert.equal(staffEmptyMessage(view({ shown: 0, failed: true })), null);
     assert.equal(staffEmptyMessage(view({ shown: 3, total: 3 })), null);
+  });
+});
+
+describe("the picker's purpose", () => {
+  test("loans send no `for` and need a loan permission; savings send for=savings and need savings:create", () => {
+    assert.deepEqual(staffListParams("loans", ""), { per_page: 20 });
+    assert.deepEqual(staffListParams("loans", "ana"), { search: "ana", per_page: 20 });
+    assert.deepEqual(staffListParams("savings", ""), { for: "savings", per_page: 20 });
+    assert.deepEqual(STAFF_PICKER_PURPOSES.loans.permissions, ["loans:create", "loans:update", "loans:restructure"]);
+    assert.deepEqual(STAFF_PICKER_PURPOSES.savings.permissions, ["savings:create"]);
+  });
+
+  test("the locked note names the permission each purpose needs", () => {
+    assert.match(STAFF_PICKER_PURPOSES.loans.lockedNote, /create, edit or\s+restructure loans/);
+    assert.match(STAFF_PICKER_PURPOSES.savings.lockedNote, /open savings accounts/);
+    assert.doesNotMatch(STAFF_PICKER_PURPOSES.savings.lockedNote, /loan/);
   });
 });

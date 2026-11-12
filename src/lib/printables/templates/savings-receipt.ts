@@ -5,7 +5,8 @@
  * Built from a loaded `SavingsAccount` and one of its ledger lines, not
  * through the `/printables` catalog. Every figure is the server's, printed as
  * sent: the amount is the line's credit (deposit) or debit (withdrawal), the
- * balance is its `balance_after`. Nothing is worked out here.
+ * balance is its `balance_after` (a withdrawal's fee row's, when it carries
+ * an excess-withdrawal fee). Nothing is worked out here.
  *
  * Like the official receipt, a reversed line must not pass for proof of a
  * deposit: it is stamped REVERSED on every copy and says so in words.
@@ -13,6 +14,7 @@
 
 import type { SavingsAccount, SavingsTransaction } from "@/types";
 import { METHOD_LABELS } from "@/lib/savings/method-labels";
+import { feeOf } from "@/lib/savings/withdrawal-fee";
 import { amountInWords } from "../amount-in-words";
 import type { PrintableDocument, PrintBlock } from "../types";
 import {
@@ -64,16 +66,32 @@ const COPY = {
 
 const COPIES = ["Member's Copy", "File Copy"];
 
+export interface SavingsReceiptOptions extends PrintableBuildOptions {
+  /**
+   * The withdrawal's linked excess-withdrawal `fee` row, read from the
+   * server (gap round S1), or null when it couldn't be read. The fee posts
+   * after the withdrawal, so the balance after the whole transaction is the
+   * fee row's `balance_after`, never the withdrawal row's.
+   */
+  fee?: SavingsTransaction | null;
+}
+
 export function buildSavingsReceiptDoc(
   account: SavingsAccount,
   txn: SavingsTransaction & { type: ReceiptTransactionType },
-  options: PrintableBuildOptions = {},
+  options: SavingsReceiptOptions = {},
 ): PrintableDocument {
   const copy = COPY[txn.type];
   const reversed = txn.reversed_by_transaction_id != null;
   const amountText = receiptAmount(txn);
   const figure = toNumber(amountText);
   const method = txn.method ? METHOD_LABELS[txn.method] : null;
+  // A withdrawal beyond the month's free count carries a fee row: print its
+  // amount and the balance once it posted. Without the row the balance after
+  // isn't known here, so it reads a dash rather than the pre-fee figure.
+  const feeAmount = txn.type === "withdrawal" ? feeOf(txn) : null;
+  const feeRow = feeAmount ? (options.fee ?? null) : null;
+  const balanceAfter = feeAmount ? (feeRow?.balance_after ?? null) : txn.balance_after;
 
   const blocks: PrintBlock[] = [
     {
@@ -111,11 +129,17 @@ export function buildSavingsReceiptDoc(
         method ? field("Payment Method", method) : null,
         txn.external_reference ? field("Reference No.", txn.external_reference) : null,
         txn.remarks ? field("Remarks", txn.remarks) : null,
+        feeRow ? field("Fee reference", feeRow.reference) : null,
       ]),
     },
     {
       kind: "charges",
-      lines: [{ label: copy.amountLabel, amount: currencyOrDash(amountText), rule: "grand" }],
+      lines: [
+        { label: copy.amountLabel, amount: currencyOrDash(amountText), rule: "grand" },
+        ...(feeAmount
+          ? [{ label: "Excess withdrawal fee", amount: currencyOrDash(feeRow?.debit ?? feeAmount) }]
+          : []),
+      ],
     },
     {
       kind: "fields",
@@ -128,7 +152,7 @@ export function buildSavingsReceiptDoc(
     {
       kind: "fields",
       columns: 2,
-      items: presentFields([field("Balance after this transaction", currencyOrDash(txn.balance_after))]),
+      items: presentFields([field("Balance after this transaction", currencyOrDash(balanceAfter))]),
     },
     {
       kind: "signatures",

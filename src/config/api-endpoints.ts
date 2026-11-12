@@ -224,6 +224,17 @@ export const API_ENDPOINTS = {
     SAVINGS_STATEMENT: (accountId: number) => `/reports/savings/statement/${accountId}`,
     SAVINGS_GL_CONTROL: "/reports/savings/gl-control",
     SAVINGS_EXPORT: (report: string) => `/reports/savings/${report}/export`,
+    // The rest of the Savings task's deposit reports (gap round S5): every one
+    // takes `product_id`; the summary also `group_by` (branch or product).
+    SAVINGS_SUMMARY: "/reports/savings/summary",
+    SAVINGS_ACCOUNT_LIST: "/reports/savings/accounts",
+    SAVINGS_DEPOSITS: "/reports/savings/deposits",
+    SAVINGS_WITHDRAWALS: "/reports/savings/withdrawals",
+    SAVINGS_LARGE_TRANSACTIONS: "/reports/savings/large-transactions",
+    SAVINGS_TIME_DEPOSITS: "/reports/savings/time-deposits",
+    SAVINGS_INTEREST_ACCRUAL: "/reports/savings/interest-accrual",
+    SAVINGS_ACCOUNT_ACTIVITY: "/reports/savings/account-activity",
+    SAVINGS_MEMBER_STATEMENT: (borrowerId: number) => `/reports/savings/member-statement/${borrowerId}`,
     // Running-balance statement for one member. Separate from SHARE_CAPITAL
     // (the org-wide summary) and from SHARE_CAPITAL.LEDGER_LIST, whose
     // paginator caps at 100 rows and carries no opening/closing balance.
@@ -446,6 +457,9 @@ export const API_ENDPOINTS = {
    * with `{approval}` instead of 201.
    */
   SAVINGS: {
+    // The Savings dashboard (gap round S5): `from`, `to`, `branch_id`, `product_id`.
+    DASHBOARD: "/savings/dashboard",
+
     SETTINGS: "/savings/settings",
     PREPARE_BOOKS: "/savings/settings/prepare-books",
     TAX_RULES: "/savings/tax-rules",
@@ -454,6 +468,8 @@ export const API_ENDPOINTS = {
     PRODUCT: (id: number) => `/savings/products/${id}`,
     PRODUCT_RATES: (id: number) => `/savings/products/${id}/rates`,
 
+    /** The member check before opening (gap round S1). */
+    OPENING_CHECK: "/savings/opening-check",
     ACCOUNTS: "/savings/accounts",
     ACCOUNT: (id: number) => `/savings/accounts/${id}`,
     ACCOUNT_TRANSACTIONS: (id: number) => `/savings/accounts/${id}/transactions`,
@@ -490,6 +506,15 @@ export const API_ENDPOINTS = {
     INTEREST_RUN_REJECT: (id: number) => `/savings/interest-runs/${id}/reject`,
     INTEREST_RUN_POST: (id: number) => `/savings/interest-runs/${id}/post`,
     INTEREST_RUN_REVERSE: (id: number) => `/savings/interest-runs/${id}/reverse`,
+
+    // Savings servicing (gap round S3 and S4): transfers to share capital,
+    // auto-credit instructions and runs, and account notes.
+    SHARE_CAPITAL_TRANSFERS: (id: number) => `/savings/accounts/${id}/share-capital-transfers`,
+    ACCOUNT_NOTES: (id: number) => `/savings/accounts/${id}/notes`,
+    AUTO_CREDIT_INSTRUCTIONS: "/savings/auto-credit/instructions",
+    AUTO_CREDIT_INSTRUCTION: (id: number) => `/savings/auto-credit/instructions/${id}`,
+    AUTO_CREDIT_PREVIEW: "/savings/auto-credit/preview",
+    AUTO_CREDIT_PROCESS: "/savings/auto-credit/process",
   },
   /**
    * Credit Scoring (backend PR #240). Every route needs credit_scoring:view,

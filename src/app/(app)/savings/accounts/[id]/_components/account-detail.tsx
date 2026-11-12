@@ -8,6 +8,7 @@ import {
   ArrowLeftRight,
   ArrowUpFromLine,
   FileText,
+  Landmark,
   Lock,
   Printer,
   Snowflake,
@@ -16,12 +17,15 @@ import { DataState } from "@/components/common/data-state";
 import { PermissionGate } from "@/components/common/permission-gate";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useApiResource } from "@/hooks";
+import { useApiResource, usePermission } from "@/hooks";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { ACCOUNT_DOCUMENTS } from "@/lib/savings/documents";
 import { savingsService } from "@/services";
 import type { SavingsAccount } from "@/types";
+import type { SavingsAccountDetails } from "@/types/savings-servicing";
 import { AccountStatusBadge } from "../../../_components/account-status-badge";
 import { ActionButton } from "../../../_components/action-button";
+import { DocumentsMenu } from "../../../_components/documents-menu";
 import {
   canDeposit,
   canOfferClose,
@@ -31,8 +35,12 @@ import {
   type StatusOffer,
 } from "../../../_lib/savings-rules";
 import { printSavingsPassbook } from "../_lib/print-passbook";
+import { accountDetailItems } from "../_lib/account-details";
+import { shareCapitalTransferBlocker } from "../_lib/share-capital-transfer";
+import { AccountNotesPanel } from "./account-notes-panel";
 import { CloseAccountDialog } from "./close-account-dialog";
 import { HoldsCard } from "./holds-card";
+import { ShareCapitalTransferDialog } from "./share-capital-transfer-dialog";
 import { StatusDialog } from "./status-dialog";
 import { TransferDialog } from "./transfer-dialog";
 import { TransactionDialog, type TransactionMode } from "./transaction-dialog";
@@ -45,6 +53,7 @@ export function AccountDetail({ accountId }: { accountId: number }) {
   const [mode, setMode] = useState<TransactionMode | null>(null);
   const [closing, setClosing] = useState(false);
   const [transferring, setTransferring] = useState(false);
+  const [toShareCapital, setToShareCapital] = useState(false);
   const [statusOffer, setStatusOffer] = useState<StatusOffer | null>(null);
   const [printing, setPrinting] = useState(false);
 
@@ -78,10 +87,12 @@ export function AccountDetail({ accountId }: { accountId: number }) {
               onDeposit={() => setMode("deposit")}
               onWithdraw={() => setMode("withdrawal")}
               onTransfer={() => setTransferring(true)}
+              onShareCapital={() => setToShareCapital(true)}
               onStatus={setStatusOffer}
               onClose={() => setClosing(true)}
             />
             <Balances account={account} />
+            <OpeningDetails account={account} />
             <HoldsCard account={account} onChanged={() => resource.refetch()} />
             <Card>
               <CardHeader>
@@ -91,6 +102,14 @@ export function AccountDetail({ accountId }: { accountId: number }) {
                 <TransactionsTable key={ledgerKey} account={account} onChanged={() => resource.refetch()} />
               </CardContent>
             </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Notes</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <AccountNotesPanel accountId={account.id} />
+              </CardContent>
+            </Card>
             <TransactionDialog
               mode={mode}
               account={account}
@@ -98,6 +117,12 @@ export function AccountDetail({ accountId }: { accountId: number }) {
               onPosted={reload}
             />
             <TransferDialog open={transferring} account={account} onOpenChange={setTransferring} onPosted={reload} />
+            <ShareCapitalTransferDialog
+              open={toShareCapital}
+              account={account}
+              onOpenChange={setToShareCapital}
+              onPosted={reload}
+            />
             <StatusDialog
               offer={statusOffer}
               account={account}
@@ -119,6 +144,7 @@ function Header({
   onDeposit,
   onWithdraw,
   onTransfer,
+  onShareCapital,
   onStatus,
   onClose,
 }: {
@@ -128,10 +154,13 @@ function Header({
   onDeposit: () => void;
   onWithdraw: () => void;
   onTransfer: () => void;
+  onShareCapital: () => void;
   onStatus: (offer: StatusOffer) => void;
   onClose: () => void;
 }) {
   const statusOffers = statusChangeOffers(account);
+  // The transfer to share capital needs share_capital:create as well as savings:post (backend S3).
+  const canEnterShareCapital = usePermission().can("share_capital:create");
   const notActive = canWithdraw(account) ? null : "Only an active account can be withdrawn from or transferred out of.";
   return (
     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -159,6 +188,7 @@ function Header({
         <Button variant="outline" onClick={onPrint} disabled={printing}>
           <Printer className="h-4 w-4" /> {printing ? "Preparing…" : "Print passbook"}
         </Button>
+        <DocumentsMenu documents={ACCOUNT_DOCUMENTS} subjectId={account.id} />
         <PermissionGate permission="reports:view">
           <Button
             variant="outline"
@@ -182,6 +212,18 @@ function Header({
             </ActionButton>
             <ActionButton permission="savings:transact" variant="outline" onClick={onTransfer} blockedReason={notActive}>
               <ArrowLeftRight className="h-4 w-4" /> Transfer
+            </ActionButton>
+            <ActionButton
+              permission="savings:post"
+              variant="outline"
+              onClick={onShareCapital}
+              blockedReason={
+                canEnterShareCapital
+                  ? shareCapitalTransferBlocker(account)
+                  : "Transferring to share capital also needs the share capital entry permission."
+              }
+            >
+              <Landmark className="h-4 w-4" /> Transfer to share capital
             </ActionButton>
             {statusOffers.map((offer) => (
               <ActionButton key={offer.label} permission="savings:close" variant="outline" onClick={() => onStatus(offer)}>
@@ -225,5 +267,23 @@ function Balances({ account }: { account: SavingsAccount }) {
         </Card>
       ))}
     </div>
+  );
+}
+
+/** The opening details (gap round S1): officer, source of funds and beneficiary, as the server sent them. */
+function OpeningDetails({ account }: { account: SavingsAccount & SavingsAccountDetails }) {
+  return (
+    <Card>
+      <CardContent className="py-4">
+        <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+          {accountDetailItems(account).map((item) => (
+            <div key={item.label}>
+              <dt className="text-xs text-muted-foreground">{item.label}</dt>
+              <dd className="mt-0.5 font-medium">{item.value}</dd>
+            </div>
+          ))}
+        </dl>
+      </CardContent>
+    </Card>
   );
 }

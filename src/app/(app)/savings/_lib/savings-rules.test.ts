@@ -86,6 +86,21 @@ test("a reversal can be asked for on deposits, withdrawals and transfers only, o
   assert.equal(reversalBlocker(txn({ pending_reversal_approval_id: 3 })), "A reversal is waiting for approval.");
 });
 
+test("the gap round's row types and approval kinds read in words (S1, S3, S4)", () => {
+  assert.equal(labelOf(TRANSACTION_TYPE_LABELS, "fee"), "Excess withdrawal fee");
+  assert.equal(labelOf(TRANSACTION_TYPE_LABELS, "share_capital_transfer"), "Transfer to share capital");
+  assert.equal(labelOf(APPROVAL_KIND_LABELS, "share_capital_transfer"), "Transfer to share capital");
+  assert.equal(labelOf(APPROVAL_KIND_LABELS, "reactivation"), "Account reactivation");
+});
+
+test("a fee and a transfer to share capital say why they can't be reversed, in the server's words", () => {
+  assert.equal(
+    reversalBlocker(txn({ type: "fee" })),
+    "An excess-withdrawal fee is reversed only with its withdrawal. Reverse the withdrawal instead.",
+  );
+  assert.match(reversalBlocker(txn({ type: "share_capital_transfer" })) ?? "", /^A transfer to share capital can't be reversed\./);
+});
+
 test("the system is named when the server sends no user", () => {
   assert.equal(actorName(null), "System");
   assert.equal(actorName({ id: 1, name: "Ana" }), "Ana");

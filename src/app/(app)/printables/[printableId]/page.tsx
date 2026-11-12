@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -10,6 +10,7 @@ import { usePermission } from "@/hooks";
 // imports `@/components/common` ~52 kB it cannot use. See the note in the barrel.
 import { SubjectPicker } from "@/components/common/subject-picker";
 import { LoanSubjectPicker } from "./_components/loan-subject-picker";
+import { SavingsSubjectPicker } from "./_components/savings-subject-picker";
 import { fetchReceiptPage, type ReceiptOption } from "./_lib/receipt-search";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -19,7 +20,7 @@ import { searchEmptyMessage, searchStatus, useSearchPage } from "@/hooks/use-sea
 import { cn } from "@/lib/utils";
 import { ArrowLeft, ChevronRight, FileStack, Loader2, Printer } from "lucide-react";
 import { repaymentService } from "@/services";
-import { PRINTABLE_CATALOG, PrintableRefusedError, findPrintable } from "@/lib/printables/catalog";
+import { PrintableRefusedError, visiblePrintables } from "@/lib/printables/catalog";
 import { SUBJECT_ACCENT, SUBJECT_META } from "@/lib/printables/types";
 import { applyPrintChrome, resolvePrintableOrg } from "@/lib/printables/print-chrome";
 import { openPrintable } from "@/lib/printables/print-open";
@@ -34,7 +35,11 @@ export default function PrintableDetailPage() {
   const params = useParams();
   const router = useRouter();
   const printableId = params?.printableId as string | undefined;
-  const printable = useMemo(() => findPrintable(printableId), [printableId]);
+  const { can } = usePermission();
+  // A document this deployment or user can't open answers "not found", the
+  // same as an unknown id, so its data is never requested.
+  const catalog = visiblePrintables(can);
+  const printable = catalog.find((p) => p.id === printableId);
 
   const [subjectId, setSubjectId] = useState<number | null>(null);
   // Only the loan picker uses this — it selects the member first — but it is
@@ -187,6 +192,15 @@ export default function PrintableDetailPage() {
               <div className="flex flex-wrap items-end gap-4">
                 {printable.subject === "repayment" ? (
                   <RepaymentPicker value={subjectId} onChange={setSubjectId} />
+                ) : printable.subject === "savings_account" ||
+                  printable.subject === "savings_withdrawal" ||
+                  printable.subject === "time_deposit" ? (
+                  <SavingsSubjectPicker
+                    key={printable.subject}
+                    subject={printable.subject}
+                    value={subjectId}
+                    onChange={setSubjectId}
+                  />
                 ) : (
                   <SubjectPicker
                     subject={printable.subject}
@@ -208,7 +222,7 @@ export default function PrintableDetailPage() {
         {/* The loan table is the guidance once a member is chosen — repeating
             "choose a loan above" under it would only push it off the fold. */}
         {!(printable.subject === "loan" && borrowerId) && (
-          <EmptyState title={printable.title} subjectLabel={subjectLabel} />
+          <EmptyState title={printable.title} subjectLabel={subjectLabel} count={catalog.length} />
         )}
       </div>
     </RouteGuard>
@@ -284,9 +298,11 @@ function RepaymentPicker({
 function EmptyState({
   title,
   subjectLabel,
+  count,
 }: {
   title: string;
   subjectLabel: string;
+  count: number;
 }) {
   return (
     <div className="rounded-xl border border-dashed bg-muted/20 py-16 px-6">
@@ -302,7 +318,7 @@ function EmptyState({
           and its own print button.
         </p>
         <p className="text-xs text-muted-foreground/80">
-          {PRINTABLE_CATALOG.length} documents are available from the catalog.
+          {count} documents are available from the catalog.
         </p>
       </div>
     </div>

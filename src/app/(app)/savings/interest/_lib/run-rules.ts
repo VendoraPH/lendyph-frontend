@@ -1,3 +1,5 @@
+import { formatDate, formatRate } from "@/lib/format";
+import { tierBand } from "@/lib/savings/rate-ladder";
 import type { InterestRun, InterestRunLine, InterestRunRequest, InterestRunStatus, SavingsProduct } from "@/types";
 import { INTEREST_RUN_STATUS_LABELS, labelOf, SKIP_REASON_LABELS, UNKNOWN_LABEL } from "../../_lib/savings-rules";
 
@@ -109,6 +111,22 @@ export function skipReasonText(line: Pick<InterestRunLine, "skip_reason">): stri
   if (!line.skip_reason) return null;
   const text = labelOf(SKIP_REASON_LABELS, line.skip_reason);
   return text === UNKNOWN_LABEL ? "Not credited" : text;
+}
+
+/**
+ * The tiers a run line used, in words, from the server's `rate_segments`:
+ * "₱10,000.00 and up: 2% a year, 31 days". Days are the server's count per
+ * tier; nothing is worked out. A single-rate segment adds nothing. When the
+ * ladder changed within the period, each segment's lines carry its dates.
+ */
+export function runLineTierLines(line: Pick<InterestRunLine, "rate_segments">): string[] {
+  const tiered = (line.rate_segments ?? []).filter((s) => s.tiers?.length && s.by_tier?.length);
+  return tiered.flatMap((segment) =>
+    (segment.by_tier ?? []).map((used) => {
+      const words = `${tierBand(segment.tiers ?? [], used.min_balance)}: ${formatRate(used.rate)}% a year, ${used.days} ${used.days === 1 ? "day" : "days"}`;
+      return tiered.length > 1 ? `${formatDate(segment.from)} to ${formatDate(segment.to)}: ${words}` : words;
+    }),
+  );
 }
 
 /** The toast after creating runs: one draft per branch. */

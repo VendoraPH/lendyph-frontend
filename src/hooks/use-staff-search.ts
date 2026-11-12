@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { staffService } from "@/services/staff.service";
 import {
-  STAFF_PAGE_SIZE,
   STAFF_SEARCH_DEBOUNCE_MS,
   isStaffListForbidden,
   normaliseStaffQuery,
   staffEmptyMessage,
+  staffListParams,
   staffSearchStatus,
   viewStaffSearch,
   type StaffPage,
+  type StaffPickerPurpose,
 } from "@/lib/staff-search";
 import type { StaffMember } from "@/types";
 
@@ -39,8 +40,11 @@ export interface StaffSearch {
  *   not ask for it again.
  * - A failure waits for the next keystroke instead of retrying on its own, and
  *   a 403 stops the search for good.
+ * - `purpose` picks the query (`for=savings` on the savings form); `allowed`
+ *   false asks nothing and reads as forbidden, for a user the client already
+ *   knows lacks the purpose's permission.
  */
-export function useStaffSearch(): StaffSearch {
+export function useStaffSearch(purpose: StaffPickerPurpose = "loans", allowed = true): StaffSearch {
   const [query, setQueryState] = useState("");
   const [asked, setAsked] = useState<string | null>("");
   const [failedQuery, setFailedQuery] = useState<string | null>(null);
@@ -73,11 +77,11 @@ export function useStaffSearch(): StaffSearch {
   }, []);
 
   useEffect(() => {
-    if (asked === null || forbidden) return;
+    if (asked === null || forbidden || !allowed) return;
     if (asked === "" && firstPage) return;
     let cancelled = false;
     staffService
-      .list({ search: asked || undefined, per_page: STAFF_PAGE_SIZE })
+      .list(staffListParams(purpose, asked))
       .then((res) => {
         if (cancelled) return;
         const rows = res.data ?? [];
@@ -98,9 +102,10 @@ export function useStaffSearch(): StaffSearch {
     return () => {
       cancelled = true;
     };
-  }, [asked, firstPage, forbidden]);
+  }, [asked, firstPage, forbidden, allowed, purpose]);
 
-  const { rows, view } = viewStaffSearch({ query, asked, failedQuery, page, firstPage, forbidden });
+  const locked = forbidden || !allowed;
+  const { rows, view } = viewStaffSearch({ query, asked, failedQuery, page, firstPage, forbidden: locked });
 
   return {
     query,
@@ -108,7 +113,7 @@ export function useStaffSearch(): StaffSearch {
     reset,
     rows,
     pending: view.pending,
-    forbidden,
+    forbidden: locked,
     status: staffSearchStatus(view),
     emptyMessage: staffEmptyMessage(view),
   };

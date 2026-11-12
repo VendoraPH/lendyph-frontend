@@ -664,6 +664,14 @@ export interface AccountingDashboard {
   months: DashboardMonth[];
   /** The 10 latest posted or reversed journals dated on or before `as_of`. */
   recent_journals: RecentJournal[];
+  /**
+   * The savings GL control (gap round S5): true when any branch's savings or
+   * time deposit subledger differs from GL 2050 or 2060 as of `as_of`. Null
+   * while savings is not in use, and absent from older servers.
+   */
+  savings_gl_differs?: boolean | null;
+  /** Unlike the rest of this payload, `difference` is pesos (a two-decimal string), not centavos. */
+  savings_gl_control?: { as_of: string; difference: string; differences: number } | null;
 }
 
 export type AccountingPeriodSummary = Pick<

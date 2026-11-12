@@ -64,6 +64,11 @@ import type { DateRange, ReportDocument, ReportId } from "../_lib/types";
 import { ReportPreview } from "../_components/report-preview";
 import { ReportPrintSheet } from "../_components/report-print-sheet";
 import { applyChrome, loadLogoDataUrl } from "../_lib/report-chrome";
+import { reportScopeParams } from "../_lib/report-catalog";
+import { savingsCsvReport } from "../_lib/savings-csv";
+import { ProductFilter } from "../../savings/_components/product-filter";
+import { OptionSelect } from "../../savings/_components/option-select";
+import { ALL_PRODUCTS, productIdParam } from "../../savings/_lib/product-filter";
 
 type BackendExporter = (params?: Record<string, unknown>) => Promise<Blob>;
 
@@ -71,13 +76,15 @@ const BACKEND_CSV_EXPORTERS: Partial<Record<ReportId, BackendExporter>> = {
   releases_list: reportService.exportReleases,
   repayments_list: reportService.exportRepayments,
   due_past_due_list: reportService.exportDuePastDue,
-  savings_balances: (params) => reportService.exportSavingsReport("balances", params),
-  savings_transactions: (params) => reportService.exportSavingsReport("transactions", params),
-  time_deposit_maturities: (params) => reportService.exportSavingsReport("time-deposit-maturities", params),
-  savings_interest_postings: (params) => reportService.exportSavingsReport("interest-postings", params),
-  savings_dormant: (params) => reportService.exportSavingsReport("dormant", params),
-  savings_gl_control: (params) => reportService.exportSavingsReport("gl-control", params),
 };
+
+/** The server's CSV for a report: a loan list's export, or the savings report's own. */
+function backendCsvExporter(id: ReportId, subjectId: number | null): BackendExporter | undefined {
+  const savings = savingsCsvReport(id, subjectId);
+  return savings
+    ? (params) => reportService.exportSavingsReport(savings, params)
+    : BACKEND_CSV_EXPORTERS[id];
+}
 
 type ExportFormat = "excel" | "pdf" | "docx" | "csv" | "print";
 
@@ -216,6 +223,9 @@ function ReportDetailContent({
     presetRange(defaultPreset, { from: "", to: "" })
   );
   const [branchId, setBranchId] = useState<number | null>(null);
+  // The savings product filter, and its words for the report's subtitle.
+  const [product, setProduct] = useState<{ value: string; label: string }>({ value: ALL_PRODUCTS, label: "" });
+  const [groupBy, setGroupBy] = useState<string | null>(report?.groupBy?.options[0]?.value ?? null);
   // `?member=<id>` opens a member's report with them selected. Reading a member
   // needs `borrowers:view`, the same as the picker; without it nothing is preset.
   const presetId =
@@ -320,15 +330,31 @@ function ReportDetailContent({
   // the two custom date inputs can reach it, since every preset is narrower.
   const spanTooWide = exceedsReportSpanCap(activeRange);
 
+  // What the preview and the CSV are scoped to, so the two always agree.
+  const scope = {
+    range: activeRange,
+    branchId: report.supportsBranch ? branchId : null,
+    subjectId: report.subject ? subjectId : report.accountParam ? accountId : null,
+    productId: report.supportsProduct ? (productIdParam(product.value) ?? null) : null,
+    groupBy: report.groupBy ? groupBy : null,
+  };
+
   async function handleGenerate() {
     if (!report || missingSubject || spanTooWide) return;
     setGenerating(true);
     try {
-      const result = await report.build({
-        range: activeRange,
-        branchId: report.supportsBranch ? branchId : null,
-        subjectId: report.subject ? subjectId : report.accountParam ? accountId : null,
-      });
+      const built = await report.build(scope);
+      // A product filter says so on screen and in every export.
+      const result =
+        scope.productId && product.label
+          ? {
+              ...built,
+              meta: {
+                ...built.meta,
+                subtitle: [built.meta.subtitle, `Product: ${product.label}`].filter(Boolean).join(" · "),
+              },
+            }
+          : built;
       // Identity is stamped once, here, so the preview and every exported
       // format quote the same reference, logo, and preparer.
       //
@@ -393,7 +419,9 @@ function ReportDetailContent({
           break;
         }
         case "csv": {
-          const backendExporter = reportId ? BACKEND_CSV_EXPORTERS[reportId as ReportId] : undefined;
+          const backendExporter = reportId
+            ? backendCsvExporter(reportId as ReportId, scope.subjectId ?? null)
+            : undefined;
           if (backendExporter) {
             // The scope has to travel with the export, or a branch-filtered
             // report downloads as the whole book while the preview beside it
@@ -401,7 +429,7 @@ function ReportDetailContent({
             const blob = await backendExporter({
               date_from: activeRange.from,
               date_to: activeRange.to,
-              ...(report.supportsBranch && branchId ? { branch_id: branchId } : {}),
+              ...reportScopeParams(scope),
             });
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
@@ -581,7 +609,11 @@ function ReportDetailContent({
           {/* Scope row — only the reports whose endpoints accept these
               filters get to show them, so the controls never imply a
               narrowing the API would silently ignore. */}
-          {(report.supportsBranch || report.subject || report.accountParam) && (
+          {(report.supportsBranch ||
+            report.supportsProduct ||
+            report.groupBy ||
+            report.subject ||
+            report.accountParam) && (
             <div className="mt-4 flex flex-wrap items-end gap-4 border-t pt-4">
               {report.supportsBranch && (
                 <div className="space-y-1">
@@ -609,6 +641,35 @@ function ReportDetailContent({
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+              )}
+
+              {report.supportsProduct && (
+                <ProductFilter
+                  value={product.value}
+                  kind={report.productKind}
+                  onChange={(value, label) => {
+                    setProduct({ value, label });
+                    setDoc(null);
+                  }}
+                />
+              )}
+
+              {report.groupBy && groupBy !== null && (
+                <div className="space-y-1">
+                  <Label htmlFor="report-group-by" className="text-xs">
+                    {report.groupBy.label}
+                  </Label>
+                  <OptionSelect
+                    id="report-group-by"
+                    value={groupBy}
+                    onChange={(value) => {
+                      setGroupBy(value);
+                      setDoc(null);
+                    }}
+                    options={report.groupBy.options}
+                    className="h-9 w-40"
+                  />
                 </div>
               )}
 

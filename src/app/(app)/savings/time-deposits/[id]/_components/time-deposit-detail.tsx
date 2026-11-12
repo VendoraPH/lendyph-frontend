@@ -12,6 +12,8 @@ import { formatCurrency, formatDate, formatRate, todayISO } from "@/lib/format";
 import { timeDepositService } from "@/services";
 import type { TimeDeposit } from "@/types";
 import { ActionButton } from "../../../_components/action-button";
+import { DocumentsMenu } from "../../../_components/documents-menu";
+import { timeDepositDocuments } from "@/lib/savings/documents";
 import { METHOD_LABELS, actorName, labelOf } from "../../../_lib/savings-rules";
 import {
   MATURITY_INSTRUCTION_LABELS,
@@ -92,6 +94,7 @@ export function TimeDepositDetail({ depositId }: { depositId: number }) {
                   <Button variant="outline" onClick={() => print(td)} disabled={printing}>
                     <Printer className="h-4 w-4" /> {printing ? "Preparing…" : "Print certificate"}
                   </Button>
+                  <DocumentsMenu documents={timeDepositDocuments(td.status)} subjectId={td.id} />
                   {(td.status === "active" || td.status === "matured") && (
                     <>
                       <ActionButton
