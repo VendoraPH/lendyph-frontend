@@ -39,7 +39,7 @@ function RangeRefused({ message }: { message: string }) {
 }
 
 /**
- * The four statements, as tabs rather than as four sidebar entries.
+ * The four statements, as tabs rather than as four sidebar entries (plus Notes, below).
  *
  * The spec nests them under a "Financial Statements" heading, but `NavSubItem`
  * has no children — the sidebar is two levels deep by design. Tabs give the
@@ -74,7 +74,11 @@ export default function FinancialStatementsPage() {
       <div className="space-y-6">
         <AccountingPageHeader
           title="Financial Statements"
-          description="The four statements, from the same set of posted entries."
+          description={
+            showNotes
+              ? "The financial statements, from the same set of posted entries, and their notes."
+              : "The financial statements, from the same set of posted entries."
+          }
         />
 
         <FilterBar>
