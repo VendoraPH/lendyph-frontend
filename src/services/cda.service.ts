@@ -31,6 +31,10 @@ import type {
   CdaReportPart,
   CdaReportRow,
   CdaReportType,
+  CdaRequirement,
+  CdaRequirementInput,
+  CdaReviewChain,
+  CdaReviewChainStep,
   CdaSettings,
   CdaSnapshot,
   CdaSnapshotCheck,
@@ -112,6 +116,22 @@ export const cdaService = {
     api.patch<CdaPeriod>(C.PERIOD(year), { extended_deadline: extendedDeadline, extension_reference: reference }),
   getDashboard: (year: number) => api.get<CdaDashboard>(C.DASHBOARD(year)),
   getCalendar: (year: number) => api.get<CdaCalendarRow[]>(C.CALENDAR(year)),
+
+  // ── Custom compliance requirements (cda:prepare writes; the calendar lists them) ──
+  listRequirements: (year: number) => drain<CdaRequirement>(C.REQUIREMENTS(year)),
+  createRequirement: (year: number, data: CdaRequirementInput) =>
+    api.post<CdaRequirement>(C.REQUIREMENTS(year), data),
+  updateRequirement: (id: number, data: Partial<CdaRequirementInput>) =>
+    api.put<CdaRequirement>(C.REQUIREMENT(id), data),
+
+  // ── The review chain (Settings → Approval Workflow, `cda`; cda:settings and every branch) ──
+  getReviewChain: () =>
+    api.get<CdaReviewChain>(API_ENDPOINTS.SETTINGS.APPROVAL_WORKFLOW, { params: { type: "cda" } }),
+  saveReviewChain: (steps: CdaReviewChainStep[]) =>
+    api.put<CdaReviewChain>(API_ENDPOINTS.SETTINGS.APPROVAL_WORKFLOW, { type: "cda", steps }),
+  /** Back to the single review: the saved chain is deleted. */
+  resetReviewChain: () =>
+    api.delete<CdaReviewChain>(API_ENDPOINTS.SETTINGS.APPROVAL_WORKFLOW, { params: { type: "cda" } }),
 
   // ── Reports ──
   reportByType: (year: number, type: CdaReportType, part?: CdaReportPart) =>

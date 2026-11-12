@@ -31,6 +31,8 @@ import {
 import type { ApiRole } from "@/services/role.service";
 import { roleDisplayName } from "@/lib/role-display-name";
 import { stepRoleOptions } from "./_lib/step-role-options";
+import { CdaReviewChain } from "./_components/cda-review-chain";
+import { env } from "@/config/env";
 import {
   Workflow,
   Plus,
@@ -273,7 +275,7 @@ function StepFormDialog({
 // Page
 // ---------------------------------------------------------------------------
 
-type WorkflowTab = "normal" | "policy_exception";
+type WorkflowTab = "normal" | "policy_exception" | "cda";
 
 function ApprovalWorkflowContent() {
   const [loading, setLoading] = useState(true);
@@ -282,7 +284,11 @@ function ApprovalWorkflowContent() {
   const [roles, setRoles] = useState<ApiRole[]>([]);
   // Listing roles needs `users:view`, which this page does not. Without it the
   // role picker is left empty rather than asking and being refused.
-  const canListRoles = usePermission().can("users:view");
+  const { can } = usePermission();
+  const canListRoles = can("users:view");
+  // The CDA review chain (backend B6): saving it needs cda:settings with
+  // every branch, so the tab shows only to those users, and only with CDA on.
+  const showCda = env.features.cda && can("cda:settings") && can("branches:view_all");
 
   // Normal flow state
   const [normalSteps, setNormalSteps] = useState<ApprovalChainStep[]>([]);
@@ -480,47 +486,51 @@ function ApprovalWorkflowContent() {
             Approval Workflow
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Configure the loan approval chain — who acts at each step and in what order
+            {activeTab === "cda"
+              ? "Configure the CDA report review chain: who approves each report, and in what order"
+              : "Configure the loan approval chain — who acts at each step and in what order"}
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setResetConfirmOpen(true)}
-            disabled={saving}
-            className="h-9"
-          >
-            <RotateCcw className="mr-2 h-4 w-4" />
-            <span className="hidden sm:inline">Reset to Default</span>
-            <span className="sm:hidden">Reset</span>
-          </Button>
-          {isDirty && (
+        {activeTab !== "cda" && (
+          <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
             <Button
               variant="outline"
               size="sm"
-              onClick={handleRevert}
+              onClick={() => setResetConfirmOpen(true)}
               disabled={saving}
               className="h-9"
             >
-              Revert
+              <RotateCcw className="mr-2 h-4 w-4" />
+              <span className="hidden sm:inline">Reset to Default</span>
+              <span className="sm:hidden">Reset</span>
             </Button>
-          )}
-          <Button
-            size="sm"
-            onClick={handleSave}
-            disabled={saving || !!validationError || !isDirty}
-            className="h-9 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-          >
-            {saving ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Save className="mr-2 h-4 w-4" />
+            {isDirty && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRevert}
+                disabled={saving}
+                className="h-9"
+              >
+                Revert
+              </Button>
             )}
-            Save Changes
-          </Button>
-        </div>
+            <Button
+              size="sm"
+              onClick={handleSave}
+              disabled={saving || !!validationError || !isDirty}
+              className="h-9 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+            >
+              {saving ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="mr-2 h-4 w-4" />
+              )}
+              Save Changes
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Workflow Type Tabs — own row so they never fight with title/actions */}
@@ -528,6 +538,7 @@ function ApprovalWorkflowContent() {
         <button
           type="button"
           onClick={() => setActiveTab("normal")}
+          aria-pressed={activeTab === "normal"}
           className={cn(
             "flex-1 sm:flex-none px-4 py-1.5 text-sm font-medium rounded-md transition-colors",
             activeTab === "normal"
@@ -540,6 +551,7 @@ function ApprovalWorkflowContent() {
         <button
           type="button"
           onClick={() => setActiveTab("policy_exception")}
+          aria-pressed={activeTab === "policy_exception"}
           className={cn(
             "flex-1 sm:flex-none px-4 py-1.5 text-sm font-medium rounded-md transition-colors",
             activeTab === "policy_exception"
@@ -549,253 +561,275 @@ function ApprovalWorkflowContent() {
         >
           Policy Exception
         </button>
+        {showCda && (
+          <button
+            type="button"
+            onClick={() => setActiveTab("cda")}
+            aria-pressed={activeTab === "cda"}
+            className={cn(
+              "flex-1 sm:flex-none px-4 py-1.5 text-sm font-medium rounded-md transition-colors",
+              activeTab === "cda"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            CDA reports
+          </button>
+        )}
       </div>
 
-      {/* Summary cards */}
-      <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
-                  Total Steps
+      {activeTab === "cda" ? (
+        <CdaReviewChain roles={roles} />
+      ) : (
+        <>
+
+          {/* Summary cards */}
+          <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+            <Card>
+              <CardContent className="py-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Total Steps
+                    </p>
+                    <p className="text-2xl font-bold mt-0.5">{stepCounts.total}</p>
+                  </div>
+                  <Workflow className="h-8 w-8 text-brand-orange/40" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="py-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Submit</p>
+                    <p className="text-2xl font-bold mt-0.5">{stepCounts.submit}</p>
+                  </div>
+                  <Send className="h-8 w-8 text-teal-500/40" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="py-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Approve</p>
+                    <p className="text-2xl font-bold mt-0.5">{stepCounts.approve}</p>
+                  </div>
+                  <CheckCircle2 className="h-8 w-8 text-green-500/40" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="py-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Release</p>
+                    <p className="text-2xl font-bold mt-0.5">{stepCounts.release}</p>
+                  </div>
+                  <Unlock className="h-8 w-8 text-brand-orange/40" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Validation warning */}
+          {validationError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 dark:border-red-800/40 dark:bg-red-900/10 p-3 flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
+              <div className="text-sm">
+                <p className="font-medium text-red-700 dark:text-red-400">
+                  Chain is invalid
                 </p>
-                <p className="text-2xl font-bold mt-0.5">{stepCounts.total}</p>
+                <p className="text-red-600 dark:text-red-500 mt-0.5">
+                  {validationError.message}
+                </p>
               </div>
-              <Workflow className="h-8 w-8 text-brand-orange/40" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Submit</p>
-                <p className="text-2xl font-bold mt-0.5">{stepCounts.submit}</p>
-              </div>
-              <Send className="h-8 w-8 text-teal-500/40" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Approve</p>
-                <p className="text-2xl font-bold mt-0.5">{stepCounts.approve}</p>
-              </div>
-              <CheckCircle2 className="h-8 w-8 text-green-500/40" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Release</p>
-                <p className="text-2xl font-bold mt-0.5">{stepCounts.release}</p>
-              </div>
-              <Unlock className="h-8 w-8 text-brand-orange/40" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Validation warning */}
-      {validationError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 dark:border-red-800/40 dark:bg-red-900/10 p-3 flex items-start gap-2">
-          <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
-          <div className="text-sm">
-            <p className="font-medium text-red-700 dark:text-red-400">
-              Chain is invalid
-            </p>
-            <p className="text-red-600 dark:text-red-500 mt-0.5">
-              {validationError.message}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Unsaved changes indicator */}
-      {isDirty && !validationError && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-900/10 p-3 flex items-start gap-2">
-          <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
-          <p className="text-sm text-amber-700 dark:text-amber-400">
-            You have unsaved changes. Click <strong>Save Changes</strong> to apply,
-            or <strong>Revert</strong> to discard.
-          </p>
-        </div>
-      )}
-
-      {/* Steps list */}
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="text-sm font-medium">Chain Steps</CardTitle>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={openAdd}
-              className="h-8 gap-1 text-xs"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add Step
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {steps.length === 0 && (
-            <div className="text-center py-12 text-muted-foreground text-sm">
-              No steps configured. Click <strong>Add Step</strong> to start.
             </div>
           )}
-          {steps.map((step, i) => {
-            const meta = KIND_META[step.kind];
-            const Icon = meta.icon;
-            const apiRole = roles.find((r) => r.name === step.role);
-            return (
-              <div
-                key={step.id}
-                className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border p-3 bg-card hover:bg-muted/30 transition-colors"
-              >
-                {/* Reorder buttons */}
-                <div className="flex flex-col gap-0.5 shrink-0">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-5 w-5"
-                    disabled={i === 0}
-                    onClick={() => moveStep(i, "up")}
-                    aria-label="Move up"
-                  >
-                    <ChevronUp className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-5 w-5"
-                    disabled={i === steps.length - 1}
-                    onClick={() => moveStep(i, "down")}
-                    aria-label="Move down"
-                  >
-                    <ChevronDown className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
 
-                {/* Position number */}
-                <div className="h-8 w-8 rounded-full bg-muted text-muted-foreground flex items-center justify-center text-xs font-semibold shrink-0">
-                  {i + 1}
-                </div>
+          {/* Unsaved changes indicator */}
+          {isDirty && !validationError && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-900/10 p-3 flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+              <p className="text-sm text-amber-700 dark:text-amber-400">
+                You have unsaved changes. Click <strong>Save Changes</strong> to apply,
+                or <strong>Revert</strong> to discard.
+              </p>
+            </div>
+          )}
 
-                {/* Kind icon */}
-                <div
-                  className={cn(
-                    "h-9 w-9 rounded-md flex items-center justify-center shrink-0",
-                    meta.colorClass
-                  )}
+          {/* Steps list */}
+          <Card>
+            <CardHeader>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <CardTitle className="text-sm font-medium">Chain Steps</CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={openAdd}
+                  className="h-8 gap-1 text-xs"
                 >
-                  <Icon className="h-4 w-4" />
-                </div>
-
-                {/* Name + role */}
-                <div className="min-w-0 flex-1 basis-[180px]">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-semibold truncate">{step.name}</p>
-                    <Badge
-                      variant="outline"
-                      className={cn("text-[10px] h-4 px-1.5", meta.colorClass)}
-                    >
-                      {meta.label}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                    Role:{" "}
-                    <span className="font-mono">
-                      {apiRole ? roleDisplayName(apiRole) : step.role}
-                    </span>
-                    {!apiRole && (
-                      <span className="ml-1 text-amber-600">
-                        (role removed)
-                      </span>
-                    )}
-                    {step.status && (
-                      <>
-                        <span className="mx-1.5 text-muted-foreground/40">
-                          ·
-                        </span>
-                        Status:{" "}
-                        <span className="font-mono">{step.status}</span>
-                      </>
-                    )}
-                  </p>
-                </div>
-
-                {/* Actions — wrap to their own row on very narrow widths */}
-                <div className="flex items-center gap-1 shrink-0 ml-auto">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={() => openEdit(step)}
-                  >
-                    Edit
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs text-destructive border-destructive/30 hover:bg-destructive/5"
-                    onClick={() => handleDeleteStep(step.id)}
-                    aria-label="Delete step"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </div>
+                  <Plus className="h-3.5 w-3.5" />
+                  Add Step
+                </Button>
               </div>
-            );
-          })}
-        </CardContent>
-      </Card>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {steps.length === 0 && (
+                <div className="text-center py-12 text-muted-foreground text-sm">
+                  No steps configured. Click <strong>Add Step</strong> to start.
+                </div>
+              )}
+              {steps.map((step, i) => {
+                const meta = KIND_META[step.kind];
+                const Icon = meta.icon;
+                const apiRole = roles.find((r) => r.name === step.role);
+                return (
+                  <div
+                    key={step.id}
+                    className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border p-3 bg-card hover:bg-muted/30 transition-colors"
+                  >
+                    {/* Reorder buttons */}
+                    <div className="flex flex-col gap-0.5 shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-5 w-5"
+                        disabled={i === 0}
+                        onClick={() => moveStep(i, "up")}
+                        aria-label="Move up"
+                      >
+                        <ChevronUp className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-5 w-5"
+                        disabled={i === steps.length - 1}
+                        onClick={() => moveStep(i, "down")}
+                        aria-label="Move down"
+                      >
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
 
-      {/* Dialogs */}
-      <StepFormDialog
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        step={editingStep}
-        existingIds={existingIds}
-        roles={roles}
-        onSave={handleSaveStep}
-      />
+                    {/* Position number */}
+                    <div className="h-8 w-8 rounded-full bg-muted text-muted-foreground flex items-center justify-center text-xs font-semibold shrink-0">
+                      {i + 1}
+                    </div>
 
-      <Dialog open={resetConfirmOpen} onOpenChange={setResetConfirmOpen}>
-        <DialogContent size="sm">
-          <DialogHeader>
-            <DialogTitle>Reset to Default</DialogTitle>
-            <DialogDescription>
-              This will discard your current configuration and restore the
-              default 10-step chain (Loan Processor → Manager → BOD1..BOD7 →
-              Cashier). Existing in-flight loans will keep their own snapshots
-              and are not affected.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-end gap-3 pt-2">
-            <Button
-              variant="outline"
-              onClick={() => setResetConfirmOpen(false)}
-              disabled={saving}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleReset}
-              disabled={saving}
-            >
-              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Reset to Default
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+                    {/* Kind icon */}
+                    <div
+                      className={cn(
+                        "h-9 w-9 rounded-md flex items-center justify-center shrink-0",
+                        meta.colorClass
+                      )}
+                    >
+                      <Icon className="h-4 w-4" />
+                    </div>
+
+                    {/* Name + role */}
+                    <div className="min-w-0 flex-1 basis-[180px]">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-semibold truncate">{step.name}</p>
+                        <Badge
+                          variant="outline"
+                          className={cn("text-[10px] h-4 px-1.5", meta.colorClass)}
+                        >
+                          {meta.label}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                        Role:{" "}
+                        <span className="font-mono">
+                          {apiRole ? roleDisplayName(apiRole) : step.role}
+                        </span>
+                        {!apiRole && (
+                          <span className="ml-1 text-amber-600">
+                            (role removed)
+                          </span>
+                        )}
+                        {step.status && (
+                          <>
+                            <span className="mx-1.5 text-muted-foreground/40">
+                              ·
+                            </span>
+                            Status:{" "}
+                            <span className="font-mono">{step.status}</span>
+                          </>
+                        )}
+                      </p>
+                    </div>
+
+                    {/* Actions — wrap to their own row on very narrow widths */}
+                    <div className="flex items-center gap-1 shrink-0 ml-auto">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => openEdit(step)}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs text-destructive border-destructive/30 hover:bg-destructive/5"
+                        onClick={() => handleDeleteStep(step.id)}
+                        aria-label="Delete step"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+
+          {/* Dialogs */}
+          <StepFormDialog
+            open={formOpen}
+            onOpenChange={setFormOpen}
+            step={editingStep}
+            existingIds={existingIds}
+            roles={roles}
+            onSave={handleSaveStep}
+          />
+
+          <Dialog open={resetConfirmOpen} onOpenChange={setResetConfirmOpen}>
+            <DialogContent size="sm">
+              <DialogHeader>
+                <DialogTitle>Reset to Default</DialogTitle>
+                <DialogDescription>
+                  This will discard your current configuration and restore the
+                  default 10-step chain (Loan Processor → Manager → BOD1..BOD7 →
+                  Cashier). Existing in-flight loans will keep their own snapshots
+                  and are not affected.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex justify-end gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setResetConfirmOpen(false)}
+                  disabled={saving}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleReset}
+                  disabled={saving}
+                >
+                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Reset to Default
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </>
+      )}
     </div>
   );
 }
