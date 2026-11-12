@@ -17,11 +17,17 @@ export function tierLabel(minBalance: string | null | undefined): string {
  * first tier's minimum) when there are tiers above it, else "Any balance".
  */
 export function ladderLines(tiers: ReadonlyArray<Pick<SavingsRateTier, "min_balance" | "annual_rate">>): string[] {
-  return tiers.map((t, i) => {
-    const band =
-      t.min_balance == null && tiers[i + 1]?.min_balance != null
-        ? `Below ${formatCurrency(tiers[i + 1].min_balance)}`
-        : tierLabel(t.min_balance);
-    return `${band}: ${formatRate(t.annual_rate)}% a year`;
-  });
+  return tiers.map((t) => `${tierBand(tiers, t.min_balance)}: ${formatRate(t.annual_rate)}% a year`);
+}
+
+/**
+ * The band of the tier starting at `minBalance` within `ladder`: the base tier
+ * reads "Below ₱X" (the next tier's minimum) when a tier sits above it.
+ */
+export function tierBand(
+  ladder: ReadonlyArray<{ min_balance: string | null }>,
+  minBalance: string | null | undefined,
+): string {
+  const above = ladder.find((t) => t.min_balance != null);
+  return minBalance == null && above?.min_balance != null ? `Below ${formatCurrency(above.min_balance)}` : tierLabel(minBalance);
 }

@@ -690,6 +690,21 @@ export interface InterestRunLine {
   net_interest: MoneyString;
   /** Why the line earns nothing, as a key (`below_minimum_adb`, …). */
   skip_reason: string | null;
+  /** The rates behind the line, one segment per rate set in the period (gap round S2). */
+  rate_segments?: InterestRateSegment[];
+}
+
+/**
+ * One rate set over part of a run line's period. A tiered segment adds its
+ * ladder (`tiers`) and, for each tier the balance used, the days and
+ * centavo-days the server counted (`by_tier`); a single-rate one has neither.
+ */
+export interface InterestRateSegment {
+  from: string;
+  to: string;
+  rate: RateString;
+  tiers?: Array<{ min_balance: MoneyString | null; rate: RateString }>;
+  by_tier?: Array<{ min_balance: MoneyString | null; rate: RateString; days: number; balance_days: number }>;
 }
 
 export interface InterestRun {

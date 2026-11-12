@@ -9,6 +9,7 @@ import {
   RUN_STATUS_TABS,
   MAKER_REJECT_REASON,
   runActions,
+  runLineTierLines,
   runProductOptions,
   skipReasonText,
 } from "./run-rules";
@@ -106,3 +107,61 @@ test("creating names how many drafts were made", () => {
   assert.equal(createdMessage([{ id: 1 } as InterestRun]), "Draft run created");
   assert.equal(createdMessage([{ id: 1 }, { id: 2 }] as InterestRun[]), "2 draft runs created, one per branch");
 });
+
+const LADDER = [
+  { min_balance: null, rate: "0.5000" },
+  { min_balance: "10000.00", rate: "2.0000" },
+];
+
+test("a tiered line lists each tier it used, in words, with the server's days", () => {
+  assert.deepEqual(
+    runLineTierLines({
+      rate_segments: [
+        {
+          from: "2026-10-01",
+          to: "2026-12-31",
+          rate: "2.0000",
+          tiers: LADDER,
+          by_tier: [
+            { min_balance: null, rate: "0.5000", days: 61, balance_days: 30500000 },
+            { min_balance: "10000.00", rate: "2.0000", days: 31, balance_days: 37200000 },
+          ],
+        },
+      ],
+    }),
+    ["Below ₱10,000.00: 0.5% a year, 61 days", "₱10,000.00 and up: 2% a year, 31 days"],
+  );
+});
+
+test("a single-rate line, or one from before tiers, adds nothing to the Rate column", () => {
+  assert.deepEqual(runLineTierLines({ rate_segments: [{ from: "2026-10-01", to: "2026-12-31", rate: "1.0000" }] }), []);
+  assert.deepEqual(runLineTierLines({}), []);
+});
+
+test("when the ladder changed in the period, each segment's tiers carry its dates; one day reads '1 day'", () => {
+  assert.deepEqual(
+    runLineTierLines({
+      rate_segments: [
+        {
+          from: "2026-10-01",
+          to: "2026-10-31",
+          rate: "0.5000",
+          tiers: LADDER,
+          by_tier: [{ min_balance: null, rate: "0.5000", days: 31, balance_days: 1 }],
+        },
+        {
+          from: "2026-11-01",
+          to: "2026-11-01",
+          rate: "3.0000",
+          tiers: [{ min_balance: null, rate: "1.0000" }, { min_balance: "10000.00", rate: "3.0000" }],
+          by_tier: [{ min_balance: "10000.00", rate: "3.0000", days: 1, balance_days: 1 }],
+        },
+      ],
+    }),
+    [
+      "Oct 1, 2026 to Oct 31, 2026: Below ₱10,000.00: 0.5% a year, 31 days",
+      "Nov 1, 2026 to Nov 1, 2026: ₱10,000.00 and up: 3% a year, 1 day",
+    ],
+  );
+});
+
