@@ -17,7 +17,8 @@
  * interpolating `null` onto a signed document.
  */
 
-import type { LoanDeduction } from "./loan";
+import type { RateFrequency } from "@/lib/loan-terms";
+import type { LoanDeduction, PenaltyBracket } from "./loan";
 
 /** Borrower block, common to both documents. */
 export interface LoanDocumentBorrower {
@@ -46,9 +47,17 @@ export interface LoanDisclosureTerms {
   principal_amount: number;
   interest_rate: number;
   interest_method: string;
+  /** The period `interest_rate` is quoted per ("annual" reads "per year"). */
+  interest_rate_frequency: RateFrequency;
   term: number;
   frequency: string;
   penalty_rate: number;
+  /**
+   * The day ranges of the penalty configuration copied at creation, and its
+   * name; both null on a loan charged by `penalty_rate`.
+   */
+  penalty_config_name: string | null;
+  penalty_brackets: PenaltyBracket[] | null;
   grace_period_days: number;
   start_date: string;
   maturity_date: string;
@@ -187,6 +196,8 @@ export interface LoanPromissoryNoteTerms {
   principal_amount: number;
   interest_rate: number;
   interest_method: string;
+  /** The period `interest_rate` is quoted per ("annual" reads "per year"). */
+  interest_rate_frequency: RateFrequency;
   term: number;
   frequency: string;
   start_date: string;
@@ -195,6 +206,12 @@ export interface LoanPromissoryNoteTerms {
   total_interest: number;
   total_obligation: number;
   penalty_rate: number;
+  /**
+   * The day ranges of the penalty configuration copied at creation, and its
+   * name; both null on a loan charged by `penalty_rate`.
+   */
+  penalty_config_name: string | null;
+  penalty_brackets: PenaltyBracket[] | null;
   grace_period_days: number;
 }
 

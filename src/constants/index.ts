@@ -20,13 +20,15 @@ export const TERM_UNIT_OPTIONS = [
 
 // The period each interest rate figure is quoted per (e.g. "3% per month").
 // Mirrors payment frequency's vocabulary minus "upon_maturity", which is a
-// repayment schedule shape rather than a rate period.
+// repayment schedule shape rather than a rate period, plus "annual" ("18% per
+// year"), which is a rate period only: no loan is paid yearly.
 export const INTEREST_RATE_FREQUENCY_OPTIONS = [
   { value: "daily", label: "Daily" },
   { value: "weekly", label: "Weekly" },
   { value: "bi_weekly", label: "Bi-Weekly" },
   { value: "semi_monthly", label: "Semi-Monthly" },
   { value: "monthly", label: "Monthly" },
+  { value: "annual", label: "Annual" },
 ] as const;
 
 export const INTEREST_TYPE = {

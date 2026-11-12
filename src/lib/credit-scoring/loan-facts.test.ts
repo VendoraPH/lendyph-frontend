@@ -14,3 +14,14 @@ test("the past-due and active-loan filters are never sent without loans:view", (
   assert.deepEqual(borrowerScoreFilters(filters, false), { branch_id: 3, risk_level: "high" });
   assert.deepEqual(borrowerScoreFilters(filters, true), filters);
 });
+
+test("the loan product filter is never sent without loans:view; trend and member type always are", () => {
+  const filters = {
+    trend: "down" as const,
+    member_type: "associate" as const,
+    loan_product_id: 4,
+    past_due: true,
+  };
+  assert.deepEqual(borrowerScoreFilters(filters, false), { trend: "down", member_type: "associate" });
+  assert.deepEqual(borrowerScoreFilters(filters, true), filters);
+});

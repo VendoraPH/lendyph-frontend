@@ -15,11 +15,13 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useChartOfAccounts, useDialogOpening } from "@/hooks";
-import { formatCentavos, toCentavos } from "@/lib/accounting/money";
+import { formatCentavos } from "@/lib/accounting/money";
 import { formatDate, todayISO } from "@/lib/format";
+import { useAuthStore } from "@/store";
 import type { Expense } from "@/types";
 import {
   buildExpenseEditPayload,
+  buildNewExpensePayload,
   expenseEditForm,
   newExpenseForm,
   type ExpenseEditForm,
@@ -27,6 +29,7 @@ import {
   type NewExpenseForm,
 } from "../expenses/_lib/expense-forms";
 import { AccountSelect } from "./account-select";
+import { JournalBranchSelect } from "./journal-branch-select";
 
 interface ExpenseDialogProps {
   open: boolean;
@@ -49,14 +52,23 @@ interface ExpenseDialogProps {
  * two journal shapes. Paid now credits the money account; unpaid credits
  * Accounts Payable and waits to be settled. Each opening starts blank, with
  * "Paid now?" on, so nothing carries over from the last entry.
+ *
+ * A `branches:view_all` caller also picks the branch the entry is recorded in
+ * (No branch by default, as on a journal entry). A branch user sees no picker;
+ * the server records their own branch.
  */
 export function ExpenseDialog({ open, onOpenChange, onSubmit }: ExpenseDialogProps) {
   const { postable, isTemplate } = useChartOfAccounts();
 
   const [form, setForm] = useState<NewExpenseForm>(() => newExpenseForm(todayISO()));
+  const [branchId, setBranchId] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
 
-  if (useDialogOpening(open, null)) setForm(newExpenseForm(todayISO()));
+  if (useDialogOpening(open, null)) {
+    setForm(newExpenseForm(todayISO()));
+    setBranchId(null);
+  }
 
   const set =
     <K extends keyof NewExpenseForm>(field: K) =>
@@ -86,28 +98,14 @@ export function ExpenseDialog({ open, onOpenChange, onSubmit }: ExpenseDialogPro
   const expenseAccounts = postable.filter((a) => a.type === "expense");
   const moneyAccounts = postable.filter((a) => Boolean(a.cash_kind));
 
-  const amountCentavos = toCentavos(amount);
-  const valid =
-    payee.trim().length > 0 &&
-    expenseAccountId !== null &&
-    amountCentavos !== null &&
-    amountCentavos > 0 &&
-    (!paidNow || paymentAccountId !== null);
+  const payload = buildNewExpensePayload(form, viewAll ? branchId : undefined);
+  const valid = payload !== null;
 
   const submit = async () => {
-    if (submitting || !valid || isTemplate) return;
+    if (submitting || !payload || isTemplate) return;
     setSubmitting(true);
     try {
-      await onSubmit({
-        date,
-        payee: payee.trim(),
-        expense_account_id: expenseAccountId,
-        amount: amountCentavos,
-        payment_account_id: paidNow ? paymentAccountId : null,
-        due_date: paidNow ? null : dueDate || null,
-        reference: reference.trim() || null,
-        description: description.trim() || null,
-      });
+      await onSubmit(payload);
     } finally {
       // Whatever the request did, the button has to come back. A rejection
       // that left this true would wedge the dialog with no way out but a
@@ -196,6 +194,15 @@ export function ExpenseDialog({ open, onOpenChange, onSubmit }: ExpenseDialogPro
                 onChange={(e) => setDueDate(e.target.value)}
               />
             </div>
+          )}
+
+          {viewAll && (
+            <JournalBranchSelect
+              id="expense-branch"
+              value={branchId}
+              onChange={setBranchId}
+              disabled={submitting}
+            />
           )}
 
           <div className="space-y-1.5">

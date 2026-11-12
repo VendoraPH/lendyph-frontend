@@ -12,3 +12,16 @@ test("the risk distribution donut has a legend with each band's name and count",
   assert.match(page, /\{item\.label\}/);
   assert.match(page, /\{item\.count\}/);
 });
+
+test("High Risk Outstanding reads the server's ₱ figure, or a dash with the reason when it's withheld", () => {
+  assert.match(
+    page,
+    /label="High Risk Outstanding"\s+value=\{pesosOrDash\(data\.high_risk_outstanding\)\}\s+hiddenReason=\{loanFigureReason\(data\.high_risk_outstanding\)\}/,
+  );
+  assert.match(page, /label="Scores Due for Review" value=\{countOrDash\(data\.scores_due_for_review\)\}/);
+  assert.doesNotMatch(page, /formatCurrency\(|toFixed\(/);
+});
+
+test("the dashboard shows the server's portfolio risk by branch", () => {
+  assert.match(page, /<BranchRiskTable rows=\{data\.branch_risk\} \/>/);
+});

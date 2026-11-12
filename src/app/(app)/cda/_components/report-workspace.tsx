@@ -30,6 +30,7 @@ import { ReportDocumentUpload } from "./report-document-upload";
 import { ReadinessMeter } from "./readiness-meter";
 import { ReportDeadline } from "./report-deadline";
 import { ReportSection } from "./report-section";
+import { ReviewSteps } from "./review-steps";
 import { SnapshotHistory } from "./snapshot-history";
 import { ValidationPanel } from "./validation-panel";
 import { WorkflowActions } from "./workflow-actions";
@@ -188,6 +189,7 @@ function ReportBody({ report, drafts, setDrafts, reloading, onChange, onReload }
           ))}
         </div>
         <div className="space-y-4">
+          <ReviewSteps steps={report.approval_steps} />
           <ValidationPanel issues={report.issues} critical={report.critical_count} warnings={report.warning_count} />
           {report.applicable && needsDocument(report) && <ReportDocumentUpload report={report} onChange={onChange} />}
           {report.readiness_breakdown && <ReadinessBreakdown breakdown={report.readiness_breakdown} sections={report.sections} />}

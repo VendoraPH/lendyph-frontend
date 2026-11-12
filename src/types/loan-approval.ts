@@ -61,6 +61,13 @@ export interface LoanApprovalStep {
    * a button early, never to decide whether an action is allowed.
    */
   can_act?: boolean;
+  /**
+   * Who the step was forwarded to (`forward_to_user_id` on submit or approve),
+   * by name only, or null. While they still qualify only they, admin or
+   * super_admin may act on it; once they don't, the step is its role's again
+   * and `can_act` says so.
+   */
+  assigned_to?: { id: number; name: string } | null;
 }
 
 /** A completed revision round, closed when an approver sends the loan back. */
@@ -77,8 +84,36 @@ export interface LoanApprovalState {
   rounds: LoanApprovalRound[];
 }
 
-export interface ApproveStepPayload {
+/** Forward the step this action makes pending to one named user. */
+export interface ForwardToPayload {
+  /** One of `GET /loans/{loan}/approval/forward-candidates`' users; absent means anyone with the role. */
+  forward_to_user_id?: number;
+}
+
+export interface ApproveStepPayload extends ForwardToPayload {
   remarks?: string;
+}
+
+/** `PATCH /loans/{id}/submit`: the draft's first approval step can be forwarded too. */
+export type SubmitLoanPayload = ForwardToPayload;
+
+/** The step a submit or approve would make pending, as the candidates read names it. */
+export interface ForwardNextStep {
+  name: string;
+  role: string;
+  /** The role in words. */
+  role_label: string;
+  kind: ApprovalStepKind;
+}
+
+/**
+ * `GET /loans/{loan}/approval/forward-candidates`: who the next step can be
+ * forwarded to, by name, as `{id, name}` only. `next_step` is null (and
+ * `users` empty) when the pending step is the last.
+ */
+export interface ForwardCandidates {
+  next_step: ForwardNextStep | null;
+  users: { id: number; name: string }[];
 }
 
 export interface SendBackStepPayload {

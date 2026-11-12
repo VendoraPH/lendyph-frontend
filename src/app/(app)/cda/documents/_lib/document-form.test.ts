@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Permission } from "@/types";
 import type { CdaReportRow } from "@/types/cda";
-import { reportOptions, toUpload, uploadCategories } from "./document-form";
+import { toFormData } from "@/services/cda.service";
+import { attachCategories, attachDefaults, reportOptions, toUpload, uploadCategories, uploadFields } from "./document-form";
 
 test("restricted categories are offered only with their view; proofs and exports never", () => {
   const none = uploadCategories(() => false).map((o) => o.value);
@@ -36,4 +37,38 @@ test("the upload sends the report by id and final as true or false", () => {
     notes: null,
     final: true,
   });
+});
+
+test("an upload attached to a register row sends its subject", () => {
+  const upload = toUpload({ title: "Attendance sheet", category: "officers_trainings", report_id: null, final: false }, { type: "training", id: 7 });
+  assert.equal(upload.subject_type, "training");
+  assert.equal(upload.subject_id, 7);
+  assert.equal(upload.report_id, null);
+  const form = toFormData({ ...upload });
+  assert.equal(form.get("subject_type"), "training");
+  assert.equal(form.get("subject_id"), "7");
+  assert.equal(form.get("report_id"), null);
+});
+
+test("an upload without a subject sends none", () => {
+  const form = toFormData({ ...toUpload({ title: "Minutes", category: "minutes", report_id: null, final: false }) });
+  assert.equal(form.get("subject_type"), null);
+  assert.equal(form.get("subject_id"), null);
+});
+
+test("Attach starts on the register's own category; a training's certificate is added from the training", () => {
+  assert.deepEqual(attachDefaults("training"), { category: "officers_trainings", final: "1" });
+  assert.deepEqual(attachDefaults("program"), { category: "social_audit", final: "1" });
+  assert.deepEqual(attachDefaults("case"), { category: "mediation", final: "1" });
+  const all = uploadCategories(() => true);
+  assert.equal(attachCategories(all, "training").some((c) => c.value === "certificates"), false);
+  assert.ok(attachCategories(all, "program").some((c) => c.value === "certificates"));
+  assert.ok(attachCategories(all, "case").some((c) => c.value === "cda_correspondence"));
+});
+
+test("the report picker says a CDA letter not linked to a report is open to every CDA user", () => {
+  const report = uploadFields(uploadCategories(() => true), []).find((f) => f.key === "report_id");
+  assert.ok(report);
+  assert.match(report.help ?? "", /CDA Correspondence/);
+  assert.match(report.help ?? "", /every CDA user/);
 });

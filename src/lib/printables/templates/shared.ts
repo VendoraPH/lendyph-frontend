@@ -18,7 +18,7 @@
 import { asRecord, pick, pickNumber } from "@/lib/api-payload";
 import { clockDate } from "@/lib/format";
 import { escapeHtml } from "@/lib/html-escape";
-import { readTermUnit, termUnitNoun } from "@/lib/loan-terms";
+import { PERIOD_DAYS, ratePeriodWord, readTermUnit, termUnitNoun, type RateFrequency } from "@/lib/loan-terms";
 import {
   DASH,
   currencyOrDash,
@@ -332,9 +332,27 @@ export function rateFrequencyFrom(source: Record<string, unknown> | null): unkno
   return raw === null || raw === undefined || raw === "" ? "monthly" : raw;
 }
 
-/** `"1% per day"`, `"2.5% per month"`. The rate exactly as it is quoted. */
+/**
+ * The rate period a payload names ("annual" included), or null when it names
+ * none we know. Kept apart from `readFrequency`, the payment frequency
+ * lookup: a rate can be quoted per year, but no loan is paid yearly, so
+ * `annual` has no periods a year there and is never annualised here.
+ */
+function readRatePeriod(value: unknown): RateFrequency | null {
+  if (value === null || value === undefined || value === "") return null;
+  const key = String(value).trim().toLowerCase();
+  return key in PERIOD_DAYS ? (key as RateFrequency) : null;
+}
+
+/**
+ * `"1% per day"`, `"2.5% per month"`, `"18% per year"`. The rate exactly as it
+ * is quoted, labelled by its rate period. `upon_maturity` (a payment shape an
+ * old payload may name) still reads per month.
+ */
 export function rateLabel(rate: number | null, frequency: unknown): string | null {
   if (rate === null) return null;
+  const period = readRatePeriod(frequency);
+  if (period !== null) return `${rate}% per ${ratePeriodWord(period)}`;
   const key = readFrequency(frequency);
   const phrase = key === null ? "per period" : FREQUENCY_META[key].ratePhrase;
   return `${rate}% ${phrase}`;

@@ -56,3 +56,15 @@ test("an incomplete transfer is refused before sending", () => {
   assert.equal(buildTransferPayload({ ...FORM, amount: "abc" }), null);
   assert.equal(buildTransferPayload({ ...FORM, description: "  " }), null);
 });
+
+test("with branches:view_all, the picked branch is sent, and No branch as null", () => {
+  assert.equal(buildTransferPayload({ ...FORM, branchId: 3 })?.branch_id, 3);
+  const headOffice = buildTransferPayload({ ...FORM, branchId: null });
+  assert.equal(headOffice !== null && "branch_id" in headOffice, true);
+  assert.equal(headOffice?.branch_id, null);
+});
+
+test("a branch user sends no branch, so the server records their own", () => {
+  const payload = buildTransferPayload({ ...FORM, branchId: undefined });
+  assert.equal(payload !== null && "branch_id" in payload, false);
+});

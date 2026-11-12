@@ -81,6 +81,7 @@ export const RATE_PERIOD: Readonly<Record<string, string>> = {
   bi_weekly: "every two weeks",
   semi_monthly: "twice a month",
   monthly: "per month",
+  annual: "per year",
 };
 
 export const INTEREST_METHOD: Readonly<Record<string, string>> = {
