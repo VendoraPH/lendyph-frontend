@@ -172,6 +172,15 @@ export const env = {
     // Credit Scoring. Off by default: the menu and every route stay hidden until
     // its endpoints stop answering 501. Literal reference for the same reason.
     creditScoring: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_CREDIT_SCORING),
+    // Formula fees written as an expression (Settings → Fees). Off by default:
+    // the Formula type keeps only its rate recipe until the backend stores and
+    // evaluates `formula_expression`. Literal reference, as above.
+    feeFormulas: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_FEE_FORMULAS),
+    // Settings → Penalties: overdue-day penalty brackets assigned to loan
+    // products. Off by default until the backend serves /penalty-configs.
+    // While on, the loan product form shows the product's penalty source
+    // instead of its Penalty Rate input. Literal reference, as above.
+    penaltyConfigs: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_PENALTY_CONFIGS),
   },
   debug: {
     enabled: getBoolEnvVar("NEXT_PUBLIC_DEBUG", false),

@@ -52,6 +52,42 @@ export interface LoanDeduction {
   original_value: number;
   /** Set on an item charged from a fee rule in Settings, at or for release. */
   fee_id?: number;
+  /**
+   * Set only on a formula fee written as an expression: the snapshot the
+   * server took when it worked the fee out. Later edits to the fee never
+   * change it.
+   */
+  formula_expression?: string;
+  /** The loan figures the expression used, as the server sent them. */
+  formula_inputs?: FeeFormulaInputs;
+  /** The server's result before rounding to the centavo (6 decimals). */
+  raw_amount?: string;
+}
+
+/**
+ * The loan figures a formula fee's expression used, all strings from the
+ * server: pesos with 2 decimals, the rate as stored (3 means 3%) per
+ * `interest_rate_frequency`, `loan_term` in months (a days term counts as
+ * days ÷ 30) and `term_in_days` in calendar days from start to maturity.
+ */
+export interface FeeFormulaInputs {
+  principal_amount: string;
+  loan_amount: string;
+  interest_rate: string;
+  interest_rate_frequency: string;
+  loan_term: string;
+  term_in_days: string;
+}
+
+/**
+ * One penalty bracket: `rate` is the % of the period's unpaid principal
+ * charged on a penalty day `days_from` to `days_to` days past the due date
+ * (`days_to` null: no upper end).
+ */
+export interface PenaltyBracket {
+  days_from: number;
+  days_to: number | null;
+  rate: number;
 }
 
 /**
@@ -402,6 +438,14 @@ export interface Loan {
   net_proceeds?: number;
   penalty_rate?: number;
   grace_period_days?: number;
+  /**
+   * Penalty brackets copied from the product's penalty configuration when
+   * the loan was created (Settings → Penalties). When set they replace
+   * `penalty_rate`; null on loans charged a single monthly rate.
+   */
+  penalty_brackets?: PenaltyBracket[] | null;
+  penalty_config_id?: number | null;
+  penalty_config_name?: string | null;
   // Share Capital Build-Up amount chosen for this loan (within product's range)
   scb_amount?: number;
   // Policy Exception — when true, loan follows the full BOD approval chain
@@ -829,6 +873,17 @@ export interface LoanProduct {
   max_service_fee?: number;
   penalty_rate: number;
   grace_period: number;
+  /**
+   * Where new loans on this product take their penalty from: an active
+   * penalty configuration, the product's own fixed monthly rate (set before
+   * Settings → Penalties), or none. Sent by the server.
+   */
+  penalty_source?: {
+    type: "configuration" | "fixed_rate" | "none";
+    config_id: number | null;
+    config_name: string | null;
+    rate: number | null;
+  };
   // Share Capital Build-Up (SCB) — optional required contribution added to
   // every amortization period. When the borrower pays, the SCB portion is
   // credited to their share capital ledger.

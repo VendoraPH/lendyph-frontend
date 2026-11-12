@@ -158,6 +158,18 @@ export const API_ENDPOINTS = {
     DETAIL: (id: number) => `/fees/${id}`,
     UPDATE: (id: number) => `/fees/${id}`,
     DELETE: (id: number) => `/fees/${id}`,
+    // Server check of a formula written as an expression, with the fee it
+    // gives on a sample loan. The browser never evaluates a formula.
+    FORMULA_CHECK: "/fees/formula-check",
+  },
+  // Settings → Penalties, behind NEXT_PUBLIC_ENABLE_PENALTY_CONFIGS.
+  PENALTY_CONFIGS: {
+    LIST: "/penalty-configs",
+    CREATE: "/penalty-configs",
+    DETAIL: (id: number) => `/penalty-configs/${id}`,
+    UPDATE: (id: number) => `/penalty-configs/${id}`,
+    STATUS: (id: number) => `/penalty-configs/${id}/status`,
+    DELETE: (id: number) => `/penalty-configs/${id}`,
   },
   COLLATERAL_TYPES: {
     LIST: "/collateral-types",
