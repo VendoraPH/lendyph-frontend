@@ -89,6 +89,7 @@ test("prints the ledger oldest first with the server's running balance", () => {
 test("every savings line type has its own code, and an unknown one reads OTH, never the raw key", () => {
   const types: SavingsTransaction["type"][] = [
     "deposit", "withdrawal", "transfer_in", "transfer_out", "interest", "withholding_tax", "closing", "reversal",
+    "fee", "share_capital_transfer",
   ];
   const doc = buildSavingsPassbookDoc(
     ACCOUNT,
@@ -97,7 +98,8 @@ test("every savings line type has its own code, and an unknown one reads OTH, ne
     { now: NOW },
   );
   const codes = tableBlock(doc, "Transactions").rows.map((r) => r.code);
-  assert.deepEqual(codes, ["DEP", "WDL", "TRI", "TRO", "INT", "TAX", "CLS", "REV", "OTH"]);
+  assert.deepEqual(codes, ["DEP", "WDL", "TRI", "TRO", "INT", "TAX", "CLS", "REV", "FEE", "SCT", "OTH"]);
+  assert.match(notes(doc), /FEE excess withdrawal fee, SCT transfer to share capital/);
 });
 
 test("a truncated ledger says it is not the whole history", () => {

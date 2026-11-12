@@ -13,9 +13,10 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useDialogOpening } from "@/hooks";
 import { useSubmitGuard } from "@/hooks/use-submit-guard";
-import { formatCurrency, formatDateLong } from "@/lib/format";
+import { formatDateLong } from "@/lib/format";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { moneyPostMessage } from "@/lib/savings/money-post";
+import { feeOf, withFeeText } from "@/lib/savings/withdrawal-fee";
 import { savingsService } from "@/services";
 import type { SavingsTransaction } from "@/types";
 import { FormField } from "./field";
@@ -63,7 +64,7 @@ export function ReverseTransactionDialog({ transaction, onOpenChange, onRequeste
           <DialogTitle>Reverse {transaction?.reference}?</DialogTitle>
           <DialogDescription>
             {transaction
-              ? `${labelOf(TRANSACTION_TYPE_LABELS, transaction.type)} of ${formatCurrency(amount)} on ${formatDateLong(transaction.date)}. The original line is kept; a reversal line posts once another user approves the request.`
+              ? `${labelOf(TRANSACTION_TYPE_LABELS, transaction.type)} of ${withFeeText(amount, feeOf(transaction))} on ${formatDateLong(transaction.date)}.${feeOf(transaction) ? " Reversing it reverses the fee too." : ""} The original line is kept; a reversal line posts once another user approves the request.`
               : ""}
           </DialogDescription>
         </DialogHeader>

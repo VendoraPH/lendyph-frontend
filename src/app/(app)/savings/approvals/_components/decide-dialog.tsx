@@ -13,13 +13,12 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useDialogOpening } from "@/hooks";
 import { useSubmitGuard } from "@/hooks/use-submit-guard";
-import { formatCurrency } from "@/lib/format";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { savingsApprovalService } from "@/services";
 import type { SavingsApproval } from "@/types";
 import { FormField } from "../../_components/field";
 import { APPROVAL_KIND_LABELS, labelOf } from "../../_lib/savings-rules";
-import { approvalSubject, serverAnswered } from "../_lib/approval-rules";
+import { approvalAmountText, approvalFeeText, approvalSubject, serverAnswered } from "../_lib/approval-rules";
 
 export type Decision = "approve" | "reject" | "cancel";
 
@@ -93,10 +92,13 @@ export function DecideDialog({ approval, decision, onOpenChange, onDecided }: De
           </DialogTitle>
           <DialogDescription>
             {approval
-              ? `${approvalSubject(approval)} · ${formatCurrency(approval.amount)}${approval.borrower_name ? ` · ${approval.borrower_name}` : ""}`
+              ? `${approvalSubject(approval)} · ${approvalAmountText(approval)}${approvalFeeText(approval) ? ` · ${approvalFeeText(approval)}` : ""}${approval.borrower_name ? ` · ${approval.borrower_name}` : ""}`
               : ""}
           </DialogDescription>
         </DialogHeader>
+        {approval?.check_reason && (
+          <p className="rounded-md border bg-muted/40 p-3 text-sm">{approval.check_reason}</p>
+        )}
         {decision !== "approve" && (
           <FormField
             id="ap-reason"

@@ -16,6 +16,7 @@ const ROOTS = [
   "services/savings-time-deposit.service.ts",
   "services/savings-approval.service.ts",
   "services/savings-interest.service.ts",
+  "services/savings-auto-credit.service.ts",
   "lib/printables/templates/savings-passbook.ts",
   "lib/printables/templates/savings-receipt.ts",
   "lib/printables/templates/time-deposit-certificate.ts",

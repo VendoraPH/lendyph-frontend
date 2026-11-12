@@ -31,3 +31,14 @@ test("a 202 without an approval is refused, not shown as posted", () => {
   assert.throws(() => readMoneyPost(202, null));
   assert.throws(() => readMoneyPost(202, { approval: null }));
 });
+
+test("a checker needed for a reason other than the amount says why, in the server's words", () => {
+  const check_reason = "This account was reactivated by today's deposit, so a checker must approve money going out today.";
+  const result = readMoneyPost(202, { approval: { ...approval, check_reason } });
+  assert.equal(moneyPostMessage(result, "Withdrawal posted."), `Sent for approval. ${check_reason}`);
+});
+
+test("a blank check reason falls back to the tier wording", () => {
+  const result = readMoneyPost(202, { approval: { ...approval, check_reason: " " } });
+  assert.equal(moneyPostMessage(result, "Posted."), "Sent for approval. It posts once another user approves it.");
+});

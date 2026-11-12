@@ -32,6 +32,8 @@ const TYPE_CODES: Record<SavingsTransactionType, string> = {
   transfer_out: "TRO",
   closing: "CLS",
   reversal: "REV",
+  fee: "FEE",
+  share_capital_transfer: "SCT",
 };
 
 export interface SavingsPassbookOptions extends PrintableBuildOptions {
@@ -113,7 +115,8 @@ export function buildSavingsPassbookDoc(
       kind: "note",
       text:
         "Codes: DEP deposit, WDL withdrawal, TRI transfer in, TRO transfer out, INT interest, " +
-        "TAX withholding tax, CLS closing payout, REV reversal. Report any entry you don't recognise to the branch.",
+        "TAX withholding tax, CLS closing payout, REV reversal, FEE excess withdrawal fee, " +
+        "SCT transfer to share capital. Report any entry you don't recognise to the branch.",
     },
     {
       kind: "signatures",

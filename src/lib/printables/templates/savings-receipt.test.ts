@@ -164,3 +164,52 @@ test("the amount a receipt line moved is the server's figure for its side", () =
   assert.equal(receiptAmount(txn()), "1500.00");
   assert.equal(receiptAmount(txn({ type: "withdrawal", debit: "800.00", credit: "0.00" })), "800.00");
 });
+
+// Browser check 3: a withdrawal of ₱500.00 with a ₱25.00 excess-withdrawal
+// fee printed the withdrawal row's ₱4,000.00 as the balance after, not the
+// ₱3,975.00 left once the linked fee row posted.
+const WITHDRAWAL_WITH_FEE = () =>
+  txn({
+    id: 40,
+    type: "withdrawal",
+    debit: "500.00",
+    credit: "0.00",
+    balance_after: "4000.00",
+    fee_transaction_id: 41,
+    fee_amount: "25.00",
+  });
+const FEE_ROW = {
+  ...txn({ id: 41 }),
+  type: "fee",
+  reference: "SFE-2026-000041",
+  debit: "25.00",
+  credit: "0.00",
+  balance_after: "3975.00",
+  fee_for_transaction_id: 40,
+} as SavingsTransaction;
+
+test("a withdrawal with a fee prints the fee line and the balance after the fee row", () => {
+  const doc = buildSavingsReceiptDoc(ACCOUNT, WITHDRAWAL_WITH_FEE(), { now: NOW, fee: FEE_ROW });
+  assert.equal(chargeAmount(doc, "AMOUNT WITHDRAWN"), formatCurrency(500));
+  assert.equal(chargeAmount(doc, "Excess withdrawal fee"), formatCurrency(25));
+  assert.equal(fieldValue(doc, "Balance after this transaction"), formatCurrency(3975));
+  assert.equal(fieldValue(doc, "Fee reference"), "SFE-2026-000041");
+  assert.equal(fieldValue(doc, "Amount in words"), amountInWords(500));
+});
+
+test("when the fee row can't be read, the fee prints from the withdrawal and the balance after is not guessed", () => {
+  const doc = buildSavingsReceiptDoc(ACCOUNT, WITHDRAWAL_WITH_FEE(), { now: NOW, fee: null });
+  assert.equal(chargeAmount(doc, "Excess withdrawal fee"), formatCurrency(25));
+  assert.equal(fieldValue(doc, "Balance after this transaction"), "—");
+  assert.doesNotMatch(JSON.stringify(doc), /4,000\.00/);
+});
+
+test("a withdrawal without a fee keeps its own balance after and no fee line", () => {
+  const doc = buildSavingsReceiptDoc(
+    ACCOUNT,
+    txn({ type: "withdrawal", debit: "800.00", credit: "0.00", balance_after: "3800.00", fee_amount: null }),
+    { now: NOW },
+  );
+  assert.equal(fieldValue(doc, "Balance after this transaction"), formatCurrency(3800));
+  assert.doesNotMatch(JSON.stringify(doc), /Excess withdrawal fee/);
+});

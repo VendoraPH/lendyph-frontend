@@ -489,6 +489,52 @@ describe("savings notifications", () => {
   });
 });
 
+// The savings servicing notice keys (backend S4: ApprovalWaitingNotice,
+// NightlyNotices and AccountEventNotices).
+describe("savings servicing notifications", () => {
+  const SERVICING_KINDS: Record<string, [string, string]> = {
+    savings_approval_waiting: ["Savings approval waiting", "approval"],
+    savings_time_deposit_maturing: ["Time deposit maturing", "info"],
+    savings_dormancy_warning: ["Savings account dormant soon", "warning"],
+    savings_account_dormant: ["Savings account dormant", "warning"],
+  };
+
+  for (const [type, [label, tone]] of Object.entries(SERVICING_KINDS)) {
+    test(`${type} reads "${label}" and is ${tone}`, () => {
+      assert.equal(notificationTypeLabel(type), label);
+      assert.equal(notificationTone(type), tone);
+    });
+  }
+
+  test("the second checker's notice keeps the server's title and reads it once", () => {
+    const [item] = buildFeed(
+      [
+        row({
+          id: "s1",
+          type: "savings_approval_waiting",
+          title: "Second savings approval waiting",
+          url: "/savings/approvals",
+          data: { approval_id: 8, kind: "withdrawal", checkers_left: 1 },
+        }),
+      ],
+      NOW,
+    );
+    assert.equal(item.title, "Second savings approval waiting");
+    assert.equal(item.kind, "Savings approval waiting");
+    assert.equal(item.announceKind, false);
+    assert.equal(item.href, "/savings/approvals");
+  });
+
+  test("a maturing deposit due today opens the deposit and names itself once", () => {
+    const [item] = buildFeed(
+      [row({ id: "s2", type: "savings_time_deposit_maturing", title: "Time deposit matures today", url: "/savings/time-deposits/4" })],
+      NOW,
+    );
+    assert.equal(item.href, "/savings/time-deposits/4");
+    assert.equal(item.announceKind, false);
+  });
+});
+
 // The CDA notice keys the backend sends: C2's WorkflowNotices, C4's
 // DeadlineReminders and C3's RegisterNotices.
 describe("CDA notifications", () => {

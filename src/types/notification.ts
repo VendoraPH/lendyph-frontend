@@ -31,6 +31,13 @@ export type NotificationType =
   // transaction at or above the large-transaction alert.
   | "savings_gl_difference"
   | "savings_large_transaction"
+  // Savings servicing (gap round S4): a request waiting for a checker (again
+  // for the second checker, "Second savings approval waiting"), a time deposit
+  // maturing, an account about to turn dormant, and one that turned dormant.
+  | "savings_approval_waiting"
+  | "savings_time_deposit_maturing"
+  | "savings_dormancy_warning"
+  | "savings_account_dormant"
   // CDA Compliance (Phase 3): the report workflow (a report waiting for
   // approval, returned, finalized, marked for correction), the deadline
   // reminders, a compliance document expiring within 30 days, and an

@@ -35,4 +35,5 @@ export { savingsService } from "./savings.service";
 export { timeDepositService } from "./savings-time-deposit.service";
 export { savingsApprovalService } from "./savings-approval.service";
 export { savingsInterestService } from "./savings-interest.service";
+export { savingsAutoCreditService } from "./savings-auto-credit.service";
 export { cdaService } from "./cda.service";

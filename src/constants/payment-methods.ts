@@ -15,6 +15,8 @@ export const PAYMENT_METHOD_OPTIONS: readonly { value: RecordPaymentMethod; labe
 /** Methods the server records that nobody picks by hand. */
 const RECORDED_ONLY_METHODS: Readonly<Record<string, string>> = {
   auto_pay: "Auto-Pay",
+  // A share capital credit moved from the member's savings (gap round S3).
+  savings_transfer: "Transfer from savings",
 };
 
 /** A stored method in words ("GCash", "Auto-Pay"), or null when it isn't one we know. */

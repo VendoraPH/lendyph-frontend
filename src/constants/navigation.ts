@@ -264,6 +264,8 @@ export const SIDEBAR_NAV: NavItem[] = [
             { title: "Savings Transactions", href: "/savings/transactions" },
             { title: "Savings Approvals", href: "/savings/approvals" },
             { title: "Savings Interest", href: "/savings/interest" },
+            { title: "Savings Auto-Credit", href: "/savings/auto-credit" },
+            { title: "Dormant Accounts", href: "/savings/dormant", permission: "reports:view" as const },
             { title: "Savings Products", href: "/savings/products", permission: "savings:settings" as const },
             { title: "Savings Settings", href: "/savings/settings", permission: "savings:settings" as const },
           ],

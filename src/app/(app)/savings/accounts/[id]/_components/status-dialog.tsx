@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useDialogOpening } from "@/hooks";
 import { useSubmitGuard } from "@/hooks/use-submit-guard";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { REACTIVATION_SENT_TEXT } from "@/lib/savings/status-change";
 import { savingsService } from "@/services";
 import type { SavingsAccount } from "@/types";
 import { FormField } from "../../../_components/field";
@@ -27,7 +28,11 @@ interface StatusDialogProps {
   onChanged: () => void;
 }
 
-/** Freeze, unfreeze or reactivate an account, with a reason. Audited by the server. */
+/**
+ * Freeze, unfreeze or ask to reactivate an account, with a reason. Audited by
+ * the server. Reactivating a dormant account starts an approval (202) instead
+ * of changing it.
+ */
 export function StatusDialog({ offer, account, onOpenChange, onChanged }: StatusDialogProps) {
   const open = offer !== null;
   const [reason, setReason] = useState("");
@@ -44,9 +49,17 @@ export function StatusDialog({ offer, account, onOpenChange, onChanged }: Status
     setSubmitted(true);
     if (!offer || reasonError) return;
     run(() => savingsService.setStatus(account.id, { status: offer.status, reason: reason.trim() }))
-      ?.then((changed) => {
-        // Unfreezing can return a once-dormant account to dormant: say what the server set.
-        notifySuccess(`Account is now ${labelOf(ACCOUNT_STATUS_LABELS, changed.status).toLowerCase()}`, account.account_number);
+      ?.then((result) => {
+        if (result.kind === "sent_for_approval") {
+          // A staff reactivation waits for a checker (gap round S4); nothing has changed yet.
+          notifySuccess("Sent for approval", result.message ?? REACTIVATION_SENT_TEXT);
+        } else {
+          // Unfreezing can return a once-dormant account to dormant: say what the server set.
+          notifySuccess(
+            `Account is now ${labelOf(ACCOUNT_STATUS_LABELS, result.account.status).toLowerCase()}`,
+            account.account_number,
+          );
+        }
         onOpenChange(false);
         onChanged();
       })
@@ -64,7 +77,7 @@ export function StatusDialog({ offer, account, onOpenChange, onChanged }: Status
             {offer?.status === "frozen"
               ? "A frozen account takes no deposits, withdrawals, transfers or reversals until it is unfrozen. It keeps earning interest."
               : offer?.label === "Reactivate"
-                ? "The account becomes active again, counted as member activity today."
+                ? "Reactivation needs a checker: it is sent for approval, and the account stays dormant until another user approves it. Once approved, it counts as member activity that day."
                 : "The account takes transactions again. One that was dormant before it was frozen goes back to dormant."}
           </DialogDescription>
         </DialogHeader>
@@ -76,7 +89,7 @@ export function StatusDialog({ offer, account, onOpenChange, onChanged }: Status
             Cancel
           </Button>
           <Button onClick={submit} disabled={submitting || !offer}>
-            {submitting ? "Saving…" : (offer?.label ?? "Save")}
+            {submitting ? "Saving…" : offer?.label === "Reactivate" ? "Send for approval" : (offer?.label ?? "Save")}
           </Button>
         </DialogFooter>
       </DialogContent>

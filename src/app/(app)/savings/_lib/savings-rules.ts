@@ -50,6 +50,8 @@ export const TRANSACTION_TYPE_LABELS: Record<SavingsTransactionType, string> = {
   withholding_tax: "Withholding tax",
   closing: "Closing payout",
   reversal: "Reversal",
+  fee: "Excess withdrawal fee",
+  share_capital_transfer: "Transfer to share capital",
 };
 
 export const INTEREST_CREDITING_LABELS: Record<InterestCrediting, string> = {
@@ -126,6 +128,8 @@ export const APPROVAL_KIND_LABELS: Record<SavingsApprovalKind, string> = {
   td_payout: "Time deposit payout",
   pretermination: "Time deposit pre-termination",
   reversal: "Reversal",
+  share_capital_transfer: "Transfer to share capital",
+  reactivation: "Account reactivation",
 };
 
 export const APPROVAL_STATUS_LABELS: Record<SavingsApprovalStatus, string> = {
@@ -218,6 +222,12 @@ const NOT_REVERSIBLE: ReadonlySet<SavingsTransactionType> = new Set([
   "reversal",
 ]);
 
+/** The server's own refusals (backend `Reverser`), so the button says why before it is pressed. */
+export const FEE_NOT_REVERSIBLE =
+  "An excess-withdrawal fee is reversed only with its withdrawal. Reverse the withdrawal instead.";
+export const SHARE_CAPITAL_TRANSFER_NOT_REVERSIBLE =
+  "A transfer to share capital can't be reversed. To correct one, record a share capital entry taking the amount back out of the member's share capital, then a deposit of it into their savings account.";
+
 /**
  * Why a transaction can't be reversed, or null when a reversal can be
  * requested. The server refuses the same rows (422, or 409 when reversed or
@@ -229,6 +239,8 @@ export function reversalBlocker(
     "type" | "time_deposit_id" | "reversed_by_transaction_id" | "pending_reversal_approval_id"
   >,
 ): string | null {
+  if (txn.type === "fee") return FEE_NOT_REVERSIBLE;
+  if (txn.type === "share_capital_transfer") return SHARE_CAPITAL_TRANSFER_NOT_REVERSIBLE;
   if (NOT_REVERSIBLE.has(txn.type) || txn.time_deposit_id !== null) {
     return "Interest, tax, closing, time deposit and reversal lines can't be reversed.";
   }

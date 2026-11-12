@@ -1,7 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { SavingsApproval } from "@/types";
-import { approvalHref, approvalOffer, approvalProgress, approvalSubject } from "./approval-rules";
+import {
+  approvalAmountText,
+  approvalFeeText,
+  approvalHref,
+  approvalOffer,
+  approvalProgress,
+  approvalSubject,
+} from "./approval-rules";
 
 const approval = (over: Partial<SavingsApproval> = {}) =>
   ({
@@ -50,4 +57,13 @@ test("the subject and link follow the account or the time deposit", () => {
   assert.equal(approvalSubject(approval({ target_reference: "SVT-20261110-000001" })), "SAV-2026-000005 · SVT-20261110-000001");
   assert.equal(approvalHref(approval()), "/savings/accounts/5");
   assert.equal(approvalHref(approval({ time_deposit_id: 3, account_id: null })), "/savings/time-deposits/3");
+});
+
+// Browser check 3: the fee beside the amount, and no ₱0.00 on a reactivation.
+test("an approval's money reads the amount and its fee as the server sent them", () => {
+  const base = approval({ amount: "500.00", fee_amount: "25.00" });
+  assert.equal(approvalAmountText(base), "₱500.00");
+  assert.equal(approvalFeeText(base), "Excess-withdrawal fee ₱25.00");
+  assert.equal(approvalFeeText({ ...base, fee_amount: "0.00" }), null);
+  assert.equal(approvalAmountText({ ...base, kind: "reactivation", amount: "0.00" }), "—");
 });

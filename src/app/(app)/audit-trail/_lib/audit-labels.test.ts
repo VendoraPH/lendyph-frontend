@@ -446,6 +446,15 @@ test("savings rows read their module, actions, targets and statuses in words", (
   assert.ok(AUDIT_ACTION_OPTIONS.some((o) => o.value === "time_deposit_preterminated"));
 });
 
+test("savings servicing rows (gap round S3 and S4) read their actions and targets in words", () => {
+  assert.equal(auditActionLabel("savings_share_capital_transfer"), "Transferred to share capital");
+  assert.equal(auditActionLabel("savings_auto_credit_run"), "Auto-credit run processed");
+  assert.equal(auditActionLabel("savings_account_note_added"), "Note added");
+  assert.equal(auditActionLabel("savings_outflow_hold_lifted"), "Outflow hold lifted");
+  assert.equal(auditTargetType("SavingsAutoCreditInstruction"), "Savings auto-credit instruction");
+  assert.equal(auditTargetType("SavingsAutoCreditRun"), "Savings auto-credit run");
+});
+
 test("savings id fields read without \"id\"", () => {
   const cases: Array<[string, string]> = [
     ["result_transaction_id", "result transaction"],

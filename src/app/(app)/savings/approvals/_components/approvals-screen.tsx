@@ -18,14 +18,21 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useApiResource } from "@/hooks";
-import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
+import { formatDate, formatDateTime } from "@/lib/format";
 import { savingsApprovalService } from "@/services";
 import { useAuthStore } from "@/store";
 import type { SavingsApproval, SavingsApprovalKind, SavingsApprovalStatus } from "@/types";
 import { ActionButton } from "../../_components/action-button";
 import { OptionSelect } from "../../_components/option-select";
 import { APPROVAL_KIND_LABELS, APPROVAL_STATUS_LABELS, actorName, labelOf } from "../../_lib/savings-rules";
-import { approvalHref, approvalOffer, approvalProgress, approvalSubject } from "../_lib/approval-rules";
+import {
+  approvalAmountText,
+  approvalFeeText,
+  approvalHref,
+  approvalOffer,
+  approvalProgress,
+  approvalSubject,
+} from "../_lib/approval-rules";
 import { DecideDialog, type Decision } from "./decide-dialog";
 
 const STATUSES: SavingsApprovalStatus[] = ["pending", "approved", "rejected", "cancelled", "expired"];
@@ -149,7 +156,12 @@ export function ApprovalsScreen() {
                             <span className="block text-xs text-muted-foreground">Expires {formatDateTime(a.expires_at)}</span>
                           )}
                         </TableCell>
-                        <TableCell>{labelOf(APPROVAL_KIND_LABELS, a.kind)}</TableCell>
+                        <TableCell>
+                          {labelOf(APPROVAL_KIND_LABELS, a.kind)}
+                          {a.check_reason && (
+                            <span className="block max-w-56 text-xs text-muted-foreground">{a.check_reason}</span>
+                          )}
+                        </TableCell>
                         <TableCell className="font-mono text-xs">
                           {href ? (
                             <Link href={href} className="hover:underline">
@@ -163,7 +175,12 @@ export function ApprovalsScreen() {
                           {a.borrower_name ?? "—"}
                           {a.branch_name && <span className="block text-xs text-muted-foreground">{a.branch_name}</span>}
                         </TableCell>
-                        <TableCell className="text-right tabular-nums">{formatCurrency(a.amount)}</TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {approvalAmountText(a)}
+                          {approvalFeeText(a) && (
+                            <span className="block text-xs text-muted-foreground">{approvalFeeText(a)}</span>
+                          )}
+                        </TableCell>
                         <TableCell>{actorName(a.requested_by)}</TableCell>
                         <TableCell>
                           <Badge variant={a.status === "pending" ? "secondary" : "outline"}>

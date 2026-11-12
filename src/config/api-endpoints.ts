@@ -506,6 +506,15 @@ export const API_ENDPOINTS = {
     INTEREST_RUN_REJECT: (id: number) => `/savings/interest-runs/${id}/reject`,
     INTEREST_RUN_POST: (id: number) => `/savings/interest-runs/${id}/post`,
     INTEREST_RUN_REVERSE: (id: number) => `/savings/interest-runs/${id}/reverse`,
+
+    // Savings servicing (gap round S3 and S4): transfers to share capital,
+    // auto-credit instructions and runs, and account notes.
+    SHARE_CAPITAL_TRANSFERS: (id: number) => `/savings/accounts/${id}/share-capital-transfers`,
+    ACCOUNT_NOTES: (id: number) => `/savings/accounts/${id}/notes`,
+    AUTO_CREDIT_INSTRUCTIONS: "/savings/auto-credit/instructions",
+    AUTO_CREDIT_INSTRUCTION: (id: number) => `/savings/auto-credit/instructions/${id}`,
+    AUTO_CREDIT_PREVIEW: "/savings/auto-credit/preview",
+    AUTO_CREDIT_PROCESS: "/savings/auto-credit/process",
   },
   /**
    * Credit Scoring (backend PR #240). Every route needs credit_scoring:view,
