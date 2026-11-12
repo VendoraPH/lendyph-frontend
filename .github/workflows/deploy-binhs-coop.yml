@@ -158,6 +158,10 @@ jobs:
               export NEXT_PUBLIC_ENABLE_CDA=true
               # Staging only: the Member Portal is on for testing (Arvin, 2026-11-10, Phase 3 plan).
               export NEXT_PUBLIC_ENABLE_MEMBER_PORTAL=true
+              # Staging only: formula fees written as an expression (Arvin, 2026-11-12, Phase 4 plan).
+              export NEXT_PUBLIC_ENABLE_FEE_FORMULAS=true
+              # Staging only: Settings → Penalties (Arvin, 2026-11-12, Phase 4 plan).
+              export NEXT_PUBLIC_ENABLE_PENALTY_CONFIGS=true
               DEPLOY_BRANCH=development
               # The proxy secret, delivered by the step before this one (staging only).
               # Exported so deploy.sh's children inherit it: never echoed, never on a
@@ -389,6 +393,10 @@ jobs:
               export NEXT_PUBLIC_ENABLE_CDA=true
               # Staging only: the Member Portal is on for testing (Arvin, 2026-11-10, Phase 3 plan).
               export NEXT_PUBLIC_ENABLE_MEMBER_PORTAL=true
+              # Staging only: formula fees written as an expression (Arvin, 2026-11-12, Phase 4 plan).
+              export NEXT_PUBLIC_ENABLE_FEE_FORMULAS=true
+              # Staging only: Settings → Penalties (Arvin, 2026-11-12, Phase 4 plan).
+              export NEXT_PUBLIC_ENABLE_PENALTY_CONFIGS=true
               DEPLOY_BRANCH=development
               # The proxy secret, delivered by the step before this one (staging only).
               # Exported so deploy.sh's children inherit it: never echoed, never on a
