@@ -5,11 +5,12 @@ import { Button } from "@/components/ui/button";
 import { usePermission } from "@/hooks";
 import { useAuthStore } from "@/store";
 import { cdaService } from "@/services";
-import { httpStatusOf } from "@/lib/api-error";
-import { notifyError, notifySuccess } from "@/lib/notify";
+import { notifySuccess } from "@/lib/notify";
 import { ACTION_LABELS, NEEDS_REASON, STAGES_BY_TYPE, labelOf } from "../_lib/labels";
+import { notifyCdaError } from "../_lib/notify-cda";
+import { approveInput, approveNote, reloadsReport, reviewRound } from "../_lib/review-chain";
 import { ReasonDialog } from "./reason-dialog";
-import { FilingDialog, FinalizeDialog, StageDialog } from "./workflow-dialogs";
+import { ApproveStepDialog, FilingDialog, FinalizeDialog, StageDialog } from "./workflow-dialogs";
 import type { CdaReport, CdaWorkflowAction, CdaWorkflowInput } from "@/types/cda";
 
 const QUIET: ReadonlySet<CdaWorkflowAction> = new Set(["return", "reopen", "mark_for_correction", "refresh", "set_stage"]);
@@ -18,8 +19,10 @@ const QUIET: ReadonlySet<CdaWorkflowAction> = new Set(["return", "reopen", "mark
  * The steps the server says the user can take now (`available_actions`,
  * carried over from #510 by Augustin and moved onto the server's list). A
  * reason is asked where the server needs one, warnings are confirmed to
- * finalize, and a filing records how and when. A 409 means the report moved
- * on: it reloads.
+ * finalize, and a filing records how and when. On a review chain, Approve
+ * acts on the pending step (with optional remarks), and a user who isn't
+ * offered it reads why in the server's words. A refusal never shows a
+ * permission key. A 409 means the report moved on: it reloads.
  */
 export function WorkflowActions({
   report,
@@ -47,15 +50,18 @@ export function WorkflowActions({
         onChange(next);
       })
       .catch((err: unknown) => {
-        notifyError(err, `Could not ${labelOf(ACTION_LABELS, input.action).toLowerCase()}`);
-        if (httpStatusOf(err) === 409) onReload();
+        notifyCdaError(err, `Could not ${labelOf(ACTION_LABELS, input.action).toLowerCase()}`);
+        if (reloadsReport(err)) onReload();
         throw err;
       })
       .finally(() => setBusy(null));
   }
 
+  const pendingStep = reviewRound(report.approval_steps)?.pending ?? null;
+
   function start(action: CdaWorkflowAction) {
-    if (NEEDS_REASON.has(action) || action === "finalize" || action === "mark_submitted" || action === "set_stage") {
+    const asks = NEEDS_REASON.has(action) || action === "finalize" || action === "mark_submitted" || action === "set_stage";
+    if (asks || (action === "approve" && pendingStep !== null)) {
       setDialog(action);
       return;
     }
@@ -63,14 +69,10 @@ export function WorkflowActions({
   }
 
   const actions = report.available_actions;
-  const ownReview =
-    report.status === "for_review" &&
-    can("cda:approve") &&
-    report.submitted_for_review_by !== null &&
-    String(report.submitted_for_review_by.id) === String(userId) &&
-    !actions.includes("approve");
+  const note = approveNote(report, userId, can("cda:approve"));
+  const lastStep = pendingStep !== null && !report.approval_steps.some((s) => s.step_order > pendingStep.step_order);
 
-  if (actions.length === 0 && !ownReview) return null;
+  if (actions.length === 0 && !note) return null;
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -82,14 +84,23 @@ export function WorkflowActions({
           disabled={busy !== null || reloading}
           onClick={() => start(action)}
         >
-          {busy === action ? "Working…" : labelOf(ACTION_LABELS, action)}
+          {busy === action
+            ? "Working…"
+            : action === "approve" && pendingStep
+              ? `Approve “${pendingStep.name}”`
+              : labelOf(ACTION_LABELS, action)}
         </Button>
       ))}
-      {ownReview && (
-        <p className="w-full text-xs text-muted-foreground">
-          You sent this report for review, so someone else approves it.
-        </p>
-      )}
+      {note && <p className="w-full text-xs text-muted-foreground">{note}</p>}
+
+      <ApproveStepDialog
+        open={dialog === "approve"}
+        onOpenChange={(open) => !open && setDialog(null)}
+        stepName={pendingStep?.name ?? ""}
+        roleLabel={pendingStep?.role_label ?? ""}
+        last={lastStep}
+        onConfirm={(remarks) => run(approveInput(pendingStep, remarks))}
+      />
 
       <ReasonDialog
         open={dialog !== null && NEEDS_REASON.has(dialog)}

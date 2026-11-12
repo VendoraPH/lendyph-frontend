@@ -8,10 +8,13 @@ import { DataState } from "@/components/common/data-state";
 import { useApiResource, useIsClient } from "@/hooks";
 import { creditScoringService } from "@/services";
 import { CreditScoringPageHeader } from "./_components/page-header";
+import { FigureCard } from "./_components/figure-card";
+import { BranchRiskTable } from "./_components/branch-risk-table";
 import { RISK_LEVEL_LABELS } from "@/constants/risk-level";
 import { formatDateTime } from "@/lib/format";
 import { borrowerLabel } from "@/lib/credit-scoring/borrower-label";
-import { averageScoreText, rowScoreView } from "@/lib/credit-scoring/score-state";
+import { averageScoreText, countOrDash, rowScoreView } from "@/lib/credit-scoring/score-state";
+import { loanFigureReason, pesosOrDash } from "@/lib/credit-scoring/money";
 import { riskLegend } from "@/lib/credit-scoring/risk-level";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,24 +38,21 @@ const SHORTCUTS: { title: string; href: string; icon: LucideIcon }[] = [
   { title: "Score History", href: "/credit-scoring/score-history", icon: History },
 ];
 
-function Figure({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border bg-card p-4">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1 text-2xl font-semibold">{value}</p>
-    </div>
-  );
-}
-
 function DashboardBody({ data }: { data: CreditScoringDashboardSummary }) {
   const mounted = useIsClient();
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Figure label="Scored Members" value={String(data.total_scored_borrowers)} />
-        <Figure label="Average Score" value={averageScoreText(data.average_score)} />
-        <Figure label="Insufficient Data" value={String(data.insufficient_data_count)} />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <FigureCard label="Scored Members" value={String(data.total_scored_borrowers)} />
+        <FigureCard label="Average Score" value={averageScoreText(data.average_score)} />
+        <FigureCard label="Insufficient Data" value={String(data.insufficient_data_count)} />
+        <FigureCard
+          label="High Risk Outstanding"
+          value={pesosOrDash(data.high_risk_outstanding)}
+          hiddenReason={loanFigureReason(data.high_risk_outstanding)}
+        />
+        <FigureCard label="Scores Due for Review" value={countOrDash(data.scores_due_for_review)} />
       </div>
 
       <Card>
@@ -101,6 +101,8 @@ function DashboardBody({ data }: { data: CreditScoringDashboardSummary }) {
         </CardContent>
       </Card>
 
+      <BranchRiskTable rows={data.branch_risk} />
+
       <Card>
         <CardContent className="pt-6">
           <p className="mb-3 text-sm font-medium">Recent Score Changes</p>
@@ -146,7 +148,7 @@ function CreditScoringDashboardContent() {
 
       <DataState
         resource={resource}
-        summary="The credit scoring dashboard summarizes scored members, the average score and the risk distribution."
+        summary="The credit scoring dashboard summarizes scored members, the average score, the risk distribution, risk by branch and the high risk members' outstanding balance."
         endpoints={["GET /credit-scoring/dashboard"]}
       >
         {(data) => <DashboardBody data={data} />}

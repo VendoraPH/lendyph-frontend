@@ -6,6 +6,7 @@ import { cdaService, type CdaMediationCaseInput } from "@/services/cda.service";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { formatDate } from "@/lib/format";
 import type { CdaMediationCase } from "@/types/cda";
+import { AttachButton, useAttachDocument } from "../../_components/attach-document";
 import { RegisterTable, type RegisterColumn } from "../../_components/register-table";
 import { ToneBadge } from "../../_components/tone-badge";
 import { HALF_LABELS, MEDIATION_STATUS_META, labelOf, toOptions } from "../../_lib/labels";
@@ -66,20 +67,25 @@ const COLUMNS: RegisterColumn<CdaMediationCase>[] = [
 export function MediationCases({ year, onChanged }: { year: number; onChanged: () => void }) {
   const resource = useApiResource(useCallback(() => cdaService.listMediationCases(year), [year]));
   const asCase = (v: RecordValues) => v as CdaMediationCaseInput;
+  const attach = useAttachDocument(year);
   return (
-    <RegisterTable<CdaMediationCase>
-      title={`Mediation and conciliation cases, ${year}`}
-      description="A case filed in one half and still open in the next is reported in both."
-      noun={["case", "cases"]}
-      resource={resource}
-      endpoints={[`GET ${API_ENDPOINTS.CDA.MEDIATION_CASES(year)}`]}
-      columns={COLUMNS}
-      fields={FIELDS}
-      defaults={{ status: "pending", meetings_count: "0" }}
-      permission="cda:manage_mediation"
-      onCreate={(v) => cdaService.createMediationCase(year, asCase(v)).then(onChanged)}
-      onUpdate={(id, v) => cdaService.updateMediationCase(id, asCase(v)).then(onChanged)}
-      onDelete={(id) => cdaService.deleteMediationCase(id).then(onChanged)}
-    />
+    <>
+      <RegisterTable<CdaMediationCase>
+        title={`Mediation and conciliation cases, ${year}`}
+        description="A case filed in one half and still open in the next is reported in both."
+        noun={["case", "cases"]}
+        resource={resource}
+        endpoints={[`GET ${API_ENDPOINTS.CDA.MEDIATION_CASES(year)}`]}
+        columns={COLUMNS}
+        fields={FIELDS}
+        defaults={{ status: "pending", meetings_count: "0" }}
+        permission="cda:manage_mediation"
+        onCreate={(v) => cdaService.createMediationCase(year, asCase(v)).then(onChanged)}
+        onUpdate={(id, v) => cdaService.updateMediationCase(id, asCase(v)).then(onChanged)}
+        onDelete={(id) => cdaService.deleteMediationCase(id).then(onChanged)}
+        rowActions={(r) => <AttachButton subject={{ type: "case", id: r.id, name: `Case ${r.case_number}` }} onAttach={attach.open} />}
+      />
+      {attach.dialog}
+    </>
   );
 }

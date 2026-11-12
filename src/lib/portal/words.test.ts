@@ -8,6 +8,7 @@ test("a rate reads as stored, trailing zeros dropped, never rounded", () => {
   assert.equal(rateText("1.23456"), "1.23456%");
   assert.equal(rateText("10"), "10%");
   assert.equal(rateText("3.0000", "monthly"), "3% per month");
+  assert.equal(rateText("18.0000", "annual"), "18% per year");
   assert.equal(rateText(null), "—");
 });
 

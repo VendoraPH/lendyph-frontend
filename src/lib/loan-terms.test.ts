@@ -232,3 +232,21 @@ test("a rate converts from the period it is quoted per, on a 30-day month", () =
   assert.equal(rateForDays(1, 7, "weekly"), 0.01);
   assert.equal(Math.round(70000 * rateForDays(1, 3, "weekly") * 100) / 100, 300);
 });
+
+test("an annual rate reads per year", () => {
+  assert.equal(readRateFrequency("annual"), "annual");
+  assert.equal(readRateFrequency(" Annual "), "annual");
+  assert.equal(ratePeriodWord("annual"), "year");
+});
+
+test("annual is a rate period only, never a payment frequency", () => {
+  // A loan is never paid yearly: an "annual" payment frequency is unknown to
+  // the instalment steps, so it is stepped like any unknown one (30 days),
+  // never by a 360-day year.
+  const rows = instalments(new Date(2026, 0, 1), 60, "days", "annual");
+  assert.equal(rows.length, 2);
+  assert.deepEqual(
+    rows.map((r) => r.days),
+    [30, 30],
+  );
+});

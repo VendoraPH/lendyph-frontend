@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cdaService } from "@/services";
 import { notifyError, notifySuccess, notifyValidation } from "@/lib/notify";
-import { useCdaYearStore } from "../_hooks/use-cda-year";
+import { useCdaYearPicker } from "../_hooks/use-cda-year-picker";
 import { parseYear } from "../_lib/year";
 
 /**
@@ -18,7 +18,8 @@ import { parseYear } from "../_lib/year";
 export function OpenPeriodForm({ onOpened, compact = false }: { onOpened: () => void; compact?: boolean }) {
   const [raw, setRaw] = useState("");
   const [busy, setBusy] = useState(false);
-  const setPreferred = useCdaYearStore((s) => s.setPreferred);
+  // The opened year shows next, and a link's ?year= no longer wins over it.
+  const pickYear = useCdaYearPicker();
 
   function open() {
     const year = parseYear(raw);
@@ -31,7 +32,7 @@ export function OpenPeriodForm({ onOpened, compact = false }: { onOpened: () => 
       .openPeriod(year)
       .then((period) => {
         notifySuccess(`${period.year} reporting period opened`);
-        setPreferred(period.year);
+        pickYear(period.year);
         setRaw("");
         onOpened();
       })

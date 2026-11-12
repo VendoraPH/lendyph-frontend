@@ -201,3 +201,57 @@ export function StageDialog({
     </Dialog>
   );
 }
+
+/**
+ * Approving one step of the review chain, with optional remarks kept on the
+ * step and in the audit trail. Only the last step approves the report.
+ */
+export function ApproveStepDialog({
+  open,
+  onOpenChange,
+  stepName,
+  roleLabel,
+  last,
+  onConfirm,
+}: Omit<ConfirmProps, "onConfirm"> & {
+  stepName: string;
+  roleLabel: string;
+  last: boolean;
+  onConfirm: (remarks: string | null) => Promise<void>;
+}) {
+  const [remarks, setRemarks] = useState("");
+  const { busy, run } = useRun(onOpenChange);
+  if (useDialogOpening(open, stepName)) setRemarks("");
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Approve “{stepName}”</DialogTitle>
+          <DialogDescription>
+            {roleLabel} review step.{" "}
+            {last ? "This is the last step, so approving it approves the report." : "The report then moves on to the next step."}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          <Label htmlFor="cda-approve-remarks">Remarks</Label>
+          <Textarea
+            id="cda-approve-remarks"
+            value={remarks}
+            onChange={(e) => setRemarks(e.target.value)}
+            className="min-h-20"
+            placeholder="Optional"
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
+            Cancel
+          </Button>
+          <Button onClick={() => run(() => onConfirm(remarks.trim() || null))} disabled={busy}>
+            {busy ? "Approving…" : "Approve"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

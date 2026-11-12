@@ -297,6 +297,8 @@ export const TRAINING_STATUS_LABELS: Record<CdaTrainingStatus, string> = {
 };
 
 export const SOCIAL_CATEGORY_LABELS: Record<CdaSocialCategory, string> = {
+  member_education: "Member education",
+  financial_literacy: "Financial literacy",
   education: "Education",
   health: "Health",
   environment: "Environment",
@@ -340,6 +342,9 @@ export const UPLOAD_CATEGORY_LABELS: Record<string, string> = {
   capr: "Cooperative Annual Progress Report (CAPR)",
   financial_statements: "Audited financial statements",
   audit_report: "Auditor's report",
+  management_representation: "Management representation letter",
+  management_responsibility: "Statement of management responsibility",
+  fs_notes: "Notes to the financial statements",
   performance_audit: "Performance audit",
   social_audit: "Social audit",
   pesos: "Enhanced PESOS",
@@ -350,6 +355,7 @@ export const UPLOAD_CATEGORY_LABELS: Record<string, string> = {
   abr: "Annual Benefits Report (ABR)",
   tax: "Tax documents",
   minutes: "Minutes of meetings",
+  cda_correspondence: "CDA Correspondence",
   certificates: "Training certificates",
   other: "Other",
 };
@@ -365,6 +371,9 @@ export const DOCUMENT_CATEGORY_LABELS: Record<string, string> = {
 export const CATEGORY_RESTRICTION: Record<string, Permission> = {
   financial_statements: "cda:view_audit",
   audit_report: "cda:view_audit",
+  management_representation: "cda:view_audit",
+  management_responsibility: "cda:view_audit",
+  fs_notes: "cda:view_audit",
   performance_audit: "cda:view_audit",
   atir: "cda:view_tax",
   abr: "cda:view_tax",

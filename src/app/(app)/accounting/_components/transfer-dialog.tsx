@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { todayISO } from "@/lib/format";
+import { useAuthStore } from "@/store";
 import type { Account } from "@/types";
 import {
   TRANSFER_REFERENCE_MAX,
@@ -20,6 +21,7 @@ import {
   type TransferPayload,
 } from "../_lib/transfer-payload";
 import { AccountSelect } from "./account-select";
+import { JournalBranchSelect } from "./journal-branch-select";
 
 interface TransferDialogProps {
   open: boolean;
@@ -38,6 +40,12 @@ interface TransferDialogProps {
   onSubmit: (data: TransferPayload) => Promise<void>;
 }
 
+/**
+ * Move money between two of the organisation's own accounts. A
+ * `branches:view_all` caller also picks the branch the entry is recorded in
+ * (No branch by default); a branch user sees no picker, and the server
+ * records their own branch.
+ */
 export function TransferDialog({
   open,
   accounts,
@@ -51,7 +59,9 @@ export function TransferDialog({
   const [charge, setCharge] = useState("");
   const [description, setDescription] = useState("");
   const [reference, setReference] = useState("");
+  const [branchId, setBranchId] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
 
   // Same account on both sides is a no-op that still writes two lines against
   // one account, which reads as activity that never happened.
@@ -64,6 +74,7 @@ export function TransferDialog({
     charge,
     reference,
     description,
+    branchId: viewAll ? branchId : undefined,
   });
 
   const submit = async () => {
@@ -154,6 +165,15 @@ export function TransferDialog({
               placeholder="GCash to bank sweep"
             />
           </div>
+
+          {viewAll && (
+            <JournalBranchSelect
+              id="transfer-branch"
+              value={branchId}
+              onChange={setBranchId}
+              disabled={submitting}
+            />
+          )}
 
           <div className="space-y-1.5">
             <Label htmlFor="transfer-reference">Reference (optional)</Label>

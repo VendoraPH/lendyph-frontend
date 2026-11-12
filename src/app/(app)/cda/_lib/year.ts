@@ -16,3 +16,18 @@ export function parseYear(raw: string): number | null {
   if (!/^2\d{3}$/.test(text)) return null;
   return Number(text);
 }
+
+/**
+ * The year a CDA page opens on: a link's `?year=` when it names an open
+ * period (so a notice opens the year it is about), else the remembered year,
+ * else the newest.
+ */
+export function pickYear(
+  linked: string | null | undefined,
+  preferred: number | null,
+  periods: readonly Pick<CdaPeriod, "year">[],
+): number | null {
+  const year = parseYear(linked ?? "");
+  if (year !== null && periods.some((p) => p.year === year)) return year;
+  return resolveYear(preferred, periods);
+}

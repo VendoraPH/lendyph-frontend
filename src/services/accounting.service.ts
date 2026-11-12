@@ -16,6 +16,7 @@ import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { fetchAllPages, type DrainResult } from "@/lib/paginate";
 import { buildJournalPayload } from "@/lib/accounting/journal";
 import type { PaginatedResponse } from "@/types";
+import type { StatementNotes } from "@/types/cda";
 import type {
   Account,
   AccountingAttachment,
@@ -335,6 +336,10 @@ export const accountingService = {
 
   equityChanges: (query: PeriodQuery): Promise<EquityChanges> =>
     api.get<EquityChanges>(API_ENDPOINTS.ACCOUNTING.EQUITY_CHANGES, { params: query }),
+
+  /** The notes to the statements: the year's Enhanced PESOS rating (accounting:view plus branches:view_all). */
+  statementNotes: (year: number): Promise<StatementNotes> =>
+    api.get<StatementNotes>(API_ENDPOINTS.ACCOUNTING.STATEMENT_NOTES, { params: { year } }),
 
   book: (kind: BookKind, query: PeriodQuery): Promise<AccountingBook> =>
     api.get<AccountingBook>(API_ENDPOINTS.ACCOUNTING.BOOKS[kind], { params: query }),

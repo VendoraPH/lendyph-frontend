@@ -8,10 +8,12 @@ import { creditScoringService } from "@/services";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { fieldErrorsFor } from "@/lib/credit-scoring/field-errors";
 import { scorecardBody, scorecardDraftFrom, type ScorecardDraft } from "@/lib/credit-scoring/scorecard-form";
+import { factorRangeErrors, type FactorRangeErrors } from "@/lib/credit-scoring/factor-ranges";
 import { CreditScoringPageHeader } from "../_components/page-header";
 import { CategoriesEditor } from "./_components/categories-editor";
 import { RiskBandsEditor } from "./_components/risk-bands-editor";
-import { FactorRulesList, PolicyRulesList } from "./_components/read-only-rules";
+import { FactorRangesEditor } from "./_components/factor-ranges-editor";
+import { PolicyRulesList } from "./_components/read-only-rules";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,9 +22,10 @@ import type { ScorecardConfig } from "@/types/credit-scoring";
 interface SaveErrors {
   categories: string[];
   bands: string[];
+  factors: FactorRangeErrors;
 }
 
-const NO_ERRORS: SaveErrors = { categories: [], bands: [] };
+const NO_ERRORS: SaveErrors = { categories: [], bands: [], factors: { general: [], byFactor: {} } };
 
 function savedNote(before: string, after: ScorecardConfig): string {
   return after.version === before
@@ -44,12 +47,16 @@ function ScorecardConfigurationContent() {
     setNote(null);
     try {
       const saved = await creditScoringService.updateScorecardConfig(scorecardBody(config, current));
-      notifySuccess("Scorecard saved.");
+      notifySuccess(saved.version === config.version ? "Nothing changed." : `Scorecard saved as v${saved.version}.`);
       setNote(savedNote(config.version, saved));
       setDraft(null);
       resource.refetch();
     } catch (err: unknown) {
-      setErrors({ categories: fieldErrorsFor(err, "categories"), bands: fieldErrorsFor(err, "risk_bands") });
+      setErrors({
+        categories: fieldErrorsFor(err, "categories"),
+        bands: fieldErrorsFor(err, "risk_bands"),
+        factors: factorRangeErrors(err, config.factor_rules),
+      });
       notifyError(err, "Unable to save this scorecard.");
     } finally {
       setSaving(false);
@@ -62,7 +69,7 @@ function ScorecardConfigurationContent() {
     <div className="space-y-6">
       <CreditScoringPageHeader
         title="Scorecard Configuration"
-        description="Category weights and risk bands used to work out scores. Each save makes a new scorecard version."
+        description="Category weights, risk bands and factor ranges used to work out scores. Each save makes a new scorecard version."
         actions={
           loaded && (
             <Button onClick={() => handleSave(loaded, draft ?? scorecardDraftFrom(loaded))} disabled={saving}>
@@ -74,7 +81,7 @@ function ScorecardConfigurationContent() {
 
       <DataState
         resource={resource}
-        summary="Scorecard category weights, risk bands, factor rules and policy rules."
+        summary="Scorecard category weights, risk bands, factor ranges and policy rules."
         endpoints={["GET /credit-scoring/scorecard-config", "PUT /credit-scoring/scorecard-config"]}
       >
         {(config) => {
@@ -96,7 +103,7 @@ function ScorecardConfigurationContent() {
                 <TabsList>
                   <TabsTrigger value="categories">Categories</TabsTrigger>
                   <TabsTrigger value="bands">Risk Bands</TabsTrigger>
-                  <TabsTrigger value="factors">Factor Configuration</TabsTrigger>
+                  <TabsTrigger value="factors">Factor Ranges</TabsTrigger>
                   <TabsTrigger value="policy">Policy Rules</TabsTrigger>
                 </TabsList>
                 <TabsContent value="categories">
@@ -118,7 +125,13 @@ function ScorecardConfigurationContent() {
                   />
                 </TabsContent>
                 <TabsContent value="factors">
-                  <FactorRulesList rules={config.factor_rules} categories={config.categories} />
+                  <FactorRangesEditor
+                    rules={config.factor_rules}
+                    categories={config.categories}
+                    drafts={current.factors}
+                    errors={errors.factors}
+                    onChange={(id, next) => setDraft({ ...current, factors: { ...current.factors, [id]: next } })}
+                  />
                 </TabsContent>
                 <TabsContent value="policy">
                   <PolicyRulesList rules={config.policy_rules} />

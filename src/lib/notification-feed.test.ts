@@ -500,6 +500,9 @@ describe("CDA notifications", () => {
     cda_deadline_reminder: ["CDA deadline reminder", "warning"],
     cda_document_expiring: ["CDA document expiring", "warning"],
     cda_training_incomplete: ["Officer training incomplete", "warning"],
+    // Gap round B6.
+    cda_submission_recorded: ["CDA submission recorded", "success"],
+    cda_missing_requirement: ["CDA missing requirement", "warning"],
   };
 
   for (const [type, [label, tone]] of Object.entries(CDA_KINDS)) {
@@ -541,6 +544,16 @@ describe("a notice reads its title once", () => {
     assert.equal(item.announceKind, false);
   });
 
+  test("the B6 notices' server titles name their kind too", () => {
+    for (const [type, title] of [
+      ["cda_submission_recorded", "CDA filing recorded"],
+      ["cda_missing_requirement", "CDA report incomplete"],
+    ]) {
+      const [item] = buildFeed([row({ id: type, type, title })], NOW);
+      assert.equal(item.announceKind, false, type);
+    }
+  });
+
   test("a row whose title is its kind doesn't announce it twice", () => {
     const [item] = buildFeed([row({ id: "n2", type: "savings_large_transaction", title: "" })], NOW);
     assert.equal(item.announceKind, false);
@@ -549,5 +562,22 @@ describe("a notice reads its title once", () => {
   test("other kinds still name the kind beside a title of the server's own", () => {
     const [item] = buildFeed([row({ id: "n3", type: "loan_approved", title: "LN-000123 approved" })], NOW);
     assert.equal(item.announceKind, true);
+  });
+});
+
+describe("the ready-for-release notice", () => {
+  test('reads "Ready for release" and asks for action', () => {
+    assert.equal(notificationTypeLabel("loan_ready_for_release"), "Ready for release");
+    assert.equal(notificationTone("loan_ready_for_release"), "approval");
+  });
+
+  test("links to the loan, and its title already names the kind", () => {
+    const [item] = buildFeed(
+      [row({ id: "r1", type: "loan_ready_for_release", title: "Loan ready for release", url: "/loans/12" })],
+      NOW,
+    );
+    assert.equal(item.kind, "Ready for release");
+    assert.equal(item.href, "/loans/12");
+    assert.equal(item.announceKind, false);
   });
 });
