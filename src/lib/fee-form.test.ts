@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildFeePayload, buildFormulaFields, describeFormulaFee, FORMULA_FEE_HELP } from "./fee-form";
+import {
+  buildFeeFormulaCheckRequest, buildFeePayload, buildFormulaFields, DEFAULT_FORMULA_SAMPLE, describeFormulaFee,
+  describeFormulaInputs, describeFormulaSnapshot, EMPTY_FORMULA_FIELDS, FEE_FORMULA_VARIABLES, FORMULA_FEE_HELP,
+  formulaExpressionError,
+} from "./fee-form";
 
 const form = { name: " Release fee ", type: "fixed" as const, value: "500", productIds: [7], conditions: {} };
 
@@ -153,4 +157,157 @@ test("a formula fee reads as its rule, in pesos", () => {
 
 test("the help line says what a formula does", () => {
   assert.equal(FORMULA_FEE_HELP, "Percentage of principal, optionally per month of the term, kept between the minimum and maximum.");
+});
+
+test("a written formula is sent as written, trimmed, and replaces the rate", () => {
+  const result = buildFeePayload(
+    { ...form, type: "formula", value: "", formula: { ...EMPTY_FORMULA_FIELDS, perMonth: true, mode: "expression", expression: "  (principal amount*2.5%)/365 ", maxAmount: "500" } },
+    { expressions: true },
+  );
+  assert.ok("payload" in result);
+  assert.equal(result.payload.value, 0);
+  assert.equal(result.payload.per_month, false);
+  assert.equal(result.payload.max_amount, 500);
+  assert.equal(result.payload.formula_expression, "(principal amount*2.5%)/365");
+});
+
+test("the browser never judges a formula: an unknown variable is left to the server", () => {
+  const result = buildFeePayload(
+    { ...form, type: "formula", value: "", formula: { ...EMPTY_FORMULA_FIELDS, mode: "expression", expression: "Principle * 2" } },
+    { expressions: true },
+  );
+  assert.ok("payload" in result);
+  assert.equal(result.payload.formula_expression, "Principle * 2");
+});
+
+test("a blank or too-long written formula is refused before sending", () => {
+  const blank = buildFeePayload(
+    { ...form, type: "formula", value: "", formula: { ...EMPTY_FORMULA_FIELDS, mode: "expression", expression: "   " } },
+    { expressions: true },
+  );
+  assert.deepEqual(blank, { error: "Write the fee formula." });
+  const long = buildFeePayload(
+    { ...form, type: "formula", value: "", formula: { ...EMPTY_FORMULA_FIELDS, mode: "expression", expression: "1+".repeat(128) + "1" } },
+    { expressions: true },
+  );
+  assert.ok("error" in long);
+});
+
+test("with expressions off, a formula fee is today's rate recipe and sends no expression", () => {
+  const input = { ...form, type: "formula" as const, value: "2", formula: { ...EMPTY_FORMULA_FIELDS, mode: "expression" as const, expression: "Loan Term * 10" } };
+  const off = buildFeePayload(input);
+  assert.ok("payload" in off);
+  assert.equal(off.payload.value, 2);
+  assert.equal("formula_expression" in off.payload, false);
+});
+
+test("the rate recipe and the other types clear a saved expression only where expressions are on", () => {
+  const recipe = { ...form, type: "formula" as const, value: "2", formula: { ...EMPTY_FORMULA_FIELDS, mode: "rate" as const } };
+  const on = buildFeePayload(recipe, { expressions: true });
+  assert.ok("payload" in on);
+  assert.equal(on.payload.formula_expression, null);
+  assert.equal(on.payload.value, 2);
+  const fixedOn = buildFeePayload(form, { expressions: true });
+  assert.ok("payload" in fixedOn);
+  assert.equal(fixedOn.payload.formula_expression, null);
+  const fixedOff = buildFeePayload(form);
+  assert.ok("payload" in fixedOff);
+  assert.equal("formula_expression" in fixedOff.payload, false);
+});
+
+test("a written formula reads as itself in the list, never 0%", () => {
+  assert.equal(
+    describeFormulaFee({ value: 0, formula_expression: "Principal Amount * 1%", min_amount: 100 }),
+    "Principal Amount * 1% · min ₱100.00",
+  );
+});
+
+test("every variable has a hint in words: the rate's period, months and calendar days", () => {
+  assert.deepEqual(FEE_FORMULA_VARIABLES.map((v) => v.label), [
+    "Principal Amount", "Loan Amount", "Interest Rate", "Loan Term", "Term in Days",
+  ]);
+  const hint = (label: string) => FEE_FORMULA_VARIABLES.find((v) => v.label === label)?.hint ?? "";
+  assert.match(hint("Interest Rate"), /per the loan's own rate period/);
+  assert.match(hint("Loan Term"), /in months.*days ÷ 30/);
+  assert.match(hint("Term in Days"), /Calendar days from the loan's start date to its maturity date/);
+});
+
+test("the formula check sends the formula, the sample loan and the bounds as typed", () => {
+  const result = buildFeeFormulaCheckRequest(" Loan Term * 10 ", DEFAULT_FORMULA_SAMPLE, { minAmount: "100", maxAmount: "abc" });
+  assert.deepEqual(result, {
+    body: {
+      formula_expression: "Loan Term * 10",
+      principal_amount: "100000.00",
+      interest_rate: "3",
+      interest_rate_frequency: "monthly",
+      term: 12,
+      term_unit: "months",
+      min_amount: "100",
+      max_amount: null,
+    },
+  });
+});
+
+test("the formula check waits for a formula and a well-formed sample loan", () => {
+  assert.equal(buildFeeFormulaCheckRequest("  ", DEFAULT_FORMULA_SAMPLE, { minAmount: "", maxAmount: "" }), null);
+  for (const sample of [
+    { ...DEFAULT_FORMULA_SAMPLE, principalAmount: "1,000" },
+    { ...DEFAULT_FORMULA_SAMPLE, interestRate: "three" },
+    { ...DEFAULT_FORMULA_SAMPLE, term: "1.5" },
+    { ...DEFAULT_FORMULA_SAMPLE, term: "0" },
+  ]) {
+    const result = buildFeeFormulaCheckRequest("Loan Term", sample, { minAmount: "", maxAmount: "" });
+    assert.ok(result && "error" in result, JSON.stringify(sample));
+  }
+});
+
+test("a save refusal on the formula is shown as the server sent it", () => {
+  const message = "A bracket is opened and never closed.";
+  assert.equal(formulaExpressionError({ response: { status: 422, data: { errors: { formula_expression: [message] } } } }), message);
+  assert.equal(formulaExpressionError({ response: { status: 422, data: { errors: { name: ["Taken."] } } } }), null);
+  assert.equal(formulaExpressionError({ response: { status: 500, data: {} } }), null);
+  assert.equal(formulaExpressionError(new Error("x")), null);
+});
+
+const INPUTS = {
+  principal_amount: "100000.00", loan_amount: "100000.00",
+  interest_rate: "3.0000", interest_rate_frequency: "monthly",
+  loan_term: "12", term_in_days: "365",
+};
+
+test("a formula snapshot reads in words: pesos, the rate per its period, months and days", () => {
+  assert.deepEqual(describeFormulaInputs(INPUTS), [
+    "Principal Amount and Loan Amount ₱100,000.00",
+    "Interest Rate 3% per month",
+    "Loan Term 12 months",
+    "Term in Days 365 days",
+  ]);
+  assert.deepEqual(
+    describeFormulaInputs({ ...INPUTS, loan_amount: "90000.50", interest_rate: "1.25", interest_rate_frequency: "semi_monthly", loan_term: "1.5", term_in_days: "1" }),
+    [
+      "Principal Amount ₱100,000.00",
+      "Loan Amount ₱90,000.50",
+      "Interest Rate 1.25% per semi-monthly period",
+      "Loan Term 1.5 months",
+      "Term in Days 1 day",
+    ],
+  );
+});
+
+test("a formula snapshot never shows a raw key", () => {
+  const view = describeFormulaSnapshot({ formula_expression: "(Principal Amount * 2.5%) / 365", formula_inputs: { ...INPUTS, interest_rate_frequency: "fortnightly_custom" }, raw_amount: "6.849315" });
+  assert.ok(view);
+  assert.equal(view.formula, "(Principal Amount * 2.5%) / 365");
+  assert.equal(view.beforeRounding, "₱6.849315");
+  const text = [view.formula, ...view.figures, view.beforeRounding].join(" ");
+  for (const key of [...Object.keys(INPUTS), "fortnightly_custom", "monthly", "raw_amount"]) {
+    assert.equal(text.includes(key), false, key);
+  }
+  assert.ok(view.figures.includes("Interest Rate 3%"));
+});
+
+test("a line with no written formula has no snapshot", () => {
+  assert.equal(describeFormulaSnapshot({}), null);
+  assert.equal(describeFormulaSnapshot({ formula_expression: " ", raw_amount: "1.00" }), null);
+  assert.equal(describeFormulaSnapshot({ formula_expression: "Loan Term", formula_inputs: null })?.figures.length, 0);
 });

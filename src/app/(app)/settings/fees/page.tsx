@@ -26,12 +26,24 @@ import { cn } from "@/lib/utils";
 import { formatCurrencyExact, formatRate } from "@/lib/format";
 import { decimalInputValue } from "@/lib/percent";
 import {
-  buildFeePayload, describeFormulaFee, EMPTY_FORMULA_FIELDS, FORMULA_FEE_HELP, type FormulaFieldsInput,
+  buildFeePayload, describeFormulaFee, EMPTY_FORMULA_FIELDS, FORMULA_FEE_HELP, formulaExpressionError,
+  type FormulaFieldsInput, type FormulaMode,
 } from "@/lib/fee-form";
 import { notifyError } from "@/lib/notify";
 import { getErrorMessage } from "@/lib/api-error";
 import { usePermission } from "@/hooks";
 import { completeRows } from "@/lib/paginate";
+import { env } from "@/config/env";
+import { FormulaExpressionField } from "./_components/formula-expression-field";
+import { useFormulaCheck } from "./_hooks/use-formula-check";
+
+// Formula fees written as an expression, where the backend evaluates them.
+const FEE_FORMULAS = env.features.feeFormulas;
+
+const FORMULA_MODES: readonly { mode: FormulaMode; label: string }[] = [
+  { mode: "rate", label: "Rate of principal" },
+  { mode: "expression", label: "Write a formula" },
+];
 
 // ---------------------------------------------------------------------------
 // Fee Form Dialog
@@ -65,6 +77,7 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
   const [conditions, setConditions] = useState<FeeConditions>({});
   const [formula, setFormula] = useState<FormulaFieldsInput>(EMPTY_FORMULA_FIELDS);
   const [saving, setSaving] = useState(false);
+  const [formulaSaveError, setFormulaSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (fee) {
@@ -77,6 +90,9 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
         perMonth: Boolean(fee.per_month),
         minAmount: fee.min_amount != null ? decimalInputValue(fee.min_amount) : "",
         maxAmount: fee.max_amount != null ? decimalInputValue(fee.max_amount) : "",
+        // A formula fee saved before expressions existed keeps its rate recipe.
+        mode: fee.formula_expression ? "expression" : "rate",
+        expression: fee.formula_expression ?? "",
       });
     } else {
       setName("");
@@ -84,9 +100,18 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
       setValue("");
       setSelectedProducts([]);
       setConditions({});
-      setFormula(EMPTY_FORMULA_FIELDS);
+      setFormula({ ...EMPTY_FORMULA_FIELDS, mode: "rate", expression: "" });
     }
+    setFormulaSaveError(null);
   }, [fee, open]);
+
+  const writtenFormula = FEE_FORMULAS && type === "formula" && formula.mode === "expression";
+  const formulaCheck = useFormulaCheck({
+    enabled: open && writtenFormula,
+    expression: formula.expression ?? "",
+    minAmount: formula.minAmount,
+    maxAmount: formula.maxAmount,
+  });
 
   function toggleProduct(id: number) {
     setSelectedProducts((prev) =>
@@ -109,9 +134,16 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (saving) return;
-    const result = buildFeePayload({ name, type, value, productIds: selectedProducts, conditions, formula });
+    const result = buildFeePayload(
+      { name, type, value, productIds: selectedProducts, conditions, formula },
+      { expressions: FEE_FORMULAS },
+    );
     if ("error" in result) {
       toast.error(result.error);
+      return;
+    }
+    if (writtenFormula && !formulaCheck.valid) {
+      toast.error("Wait for the formula check to pass before saving.");
       return;
     }
     const { payload } = result;
@@ -128,6 +160,7 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
       onOpenChange(false);
       onSave();
     } catch (err) {
+      if (writtenFormula) setFormulaSaveError(formulaExpressionError(err));
       notifyError(err, isEdit ? "We couldn't update the fee. Please try again." : "We couldn't create the fee. Please try again.");
     } finally {
       setSaving(false);
@@ -176,6 +209,40 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
             </div>
           </div>
 
+          {FEE_FORMULAS && type === "formula" && (
+            <div role="radiogroup" aria-label="How the formula fee is worked out" className="grid grid-cols-2 gap-2">
+              {FORMULA_MODES.map(({ mode, label }) => (
+                <label
+                  key={mode}
+                  className={cn(
+                    "flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm",
+                    formula.mode === mode && "border-brand-orange bg-brand-orange/5",
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="formula-mode"
+                    value={mode}
+                    checked={formula.mode === mode}
+                    onChange={() => setFormula((prev) => ({ ...prev, mode }))}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+          )}
+
+          {writtenFormula ? (
+            <FormulaExpressionField
+              value={formula.expression ?? ""}
+              onChange={(expression) => {
+                setFormula((prev) => ({ ...prev, expression }));
+                setFormulaSaveError(null);
+              }}
+              check={formulaCheck}
+              saveError={formulaSaveError}
+            />
+          ) : (
           <div className="space-y-2">
             <Label htmlFor="fee-value">
               {type === "fixed" ? "Amount (₱)" : "Rate (%)"}{" "}
@@ -192,10 +259,12 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
               required
             />
           </div>
+          )}
 
           {type === "formula" && (
             <div className="space-y-3 rounded-md border p-3">
-              <p className="text-xs text-muted-foreground">{FORMULA_FEE_HELP}</p>
+              {!writtenFormula && <p className="text-xs text-muted-foreground">{FORMULA_FEE_HELP}</p>}
+              {!writtenFormula && (
               <label className="flex items-center gap-2 text-sm cursor-pointer">
                 <input
                   type="checkbox"
@@ -205,6 +274,7 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
                 />
                 Per month of term
               </label>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="fee-min-amount">Minimum (₱)</Label>
@@ -332,7 +402,7 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
             </Button>
             <Button
               type="submit"
-              disabled={saving || !name.trim() || value === ""}
+              disabled={saving || !name.trim() || (writtenFormula ? !formulaCheck.valid : value === "")}
               className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
             >
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}

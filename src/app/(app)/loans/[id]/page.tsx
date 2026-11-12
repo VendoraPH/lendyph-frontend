@@ -93,6 +93,7 @@ import { LoanRemindersCard } from "./_components/loan-reminders-card";
 import { ShareCapitalCard } from "./_components/share-capital-card";
 import { LoanCollateralsCard } from "./_components/loan-collaterals-card";
 import { ReleaseDeductions } from "./_components/release-deductions";
+import { FormulaSnapshot, type FormulaSnapshotItem } from "./_components/formula-snapshot";
 import { ReleaseCoMakers } from "./_components/release-co-makers";
 import { InsurancePremiumSection } from "./_components/insurance-premium-section";
 import {
@@ -1346,8 +1347,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // (LoanService::computeDeductions). Earlier code assumed it was an object
   // keyed by fee name and silently fell through to 0 for every fee, which
   // collapsed all fees into the "Other Deductions" bucket on the UI.
-  const deductionsArray: Array<{ name?: string; amount?: number | string }> = Array.isArray(loan?.deductions)
-    ? (loan.deductions as Array<{ name?: string; amount?: number | string }>)
+  const deductionsArray: Array<{ name?: string; amount?: number | string } & FormulaSnapshotItem> = Array.isArray(loan?.deductions)
+    ? (loan.deductions as Array<{ name?: string; amount?: number | string } & FormulaSnapshotItem>)
     : [];
   const findDeductionAmount = (name: string): number => {
     const match = deductionsArray.find((d) => (d?.name ?? "").toLowerCase() === name.toLowerCase());
@@ -3143,6 +3144,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                       <span className="text-sm text-muted-foreground">
                         {item.name}
                         {item.fee_id != null && <span className="ml-1.5 text-xs">from Fees settings</span>}
+                        <FormulaSnapshot item={item} />
                       </span>
                       <span className="text-sm font-medium">{formatCurrencyExact(item.amount)}</span>
                     </div>
@@ -3166,7 +3168,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 // product-specific fees aren't silently folded into "Other".
                 const named = deductionsArray
                   .filter((d) => (d?.name ?? "").trim() && Number(d.amount ?? 0) !== 0)
-                  .map((d) => ({ label: d.name as string, amount: Number(d.amount ?? 0) }));
+                  .map((d) => ({ label: d.name as string, amount: Number(d.amount ?? 0), snapshot: d }));
                 // The server's unitemised remainder, signed; its own line when not 0.
                 const other = Number(loan.unitemised_deductions ?? 0);
                 const rows = named.length > 0
@@ -3179,7 +3181,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   <>
                     {rows.map((r) => (
                       <div key={r.label} className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">{r.label}</span>
+                        <span className="text-sm text-muted-foreground">
+                          {r.label}
+                          {"snapshot" in r && <FormulaSnapshot item={r.snapshot} />}
+                        </span>
                         <span className="text-sm font-medium">{formatCurrency(r.amount)}</span>
                       </div>
                     ))}
