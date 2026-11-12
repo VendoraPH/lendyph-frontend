@@ -83,12 +83,15 @@ function putWithFile<T>(url: string, data: Record<string, unknown>, file: File, 
 }
 
 export type CdaOfficerInput = Partial<Omit<CdaOfficer, "id" | "member" | "position_label" | "trainings">>;
-export type CdaTrainingInput = Partial<Omit<CdaTraining, "id" | "officer" | "certificate">>;
+export type CdaTrainingInput = Partial<Omit<CdaTraining, "id" | "officer" | "certificate" | "documents_count">>;
 export type CdaSocialProgramInput = Partial<
-  Omit<CdaSocialProgram, "id" | "period_id" | "year" | "category_label" | "funding_source_label" | "responsible_officer">
+  Omit<
+    CdaSocialProgram,
+    "id" | "period_id" | "year" | "category_label" | "funding_source_label" | "responsible_officer" | "documents_count"
+  >
 > & { responsible_officer_id?: number | null };
 export type CdaMediationCaseInput = Partial<
-  Omit<CdaMediationCase, "id" | "case_number" | "year" | "halves" | "status_label">
+  Omit<CdaMediationCase, "id" | "case_number" | "year" | "halves" | "status_label" | "documents_count">
 >;
 
 /** The register rows a document can be attached to (`CdaDocumentRequest::SUBJECT_TYPES`). */
@@ -208,7 +211,11 @@ export const cdaService = {
   deleteMediationCase: (id: number) => api.delete<void>(C.MEDIATION_CASE(id)),
 
   // ── Documents (versioned; a new file never overwrites) ──
-  listDocuments: (year: number, params?: { report_id?: number; status?: string }) =>
+  /** `subject_type` with `subject_id` lists one register row's documents (422 without the type). */
+  listDocuments: (
+    year: number,
+    params?: { report_id?: number; status?: string; subject_type?: CdaDocumentSubjectType; subject_id?: number },
+  ) =>
     drain<CdaDocument>(C.DOCUMENTS(year), params),
   uploadDocument: (year: number, data: CdaDocumentUpload, file: File) =>
     api.upload<CdaDocument>(C.DOCUMENTS(year), toFormData({ ...data }, file)),

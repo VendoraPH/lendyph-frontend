@@ -67,16 +67,40 @@ describe("submitting a draft", () => {
 });
 
 describe("approving a step", () => {
-  test("without a pick it sends only the remarks", async () => {
+  test("without a pick it sends the remarks and names the step it acts on", async () => {
     await loanApprovalService.approve(12, 41, { remarks: "Looks fine" });
     assert.deepEqual(seen, [
-      { method: "PATCH", path: "/loans/12/approval-steps/41/approve", query: {}, body: { remarks: "Looks fine" } },
+      {
+        method: "PATCH",
+        path: "/loans/12/approval-steps/41/approve",
+        query: {},
+        body: { remarks: "Looks fine", step_id: 41 },
+      },
     ]);
   });
 
   test("with a pick it sends forward_to_user_id beside the remarks", async () => {
     await loanApprovalService.approve(12, 41, { remarks: "Looks fine", forward_to_user_id: 9 });
-    assert.deepEqual(seen[0].body, { remarks: "Looks fine", forward_to_user_id: 9 });
+    assert.deepEqual(seen[0].body, { remarks: "Looks fine", forward_to_user_id: 9, step_id: 41 });
+  });
+
+  test("with no payload it still names the step", async () => {
+    await loanApprovalService.approve(12, 41);
+    assert.deepEqual(seen[0].body, { step_id: 41 });
+  });
+});
+
+describe("sending a step back", () => {
+  test("names the step it acts on beside the target and the reason", async () => {
+    await loanApprovalService.sendBack(12, 41, { target_step_order: 1, remarks: "Missing ID" });
+    assert.deepEqual(seen, [
+      {
+        method: "PATCH",
+        path: "/loans/12/approval-steps/41/send-back",
+        query: {},
+        body: { target_step_order: 1, remarks: "Missing ID", step_id: 41 },
+      },
+    ]);
   });
 });
 

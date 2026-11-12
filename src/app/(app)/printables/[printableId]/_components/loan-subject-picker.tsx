@@ -6,14 +6,19 @@ import { IncompleteListNotice } from "@/components/common/incomplete-list-notice
 // Deep import, not the barrel: re-exporting either of these costs every page
 // that imports `@/components/common` ~52 kB it cannot use.
 import { SubjectPicker } from "@/components/common/subject-picker";
-import { isActiveLoanStatus } from "@/constants";
 import { formatCurrency } from "@/lib/format";
 import { loanService } from "@/services";
 import { usePermission } from "@/hooks";
 import type { Loan } from "@/types";
 import { Loader2 } from "lucide-react";
 import { BorrowerLoansTable, loanNumber } from "./borrower-loans-table";
-import { memberLoanParams } from "../_lib/member-loans";
+import {
+  LOAN_PICKER_TABS,
+  loanPickerCounts,
+  loanPickerTab,
+  memberLoanParams,
+  type LoanPickerFilter,
+} from "../_lib/member-loans";
 
 /**
  * Pick the member first, then the loan.
@@ -28,13 +33,9 @@ import { memberLoanParams } from "../_lib/member-loans";
  * wants a table here.
  */
 
-type LoanFilter = "active" | "inactive" | "all";
-
-const FILTER_LABELS: Record<LoanFilter, string> = {
-  active: "Active",
-  inactive: "Closed",
-  all: "All",
-};
+const EMPTY_TAB = Object.fromEntries(
+  LOAN_PICKER_TABS.map((tab) => [tab.key, tab.empty]),
+) as Record<LoanPickerFilter, string>;
 
 interface LoanSubjectPickerProps {
   /** Lifted so the page can drop its empty state once a member is chosen. */
@@ -60,7 +61,7 @@ export function LoanSubjectPicker({
     shown: number;
     total: number | null;
   } | null>(null);
-  const [filter, setFilter] = useState<LoanFilter>("active");
+  const [filter, setFilter] = useState<LoanPickerFilter>("active");
   // A member's loans need `loans:view`, which the documents screen does not.
   // Without it they are not asked for, and the member simply shows none.
   const canListLoans = usePermission().can("loans:view");
@@ -104,16 +105,12 @@ export function LoanSubjectPicker({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [borrowerId, canListLoans]);
 
-  const counts = useMemo(() => {
-    const active = loans.filter((loan) => isActiveLoanStatus(loan.status)).length;
-    return { active, inactive: loans.length - active, all: loans.length };
-  }, [loans]);
+  const counts = useMemo(() => loanPickerCounts(loans), [loans]);
 
-  const visible = useMemo(() => {
-    if (filter === "all") return loans;
-    const wantActive = filter === "active";
-    return loans.filter((loan) => isActiveLoanStatus(loan.status) === wantActive);
-  }, [loans, filter]);
+  const visible = useMemo(
+    () => (filter === "all" ? loans : loans.filter((loan) => loanPickerTab(loan.status) === filter)),
+    [loans, filter]
+  );
 
   const selected = useMemo(
     () => loans.find((loan) => loan.id === value) ?? null,
@@ -140,12 +137,12 @@ export function LoanSubjectPicker({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <Tabs
               value={filter}
-              onValueChange={(next) => setFilter(next as LoanFilter)}
+              onValueChange={(next) => setFilter(next as LoanPickerFilter)}
             >
               <TabsList>
-                {(["active", "inactive", "all"] as const).map((key) => (
+                {LOAN_PICKER_TABS.map(({ key, label }) => (
                   <TabsTrigger key={key} value={key}>
-                    {FILTER_LABELS[key]} ({counts[key]})
+                    {label} ({counts[key]})
                   </TabsTrigger>
                 ))}
               </TabsList>
@@ -175,7 +172,7 @@ export function LoanSubjectPicker({
             <p className="rounded-lg border border-dashed py-8 text-center text-sm text-muted-foreground">
               {loans.length === 0
                 ? "This member has no loans on file."
-                : `No ${FILTER_LABELS[filter].toLowerCase()} loans for this member.`}
+                : EMPTY_TAB[filter]}
             </p>
           ) : (
             <BorrowerLoansTable

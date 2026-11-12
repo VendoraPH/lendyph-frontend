@@ -36,3 +36,11 @@ test("each range shows the rule in words and the factor's own unit", () => {
   assert.match(editor, /A defaulted or written-off loan/);
   assert.doesNotMatch(editor, /\{rule\.rule\}/);
 });
+
+test("a save keeps the tab the user saved from", () => {
+  // The tabs are controlled by the page, above the data that a save reloads,
+  // so the refetch's remount doesn't reset them to Categories.
+  assert.match(page, /const \[tab, setTab\] = useState<string>\("categories"\)/);
+  assert.match(page, /<Tabs value=\{tab\} onValueChange=\{\(next\) => setTab\(String\(next\)\)\}>/);
+  assert.doesNotMatch(page, /<Tabs defaultValue=/);
+});

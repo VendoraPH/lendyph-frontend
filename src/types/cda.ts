@@ -725,6 +725,8 @@ export interface CdaTraining {
   expires_on: string | null;
   remarks: string | null;
   certificate: (CdaDocumentVersion & { cda_document_id: number; status: string }) | null;
+  /** The training's active documents the caller may see, in its own period; absent on older payloads. */
+  documents_count?: number;
 }
 
 export type CdaSocialCategory =
@@ -764,6 +766,8 @@ export interface CdaSocialProgram {
   status: CdaSocialStatus;
   responsible_officer: { id: number; name: string | null } | null;
   remarks: string | null;
+  /** The program's active documents the caller may see, in its period; absent on older payloads. */
+  documents_count?: number;
 }
 
 /** The server's totals over ongoing and completed programs. */
@@ -796,6 +800,8 @@ export interface CdaMediationCase {
   status: CdaMediationStatus;
   status_label: string;
   remarks: string | null;
+  /** The case's active documents the caller may see, in the list's year; absent on older payloads. */
+  documents_count?: number;
 }
 
 export type CdaDocumentCategory =

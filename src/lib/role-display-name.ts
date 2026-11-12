@@ -48,3 +48,21 @@ export function roleLabelForKey(
   const match = roles?.find((r) => r.name === key);
   return roleDisplayName(match ?? { name: key, display_name: null });
 }
+
+/**
+ * A role the server names for us (`role_label` on an approval step or the
+ * forward candidates' next step). The server sends the saved display name, or,
+ * with none saved, the key run through `Str::headline` ("bod1" reads "Bod1").
+ * That fallback is the key title-cased, so it is replaced by the screen's own
+ * name for the role ("BOD1"), the one every other screen shows; a saved
+ * display name is kept as sent.
+ */
+export function roleLabelFromServer(
+  key: string | null | undefined,
+  serverLabel: string | null | undefined
+): string {
+  const sent = serverLabel?.trim() ?? "";
+  if (!key) return sent;
+  if (sent && sent.toLowerCase() !== titleCase(key).toLowerCase()) return sent;
+  return roleDisplayName({ name: key, display_name: null });
+}

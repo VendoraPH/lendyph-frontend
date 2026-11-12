@@ -1,11 +1,14 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Ban, FileText, History, Upload } from "lucide-react";
 import { PermissionButton } from "@/components/common/permission-button";
 import { Button } from "@/components/ui/button";
 import { useApiResource, usePermission } from "@/hooks";
 import { cdaService } from "@/services";
+import type { CdaDocumentSubjectType } from "@/services/cda.service";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { notifyError, notifySuccess } from "@/lib/notify";
@@ -16,6 +19,7 @@ import { RegisterTable, type RegisterColumn } from "../../_components/register-t
 import { ToneBadge } from "../../_components/tone-badge";
 import { DOCUMENT_CATEGORY_LABELS, labelOf, reportName } from "../../_lib/labels";
 import { signedUrl } from "../../_lib/safe-url";
+import { linkedDocumentSubject, subjectDocumentsParams } from "../../_lib/register-documents";
 import { VERSION_FIELDS, reportOptions, toUpload, uploadCategories, uploadFields } from "../_lib/document-form";
 import { DocumentVersionsDialog } from "./document-versions-dialog";
 
@@ -53,6 +57,13 @@ const COLUMNS: RegisterColumn<CdaDocument>[] = [
   { header: "Expires", cell: (r) => (r.expires_on ? formatDate(r.expires_on) : "—") },
 ];
 
+/** A register row in words, for the filtered list's heading. */
+const SUBJECT_NOUNS: Record<CdaDocumentSubjectType, string> = {
+  training: "training",
+  program: "social program",
+  case: "mediation case",
+};
+
 /** Exports and withdrawn documents take no new versions. */
 function canRevise(d: CdaDocument): boolean {
   return d.status === "active" && d.category !== "report_export" && d.category !== "submission_proof";
@@ -62,11 +73,16 @@ function canRevise(d: CdaDocument): boolean {
  * The year's compliance documents, versioned (carried over from #510 by
  * Augustin). The server leaves out restricted documents the user may not see;
  * each file opens by its signed link; withdrawing keeps the files and needs a
- * reason.
+ * reason. A register row's documents link opens it filtered to that row
+ * (`?subject_type=&subject_id=`), active documents only, as the row counts them.
  */
 export function Documents({ year }: { year: number }) {
   const { can } = usePermission();
-  const resource = useApiResource(useCallback(() => cdaService.listDocuments(year), [year]));
+  const searchParams = useSearchParams();
+  const subject = useMemo(() => linkedDocumentSubject(searchParams.toString()), [searchParams]);
+  const resource = useApiResource(
+    useCallback(() => cdaService.listDocuments(year, subjectDocumentsParams(subject)), [year, subject]),
+  );
   const period = useApiResource(useCallback(() => cdaService.getPeriod(year), [year]));
   const [history, setHistory] = useState<CdaDocument | null>(null);
   const [revising, setRevising] = useState<CdaDocument | null>(null);
@@ -108,8 +124,16 @@ export function Documents({ year }: { year: number }) {
 
   return (
     <>
+      {subject && (
+        <p role="status" className="flex flex-wrap items-center gap-x-2 rounded-md border bg-muted/40 px-3 py-2 text-sm">
+          <span>Showing the active documents attached to one {SUBJECT_NOUNS[subject.type]}.</span>
+          <Link href={`/cda/documents?year=${year}`} className="font-medium text-primary underline-offset-4 hover:underline">
+            Show every document for {year}
+          </Link>
+        </p>
+      )}
       <RegisterTable<CdaDocument>
-        title={`Documents for ${year}`}
+        title={subject ? `Documents attached to this ${SUBJECT_NOUNS[subject.type]}` : `Documents for ${year}`}
         description="Signed reports, audit reports, minutes and certificates. Each upload is kept as a version."
         noun={["document", "documents"]}
         resource={resource}

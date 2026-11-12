@@ -12,10 +12,16 @@ import {
 } from "@/components/ui/select";
 import { useApiResource } from "@/hooks/use-api-resource";
 import { loanApprovalService } from "@/services/loan-approval.service";
+import type { ForwardCandidates } from "@/types/loan-approval";
 import { ANYONE_WITH_THE_ROLE, forwardOptions } from "../_lib/approval-forward";
+import type { OncePerKey } from "../_lib/once-per-key";
 
 interface ForwardToPickerProps {
   loanId: number;
+  /** The step the pick is for: the pending step's row id, or "draft". */
+  stepKey: string;
+  /** The page's shared read, so a remount reuses the step's candidates. */
+  readCandidates: OncePerKey<ForwardCandidates>;
   /** The picked user's id as a string, or `ANYONE_WITH_THE_ROLE`. */
   value: string;
   /** The picked value and its label (the user's name, or the role default). */
@@ -30,12 +36,24 @@ interface ForwardToPickerProps {
  * Forward: the role default first, then the users the server lists for the
  * next step (`GET /loans/{loan}/approval/forward-candidates`), by name.
  *
- * Mount it with a `key` per step, so a new step reads its own candidates.
- * Nothing shows when there is no next step, or before the endpoint exists;
+ * Mount it with a `key` per step. The candidates are read once per step
+ * through the page's `readCandidates`, however often the picker remounts; a
+ * new step reads its own. Nothing shows when there is no next step, or before the endpoint exists;
  * the action then goes to everyone with the role, as it always did.
  */
-export function ForwardToPicker({ loanId, value, onChange, disabled, error }: ForwardToPickerProps) {
-  const fetcher = useCallback(() => loanApprovalService.forwardCandidates(loanId), [loanId]);
+export function ForwardToPicker({
+  loanId,
+  stepKey,
+  readCandidates,
+  value,
+  onChange,
+  disabled,
+  error,
+}: ForwardToPickerProps) {
+  const fetcher = useCallback(
+    () => readCandidates(`${loanId}:${stepKey}`, () => loanApprovalService.forwardCandidates(loanId)),
+    [readCandidates, loanId, stepKey],
+  );
   const candidates = useApiResource(fetcher);
   const options = useMemo(() => forwardOptions(candidates.data), [candidates.data]);
   const fieldId = `forward-to-${loanId}`;

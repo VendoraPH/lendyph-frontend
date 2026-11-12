@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { findPrintable } from "@/lib/printables/catalog";
+import { PrintableRefusedError, findPrintable } from "@/lib/printables/catalog";
 import {
   applyPrintChrome,
   resolvePrintableOrg,
@@ -70,10 +70,15 @@ export function usePrintables(): UsePrintablesResult {
             toast.error("This browser can't open the document for printing.");
             break;
         }
-      } catch {
+      } catch (err) {
         // The catalog's builders already fail soft — a rejected request still
-        // yields a blank form. Reaching here means the open itself broke.
-        toast.error("We couldn't prepare the document. Please try again.");
+        // yields a blank form — except where the server refused the record,
+        // which says why in its own words. Otherwise the open itself broke.
+        toast.error(
+          err instanceof PrintableRefusedError
+            ? err.message
+            : "We couldn't prepare the document. Please try again."
+        );
       } finally {
         setPendingId(null);
       }

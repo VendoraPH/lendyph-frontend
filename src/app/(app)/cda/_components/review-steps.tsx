@@ -1,6 +1,7 @@
 import { Check, CornerUpLeft } from "lucide-react";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/format";
+import { roleLabelFromServer } from "@/lib/role-display-name";
 import { cn } from "@/lib/utils";
 import { reviewRound, stepStatusMeta } from "../_lib/review-chain";
 import { ToneBadge } from "./tone-badge";
@@ -73,7 +74,7 @@ export function ReviewSteps({ steps }: { steps: CdaApprovalStep[] }) {
                     <ToneBadge tone={meta.tone} label={meta.label} />
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {step.role_label}
+                    {roleLabelFromServer(step.role, step.role_label)}
                     {step.status_label && ` · ${step.status_label}`}
                   </p>
                   {step.acted_at && (

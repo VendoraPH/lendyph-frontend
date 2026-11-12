@@ -33,6 +33,7 @@ import {
 } from "./templates/share-capital-certificate";
 import { PRINT_PAGE_SIZE, type PrintableBuildOptions } from "./templates/shared";
 import { PRINTABLE_TITLES } from "@/lib/page-titles";
+import { getErrorMessage, httpStatusOf } from "@/lib/api-error";
 
 /**
  * Fetch wiring + the catalog itself, mirroring
@@ -50,7 +51,29 @@ type TemplateBuilder = (
 ) => PrintableDocument;
 
 /**
- * A failed request must still produce a document.
+ * The server refused to give this record's document (a 422: a disclosure for a
+ * loan that's still for approval, say). That isn't the API being unreachable,
+ * so no blank form opens: the message, in the server's words, says why.
+ */
+export class PrintableRefusedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PrintableRefusedError";
+  }
+}
+
+function refusedOrNull(err: unknown): null {
+  if (httpStatusOf(err) === 422) {
+    throw new PrintableRefusedError(
+      getErrorMessage(err, "This document can't be printed for this record yet."),
+    );
+  }
+  return null;
+}
+
+/**
+ * A failed request must still produce a document, unless the server refused
+ * it (`PrintableRefusedError`, above).
  *
  * This is the printables' version of `reportBuilder`'s soft failure, and it
  * matters more here than it does for a report: a blank release voucher or
@@ -63,7 +86,7 @@ function printableBuilder(fetcher: SubjectFetcher, build: TemplateBuilder) {
     // The detail page blocks the action until a subject is picked, so this
     // guards a malformed call rather than an expected state.
     if (!ctx.subjectId) return build(null, { org: ctx.org });
-    const raw = await fetcher(ctx.subjectId).catch(() => null);
+    const raw = await fetcher(ctx.subjectId).catch(refusedOrNull);
     const doc = build(raw, { org: ctx.org });
     return raw === null ? doc : { ...doc, subjectId: ctx.subjectId };
   };

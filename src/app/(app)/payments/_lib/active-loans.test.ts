@@ -11,6 +11,7 @@ import {
   activeLoanDueCell,
   activeLoanListParams,
   loanHasBuildUp,
+  activeLoanRateText,
   mapLoanToActiveLoan,
   normaliseLoanSearch,
   pageAfterEmptyAnswer,
@@ -200,6 +201,19 @@ test("a full loan fills in the dialog's figures", () => {
   assert.equal(loan.interest_rate, 1.5);
   assert.equal(loan.interest_type, "diminishing");
   assert.equal(loan.amount_due_now?.amount, 2000);
+});
+
+test("the dialog's rate reads with the period it is quoted per", () => {
+  assert.equal(
+    activeLoanRateText(mapLoanToActiveLoan(summaryRow({ interest_rate: 18, interest_rate_frequency: "annual" }))),
+    "18% per year",
+  );
+  assert.equal(
+    activeLoanRateText(mapLoanToActiveLoan(summaryRow({ interest_rate: "3.00", interest_rate_frequency: "monthly" }))),
+    "3% per month",
+  );
+  assert.equal(activeLoanRateText(mapLoanToActiveLoan(summaryRow({ interest_rate: 3 }))), "3% per month");
+  assert.equal(activeLoanRateText(mapLoanToActiveLoan(summaryRow())), "—");
 });
 
 test("an upon-maturity loan's next due date is its maturity date when the row sends one", () => {

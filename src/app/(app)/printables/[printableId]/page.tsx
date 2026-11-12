@@ -19,7 +19,7 @@ import { searchEmptyMessage, searchStatus, useSearchPage } from "@/hooks/use-sea
 import { cn } from "@/lib/utils";
 import { ArrowLeft, ChevronRight, FileStack, Loader2, Printer } from "lucide-react";
 import { repaymentService } from "@/services";
-import { PRINTABLE_CATALOG, findPrintable } from "@/lib/printables/catalog";
+import { PRINTABLE_CATALOG, PrintableRefusedError, findPrintable } from "@/lib/printables/catalog";
 import { SUBJECT_ACCENT, SUBJECT_META } from "@/lib/printables/types";
 import { applyPrintChrome, resolvePrintableOrg } from "@/lib/printables/print-chrome";
 import { openPrintable } from "@/lib/printables/print-open";
@@ -97,8 +97,13 @@ export default function PrintableDetailPage() {
           toast.error("This browser can't open the document for printing.");
           break;
       }
-    } catch {
-      toast.error("We couldn't prepare the document. Please try again.");
+    } catch (err) {
+      // A record the server refused (a 422) says why; anything else broke the open.
+      toast.error(
+        err instanceof PrintableRefusedError
+          ? err.message
+          : "We couldn't prepare the document. Please try again."
+      );
     } finally {
       setOpening(false);
     }

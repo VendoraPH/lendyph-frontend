@@ -107,6 +107,14 @@ describe("Approve follows the server's available actions", () => {
     assert.equal(approveNote(report(), 9, true), "The “Board review” step is for the BOD Chairwoman role.");
   });
 
+  test("a role with no saved name reads by the screen's own name, never the server's 'Bod1'", () => {
+    const steps = (report().approval_steps ?? []).map((s) => (s.role === "bod1" ? { ...s, role_label: "Bod1" } : s));
+    assert.equal(
+      approveNote(report({ approval_steps: steps }), 9, true),
+      "The “Board review” step is for the BOD1 role.",
+    );
+  });
+
   test("a single review with nobody to explain to says nothing", () => {
     assert.equal(approveNote(report({ approval_steps: [] }), 9, true), null);
   });
