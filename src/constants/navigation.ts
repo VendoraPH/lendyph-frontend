@@ -258,6 +258,7 @@ export const SIDEBAR_NAV: NavItem[] = [
           icon: PiggyBank,
           permission: "savings:view" as const,
           children: [
+            { title: "Dashboard", href: "/savings/dashboard" },
             { title: "Savings Accounts", href: "/savings" },
             { title: "Time Deposits", href: "/savings/time-deposits" },
             { title: "Savings Transactions", href: "/savings/transactions" },

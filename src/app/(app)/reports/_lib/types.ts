@@ -27,7 +27,17 @@ export type ReportId =
   | "savings_interest_postings"
   | "savings_dormant"
   | "savings_statement"
-  | "savings_gl_control";
+  | "savings_gl_control"
+  // The rest of the deposit reports (gap round S5).
+  | "savings_summary"
+  | "savings_accounts"
+  | "savings_deposits"
+  | "savings_withdrawals"
+  | "savings_large_transactions"
+  | "savings_time_deposits"
+  | "savings_interest_accrual"
+  | "savings_account_activity"
+  | "savings_member_statement";
 
 export type ReportCategory =
   | "operations"
@@ -274,6 +284,16 @@ export interface ReportContext {
   branchId?: number | null;
   /** The chosen loan, borrower or savings account id, for subject-scoped reports. */
   subjectId?: number | null;
+  /** null = every product. Only sent for reports with `supportsProduct`. */
+  productId?: number | null;
+  /** The summary's grouping, one of the report's `groupBy` options. */
+  groupBy?: string | null;
+}
+
+/** A report's "Group by" choices; the first is the default. */
+export interface ReportGroupBy {
+  label: string;
+  options: readonly { value: string; label: string }[];
 }
 
 export interface ReportDefinition {
@@ -289,6 +309,12 @@ export interface ReportDefinition {
   };
   /** Set when the API accepts `branch_id`, which enables the branch picker. */
   supportsBranch?: boolean;
+  /** Set when the API accepts a savings `product_id`, which enables the product picker. */
+  supportsProduct?: boolean;
+  /** The kind of savings product the picker lists; every kind when unset. */
+  productKind?: "regular" | "time_deposit";
+  /** Set when the API accepts `group_by`, which shows a "Group by" select. */
+  groupBy?: ReportGroupBy;
   /** Set when the report is scoped to one loan or borrower. */
   subject?: ReportSubject;
   /**
