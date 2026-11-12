@@ -29,6 +29,18 @@ export type IncomeVerification = "verified" | "failed";
 
 export type RiskAlertKind = "score_decline" | "high_risk";
 
+export type ScoreTrend = "up" | "down" | "flat";
+
+/** The member's own type (`borrowers.member_type`). */
+export type MemberType = "regular" | "associate";
+
+/**
+ * How a factor's ranges are read. `at_least`: thresholds fall, and the first
+ * one the value reaches gives its points. `at_most`: thresholds rise, and the
+ * first one the value doesn't exceed gives its points.
+ */
+export type FactorRule = "at_least" | "at_most";
+
 export type EmploymentStatus =
   | "employed"
   | "self_employed"
@@ -222,12 +234,50 @@ export interface ScorecardCategoryConfig {
   description: string;
 }
 
+export interface ScorecardFactorBand {
+  /** At most two decimals, in the factor's `unit`. */
+  threshold: number;
+  points: number;
+}
+
+/**
+ * A factor and its ranges (backend PR #299). The id, category, label, own
+ * points, switch and rule are fixed; the bands, `otherwise` and
+ * `default_points` can be changed.
+ */
 export interface ScorecardFactorRule {
+  id: number;
+  category_key: string;
+  label: string;
+  /** The most the factor can give; every range's points are 0 to this. */
+  points: number;
+  is_active: boolean;
+  rule: FactorRule;
+  /** 1 to 10, in the order they're tried. */
+  bands: ScorecardFactorBand[];
+  /** Points for a value no range takes. */
+  otherwise: number;
+  /** Points for a defaulted or written-off loan; only on a factor that has them. */
+  default_points?: number;
+  /** The threshold's unit in words ("%", "days", "yes (1) or no (0)"). */
+  unit: string;
+}
+
+/**
+ * A factor as the PUT sends it: the fixed fields as the server sent them, and
+ * the ranges as typed (thresholds as text; whole-number points as numbers,
+ * anything else as typed for the server to refuse). `unit` is never sent.
+ */
+export interface ScorecardFactorRuleBody {
   id: number;
   category_key: string;
   label: string;
   points: number;
   is_active: boolean;
+  rule: FactorRule;
+  bands: { threshold: string; points: number | string }[];
+  otherwise: number | string;
+  default_points?: number | string;
 }
 
 export interface PolicyRule {
@@ -253,12 +303,12 @@ export interface ScorecardConfig {
 }
 
 /**
- * The scorecard PUT body. Weights and band minimums go as typed; the rules go
- * back exactly as the server sent them.
+ * The scorecard PUT body. Weights, band minimums and factor ranges go as
+ * typed; policy rules go back exactly as the server sent them.
  */
 export interface UpdateScorecardConfigData {
   categories: { key: string; weight_percent: DecimalValue }[];
-  factor_rules: ScorecardFactorRule[];
+  factor_rules: ScorecardFactorRuleBody[];
   policy_rules: PolicyRule[];
   risk_bands: { key: RiskLevel; min_score: number | string }[];
 }
@@ -269,6 +319,21 @@ export interface RiskMonitoringSummary {
   score_declines_30d: number;
   /** Null for a caller without borrowers:view. */
   new_hard_flags_30d?: number | null;
+  /** Members with a collectible loan past grace, each once. Null without loans:view. */
+  past_due_borrowers: number | null;
+  /** The dashboard's `high_risk_outstanding`: a ₱ string, null without loans:view. */
+  high_risk_exposure: string | null;
+}
+
+/** Scored members by their own current branch. */
+export interface BranchRiskRow {
+  /** Null for members with no branch (shown only to branches:view_all). */
+  branch_id: number | null;
+  branch_name: string | null;
+  members_scored: number;
+  /** Already one decimal; null when no one is scored. */
+  average_score: number | null;
+  risk_distribution: { risk_level: RiskLevel; count: number }[];
 }
 
 export interface CreditScoringDashboardSummary {
@@ -277,6 +342,15 @@ export interface CreditScoringDashboardSummary {
   average_score: number | null;
   insufficient_data_count: number;
   risk_distribution: { risk_level: RiskLevel; count: number }[];
+  branch_risk: BranchRiskRow[];
+  /**
+   * What high and very high risk members still owe on the collectible loans
+   * the caller can see, a ₱ string ("0.00" when nothing); null without
+   * loans:view.
+   */
+  high_risk_outstanding: string | null;
+  /** Members with an open hard flag, or whose risk level dropped a band or more. */
+  scores_due_for_review: number;
   recent_score_changes: CreditScoreHistoryEntry[];
 }
 
@@ -288,13 +362,18 @@ export interface BorrowerScoreRow {
   branch_name: string | null;
   score: number | null;
   risk_level: RiskLevel | null;
-  score_trend: "up" | "down" | "flat" | null;
+  score_trend: ScoreTrend | null;
   /** Null without loans:view. */
   has_active_loan: boolean | null;
   /** Null without loans:view. */
   past_due: boolean | null;
   calculated_at: string | null;
   status: Exclude<ScoreStatus, "not_scored">;
+  /**
+   * What the member still owes on the collectible loans the caller can see, a
+   * ₱ string. Null without loans:view, borrowers:view or the member's branch.
+   */
+  outstanding: string | null;
 }
 
 export interface BorrowerScoreFilters {
@@ -308,6 +387,10 @@ export interface BorrowerScoreFilters {
   has_active_loan?: boolean;
   /** Needs loans:view (422 without it). */
   past_due?: boolean;
+  trend?: ScoreTrend;
+  member_type?: MemberType;
+  /** Members with a collectible loan of this product. Needs loans:view (422 without it). */
+  loan_product_id?: number;
 }
 
 export interface ScoreHistoryFilters {

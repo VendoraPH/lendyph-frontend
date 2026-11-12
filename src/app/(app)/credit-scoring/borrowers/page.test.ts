@@ -26,3 +26,17 @@ test("the search box asks the server once typing settles, from page one, never f
   assert.match(page, /search: memberSearchParam\(search\),/);
   assert.doesNotMatch(page, /res\.data\.filter\(|\.data\.filter\(/);
 });
+
+test("the Outstanding column shows the server's ₱ figure, or a dash when it's null", () => {
+  assert.match(page, /<TableHead className="text-right">Outstanding<\/TableHead>/);
+  assert.match(page, /<TableCell className="text-right tabular-nums">\{pesosOrDash\(row\.outstanding\)\}<\/TableCell>/);
+});
+
+test("trend, member type and loan product are filters; the loan product one only for loans:view", () => {
+  assert.match(page, /trend: optionParam<ScoreTrend>\(trend\),/);
+  assert.match(page, /member_type: optionParam<MemberType>\(memberType\),/);
+  assert.match(page, /loan_product_id: loanProductParam\(loanProduct\),/);
+  assert.match(page, /\{canViewLoans && \(\s*<LoanProductFilter/);
+  assert.match(page, /<TrendFilter/);
+  assert.match(page, /<MemberTypeFilter/);
+});

@@ -9,10 +9,12 @@ import { creditScoringService } from "@/services";
 import { CreditScoringPageHeader } from "../_components/page-header";
 import { MemberCell } from "../_components/member-cell";
 import { ScoreCells } from "../_components/score-cells";
+import { FigureCard } from "../_components/figure-card";
 import { ALERT_KIND_LABELS, ALERT_SEVERITY_LABELS } from "@/lib/credit-scoring/labels";
 import { borrowerLabel } from "@/lib/credit-scoring/borrower-label";
 import { countOrDash } from "@/lib/credit-scoring/score-state";
 import { yesNoOrDash } from "@/lib/credit-scoring/loan-facts";
+import { loanFigureReason, pesosOrDash } from "@/lib/credit-scoring/money";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -32,15 +34,6 @@ const SEVERITY_VARIANT = {
   critical: "destructive",
 } as const;
 
-function Figure({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border bg-card p-4">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1 text-2xl font-semibold">{value}</p>
-    </div>
-  );
-}
-
 function RiskMonitoringContent() {
   const fetcher = useCallback(() => creditScoringService.getRiskMonitoring(), []);
   const resource = useApiResource<RiskMonitoringData>(fetcher);
@@ -59,11 +52,21 @@ function RiskMonitoringContent() {
       >
         {(data) => (
           <div className="space-y-6">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <Figure label="Total Members" value={countOrDash(data.summary.total_borrowers)} />
-              <Figure label="High Risk" value={countOrDash(data.summary.high_risk_count)} />
-              <Figure label="Score Declines (30d)" value={countOrDash(data.summary.score_declines_30d)} />
-              <Figure label="New Hard Flags (30d)" value={countOrDash(data.summary.new_hard_flags_30d)} />
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <FigureCard label="Total Members" value={countOrDash(data.summary.total_borrowers)} />
+              <FigureCard label="High Risk" value={countOrDash(data.summary.high_risk_count)} />
+              <FigureCard label="Score Declines (30d)" value={countOrDash(data.summary.score_declines_30d)} />
+              <FigureCard label="New Hard Flags (30d)" value={countOrDash(data.summary.new_hard_flags_30d)} />
+              <FigureCard
+                label="Past Due Members"
+                value={countOrDash(data.summary.past_due_borrowers)}
+                hiddenReason={loanFigureReason(data.summary.past_due_borrowers)}
+              />
+              <FigureCard
+                label="High Risk Exposure"
+                value={pesosOrDash(data.summary.high_risk_exposure)}
+                hiddenReason={loanFigureReason(data.summary.high_risk_exposure)}
+              />
             </div>
 
             <Card>
