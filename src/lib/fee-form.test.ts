@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildFeeFormulaCheckRequest, buildFeePayload, buildFormulaFields, DEFAULT_FORMULA_SAMPLE, describeFormulaFee,
   describeFormulaInputs, describeFormulaSnapshot, EMPTY_FORMULA_FIELDS, FEE_FORMULA_VARIABLES, FORMULA_FEE_HELP,
-  formulaExpressionError,
+  formatRawPesos, formulaCheckRefusal, formulaExpressionError,
 } from "./fee-form";
 
 const form = { name: " Release fee ", type: "fixed" as const, value: "500", productIds: [7], conditions: {} };
@@ -299,6 +299,7 @@ test("a formula snapshot never shows a raw key", () => {
   assert.ok(view);
   assert.equal(view.formula, "(Principal Amount * 2.5%) / 365");
   assert.equal(view.beforeRounding, "₱6.849315");
+  assert.equal(describeFormulaSnapshot({ formula_expression: "Loan Term", raw_amount: "1234567.500000" })?.beforeRounding, "₱1,234,567.500000");
   const text = [view.formula, ...view.figures, view.beforeRounding].join(" ");
   for (const key of [...Object.keys(INPUTS), "fortnightly_custom", "monthly", "raw_amount"]) {
     assert.equal(text.includes(key), false, key);
@@ -310,4 +311,35 @@ test("a line with no written formula has no snapshot", () => {
   assert.equal(describeFormulaSnapshot({}), null);
   assert.equal(describeFormulaSnapshot({ formula_expression: " ", raw_amount: "1.00" }), null);
   assert.equal(describeFormulaSnapshot({ formula_expression: "Loan Term", formula_inputs: null })?.figures.length, 0);
+});
+
+test("the figure before rounding gets thousands separators and keeps its decimals as sent", () => {
+  assert.equal(formatRawPesos("1000.000000"), "₱1,000.000000");
+  assert.equal(formatRawPesos("6.849315"), "₱6.849315");
+  assert.equal(formatRawPesos("1234567.891234"), "₱1,234,567.891234");
+  assert.equal(formatRawPesos("999"), "₱999");
+  assert.equal(formatRawPesos("100000"), "₱100,000");
+  assert.equal(formatRawPesos("-1500.250000"), "-₱1,500.250000");
+  assert.equal(formatRawPesos(" 12345.000001 "), "₱12,345.000001");
+  assert.equal(formatRawPesos("not a figure"), "₱not a figure");
+});
+
+test("only a refusal of the formula itself blocks saving; a sample loan refusal is a note", () => {
+  const refusal = (errors: Record<string, string[]>) =>
+    formulaCheckRefusal({ response: { status: 422, data: { message: "x", errors } } });
+  assert.deepEqual(refusal({ formula_expression: ["A bracket is opened and never closed."] }), {
+    on: "formula", message: "A bracket is opened and never closed.",
+  });
+  assert.deepEqual(refusal({ sample: ["It works out below ₱0.00."] }), {
+    on: "sample", message: "It works out below ₱0.00.",
+  });
+  assert.deepEqual(refusal({ sample: ["Divides by zero."], formula_expression: ["Use only numbers."] }), {
+    on: "formula", message: "Use only numbers.",
+  });
+  assert.deepEqual(refusal({ term: ["The term must be at least 1."] }), {
+    on: "sample", message: "The term must be at least 1.",
+  });
+  assert.equal(refusal({}), null);
+  assert.equal(formulaCheckRefusal({ response: { status: 500, data: {} } }), null);
+  assert.equal(formulaCheckRefusal(new Error("offline")), null);
 });

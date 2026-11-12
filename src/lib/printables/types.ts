@@ -26,7 +26,8 @@ export type PrintableId =
   | "share_capital_certificate"
   | "member_ledger_card"
   | "time_deposit_certificate"
-  | "savings_passbook";
+  | "savings_passbook"
+  | "savings_receipt";
 
 /**
  * What a template needs picked before it can run. Mirrors the reports'

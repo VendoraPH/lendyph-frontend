@@ -8,7 +8,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { CheckCircle2, AlertCircle } from "lucide-react";
 import { formatCurrencyExact } from "@/lib/format";
 import {
-  FEE_FORMULA_MAX_LENGTH, FEE_FORMULA_VARIABLES, FORMULA_EXPRESSION_HELP, FORMULA_GRAMMAR_HELP,
+  FEE_FORMULA_MAX_LENGTH, FEE_FORMULA_VARIABLES, FORMULA_EXPRESSION_HELP, FORMULA_GRAMMAR_HELP, formatRawPesos,
 } from "@/lib/fee-form";
 import type { FormulaCheck } from "../_hooks/use-formula-check";
 import { FormulaSampleLoan } from "./formula-sample-loan";
@@ -116,6 +116,14 @@ export function FormulaExpressionField({ value, onChange, check, saveError }: Pr
             {state.message}
           </p>
         )}
+        {state.status === "sample" && (
+          <p className="flex items-start gap-1.5 text-amber-700 dark:text-amber-400">
+            <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
+            <span>
+              {state.message} The formula itself is accepted; change the sample loan to see an amount.
+            </span>
+          </p>
+        )}
         {state.status === "failed" && (
           <div className="flex flex-wrap items-center gap-2 text-destructive">
             <AlertCircle className="h-3 w-3 shrink-0" />
@@ -134,7 +142,7 @@ export function FormulaExpressionField({ value, onChange, check, saveError }: Pr
                 <span className="font-medium tabular-nums">{formatCurrencyExact(state.result.amount)}</span>.
               </p>
               <p className="text-muted-foreground">
-                Before rounding: <span className="tabular-nums">₱{state.result.raw_amount}</span>
+                Before rounding: <span className="tabular-nums">{formatRawPesos(state.result.raw_amount)}</span>
               </p>
               {state.result.clamped && <p className="text-muted-foreground">{CLAMP_NOTES[state.result.clamped]}</p>}
             </div>

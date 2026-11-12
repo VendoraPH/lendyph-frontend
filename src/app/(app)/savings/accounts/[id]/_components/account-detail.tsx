@@ -88,7 +88,7 @@ export function AccountDetail({ accountId }: { accountId: number }) {
                 <CardTitle className="text-base">Transactions</CardTitle>
               </CardHeader>
               <CardContent>
-                <TransactionsTable key={ledgerKey} accountId={account.id} onChanged={() => resource.refetch()} />
+                <TransactionsTable key={ledgerKey} account={account} onChanged={() => resource.refetch()} />
               </CardContent>
             </Card>
             <TransactionDialog
