@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { pickYear, withoutYearParam } from "./year";
+import { pickYear } from "./year";
 
 const PERIODS = [{ year: 2026 }, { year: 2025 }, { year: 2024 }];
 
@@ -21,9 +21,4 @@ test("a ?year= that isn't an open period, or isn't a year, is ignored", () => {
 
 test("no open period means no year, whatever the link says", () => {
   assert.equal(pickYear("2026", 2026, []), null);
-});
-
-test("picking a year drops ?year= from the address and keeps the other parameters", () => {
-  assert.equal(withoutYearParam("/cda/mediation", "year=2024&part=h2"), "/cda/mediation?part=h2");
-  assert.equal(withoutYearParam("/cda/calendar", "year=2024"), "/cda/calendar");
 });

@@ -31,11 +31,3 @@ export function pickYear(
   if (year !== null && periods.some((p) => p.year === year)) return year;
   return resolveYear(preferred, periods);
 }
-
-/** The page's address without `?year=`, its other parameters kept: a year picked by hand wins from then on. */
-export function withoutYearParam(pathname: string, search: string): string {
-  const params = new URLSearchParams(search);
-  params.delete("year");
-  const rest = params.toString();
-  return rest ? `${pathname}?${rest}` : pathname;
-}

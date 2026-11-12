@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, type ReactNode } from "react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { DataState } from "@/components/common/data-state";
 import { Card, CardContent } from "@/components/ui/card";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
@@ -12,7 +12,8 @@ import { API_ENDPOINTS } from "@/config/api-endpoints";
 import type { Permission } from "@/types";
 import type { CdaPeriod } from "@/types/cda";
 import { useCdaYearStore } from "../_hooks/use-cda-year";
-import { parseYear, pickYear, withoutYearParam } from "../_lib/year";
+import { parseYear, pickYear } from "../_lib/year";
+import { useCdaYearPicker } from "../_hooks/use-cda-year-picker";
 import { CdaGuard } from "./cda-guard";
 
 export interface CdaPageContext {
@@ -99,24 +100,18 @@ function PageBody({ title, description, actions, noPeriod, yearless, children }:
   const resource = useApiResource(useCallback(() => cdaService.listPeriods(), []));
   const preferred = useCdaYearStore((s) => s.preferred);
   const setPreferred = useCdaYearStore((s) => s.setPreferred);
-  const router = useRouter();
-  const pathname = usePathname();
+  const pick = useCdaYearPicker();
   const searchParams = useSearchParams();
   const linked = searchParams.get("year");
   const periods = resource.data ?? [];
   // A link's ?year= (a notice's) wins over the remembered year while it names
   // an open period, and becomes the remembered one, so the other CDA pages
-  // follow it. Picking a year by hand drops it from the address.
+  // follow it. Changing the year in the app drops it (`useCdaYearPicker`).
   const year = pickYear(linked, preferred, periods);
   const linkedYear = year !== null && year === parseYear(linked ?? "") ? year : null;
   useEffect(() => {
     if (linkedYear !== null) setPreferred(linkedYear);
   }, [linkedYear, setPreferred]);
-
-  function pick(next: number) {
-    setPreferred(next);
-    if (linked !== null) router.replace(withoutYearParam(pathname, searchParams.toString()));
-  }
   const period = periods.find((p) => p.year === year) ?? null;
   const ctx: CdaPageContext | null =
     year !== null && period !== null ? { year, period, periods, reloadPeriods: resource.refetch } : null;
