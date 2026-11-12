@@ -2,7 +2,7 @@
 // can be tested without a browser. Dependency-free, so it runs under
 // `tsx --test`.
 
-import type { StaffMember } from "@/types";
+import type { Permission, StaffMember } from "@/types";
 
 /** Rows per search. Enough to scan; the status line says when there are more. */
 export const STAFF_PAGE_SIZE = 20;
@@ -23,7 +23,42 @@ export function normaliseStaffQuery(raw: string): string {
   return raw.trim().replace(/\s+/g, " ").slice(0, STAFF_SEARCH_MAX_LENGTH).trimEnd();
 }
 
-/** A 403: the caller holds none of `loans:create`, `loans:update` or `loans:restructure`. */
+/**
+ * What an Account Officer picker is for. The loan forms read `GET /staff` on
+ * the loan permissions; the savings opening form asks with `for=savings`,
+ * which the server also lets `savings:create` read (gap round S4). Either way
+ * the rows are the same names-only list.
+ */
+export type StaffPickerPurpose = "loans" | "savings";
+
+export const STAFF_PICKER_PURPOSES: Record<
+  StaffPickerPurpose,
+  { permissions: readonly Permission[]; lockedNote: string }
+> = {
+  loans: {
+    permissions: ["loans:create", "loans:update", "loans:restructure"],
+    lockedNote:
+      "Choosing an account officer needs permission to create, edit or restructure loans, which your role does not have.",
+  },
+  savings: {
+    permissions: ["savings:create"],
+    lockedNote: "Choosing an account officer needs permission to open savings accounts, which your role does not have.",
+  },
+};
+
+/** The `GET /staff` query for one search: `for=savings` only on the savings form. */
+export function staffListParams(
+  purpose: StaffPickerPurpose,
+  search: string,
+): { for?: "savings"; search?: string; per_page: number } {
+  return {
+    ...(purpose === "savings" ? { for: "savings" as const } : {}),
+    ...(search ? { search } : {}),
+    per_page: STAFF_PAGE_SIZE,
+  };
+}
+
+/** A 403: the caller holds none of the purpose's permissions (see `STAFF_PICKER_PURPOSES`). */
 export function isStaffListForbidden(err: unknown): boolean {
   return (err as { response?: { status?: number } } | null)?.response?.status === 403;
 }

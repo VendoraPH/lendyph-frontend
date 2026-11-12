@@ -26,6 +26,7 @@ export function OpeningDetailsFields({ value, onChange, sourceError }: OpeningDe
             id="sv-officer"
             value={value.officer}
             onChange={(officer) => onChange("officer", officer)}
+            purpose="savings"
             clearable
           />
         </FormField>
