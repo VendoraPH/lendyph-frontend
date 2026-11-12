@@ -135,7 +135,7 @@ test("a list answer without the paging figures throws, never an empty page", asy
   await assert.rejects(creditScoringService.getBorrowerScoreHistory(1), /Unexpected list response/);
 });
 
-test("the scorecard PUT carries weights and band minimums exactly as typed", async () => {
+test("the scorecard PUT carries weights, band minimums and factor ranges exactly as typed", async () => {
   respond = () => ({});
   const body = {
     categories: [
@@ -144,7 +144,21 @@ test("the scorecard PUT carries weights and band minimums exactly as typed", asy
       { key: "tenure", weight_percent: "9.5" },
       { key: "behaviour", weight_percent: "30.5" },
     ],
-    factor_rules: [{ id: 1, category_key: "payment_history", label: "On time", points: 10, is_active: true }],
+    factor_rules: [
+      {
+        id: 1,
+        category_key: "payment_history",
+        label: "On time",
+        points: 10,
+        is_active: true,
+        rule: "at_least" as const,
+        bands: [
+          { threshold: "97.50", points: 10 },
+          { threshold: "90", points: 6 },
+        ],
+        otherwise: 0,
+      },
+    ],
     policy_rules: [{ id: 2, label: "Past due", description: "d", is_active: true }],
     risk_bands: [
       { key: "very_low" as const, min_score: 90 },
@@ -253,4 +267,12 @@ test("a member's decisions page on their own route, with the server's details_hi
   assert.equal((await creditScoringService.listBorrowerDecisions(7)).details_hidden, false);
   respond = () => ({ data: [] });
   await assert.rejects(creditScoringService.listBorrowerDecisions(7));
+});
+
+test("the members list sends the trend, member type and loan product filters", async () => {
+  respond = (r) => paginator(rows(1), r.query);
+  await creditScoringService.listBorrowerScores({ trend: "down", member_type: "associate", loan_product_id: 7 });
+  assert.equal(requests[0].query.trend, "down");
+  assert.equal(requests[0].query.member_type, "associate");
+  assert.equal(requests[0].query.loan_product_id, "7");
 });
