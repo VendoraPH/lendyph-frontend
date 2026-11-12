@@ -88,6 +88,10 @@ test("skip reasons read in words, never as the key", () => {
     skipReasonText({ skip_reason: "below_minimum_adb" }),
     "Average daily balance below the product's minimum",
   );
+  assert.equal(
+    skipReasonText({ skip_reason: "below_earning_tier" }),
+    "Below the first tier that earns interest",
+  );
   assert.equal(skipReasonText({ skip_reason: "some_new_key" }), "Not credited");
 });
 

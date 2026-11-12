@@ -450,6 +450,8 @@ export const API_ENDPOINTS = {
     PRODUCT: (id: number) => `/savings/products/${id}`,
     PRODUCT_RATES: (id: number) => `/savings/products/${id}/rates`,
 
+    /** The member check before opening (gap round S1). */
+    OPENING_CHECK: "/savings/opening-check",
     ACCOUNTS: "/savings/accounts",
     ACCOUNT: (id: number) => `/savings/accounts/${id}`,
     ACCOUNT_TRANSACTIONS: (id: number) => `/savings/accounts/${id}/transactions`,
