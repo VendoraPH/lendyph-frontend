@@ -127,6 +127,8 @@ export const API_ENDPOINTS = {
       `/loans/${loanId}/approval-steps/${stepId}/approve`,
     SEND_BACK_STEP: (loanId: number, stepId: number | string) =>
       `/loans/${loanId}/approval-steps/${stepId}/send-back`,
+    /** Who the next step can be forwarded to (`forward_to_user_id` on submit and approve). */
+    FORWARD_CANDIDATES: (loanId: number) => `/loans/${loanId}/approval/forward-candidates`,
   },
   LOAN_ADJUSTMENTS: {
     LIST: (loanId: number) => `/loans/${loanId}/adjustments`,

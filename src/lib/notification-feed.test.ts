@@ -564,3 +564,20 @@ describe("a notice reads its title once", () => {
     assert.equal(item.announceKind, true);
   });
 });
+
+describe("the ready-for-release notice", () => {
+  test('reads "Ready for release" and asks for action', () => {
+    assert.equal(notificationTypeLabel("loan_ready_for_release"), "Ready for release");
+    assert.equal(notificationTone("loan_ready_for_release"), "approval");
+  });
+
+  test("links to the loan, and its title already names the kind", () => {
+    const [item] = buildFeed(
+      [row({ id: "r1", type: "loan_ready_for_release", title: "Loan ready for release", url: "/loans/12" })],
+      NOW,
+    );
+    assert.equal(item.kind, "Ready for release");
+    assert.equal(item.href, "/loans/12");
+    assert.equal(item.announceKind, false);
+  });
+});

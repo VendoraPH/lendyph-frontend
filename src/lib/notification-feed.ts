@@ -158,6 +158,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
   extension_applied: "Extension applied",
   restructure_applied: "Restructure applied",
   adjustment_pending: "Adjustment waiting for approval",
+  loan_ready_for_release: "Ready for release",
   reminder_contact_invalid: "Member contact needs fixing",
   reminder_follow_up: "Reminder follow-up",
   reminder_failed: "Reminder not sent",
@@ -182,6 +183,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
  * other words.
  */
 const KIND_IN_TITLE: ReadonlySet<string> = new Set([
+  "loan_ready_for_release",
   "cda_approval_needed",
   "cda_report_returned",
   "cda_report_finalized",
@@ -205,6 +207,7 @@ export function notificationTone(type: string): NotificationTone {
   switch (type) {
     case "approval_needed":
     case "adjustment_pending":
+    case "loan_ready_for_release":
     case "cda_approval_needed":
     case "portal_request_submitted":
       return "approval";
