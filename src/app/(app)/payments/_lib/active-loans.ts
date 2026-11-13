@@ -6,22 +6,24 @@ import { rateWithPeriod, readRateFrequency, type RateFrequency } from "@/lib/loa
 import { currencyOrDash, toNumber } from "@/lib/report-format";
 import { interestMethodLabel } from "@/app/(app)/loans/new/_lib/loan-preview";
 import { dueAmountCell, readAmountDueNow, type AmountDueNow } from "@/lib/payment-figures";
+import { isRecoveryPayment } from "@/lib/recovery-payment";
 
 /**
- * The `status` value this screen sends.
+ * The `status` this screen sends: loans that can take a payment.
  *
- * `active` is a virtual status the API expands server-side from
- * `Loan::ACTIVE_STATUSES` (`Loan::scopeForStatus()`), so the set of statuses
- * that counts as "active" is defined once, on the server, and this screen holds
- * no opinion about it. It used to hold one — a private four-entry set including
- * `current` and `past_due`, neither of which is a member of the `loans.status`
- * enum, so neither ever matched a row.
+ * `collectible` is a virtual status the API expands server-side in
+ * `Loan::scopeForStatus()`: today released, ongoing and defaulted, since a
+ * defaulted loan takes recovery payments. The set of statuses that counts is
+ * defined once, on the server, and this screen holds no opinion about it. It
+ * used to hold one — a private four-entry set including `current` and
+ * `past_due`, neither of which is a member of the `loans.status` enum, so
+ * neither ever matched a row.
  *
  * Do NOT replace this with the expansion. Spelling the statuses out here would
  * work today and would be a copy that goes stale the day the set changes — it
- * already changed once.
+ * has already changed twice (`active`, then `collectible`).
  */
-export const ACTIVE_STATUS = "active";
+export const COLLECTIBLE_STATUS = "collectible";
 
 /**
  * GET /loans `view=summary`: rows without schedules. Draining full rows cost
@@ -60,7 +62,7 @@ export function activeLoanListParams(request: {
   perPage: number;
 }): Record<string, unknown> {
   return {
-    status: ACTIVE_STATUS,
+    status: COLLECTIBLE_STATUS,
     view: LOAN_SUMMARY_VIEW,
     ...ACTIVE_LOANS_SORT,
     page: request.page,
@@ -71,11 +73,11 @@ export function activeLoanListParams(request: {
 
 /**
  * For the cards while a search is on. `meta.total` and `meta.totals` follow the
- * request's search, and the cards describe every active loan, so they need an
+ * request's search, and the cards describe every loan to collect, so they need an
  * unsearched read of their own; its one row is not used.
  */
 export function activeLoanCardParams(): Record<string, unknown> {
-  return { status: ACTIVE_STATUS, view: LOAN_SUMMARY_VIEW, per_page: 1 };
+  return { status: COLLECTIBLE_STATUS, view: LOAN_SUMMARY_VIEW, per_page: 1 };
 }
 
 /**
@@ -128,7 +130,7 @@ export function readActiveLoanPage(response: unknown): ActiveLoanPage {
   const lastPage = meta?.last_page;
   return {
     rows: Array.isArray(data) ? (data as Loan[]) : [],
-    // 0 is a real total: "this coop has no active loans".
+    // 0 is a real total: "this coop has no loans to collect".
     total: typeof meta?.total === "number" ? meta.total : null,
     lastPage: typeof lastPage === "number" && lastPage > 0 ? lastPage : 1,
     totals: readLoanListTotals(response),
@@ -248,6 +250,11 @@ export function mapLoanToActiveLoan(loan: Loan): ActiveLoan {
     penalty_note: null,
     has_build_up: loanHasBuildUp(l.scb_amount),
   };
+}
+
+/** Whether a row is a defaulted loan, which takes recovery payments. */
+export function activeLoanIsDefaulted(loan: Pick<ActiveLoan, "status">): boolean {
+  return isRecoveryPayment(loan.status);
 }
 
 /** The loan's rate with its period ("18% per year"), or a dash until the full loan loads. */

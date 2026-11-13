@@ -67,6 +67,7 @@ import {
   ACTIVE_LOANS_PER_PAGE_OPTIONS,
   activeLoanDueCell,
   activeLoanInterestText,
+  activeLoanIsDefaulted,
   isDueSoon,
   type ActiveLoan,
 } from "./_lib/active-loans";
@@ -74,6 +75,8 @@ import { buildPaymentBody, referenceAfterMethodChange } from "./_lib/payment-bod
 import { useActiveLoanPage, useSelectedLoan } from "./_lib/use-active-loan-page";
 import { allocationPenaltyNote } from "@/lib/penalty-months";
 import { PenaltyMonthsNote } from "@/components/common/penalty-months-note";
+import { RecoveryPaymentNote } from "@/components/common/recovery-payment-note";
+import { LOAN_STATUS_COLORS, LOAN_STATUS_LABELS } from "@/constants/loan-status";
 import { checkPaymentAmount } from "./_lib/payment-amount";
 import {
   postPaymentErrorMessage,
@@ -128,6 +131,35 @@ function getLoanPaymentStatus(loan: ActiveLoan) {
     icon: CheckCircle2,
     className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
   };
+}
+
+/**
+ * A row's payment status: a defaulted loan reads "Defaulted" on the loan status
+ * badge; any other reads Overdue, Due Soon or Current. The table and the
+ * dialog show the same one; `size` only changes its text size.
+ */
+function PaymentStatusPill({ loan, size = "sm" }: { loan: ActiveLoan; size?: "sm" | "md" }) {
+  if (activeLoanIsDefaulted(loan)) {
+    return (
+      <Badge variant="outline" className={cn(LOAN_STATUS_COLORS.defaulted, size === "sm" && "text-[10px]")}>
+        {LOAN_STATUS_LABELS.defaulted}
+      </Badge>
+    );
+  }
+  const status = getLoanPaymentStatus(loan);
+  const StatusIcon = status.icon;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium",
+        size === "sm" ? "text-[10px]" : "gap-1.5 px-2.5 text-xs",
+        status.className,
+      )}
+    >
+      <StatusIcon className="size-3" />
+      {status.label}
+    </span>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -339,7 +371,7 @@ function PaymentsContent() {
 
   const needsReference = paymentMethod !== "cash";
 
-  // The cards are the server's figures over every active loan (GET /loans
+  // The cards are the server's figures over every loan to collect (GET /loans
   // `meta.total` and `meta.totals`); a figure it did not send shows a dash.
   // Never add the rows up here.
   const activeLoanCount = list.cards?.total ?? null;
@@ -373,7 +405,7 @@ function PaymentsContent() {
       {/* Summary Cards */}
       <div className="grid gap-4 sm:grid-cols-3">
         <SummaryCard
-          label="Active Loans"
+          label="Loans to Collect"
           value={activeLoanCount !== null ? String(activeLoanCount) : null}
           icon={<Users className="size-5 text-brand-orange" />}
           iconBg="bg-brand-orange/10"
@@ -402,11 +434,11 @@ function PaymentsContent() {
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="flex items-center gap-2 text-base">
             <ReceiptText className="size-4" />
-            Members with Active Loans
+            Members with Loans to Collect
           </CardTitle>
           <div className="relative w-full sm:w-72">
             <Input
-              aria-label="Search active loans"
+              aria-label="Search loans to collect"
               placeholder="Search member, account, or product..."
               value={list.search}
               onChange={(e) => list.setSearch(e.target.value)}
@@ -417,7 +449,7 @@ function PaymentsContent() {
         </CardHeader>
         <CardContent>
           {list.error ? (
-            // Deliberately NOT the empty state. "No active loans found" after a
+            // Deliberately NOT the empty state. "No loans to collect" after a
             // failed request tells a cashier the member in front of them has
             // nothing to pay, which is a different and much worse claim than
             // "we could not check".
@@ -444,8 +476,8 @@ function PaymentsContent() {
           ) : list.rows.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               {list.query
-                ? `No active loans found matching "${list.query}"`
-                : "No active loans found"}
+                ? `No loans to collect matching "${list.query}"`
+                : "No loans to collect"}
             </div>
           ) : (
             <>
@@ -473,8 +505,6 @@ function PaymentsContent() {
                 </TableHeader>
                 <TableBody>
                   {list.rows.map((loan) => {
-                    const status = getLoanPaymentStatus(loan);
-                    const StatusIcon = status.icon;
                     return (
                       <TableRow
                         key={loan.id}
@@ -518,15 +548,7 @@ function PaymentsContent() {
                           </span>
                         </TableCell>
                         <TableCell className="text-center">
-                          <span
-                            className={cn(
-                              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
-                              status.className
-                            )}
-                          >
-                            <StatusIcon className="size-3" />
-                            {status.label}
-                          </span>
+                          <PaymentStatusPill loan={loan} />
                         </TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>
                           <PermissionButton
@@ -577,6 +599,8 @@ function PaymentsContent() {
 
         {selectedLoan && (
           <div className="space-y-5">
+            <RecoveryPaymentNote status={selectedLoan.status} />
+
             {/* Loan Summary */}
             <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
               <div className="flex items-start justify-between">
@@ -586,16 +610,7 @@ function PaymentsContent() {
                     {selectedLoan.loan_account_number} &middot; {selectedLoan.loan_product_name}
                   </p>
                 </div>
-                {(() => {
-                  const s = getLoanPaymentStatus(selectedLoan);
-                  const SIcon = s.icon;
-                  return (
-                    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium", s.className)}>
-                      <SIcon className="size-3" />
-                      {s.label}
-                    </span>
-                  );
-                })()}
+                <PaymentStatusPill loan={selectedLoan} size="md" />
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -1112,7 +1127,7 @@ function PaymentsContent() {
   );
 }
 
-// The page is the list of active loans, and `GET /loans` needs `loans:view`.
+// The page is the list of loans to collect, and `GET /loans` needs `loans:view`.
 export default function PaymentsPage() {
   return (
     <RouteGuard permission="payments:view" pageName="Payments">

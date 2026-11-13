@@ -25,7 +25,7 @@
  */
 
 import { useCallback, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Ban, Clock, Info } from "lucide-react";
+import { AlertTriangle, Ban, CheckCircle2, Clock, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
 import { getErrorMessage } from "@/lib/api-error";
@@ -34,6 +34,7 @@ import { cn } from "@/lib/utils";
 import { dataImportService } from "@/services/data-import.service";
 import type { ImportCounts, ImportRunStatus } from "@/types/data-import";
 import { useImportStatus } from "../_hooks/use-import-status";
+import { ProductMappingGate } from "./product-mapping-table";
 
 /* ------------------------------------------------------------------ */
 /* Pure — unit tested in ./step-processing.test.ts                      */
@@ -131,6 +132,29 @@ export function isStale(
   return typeof secondsSinceLastAdvance === "number" && secondsSinceLastAdvance > threshold;
 }
 
+/**
+ * Whether the run is waiting on the user to match the loan products in their
+ * file. On the server, the next `imports:process` tick (every minute) after a
+ * complete mapping is saved starts importing; nothing else needs calling.
+ */
+export function awaitsMapping(phase: string | null | undefined): boolean {
+  return phase === "awaiting_mapping";
+}
+
+/**
+ * Whether to say the import has been quiet for too long. A run waiting on the
+ * user's product mapping isn't stalled, however long it waits.
+ */
+export function showsStaleWarning(
+  status: { phase?: string | null; seconds_since_last_advance?: number | null } | null | undefined,
+): boolean {
+  if (!status || awaitsMapping(status.phase)) return false;
+  return isStale(status.seconds_since_last_advance);
+}
+
+/** Shown once the mapping is saved, while the run waits for its next tick. */
+export const MAPPING_SAVED_MESSAGE = "Saved. The import continues within a minute.";
+
 /* ------------------------------------------------------------------ */
 
 interface CancelRefusal {
@@ -160,6 +184,8 @@ export function StepProcessing({
 }: StepProcessingProps) {
   const [cancelling, setCancelling] = useState(false);
   const [refusal, setRefusal] = useState<CancelRefusal | null>(null);
+  /** The server's own words for the mapping just saved; null until it is saved. */
+  const [mappingSaved, setMappingSaved] = useState<string[] | null>(null);
   // Fires once. A ref rather than state: the shell moves the step machine on
   // the back of this, and re-firing on every poll would re-enter a step the
   // operator has already left.
@@ -184,7 +210,8 @@ export function StepProcessing({
   });
 
   const progress = useMemo(() => rowProgress(status?.files), [status?.files]);
-  const stale = isStale(status?.seconds_since_last_advance);
+  const stale = showsStaleWarning(status);
+  const waitingOnMapping = awaitsMapping(status?.phase);
   const elapsed = formatElapsed(status?.seconds_since_last_advance);
 
   // Known-not-cancellable only when the SERVER has told us the accepted phases
@@ -309,22 +336,40 @@ export function StepProcessing({
         </div>
       ) : null}
 
-      {status?.phase === "awaiting_mapping" ? (
+      {waitingOnMapping && mappingSaved === null ? (
+        <section aria-labelledby="processing-mapping-heading" className="space-y-3 rounded-lg border p-4">
+          <div>
+            <h3 id="processing-mapping-heading" className="font-medium">
+              Match the loan products in your file
+            </h3>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              Nothing more is imported until every product named in your loans file is matched
+              to a Lendyph loan product. The run and everything uploaded are kept.
+            </p>
+          </div>
+          <ProductMappingGate
+            runId={runId}
+            onMapped={setMappingSaved}
+            continueLabel="Save and continue the import"
+          />
+        </section>
+      ) : null}
+
+      {waitingOnMapping && mappingSaved !== null ? (
         <div
           role="status"
-          className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm"
+          className="flex items-start gap-3 rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-4 text-sm"
         >
-          <Info className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden="true" />
+          <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" aria-hidden="true" />
           <div>
-            <p className="font-medium text-amber-900 dark:text-amber-200">
-              Waiting on the loan product mapping
+            <p className="font-medium text-emerald-900 dark:text-emerald-200">
+              {MAPPING_SAVED_MESSAGE}
             </p>
-            <p className="mt-0.5 text-muted-foreground">
-              Nothing more will happen until every product named in your loans file
-              is matched to a Lendyph loan product. Re-open this import from
-              Settings to finish that step — the run and everything uploaded are
-              kept.
-            </p>
+            {mappingSaved.map((message) => (
+              <p key={message} className="mt-0.5 text-muted-foreground">
+                {message}
+              </p>
+            ))}
           </div>
         </div>
       ) : null}

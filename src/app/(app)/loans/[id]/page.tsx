@@ -267,6 +267,8 @@ import { cn } from "@/lib/utils";
 import { currencyOrDash } from "@/lib/report-format";
 import { penaltyMonthsNote } from "@/lib/penalty-months";
 import { PenaltyMonthsNote } from "@/components/common/penalty-months-note";
+import { RecoveryPaymentNote } from "@/components/common/recovery-payment-note";
+import { canRecordPaymentOn, isRecoveryPayment } from "@/lib/recovery-payment";
 import {
   formatCurrency,
   formatCurrencyExact,
@@ -1986,7 +1988,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
     // calls it partial (premium owed counted), prompt to extend instead of
     // silently posting a partial payment. Until that preview has answered
     // for exactly this amount and date, the payment is not posted at all.
-    if (isUponMaturityLoan && paymentMode === "regular") {
+    // A defaulted loan can't be extended, so its partial payment is simply
+    // recorded.
+    if (isUponMaturityLoan && paymentMode === "regular" && !isRecoveryPayment(loan.status)) {
       const decision = shouldPromptExtend({
         hasOpenPeriod: amountDueNow === null || dueNowHasOpenPeriod(amountDueNow),
         preview: paymentPreview,
@@ -3866,10 +3870,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
                     New Adjustment
                   </PermissionButton>
                 )}
-                {["released", "ongoing", "current", "past_due"].includes(loan.status) && (
+                {canRecordPaymentOn(loan.status) && (
                   // Recording needs payments:create; an upon-maturity payment
                   // is also checked against the server's payment preview,
-                  // which needs payments:view.
+                  // which needs payments:view. A defaulted loan takes recovery
+                  // payments too.
                   <PermissionButton
                     permission={recordPayment.permission}
                     tooltip={recordPayment.tooltip}
@@ -4415,6 +4420,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 : `Record a repayment for loan ${loan.loan_account_number || loan.application_number}.`}
             </DialogDescription>
           </DialogHeader>
+
+          <RecoveryPaymentNote status={loan.status} />
 
           {/* Loan / dues summary */}
           <div className="rounded-lg border bg-muted/30 p-3 sm:p-4 space-y-3">

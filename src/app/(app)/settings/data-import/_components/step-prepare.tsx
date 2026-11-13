@@ -11,7 +11,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, Building2, RotateCw } from "lucide-react";
+import { AlertTriangle, ArrowRight, Building2, Download, RotateCw } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,8 @@ import { useBranches } from "@/hooks";
 import { branchPicker } from "@/lib/user-branches";
 import { useAuthStore } from "@/store";
 import { formatDate } from "@/lib/format";
+import { downloadImportTemplate, IMPORT_TEMPLATES } from "@/lib/import-template";
+import { notifyError } from "@/lib/notify";
 import type { ImportRunStatus } from "@/types/data-import";
 
 import { FileSlot } from "./file-slot";
@@ -284,6 +286,29 @@ export function StepPrepare({
             separate slots because the importer has to be told which is which —
             it cannot work that out from the order you picked them in.
           </p>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {IMPORT_TEMPLATES.map((template) => (
+              <Button
+                key={template.shape}
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  downloadImportTemplate(template).catch(() =>
+                    notifyError(null, "We couldn't download the template. Please try again."),
+                  );
+                }}
+              >
+                <Download className="size-4" aria-hidden="true" />
+                {template.buttonLabel}
+              </Button>
+            ))}
+            <p className="basis-full text-xs text-muted-foreground">
+              Each template is the header row only, with the columns in the order the importer
+              reads them. Keep the header row and add one row per member or loan below it.
+            </p>
+          </div>
 
           <FileSlot
             label="Members file"

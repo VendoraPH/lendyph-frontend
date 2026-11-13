@@ -1,8 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
+  awaitsMapping,
   formatElapsed,
   isStale,
+  MAPPING_SAVED_MESSAGE,
+  showsStaleWarning,
   phaseLabel,
   rowProgress,
   STALE_AFTER_SECONDS,
@@ -126,4 +131,37 @@ test("the threshold is comfortably longer than the server's own batch interval",
   // Batches land about once a minute, so anything under two minutes would cry
   // wolf on a perfectly healthy run.
   assert.ok(STALE_AFTER_SECONDS >= 120);
+});
+
+/* ── waiting on the product mapping ─────────────────────────────────── */
+
+test("a run waiting on the product mapping is waiting on the user", () => {
+  assert.equal(awaitsMapping("awaiting_mapping"), true);
+  for (const phase of ["staging", "importing_loans", "completed", null, undefined]) {
+    assert.equal(awaitsMapping(phase), false, String(phase));
+  }
+});
+
+test("a run waiting on the user is never flagged as stalled, however long it waits", () => {
+  const long = STALE_AFTER_SECONDS * 20;
+  assert.equal(showsStaleWarning({ phase: "awaiting_mapping", seconds_since_last_advance: long }), false);
+  assert.equal(showsStaleWarning({ phase: "importing_loans", seconds_since_last_advance: long }), true);
+  assert.equal(showsStaleWarning({ phase: "importing_loans", seconds_since_last_advance: 30 }), false);
+  assert.equal(showsStaleWarning(null), false);
+});
+
+test("after the mapping is saved, the screen says when the import continues", () => {
+  assert.equal(MAPPING_SAVED_MESSAGE, "Saved. The import continues within a minute.");
+});
+
+test("the Processing step shows the mapping table inline instead of sending the user away", () => {
+  const source = readFileSync(
+    join(process.cwd(), "src/app/(app)/settings/data-import/_components/step-processing.tsx"),
+    "utf8",
+  );
+  assert.match(source, /<ProductMappingGate\s+runId=\{runId\}/);
+  assert.match(source, /continueLabel="Save and continue the import"/);
+  assert.match(source, /Match the loan products in your file/);
+  assert.doesNotMatch(source, /Re-open this import from/);
+  assert.match(source, /const stale = showsStaleWarning\(status\)/);
 });
