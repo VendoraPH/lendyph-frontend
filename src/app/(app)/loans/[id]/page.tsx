@@ -50,7 +50,11 @@ import {
   sendBackFailureAction,
   sendBackReasonError,
 } from "./_lib/send-back-approved";
-import type { LoanApprovalRound, LoanApprovalStep as ChainStep } from "@/types/loan-approval";
+import type {
+  ForwardCandidates,
+  LoanApprovalRound,
+  LoanApprovalStep as ChainStep,
+} from "@/types/loan-approval";
 import {
   NO_SCHEDULE_TOTALS,
   allocationBuildUp,
@@ -118,6 +122,8 @@ import {
 } from "./_lib/release-figures";
 import { MethodReferenceFields } from "@/components/common/method-reference-fields";
 import { releaseConflictOf } from "./_lib/release-conflict";
+import { stepConflictMessage } from "./_lib/step-conflict";
+import { oncePerKey } from "./_lib/once-per-key";
 import { useReleasePreview } from "./_hooks/use-release-preview";
 import { useDeductionsPreview } from "./_hooks/use-deductions-preview";
 import type { PreviewReadState } from "./_hooks/use-preview-read";
@@ -268,7 +274,6 @@ import {
   formatDateISO,
   formatDateObj,
   formatDateTime,
-  formatRate,
   todayDate,
   todayISO,
 } from "@/lib/format";
@@ -284,7 +289,7 @@ import {
 import { loanDisplayStatus } from "@/constants/loan-status";
 import { useDialogOpening } from "@/hooks/use-dialog-opening";
 import type { Loan } from "@/types/loan";
-import { readTermUnit, stepsByCalendarMonth } from "@/lib/loan-terms";
+import { rateWithPeriod, readTermUnit, stepsByCalendarMonth } from "@/lib/loan-terms";
 
 // ── Status Colors ──
 //
@@ -1172,6 +1177,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
     userId: ANYONE_WITH_THE_ROLE,
   });
   const [forwardError, setForwardError] = useState<{ key: string; message: string } | null>(null);
+  // The "Forward to" candidates, read once per pending step for this page.
+  const [readForwardCandidates] = useState(() => oncePerKey<ForwardCandidates>());
   // Index of the step an approver is sending the loan back to. Defaults to
   // the most recent prior approver, falling back to the Loan Processor. See
   // `sendBackTargets` below for the list of valid choices.
@@ -1688,6 +1695,20 @@ function LoanDetail({ loanId }: { loanId: number }) {
     }
   };
 
+  // A step action answered 409: the step the button named isn't waiting any
+  // more. Nothing was recorded, so read the loan and its chain again to show
+  // where it now stands, then show the server's sentence. A failed re-read
+  // stays quiet: the sentence already says to reload.
+  const showStepConflict = async (message: string) => {
+    try {
+      const [updated] = await Promise.all([loadLoan(loan.id, loan), refreshApproval()]);
+      setLoan(updated);
+    } catch {
+      // The conflict toast below already tells the user to reload.
+    }
+    toast.error(message);
+  };
+
   /** Shared guard for the three step actions. Returns false once it has toasted. */
   // A draft whose chain has not been seeded yet: no steps, so no `currentStep`,
   // so every guard keyed on one silently refuses. Submit, Edit and Void all
@@ -1760,6 +1781,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
         forwardedName ? `Submitted for approval. Forwarded to ${forwardedName}.` : "Submitted for approval"
       );
     } catch (err) {
+      const conflict = stepConflictMessage(err);
+      if (conflict) {
+        await showStepConflict(conflict);
+        return;
+      }
       rememberForwardError(err, key);
       notifyError(err, "We couldn't submit for approval. Please try again.");
     } finally {
@@ -1800,6 +1826,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
           : `Approved by ${actedStepName}`
       );
     } catch (err) {
+      const conflict = stepConflictMessage(err);
+      if (conflict) {
+        await showStepConflict(conflict);
+        return;
+      }
       rememberForwardError(err, key);
       notifyError(err, "We couldn't record this approval. Please try again.");
     } finally {
@@ -1838,6 +1869,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
         `${currentStep.name} sent the loan back to ${targetStep.name} for revision.`
       );
     } catch (err) {
+      const conflict = stepConflictMessage(err);
+      if (conflict) {
+        await showStepConflict(conflict);
+        return;
+      }
       notifyError(err, "We couldn't send this back for revision. Please try again.");
     } finally {
       setStepActionLoading(false);
@@ -2490,6 +2526,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   <ForwardToPicker
                     key={`forward-${loan.id}-draft`}
                     loanId={loan.id}
+                    stepKey={forwardKey}
+                    readCandidates={readForwardCandidates}
                     value={forwardTo}
                     onChange={handleForwardChange}
                     disabled={stepActionLoading}
@@ -2830,6 +2868,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
                       <ForwardToPicker
                         key={`forward-${loan.id}-${currentStep.id}`}
                         loanId={loan.id}
+                        stepKey={forwardKey}
+                        readCandidates={readForwardCandidates}
                         value={forwardTo}
                         onChange={handleForwardChange}
                         disabled={stepActionLoading}
@@ -3137,7 +3177,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   Interest Rate
                   {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
                 </p>
-                <p className="text-sm font-medium">{formatRate(loan.interest_rate)}%</p>
+                <p className="text-sm font-medium">
+                  {rateWithPeriod(loan.interest_rate, loan.interest_rate_frequency)}
+                </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground flex items-center gap-1">
@@ -4135,7 +4177,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 <div>
                   <p className="text-xs text-muted-foreground">Interest Rate / Type</p>
                   <p className="text-sm font-medium">
-                    {formatRate(loan.interest_rate)}% / {loanInterestType ? interestMethodLabel(loanInterestType) : "N/A"}
+                    {rateWithPeriod(loan.interest_rate, loan.interest_rate_frequency)} / {loanInterestType ? interestMethodLabel(loanInterestType) : "N/A"}
                   </p>
                 </div>
                 <div>

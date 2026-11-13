@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { roleDisplayName, roleLabelForKey } from "./role-display-name";
+import { roleDisplayName, roleLabelForKey, roleLabelFromServer } from "./role-display-name";
 
 test("a saved display name wins, trimmed", () => {
   assert.equal(roleDisplayName({ name: "admin", display_name: "  Branch Head " }), "Branch Head");
@@ -78,4 +78,24 @@ test("useRoleLabel passes the signed-in user's role details", () => {
   const hook = readFileSync(join(process.cwd(), "src/hooks/use-role-label.ts"), "utf8");
   assert.match(hook, /state\.user\?\.role_details/);
   assert.match(hook, /roleLabelForKey\(key, canListRoles \? roles : undefined, ownRoles\)/);
+});
+
+test("a role the server labels by its key title-cased reads by the screen's own name", () => {
+  // The server falls back to Str::headline("bod1"), "Bod1", when no display
+  // name is saved; every other screen reads the catalog's "BOD1".
+  assert.equal(roleLabelFromServer("bod1", "Bod1"), "BOD1");
+  assert.equal(roleLabelFromServer("bod7", "Bod7"), "BOD7");
+  assert.equal(roleLabelFromServer("loan_processor", "Loan Processor"), roleDisplayName({ name: "loan_processor", display_name: null }));
+});
+
+test("a saved display name the server sends is kept", () => {
+  assert.equal(roleLabelFromServer("bod1", "BOD Chairwoman"), "BOD Chairwoman");
+  assert.equal(roleLabelFromServer("manager", "  Branch Manager "), "Branch Manager");
+});
+
+test("no server label, or no key, still reads in words", () => {
+  assert.equal(roleLabelFromServer("bod2", null), "BOD2");
+  assert.equal(roleLabelFromServer("bod2", ""), "BOD2");
+  assert.equal(roleLabelFromServer("", "Bod2"), "Bod2");
+  assert.equal(roleLabelFromServer(null, null), "");
 });

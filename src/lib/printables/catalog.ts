@@ -53,6 +53,9 @@ import {
   fetchTimeDepositPayload,
 } from "./savings-fetchers";
 import { PRINTABLE_TITLES } from "@/lib/page-titles";
+import { refusedOrNull } from "./refusal";
+
+export { PrintableRefusedError } from "./refusal";
 
 /**
  * Fetch wiring + the catalog itself, mirroring
@@ -70,7 +73,8 @@ type TemplateBuilder = (
 ) => PrintableDocument;
 
 /**
- * A failed request must still produce a document.
+ * A failed request must still produce a document, unless the server refused
+ * it (`PrintableRefusedError`, in `./refusal`).
  *
  * This is the printables' version of `reportBuilder`'s soft failure, and it
  * matters more here than it does for a report: a blank release voucher or
@@ -83,7 +87,7 @@ function printableBuilder(fetcher: SubjectFetcher, build: TemplateBuilder) {
     // The detail page blocks the action until a subject is picked, so this
     // guards a malformed call rather than an expected state.
     if (!ctx.subjectId) return build(null, { org: ctx.org });
-    const raw = await fetcher(ctx.subjectId).catch(() => null);
+    const raw = await fetcher(ctx.subjectId).catch(refusedOrNull);
     const doc = build(raw, { org: ctx.org });
     return raw === null ? doc : { ...doc, subjectId: ctx.subjectId };
   };

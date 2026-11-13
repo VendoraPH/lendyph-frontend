@@ -1,6 +1,7 @@
 import { toast } from "sonner";
 import { applyPrintChrome, resolvePrintableOrg } from "@/lib/printables/print-chrome";
 import { openPrintable } from "@/lib/printables/print-open";
+import { PrintableRefusedError } from "@/lib/printables/refusal";
 import type { SavingsDocument } from "./documents";
 
 /**
@@ -33,7 +34,12 @@ export async function printSavingsDocument(doc: SavingsDocument, subjectId: numb
         toast.error("This browser can't open the document for printing.");
         break;
     }
-  } catch {
-    toast.error(`We couldn't prepare the ${doc.label.toLowerCase()}. Please try again.`);
+  } catch (err) {
+    // A record the server refused (a 422) says why, in its words.
+    toast.error(
+      err instanceof PrintableRefusedError
+        ? err.message
+        : `We couldn't prepare the ${doc.label.toLowerCase()}. Please try again.`
+    );
   }
 }

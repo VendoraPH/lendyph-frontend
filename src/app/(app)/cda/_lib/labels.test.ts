@@ -1,6 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CATEGORY_RESTRICTION, DOCUMENT_CATEGORY_LABELS, SOCIAL_CATEGORY_LABELS, UPLOAD_CATEGORY_LABELS } from "./labels";
+import {
+  ACTION_LABELS,
+  CATEGORY_RESTRICTION,
+  DOCUMENT_CATEGORY_LABELS,
+  SOCIAL_CATEGORY_LABELS,
+  UPLOAD_CATEGORY_LABELS,
+  workflowDoneMessage,
+} from "./labels";
 
 /** `DocumentCategories::LABELS` keys (backend B4), proofs and exports included. */
 const SERVER_DOCUMENT_CATEGORIES = [
@@ -63,4 +70,26 @@ test("every social program category reads in words, member education and financi
   assert.deepEqual(Object.keys(SOCIAL_CATEGORY_LABELS).sort(), [...SERVER_SOCIAL_CATEGORIES].sort());
   assert.equal(SOCIAL_CATEGORY_LABELS.member_education, "Member education");
   assert.equal(SOCIAL_CATEGORY_LABELS.financial_literacy, "Financial literacy");
+});
+
+test("each workflow step's toast reads as a sentence", () => {
+  assert.equal(workflowDoneMessage("submit_for_review", "for_review"), "Sent for review.");
+  assert.equal(workflowDoneMessage("approve", "for_review"), "Step approved.");
+  assert.equal(workflowDoneMessage("approve", "approved"), "Report approved.");
+  assert.equal(workflowDoneMessage("return", "draft"), "Returned for changes.");
+  assert.equal(workflowDoneMessage("mark_for_correction", "for_correction"), "Returned for correction.");
+  assert.equal(workflowDoneMessage("refresh", "draft"), "Figures refreshed.");
+  assert.equal(workflowDoneMessage("finalize", "finalized"), "Report finalized.");
+  assert.equal(workflowDoneMessage("mark_submitted", "submitted"), "Filing with CDA recorded.");
+  assert.equal(workflowDoneMessage("mark_accepted", "accepted"), "Marked accepted by CDA.");
+  assert.equal(workflowDoneMessage("reopen", "draft"), "Report reopened.");
+  assert.equal(workflowDoneMessage("set_stage", "draft"), "Stage changed.");
+});
+
+test("no workflow toast reads like a label with ': done'", () => {
+  for (const action of Object.keys(ACTION_LABELS) as (keyof typeof ACTION_LABELS)[]) {
+    const message = workflowDoneMessage(action, "draft");
+    assert.doesNotMatch(message, /: done/);
+    assert.match(message, /^[A-Z].*\.$/);
+  }
 });

@@ -2,6 +2,7 @@ import type { Loan, PaginatedResponse } from "@/types";
 import type { LoanSummary } from "@/types/loan";
 import { penaltyMonthsNote, type PenaltyMonthsRow } from "@/lib/penalty-months";
 import { daysFromToday } from "@/lib/format";
+import { rateWithPeriod, readRateFrequency, type RateFrequency } from "@/lib/loan-terms";
 import { currencyOrDash, toNumber } from "@/lib/report-format";
 import { dueAmountCell, readAmountDueNow, type AmountDueNow } from "@/lib/payment-figures";
 
@@ -159,6 +160,8 @@ export interface ActiveLoan {
   borrower_id: number;
   loan_product_name: string;
   interest_rate: number | null;
+  /** The period the rate is quoted per; absent on older payloads, which mean monthly. */
+  interest_rate_frequency: RateFrequency;
   interest_type: "fixed" | "diminishing";
   /** Everything owed (principal, interest, penalty, premium); null when not sent. */
   total_outstanding: number | null;
@@ -227,6 +230,7 @@ export function mapLoanToActiveLoan(loan: Loan): ActiveLoan {
     borrower_id: l.borrower?.id ?? l.borrower_id ?? 0,
     loan_product_name: l.loan_product?.name ?? l.loan_product_name ?? "—",
     interest_rate: toNumber(l.interest_rate),
+    interest_rate_frequency: readRateFrequency(l.interest_rate_frequency),
     interest_type: (interestType === "upon_maturity" ? "fixed" : (interestType ?? "fixed")) as ActiveLoan["interest_type"],
     total_outstanding: toNumber(l.total_outstanding),
     status: l.status,
@@ -238,6 +242,11 @@ export function mapLoanToActiveLoan(loan: Loan): ActiveLoan {
     penalty_note: null,
     has_build_up: loanHasBuildUp(l.scb_amount),
   };
+}
+
+/** The loan's rate with its period ("18% per year"), or a dash until the full loan loads. */
+export function activeLoanRateText(loan: ActiveLoan): string {
+  return rateWithPeriod(loan.interest_rate, loan.interest_rate_frequency);
 }
 
 /**

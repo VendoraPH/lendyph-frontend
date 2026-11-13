@@ -7,6 +7,7 @@ import type {
   CdaRequirementStatus,
   CdaWorkflowInput,
 } from "@/types/cda";
+import { roleLabelFromServer } from "@/lib/role-display-name";
 import { HISTORY_ACTION_LABELS, UNKNOWN_LABEL, type Tone } from "./labels";
 
 /**
@@ -81,7 +82,7 @@ export function approveNote(
     (s) => s.status === "approved" && !s.closed && s.step_order < pending.step_order && same(s.acted_by?.id, userId),
   );
   if (earlier) return "You approved an earlier step of this review, so someone else has to approve this one.";
-  return `The “${pending.name}” step is for the ${pending.role_label} role.`;
+  return `The “${pending.name}” step is for the ${roleLabelFromServer(pending.role, pending.role_label)} role.`;
 }
 
 /**

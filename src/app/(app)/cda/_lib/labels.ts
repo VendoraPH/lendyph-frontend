@@ -11,6 +11,7 @@ import type {
   CdaOfficerStatus,
   CdaPesosStatus,
   CdaReportPart,
+  CdaReportStatus,
   CdaReportType,
   CdaSeverity,
   CdaSex,
@@ -179,6 +180,30 @@ export const ACTION_LABELS: Record<CdaWorkflowAction, string> = {
   reopen: "Reopen",
   set_stage: "Change stage",
 };
+
+/** What each workflow step's toast says once the server has done it, as a sentence. */
+const ACTION_DONE: Record<CdaWorkflowAction, string> = {
+  refresh: "Figures refreshed.",
+  submit_for_review: "Sent for review.",
+  return: "Returned for changes.",
+  approve: "Step approved.",
+  finalize: "Report finalized.",
+  mark_submitted: "Filing with CDA recorded.",
+  mark_accepted: "Marked accepted by CDA.",
+  mark_for_correction: "Returned for correction.",
+  reopen: "Report reopened.",
+  set_stage: "Stage changed.",
+};
+
+/**
+ * The toast after a workflow step, from the report the server sent back:
+ * an approve that left the report approved (the last step, or no chain)
+ * says the report is approved; one that moved the chain on says the step is.
+ */
+export function workflowDoneMessage(action: CdaWorkflowAction, status: CdaReportStatus): string {
+  if (action === "approve" && status === "approved") return "Report approved.";
+  return ACTION_DONE[action];
+}
 
 /** History rows carry the workflow actions plus `save` and `refresh`. */
 export const HISTORY_ACTION_LABELS: Record<string, string> = {

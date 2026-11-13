@@ -54,6 +54,14 @@ describe("the forward payload", () => {
 });
 
 describe("the Forward to options", () => {
+  test("a role with no saved name reads by the screen's own name, never the server's 'Bod1'", () => {
+    const options = forwardOptions({
+      next_step: { name: "BOD1", role: "bod1", role_label: "Bod1", kind: "approve" },
+      users: [],
+    });
+    assert.equal(options[0].label, "Anyone with the BOD1 role");
+  });
+
   test("the default reads 'Anyone with the <role> role', then the candidates by name only", () => {
     assert.deepEqual(forwardOptions(CANDIDATES), [
       { value: ANYONE_WITH_THE_ROLE, label: "Anyone with the Board Member 1 role" },

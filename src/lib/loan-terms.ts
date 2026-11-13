@@ -16,6 +16,8 @@
  *   only, never a payment frequency.
  */
 
+import { formatRate } from "./format";
+
 export type TermUnit = "months" | "days";
 
 export type RateFrequency = "daily" | "weekly" | "bi_weekly" | "semi_monthly" | "monthly" | "annual";
@@ -67,6 +69,20 @@ const RATE_PERIOD_WORD: Record<RateFrequency, string> = {
 /** "week", "month", "year" — as in "3% per week". */
 export function ratePeriodWord(rateFrequency: RateFrequency): string {
   return RATE_PERIOD_WORD[rateFrequency];
+}
+
+/**
+ * A loan's rate with the period it is quoted per: "18% per year", "3% per
+ * month". The rate as stored (`formatRate`, never rounded further); a rate
+ * with no period named reads per month, the backend default. A dash when the
+ * payload sent no rate.
+ */
+export function rateWithPeriod(
+  rate: number | string | null | undefined,
+  rateFrequency: unknown,
+): string {
+  if (rate === null || rate === undefined || rate === "") return "—";
+  return `${formatRate(rate)}% per ${ratePeriodWord(readRateFrequency(rateFrequency))}`;
 }
 
 /** "day(s)" / "month(s)" — the noun for a term's unit. */

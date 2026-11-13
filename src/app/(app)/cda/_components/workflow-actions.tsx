@@ -6,7 +6,8 @@ import { usePermission } from "@/hooks";
 import { useAuthStore } from "@/store";
 import { cdaService } from "@/services";
 import { notifySuccess } from "@/lib/notify";
-import { ACTION_LABELS, NEEDS_REASON, STAGES_BY_TYPE, labelOf } from "../_lib/labels";
+import { roleLabelFromServer } from "@/lib/role-display-name";
+import { ACTION_LABELS, NEEDS_REASON, STAGES_BY_TYPE, labelOf, workflowDoneMessage } from "../_lib/labels";
 import { notifyCdaError } from "../_lib/notify-cda";
 import { approveInput, approveNote, reloadsReport, reviewRound } from "../_lib/review-chain";
 import { ReasonDialog } from "./reason-dialog";
@@ -46,7 +47,7 @@ export function WorkflowActions({
     return cdaService
       .runWorkflow(report.id, input)
       .then((next) => {
-        notifySuccess(`${labelOf(ACTION_LABELS, input.action)}: done`);
+        notifySuccess(workflowDoneMessage(input.action, next.status));
         onChange(next);
       })
       .catch((err: unknown) => {
@@ -97,7 +98,7 @@ export function WorkflowActions({
         open={dialog === "approve"}
         onOpenChange={(open) => !open && setDialog(null)}
         stepName={pendingStep?.name ?? ""}
-        roleLabel={pendingStep?.role_label ?? ""}
+        roleLabel={pendingStep ? roleLabelFromServer(pendingStep.role, pendingStep.role_label) : ""}
         last={lastStep}
         onConfirm={(remarks) => run(approveInput(pendingStep, remarks))}
       />

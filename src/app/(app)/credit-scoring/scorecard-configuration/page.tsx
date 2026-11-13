@@ -40,6 +40,9 @@ function ScorecardConfigurationContent() {
   const [errors, setErrors] = useState<SaveErrors>(NO_ERRORS);
   const [note, setNote] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // Held here, above the data a save reloads, so the user stays on the tab
+  // they saved from.
+  const [tab, setTab] = useState<string>("categories");
 
   async function handleSave(config: ScorecardConfig, current: ScorecardDraft) {
     setSaving(true);
@@ -99,7 +102,7 @@ function ScorecardConfigurationContent() {
                 </p>
               )}
 
-              <Tabs defaultValue="categories">
+              <Tabs value={tab} onValueChange={(next) => setTab(String(next))}>
                 <TabsList>
                   <TabsTrigger value="categories">Categories</TabsTrigger>
                   <TabsTrigger value="bands">Risk Bands</TabsTrigger>

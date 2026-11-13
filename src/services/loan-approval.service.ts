@@ -75,16 +75,20 @@ export const loanApprovalService = {
    * Returns nothing useful on purpose: re-read `state()` (and the loan) after,
    * rather than patching what is on screen from a response body.
    * `forward_to_user_id` forwards the step this makes pending, as on submit.
+   *
+   * The body names the step as `step_id` (the step ROW's id, the same as the
+   * URL's): when it isn't the step waiting any more, a late click answers 409
+   * with the server's sentence naming the step the loan is now at.
    */
   approve: async (
     loanId: number,
-    stepId: number | string,
+    stepId: number,
     payload?: ApproveStepPayload,
   ): Promise<void> => {
-    await api.patch(
-      API_ENDPOINTS.LOAN_APPROVAL.APPROVE_STEP(loanId, stepId),
-      payload ?? {},
-    );
+    await api.patch(API_ENDPOINTS.LOAN_APPROVAL.APPROVE_STEP(loanId, stepId), {
+      ...payload,
+      step_id: stepId,
+    });
   },
 
   /**
@@ -93,15 +97,16 @@ export const loanApprovalService = {
    *
    * Opens a new round server-side and leaves `loans.status` at `for_review`.
    * `target_step_order` is a prior step's `index`, and `remarks` is required.
+   * It names its step as `step_id` too, with the same 409 as `approve`.
    */
   sendBack: async (
     loanId: number,
-    stepId: number | string,
+    stepId: number,
     payload: SendBackStepPayload,
   ): Promise<void> => {
-    await api.patch(
-      API_ENDPOINTS.LOAN_APPROVAL.SEND_BACK_STEP(loanId, stepId),
-      payload,
-    );
+    await api.patch(API_ENDPOINTS.LOAN_APPROVAL.SEND_BACK_STEP(loanId, stepId), {
+      ...payload,
+      step_id: stepId,
+    });
   },
 };

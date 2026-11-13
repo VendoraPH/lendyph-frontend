@@ -1,3 +1,4 @@
+import { roleLabelFromServer } from "@/lib/role-display-name";
 import type { ForwardCandidates, ForwardToPayload, LoanApprovalStep } from "@/types/loan-approval";
 
 /** The picker's default: no `forward_to_user_id`, so the step is its role's. */
@@ -18,7 +19,7 @@ export function forwardOptions(candidates: ForwardCandidates | null | undefined)
   if (!next) return [];
   const users = Array.isArray(candidates?.users) ? candidates.users : [];
   return [
-    { value: ANYONE_WITH_THE_ROLE, label: `Anyone with the ${next.role_label} role` },
+    { value: ANYONE_WITH_THE_ROLE, label: `Anyone with the ${roleLabelFromServer(next.role, next.role_label)} role` },
     ...users.map((user) => ({ value: String(user.id), label: user.name })),
   ];
 }

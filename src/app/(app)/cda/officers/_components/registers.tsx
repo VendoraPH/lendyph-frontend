@@ -11,6 +11,7 @@ import { formatDate } from "@/lib/format";
 import type { CdaOfficer, CdaTraining } from "@/types/cda";
 import { RegisterTable, type RegisterColumn } from "../../_components/register-table";
 import { AttachButton, useAttachDocument } from "../../_components/attach-document";
+import { RegisterDocumentsLink } from "../../_components/register-documents-link";
 import { CDA_FILE_ACCEPT } from "../../_components/record-form-dialog";
 import { ToneBadge } from "../../_components/tone-badge";
 import {
@@ -212,6 +213,12 @@ export function OfficerRegisters({ year, onChanged }: { year: number; onChanged:
                     <FileText className="h-4 w-4" />
                   </Button>
                 )}
+                <RegisterDocumentsLink
+                  subject={{ type: "training", id: r.id }}
+                  year={year}
+                  count={r.documents_count}
+                  name={r.title}
+                />
                 <AttachButton subject={{ type: "training", id: r.id, name: r.title }} onAttach={attach.open} />
               </>
             );

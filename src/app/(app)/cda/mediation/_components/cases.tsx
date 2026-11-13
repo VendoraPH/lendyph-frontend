@@ -7,6 +7,7 @@ import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { formatDate } from "@/lib/format";
 import type { CdaMediationCase } from "@/types/cda";
 import { AttachButton, useAttachDocument } from "../../_components/attach-document";
+import { RegisterDocumentsLink } from "../../_components/register-documents-link";
 import { RegisterTable, type RegisterColumn } from "../../_components/register-table";
 import { ToneBadge } from "../../_components/tone-badge";
 import { HALF_LABELS, MEDIATION_STATUS_META, labelOf, toOptions } from "../../_lib/labels";
@@ -83,7 +84,17 @@ export function MediationCases({ year, onChanged }: { year: number; onChanged: (
         onCreate={(v) => cdaService.createMediationCase(year, asCase(v)).then(onChanged)}
         onUpdate={(id, v) => cdaService.updateMediationCase(id, asCase(v)).then(onChanged)}
         onDelete={(id) => cdaService.deleteMediationCase(id).then(onChanged)}
-        rowActions={(r) => <AttachButton subject={{ type: "case", id: r.id, name: `Case ${r.case_number}` }} onAttach={attach.open} />}
+        rowActions={(r) => (
+          <>
+            <RegisterDocumentsLink
+              subject={{ type: "case", id: r.id }}
+              year={year}
+              count={r.documents_count}
+              name={`Case ${r.case_number}`}
+            />
+            <AttachButton subject={{ type: "case", id: r.id, name: `Case ${r.case_number}` }} onAttach={attach.open} />
+          </>
+        )}
       />
       {attach.dialog}
     </>

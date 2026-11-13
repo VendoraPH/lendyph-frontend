@@ -5,9 +5,9 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useDialogOpening, usePermission } from "@/hooks";
 import { toast } from "sonner";
-import { notifyError } from "@/lib/notify";
 import { loanProductService } from "@/services/loan-product.service";
 import { completeRows } from "@/lib/paginate";
+import { productSaveRefusal } from "./_lib/product-save";
 import { decimalInputValue } from "@/lib/percent";
 import { PermissionGate, RouteGuard } from "@/components/common";
 import { Spinner } from "@/components/ui/spinner";
@@ -167,7 +167,8 @@ function ProductFormDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (form: ProductForm) => void;
+  /** Saves the form: null once the server took it, else the server's message. */
+  onSubmit: (form: ProductForm) => Promise<string | null>;
   initialData?: ProductForm;
   /** Shown read-only when the product still holds retired `custom_fees`. */
   retiredFeesNotice?: string | null;
@@ -177,22 +178,35 @@ function ProductFormDialog({
   description: string;
 }) {
   const [form, setForm] = useState<ProductForm>(initialData ?? EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
+  // The server's refusal, shown in the dialog. The dialog stays open on a
+  // refusal so nothing the user typed is lost.
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   if (useDialogOpening(open, initialData)) {
     setForm(initialData ?? EMPTY_FORM);
+    setSaveError(null);
   }
 
   const update = (field: keyof ProductForm, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     const termError = defaultTermError(form);
     if (termError) {
       toast.error(termError);
       return;
     }
-    onSubmit(form);
+    setSaving(true);
+    setSaveError(null);
+    const refusal = await onSubmit(form);
+    setSaving(false);
+    if (refusal !== null) {
+      setSaveError(refusal);
+      return;
+    }
     if (!initialData) setForm(EMPTY_FORM);
     onOpenChange(false);
   };
@@ -715,6 +729,12 @@ function ProductFormDialog({
             </Alert>
           )}
 
+          {saveError && (
+            <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+              {saveError}
+            </p>
+          )}
+
           <div className="flex justify-end gap-3 pt-2">
             <Button
               type="button"
@@ -725,9 +745,10 @@ function ProductFormDialog({
             </Button>
             <Button
               type="submit"
+              disabled={saving}
               className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
             >
-              {initialData ? "Save Changes" : "Create Product"}
+              {saving ? "Saving…" : initialData ? "Save Changes" : "Create Product"}
             </Button>
           </div>
         </form>
@@ -843,7 +864,7 @@ function ProductActionsCell({
   onDelete,
 }: {
   product: LoanProduct;
-  onEdit: (form: ProductForm) => void;
+  onEdit: (form: ProductForm) => Promise<string | null>;
   onToggleStatus: () => void;
   onDelete: () => void;
 }) {
@@ -941,26 +962,34 @@ function LoanProductsContent() {
   const activeCount = products.filter((p) => p.is_active).length;
   const inactiveCount = products.filter((p) => !p.is_active).length;
 
-  const handleAdd = async (form: ProductForm) => {
-    try {
-      const payload = formToApiPayload(form);
-      await loanProductService.create(payload);
-      toast.success("Loan product created");
-      fetchProducts();
-    } catch (err) {
-      notifyError(err, "We couldn't create this loan product. Please try again.");
+  // Each answers null once saved, else the server's message, which the dialog
+  // shows while it stays open on the user's entries.
+  const handleAdd = async (form: ProductForm): Promise<string | null> => {
+    const refusal = await productSaveRefusal(
+      () => loanProductService.create(formToApiPayload(form)),
+      "We couldn't create this loan product. Please try again.",
+    );
+    if (refusal !== null) {
+      toast.error(refusal);
+      return refusal;
     }
+    toast.success("Loan product created");
+    fetchProducts();
+    return null;
   };
 
-  const handleEdit = async (id: number, form: ProductForm) => {
-    try {
-      const payload = formToApiPayload(form);
-      await loanProductService.update(id, payload);
-      toast.success("Loan product updated");
-      fetchProducts();
-    } catch (err) {
-      notifyError(err, "We couldn't update this loan product. Please try again.");
+  const handleEdit = async (id: number, form: ProductForm): Promise<string | null> => {
+    const refusal = await productSaveRefusal(
+      () => loanProductService.update(id, formToApiPayload(form)),
+      "We couldn't update this loan product. Please try again.",
+    );
+    if (refusal !== null) {
+      toast.error(refusal);
+      return refusal;
     }
+    toast.success("Loan product updated");
+    fetchProducts();
+    return null;
   };
 
   const handleToggleStatus = async (id: number) => {

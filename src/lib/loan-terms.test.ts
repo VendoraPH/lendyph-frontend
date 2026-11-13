@@ -5,6 +5,7 @@ import {
   maturityDate,
   rateForDays,
   ratePeriodWord,
+  rateWithPeriod,
   readRateFrequency,
   readTermUnit,
   termDays,
@@ -249,4 +250,25 @@ test("annual is a rate period only, never a payment frequency", () => {
     rows.map((r) => r.days),
     [30, 30],
   );
+});
+
+test("a loan's rate reads with the period it is quoted per", () => {
+  assert.equal(rateWithPeriod(18, "annual"), "18% per year");
+  assert.equal(rateWithPeriod("3.00", "monthly"), "3% per month");
+  assert.equal(rateWithPeriod(1.125, "weekly"), "1.125% per week");
+  assert.equal(rateWithPeriod("0.0525", "daily"), "0.0525% per day");
+  assert.equal(rateWithPeriod(2.5, "semi_monthly"), "2.5% per semi-monthly period");
+  assert.equal(rateWithPeriod(0, "monthly"), "0% per month");
+});
+
+test("a rate with no period named reads per month, the backend default", () => {
+  assert.equal(rateWithPeriod(3, undefined), "3% per month");
+  assert.equal(rateWithPeriod(3, null), "3% per month");
+  assert.equal(rateWithPeriod(3, "upon_maturity"), "3% per month");
+});
+
+test("a rate the payload didn't send reads as a dash", () => {
+  assert.equal(rateWithPeriod(null, "annual"), "—");
+  assert.equal(rateWithPeriod(undefined, "monthly"), "—");
+  assert.equal(rateWithPeriod("", "monthly"), "—");
 });
