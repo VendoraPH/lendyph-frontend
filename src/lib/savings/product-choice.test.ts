@@ -67,6 +67,7 @@ test("a member who can't open any active product is told so; those products stay
     products: [RS, KS],
     kind: "regular",
     eligibleIds: new Set<string>(),
+    heldProductIds: new Set<string>(),
     booksReady: true,
     canManage: true,
   });
@@ -80,6 +81,32 @@ test("a member who can't open any active product is told so; those products stay
     "This member can't open any active product. They may already hold an account in each one, or a product's rules leave them out.",
   );
   assert.equal(choice.empty?.link, null);
+});
+
+// Browser check 5: one reason. A member who already holds every active
+// product reads the member check's own sentence, so the dialog adds none.
+test("a member who already holds an account in every active product gets no second notice", () => {
+  const RS2: P = { id: 5, code: "RS2", name: "Senior Savings", kind: "regular", is_active: true };
+  const choice = productChoice({
+    products: [RS, RS2, KS],
+    kind: "regular",
+    eligibleIds: new Set<string>(),
+    heldProductIds: new Set(["1", "5"]),
+    booksReady: true,
+    canManage: true,
+  });
+  assert.equal(choice.selectable, 0);
+  assert.equal(choice.empty, null);
+  // Holding only some of them, the rest ruled out by the product rules: the dialog's notice explains it.
+  const some = productChoice({
+    products: [RS, RS2],
+    kind: "regular",
+    eligibleIds: new Set<string>(),
+    heldProductIds: new Set(["1"]),
+    booksReady: true,
+    canManage: true,
+  });
+  assert.match(some.empty?.message ?? "", /^This member can't open any active product\./);
 });
 
 test("the member check narrows the active products to the ones the member may open", () => {

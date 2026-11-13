@@ -25,6 +25,7 @@ import { useBooksReady } from "../_hooks/use-books-ready";
 import { PAYMENT_METHOD_OPTIONS } from "../_lib/savings-rules";
 import {
   EMPTY_OPENING_DETAILS,
+  heldProductIds,
   openingProductOptions,
   readOpeningDetails,
   type OpeningDetailsDraft,
@@ -81,6 +82,7 @@ export function OpenAccountDialog({ open, onOpenChange, onOpened }: OpenAccountD
     products: products.data,
     kind: "regular",
     eligibleIds,
+    heldProductIds: eligibleIds && check.data ? heldProductIds(check.data) : null,
     booksReady: books.ready,
     canManage: books.canManage,
   });

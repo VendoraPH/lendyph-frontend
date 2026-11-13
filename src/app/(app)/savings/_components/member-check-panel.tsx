@@ -16,8 +16,8 @@ export function MemberCheckPanel({
   products,
 }: {
   check: ApiResource<SavingsOpeningCheck>;
-  /** The server's products, null while they load: with none active the dialog's own notice gives the reason. */
-  products: ReadonlyArray<Pick<SavingsProduct, "kind" | "is_active">> | null;
+  /** The server's products, null while they load: the dialog's own notice gives the reason unless the member holds every active one. */
+  products: ReadonlyArray<Pick<SavingsProduct, "id" | "kind" | "is_active">> | null;
 }) {
   if (check.loading) {
     return <p className="rounded-lg border p-3 text-sm text-muted-foreground">Checking the member…</p>;

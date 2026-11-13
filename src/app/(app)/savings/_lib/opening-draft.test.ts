@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { SavingsOpeningCheck } from "@/types";
 import {
   EMPTY_OPENING_DETAILS,
+  heldProductIds,
   memberCheckEligibilityNote,
   memberCheckRows,
   openingProductOptions,
@@ -104,38 +105,66 @@ test("the product list offers only the products the server says the member may o
 });
 
 // Browser check 5: one clear reason. With no product turned on, the dialog's
-// own notice explains it, so the member check doesn't add a second sentence.
+// own notice explains it; a member ruled out by the product rules gets the
+// dialog's notice too. The member check keeps its sentence only for a member
+// who already holds an account in every active product.
 const HOLDS_ONE_OF_EACH =
   "The member can't open any more savings products: none is open to them, or they already hold one of each.";
-const NONE_OPEN = { eligible_products: [] };
+const NONE_OPEN = { eligible_products: [], savings_accounts: [] };
+const account = (id: number, productId: number, status: "active" | "dormant" | "frozen" | "closed" = "active") => ({
+  id,
+  account_number: `SA-${id}`,
+  product_id: productId,
+  product_name: null,
+  product_kind: "regular" as const,
+  status,
+  balance: "100.00",
+});
 
 test("with no savings product at all, the member check adds no sentence", () => {
   assert.equal(memberCheckEligibilityNote(NONE_OPEN, []), null);
   // A time deposit product doesn't count: Open Account opens regular savings.
-  assert.equal(memberCheckEligibilityNote(NONE_OPEN, [{ kind: "time_deposit", is_active: true }]), null);
+  assert.equal(memberCheckEligibilityNote(NONE_OPEN, [{ id: 9, kind: "time_deposit", is_active: true }]), null);
 });
 
 test("with only inactive savings products, the member check adds no sentence", () => {
   assert.equal(
     memberCheckEligibilityNote(NONE_OPEN, [
-      { kind: "regular", is_active: false },
-      { kind: "regular", is_active: false },
+      { id: 1, kind: "regular", is_active: false },
+      { id: 2, kind: "regular", is_active: false },
     ]),
     null,
   );
 });
 
-test("when active products exist but the member already holds one of each, the member check says so", () => {
+test("when the member already holds an account in every active product, the member check says so", () => {
+  const holds = { eligible_products: [], savings_accounts: [account(10, 1), account(11, 2, "dormant")] };
   assert.equal(
-    memberCheckEligibilityNote(NONE_OPEN, [
-      { kind: "regular", is_active: true },
-      { kind: "regular", is_active: false },
+    memberCheckEligibilityNote(holds, [
+      { id: 1, kind: "regular", is_active: true },
+      { id: 2, kind: "regular", is_active: true },
+      { id: 3, kind: "regular", is_active: false },
     ]),
     HOLDS_ONE_OF_EACH,
+  );
+  assert.deepEqual([...heldProductIds(holds)].sort(), ["1", "2"]);
+});
+
+test("a member ruled out by the product rules gets no member-check sentence (the dialog's notice explains it)", () => {
+  const active = [
+    { id: 1, kind: "regular" as const, is_active: true },
+    { id: 2, kind: "regular" as const, is_active: true },
+  ];
+  // Holds none.
+  assert.equal(memberCheckEligibilityNote(NONE_OPEN, active), null);
+  // Holds one, ruled out of the other; a closed account doesn't count as held.
+  assert.equal(
+    memberCheckEligibilityNote({ eligible_products: [], savings_accounts: [account(10, 1), account(12, 2, "closed")] }, active),
+    null,
   );
 });
 
 test("while the products load the member check says nothing; a member who can open products reads them by name", () => {
   assert.equal(memberCheckEligibilityNote(NONE_OPEN, null), null);
-  assert.equal(memberCheckEligibilityNote(CHECK, [{ kind: "regular", is_active: true }]), "Can open: Regular Savings.");
+  assert.equal(memberCheckEligibilityNote(CHECK, [{ id: 3, kind: "regular", is_active: true }]), "Can open: Regular Savings.");
 });

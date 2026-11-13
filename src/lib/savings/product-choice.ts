@@ -22,6 +22,12 @@ export interface ProductChoiceInput {
   kind: SavingsProductKind;
   /** The products the member check allows (Open Account); null when there is no member check to follow. */
   eligibleIds?: ReadonlySet<string> | null;
+  /**
+   * The products the member already holds an account in (Open Account). When
+   * they hold every active one, the member check's own sentence is the reason,
+   * so no notice is added.
+   */
+  heldProductIds?: ReadonlySet<string> | null;
   /** `books_ready` from the savings settings; null when it couldn't be read. */
   booksReady: boolean | null;
   /** Whether the user can set up the books and turn products on (`savings:settings`). */
@@ -37,7 +43,11 @@ export interface ProductChoice {
   options: ProductOption[];
   /** How many options can be picked. */
   selectable: number;
-  /** Why nothing can be picked, or null when something can (or the products are still loading). */
+  /**
+   * Why nothing can be picked, or null when something can, the products are
+   * still loading, or the member already holds every active product (the
+   * member check says so).
+   */
   empty: ProductChoiceEmpty | null;
 }
 
@@ -92,7 +102,9 @@ export function productChoice(input: ProductChoiceInput): ProductChoice {
   ];
 
   let empty: ProductChoiceEmpty | null = null;
-  if (open.length === 0) {
+  const held = input.heldProductIds;
+  const holdsEveryActive = !!held && active.length > 0 && active.every((p) => held.has(String(p.id)));
+  if (open.length === 0 && !holdsEveryActive) {
     empty =
       active.length > 0
         ? {
