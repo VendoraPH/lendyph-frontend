@@ -117,6 +117,19 @@ export function productChoice(input: ProductChoiceInput): ProductChoice {
   return { options, selectable: open.length, empty };
 }
 
+/**
+ * The Product field's placeholder. "No product to choose" comes before
+ * "Choose the member first": when nothing can be picked, choosing a member
+ * wouldn't change that, and the notice below says why. `memberChosen` is left
+ * out where there is no member step (Place a time deposit).
+ */
+export function productPlaceholder(input: { choosing: boolean; memberChosen?: boolean; selectable: number }): string {
+  if (input.choosing) return "Loading…";
+  if (input.selectable === 0) return "No product to choose";
+  if (input.memberChosen === false) return "Choose the member first";
+  return "Choose a product";
+}
+
 /** The Term options of the chosen time deposit product, and a placeholder that says what to do. */
 export function termChoice(product: { term_options_days: number[] | null } | null): {
   options: ProductOption[];

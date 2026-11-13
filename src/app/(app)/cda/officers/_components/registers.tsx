@@ -149,7 +149,7 @@ export function OfficerRegisters({ year, onChanged }: { year: number; onChanged:
   const officers = useApiResource(useCallback(() => cdaService.listOfficers({ year }), [year]));
   const trainings = useApiResource(useCallback(() => cdaService.listTrainings({ year }), [year]));
   const fields = useMemo(() => trainingFields(officers.data?.rows ?? []), [officers.data]);
-  const attach = useAttachDocument(year);
+  const attach = useAttachDocument(year, trainings.refetch);
   const changed = () => {
     officers.refetch();
     onChanged();

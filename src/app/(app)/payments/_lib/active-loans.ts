@@ -4,6 +4,7 @@ import { penaltyMonthsNote, type PenaltyMonthsRow } from "@/lib/penalty-months";
 import { daysFromToday } from "@/lib/format";
 import { rateWithPeriod, readRateFrequency, type RateFrequency } from "@/lib/loan-terms";
 import { currencyOrDash, toNumber } from "@/lib/report-format";
+import { interestMethodLabel } from "@/app/(app)/loans/new/_lib/loan-preview";
 import { dueAmountCell, readAmountDueNow, type AmountDueNow } from "@/lib/payment-figures";
 
 /**
@@ -247,6 +248,16 @@ export function mapLoanToActiveLoan(loan: Loan): ActiveLoan {
 /** The loan's rate with its period ("18% per year"), or a dash until the full loan loads. */
 export function activeLoanRateText(loan: ActiveLoan): string {
   return rateWithPeriod(loan.interest_rate, loan.interest_rate_frequency);
+}
+
+/**
+ * The dialog's Interest: the rate with its period, then the method
+ * ("3% per month · Straight (Fixed)"), or a dash until the full loan loads.
+ * A separator rather than brackets, since a method's own label may hold some.
+ */
+export function activeLoanInterestText(loan: ActiveLoan): string {
+  if (loan.interest_rate === null) return "—";
+  return `${activeLoanRateText(loan)} · ${interestMethodLabel(loan.interest_type)}`;
 }
 
 /**

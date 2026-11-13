@@ -8,6 +8,7 @@ import { cdaService, type CdaDocumentSubjectType } from "@/services/cda.service"
 import { notifyError, notifySuccess } from "@/lib/notify";
 import type { Permission } from "@/types";
 import type { RecordValues } from "../_lib/record-form";
+import { attachThenReload } from "../_lib/register-documents";
 import {
   attachCategories,
   attachDefaults,
@@ -50,20 +51,28 @@ export function AttachButton({ subject, onAttach }: { subject: AttachSubject; on
 }
 
 /** The upload form, opened on a row: the year's reports load only once it opens. */
-function AttachForm({ year, subject, onClose }: { year: number; subject: AttachSubject; onClose: () => void }) {
+function AttachForm({
+  year,
+  subject,
+  onClose,
+  onSaved,
+}: {
+  year: number;
+  subject: AttachSubject;
+  onClose: () => void;
+  onSaved?: () => void;
+}) {
   const { can } = usePermission();
   const period = useApiResource(useCallback(() => cdaService.getPeriod(year), [year]));
   const fields = uploadFields(attachCategories(uploadCategories(can), subject.type), reportOptions(period.data?.reports ?? []));
 
   function upload(values: RecordValues, file: File | null): Promise<unknown> {
     if (!file) return Promise.reject(new Error("No file"));
-    return cdaService
-      .uploadDocument(year, toUpload(values, subject), file)
-      .then(() => notifySuccess("Document attached. It's listed under CDA › Documents."))
-      .catch((err: unknown) => {
-        notifyError(err, "Could not attach the document");
-        throw err;
-      });
+    return attachThenReload(() => cdaService.uploadDocument(year, toUpload(values, subject), file), {
+      notifySaved: () => notifySuccess("Document attached. It's listed under CDA › Documents."),
+      notifyFailed: (err) => notifyError(err, "Could not attach the document"),
+      onSaved,
+    });
   }
 
   return (
@@ -84,9 +93,18 @@ function AttachForm({ year, subject, onClose }: { year: number; subject: AttachS
  * Attach on a register: one form for the whole table, opened by a row's
  * AttachButton with that row as the document's subject (`subject_type`,
  * `subject_id`). The category starts on the register's own and can be changed.
+ * `onSaved` reloads the register after an upload, so the row's count updates.
  */
-export function useAttachDocument(year: number) {
+export function useAttachDocument(year: number, onSaved?: () => void) {
   const [subject, setSubject] = useState<AttachSubject | null>(null);
-  const dialog = subject ? <AttachForm key={`${subject.type}-${subject.id}`} year={year} subject={subject} onClose={() => setSubject(null)} /> : null;
+  const dialog = subject ? (
+    <AttachForm
+      key={`${subject.type}-${subject.id}`}
+      year={year}
+      subject={subject}
+      onClose={() => setSubject(null)}
+      onSaved={onSaved}
+    />
+  ) : null;
   return { open: setSubject, dialog };
 }

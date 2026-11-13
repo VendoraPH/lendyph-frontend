@@ -20,7 +20,7 @@ import { savingsService } from "@/services";
 import type { SavingsAccount, SavingsMethod } from "@/types";
 import { useSubmitGuard } from "@/hooks/use-submit-guard";
 import { parseMoneyInput } from "@/lib/money-input";
-import { productChoice } from "@/lib/savings/product-choice";
+import { productChoice, productPlaceholder } from "@/lib/savings/product-choice";
 import { useBooksReady } from "../_hooks/use-books-ready";
 import { PAYMENT_METHOD_OPTIONS } from "../_lib/savings-rules";
 import {
@@ -172,15 +172,7 @@ export function OpenAccountDialog({ open, onOpenChange, onOpened }: OpenAccountD
               value={form.productId}
               onChange={(v) => set("productId", v)}
               options={choice.options}
-              placeholder={
-                choosing
-                  ? "Loading…"
-                  : memberId === null
-                    ? "Choose the member first"
-                    : choice.selectable === 0
-                      ? "No product to choose"
-                      : "Choose a product"
-              }
+              placeholder={productPlaceholder({ choosing, memberChosen: memberId !== null, selectable: choice.selectable })}
               disabled={choosing || memberId === null || choice.options.length === 0}
             />
             {emptyNotice && <ProductChoiceNotice empty={emptyNotice} />}

@@ -122,7 +122,7 @@ export function SocialPrograms({ year, onChanged }: { year: number; onChanged: (
   );
   const officers = useApiResource(useCallback(() => cdaService.listOfficers({ year }), [year]));
   const changed = () => onChanged();
-  const attach = useAttachDocument(year);
+  const attach = useAttachDocument(year, resource.refetch);
 
   const fields = useMemo(() => {
     if (!officers.data) return FIELDS;

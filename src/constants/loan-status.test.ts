@@ -4,8 +4,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   ACTIVE_LOAN_STATUSES,
+  COLLECTIBLE_LOAN_STATUSES,
   EVER_RELEASED_LOAN_STATUSES,
   isActiveLoanStatus,
+  isCollectibleLoanStatus,
   isEverReleasedLoanStatus,
   LOAN_STATUS,
   LOAN_STATUS_COLORS,
@@ -154,6 +156,36 @@ test("an unknown or absent status reads as inactive rather than throwing", () =>
   assert.equal(isActiveLoanStatus(null), false);
   assert.equal(isActiveLoanStatus(""), false);
   assert.equal(isActiveLoanStatus("some_future_status"), false);
+});
+
+// ── the collectible set ────────────────────────────────────────────────────
+//
+// Active means a current loan. A defaulted loan is not active, but it is still
+// owed: the server's collectible loans (released, ongoing, defaulted).
+
+test("the collectible set is released, ongoing and defaulted", () => {
+  assert.deepEqual([...COLLECTIBLE_LOAN_STATUSES], ["released", "ongoing", "defaulted"]);
+});
+
+test("a defaulted loan is collectible but not active", () => {
+  assert.equal(isCollectibleLoanStatus(LOAN_STATUS.DEFAULTED), true);
+  assert.equal(isActiveLoanStatus(LOAN_STATUS.DEFAULTED), false);
+});
+
+test("every collectible status the enum holds, except defaulted, is active", () => {
+  for (const status of COLLECTIBLE_LOAN_STATUSES) {
+    if (status === LOAN_STATUS.DEFAULTED) continue;
+    assert.ok(isActiveLoanStatus(status), status);
+  }
+});
+
+test("finished, never-released and unknown statuses are not collectible", () => {
+  for (const status of ["draft", "for_review", "approved", "rejected", "void", "completed", "restructured", "closed"]) {
+    assert.equal(isCollectibleLoanStatus(status), false, status);
+  }
+  assert.equal(isCollectibleLoanStatus(undefined), false);
+  assert.equal(isCollectibleLoanStatus(null), false);
+  assert.equal(isCollectibleLoanStatus("some_future_status"), false);
 });
 
 // ── the ever-released set ──────────────────────────────────────────────────

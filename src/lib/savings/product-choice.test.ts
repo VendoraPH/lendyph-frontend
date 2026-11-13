@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { SavingsProductKind } from "@/types";
-import { productChoice, termChoice } from "./product-choice";
+import { productChoice, productPlaceholder, termChoice } from "./product-choice";
 
 type P = { id: number; code: string; name: string; kind: SavingsProductKind; is_active: boolean };
 
@@ -146,4 +146,16 @@ test("the Term options are the chosen product's terms, with a placeholder that s
     options: [],
     placeholder: "This product offers no term",
   });
+});
+
+test("the Product placeholder says why nothing can be picked before it asks for the member", () => {
+  // Nothing to choose reads the same with or without a member, as on Place a time deposit.
+  assert.equal(productPlaceholder({ choosing: false, memberChosen: false, selectable: 0 }), "No product to choose");
+  assert.equal(productPlaceholder({ choosing: false, memberChosen: true, selectable: 0 }), "No product to choose");
+  assert.equal(productPlaceholder({ choosing: false, memberChosen: false, selectable: 2 }), "Choose the member first");
+  assert.equal(productPlaceholder({ choosing: false, memberChosen: true, selectable: 2 }), "Choose a product");
+  assert.equal(productPlaceholder({ choosing: true, memberChosen: false, selectable: 0 }), "Loading…");
+  // Place a time deposit has no member step.
+  assert.equal(productPlaceholder({ choosing: false, selectable: 1 }), "Choose a product");
+  assert.equal(productPlaceholder({ choosing: false, selectable: 0 }), "No product to choose");
 });

@@ -55,7 +55,6 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatDate as formatShortDate, todayISO } from "@/lib/format";
-import { interestMethodLabel } from "@/app/(app)/loans/new/_lib/loan-preview";
 import { INSURANCE_PREMIUM_LABEL } from "@/lib/insurance-premium";
 import { currencyOrDash } from "@/lib/report-format";
 import {
@@ -67,7 +66,7 @@ import { getErrorMessage } from "@/lib/api-error";
 import {
   ACTIVE_LOANS_PER_PAGE_OPTIONS,
   activeLoanDueCell,
-  activeLoanRateText,
+  activeLoanInterestText,
   isDueSoon,
   type ActiveLoan,
 } from "./_lib/active-loans";
@@ -625,9 +624,7 @@ function PaymentsContent() {
                 <div>
                   <p className="text-[10px] text-muted-foreground uppercase">Interest</p>
                   <p className="text-sm font-medium">
-                    {selectedLoan.interest_rate !== null
-                      ? `${activeLoanRateText(selectedLoan)} (${interestMethodLabel(selectedLoan.interest_type)})`
-                      : "—"}
+                    {activeLoanInterestText(selectedLoan)}
                   </p>
                 </div>
               </div>

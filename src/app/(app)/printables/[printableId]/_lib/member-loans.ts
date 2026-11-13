@@ -1,4 +1,4 @@
-import { LOAN_STATUS, isActiveLoanStatus } from "@/constants";
+import { LOAN_STATUS, isActiveLoanStatus, isCollectibleLoanStatus } from "@/constants";
 
 /**
  * One member's loans for the printable picker. A member holds a handful, so all
@@ -29,13 +29,14 @@ const NOT_RELEASED: ReadonlySet<string> = new Set([
 /**
  * Which tab a loan is listed under. A draft, a loan still for approval and an
  * approved loan waiting for release have their own tab, so they never read as
- * Closed. Active is the collectible loans: the shared `isActiveLoanStatus`
- * plus a defaulted loan, which is still owed and the usual subject of a demand
- * letter (this picker only; the shared rule is unchanged). Everything else
- * (finished, rejected, void) is Closed.
+ * Closed. Active is the collectible loans (COLLECTIBLE_LOAN_STATUSES), a
+ * defaulted loan included: it is still owed and the usual subject of a demand
+ * letter. `isActiveLoanStatus` adds the old spellings (`current`, `past_due`)
+ * that older payloads carry. Everything else (finished, rejected, void) is
+ * Closed.
  */
 export function loanPickerTab(status: string | null | undefined): LoanPickerTab {
-  if (isActiveLoanStatus(status) || status === LOAN_STATUS.DEFAULTED) return "active";
+  if (isCollectibleLoanStatus(status) || isActiveLoanStatus(status)) return "active";
   if (status && NOT_RELEASED.has(status)) return "not_released";
   return "closed";
 }

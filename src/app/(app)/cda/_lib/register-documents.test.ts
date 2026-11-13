@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  attachThenReload,
   documentsCountLabel,
   linkedDocumentSubject,
   registerDocumentsHref,
@@ -57,4 +58,42 @@ test("each register row shows its count, and the documents list filters by the r
   }
   const documents = readFileSync(join(cda, "documents/_components/documents.tsx"), "utf8");
   assert.match(documents, /cdaService\.listDocuments\(year, subjectDocumentsParams\(subject\)\)/);
+});
+
+test("an Attach that saves tells the user, then reloads the register so the row's count updates", async () => {
+  const steps: string[] = [];
+  await attachThenReload(() => Promise.resolve().then(() => void steps.push("upload")), {
+    notifySaved: () => steps.push("notice"),
+    notifyFailed: () => steps.push("failed"),
+    onSaved: () => steps.push("reload"),
+  });
+  assert.deepEqual(steps, ["upload", "notice", "reload"]);
+});
+
+test("an Attach that fails is reported and rethrown (the form stays open), and nothing reloads", async () => {
+  const steps: string[] = [];
+  const refused = new Error("422");
+  await assert.rejects(
+    attachThenReload(() => Promise.reject(refused), {
+      notifySaved: () => steps.push("notice"),
+      notifyFailed: (err) => steps.push(err === refused ? "failed" : "other"),
+      onSaved: () => steps.push("reload"),
+    }),
+    (err) => err === refused,
+  );
+  assert.deepEqual(steps, ["failed"]);
+});
+
+test("each register reloads its own rows after an Attach", () => {
+  const cda = join(process.cwd(), "src/app/(app)/cda");
+  for (const [file, reload] of [
+    ["officers/_components/registers.tsx", "trainings.refetch"],
+    ["social-audit/_components/programs.tsx", "resource.refetch"],
+    ["mediation/_components/cases.tsx", "resource.refetch"],
+  ]) {
+    const source = readFileSync(join(cda, file), "utf8");
+    assert.ok(source.includes(`useAttachDocument(year, ${reload})`), file);
+  }
+  const attach = readFileSync(join(cda, "_components/attach-document.tsx"), "utf8");
+  assert.match(attach, /attachThenReload\(/);
 });

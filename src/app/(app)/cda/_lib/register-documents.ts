@@ -50,3 +50,25 @@ export function documentsCountLabel(count: number | null | undefined): string | 
   if (count === 0) return "No documents";
   return `${count} ${count === 1 ? "document" : "documents"}`;
 }
+
+/**
+ * A register row's Attach: the upload, then the success notice, then
+ * `onSaved` (the register reloads its rows, so the row's documents count
+ * updates). A failure is reported and rethrown so the form stays open; nothing
+ * reloads.
+ */
+export function attachThenReload(
+  upload: () => Promise<unknown>,
+  after: { notifySaved: () => void; notifyFailed: (err: unknown) => void; onSaved?: () => void },
+): Promise<void> {
+  return upload().then(
+    () => {
+      after.notifySaved();
+      after.onSaved?.();
+    },
+    (err: unknown) => {
+      after.notifyFailed(err);
+      throw err;
+    },
+  );
+}

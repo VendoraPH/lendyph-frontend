@@ -9,6 +9,7 @@ import {
   ACTIVE_LOAN_SEARCH_DEBOUNCE_MS,
   activeLoanCardParams,
   activeLoanDueCell,
+  activeLoanInterestText,
   activeLoanListParams,
   loanHasBuildUp,
   activeLoanRateText,
@@ -214,6 +215,22 @@ test("the dialog's rate reads with the period it is quoted per", () => {
   );
   assert.equal(activeLoanRateText(mapLoanToActiveLoan(summaryRow({ interest_rate: 3 }))), "3% per month");
   assert.equal(activeLoanRateText(mapLoanToActiveLoan(summaryRow())), "—");
+});
+
+test("the dialog's Interest reads the rate and the method side by side, with no brackets inside brackets", () => {
+  assert.equal(
+    activeLoanInterestText(
+      mapLoanToActiveLoan(summaryRow({ interest_rate: 3, interest_rate_frequency: "monthly", interest_type: "straight" })),
+    ),
+    "3% per month · Straight (Fixed)",
+  );
+  assert.equal(
+    activeLoanInterestText(
+      mapLoanToActiveLoan(summaryRow({ interest_rate: 18, interest_rate_frequency: "annual", interest_type: "diminishing" })),
+    ),
+    "18% per year · Diminishing",
+  );
+  assert.equal(activeLoanInterestText(mapLoanToActiveLoan(summaryRow())), "—");
 });
 
 test("an upon-maturity loan's next due date is its maturity date when the row sends one", () => {

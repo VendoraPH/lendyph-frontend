@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/hooks";
 import { tokenManager } from "@/lib/axios-client";
+import { signOut } from "@/lib/sign-out";
 import { notifyError } from "@/lib/notify";
 import { RETURN_PATH_PARAM, safeReturnPath } from "@/lib/password-change-required";
 import { authService } from "@/services";
@@ -138,14 +139,13 @@ export default function ChangePasswordPage() {
   };
 
   const handleLogout = async () => {
-    // Mirrors the header's logout: the backend call is best-effort (and is one
-    // of the three routes still allowed while locked), local cleanup is not.
-    try {
-      await authService.logout();
-    } catch {
-      /* ignore — local cleanup runs unconditionally below */
-    }
-    tokenManager.clearTokens();
+    // Same as the header's Log out (lib/sign-out.ts). Log out is one of the
+    // three routes still allowed while locked.
+    await signOut({
+      getAccessToken: tokenManager.getAccessToken,
+      clearTokens: tokenManager.clearTokens,
+      logout: authService.logout,
+    });
     localStorage.removeItem("lendy_remember_me");
     clearAuth();
     toast.success("Logged out");
