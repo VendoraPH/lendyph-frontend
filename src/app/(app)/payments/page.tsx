@@ -67,6 +67,7 @@ import {
   ACTIVE_LOANS_PER_PAGE_OPTIONS,
   activeLoanDueCell,
   activeLoanInterestText,
+  activeLoanIsDefaulted,
   isDueSoon,
   type ActiveLoan,
 } from "./_lib/active-loans";
@@ -74,6 +75,8 @@ import { buildPaymentBody, referenceAfterMethodChange } from "./_lib/payment-bod
 import { useActiveLoanPage, useSelectedLoan } from "./_lib/use-active-loan-page";
 import { allocationPenaltyNote } from "@/lib/penalty-months";
 import { PenaltyMonthsNote } from "@/components/common/penalty-months-note";
+import { RecoveryPaymentNote } from "@/components/common/recovery-payment-note";
+import { LOAN_STATUS_COLORS, LOAN_STATUS_LABELS } from "@/constants/loan-status";
 import { checkPaymentAmount } from "./_lib/payment-amount";
 import {
   postPaymentErrorMessage,
@@ -518,15 +521,21 @@ function PaymentsContent() {
                           </span>
                         </TableCell>
                         <TableCell className="text-center">
-                          <span
-                            className={cn(
-                              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
-                              status.className
-                            )}
-                          >
-                            <StatusIcon className="size-3" />
-                            {status.label}
-                          </span>
+                          {activeLoanIsDefaulted(loan) ? (
+                            <Badge variant="outline" className={LOAN_STATUS_COLORS.defaulted}>
+                              {LOAN_STATUS_LABELS.defaulted}
+                            </Badge>
+                          ) : (
+                            <span
+                              className={cn(
+                                "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                                status.className
+                              )}
+                            >
+                              <StatusIcon className="size-3" />
+                              {status.label}
+                            </span>
+                          )}
                         </TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>
                           <PermissionButton
@@ -577,6 +586,8 @@ function PaymentsContent() {
 
         {selectedLoan && (
           <div className="space-y-5">
+            <RecoveryPaymentNote status={selectedLoan.status} />
+
             {/* Loan Summary */}
             <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
               <div className="flex items-start justify-between">

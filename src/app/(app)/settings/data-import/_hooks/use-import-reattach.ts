@@ -128,9 +128,10 @@ export function stepForRunStatus(status: {
     case "uploading":
       return "upload";
     // The server has staged the rows and is waiting on the admin to map CSV
-    // product names onto loan products. That is step 2's job.
+    // product names onto loan products. The Processing step shows the mapping
+    // inline while it polls; the Check step returns early for a re-opened run
+    // and never shows it.
     case "awaiting_mapping":
-      return "check";
     case "assembled":
     case "staging":
     case "importing_customers":

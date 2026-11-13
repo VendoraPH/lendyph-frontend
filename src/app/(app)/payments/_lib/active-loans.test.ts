@@ -10,7 +10,9 @@ import {
   activeLoanCardParams,
   activeLoanDueCell,
   activeLoanInterestText,
+  activeLoanIsDefaulted,
   activeLoanListParams,
+  COLLECTIBLE_STATUS,
   loanHasBuildUp,
   activeLoanRateText,
   mapLoanToActiveLoan,
@@ -50,7 +52,7 @@ function summaryRow(overrides: Record<string, unknown> = {}): Loan {
 test("asks the server for one summary page of active loans", () => {
   assert.equal(ACTIVE_LOANS_PER_PAGE, 25);
   assert.deepEqual(activeLoanListParams({ query: "", page: 1, perPage: ACTIVE_LOANS_PER_PAGE }), {
-    status: "active",
+    status: "collectible",
     view: "summary",
     sort: "next_due",
     dir: "asc",
@@ -61,6 +63,28 @@ test("asks the server for one summary page of active loans", () => {
 
 // A cashier's queue: the earliest unpaid due date first, so overdue loans lead
 // every page. The server has to sort it, since a browser sort only sees one page.
+// Defaulted loans take recovery payments, so the list asks for the virtual
+// `collectible` status (released, ongoing and defaulted), expanded on the server.
+test("the list and its cards ask for collectible loans, never a spelled-out set", () => {
+  assert.equal(COLLECTIBLE_STATUS, "collectible");
+  assert.equal(activeLoanListParams({ query: "", page: 1, perPage: 25 }).status, "collectible");
+  assert.equal(activeLoanCardParams().status, "collectible");
+});
+
+test("a defaulted row reads as defaulted; other rows don't", () => {
+  assert.equal(activeLoanIsDefaulted(mapLoanToActiveLoan(summaryRow({ status: "defaulted" }))), true);
+  for (const status of ["released", "ongoing"]) {
+    assert.equal(activeLoanIsDefaulted(mapLoanToActiveLoan(summaryRow({ status }))), false, status);
+  }
+});
+
+test("Payment Entry badges a defaulted row with the loan status badge", () => {
+  const page = readFileSync(join(process.cwd(), "src/app/(app)/payments/page.tsx"), "utf8");
+  assert.match(page, /activeLoanIsDefaulted\(loan\)/);
+  assert.match(page, /className=\{LOAN_STATUS_COLORS\.defaulted\}/);
+  assert.match(page, /\{LOAN_STATUS_LABELS\.defaulted\}/);
+});
+
 test("every page asks the server for the earliest due date first", () => {
   for (const query of ["", "santos"]) {
     const params = activeLoanListParams({ query, page: 2, perPage: 25 });
@@ -71,7 +95,7 @@ test("every page asks the server for the earliest due date first", () => {
 
 test("the search goes to the server with the page", () => {
   assert.deepEqual(activeLoanListParams({ query: "santos", page: 3, perPage: 50 }), {
-    status: "active",
+    status: "collectible",
     view: "summary",
     sort: "next_due",
     dir: "asc",
@@ -92,7 +116,7 @@ test("what was typed is trimmed and inner spaces collapse", () => {
 
 test("the cards' own read is the smallest page of the unsearched list", () => {
   assert.deepEqual(activeLoanCardParams(), {
-    status: "active",
+    status: "collectible",
     view: "summary",
     per_page: 1,
   });

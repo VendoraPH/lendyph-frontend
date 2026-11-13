@@ -6,6 +6,7 @@ import { rateWithPeriod, readRateFrequency, type RateFrequency } from "@/lib/loa
 import { currencyOrDash, toNumber } from "@/lib/report-format";
 import { interestMethodLabel } from "@/app/(app)/loans/new/_lib/loan-preview";
 import { dueAmountCell, readAmountDueNow, type AmountDueNow } from "@/lib/payment-figures";
+import { isRecoveryPayment } from "@/lib/recovery-payment";
 
 /**
  * The `status` value this screen sends.
@@ -22,6 +23,19 @@ import { dueAmountCell, readAmountDueNow, type AmountDueNow } from "@/lib/paymen
  * already changed once.
  */
 export const ACTIVE_STATUS = "active";
+
+/**
+ * The `status` this screen sends: loans that can take a payment.
+ *
+ * `collectible` is a virtual status the API expands server-side in
+ * `Loan::scopeForStatus()`, like `active`: today released, ongoing and
+ * defaulted, since a defaulted loan takes recovery payments. The set is
+ * defined once, on the server, and this screen holds no opinion about it.
+ *
+ * Do NOT replace this with the expansion, for the reason given on
+ * `ACTIVE_STATUS`: a spelled-out copy goes stale the day the set changes.
+ */
+export const COLLECTIBLE_STATUS = "collectible";
 
 /**
  * GET /loans `view=summary`: rows without schedules. Draining full rows cost
@@ -60,7 +74,7 @@ export function activeLoanListParams(request: {
   perPage: number;
 }): Record<string, unknown> {
   return {
-    status: ACTIVE_STATUS,
+    status: COLLECTIBLE_STATUS,
     view: LOAN_SUMMARY_VIEW,
     ...ACTIVE_LOANS_SORT,
     page: request.page,
@@ -75,7 +89,7 @@ export function activeLoanListParams(request: {
  * unsearched read of their own; its one row is not used.
  */
 export function activeLoanCardParams(): Record<string, unknown> {
-  return { status: ACTIVE_STATUS, view: LOAN_SUMMARY_VIEW, per_page: 1 };
+  return { status: COLLECTIBLE_STATUS, view: LOAN_SUMMARY_VIEW, per_page: 1 };
 }
 
 /**
@@ -248,6 +262,11 @@ export function mapLoanToActiveLoan(loan: Loan): ActiveLoan {
     penalty_note: null,
     has_build_up: loanHasBuildUp(l.scb_amount),
   };
+}
+
+/** Whether a row is a defaulted loan, which takes recovery payments. */
+export function activeLoanIsDefaulted(loan: Pick<ActiveLoan, "status">): boolean {
+  return isRecoveryPayment(loan.status);
 }
 
 /** The loan's rate with its period ("18% per year"), or a dash until the full loan loads. */

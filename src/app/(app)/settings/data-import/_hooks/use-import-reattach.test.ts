@@ -38,7 +38,9 @@ test("a phase this build has never heard of is not treated as finished", () => {
 
 test("open phases route to the step that can act on them", () => {
   assert.equal(stepForRunStatus(open("uploading")), "upload");
-  assert.equal(stepForRunStatus(open("awaiting_mapping")), "check");
+  // The Processing step shows the product mapping inline while the run waits
+  // on it. The Check step returns early for a re-opened run and never shows it.
+  assert.equal(stepForRunStatus(open("awaiting_mapping")), "processing");
   assert.equal(stepForRunStatus(open("assembled")), "processing");
   assert.equal(stepForRunStatus(open("staging")), "processing");
   assert.equal(stepForRunStatus(open("importing_customers")), "processing");
@@ -58,6 +60,7 @@ test("a closed run found locally lands on step 1, not on a receipt", () => {
 
 test("an OPEN run resumes at its phase's step regardless of source", () => {
   assert.equal(stepForHit(open("uploading"), "storage"), "upload");
-  assert.equal(stepForHit(open("awaiting_mapping"), "server"), "check");
+  assert.equal(stepForHit(open("awaiting_mapping"), "server"), "processing");
+  assert.equal(stepForHit(open("awaiting_mapping"), "storage"), "processing");
   assert.equal(stepForHit(open("importing_loans"), "url"), "processing");
 });
