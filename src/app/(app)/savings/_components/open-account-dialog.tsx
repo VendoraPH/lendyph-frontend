@@ -149,7 +149,7 @@ export function OpenAccountDialog({ open, onOpenChange, onOpened }: OpenAccountD
             />
           </FormField>
 
-          {memberId !== null && <MemberCheckPanel check={check} />}
+          {memberId !== null && <MemberCheckPanel check={check} products={products.loading ? null : products.data} />}
 
           <FormField
             id="sv-product"

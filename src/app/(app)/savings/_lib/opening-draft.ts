@@ -1,6 +1,7 @@
 import { formatCurrency, formatDate } from "@/lib/format";
 import type {
   SavingsMemberType,
+  SavingsProduct,
   SavingsOpeningCheck,
   SavingsOpeningDetailsInput,
   SavingsSourceOfFunds,
@@ -106,4 +107,20 @@ export function memberCheckRows(check: SavingsOpeningCheck): Array<{ label: stri
 /** The products the server says the member may open, as select options. */
 export function openingProductOptions(check: SavingsOpeningCheck | null): Array<{ value: string; label: string }> {
   return (check?.eligible_products ?? []).map((p) => ({ value: String(p.id), label: `${p.name} (${p.code})` }));
+}
+
+/**
+ * The member check's last line: what the member can open. When no regular
+ * product is active (none exists, or every one is off), the dialog's own
+ * notice gives the reason, so this says nothing; it keeps its sentence only
+ * when active products exist but none is open to the member. Nothing while
+ * the products load.
+ */
+export function memberCheckEligibilityNote(
+  check: Pick<SavingsOpeningCheck, "eligible_products">,
+  products: ReadonlyArray<Pick<SavingsProduct, "kind" | "is_active">> | null,
+): string | null {
+  if (check.eligible_products.length > 0) return `Can open: ${check.eligible_products.map((p) => p.name).join(", ")}.`;
+  if (products === null || !products.some((p) => p.kind === "regular" && p.is_active)) return null;
+  return "The member can't open any more savings products: none is open to them, or they already hold one of each.";
 }

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { SavingsOpeningCheck } from "@/types";
 import {
   EMPTY_OPENING_DETAILS,
+  memberCheckEligibilityNote,
   memberCheckRows,
   openingProductOptions,
   readOpeningDetails,
@@ -100,4 +101,41 @@ test("a zero from the server stays ₱0.00 and 0; withdrawn and deceased read in
 test("the product list offers only the products the server says the member may open", () => {
   assert.deepEqual(openingProductOptions(CHECK), [{ value: "3", label: "Regular Savings (RS)" }]);
   assert.deepEqual(openingProductOptions(null), []);
+});
+
+// Browser check 5: one clear reason. With no product turned on, the dialog's
+// own notice explains it, so the member check doesn't add a second sentence.
+const HOLDS_ONE_OF_EACH =
+  "The member can't open any more savings products: none is open to them, or they already hold one of each.";
+const NONE_OPEN = { eligible_products: [] };
+
+test("with no savings product at all, the member check adds no sentence", () => {
+  assert.equal(memberCheckEligibilityNote(NONE_OPEN, []), null);
+  // A time deposit product doesn't count: Open Account opens regular savings.
+  assert.equal(memberCheckEligibilityNote(NONE_OPEN, [{ kind: "time_deposit", is_active: true }]), null);
+});
+
+test("with only inactive savings products, the member check adds no sentence", () => {
+  assert.equal(
+    memberCheckEligibilityNote(NONE_OPEN, [
+      { kind: "regular", is_active: false },
+      { kind: "regular", is_active: false },
+    ]),
+    null,
+  );
+});
+
+test("when active products exist but the member already holds one of each, the member check says so", () => {
+  assert.equal(
+    memberCheckEligibilityNote(NONE_OPEN, [
+      { kind: "regular", is_active: true },
+      { kind: "regular", is_active: false },
+    ]),
+    HOLDS_ONE_OF_EACH,
+  );
+});
+
+test("while the products load the member check says nothing; a member who can open products reads them by name", () => {
+  assert.equal(memberCheckEligibilityNote(NONE_OPEN, null), null);
+  assert.equal(memberCheckEligibilityNote(CHECK, [{ kind: "regular", is_active: true }]), "Can open: Regular Savings.");
 });
