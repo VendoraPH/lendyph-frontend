@@ -81,8 +81,34 @@ test("a defaulted row reads as defaulted; other rows don't", () => {
 test("Payment Entry badges a defaulted row with the loan status badge", () => {
   const page = readFileSync(join(process.cwd(), "src/app/(app)/payments/page.tsx"), "utf8");
   assert.match(page, /activeLoanIsDefaulted\(loan\)/);
-  assert.match(page, /className=\{LOAN_STATUS_COLORS\.defaulted\}/);
+  assert.match(page, /<Badge variant="outline" className=\{cn\(LOAN_STATUS_COLORS\.defaulted,/);
   assert.match(page, /\{LOAN_STATUS_LABELS\.defaulted\}/);
+});
+
+test("the old `active` status is gone from the module, so nothing can send it again", () => {
+  assert.equal("ACTIVE_STATUS" in activeLoans, false);
+});
+
+test("Payment Entry's dialog badges a defaulted loan Defaulted, the same badge as its row", () => {
+  const page = readFileSync(join(process.cwd(), "src/app/(app)/payments/page.tsx"), "utf8");
+  const dialog = page.slice(page.indexOf("{/* Payment Entry Dialog */}"));
+  assert.match(dialog.slice(0, 3000), /<PaymentStatusPill loan=\{selectedLoan\}/);
+  const table = page.slice(page.indexOf("<TableBody>"), page.indexOf("</TableBody>"));
+  assert.match(table, /<PaymentStatusPill loan=\{loan\}/);
+  assert.doesNotMatch(page, /getLoanPaymentStatus\(selectedLoan\)/);
+});
+
+// The list holds released, ongoing and defaulted loans, so no caption calls
+// them "active".
+test("Payment Entry's captions say loans to collect, never active loans", () => {
+  const page = readFileSync(join(process.cwd(), "src/app/(app)/payments/page.tsx"), "utf8");
+  assert.doesNotMatch(page, /No active loans found/);
+  assert.doesNotMatch(page, /label="Active Loans"/);
+  assert.doesNotMatch(page, /Members with Active Loans/);
+  assert.doesNotMatch(page, /Search active loans/);
+  assert.match(page, /: "No loans to collect"/);
+  assert.match(page, /`No loans to collect matching "\$\{list\.query\}"`/);
+  assert.match(page, /label="Loans to Collect"/);
 });
 
 test("every page asks the server for the earliest due date first", () => {

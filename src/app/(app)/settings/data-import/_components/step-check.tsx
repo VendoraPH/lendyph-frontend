@@ -154,9 +154,10 @@ export interface StepCheckProps {
   /**
    * Render the product-mapping gate under the pre-check, filling
    * `outcome.productMap`. Off by default: the server cannot answer
-   * `GET /product-mapping` until the run has staged, so only the step that owns
-   * `awaiting_mapping` should turn this on. That step can equally render
-   * `<ProductMappingGate>` from `./product-mapping-table` directly.
+   * `GET /product-mapping` until the run has staged. A run waiting at
+   * `awaiting_mapping` belongs to the Processing step (`step-processing.tsx`),
+   * which renders `<ProductMappingGate>` itself while it polls, so this step
+   * never needs to turn this on for it.
    */
   showProductMapping?: boolean;
 }

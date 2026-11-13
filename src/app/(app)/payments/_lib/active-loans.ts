@@ -9,31 +9,19 @@ import { dueAmountCell, readAmountDueNow, type AmountDueNow } from "@/lib/paymen
 import { isRecoveryPayment } from "@/lib/recovery-payment";
 
 /**
- * The `status` value this screen sends.
- *
- * `active` is a virtual status the API expands server-side from
- * `Loan::ACTIVE_STATUSES` (`Loan::scopeForStatus()`), so the set of statuses
- * that counts as "active" is defined once, on the server, and this screen holds
- * no opinion about it. It used to hold one — a private four-entry set including
- * `current` and `past_due`, neither of which is a member of the `loans.status`
- * enum, so neither ever matched a row.
- *
- * Do NOT replace this with the expansion. Spelling the statuses out here would
- * work today and would be a copy that goes stale the day the set changes — it
- * already changed once.
- */
-export const ACTIVE_STATUS = "active";
-
-/**
  * The `status` this screen sends: loans that can take a payment.
  *
  * `collectible` is a virtual status the API expands server-side in
- * `Loan::scopeForStatus()`, like `active`: today released, ongoing and
- * defaulted, since a defaulted loan takes recovery payments. The set is
- * defined once, on the server, and this screen holds no opinion about it.
+ * `Loan::scopeForStatus()`: today released, ongoing and defaulted, since a
+ * defaulted loan takes recovery payments. The set of statuses that counts is
+ * defined once, on the server, and this screen holds no opinion about it. It
+ * used to hold one — a private four-entry set including `current` and
+ * `past_due`, neither of which is a member of the `loans.status` enum, so
+ * neither ever matched a row.
  *
- * Do NOT replace this with the expansion, for the reason given on
- * `ACTIVE_STATUS`: a spelled-out copy goes stale the day the set changes.
+ * Do NOT replace this with the expansion. Spelling the statuses out here would
+ * work today and would be a copy that goes stale the day the set changes — it
+ * has already changed twice (`active`, then `collectible`).
  */
 export const COLLECTIBLE_STATUS = "collectible";
 
@@ -85,7 +73,7 @@ export function activeLoanListParams(request: {
 
 /**
  * For the cards while a search is on. `meta.total` and `meta.totals` follow the
- * request's search, and the cards describe every active loan, so they need an
+ * request's search, and the cards describe every loan to collect, so they need an
  * unsearched read of their own; its one row is not used.
  */
 export function activeLoanCardParams(): Record<string, unknown> {
@@ -142,7 +130,7 @@ export function readActiveLoanPage(response: unknown): ActiveLoanPage {
   const lastPage = meta?.last_page;
   return {
     rows: Array.isArray(data) ? (data as Loan[]) : [],
-    // 0 is a real total: "this coop has no active loans".
+    // 0 is a real total: "this coop has no loans to collect".
     total: typeof meta?.total === "number" ? meta.total : null,
     lastPage: typeof lastPage === "number" && lastPage > 0 ? lastPage : 1,
     totals: readLoanListTotals(response),
