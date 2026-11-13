@@ -68,7 +68,7 @@ const COLUMNS: RegisterColumn<CdaMediationCase>[] = [
 export function MediationCases({ year, onChanged }: { year: number; onChanged: () => void }) {
   const resource = useApiResource(useCallback(() => cdaService.listMediationCases(year), [year]));
   const asCase = (v: RecordValues) => v as CdaMediationCaseInput;
-  const attach = useAttachDocument(year);
+  const attach = useAttachDocument(year, resource.refetch);
   return (
     <>
       <RegisterTable<CdaMediationCase>

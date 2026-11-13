@@ -26,7 +26,15 @@ export const authService = {
       credentials
     ),
 
-  logout: () => api.post(API_ENDPOINTS.AUTH.LOGOUT),
+  /**
+   * Revokes `token` (see lib/sign-out.ts, which clears the stored tokens
+   * first). Sent explicitly because storage is already empty by then, and the
+   * request interceptor only adds a token while one is stored.
+   */
+  logout: (token: string) =>
+    api.post(API_ENDPOINTS.AUTH.LOGOUT, undefined, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
 
   me: () => api.get<User>(API_ENDPOINTS.AUTH.ME),
 

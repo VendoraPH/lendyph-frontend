@@ -178,6 +178,8 @@ export {
   LOAN_STATUS_COLORS,
   ACTIVE_LOAN_STATUSES,
   isActiveLoanStatus,
+  COLLECTIBLE_LOAN_STATUSES,
+  isCollectibleLoanStatus,
   EVER_RELEASED_LOAN_STATUSES,
   isEverReleasedLoanStatus,
 } from "./loan-status";

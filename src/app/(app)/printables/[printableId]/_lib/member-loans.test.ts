@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { isActiveLoanStatus } from "@/constants";
+import { isActiveLoanStatus, isCollectibleLoanStatus } from "@/constants";
 import { LOAN_PICKER_TABS, loanPickerCounts, loanPickerTab, memberLoanParams } from "./member-loans";
 
 describe("one member's loans on the printable picker", () => {
@@ -23,9 +23,11 @@ describe("the picker's tabs", () => {
   });
 
   test("a defaulted loan is still collectible, so it is listed under Active, never Closed", () => {
-    // The usual subject of a demand letter. Only the picker groups it so; the
-    // shared active-loan rule elsewhere still reads it as inactive.
+    // The usual subject of a demand letter. The picker's Active tab is the
+    // collectible loans; the shared active-loan rule (current loans) still
+    // reads it as not active.
     assert.equal(loanPickerTab("defaulted"), "active");
+    assert.equal(isCollectibleLoanStatus("defaulted"), true);
     assert.equal(isActiveLoanStatus("defaulted"), false);
   });
 

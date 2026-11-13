@@ -23,7 +23,7 @@ import { FormField } from "../../_components/field";
 import { OptionSelect } from "../../_components/option-select";
 import { ProductChoiceNotice } from "../../_components/product-choice-notice";
 import { useBooksReady } from "../../_hooks/use-books-ready";
-import { productChoice, termChoice } from "@/lib/savings/product-choice";
+import { productChoice, productPlaceholder, termChoice } from "@/lib/savings/product-choice";
 import { METHOD_LABELS, PAYMENT_METHOD_OPTIONS } from "../../_lib/savings-rules";
 import { MATURITY_INSTRUCTION_OPTIONS, termsOfferedText } from "../../_lib/time-deposit-rules";
 import { checkPlacement, type PlacementForm } from "../_lib/placement-form";
@@ -153,7 +153,7 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
                 value={form.productId}
                 onChange={(v) => setForm((f) => ({ ...f, productId: v, term: "" }))}
                 options={choice.options}
-                placeholder={choosing ? "Loading…" : choice.selectable === 0 ? "No product to choose" : "Choose a product"}
+                placeholder={productPlaceholder({ choosing, selectable: choice.selectable })}
                 disabled={choosing || choice.options.length === 0}
               />
             </FormField>

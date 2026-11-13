@@ -32,6 +32,7 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { authService } from "@/services";
 import { tokenManager } from "@/lib/axios-client";
+import { signOut } from "@/lib/sign-out";
 import {
   detailPageTitle,
   humanizeSegment,
@@ -144,15 +145,14 @@ export function Header({ onMenuClick }: HeaderProps) {
   );
 
   const handleLogout = async () => {
-    // Backend logout can fail (token already revoked, session expired, 500)
-    // but client-side logout must always succeed. Swallow the API error and
-    // proceed with local cleanup + redirect.
-    try {
-      await authService.logout();
-    } catch {
-      /* ignore — local cleanup runs unconditionally below */
-    }
-    tokenManager.clearTokens();
+    // Tokens are cleared before Log out goes out (it carries its own), so the
+    // pollers stop at once and no "Session Expired" dialog shows. Log out is
+    // best effort; local cleanup always runs.
+    await signOut({
+      getAccessToken: tokenManager.getAccessToken,
+      clearTokens: tokenManager.clearTokens,
+      logout: authService.logout,
+    });
     localStorage.removeItem("lendy_remember_me");
     clearAuth();
     toast.success("Logged out");

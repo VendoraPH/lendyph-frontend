@@ -163,18 +163,19 @@ export const LOAN_STATUS_COLORS: Record<LoanStatus, string> = {
 };
 
 /**
- * The statuses that mean the money is out and still owed.
+ * The statuses of a current loan: released and being repaid on its schedule.
  *
  * "Active" vs "inactive" is a distinction the API does not make — it only
  * reports the twelve statuses above — but it is the one staff actually ask for
- * ("show me their live loans"). Defined here rather than inline in the one
- * screen that filters by it, next to the vocabulary it partitions, so the
- * answer cannot drift between screens the way the badge colours did.
+ * ("show me their live loans"). Defined here, next to the vocabulary it
+ * partitions, so the answer cannot drift between screens the way the badge
+ * colours did.
  *
  * `ongoing` is the legacy spelling of `current`; both are live. Everything
- * else — not yet released (`draft`, `for_review`, `approved`), never released
- * (`rejected`, `void`), or finished (`completed`, `defaulted`, `restructured`,
- * `closed`) — is inactive.
+ * else is not active: not yet released (`draft`, `for_review`, `approved`),
+ * never released (`rejected`, `void`), finished (`completed`, `restructured`,
+ * `closed`), or `defaulted`. A defaulted loan is still owed, so it is
+ * collectible (COLLECTIBLE_LOAN_STATUSES) but not active.
  */
 export const ACTIVE_LOAN_STATUSES: readonly LoanStatus[] = [
   LOAN_STATUS.RELEASED,
@@ -193,6 +194,25 @@ export const ACTIVE_LOAN_STATUSES: readonly LoanStatus[] = [
 export function isActiveLoanStatus(status: string | null | undefined): boolean {
   return (
     !!status && (ACTIVE_LOAN_STATUSES as readonly string[]).includes(status)
+  );
+}
+
+/**
+ * The statuses of a loan still owed: the backend's collectible loans (released,
+ * ongoing, defaulted). A defaulted loan is collectible but not active.
+ *
+ * Only values `loans.status` can hold, like EVER_RELEASED_LOAN_STATUSES below.
+ */
+export const COLLECTIBLE_LOAN_STATUSES: readonly LoanStatus[] = [
+  LOAN_STATUS.RELEASED,
+  LOAN_STATUS.ONGOING,
+  LOAN_STATUS.DEFAULTED,
+];
+
+/** Whether a loan status is one of COLLECTIBLE_LOAN_STATUSES. */
+export function isCollectibleLoanStatus(status: string | null | undefined): boolean {
+  return (
+    !!status && (COLLECTIBLE_LOAN_STATUSES as readonly string[]).includes(status)
   );
 }
 
