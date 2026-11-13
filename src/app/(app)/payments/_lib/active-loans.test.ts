@@ -233,6 +233,23 @@ test("the dialog's Interest reads the rate and the method side by side, with no 
   assert.equal(activeLoanInterestText(mapLoanToActiveLoan(summaryRow())), "—");
 });
 
+test("an upon-maturity loan reads its own method, as the loan page does, never Straight (Fixed)", () => {
+  const byMethod = mapLoanToActiveLoan(
+    summaryRow({ interest_rate: 5, interest_rate_frequency: "monthly", interest_method: "upon_maturity", interest_type: "fixed" }),
+  );
+  assert.equal(byMethod.interest_type, "upon_maturity");
+  assert.equal(activeLoanInterestText(byMethod), "5% per month · Upon Maturity");
+  const byType = mapLoanToActiveLoan(summaryRow({ interest_rate: 5, interest_type: "upon_maturity" }));
+  assert.equal(activeLoanInterestText(byType), "5% per month · Upon Maturity");
+  // The legacy spelling "fixed" still reads as straight.
+  assert.equal(
+    activeLoanInterestText(mapLoanToActiveLoan(summaryRow({ interest_rate: 3, interest_type: "fixed" }))),
+    "3% per month · Straight (Fixed)",
+  );
+  // A loan that didn't send its method shows the rate alone, never a guessed method.
+  assert.equal(activeLoanInterestText(mapLoanToActiveLoan(summaryRow({ interest_rate: 3 }))), "3% per month");
+});
+
 test("an upon-maturity loan's next due date is its maturity date when the row sends one", () => {
   const loan = mapLoanToActiveLoan(
     summaryRow({ frequency: "upon_maturity", maturity_date: "2027-01-31" }),

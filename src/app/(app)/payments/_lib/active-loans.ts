@@ -163,7 +163,12 @@ export interface ActiveLoan {
   interest_rate: number | null;
   /** The period the rate is quoted per; absent on older payloads, which mean monthly. */
   interest_rate_frequency: RateFrequency;
-  interest_type: "fixed" | "diminishing";
+  /**
+   * The loan's interest method as the server sends it (`interest_method`, else
+   * `interest_type`; "fixed" is the legacy spelling of straight), read in words
+   * by `interestMethodLabel`. Null when the loan didn't say.
+   */
+  interest_type: string | null;
   /** Everything owed (principal, interest, penalty, premium); null when not sent. */
   total_outstanding: number | null;
   status: string;
@@ -232,7 +237,7 @@ export function mapLoanToActiveLoan(loan: Loan): ActiveLoan {
     loan_product_name: l.loan_product?.name ?? l.loan_product_name ?? "—",
     interest_rate: toNumber(l.interest_rate),
     interest_rate_frequency: readRateFrequency(l.interest_rate_frequency),
-    interest_type: (interestType === "upon_maturity" ? "fixed" : (interestType ?? "fixed")) as ActiveLoan["interest_type"],
+    interest_type: interestType || null,
     total_outstanding: toNumber(l.total_outstanding),
     status: l.status,
     next_due_date: isUponMaturity ? maturityDate || l.next_due_date || "" : l.next_due_date || "",
@@ -252,12 +257,15 @@ export function activeLoanRateText(loan: ActiveLoan): string {
 
 /**
  * The dialog's Interest: the rate with its period, then the method
- * ("3% per month · Straight (Fixed)"), or a dash until the full loan loads.
+ * ("3% per month · Straight (Fixed)", "5% per month · Upon Maturity"), the
+ * rate alone when the loan didn't send its method, or a dash until the full
+ * loan loads.
  * A separator rather than brackets, since a method's own label may hold some.
  */
 export function activeLoanInterestText(loan: ActiveLoan): string {
   if (loan.interest_rate === null) return "—";
-  return `${activeLoanRateText(loan)} · ${interestMethodLabel(loan.interest_type)}`;
+  const rate = activeLoanRateText(loan);
+  return loan.interest_type ? `${rate} · ${interestMethodLabel(loan.interest_type)}` : rate;
 }
 
 /**
