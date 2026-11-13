@@ -317,6 +317,19 @@ export interface SavingsAccount extends SavingsOpeningDetails {
   closed_on: string | null;
   close_reason: string | null;
   remarks: string | null;
+  /**
+   * Set while a deposit reactivation's hold is on (gap round B7): every outflow
+   * waits for a checker until one is approved. Null otherwise.
+   */
+  outflow_hold?: { since: string } | null;
+  /**
+   * `GET /savings/accounts/{id}` only (gap round B9): the excess-withdrawal fee
+   * a withdrawal requested today would carry ("0.00" when free), or null when
+   * a withdrawal would be refused.
+   */
+  next_withdrawal_fee?: MoneyString | null;
+  /** Detail only: the free withdrawals left this month; null when the product has no free count (unlimited). */
+  free_withdrawals_left?: number | null;
 }
 
 /**
@@ -390,6 +403,12 @@ export interface SavingsTransaction {
   fee_amount?: MoneyString | null;
   /** On a `fee` row: the withdrawal it was charged on. */
   fee_for_transaction_id?: number | null;
+  /** On a withdrawal with a fee row: its amount plus the fee charged, the server's figure (gap round B9). */
+  total_with_fee?: MoneyString | null;
+  /** The checker whose approval posted the line; null when it posted with no approval (gap round B9). */
+  approved_by?: SavingsUserRef | null;
+  /** The first of two checkers, when the approval needed two (gap round B9). */
+  first_checker?: SavingsUserRef | null;
   /** Null when the system posted it. */
   created_by: SavingsUserRef | null;
   created_at: string | null;
@@ -514,6 +533,8 @@ export interface SavingsApproval {
   amount: MoneyString;
   /** The excess-withdrawal fee it carries besides `amount` ("0.00" when none; gap round S1). */
   fee_amount?: MoneyString;
+  /** `amount` plus `fee_amount` when the fee is above ₱0.00, the server's figure; null otherwise (gap round B9). */
+  total_with_fee?: MoneyString | null;
   /** How many different checkers it needs (2 above the second tier). */
   required_checkers: number;
   requested_by: SavingsUserRef | null;

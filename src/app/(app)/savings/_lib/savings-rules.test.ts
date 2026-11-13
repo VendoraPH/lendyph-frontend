@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { SavingsTransaction } from "@/types";
 import {
   ACCOUNT_STATUS_LABELS,
+  outflowHoldNote,
   APPROVAL_KIND_LABELS,
   APPROVAL_STATUS_LABELS,
   HOLDER_TYPE_LABELS,
@@ -153,4 +154,14 @@ test("other active holds offer Release; a released or expired one offers nothing
   }
   assert.deepEqual(holdReleaseOffer({ type: "manual", status: "released" }), { release: false, note: null });
   assert.deepEqual(holdReleaseOffer({ type: "member_request", status: "expired" }), { release: false, note: null });
+});
+
+// Gap round B7: a deposit that reactivated the account puts every outflow behind a checker.
+test("an account under the reactivation hold warns before money goes out", () => {
+  assert.equal(
+    outflowHoldNote({ outflow_hold: { since: "2026-11-12" } }),
+    "This account was reactivated by a deposit on Nov 12, 2026; money going out needs a checker until one outflow is approved.",
+  );
+  assert.equal(outflowHoldNote({ outflow_hold: null }), null);
+  assert.equal(outflowHoldNote({}), null);
 });

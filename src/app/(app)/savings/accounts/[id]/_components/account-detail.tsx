@@ -11,10 +11,12 @@ import {
   Landmark,
   Lock,
   Printer,
+  ShieldAlert,
   Snowflake,
 } from "lucide-react";
 import { DataState } from "@/components/common/data-state";
 import { PermissionGate } from "@/components/common/permission-gate";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useApiResource, usePermission } from "@/hooks";
@@ -31,6 +33,7 @@ import {
   canOfferClose,
   canWithdraw,
   heldForRequestsNote,
+  outflowHoldNote,
   statusChangeOffers,
   type StatusOffer,
 } from "../../../_lib/savings-rules";
@@ -91,6 +94,7 @@ export function AccountDetail({ accountId }: { accountId: number }) {
               onStatus={setStatusOffer}
               onClose={() => setClosing(true)}
             />
+            <OutflowHoldNotice account={account} />
             <Balances account={account} />
             <OpeningDetails account={account} />
             <HoldsCard account={account} onChanged={() => resource.refetch()} />
@@ -267,6 +271,19 @@ function Balances({ account }: { account: SavingsAccount }) {
         </Card>
       ))}
     </div>
+  );
+}
+
+/** The reactivation hold (gap round B7), shown before anyone starts a withdrawal or transfer. */
+function OutflowHoldNotice({ account }: { account: SavingsAccount }) {
+  const note = account.status === "closed" ? null : outflowHoldNote(account);
+  if (!note) return null;
+  return (
+    <Alert>
+      <ShieldAlert />
+      <AlertTitle>Outflows need a checker</AlertTitle>
+      <AlertDescription>{note}</AlertDescription>
+    </Alert>
   );
 }
 

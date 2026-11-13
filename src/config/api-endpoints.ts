@@ -515,6 +515,9 @@ export const API_ENDPOINTS = {
     AUTO_CREDIT_INSTRUCTION: (id: number) => `/savings/auto-credit/instructions/${id}`,
     AUTO_CREDIT_PREVIEW: "/savings/auto-credit/preview",
     AUTO_CREDIT_PROCESS: "/savings/auto-credit/process",
+    // Gap round B7: past auto-credit runs.
+    AUTO_CREDIT_RUNS: "/savings/auto-credit/runs",
+    AUTO_CREDIT_RUN: (id: number) => `/savings/auto-credit/runs/${id}`,
   },
   /**
    * Credit Scoring (backend PR #240). Every route needs credit_scoring:view,

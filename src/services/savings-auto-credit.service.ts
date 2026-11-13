@@ -3,7 +3,8 @@
  * 15th, the 30th, or both) and the run that credits them. `savings:view`
  * reads instructions; `savings:post` writes them and previews and processes a
  * run. The server plans every run and works out every figure; the preview
- * writes nothing, and a re-run of a cycle posts nothing.
+ * writes nothing, and a re-run of a cycle posts nothing. Past runs read with
+ * `savings:view`.
  */
 
 import { api } from "@/lib/api-client";
@@ -14,8 +15,10 @@ import type {
   SavingsAutoCreditInstructionInput,
   SavingsAutoCreditInstructionUpdate,
   SavingsAutoCreditInstructionsResponse,
+  SavingsAutoCreditRunDetail,
   SavingsAutoCreditRunInput,
   SavingsAutoCreditRunResult,
+  SavingsAutoCreditRunsResponse,
 } from "@/types/savings-servicing";
 
 const E = API_ENDPOINTS.SAVINGS;
@@ -42,4 +45,9 @@ export const savingsAutoCreditService = {
   /** Posts the plan. Needs the form's Idempotency-Key; 409 in words when another run got there first. */
   process: (data: SavingsAutoCreditRunInput, key: string | null) =>
     api.post<SavingsAutoCreditRunResult>(E.AUTO_CREDIT_PROCESS, data, idempotencyHeaders(key)),
+  /** Past runs, newest first, one page (`getRaw` so `meta` survives); `savings:view` (gap round B7). */
+  runs: (params?: { page?: number; per_page?: number }) =>
+    api.getRaw<SavingsAutoCreditRunsResponse>(E.AUTO_CREDIT_RUNS, { params }),
+  /** One past run with what it posted and skipped; 404 outside the caller's branches. */
+  run: (id: number) => api.get<SavingsAutoCreditRunDetail>(E.AUTO_CREDIT_RUN(id)),
 };

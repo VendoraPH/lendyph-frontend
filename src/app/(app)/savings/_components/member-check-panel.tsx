@@ -2,8 +2,8 @@
 
 import { formatCurrency } from "@/lib/format";
 import type { ApiResource } from "@/hooks/use-api-resource";
-import type { SavingsOpeningCheck } from "@/types";
-import { memberCheckRows } from "../_lib/opening-draft";
+import type { SavingsOpeningCheck, SavingsProduct } from "@/types";
+import { memberCheckEligibilityNote, memberCheckRows } from "../_lib/opening-draft";
 import { ACCOUNT_STATUS_LABELS, labelOf } from "../_lib/savings-rules";
 
 /**
@@ -11,7 +11,14 @@ import { ACCOUNT_STATUS_LABELS, labelOf } from "../_lib/savings-rules";
  * the member's standing, loans, share capital and savings accounts, every
  * figure the server's. A figure the caller may not see reads "—".
  */
-export function MemberCheckPanel({ check }: { check: ApiResource<SavingsOpeningCheck> }) {
+export function MemberCheckPanel({
+  check,
+  products,
+}: {
+  check: ApiResource<SavingsOpeningCheck>;
+  /** The server's products, null while they load: the dialog's own notice gives the reason unless the member holds every active one. */
+  products: ReadonlyArray<Pick<SavingsProduct, "id" | "kind" | "is_active">> | null;
+}) {
   if (check.loading) {
     return <p className="rounded-lg border p-3 text-sm text-muted-foreground">Checking the member…</p>;
   }
@@ -25,6 +32,7 @@ export function MemberCheckPanel({ check }: { check: ApiResource<SavingsOpeningC
   }
 
   const data = check.data;
+  const eligibility = memberCheckEligibilityNote(data, products);
   return (
     <section aria-labelledby="member-check" className="space-y-3 rounded-lg border bg-muted/30 p-3">
       <h3 id="member-check" className="text-sm font-medium">
@@ -55,11 +63,7 @@ export function MemberCheckPanel({ check }: { check: ApiResource<SavingsOpeningC
           </ul>
         )}
       </div>
-      <p className="text-xs text-muted-foreground">
-        {data.eligible_products.length === 0
-          ? "The member can't open any more savings products: none is open to them, or they already hold one of each."
-          : `Can open: ${data.eligible_products.map((p) => p.name).join(", ")}.`}
-      </p>
+      {eligibility && <p className="text-xs text-muted-foreground">{eligibility}</p>}
     </section>
   );
 }

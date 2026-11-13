@@ -26,7 +26,9 @@ export function RunLines({ lines }: { lines: readonly InterestRunLine[] }) {
             <TableHead>Member</TableHead>
             <TableHead className="text-right">Days</TableHead>
             <TableHead className="text-right">Avg. daily balance</TableHead>
-            <TableHead className="text-right">Rate</TableHead>
+            <TableHead className="text-right" title="The rate in force on the period's last day; on a tiered product, the lines below it show each tier the balance used">
+              Rate (last day)
+            </TableHead>
             <TableHead className="text-right">Gross interest</TableHead>
             <TableHead className="text-right">Tax rate</TableHead>
             <TableHead className="text-right">Withholding tax</TableHead>

@@ -525,6 +525,22 @@ describe("savings servicing notifications", () => {
     assert.equal(item.href, "/savings/approvals");
   });
 
+  // Gap round B7: `data.stage` says which approval it is, not `checkers_left`.
+  test("a notice with no title reads its stage: the first approval or the second checker", () => {
+    const [second, first, older] = buildFeed(
+      [
+        row({ id: "s3", type: "savings_approval_waiting", title: "", data: { approval_id: 9, stage: "second", checkers_left: 1 } }),
+        row({ id: "s4", type: "savings_approval_waiting", title: "", data: { approval_id: 10, stage: "first", checkers_left: 1 } }),
+        row({ id: "s5", type: "savings_approval_waiting", title: "", data: { approval_id: 11, checkers_left: 1 } }),
+      ],
+      NOW,
+    );
+    assert.equal(second.title, "Second savings approval waiting");
+    assert.equal(first.title, "Savings approval waiting");
+    assert.equal(older.title, "Savings approval waiting");
+    assert.equal(second.kind, "Savings approval waiting");
+  });
+
   test("a maturing deposit due today opens the deposit and names itself once", () => {
     const [item] = buildFeed(
       [row({ id: "s2", type: "savings_time_deposit_maturing", title: "Time deposit matures today", url: "/savings/time-deposits/4" })],

@@ -22,15 +22,22 @@ export function accountDetailItems(account: SavingsAccountDetails): Array<{ labe
 
 /**
  * Who a ledger line is by. A line posted through an approval carries its
- * maker as `created_by`; the transaction payload names no checker, so the
- * line points to the request instead.
+ * maker as `created_by` and its checker as `approved_by`, with the first of
+ * two checkers as `first_checker` (gap round B9). A server that names no
+ * checker points to the request instead.
  */
-export function postedByText(txn: Pick<SavingsTransaction, "created_by" | "approval_id">): {
+export function postedByText(
+  txn: Pick<SavingsTransaction, "created_by" | "approval_id" | "approved_by" | "first_checker">,
+): {
   primary: string;
   secondary: string | null;
 } {
   const name = txn.created_by?.name ?? "System";
-  return txn.approval_id
-    ? { primary: `Requested by ${name}`, secondary: `Approved through request #${txn.approval_id}` }
-    : { primary: name, secondary: null };
+  if (!txn.approval_id) return { primary: name, secondary: null };
+  const checker = txn.approved_by?.name;
+  const first = txn.first_checker?.name;
+  const secondary = checker
+    ? `Approved by ${first ? `${first} and ${checker}` : checker}`
+    : `Approved through request #${txn.approval_id}`;
+  return { primary: `Requested by ${name}`, secondary };
 }

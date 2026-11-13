@@ -1,6 +1,7 @@
 import { formatCurrency, formatDate } from "@/lib/format";
 import type {
   SavingsMemberType,
+  SavingsProduct,
   SavingsOpeningCheck,
   SavingsOpeningDetailsInput,
   SavingsSourceOfFunds,
@@ -106,4 +107,27 @@ export function memberCheckRows(check: SavingsOpeningCheck): Array<{ label: stri
 /** The products the server says the member may open, as select options. */
 export function openingProductOptions(check: SavingsOpeningCheck | null): Array<{ value: string; label: string }> {
   return (check?.eligible_products ?? []).map((p) => ({ value: String(p.id), label: `${p.name} (${p.code})` }));
+}
+
+/** The products the member already holds an account in (any status but closed), from the member check. */
+export function heldProductIds(check: Pick<SavingsOpeningCheck, "savings_accounts">): Set<string> {
+  return new Set(check.savings_accounts.filter((a) => a.status !== "closed").map((a) => String(a.product_id)));
+}
+
+/**
+ * The member check's last line: what the member can open. When none is open,
+ * it says so only for a member who already holds an account in every active
+ * regular product; otherwise (no product turned on, or the product rules rule
+ * the member out) the dialog's own notice gives the one reason. Nothing while
+ * the products load.
+ */
+export function memberCheckEligibilityNote(
+  check: Pick<SavingsOpeningCheck, "eligible_products" | "savings_accounts">,
+  products: ReadonlyArray<Pick<SavingsProduct, "id" | "kind" | "is_active">> | null,
+): string | null {
+  if (check.eligible_products.length > 0) return `Can open: ${check.eligible_products.map((p) => p.name).join(", ")}.`;
+  const active = (products ?? []).filter((p) => p.kind === "regular" && p.is_active);
+  const held = heldProductIds(check);
+  if (active.length === 0 || !active.every((p) => held.has(String(p.id)))) return null;
+  return "The member can't open any more savings products: none is open to them, or they already hold one of each.";
 }

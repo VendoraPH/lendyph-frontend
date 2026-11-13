@@ -188,6 +188,47 @@ export interface SavingsAutoCreditRunResult {
   totals: AutoCreditRunTotals;
 }
 
+// ── Past auto-credit runs (gap round B7) ──
+
+/** One row of `GET /savings/auto-credit/runs`, newest first; a branch user's counts cover their branches only. */
+export interface SavingsAutoCreditRunSummary {
+  id: number;
+  cycle_date: string;
+  /** The cycle in words ("Nov 15, 2026"). */
+  cycle_label: string;
+  posted_on: string;
+  method: SavingsAutoCreditMethod;
+  method_label: string;
+  reference_number: string | null;
+  /** The account its deposits debited; null when it credited nothing or no books are kept. */
+  settlement_account: { id: number; code: string; name: string } | null;
+  posted_count: number;
+  posted_total: MoneyString;
+  /** Null on a run from before skips were recorded, for a branch user. */
+  skipped_count: number | null;
+  /** False on a run from before skipped instructions were recorded. */
+  skips_recorded: boolean;
+  run_by: SavingsUserRef | null;
+  created_at: string | null;
+}
+
+export type SavingsAutoCreditRunsResponse = PaginatedResponse<SavingsAutoCreditRunSummary>;
+
+/** A credit a past run posted. */
+export interface AutoCreditPostedLine extends AutoCreditRunLine {
+  transaction_id: number | null;
+  reference: string | null;
+  status: "credited" | "reversed";
+  /** "Credited" or "Credited, then reversed". */
+  status_label: string;
+}
+
+/** `GET /savings/auto-credit/runs/{run}`: the row plus what it posted and skipped (null when skips weren't recorded). */
+export interface SavingsAutoCreditRunDetail extends SavingsAutoCreditRunSummary {
+  posted: AutoCreditPostedLine[];
+  skipped: AutoCreditSkippedLine[] | null;
+}
+
 // ── Dormancy lists (S4, on GET /reports/savings/dormant) ──
 
 export type DormancyList = "dormant" | "approaching";

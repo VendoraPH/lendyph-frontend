@@ -4,11 +4,12 @@ import { useState } from "react";
 import { RouteGuard } from "@/components/common/route-guard";
 import { usePermission } from "@/hooks";
 import { InstructionsCard } from "./_components/instructions-card";
+import { PastRunsCard } from "./_components/past-runs-card";
 import { RunPanel } from "./_components/run-panel";
 
 function AutoCreditContent() {
   const canRun = usePermission().can("savings:post");
-  // A processed run changes each instruction's last credited cycle.
+  // A processed run changes each instruction's last credited cycle and adds a past run.
   const [listKey, setListKey] = useState(0);
   return (
     <div className="min-w-0 space-y-6">
@@ -21,6 +22,7 @@ function AutoCreditContent() {
       </div>
       {canRun && <RunPanel onProcessed={() => setListKey((k) => k + 1)} />}
       <InstructionsCard key={listKey} />
+      <PastRunsCard key={`runs-${listKey}`} />
     </div>
   );
 }

@@ -7,7 +7,7 @@ import type { AutoCreditRunLine, SavingsAutoCreditRunResult } from "@/types/savi
 import { Kpi } from "../../_components/kpi";
 import { runHeadline, runLineAccount, runTotalCards } from "../_lib/run-view";
 
-function AccountCell({ line }: { line: AutoCreditRunLine }) {
+export function AccountCell({ line }: { line: AutoCreditRunLine }) {
   const { account, member } = runLineAccount(line);
   return (
     <TableCell>
