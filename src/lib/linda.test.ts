@@ -1,28 +1,37 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  LINDA_HISTORY_CONTENT_LIMIT,
   LINDA_MESSAGES,
   LINDA_MAX_LINK_LENGTH,
   buildLindaHistory,
+  formatLindaDateTime,
   formatLindaValue,
   isImeComposing,
   lindaErrorMessage,
+  lindaLinkAriaLabel,
+  lindaLinkLabel,
   normalizeLindaReply,
   safeLindaPath,
   type LindaMessage,
 } from "./linda";
 
+/**
+ * Dates must read in Philippine time on any computer. This file runs in its own
+ * process (each test file does), so it runs on a computer set to US Pacific
+ * time, where a date read in the computer's zone lands a day early.
+ */
+process.env.TZ = "America/Los_Angeles";
+
 const reply = (intent: string) => ({ intent, answer: "x", blocks: [], links: [] });
 
-test("history keeps answered turns with their intent, for follow-up questions", () => {
+test("history keeps answered turns by their intent only, for follow-up questions", () => {
   const messages: LindaMessage[] = [
     { id: 1, role: "user", content: "How much did we collect this month?" },
     { id: 2, role: "assistant", content: "₱245,600.", reply: reply("collection_summary") },
   ];
   assert.deepEqual(buildLindaHistory(messages), [
     { role: "user", content: "How much did we collect this month?" },
-    { role: "assistant", content: "₱245,600.", intent: "collection_summary" },
+    { role: "assistant", content: "", intent: "collection_summary" },
   ]);
 });
 
@@ -35,7 +44,7 @@ test("history drops a failed answer and the question it failed on", () => {
   ];
   assert.deepEqual(
     buildLindaHistory(messages).map((t) => t.content),
-    ["b", "ok"],
+    ["b", ""],
   );
 });
 
@@ -49,7 +58,7 @@ test("history drops a question whose request failed silently", () => {
   ];
   assert.deepEqual(
     buildLindaHistory(messages).map((t) => t.content),
-    ["b", "ok"],
+    ["b", ""],
   );
 });
 
@@ -60,29 +69,30 @@ test("trimmed history still starts with a question", () => {
     content: String(i),
     reply: i % 2 ? reply("x") : undefined,
   }));
-  assert.deepEqual(buildLindaHistory(messages, 3).map((t) => t.content), ["6", "7"]);
+  assert.deepEqual(buildLindaHistory(messages, 3).map((t) => t.content), ["6", ""]);
 });
 
-test("a long answer goes back in history cut to the limit", () => {
-  const long = "x".repeat(LINDA_HISTORY_CONTENT_LIMIT + 500);
-  const messages: LindaMessage[] = [
-    { id: 1, role: "user", content: "q" },
-    { id: 2, role: "assistant", content: long, reply: reply("loan_summary") },
+test("an earlier answer's text never goes back to the server", () => {
+  // Answers carry member names and figures; the model must never see them.
+  const answers = [
+    "Juan Dela Cruz owes ₱12,500.00, 32 days overdue.",
+    `${"x".repeat(5000)}😀 tail`,
   ];
-  const [, answer] = buildLindaHistory(messages);
-  assert.equal(answer.content.length, LINDA_HISTORY_CONTENT_LIMIT);
-});
-
-test("cutting an answer never splits an emoji or other surrogate pair", () => {
-  // A lone surrogate is invalid JSON text for many servers (PHP rejects it).
-  const content = `${"x".repeat(LINDA_HISTORY_CONTENT_LIMIT - 1)}😀 tail`;
-  const messages: LindaMessage[] = [
-    { id: 1, role: "user", content: "q" },
-    { id: 2, role: "assistant", content, reply: reply("loan_summary") },
-  ];
-  const [, answer] = buildLindaHistory(messages);
-  assert.equal(answer.content, "x".repeat(LINDA_HISTORY_CONTENT_LIMIT - 1));
-  assert.ok(answer.content.isWellFormed());
+  const messages: LindaMessage[] = answers.flatMap((content, i) => [
+    { id: i * 2, role: "user" as const, content: `q${i}` },
+    { id: i * 2 + 1, role: "assistant" as const, content, reply: reply("overdue_accounts") },
+  ]);
+  const history = buildLindaHistory(messages);
+  const sent = JSON.stringify(history);
+  for (const answer of answers) assert.ok(!sent.includes(answer));
+  assert.doesNotMatch(sent, /Juan|₱|x{10}|😀/u);
+  assert.deepEqual(
+    history.filter((t) => t.role === "assistant"),
+    [
+      { role: "assistant", content: "", intent: "overdue_accounts" },
+      { role: "assistant", content: "", intent: "overdue_accounts" },
+    ],
+  );
 });
 
 test("history sends only the most recent turns", () => {
@@ -93,7 +103,7 @@ test("history sends only the most recent turns", () => {
     reply: i % 2 ? reply("x") : undefined,
   }));
   const h = buildLindaHistory(messages, 4);
-  assert.deepEqual(h.map((t) => t.content), ["26", "27", "28", "29"]);
+  assert.deepEqual(h.map((t) => t.content), ["26", "", "28", ""]);
 });
 
 test("only in-app paths survive as links", () => {
@@ -239,6 +249,19 @@ test("errors never surface the server's text", () => {
   assert.equal(lindaErrorMessage(429), LINDA_MESSAGES.rateLimited);
 });
 
+test("the cooperative's monthly limit and the user's daily limit say which one was hit", () => {
+  assert.equal(
+    lindaErrorMessage(429, "monthly_limit"),
+    "Linda has reached this month's question limit for your cooperative. The suggested questions still work.",
+  );
+  assert.equal(
+    lindaErrorMessage(429, "daily_limit"),
+    "You've reached today's question limit. Please try again tomorrow.",
+  );
+  assert.equal(lindaErrorMessage(429), LINDA_MESSAGES.rateLimited);
+  assert.equal(lindaErrorMessage(429, "too_many_requests"), LINDA_MESSAGES.rateLimited);
+});
+
 test("a question the server rejects is not met with 'try again'", () => {
   assert.equal(lindaErrorMessage(422), LINDA_MESSAGES.invalidQuestion);
   assert.equal(lindaErrorMessage(400), LINDA_MESSAGES.invalidQuestion);
@@ -273,6 +296,59 @@ test("a blank value shows a dash, not zero", () => {
   assert.equal(formatLindaValue({ label: "a", value: " ", format: "currency" }), "—");
   assert.equal(formatLindaValue({ label: "a", value: "", format: "number" }), "—");
   assert.equal(formatLindaValue({ label: "a", value: "  ", format: "percent" }), "—");
+});
+
+test("the fixture really runs on a computer west of Manila", () => {
+  assert.equal(new Date("2026-12-05").getDate(), 4);
+});
+
+test("a date-only value reads its own day", () => {
+  assert.equal(formatLindaValue({ label: "a", value: "2026-12-05", format: "date" }), "December 5, 2026");
+  assert.equal(formatLindaValue({ label: "a", value: "2026-12-01", format: "date" }), "December 1, 2026");
+});
+
+test("a timestamp value reads its Philippine day", () => {
+  assert.equal(
+    formatLindaValue({ label: "a", value: "2026-12-04T16:30:00.000000Z", format: "date" }),
+    "December 5, 2026",
+  );
+});
+
+test("a server time with no zone is already Philippine time", () => {
+  assert.equal(formatLindaValue({ label: "a", value: "2026-12-05 00:10:00", format: "date" }), "December 5, 2026");
+  assert.match(formatLindaDateTime("2026-12-05 14:05:00"), /^Dec 5, 2026.* 02:05.PM$/i);
+});
+
+test("a value that is not a date is shown as sent", () => {
+  assert.equal(formatLindaValue({ label: "a", value: "next week", format: "date" }), "next week");
+});
+
+test("the reply's as-of time reads in Philippine time", () => {
+  assert.match(formatLindaDateTime("2026-12-04T16:30:00Z"), /^Dec 5, 2026.* 12:30.AM$/i);
+});
+
+test("a row's link says what it opens", () => {
+  assert.equal(lindaLinkLabel("/borrowers/42"), "View member");
+  assert.equal(lindaLinkLabel("/loans/152"), "View loan");
+  assert.equal(lindaLinkLabel("/loans/152?tab=schedule#due"), "View loan");
+  assert.equal(lindaLinkLabel("/payments/9"), "View payment");
+  assert.equal(lindaLinkLabel("/payments/history"), "View");
+  assert.equal(lindaLinkLabel("/loans/past-due"), "View");
+  assert.equal(lindaLinkLabel("/borrowers/new"), "View");
+  assert.equal(lindaLinkLabel("/reports"), "View");
+});
+
+test("a row's link names the row for screen readers", () => {
+  assert.equal(lindaLinkAriaLabel("/borrowers/7", "Juan Dela Cruz"), "View member: Juan Dela Cruz");
+  assert.equal(lindaLinkAriaLabel("/reports", "Collections"), "View: Collections");
+});
+
+test("the panel notice says what may leave Lendy and what never does", () => {
+  assert.match(
+    LINDA_MESSAGES.noHistory,
+    /Questions Linda can't answer itself may be sent to an outside AI service; your Lendy records are never sent\.$/,
+  );
+  assert.match(LINDA_MESSAGES.noHistory, /^Linda does not save your chat history\./);
 });
 
 test("Escape and Enter are left to an IME that is composing", () => {
