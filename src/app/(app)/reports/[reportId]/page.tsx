@@ -11,8 +11,11 @@ import { SubjectPicker } from "@/components/common/subject-picker";
 import {
   ACCOUNT_REPORT_HINT,
   noDateRangeScope,
+  linkedBranchId,
   presetAccountId,
+  presetBranchId,
   presetMemberId,
+  presetPeriodRange,
   reportPickPrompt,
   reportSubjectNoun,
 } from "../_lib/report-subject";
@@ -41,7 +44,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { formatDateISO, todayISO } from "@/lib/format";
+import { todayISO } from "@/lib/format";
 import {
   ArrowLeft,
   ChevronDown,
@@ -59,6 +62,7 @@ import {
 import { borrowerService, reportService } from "@/services";
 import { visibleReports } from "../_lib/report-catalog";
 import { csvFileName } from "../_lib/export-file-name";
+import { PRESETS, presetRange, type Preset } from "../_lib/report-period";
 import { CATEGORY_META, MAX_REPORT_SPAN_YEARS, exceedsReportSpanCap } from "../_lib/types";
 import type { DateRange, ReportDocument, ReportId } from "../_lib/types";
 import { ReportPreview } from "../_components/report-preview";
@@ -131,83 +135,17 @@ const ALL_BRANCHES = "all";
 /** What an unfiltered report is labelled for a caller with `branches:view_all`. */
 const ALL_BRANCHES_LABEL = "All Branches";
 
-type Preset =
-  | "today"
-  | "yesterday"
-  | "last_7"
-  | "this_month"
-  | "whole_month"
-  | "last_month"
-  | "ytd"
-  | "custom";
-
-const PRESETS: { id: Preset; label: string }[] = [
-  { id: "today", label: "Today" },
-  { id: "yesterday", label: "Yesterday" },
-  { id: "last_7", label: "Last 7 Days" },
-  { id: "this_month", label: "This Month" },
-  { id: "whole_month", label: "Whole Month" },
-  { id: "last_month", label: "Last Month" },
-  { id: "ytd", label: "Year to Date" },
-  { id: "custom", label: "Custom" },
-];
-
-/**
- * Preset ranges are serialised with formatDateISO, which reads the Date's
- * *local* calendar parts. `toISOString()` used to shift every preset a day
- * earlier in Manila (UTC+8) — "Today" literally queried yesterday.
- */
-function presetRange(preset: Preset, fallback: DateRange): DateRange {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = now.getMonth();
-  const d = now.getDate();
-  switch (preset) {
-    case "today": {
-      const t = formatDateISO(new Date(y, m, d));
-      return { from: t, to: t };
-    }
-    case "yesterday": {
-      const t = formatDateISO(new Date(y, m, d - 1));
-      return { from: t, to: t };
-    }
-    case "last_7":
-      return {
-        from: formatDateISO(new Date(y, m, d - 6)),
-        to: formatDateISO(new Date(y, m, d)),
-      };
-    case "this_month":
-      return {
-        from: formatDateISO(new Date(y, m, 1)),
-        to: formatDateISO(new Date(y, m, d)),
-      };
-    case "whole_month":
-      return {
-        from: formatDateISO(new Date(y, m, 1)),
-        to: formatDateISO(new Date(y, m + 1, 0)),
-      };
-    case "last_month":
-      return {
-        from: formatDateISO(new Date(y, m - 1, 1)),
-        to: formatDateISO(new Date(y, m, 0)),
-      };
-    case "ytd":
-      return {
-        from: formatDateISO(new Date(y, 0, 1)),
-        to: formatDateISO(new Date(y, m, d)),
-      };
-    case "custom":
-    default:
-      return fallback;
-  }
-}
-
 function ReportDetailContent({
   memberParam,
   accountParam,
+  periodParam,
+  branchParam,
 }: {
   memberParam: number | null;
   accountParam: number | null;
+  /** `?from=&to=`, already checked: both real dates, in order. */
+  periodParam: DateRange | null;
+  branchParam: number | null;
 }) {
   const params = useParams();
   const router = useRouter();
@@ -217,12 +155,20 @@ function ReportDetailContent({
   // same as an unknown id, so its data is never requested.
   const report = visibleReports(hasPermission).find((r) => r.id === (reportId as ReportId));
 
-  const defaultPreset: Preset = report?.defaultPeriod ?? "this_month";
+  // A link's `?from=&to=` opens the report on that period, as a custom range,
+  // on reports that have date controls. It only presets them; nothing runs
+  // until Generate.
+  const linkedPeriod = report?.noDateRange ? null : periodParam;
+  const defaultPreset: Preset = linkedPeriod ? "custom" : (report?.defaultPeriod ?? "this_month");
   const [preset, setPreset] = useState<Preset>(defaultPreset);
   const [range, setRange] = useState<DateRange>(() =>
-    presetRange(defaultPreset, { from: "", to: "" })
+    linkedPeriod ?? presetRange(defaultPreset, { from: "", to: "" })
   );
-  const [branchId, setBranchId] = useState<number | null>(null);
+  // A link's `?branch=<id>` presets the picker on reports that filter by
+  // branch. It counts only once the picker offers it (see `pickedBranchId`).
+  const [branchChoice, setBranchChoice] = useState<number | null>(
+    report?.supportsBranch ? branchParam : null
+  );
   // The savings product filter, and its words for the report's subtitle.
   const [product, setProduct] = useState<{ value: string; label: string }>({ value: ALL_PRODUCTS, label: "" });
   const [groupBy, setGroupBy] = useState<string | null>(report?.groupBy?.options[0]?.value ?? null);
@@ -239,10 +185,17 @@ function ReportDetailContent({
   const [generating, setGenerating] = useState(false);
   const [exportingFormat, setExportingFormat] = useState<ExportFormat | null>(null);
 
-  const { branches } = useBranches();
+  const { branches, loading: branchesLoading } = useBranches();
   // Without `branches:view_all` the API answers 403 to a branch outside the
   // caller's own, so the picker offers only theirs.
   const picker = branchPicker(branches, user, hasPermission("branches:view_all"));
+  // The branch the report runs and is labelled on: a choice the picker doesn't
+  // offer (a linked id it hasn't loaded yet, or one this user can't pick) reads
+  // as no branch, so the label never names one the request doesn't send.
+  const branchId = linkedBranchId(branchChoice, picker.branches, !branchesLoading);
+  // A linked branch still waiting on the list holds Generate, so the first run
+  // can't go out for every branch while the link asked for one.
+  const branchPending = branchChoice !== null && branchesLoading;
   const logoUrl = useBrandingStore((s) => s.logoUrl);
   const loadBranding = useBrandingStore((s) => s.load);
 
@@ -340,7 +293,7 @@ function ReportDetailContent({
   };
 
   async function handleGenerate() {
-    if (!report || missingSubject || spanTooWide) return;
+    if (!report || missingSubject || spanTooWide || branchPending) return;
     setGenerating(true);
     try {
       const built = await report.build(scope);
@@ -583,7 +536,7 @@ function ReportDetailContent({
               )}
               <Button
                 onClick={handleGenerate}
-                disabled={generating || missingSubject || spanTooWide}
+                disabled={generating || missingSubject || spanTooWide || branchPending}
                 className="h-9 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
               >
                 {generating ? (
@@ -621,7 +574,7 @@ function ReportDetailContent({
                   <Select
                     value={branchId === null ? ALL_BRANCHES : String(branchId)}
                     onValueChange={(v: string | null) => {
-                      setBranchId(
+                      setBranchChoice(
                         !v || v === ALL_BRANCHES ? null : Number(v)
                       );
                       setDoc(null);
@@ -728,16 +681,29 @@ function ReportDetailContent({
   );
 }
 
-/** Keyed by the member or account, so following a link to another one starts afresh. */
+/**
+ * Keyed by everything a link presets (member, account, period and branch), so
+ * following a second link to the same report starts afresh.
+ */
 function ReportDetailRoute() {
   const searchParams = useSearchParams();
   const memberParam = presetMemberId(searchParams.get("member"));
   const accountParam = presetAccountId(searchParams.get("account"));
+  const periodParam = presetPeriodRange(searchParams.get("from"), searchParams.get("to"));
+  const branchParam = presetBranchId(searchParams.get("branch"));
+  const key = [
+    memberParam ?? "none",
+    accountParam ?? "none",
+    periodParam ? `${periodParam.from}..${periodParam.to}` : "none",
+    branchParam ?? "none",
+  ].join(":");
   return (
     <ReportDetailContent
-      key={`${memberParam ?? "none"}:${accountParam ?? "none"}`}
+      key={key}
       memberParam={memberParam}
       accountParam={accountParam}
+      periodParam={periodParam}
+      branchParam={branchParam}
     />
   );
 }
