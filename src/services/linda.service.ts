@@ -1,8 +1,8 @@
 /**
- * Linda API client. `POST /linda/chat` is not built on the backend yet; see
- * the note on `API_ENDPOINTS.LINDA`.
+ * Linda API client: the chat (`POST /linda/chat`) and Settings → Linda
+ * (`GET` and `PUT /linda/settings`).
  *
- * The request carries only the question and this session's earlier turns. The
+ * A question carries only its text and this session's earlier turns. The
  * tenant, branch, role and permissions are the token's, decided by the server;
  * nothing here lets the browser widen what Linda may read.
  */
@@ -10,7 +10,7 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { normalizeLindaReply } from "@/lib/linda";
-import type { LindaChatRequest, LindaReply } from "@/types/linda";
+import type { LindaChatRequest, LindaReply, LindaSettings, LindaSettingsInput } from "@/types/linda";
 
 export const lindaService = {
   /**
@@ -23,4 +23,11 @@ export const lindaService = {
     if (!reply) throw new Error("Unexpected response shape from the Linda API.");
     return reply;
   },
+
+  /** The model in use, the choices with their prices, the AI status and this month's cost. */
+  getSettings: () => api.get<LindaSettings>(API_ENDPOINTS.LINDA.SETTINGS),
+
+  /** Sends only the chosen model; answers the saved settings. */
+  updateSettings: (input: LindaSettingsInput) =>
+    api.put<LindaSettings>(API_ENDPOINTS.LINDA.SETTINGS, { model: input.model }),
 };

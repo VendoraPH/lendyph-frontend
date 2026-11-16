@@ -18,9 +18,10 @@ test("a summary-only profile skips the flags and capacity sections", () => {
   assert.match(page, /\{!summaryOnly && profile\.status !== "not_scored" && \(/);
 });
 
-test("the Ask Linda panel shows only with the Linda flag on", () => {
-  assert.match(page, /\{env\.features\.linda && <LindaChatPlaceholder \/>\}/);
-  assert.match(page, /import \{ env \} from "@\/config\/env";/);
+test("the Ask Linda panel shows only with the Linda flag on and linda:use held", () => {
+  assert.match(page, /const lindaOn = useLindaAvailable\(\);/);
+  assert.match(page, /\{lindaOn && <LindaChatPlaceholder \/>\}/);
+  assert.match(page, /import \{ useLindaAvailable \} from "@\/components\/linda\/linda-gate";/);
 });
 
 test("the profile lists the member's decisions, reloaded after one is recorded", () => {

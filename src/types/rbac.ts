@@ -151,7 +151,14 @@ export type Module =
   // `announcements` writes announcements to members; `settings` covers the
   // portal settings and terms (with `branches:view_all`). Everything is
   // branch-scoped by the server. Seeded for admin and super_admin only.
-  | "member_portal";
+  | "member_portal"
+  // ── Linda (AI assistant) ──
+  //
+  // `use` asks Linda questions (the header button, its panel and the entries
+  // on the dashboard and a member's credit profile); `settings` chooses the AI
+  // model in Settings → Linda, which also needs `branches:view_all`. Seeded for
+  // admin and super_admin only. Revoking `use` is the instant off switch.
+  | "linda";
 
 export type Action =
   | "view"
@@ -225,7 +232,9 @@ export type Action =
   // ── Member Portal verbs (see the `member_portal` module above) ──
   | "invite"
   | "requests"
-  | "announcements";
+  | "announcements"
+  // Linda: asking it questions (`linda:use`).
+  | "use";
 
 export type Permission = `${Module}:${Action}`;
 

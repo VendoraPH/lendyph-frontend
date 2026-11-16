@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { env } from "@/config/env";
-import { CDA_NAV, MEMBER_PORTAL_NAV, PENALTIES_SETTINGS_NAV, SIDEBAR_NAV, navChildAllowed, navItemAllowed, navItemHref } from "./navigation";
+import { CDA_NAV, LINDA_SETTINGS_NAV, MEMBER_PORTAL_NAV, PENALTIES_SETTINGS_NAV, SIDEBAR_NAV, navChildAllowed, navItemAllowed, navItemHref } from "./navigation";
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
 const LAYOUT = "src/app/(app)/credit-scoring/layout.tsx";
@@ -181,4 +181,29 @@ test("Settings → Penalties needs penalties:view, as its page does", () => {
   assert.equal(navChildAllowed(PENALTIES_SETTINGS_NAV, holds()), false);
   assert.equal(navChildAllowed(PENALTIES_SETTINGS_NAV, holds("penalties:view")), true);
   assert.match(read("src/app/(app)/settings/penalties/page.tsx"), /<RouteGuard permission="penalties:view"/);
+});
+
+test("Settings → Linda is off when the flag isn't set, and its route answers not found", () => {
+  assert.equal(env.features.linda, false);
+  const settings = SIDEBAR_NAV.find((item) => item.href === "/settings");
+  assert.equal(settings?.children?.some((c) => c.href === "/settings/linda"), false);
+  const layout = read("src/app/(app)/settings/linda/layout.tsx");
+  assert.match(layout, /env\.features\.linda/);
+  assert.match(layout, /notFound\(\)/);
+  assert.doesNotMatch(layout, /"use client"/);
+  assert.match(read("src/constants/navigation.ts"), /env\.features\.linda \? \[LINDA_SETTINGS_NAV\]/);
+});
+
+test("Settings → Linda needs linda:settings and every branch, as its page and the server do", () => {
+  const holds = (...held: string[]) => (p: string) => held.includes(p);
+  assert.equal(LINDA_SETTINGS_NAV.title, "Linda");
+  assert.equal(LINDA_SETTINGS_NAV.href, "/settings/linda");
+  assert.equal(navChildAllowed(LINDA_SETTINGS_NAV, holds()), false);
+  assert.equal(navChildAllowed(LINDA_SETTINGS_NAV, holds("linda:use")), false);
+  assert.equal(navChildAllowed(LINDA_SETTINGS_NAV, holds("linda:settings")), false);
+  assert.equal(navChildAllowed(LINDA_SETTINGS_NAV, holds("branches:view_all")), false);
+  assert.equal(navChildAllowed(LINDA_SETTINGS_NAV, holds("linda:settings", "branches:view_all")), true);
+  const page = read("src/app/(app)/settings/linda/page.tsx");
+  assert.match(page, /<RouteGuard permission="linda:settings"/);
+  assert.match(page, /<RouteGuard permission="branches:view_all"/);
 });

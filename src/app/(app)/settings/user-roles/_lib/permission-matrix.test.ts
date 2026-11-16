@@ -171,3 +171,17 @@ test("the roles screen describes the Penalties module", () => {
   const page = readFileSync(resolve(process.cwd(), "src/app/(app)/settings/user-roles/page.tsx"), "utf8");
   assert.match(page, /penalties: \{\n\s+label: "Penalties"/);
 });
+
+// Linda v1: the API seeds exactly these two for admin and super_admin. `use`
+// asks Linda questions; `settings` chooses the AI model (Settings → Linda,
+// with See all branches).
+test("the matrix offers exactly the two Linda permissions", () => {
+  assert.deepEqual(offered.filter((p) => p.startsWith("linda:")), ["linda:use", "linda:settings"]);
+  assert.deepEqual(moduleToggleActions("linda"), ["use", "settings"]);
+});
+
+test("the roles screen describes the Linda module and labels its use action", () => {
+  const page = readFileSync(resolve(process.cwd(), "src/app/(app)/settings/user-roles/page.tsx"), "utf8");
+  assert.match(page, /linda: \{\n\s+label: "Linda \(AI assistant\)"/);
+  assert.match(page, /\n  use: \{ label: "Use",/);
+});

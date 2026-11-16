@@ -1,10 +1,11 @@
 /**
  * Linda, the AI lending assistant: the `POST /linda/chat` contract.
  *
- * Lendy calculates, Linda explains. Every figure in `blocks` is computed by the
- * backend's data service; the model only writes `answer`. The frontend formats
- * the figures itself (peso, dates, percents) so a value never depends on how
- * the model chose to spell it.
+ * Lendy calculates, Linda explains. Every figure in `blocks` comes from the
+ * backend's reports, and the server writes `answer` from its own templates;
+ * the AI model only reads the question to pick the intent. The frontend
+ * formats the figures itself (peso, dates, percents) so a value is spelled the
+ * same in every answer.
  */
 
 /** How the panel should render a value. */
@@ -89,4 +90,65 @@ export interface LindaHistoryTurn {
 export interface LindaChatRequest {
   message: string;
   history: LindaHistoryTurn[];
+}
+
+// ---------------------------------------------------------------------------
+// Settings → Linda: `GET` and `PUT /linda/settings` (linda:settings and
+// branches:view_all). Every figure is the server's; money is a 2-decimal
+// string in pesos.
+// ---------------------------------------------------------------------------
+
+/** One model the server offers, with its prices in pesos. */
+export interface LindaModelOption {
+  id: string;
+  label: string;
+  description: string;
+  /** ₱ per million input tokens. Null when the server's prices aren't set correctly. */
+  input_per_million: string | null;
+  /** ₱ per million output tokens. Null when the server's prices aren't set correctly. */
+  output_per_million: string | null;
+  /** ₱ for a typical question, as the server works it out. Null when its prices aren't set correctly. */
+  per_question: string | null;
+}
+
+/** Why the AI model is off on this server. Others may come later and read as off. */
+export type LindaAiOffReason =
+  | "linda_off"
+  | "model_off"
+  | "test_driver"
+  | "no_key"
+  | "no_prices"
+  | (string & {});
+
+export interface LindaAiStatus {
+  on: boolean;
+  /** Null when on. */
+  reason: LindaAiOffReason | null;
+}
+
+/** This Manila calendar month's AI use, from the question log. */
+export interface LindaMonth {
+  /** "November 2026". */
+  label: string;
+  cost: string;
+  /** Null when the server's cap isn't set correctly. */
+  cap: string | null;
+  questions: number;
+  /** Questions that went to the AI model. */
+  model_questions: number;
+}
+
+export interface LindaSettings {
+  /** The model Linda uses now. */
+  model: string;
+  models: LindaModelOption[];
+  ai: LindaAiStatus;
+  month: LindaMonth;
+  /** Null until someone saves a choice. */
+  updated_at: string | null;
+  updated_by: string | null;
+}
+
+export interface LindaSettingsInput {
+  model: string;
 }
