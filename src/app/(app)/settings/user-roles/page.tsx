@@ -71,6 +71,7 @@ import {
   PiggyBank,
   ClipboardCheck,
   MonitorSmartphone,
+  Sparkles,
   Package,
   Building2,
   type LucideIcon,
@@ -400,6 +401,13 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
       "Configure the portal and publish its terms",
     ],
   },
+  linda: {
+    label: "Linda (AI assistant)",
+    description:
+      "Ask Linda about collections, overdue members, loans and disbursements. Choosing its AI model also needs See all branches.",
+    icon: Sparkles,
+    features: ["Ask Linda questions", "Choose the AI model Linda uses"],
+  },
 };
 
 
@@ -449,6 +457,7 @@ const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   invite: { label: "Issue codes", colorClass: "bg-blue-500/10 text-blue-700 border-blue-500/30" },
   requests: { label: "Decide requests", colorClass: "bg-teal-500/10 text-teal-700 border-teal-500/30" },
   announcements: { label: "Announcements", colorClass: "bg-violet-500/10 text-violet-700 border-violet-500/30" },
+  use: { label: "Use", colorClass: "bg-orange-500/10 text-orange-700 border-orange-500/30" },
 };
 
 /** "credit_scoring:settings" → "Credit Scoring: Configure", as the matrix labels it. */

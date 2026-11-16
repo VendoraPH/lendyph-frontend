@@ -248,3 +248,10 @@ test("CDA pages read their menu titles, whether or not the CDA menu is built in"
   }
   assert.equal(subPageTitle("cda", "settings"), "CDA Settings");
 });
+
+test("Settings → Linda's breadcrumb reads its menu title, with the menu entry or without it", async () => {
+  const { LINDA_SETTINGS_NAV } = await import("@/constants/navigation");
+  const menuTitle = menuTitles([{ title: "Settings", href: "/settings", children: [LINDA_SETTINGS_NAV] }]);
+  assert.equal(subPageTitle("settings", "linda", { menuTitle }), "Linda");
+  assert.equal(subPageTitle("settings", "linda"), "Linda");
+});

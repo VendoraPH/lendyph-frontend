@@ -172,6 +172,10 @@ const EVERY_PERMISSION: Permission[] = [
   // only. Suggested, not granted: a manager view, invite, manage and requests;
   // a cashier requests; a loan officer view and invite.
   ...MEMBER_PORTAL_PERMISSIONS,
+  // Linda, the AI assistant (Linda v1). Seeded for admin and super_admin only;
+  // `linda:settings` also needs `branches:view_all` to open Settings → Linda.
+  "linda:use",
+  "linda:settings",
 ];
 
 /**

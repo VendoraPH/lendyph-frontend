@@ -567,13 +567,14 @@ export const API_ENDPOINTS = {
       `/borrowers/${borrowerId}/notification-preferences`,
   },
   /**
-   * Linda, the AI lending assistant. Not built on the backend yet; the
-   * contract is the "Linda" backend handoff on PR feat/linda-ai-assistant.
-   * The server derives tenant, branch and permissions from the token, so the
-   * request carries only the question and this session's earlier turns.
+   * Linda, the AI lending assistant. `CHAT` needs `linda:use`; the server
+   * derives tenant, branch and permissions from the token, so the request
+   * carries only the question and this session's earlier turns. `SETTINGS`
+   * (`GET` and `PUT`) needs `linda:settings` and `branches:view_all`.
    */
   LINDA: {
     CHAT: "/linda/chat",
+    SETTINGS: "/linda/settings",
   },
   /**
    * CDA Compliance (CDA design §3). Every route needs `branches:view_all` plus

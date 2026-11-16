@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Info, X } from "lucide-react";
-import { env } from "@/config/env";
 import { cn } from "@/lib/utils";
 import { LINDA_MESSAGES, LINDA_SUGGESTED_QUESTIONS, isImeComposing } from "@/lib/linda";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -10,6 +9,7 @@ import { useLindaStore } from "@/store";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { LindaComposer } from "./linda-composer";
+import { LindaGate } from "./linda-gate";
 import { LindaMark } from "./linda-mark";
 import { LindaReplyView } from "./linda-reply";
 import { useLindaChat } from "./use-linda-chat";
@@ -152,11 +152,15 @@ function LindaConversation({ onNavigate, autoFocus }: LindaConversationProps) {
  * answers stay readable); on phones it covers the screen as a modal dialog.
  *
  * With `NEXT_PUBLIC_ENABLE_LINDA` off this renders nothing and runs no hooks,
- * so the app is exactly as it is without Linda.
+ * so the app is exactly as it is without Linda. Without `linda:use` it renders
+ * nothing either.
  */
 export function LindaPanel() {
-  if (!env.features.linda) return null;
-  return <LindaSidePanel />;
+  return (
+    <LindaGate>
+      <LindaSidePanel />
+    </LindaGate>
+  );
 }
 
 function LindaSidePanel() {

@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
-import { formatDateTime } from "@/lib/format";
-import { formatLindaValue } from "@/lib/linda";
+import { formatLindaDateTime, formatLindaValue, lindaLinkAriaLabel, lindaLinkLabel } from "@/lib/linda";
 import type { LindaListBlock, LindaReply, LindaStatsBlock } from "@/types/linda";
 
 interface LindaReplyViewProps {
@@ -65,10 +64,11 @@ function ListBlock({ block, onNavigate }: { block: LindaListBlock; onNavigate: (
                 <Link
                   href={item.url}
                   onClick={onNavigate}
+                  aria-label={lindaLinkAriaLabel(item.url, item.title)}
                   className="inline-flex shrink-0 items-center gap-0.5 text-xs font-medium text-brand-orange hover:underline"
                 >
-                  View
-                  <ArrowUpRight className="size-3" />
+                  {lindaLinkLabel(item.url)}
+                  <ArrowUpRight className="size-3" aria-hidden="true" />
                 </Link>
               )}
             </div>
@@ -117,7 +117,7 @@ export function LindaReplyView({ reply, onNavigate }: LindaReplyViewProps) {
         </div>
       )}
       {reply.as_of && (
-        <p className="text-[11px] text-muted-foreground">As of {formatDateTime(reply.as_of)}</p>
+        <p className="text-[11px] text-muted-foreground">As of {formatLindaDateTime(reply.as_of)}</p>
       )}
     </div>
   );

@@ -125,6 +125,19 @@ export const PENALTIES_SETTINGS_NAV: NavSubItem = {
   permission: "penalties:view",
 };
 
+/**
+ * Settings → Linda: the AI model Linda uses. Company-wide, so it also needs
+ * `branches:view_all`, as the server does. Shown only when
+ * NEXT_PUBLIC_ENABLE_LINDA is set at build time; the route answers not found
+ * otherwise (settings/linda/layout.tsx).
+ */
+export const LINDA_SETTINGS_NAV: NavSubItem = {
+  title: "Linda",
+  href: "/settings/linda",
+  permission: "linda:settings",
+  alsoRequires: ["branches:view_all"],
+};
+
 export const CDA_NAV: NavItem = {
   title: "CDA Compliance",
   href: "/cda",
@@ -384,6 +397,7 @@ export const SIDEBAR_NAV: NavItem[] = [
             },
           ]
         : []),
+      ...(env.features.linda ? [LINDA_SETTINGS_NAV] : []),
       // Lives under Settings because it is admin-only, org-wide, one-time
       // config — and because it belongs to neither Members nor Loans: a single
       // run writes both.

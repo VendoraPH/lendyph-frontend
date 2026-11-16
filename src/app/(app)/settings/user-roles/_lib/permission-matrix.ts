@@ -38,6 +38,9 @@ import type { Action, Module } from "@/types";
  *
  * `penalties` is offered too (Phase 4, Settings → Penalties): the backend
  * seeds `penalties:view|create|update|delete` for admin and super_admin.
+ *
+ * `linda` is offered too (Linda v1): the backend seeds `linda:use|settings`
+ * for admin and super_admin. `settings` works only with `branches:view_all`.
  */
 export type UIModule = Exclude<Module, "collections" | "loan_adjustments" | "auto_credit">;
 
@@ -121,6 +124,8 @@ export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
   ],
   // The Member Portal's staff side, in the server's order.
   member_portal: ["view", "invite", "manage", "requests", "announcements", "settings"],
+  // `use` asks Linda questions; `settings` chooses its AI model.
+  linda: ["use", "settings"],
 };
 
 /**

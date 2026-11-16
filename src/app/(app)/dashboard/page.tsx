@@ -30,8 +30,8 @@ import { formatCurrency, formatDateFull } from "@/lib/format";
 import { currencyOrDash } from "@/lib/report-format";
 import { shareCapitalService } from "@/services";
 import { dashboardService } from "@/services/dashboard.service";
-import { env } from "@/config/env";
 import { useLindaStore } from "@/store";
+import { useLindaAvailable } from "@/components/linda/linda-gate";
 import type { DailyDuesSummary } from "@/types";
 import { shareCapitalBookBalance } from "./_lib/share-capital-kpi";
 import { collectionPieSlices, collectionRateTone, shownCollectionRate } from "./_lib/collection-pie";
@@ -193,7 +193,8 @@ function DashboardContent() {
   const mounted = useIsClient();
   // Make room for Linda's side panel only while it is open.
   const lindaOpen = useLindaStore((s) => s.open);
-  const kpiClasses = dashboardKpiClasses({ lindaEnabled: env.features.linda, lindaOpen });
+  const lindaEnabled = useLindaAvailable();
+  const kpiClasses = dashboardKpiClasses({ lindaEnabled, lindaOpen });
   const canViewShareCapital = usePermission().can("share_capital:view");
   const [shareCapitalTotal, setShareCapitalTotal] = useState<string>("—");
   const [stats, setStats] = useState<DashboardStats | null>(null);

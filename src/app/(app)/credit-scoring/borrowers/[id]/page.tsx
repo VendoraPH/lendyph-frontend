@@ -18,10 +18,10 @@ import { MemberDecisions } from "./_components/member-decisions";
 import { ManualOverrideDialog } from "./_components/manual-override-dialog";
 import { LindaChatPlaceholder } from "./_components/linda-chat-placeholder";
 import { CicPlaceholder } from "./_components/cic-placeholder";
+import { useLindaAvailable } from "@/components/linda/linda-gate";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { SCORE_TYPE_LABELS } from "@/lib/credit-scoring/labels";
-import { env } from "@/config/env";
 import { isDetailsHidden } from "@/lib/credit-scoring/score-state";
 import type { CreditScore, PolicyFlagList } from "@/types/credit-scoring";
 
@@ -34,6 +34,7 @@ function BorrowerCreditProfileContent({
   const borrowerId = Number(id);
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [decisionsVersion, setDecisionsVersion] = useState(0);
+  const lindaOn = useLindaAvailable();
 
   const profileFetcher = useCallback(
     () => creditScoringService.getBorrowerCreditProfile(borrowerId),
@@ -104,7 +105,7 @@ function BorrowerCreditProfileContent({
               <MemberScoreHistory borrowerId={borrowerId} />
 
               <div className="grid gap-4 sm:grid-cols-2">
-                {env.features.linda && <LindaChatPlaceholder />}
+                {lindaOn && <LindaChatPlaceholder />}
                 <CicPlaceholder />
               </div>
 

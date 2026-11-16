@@ -1,9 +1,9 @@
 "use client";
 
 import { Sparkles } from "lucide-react";
-import { env } from "@/config/env";
 import { cn } from "@/lib/utils";
 import { useLindaStore } from "@/store";
+import { LindaGate } from "./linda-gate";
 import { LINDA_TRIGGER_ID } from "./use-linda-panel-focus";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,10 +13,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-/** The header button that opens and closes Linda. Nothing at all where Linda is off. */
+/** The header button that opens and closes Linda. Nothing at all where Linda is off or the user lacks `linda:use`. */
 export function LindaTrigger() {
-  if (!env.features.linda) return null;
-  return <LindaTriggerButton />;
+  return (
+    <LindaGate>
+      <LindaTriggerButton />
+    </LindaGate>
+  );
 }
 
 function LindaTriggerButton() {
