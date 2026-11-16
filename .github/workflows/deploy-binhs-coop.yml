@@ -162,6 +162,9 @@ jobs:
               export NEXT_PUBLIC_ENABLE_FEE_FORMULAS=true
               # Staging only: Settings → Penalties (Arvin, 2026-11-12, Phase 4 plan).
               export NEXT_PUBLIC_ENABLE_PENALTY_CONFIGS=true
+              # Staging only: Linda, the AI assistant (Arvin, 2026-11-16). Its AI model stays off on
+              # the backend until the owner signs off on privacy, so it answers with its matcher.
+              export NEXT_PUBLIC_ENABLE_LINDA=true
               DEPLOY_BRANCH=development
               # The proxy secret, delivered by the step before this one (staging only).
               # Exported so deploy.sh's children inherit it: never echoed, never on a
@@ -397,6 +400,9 @@ jobs:
               export NEXT_PUBLIC_ENABLE_FEE_FORMULAS=true
               # Staging only: Settings → Penalties (Arvin, 2026-11-12, Phase 4 plan).
               export NEXT_PUBLIC_ENABLE_PENALTY_CONFIGS=true
+              # Staging only: Linda, the AI assistant (Arvin, 2026-11-16). Its AI model stays off on
+              # the backend until the owner signs off on privacy, so it answers with its matcher.
+              export NEXT_PUBLIC_ENABLE_LINDA=true
               DEPLOY_BRANCH=development
               # The proxy secret, delivered by the step before this one (staging only).
               # Exported so deploy.sh's children inherit it: never echoed, never on a
