@@ -177,3 +177,13 @@ test("Time Deposit Maturities opens on the whole month, and the savings statemen
   assert.equal((await reportDefinition("savings_statement")).noCsv, true);
   assert.equal((await reportDefinition("savings_transactions")).noCsv, undefined);
 });
+
+test("Daily Collection offers the branch filter and sends the picked branch to both reads", async () => {
+  const report = await reportDefinition("daily_collection");
+  assert.equal(report.supportsBranch, true);
+  requests.length = 0;
+  await report.build({ range: RANGE, branchId: 3 });
+  const reads = requests.filter((url) => url.pathname.startsWith("/reports/"));
+  assert.ok(reads.length >= 2, "both the summary and the repayments are read");
+  for (const url of reads) assert.equal(url.searchParams.get("branch_id"), "3", url.pathname);
+});

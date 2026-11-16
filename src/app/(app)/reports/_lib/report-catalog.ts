@@ -194,6 +194,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     category: "operations",
     icon: ClipboardList,
     accent: ACCENT.orange,
+    supportsBranch: true,
     build: async (ctx) => {
       const params = {
         date_from: ctx.range.from,
