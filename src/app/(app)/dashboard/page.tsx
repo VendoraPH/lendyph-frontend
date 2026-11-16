@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { RouteGuard } from "@/components/common";
+import { ExpandableCard } from "@/components/common/expandable-card";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { NoBranchBanner } from "@/components/common/no-branch-banner";
 import { useIsClient, usePermission } from "@/hooks";
 import {
@@ -26,6 +28,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Wallet, FileText, PhilippinePeso, AlertTriangle, TrendingUp, Landmark } from "lucide-react";
 import { getInitials } from "@/lib/initials";
+import { cn } from "@/lib/utils";
 import { formatCurrency, formatDateFull } from "@/lib/format";
 import { currencyOrDash } from "@/lib/report-format";
 import { shareCapitalService } from "@/services";
@@ -35,7 +38,7 @@ import { useLindaAvailable } from "@/components/linda/linda-gate";
 import type { DailyDuesSummary } from "@/types";
 import { shareCapitalBookBalance } from "./_lib/share-capital-kpi";
 import { collectionPieSlices, collectionRateTone, shownCollectionRate } from "./_lib/collection-pie";
-import { dashboardKpiClasses } from "./_lib/kpi-layout";
+import { DASHBOARD_PAGE_CLASS, dashboardKpiClasses } from "./_lib/kpi-layout";
 import { insuranceCollected } from "./_lib/insurance-collected";
 import { recentTransactionRows, type RecentTransactionRow } from "./_lib/recent-transactions";
 import {
@@ -311,16 +314,19 @@ function DashboardContent() {
   }[collectionRateTone(collectionRate)];
 
   return (
-    <div className={kpiClasses.page}>
+    <>
       {/* ----------------------------------------------------------------- */}
-      {/* Row 1: KPI Cards                                                  */}
+      {/* Row 1: KPI Cards (compact, natural height)                        */}
       {/* ----------------------------------------------------------------- */}
       <div className={kpiClasses.grid}>
         {KPI_CARD_STRUCTURE.map((kpi) => (
           <Link key={kpi.label} href={kpi.href} className="group">
-            <Card className="rounded-xl border border-border shadow-sm transition-all duration-200 group-hover:shadow-md group-hover:border-brand-orange/30 group-hover:scale-[1.02] cursor-pointer">
-              <CardContent className="py-3 px-4">
-                <div className="flex items-center justify-between">
+            <Card
+              size="sm"
+              className="h-full rounded-xl border border-border shadow-sm transition-all duration-200 group-hover:shadow-md group-hover:border-brand-orange/30 group-hover:scale-[1.02] cursor-pointer"
+            >
+              <CardContent className="flex h-full items-center">
+                <div className="flex w-full items-center justify-between">
                   <div className="flex items-center gap-2.5">
                     <div
                       className="h-7 w-7 rounded-full flex items-center justify-center shrink-0"
@@ -352,30 +358,29 @@ function DashboardContent() {
       </div>
 
       {/* ----------------------------------------------------------------- */}
-      {/* Row 2: Expected vs Actual Daily Collection                        */}
+      {/* Row 2: daily dues (left) and Recent Transactions (right). At fit   */}
+      {/* they share the height left and their tables scroll inside.        */}
       {/* ----------------------------------------------------------------- */}
-      <Card className="rounded-xl border border-border shadow-sm">
-        <div className="px-6 pt-5 pb-4">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-base font-semibold">Expected Daily Collection vs Actual Collection</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {formatDateFull(new Date())}
-              </p>
-            </div>
+      <div className={kpiClasses.columns}>
+        <ExpandableCard
+          title="Expected Daily Collection vs Actual Collection"
+          description={formatDateFull(new Date())}
+          className="rounded-xl border border-border shadow-sm"
+          contentClassName="px-0"
+          actions={
             <Badge variant="outline" className={rateBadgeClass}>
               <TrendingUp className="h-3 w-3 mr-1" />
               {collectionRateLabel} collected
             </Badge>
-          </div>
-
-          {/* Pie chart */}
-          <div className="mb-5">
-            <div className="flex flex-col items-center justify-center">
-              <div className="relative" style={{ width: 200, height: 200 }}>
+          }
+        >
+          {/* The chart beside the table on a wide card, above it on a narrow one. */}
+          <div className="flex flex-col gap-4 @xl:flex-row fit:flex-1 fit:min-h-0">
+            <div className="flex shrink-0 flex-col items-center justify-center px-4">
+              <div className="relative" style={{ width: 160, height: 160 }}>
                 {collectionRate === null ? (
                   // Nothing due (or no summary yet): an empty ring, since a pie of zeros draws nothing.
-                  <div aria-hidden="true" className="absolute inset-[10px] rounded-full border-[30px] border-muted" />
+                  <div aria-hidden="true" className="absolute inset-[8px] rounded-full border-[24px] border-muted" />
                 ) : mounted ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
@@ -383,8 +388,8 @@ function DashboardContent() {
                         data={pieData}
                         cx="50%"
                         cy="50%"
-                        innerRadius={60}
-                        outerRadius={90}
+                        innerRadius={48}
+                        outerRadius={72}
                         paddingAngle={3}
                         dataKey="value"
                         strokeWidth={0}
@@ -403,7 +408,7 @@ function DashboardContent() {
                 ) : null}
                 {/* Center label */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <p className="text-2xl font-bold">{collectionRateLabel}</p>
+                  <p className="text-xl font-bold">{collectionRateLabel}</p>
                   <p className="text-[11px] text-muted-foreground">Collected</p>
                 </div>
               </div>
@@ -418,84 +423,76 @@ function DashboardContent() {
               </div>
             </div>
 
-          </div>
-        </div>
-
-        {/* Breakdown table */}
-        <CardContent className="px-0 pb-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent bg-muted/50">
-                  <TableHead className="pl-6 text-muted-foreground">Member</TableHead>
-                  <TableHead className="text-muted-foreground">Loan ID</TableHead>
-                  <TableHead className="text-right text-muted-foreground">Amount Due</TableHead>
-                  <TableHead className="text-right text-muted-foreground">Paid</TableHead>
-                  <TableHead className="pr-6 text-right text-muted-foreground">Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {dueItems.length === 0 && (
-                  <TableEmptyRow
-                    colSpan={5}
-                    state={duesStatus}
-                    emptyText="Nothing due today."
-                  />
-                )}
-                {dueItems.map((item) => (
-                  <TableRow key={item.id} className="hover:bg-muted/40 transition-colors">
-                    <TableCell className="pl-6">
-                      <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-full bg-purple-500/15 flex items-center justify-center text-xs font-semibold text-purple-700 dark:text-purple-300 shrink-0">
-                          {getInitials(item.borrower)}
-                        </div>
-                        <span className="font-medium text-sm whitespace-nowrap">{item.borrower}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{item.loanId}</TableCell>
-                    <TableCell className="text-right text-sm font-medium">{formatCurrency(item.amountDue)}</TableCell>
-                    <TableCell className="text-right text-sm font-medium">
-                      {item.amountPaid > 0 ? formatCurrency(item.amountPaid) : "—"}
-                    </TableCell>
-                    <TableCell className="pr-6 text-right">
-                      <Badge
-                        variant="outline"
-                        className={
-                          item.status === "collected"
-                            ? "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/30"
-                            : item.status === "partial"
-                              ? "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/30"
-                              : "bg-muted text-muted-foreground border-border"
-                        }
-                      >
-                        {item.status === "collected" ? "Paid" : item.status === "partial" ? "Partial" : "Pending"}
-                      </Badge>
-                    </TableCell>
+            {/* Breakdown table */}
+            <ScrollBox className="@xl:flex-1">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="pl-4 text-muted-foreground">Member</TableHead>
+                    <TableHead className="text-muted-foreground">Loan ID</TableHead>
+                    <TableHead className="text-right text-muted-foreground">Amount Due</TableHead>
+                    <TableHead className="text-right text-muted-foreground">Paid</TableHead>
+                    <TableHead className="pr-4 text-right text-muted-foreground">Status</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {dueItems.length === 0 && (
+                    <TableEmptyRow
+                      colSpan={5}
+                      state={duesStatus}
+                      emptyText="Nothing due today."
+                    />
+                  )}
+                  {dueItems.map((item) => (
+                    <TableRow key={item.id} className="hover:bg-muted/40 transition-colors">
+                      <TableCell className="pl-4">
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 rounded-full bg-purple-500/15 flex items-center justify-center text-xs font-semibold text-purple-700 dark:text-purple-300 shrink-0">
+                            {getInitials(item.borrower)}
+                          </div>
+                          <span className="font-medium text-sm whitespace-nowrap">{item.borrower}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{item.loanId}</TableCell>
+                      <TableCell className="text-right text-sm font-medium">{formatCurrency(item.amountDue)}</TableCell>
+                      <TableCell className="text-right text-sm font-medium">
+                        {item.amountPaid > 0 ? formatCurrency(item.amountPaid) : "—"}
+                      </TableCell>
+                      <TableCell className="pr-4 text-right">
+                        <Badge
+                          variant="outline"
+                          className={
+                            item.status === "collected"
+                              ? "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/30"
+                              : item.status === "partial"
+                                ? "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/30"
+                                : "bg-muted text-muted-foreground border-border"
+                          }
+                        >
+                          {item.status === "collected" ? "Paid" : item.status === "partial" ? "Partial" : "Pending"}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ScrollBox>
           </div>
-        </CardContent>
-      </Card>
+        </ExpandableCard>
 
-
-      {/* ----------------------------------------------------------------- */}
-      {/* Row 3: Recent Transactions Table                                   */}
-      {/* ----------------------------------------------------------------- */}
-      <Card className="rounded-xl border border-border shadow-sm">
-        <div className="px-6 pt-5 pb-3">
-          <h3 className="text-base font-semibold">Recent Transactions</h3>
-        </div>
-        <CardContent className="px-0 pb-0">
-          <div className="overflow-x-auto">
+        <ExpandableCard
+          title="Recent Transactions"
+          className="rounded-xl border border-border shadow-sm"
+          contentClassName="px-0"
+        >
+          <ScrollBox>
             <Table>
               <TableHeader>
-                <TableRow className="hover:bg-transparent bg-muted/50">
-                  <TableHead className="pl-6 text-muted-foreground">Name</TableHead>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="pl-4 text-muted-foreground">Name</TableHead>
                   <TableHead className="text-muted-foreground">Description</TableHead>
                   <TableHead className="text-right text-muted-foreground">Amount</TableHead>
-                  <TableHead className="pr-6 text-right text-muted-foreground">Date</TableHead>
+                  <TableHead className="pr-4 text-right text-muted-foreground">Date</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -510,7 +507,7 @@ function DashboardContent() {
                   const initials = getInitials(tx.name);
                   return (
                     <TableRow key={tx.key} className="hover:bg-muted/40 transition-colors">
-                      <TableCell className="pl-6">
+                      <TableCell className="pl-4">
                         <div className="flex items-center gap-3">
                           <div
                             className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-semibold text-white shrink-0 ${tx.color}`}
@@ -524,7 +521,7 @@ function DashboardContent() {
                       <TableCell className="text-right text-sm font-medium">
                         {currencyOrDash(tx.amount)}
                       </TableCell>
-                      <TableCell className="text-right text-sm text-muted-foreground pr-6">
+                      <TableCell className="text-right text-sm text-muted-foreground pr-4">
                         {tx.date}
                       </TableCell>
                     </TableRow>
@@ -532,18 +529,27 @@ function DashboardContent() {
                 })}
               </TableBody>
             </Table>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+          </ScrollBox>
+        </ExpandableCard>
+      </div>
+    </>
   );
 }
 
 export default function DashboardPage() {
   return (
     <RouteGuard permission="dashboard:view" pageName="Dashboard">
-      <NoBranchBanner className="mb-6" />
-      <DashboardContent />
+      <DashboardPageFill />
     </RouteGuard>
+  );
+}
+
+/** The page root: fills the main area at fit, and is the dashboard's size container. */
+function DashboardPageFill() {
+  return (
+    <PageFill className={cn(DASHBOARD_PAGE_CLASS, "gap-4")}>
+      <NoBranchBanner />
+      <DashboardContent />
+    </PageFill>
   );
 }

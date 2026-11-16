@@ -24,6 +24,16 @@ export interface TablePaginationProps {
 
 const DEFAULT_PER_PAGE_OPTIONS = [10, 20, 50] as const;
 
+/**
+ * Rows-per-page and previous/next under a table. Put it after the table's
+ * `ScrollBox` inside a `FillSection` (or a `CardContent` with
+ * `FIT_CLASSES.section`) and it stays pinned at the card's foot:
+ *
+ *     <CardContent className={FIT_CLASSES.section}>
+ *       <ScrollBox><Table>…</Table></ScrollBox>
+ *       <TablePagination page={page} perPage={perPage} total={total} … />
+ *     </CardContent>
+ */
 export function TablePagination({
   page,
   perPage,
@@ -41,8 +51,15 @@ export function TablePagination({
   // from `items`, so the dropdown is given them like every other one.
   const perPageItems = perPageOptions.map((opt) => ({ value: String(opt), label: String(opt) }));
 
+  // `shrink-0`: in a FillSection the ScrollBox above takes the height and this
+  // stays pinned at the card's foot. `data-fab-clear` keeps its right end clear
+  // of the floating Linda button at fit (globals.css).
   return (
-    <div className="flex items-center justify-between pt-4 border-t mt-4">
+    <div
+      data-slot="table-pagination"
+      data-fab-clear=""
+      className="flex shrink-0 items-center justify-between pt-4 border-t mt-4"
+    >
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <span>Rows per page</span>
         <Select

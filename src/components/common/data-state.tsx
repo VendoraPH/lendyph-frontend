@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import type { ApiResource } from "@/hooks";
+import type { IllustrationName } from "@/lib/illustrations";
+import { hasIllustration, Illustration } from "./illustration";
 
 interface DataStateProps<T> {
   resource: ApiResource<T>;
@@ -16,7 +18,18 @@ interface DataStateProps<T> {
   /** True when the request succeeded but returned nothing. */
   isEmpty?: (data: T) => boolean;
   emptyMessage?: string;
+  /**
+   * The picture for the empty state, when one is set in `@/lib/illustrations`:
+   * "empty" (default), "noResults" for a search or filter that matched
+   * nothing, or "allCaughtUp" for nothing overdue or waiting.
+   */
+  emptyIllustration?: Extract<IllustrationName, "empty" | "noResults" | "allCaughtUp">;
   children: (data: T) => ReactNode;
+}
+
+/** The slot's picture when it has one, otherwise the screen's own icon. */
+function Art({ name, icon }: { name: IllustrationName; icon: ReactNode }) {
+  return hasIllustration(name) ? <Illustration name={name} /> : <>{icon}</>;
 }
 
 function Panel({ children }: { children: ReactNode }) {
@@ -45,6 +58,7 @@ export function DataState<T>({
   summary,
   isEmpty,
   emptyMessage = "Nothing to show for this selection.",
+  emptyIllustration = "empty",
   children,
 }: DataStateProps<T>) {
   const { data, loading, unavailable, error, refetch } = resource;
@@ -61,9 +75,14 @@ export function DataState<T>({
   if (unavailable) {
     return (
       <Panel>
-        <div className="rounded-full bg-muted p-3">
-          <Construction className="h-6 w-6 text-muted-foreground" />
-        </div>
+        <Art
+          name="notConnected"
+          icon={
+            <div className="rounded-full bg-muted p-3">
+              <Construction className="h-6 w-6 text-muted-foreground" />
+            </div>
+          }
+        />
         <div className="max-w-lg space-y-1">
           <p className="font-medium">Not connected yet</p>
           <p className="text-sm text-muted-foreground">{summary}</p>
@@ -89,9 +108,14 @@ export function DataState<T>({
   if (error) {
     return (
       <Panel>
-        <div className="rounded-full bg-destructive/10 p-3">
-          <AlertCircle className="h-6 w-6 text-destructive" />
-        </div>
+        <Art
+          name="error"
+          icon={
+            <div className="rounded-full bg-destructive/10 p-3">
+              <AlertCircle className="h-6 w-6 text-destructive" />
+            </div>
+          }
+        />
         <div className="max-w-lg space-y-1">
           <p className="font-medium">Something went wrong</p>
           <p className="text-sm text-muted-foreground">{error}</p>
@@ -107,9 +131,14 @@ export function DataState<T>({
   if (data === null || (isEmpty && isEmpty(data))) {
     return (
       <Panel>
-        <div className="rounded-full bg-muted p-3">
-          <Inbox className="h-6 w-6 text-muted-foreground" />
-        </div>
+        <Art
+          name={emptyIllustration}
+          icon={
+            <div className="rounded-full bg-muted p-3">
+              <Inbox className="h-6 w-6 text-muted-foreground" />
+            </div>
+          }
+        />
         <p className="text-sm text-muted-foreground">{emptyMessage}</p>
       </Panel>
     );

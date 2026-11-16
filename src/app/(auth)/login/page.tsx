@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { BrandLogo, PoweredByLendy } from "@/components/common";
+import { Illustration } from "@/components/common/illustration";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks";
 import { authService } from "@/services";
@@ -140,6 +141,8 @@ export default function LoginPage() {
           </div>
 
           <div className="max-w-md">
+            {/* Renders nothing until the sign-in picture is set (lib/illustrations). */}
+            <Illustration name="signIn" className="mb-8 max-h-[min(18rem,30dvh)]" />
             <h2 className="text-4xl font-bold leading-tight">
               Manage your lending business with confidence
             </h2>

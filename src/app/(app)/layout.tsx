@@ -98,14 +98,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <SessionProvider>
-      <div className="flex h-screen overflow-hidden">
+      {/*
+        h-dvh, not h-screen: on a phone the browser's own bar would hide the
+        foot of the page. `data-app-shell` is what print CSS resets, and the
+        floating Linda button sets `data-linda-fab` here while it shows, so
+        pinned controls keep clear of it (globals.css).
+      */}
+      <div data-app-shell className="flex h-dvh overflow-hidden">
         <Sidebar
           mobileOpen={sidebarOpen}
           onMobileClose={() => setSidebarOpen(false)}
         />
-        <div className="flex flex-1 flex-col min-w-0">
+        <div data-app-column className="flex flex-1 flex-col min-w-0">
           <Header onMenuClick={() => setSidebarOpen(true)} />
-          <main className="flex-1 overflow-y-auto bg-muted/40 p-4 sm:p-6">{children}</main>
+          {/* Scrolls for pages not yet built to fit; a PageFill page fills it exactly. */}
+          <main data-app-main className="flex-1 overflow-y-auto bg-muted/40 p-4 sm:p-6">{children}</main>
         </div>
         {/* Beside the page, not over it: opening Linda narrows the content. */}
         <LindaPanel />
