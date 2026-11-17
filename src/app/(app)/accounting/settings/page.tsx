@@ -86,7 +86,7 @@ function AccountingSettingsContent() {
                       {group.description}
                     </p>
                   </div>
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                     {group.fields.map((field) => (
                       <div key={field.key} className="space-y-1">
                         <AccountSelect

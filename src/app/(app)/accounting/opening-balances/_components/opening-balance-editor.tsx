@@ -108,18 +108,21 @@ export function OpeningBalanceEditor({ opening, onAnswer, onReload }: OpeningBal
         </div>
       )}
 
-      <div className="max-w-xs space-y-1.5">
-        <Label htmlFor="opening-as-of">As of</Label>
-        <Input
-          id="opening-as-of"
-          type="date"
-          value={asOf}
-          onChange={(e) => {
-            setAsOf(e.target.value);
-            setDirty(true);
-          }}
-          disabled={saving}
-        />
+      {/* The form's field grid: the date takes one column of it. */}
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="opening-as-of">As of</Label>
+          <Input
+            id="opening-as-of"
+            type="date"
+            value={asOf}
+            onChange={(e) => {
+              setAsOf(e.target.value);
+              setDirty(true);
+            }}
+            disabled={saving}
+          />
+        </div>
       </div>
 
       <EditorLinesTable

@@ -110,9 +110,12 @@ function AllowanceContent() {
                       />
                     </CardContent>
                   </Card>
-                  {branchViews(data).map((branch) => (
-                    <BranchAllowanceCard key={branch.id} branch={branch} />
-                  ))}
+                  {/* Branches side by side on a wide screen. */}
+                  <div className="grid gap-6 xl:grid-cols-2">
+                    {branchViews(data).map((branch) => (
+                      <BranchAllowanceCard key={branch.id} branch={branch} />
+                    ))}
+                  </div>
                 </div>
               )}
             </DataState>

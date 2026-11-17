@@ -90,7 +90,7 @@ export function ChartOfAccountsTable({ accounts, onEdit, onToggleActive }: Chart
 
   return (
     <>
-      <div className="relative max-w-sm">
+      <div className="relative w-full md:w-1/2 xl:w-1/3 2xl:w-1/4">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           value={query}

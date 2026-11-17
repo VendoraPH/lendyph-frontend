@@ -152,7 +152,7 @@ export function SeedChartCard({ notBuiltYet, onSeeded }: SeedChartCardProps) {
             </p>
           </div>
           <div className="flex flex-wrap items-end gap-3">
-            <div className="w-full max-w-md space-y-1.5">
+            <div className="w-full space-y-1.5 md:w-auto md:flex-1">
               <Label htmlFor="seed-chart-template">
                 Which chart fits this organisation?
               </Label>
