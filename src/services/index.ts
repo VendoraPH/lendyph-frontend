@@ -30,6 +30,7 @@ export { autoPayService } from "./auto-pay.service";
 export { accountingService } from "./accounting.service";
 export { creditScoringService } from "./credit-scoring.service";
 export { reminderService } from "./reminder.service";
+export { loanOriginationService } from "./loan-origination.service";
 export { lindaService } from "./linda.service";
 export { savingsService } from "./savings.service";
 export { timeDepositService } from "./savings-time-deposit.service";

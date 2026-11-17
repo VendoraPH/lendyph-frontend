@@ -540,6 +540,55 @@ export const API_ENDPOINTS = {
     LOAN_ASSESSMENT: (loanId: number) => `/credit-scoring/loans/${loanId}/assessment`,
   },
   /**
+   * Loan Origination: online applications from public links. None of these
+   * exist yet; the contract is `@/types/loan-origination` and
+   * `docs/LOAN_ORIGINATION_BACKEND_HANDOFF.md`. The screens stay behind
+   * NEXT_PUBLIC_ENABLE_LOAN_ORIGINATION and show "Not connected yet" (404).
+   */
+  LOAN_ORIGINATION: {
+    DASHBOARD: "/loan-origination/dashboard",
+    APPLICATIONS: "/loan-origination/applications",
+    APPLICATION: (id: number) => `/loan-origination/applications/${id}`,
+    TRANSITION: (id: number) => `/loan-origination/applications/${id}/transition`,
+    ASSIGN: (id: number) => `/loan-origination/applications/${id}/assign`,
+    NOTES: (id: number) => `/loan-origination/applications/${id}/notes`,
+    REQUEST_INFO: (id: number) => `/loan-origination/applications/${id}/request-information`,
+    REMIND: (id: number) => `/loan-origination/applications/${id}/remind`,
+    LINK_MEMBER: (id: number) => `/loan-origination/applications/${id}/link-member`,
+    SUBMIT_FOR_APPROVAL: (id: number) => `/loan-origination/applications/${id}/submit-for-approval`,
+    CONVERT: (id: number) => `/loan-origination/applications/${id}/convert`,
+    ASSESSMENTS: "/loan-origination/assessments",
+    ASSESSMENT: (id: number) => `/loan-origination/applications/${id}/assessment`,
+    ASSESSMENT_RERUN: (id: number) => `/loan-origination/applications/${id}/assessment/rerun`,
+    ASSESSMENT_HISTORY: (id: number) => `/loan-origination/applications/${id}/assessment/history`,
+    ASSESSMENT_PDF: (id: number) => `/loan-origination/applications/${id}/assessment/pdf`,
+    DOCUMENTS: "/loan-origination/documents",
+    DOCUMENT_VERIFY: (docId: number) => `/loan-origination/documents/${docId}/verify`,
+    DOCUMENT_REJECT: (docId: number) => `/loan-origination/documents/${docId}/reject`,
+    DOCUMENT_REQUEST_REPLACEMENT: (docId: number) =>
+      `/loan-origination/documents/${docId}/request-replacement`,
+    DOCUMENT_DOWNLOAD: (docId: number) => `/loan-origination/documents/${docId}/download`,
+    LINKS: "/loan-origination/links",
+    LINK: (id: number) => `/loan-origination/links/${id}`,
+    LINK_LOGO: (id: number) => `/loan-origination/links/${id}/logo`,
+    SETTINGS: "/loan-origination/settings",
+  },
+  /**
+   * The applicant's side of Loan Origination: no Lendy account, a link token
+   * and, after the OTP, an `X-Application-Session` header. Not built yet.
+   */
+  PUBLIC_APPLY: {
+    PORTAL: (token: string) => `/public/apply/${token}`,
+    OTP_REQUEST: (token: string) => `/public/apply/${token}/otp`,
+    OTP_VERIFY: (token: string) => `/public/apply/${token}/otp/verify`,
+    DRAFT: (token: string) => `/public/apply/${token}/draft`,
+    ESTIMATE: (token: string) => `/public/apply/${token}/estimate`,
+    DOCUMENTS: (token: string) => `/public/apply/${token}/documents`,
+    DOCUMENT: (token: string, docId: number) => `/public/apply/${token}/documents/${docId}`,
+    SUBMIT: (token: string) => `/public/apply/${token}/submit`,
+    TRACK: (token: string) => `/public/apply/${token}/track`,
+  },
+  /**
    * Automated due-date reminders. None of these exist yet: the scheduler,
    * providers and these routes are backend work still to do, and the contract
    * is `@/types/reminder` plus the handoff in the commit that added this

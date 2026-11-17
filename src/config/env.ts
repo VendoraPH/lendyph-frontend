@@ -172,6 +172,10 @@ export const env = {
     // Credit Scoring. Off by default: the menu and every route stay hidden until
     // its endpoints stop answering 501. Literal reference for the same reason.
     creditScoring: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_CREDIT_SCORING),
+    // Loan Origination (online applications: Loans → Loan Origination and the
+    // public /apply/{token} pages). Off by default until the backend serves
+    // /loan-origination and /public/apply. Literal reference, as above.
+    loanOrigination: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_LOAN_ORIGINATION),
     // Formula fees written as an expression (Settings → Fees). Off by default:
     // the Formula type keeps only its rate recipe until the backend stores and
     // evaluates `formula_expression`. Literal reference, as above.
