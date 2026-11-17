@@ -21,12 +21,12 @@ import {
   TRAINING_COMPLIANCE_META,
   TRAINING_STATUS_LABELS,
   labelOf,
-  toOptions,
   trainingKeyLabel,
 } from "../../_lib/labels";
 import { asSent } from "../../_lib/money";
-import type { RecordField, RecordValues } from "../../_lib/record-form";
+import type { RecordValues } from "../../_lib/record-form";
 import { signedUrl } from "../../_lib/safe-url";
+import { TRAINING_FILE_KEY, TRAINING_STEPS, trainingFields } from "../_lib/training-steps";
 import { OfficerDialog } from "./officer-dialog";
 
 function term(r: CdaOfficer): string {
@@ -103,43 +103,6 @@ const TRAINING_COLUMNS: RegisterColumn<CdaTraining>[] = [
   { header: "Status", cell: (r) => labelOf(TRAINING_STATUS_LABELS, r.status) },
 ];
 
-function trainingFields(officers: CdaOfficer[]): RecordField[] {
-  return [
-    {
-      key: "officer_id",
-      label: "Officer",
-      type: "select",
-      required: true,
-      options: officers.map((o) => ({ value: String(o.id), label: `${o.name ?? o.member?.name ?? "Officer"} (${labelOf(POSITION_LABELS, o.position)})` })),
-    },
-    { key: "title", label: "Training", type: "text", required: true },
-    {
-      key: "training_type",
-      label: "Training type",
-      type: "text",
-      placeholder: "e.g. Seminar",
-      help: "Up to 40 characters, such as seminar, workshop or online course.",
-    },
-    {
-      key: "requirement_key",
-      label: "Meets requirement",
-      type: "text",
-      placeholder: "e.g. basic_coop_course",
-      help: "The training key from CDA settings that this training meets.",
-    },
-    { key: "is_mandatory", label: "Mandatory", type: "checkbox" },
-    { key: "provider", label: "Provider", type: "text" },
-    { key: "provider_accreditation_no", label: "Provider accreditation no.", type: "text" },
-    { key: "started_on", label: "Started", type: "date" },
-    { key: "completed_on", label: "Completed", type: "date" },
-    { key: "hours", label: "Hours", type: "money", placeholder: "0.00" },
-    { key: "certificate_number", label: "Certificate no.", type: "text" },
-    { key: "status", label: "Status", type: "select", required: true, options: toOptions(TRAINING_STATUS_LABELS) },
-    { key: "expires_on", label: "Expires", type: "date" },
-    { key: "remarks", label: "Remarks", type: "textarea" },
-  ];
-}
-
 function asTraining(values: RecordValues): CdaTrainingInput {
   return { ...(values as CdaTrainingInput), officer_id: values.officer_id === null ? undefined : Number(values.officer_id) };
 }
@@ -194,7 +157,8 @@ export function OfficerRegisters({ year, onChanged }: { year: number; onChanged:
           fields={fields}
           defaults={{ status: "completed", is_mandatory: "" }}
           permission="cda:manage_officers"
-          file={{ label: "Certificate", accept: CDA_FILE_ACCEPT, onEdit: true }}
+          file={{ label: "Certificate", accept: CDA_FILE_ACCEPT, onEdit: true, key: TRAINING_FILE_KEY }}
+          steps={TRAINING_STEPS}
           onCreate={(v, file) => cdaService.createTraining(asTraining(v), file).then(changed)}
           onUpdate={(id, v, file) => cdaService.updateTraining(id, asTraining(v), file).then(changed)}
           onDelete={(id) => cdaService.deleteTraining(id).then(changed)}
