@@ -482,7 +482,10 @@ function ReportDetailContent({
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Date Range
                 </p>
-                <div className="flex flex-wrap gap-1.5 fit:flex-nowrap fit:overflow-x-auto fit:pb-0.5">
+                {/* At fit one row that scrolls sideways. Its right edge fades
+                    while more presets lie beyond it; the trailing padding lets
+                    the last one scroll clear of the fade. */}
+                <div className="flex flex-wrap gap-1.5 fit:flex-nowrap fit:overflow-x-auto fit:pb-0.5 fit:pr-8 fit:[mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)]">
                   {PRESETS.map((p) => (
                     <button
                       key={p.id}

@@ -89,6 +89,8 @@ type MainTab = "members" | "pending" | "rejected";
 
 function BorrowersContent() {
   const [borrowers, setBorrowers] = useState<Borrower[]>([]);
+  // The filters row's spot for the table's Columns menu (see BorrowerTable).
+  const [columnsSlot, setColumnsSlot] = useState<HTMLDivElement | null>(null);
   const [total, setTotal] = useState(0);
   // null, not zeroes: "we do not know yet" is a different thing from "none".
   const [stats, setStats] = useState<MemberStats | null>(null);
@@ -447,20 +449,25 @@ function BorrowersContent() {
       {/* Filters + Table */}
       {mainTab === "members" && (
       <Card id="members-panel" role="region" aria-labelledby="members-tab" className={cn(FIT_CLASSES.section, "fit:gap-3 fit:py-3")}>
-        <div className="shrink-0 p-6 pb-0 fit:px-4 fit:pt-0">
-          <BorrowerFilters
-            search={search}
-            onSearchChange={handleSearchChange}
-            statusFilter={statusFilter}
-            onStatusFilterChange={handleStatusFilterChange}
-            onClearFilters={handleClearFilters}
-            counts={{
-              all: memberCount,
-              active: stats?.active ?? null,
-              inactive: stats?.inactive ?? null,
-              blacklisted: stats?.blacklisted ?? null,
-            }}
-          />
+        {/* The table's Columns menu joins the filters' row (columnsSlot), so
+            the list doesn't spend a row on it. */}
+        <div className="flex shrink-0 flex-col gap-3 p-6 pb-0 sm:flex-row sm:items-center fit:px-4 fit:pt-0">
+          <div className="min-w-0 flex-1">
+            <BorrowerFilters
+              search={search}
+              onSearchChange={handleSearchChange}
+              statusFilter={statusFilter}
+              onStatusFilterChange={handleStatusFilterChange}
+              onClearFilters={handleClearFilters}
+              counts={{
+                all: memberCount,
+                active: stats?.active ?? null,
+                inactive: stats?.inactive ?? null,
+                blacklisted: stats?.blacklisted ?? null,
+              }}
+            />
+          </div>
+          <div ref={setColumnsSlot} className="shrink-0 empty:hidden" />
         </div>
         <CardContent className={cn("pt-4 fit:pt-0", FIT_CLASSES.section)}>
           {loading ? (
@@ -502,6 +509,7 @@ function BorrowersContent() {
               onDelete={handleDelete}
               onBulkDeactivate={handleBulkDeactivate}
               onBulkDelete={handleBulkDelete}
+              columnsSlot={columnsSlot}
             />
           )}
 

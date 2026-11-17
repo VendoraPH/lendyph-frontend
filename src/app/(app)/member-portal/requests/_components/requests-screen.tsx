@@ -69,7 +69,7 @@ export function RequestsScreen() {
         </p>
       </div>
 
-      <div className="flex shrink-0 flex-wrap items-center gap-2">
+      <div className="flex shrink-0 flex-wrap items-end gap-2">
         <form
           className="relative min-w-56 flex-1"
           role="search"
@@ -116,7 +116,7 @@ export function RequestsScreen() {
           }}
         >
           {/* Wraps onto a second row rather than hiding the last statuses off the edge. */}
-          <TabsList className="h-auto flex-wrap justify-start">
+          <TabsList className="flex-wrap justify-start group-data-horizontal/tabs:h-auto">
             {REQUEST_STATUSES.map((s) => (
               <TabsTrigger key={s} value={s} className="h-7 flex-none">
                 {REQUEST_STATUS_LABELS[s]}
