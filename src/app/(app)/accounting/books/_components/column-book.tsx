@@ -3,7 +3,8 @@
 import { useCallback, type ReactNode } from "react";
 import { CheckCircle2, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { ExpandableCard } from "@/components/common/expandable-card";
+import { ScrollBox } from "@/components/common/page-fill";
 import {
   Table,
   TableBody,
@@ -33,6 +34,8 @@ interface ColumnBookReportProps {
   from: string;
   to: string;
   branchId?: number;
+  /** The book's name, as its tab reads; the card's heading. */
+  title: string;
   /** What this book is for, in the operator's words. */
   summary: string;
   endpoint: string;
@@ -48,6 +51,7 @@ export function ColumnBookReport({
   from,
   to,
   branchId,
+  title,
   summary,
   endpoint,
 }: ColumnBookReportProps) {
@@ -65,7 +69,7 @@ export function ColumnBookReport({
       isEmpty={(book) => book.rows.length === 0}
       emptyMessage="Nothing recorded in this book for the chosen dates."
     >
-      {(book) => <ColumnBookCard book={book} />}
+      {(book) => <ColumnBookCard book={book} title={title} />}
     </DataState>
   );
 }
@@ -86,7 +90,7 @@ function Stacked({ lines }: { lines: Array<{ key: string; value: ReactNode }> })
   );
 }
 
-function ColumnBookCard({ book }: { book: ColumnBook }) {
+function ColumnBookCard({ book, title }: { book: ColumnBook; title: string }) {
   const heads = columnBookHeads(book);
   const sides = sideLabels(book.kind);
   const footer = columnBookFooter(book);
@@ -95,29 +99,32 @@ function ColumnBookCard({ book }: { book: ColumnBook }) {
   const hasColumns = heads.columns.length > 0;
 
   return (
-    <Card className="min-w-0">
-      <CardContent className="space-y-4 pt-6">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm text-muted-foreground">
-            {formatDate(book.from)} to {formatDate(book.to)} · {book.rows.length}{" "}
-            {book.rows.length === 1 ? "entry" : "entries"}
-          </p>
-          <Badge
-            variant={badge.balanced ? "outline" : "destructive"}
-            className={cn(
-              badge.balanced && "border-emerald-500/40 text-emerald-700 dark:text-emerald-400",
-            )}
-          >
-            {badge.balanced ? (
-              <CheckCircle2 aria-hidden="true" />
-            ) : (
-              <AlertTriangle aria-hidden="true" />
-            )}
-            {badge.label}
-          </Badge>
-        </div>
-        <p className="text-xs text-muted-foreground">{columnBookNote(book.kind)}</p>
+    <ExpandableCard
+      title={title}
+      className="min-w-0"
+      description={`${formatDate(book.from)} to ${formatDate(book.to)} · ${book.rows.length} ${
+        book.rows.length === 1 ? "entry" : "entries"
+      }`}
+      actions={
+        <Badge
+          variant={badge.balanced ? "outline" : "destructive"}
+          className={cn(
+            badge.balanced && "border-emerald-500/40 text-emerald-700 dark:text-emerald-400",
+          )}
+        >
+          {badge.balanced ? (
+            <CheckCircle2 aria-hidden="true" />
+          ) : (
+            <AlertTriangle aria-hidden="true" />
+          )}
+          {badge.label}
+        </Badge>
+      }
+    >
+      <p className="mb-4 text-xs text-muted-foreground">{columnBookNote(book.kind)}</p>
 
+      {/* Two heading rows: the second pins under the first (each is h-10). */}
+      <ScrollBox className="[&_thead_tr:nth-child(2)_th]:top-10">
         <Table>
           <caption className="sr-only">
             {book.kind === "cash_receipts" ? "Cash Receipts" : "Cash Disbursements"} in columns,{" "}
@@ -238,7 +245,7 @@ function ColumnBookCard({ book }: { book: ColumnBook }) {
             </TableRow>
           </TableFooter>
         </Table>
-      </CardContent>
-    </Card>
+      </ScrollBox>
+    </ExpandableCard>
   );
 }

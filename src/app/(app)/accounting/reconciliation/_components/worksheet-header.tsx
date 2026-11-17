@@ -12,7 +12,7 @@ export function WorksheetHeader({ reconciliation }: { reconciliation: Reconcilia
   const branch = branchScopeLabel(reconciliation);
 
   return (
-    <Card className={cn("border-2", reconciled ? "border-emerald-500/40" : "border-amber-500/50")}>
+    <Card className={cn("shrink-0 border-2", reconciled ? "border-emerald-500/40" : "border-amber-500/50")}>
       <CardContent className="space-y-4 pt-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-0.5">

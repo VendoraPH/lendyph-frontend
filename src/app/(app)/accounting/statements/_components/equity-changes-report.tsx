@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback } from "react";
-import { Card, CardContent } from "@/components/ui/card";
+import { ExpandableCard } from "@/components/common/expandable-card";
+import { ScrollBox } from "@/components/common/page-fill";
 import {
   Table,
   TableBody,
@@ -53,8 +54,8 @@ export function EquityChangesReport({
       emptyMessage="No equity movement in this period."
     >
       {(report) => (
-        <Card>
-          <CardContent className="pt-6">
+        <ExpandableCard title="Changes in Equity">
+          <ScrollBox>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -97,8 +98,8 @@ export function EquityChangesReport({
                 </TableRow>
               </TableFooter>
             </Table>
-          </CardContent>
-        </Card>
+          </ScrollBox>
+        </ExpandableCard>
       )}
     </StatementState>
   );

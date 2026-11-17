@@ -44,53 +44,55 @@ export function WorksheetTable({ reconciliation, busy, onConfirm, onUnmatch, onR
               No statement lines were recorded for this reconciliation.
             </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-28">Date</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead className="w-32">Reference</TableHead>
-                  <TableHead className="w-32 text-right">Amount</TableHead>
-                  <TableHead className="w-36">Status</TableHead>
-                  <TableHead className="w-44">Ledger line</TableHead>
-                  <TableHead className="w-36 text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {statementRows.map((row) => {
-                  const figures = rowFigures(row);
-                  return (
-                    <TableRow key={`s${row.statement_line_id}`}>
-                      <TableCell className="text-sm">
-                        <FigureWithNote figure={figures.date} note={figures.dateNote} />
-                      </TableCell>
-                      <TableCell className="text-sm">{row.description}</TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground">
-                        {row.external_reference || "—"}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-sm">
-                        <FigureWithNote figure={figures.amount} note={figures.amountNote} />
-                      </TableCell>
-                      <TableCell>
-                        <MatchBadge match={row.match} />
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        <LedgerLine row={row} />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <RowAction
-                          row={row}
-                          busy={busy}
-                          onConfirm={onConfirm}
-                          onUnmatch={onUnmatch}
-                          onResolve={onResolve}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-28">Date</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead className="w-32">Reference</TableHead>
+                    <TableHead className="w-32 text-right">Amount</TableHead>
+                    <TableHead className="w-36">Status</TableHead>
+                    <TableHead className="w-44">Ledger line</TableHead>
+                    <TableHead className="w-36 text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {statementRows.map((row) => {
+                    const figures = rowFigures(row);
+                    return (
+                      <TableRow key={`s${row.statement_line_id}`}>
+                        <TableCell className="text-sm">
+                          <FigureWithNote figure={figures.date} note={figures.dateNote} />
+                        </TableCell>
+                        <TableCell className="text-sm">{row.description}</TableCell>
+                        <TableCell className="font-mono text-xs text-muted-foreground">
+                          {row.external_reference || "—"}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-sm">
+                          <FigureWithNote figure={figures.amount} note={figures.amountNote} />
+                        </TableCell>
+                        <TableCell>
+                          <MatchBadge match={row.match} />
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          <LedgerLine row={row} />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <RowAction
+                            row={row}
+                            busy={busy}
+                            onConfirm={onConfirm}
+                            onUnmatch={onUnmatch}
+                            onResolve={onResolve}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -101,40 +103,42 @@ export function WorksheetTable({ reconciliation, busy, onConfirm, onUnmatch, onR
             <CardTitle className="text-base">In the books, not on the statement</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-28">Date</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead className="w-36">Journal</TableHead>
-                  <TableHead className="w-32">Reference</TableHead>
-                  <TableHead className="w-32 text-right">Amount</TableHead>
-                  <TableHead className="w-48">Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {bookRows.map((row) => (
-                  <TableRow key={`l${row.journal_line_id}`}>
-                    <TableCell className="text-sm">{formatDate(row.date)}</TableCell>
-                    <TableCell className="text-sm">{row.description}</TableCell>
-                    <TableCell className="text-sm">
-                      {row.journal_id !== null ? (
-                        <Link className="underline underline-offset-2" href={journalHref(row.journal_id)}>
-                          {row.journal_no ?? "Open journal"}
-                        </Link>
-                      ) : (
-                        "—"
-                      )}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs text-muted-foreground">
-                      {row.external_reference || "—"}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-sm">{signedCentavos(row.amount)}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{ledgerLineText(row)}</TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-28">Date</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead className="w-36">Journal</TableHead>
+                    <TableHead className="w-32">Reference</TableHead>
+                    <TableHead className="w-32 text-right">Amount</TableHead>
+                    <TableHead className="w-48">Status</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {bookRows.map((row) => (
+                    <TableRow key={`l${row.journal_line_id}`}>
+                      <TableCell className="text-sm">{formatDate(row.date)}</TableCell>
+                      <TableCell className="text-sm">{row.description}</TableCell>
+                      <TableCell className="text-sm">
+                        {row.journal_id !== null ? (
+                          <Link className="underline underline-offset-2" href={journalHref(row.journal_id)}>
+                            {row.journal_no ?? "Open journal"}
+                          </Link>
+                        ) : (
+                          "—"
+                        )}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">
+                        {row.external_reference || "—"}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm">{signedCentavos(row.amount)}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{ledgerLineText(row)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       )}

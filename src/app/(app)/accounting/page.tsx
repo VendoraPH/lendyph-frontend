@@ -19,8 +19,10 @@ import {
   Wallet,
 } from "lucide-react";
 import { RouteGuard } from "@/components/common";
+import { FillSection, PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -32,6 +34,7 @@ import {
 import { useAccountingResource } from "@/hooks";
 import { accountingService } from "@/services";
 import { todayISO } from "@/lib/format";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { formatValue } from "@/lib/report-format";
 import { cn } from "@/lib/utils";
 import type { AccountingDashboard, RecentJournal } from "@/types";
@@ -84,7 +87,7 @@ function AccountingDashboardContent() {
   const resource = useAccountingResource<AccountingDashboard>(fetcher, datesError === null);
 
   return (
-    <div className="space-y-6">
+    <PageFill className="gap-4">
       <AccountingPageHeader
         title="Accounting"
         description="Where the lending operation stands, in accounting terms."
@@ -101,7 +104,7 @@ function AccountingDashboardContent() {
       </FilterBar>
 
       {datesError ? (
-        <Card>
+        <Card className="shrink-0">
           <CardContent className="py-8 text-center text-sm text-muted-foreground" role="alert">
             {datesError}
           </CardContent>
@@ -116,22 +119,21 @@ function AccountingDashboardContent() {
         </DataState>
       )}
 
-      <div>
-        <p className="mb-3 text-sm font-medium text-muted-foreground">Go to</p>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {SHORTCUTS.map(({ href, label, icon: Icon }) => (
-            <Link
-              key={href}
-              href={href}
-              className="flex items-center gap-3 rounded-lg border bg-card p-4 text-sm transition-colors hover:bg-accent"
-            >
-              <Icon className="h-4 w-4 text-muted-foreground" />
-              {label}
-            </Link>
-          ))}
-        </div>
+      {/* One compact row at the page's foot, so the figures above keep the height. */}
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <p className="mr-1 text-sm font-medium text-muted-foreground">Go to</p>
+        {SHORTCUTS.map(({ href, label, icon: Icon }) => (
+          <Link
+            key={href}
+            href={href}
+            className="flex items-center gap-2 rounded-lg border bg-card px-3 py-1.5 text-sm transition-colors hover:bg-accent"
+          >
+            <Icon className="h-4 w-4 text-muted-foreground" />
+            {label}
+          </Link>
+        ))}
       </div>
-    </div>
+    </PageFill>
   );
 }
 
@@ -146,7 +148,7 @@ export default function AccountingDashboardPage() {
 function DashboardBody({ data }: { data: AccountingDashboard }) {
   const periodLabel = periodRangeLabel(data.period);
   return (
-    <div className="space-y-6">
+    <FillSection className="gap-4">
       {/*
         The balance check comes first and cannot be scrolled past. Every other
         figure on this page is read off the same ledger, so if debits and
@@ -155,7 +157,7 @@ function DashboardBody({ data }: { data: AccountingDashboard }) {
       */}
       <Card
         className={cn(
-          "border-2",
+          "shrink-0 border-2",
           data.is_balanced ? "border-emerald-500/40" : "border-red-500/60",
         )}
       >
@@ -187,46 +189,68 @@ function DashboardBody({ data }: { data: AccountingDashboard }) {
 
       <SavingsGlBannerCard data={data} />
 
-      <div className="space-y-4">
-        <FigureSection title="Money" className="sm:grid-cols-3">
-          <FigureCard label="Cash on hand" value={data.cash_on_hand} icon={Banknote} />
-          <FigureCard label="Cash in bank" value={data.cash_in_bank} icon={Landmark} />
-          <FigureCard label="E-wallets" value={data.e_wallets} icon={Smartphone} />
-        </FigureSection>
-        <CashAccountsTable accounts={data.cash_accounts} />
-      </div>
+      {/*
+        Like the main dashboard: the balance check above stays put, and the
+        rest sits in tabs that each scroll inside, so the page fits the screen.
+      */}
+      <Tabs defaultValue="figures" className={FIT_CLASSES.section}>
+        <TabsList className="shrink-0">
+          <TabsTrigger value="figures">Figures</TabsTrigger>
+          <TabsTrigger value="trends">Trends</TabsTrigger>
+          <TabsTrigger value="journals">Recent journals</TabsTrigger>
+        </TabsList>
 
-      <ReceivablesSection data={data} />
+        <TabsContent value="figures" className={FIT_CLASSES.section}>
+          <ScrollBox className="space-y-6 p-px">
+            <div className="space-y-4">
+              <FigureSection title="Money" className="sm:grid-cols-3">
+                <FigureCard label="Cash on hand" value={data.cash_on_hand} icon={Banknote} />
+                <FigureCard label="Cash in bank" value={data.cash_in_bank} icon={Landmark} />
+                <FigureCard label="E-wallets" value={data.e_wallets} icon={Smartphone} />
+              </FigureSection>
+              <CashAccountsTable accounts={data.cash_accounts} />
+            </div>
 
-      <FigureSection title="Position" className="sm:grid-cols-3">
-        <FigureCard label="Total assets" value={data.total_assets} icon={Scale} />
-        <FigureCard label="Total liabilities" value={data.total_liabilities} icon={ReceiptText} />
-        <FigureCard label="Total equity" value={data.total_equity} icon={Landmark} />
-      </FigureSection>
+            <ReceivablesSection data={data} />
 
-      <FigureSection title="Period" description={periodLabel || undefined} className="sm:grid-cols-3">
-        <FigureCard label="Income" value={data.period?.income} icon={TrendingUp} />
-        <FigureCard label="Expenses" value={data.period?.expenses} icon={TrendingDown} />
-        <FigureCard label="Net income" value={data.period?.net_income} icon={Scale} signed />
-      </FigureSection>
+            <FigureSection title="Position" className="sm:grid-cols-3">
+              <FigureCard label="Total assets" value={data.total_assets} icon={Scale} />
+              <FigureCard label="Total liabilities" value={data.total_liabilities} icon={ReceiptText} />
+              <FigureCard label="Total equity" value={data.total_equity} icon={Landmark} />
+            </FigureSection>
 
-      <FigureSection title="This month" className="sm:grid-cols-3">
-        <FigureCard label="Income" value={data.income_mtd} icon={TrendingUp} />
-        <FigureCard label="Expenses" value={data.expenses_mtd} icon={TrendingDown} />
-        <FigureCard label="Net income" value={data.net_income_mtd} icon={Scale} signed />
-      </FigureSection>
+            <FigureSection title="Period" description={periodLabel || undefined} className="sm:grid-cols-3">
+              <FigureCard label="Income" value={data.period?.income} icon={TrendingUp} />
+              <FigureCard label="Expenses" value={data.period?.expenses} icon={TrendingDown} />
+              <FigureCard label="Net income" value={data.period?.net_income} icon={Scale} signed />
+            </FigureSection>
 
-      <TrendCharts months={data.months} />
+            <FigureSection title="This month" className="sm:grid-cols-3">
+              <FigureCard label="Income" value={data.income_mtd} icon={TrendingUp} />
+              <FigureCard label="Expenses" value={data.expenses_mtd} icon={TrendingDown} />
+              <FigureCard label="Net income" value={data.net_income_mtd} icon={Scale} signed />
+            </FigureSection>
+          </ScrollBox>
+        </TabsContent>
 
-      <RecentJournals journals={data.recent_journals} />
-    </div>
+        <TabsContent value="trends" className={FIT_CLASSES.section}>
+          <ScrollBox className="p-px">
+            <TrendCharts months={data.months} />
+          </ScrollBox>
+        </TabsContent>
+
+        <TabsContent value="journals" className={FIT_CLASSES.section}>
+          <RecentJournals journals={data.recent_journals} />
+        </TabsContent>
+      </Tabs>
+    </FillSection>
   );
 }
 
 /** The latest posted or reversed journals on or before As of, newest first, as sent. */
 function RecentJournals({ journals }: { journals: readonly RecentJournal[] | undefined }) {
   return (
-    <Card>
+    <Card className={FIT_CLASSES.section}>
       <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
         <CardTitle className="text-base">Recent journals</CardTitle>
         <Link
@@ -237,13 +261,13 @@ function RecentJournals({ journals }: { journals: readonly RecentJournal[] | und
           <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </Link>
       </CardHeader>
-      <CardContent>
+      <CardContent className={FIT_CLASSES.section}>
         {!journals || journals.length === 0 ? (
           <p className="py-4 text-center text-sm text-muted-foreground">
             No posted journals on or before this date.
           </p>
         ) : (
-          <div className="overflow-x-auto">
+          <ScrollBox>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -281,7 +305,7 @@ function RecentJournals({ journals }: { journals: readonly RecentJournal[] | und
                 ))}
               </TableBody>
             </Table>
-          </div>
+          </ScrollBox>
         )}
       </CardContent>
     </Card>

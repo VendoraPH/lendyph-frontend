@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { RouteGuard } from "@/components/common";
+import { PageFill } from "@/components/common/page-fill";
 import { Button } from "@/components/ui/button";
 import { accountingService } from "@/services";
 import { emptyLine } from "@/lib/accounting/journal";
@@ -35,7 +36,7 @@ function NewJournalEntryContent() {
   };
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       <AccountingPageHeader
         title="New Journal Entry"
         description="Saves as a draft. Nothing moves in the books until it is posted."
@@ -57,7 +58,7 @@ function NewJournalEntryContent() {
           </Button>
         }
       />
-    </div>
+    </PageFill>
   );
 }
 

@@ -3,10 +3,12 @@
 import { useCallback, useState } from "react";
 import { Building2, RefreshCw } from "lucide-react";
 import { RouteGuard } from "@/components/common";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAccountingResource, usePermission } from "@/hooks";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { accountingService } from "@/services";
 import type { OpeningBalance } from "@/types";
 import { AccountingPageHeader } from "../_components/page-header";
@@ -50,7 +52,7 @@ function OpeningBalancesContent() {
   const current = latest ?? resource.data;
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       <AccountingPageHeader
         title="Opening Balances"
         description={DESCRIPTION}
@@ -62,7 +64,7 @@ function OpeningBalancesContent() {
       />
 
       {notice ? (
-        <Card>
+        <Card className="shrink-0">
           <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
             <Building2 className="h-6 w-6 text-muted-foreground" aria-hidden />
             <p className="max-w-lg text-sm text-muted-foreground">{notice}</p>
@@ -73,7 +75,7 @@ function OpeningBalancesContent() {
           {refusal && (
             <div
               role="alert"
-              className="flex flex-col gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+              className="flex shrink-0 flex-col gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm sm:flex-row sm:items-center sm:justify-between"
             >
               <span>{refusal} The opening balances were reloaded from the server.</span>
               <Button size="sm" variant="outline" onClick={() => reload(null)}>
@@ -93,25 +95,28 @@ function OpeningBalancesContent() {
             ]}
           >
             {(opening) => (
-              <Card>
-                <CardContent className="pt-6">
-                  {viewFor(opening) === "edit" ? (
-                    <OpeningBalanceEditor
-                      key={generation}
-                      opening={opening}
-                      onAnswer={answer}
-                      onReload={reload}
-                    />
-                  ) : (
-                    <OpeningBalanceReadOnly opening={opening} />
-                  )}
+              <Card className={FIT_CLASSES.section}>
+                <CardContent className={`${FIT_CLASSES.section} pt-6`}>
+                  {/* The lines, totals and finalise step scroll inside, under pinned headings. */}
+                  <ScrollBox>
+                    {viewFor(opening) === "edit" ? (
+                      <OpeningBalanceEditor
+                        key={generation}
+                        opening={opening}
+                        onAnswer={answer}
+                        onReload={reload}
+                      />
+                    ) : (
+                      <OpeningBalanceReadOnly opening={opening} />
+                    )}
+                  </ScrollBox>
                 </CardContent>
               </Card>
             )}
           </DataState>
         </>
       )}
-    </div>
+    </PageFill>
   );
 }
 

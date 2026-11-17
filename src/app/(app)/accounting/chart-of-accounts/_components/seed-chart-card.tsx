@@ -142,7 +142,7 @@ export function SeedChartCard({ notBuiltYet, onSeeded }: SeedChartCardProps) {
 
   return (
     <PermissionGate permission="chart_of_accounts:create">
-      <Card className="border-primary/30 bg-primary/5">
+      <Card className="shrink-0 border-primary/30 bg-primary/5">
         <CardContent className="space-y-4 pt-6">
           <div className="space-y-1">
             <p className="font-medium">Your chart of accounts is not set up</p>

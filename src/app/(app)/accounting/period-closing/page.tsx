@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import { Lock, LockOpen } from "lucide-react";
 import { toast } from "sonner";
 import { PermissionGate, RouteGuard } from "@/components/common";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -92,7 +93,7 @@ function PeriodClosingContent() {
   };
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       <AccountingPageHeader
         title="Period Closing"
         description="Lock a month once it has been reviewed, and close the year once its books are final."
@@ -104,136 +105,142 @@ function PeriodClosingContent() {
         into it — which is the whole value, and also why reopening exists
         and is logged.
       */}
-      <div className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
+      <div className="shrink-0 rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
         Closing a period stops anything further being posted into it. Do it
         once the trial balance is in balance and the money accounts have been
         reconciled.
       </div>
 
-      <DataState
-        resource={resource}
-        summary="Each accounting period, whether it is still accepting entries, and who closed it."
-        endpoints={[
-          "GET /accounting/periods",
-          "POST /accounting/periods/{id}/close",
-          "POST /accounting/periods/{id}/reopen",
-        ]}
-        isEmpty={(drain) => drain.rows.length === 0}
-        emptyMessage="No accounting period has been set up."
-      >
-        {({ rows: periods, truncated, total }) => (
-          <Card>
-            <CardContent className="space-y-4 pt-6">
-              {truncated && (
-                <IncompleteListNotice
-                  shown={periods.length}
-                  total={total}
-                  noun="accounting periods"
-                  consequence="A period missing from this table cannot be closed or reopened from here."
-                />
-              )}
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-28">Period</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead className="w-56">Dates</TableHead>
-                    <TableHead className="w-28">Status</TableHead>
-                    <TableHead className="w-56">Closed</TableHead>
-                    <TableHead className="w-44" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {periods.map((period) => (
-                    <TableRow key={period.id}>
-                      <TableCell className="font-mono text-xs">
-                        {period.code}
-                      </TableCell>
-                      <TableCell className="text-sm">{period.name}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {formatDate(period.start_date)} –{" "}
-                        {formatDate(period.end_date)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={
-                            period.status === "open"
-                              ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/30"
-                              : "bg-slate-500/10 text-slate-700 border-slate-500/30"
-                          }
-                        >
-                          {period.status === "open" ? (
-                            <LockOpen className="mr-1 h-3 w-3" />
-                          ) : (
-                            <Lock className="mr-1 h-3 w-3" />
-                          )}
-                          {periodStatusLabel(period.status)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {yearEndLabels.has(period.id) && (
-                          <p className="font-medium text-foreground">
-                            {yearEndLabels.get(period.id)}
-                          </p>
-                        )}
-                        {period.closed_at
-                          ? `${formatDateTime(period.closed_at)}${
-                              period.closed_by ? ` · ${period.closed_by}` : ""
-                            }`
-                          : "—"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <PermissionGate permission="accounting:close">
-                          {monthAction(period, yearEndLabels) === "close" && (
-                            <Button
-                              size="sm"
+      {/* The months, the year-end close and its history scroll together under the header. */}
+      <ScrollBox className="space-y-6 p-px">
+        <DataState
+          resource={resource}
+          summary="Each accounting period, whether it is still accepting entries, and who closed it."
+          endpoints={[
+            "GET /accounting/periods",
+            "POST /accounting/periods/{id}/close",
+            "POST /accounting/periods/{id}/reopen",
+          ]}
+          isEmpty={(drain) => drain.rows.length === 0}
+          emptyMessage="No accounting period has been set up."
+        >
+          {({ rows: periods, truncated, total }) => (
+            <Card>
+              <CardContent className="space-y-4 pt-6">
+                {truncated && (
+                  <IncompleteListNotice
+                    shown={periods.length}
+                    total={total}
+                    noun="accounting periods"
+                    consequence="A period missing from this table cannot be closed or reopened from here."
+                  />
+                )}
+                {/* The card would clip a wide table, so it scrolls sideways here. */}
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-28">Period</TableHead>
+                        <TableHead>Name</TableHead>
+                        <TableHead className="w-56">Dates</TableHead>
+                        <TableHead className="w-28">Status</TableHead>
+                        <TableHead className="w-56">Closed</TableHead>
+                        <TableHead className="w-44" />
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {periods.map((period) => (
+                        <TableRow key={period.id}>
+                          <TableCell className="font-mono text-xs">
+                            {period.code}
+                          </TableCell>
+                          <TableCell className="text-sm">{period.name}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {formatDate(period.start_date)} –{" "}
+                            {formatDate(period.end_date)}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
                               variant="outline"
-                              onClick={() => setConfirming(period)}
+                              className={
+                                period.status === "open"
+                                  ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/30"
+                                  : "bg-slate-500/10 text-slate-700 border-slate-500/30"
+                              }
                             >
-                              Close
-                            </Button>
-                          )}
-                          {monthAction(period, yearEndLabels) === "reopen" && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => reopen(period)}
-                            >
-                              Reopen
-                            </Button>
-                          )}
-                          {monthAction(period, yearEndLabels) === "year" && (
-                            <span className="text-xs text-muted-foreground">
-                              {REOPEN_THE_YEAR}
-                            </span>
-                          )}
-                        </PermissionGate>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        )}
-      </DataState>
+                              {period.status === "open" ? (
+                                <LockOpen className="mr-1 h-3 w-3" />
+                              ) : (
+                                <Lock className="mr-1 h-3 w-3" />
+                              )}
+                              {periodStatusLabel(period.status)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {yearEndLabels.has(period.id) && (
+                              <p className="font-medium text-foreground">
+                                {yearEndLabels.get(period.id)}
+                              </p>
+                            )}
+                            {period.closed_at
+                              ? `${formatDateTime(period.closed_at)}${
+                                  period.closed_by ? ` · ${period.closed_by}` : ""
+                                }`
+                              : "—"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <PermissionGate permission="accounting:close">
+                              {monthAction(period, yearEndLabels) === "close" && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setConfirming(period)}
+                                >
+                                  Close
+                                </Button>
+                              )}
+                              {monthAction(period, yearEndLabels) === "reopen" && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => reopen(period)}
+                                >
+                                  Reopen
+                                </Button>
+                              )}
+                              {monthAction(period, yearEndLabels) === "year" && (
+                                <span className="text-xs text-muted-foreground">
+                                  {REOPEN_THE_YEAR}
+                                </span>
+                              )}
+                            </PermissionGate>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </DataState>
 
-      <PermissionGate permission="accounting:close">
-        {resource.data && !closesResource.loading && (
-          <YearEndCloseSection
-            key={`close-${yearEndVersion}`}
-            periods={resource.data.rows}
+        <PermissionGate permission="accounting:close">
+          {resource.data && !closesResource.loading && (
+            <YearEndCloseSection
+              key={`close-${yearEndVersion}`}
+              periods={resource.data.rows}
+              closes={closes}
+              onChanged={yearEndChanged}
+            />
+          )}
+          <YearCloseHistory
+            key={`history-${yearEndVersion}`}
             closes={closes}
             onChanged={yearEndChanged}
           />
-        )}
-        <YearCloseHistory
-          key={`history-${yearEndVersion}`}
-          closes={closes}
-          onChanged={yearEndChanged}
-        />
-      </PermissionGate>
+        </PermissionGate>
+      </ScrollBox>
 
       <Dialog
         open={confirming !== null}
@@ -257,7 +264,7 @@ function PeriodClosingContent() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageFill>
   );
 }
 

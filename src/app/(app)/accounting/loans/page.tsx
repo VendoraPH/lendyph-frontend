@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { RouteGuard } from "@/components/common";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { useAccountingResource } from "@/hooks";
 import { accountingService } from "@/services";
 import { todayISO } from "@/lib/format";
@@ -32,7 +33,7 @@ function LoanAccountingContent() {
   const summary = useAccountingResource<LoanAccountingSummary>(fetcher);
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       <AccountingPageHeader
         title="Loan Accounting"
         description="How the loan portfolio looks from the ledger's side, against the loan records."
@@ -43,25 +44,28 @@ function LoanAccountingContent() {
         <BranchFilter value={branch} onChange={setBranch} />
       </FilterBar>
 
-      <DataState
-        resource={summary}
-        summary="Loans receivable in the books and on the loan records, the receivable aging, and how far the two agree."
-        endpoints={["GET /accounting/loan-accounting/summary"]}
-      >
-        {(data) => (
-          <div className="space-y-6">
-            <BooksFigures summary={data} />
-            <RecordsFigures summary={data} />
-            <BooksVsRecords summary={data} />
-            <AgingTable aging={data.aging} />
-          </div>
-        )}
-      </DataState>
+      {/* The header and the date stay put; the figures and tables scroll together under them. */}
+      <ScrollBox className="space-y-6 p-px">
+        <DataState
+          resource={summary}
+          summary="Loans receivable in the books and on the loan records, the receivable aging, and how far the two agree."
+          endpoints={["GET /accounting/loan-accounting/summary"]}
+        >
+          {(data) => (
+            <div className="space-y-6">
+              <BooksFigures summary={data} />
+              <RecordsFigures summary={data} />
+              <BooksVsRecords summary={data} />
+              <AgingTable aging={data.aging} />
+            </div>
+          )}
+        </DataState>
 
-      <LoansByAge asOf={asOf} branchId={branchId} />
+        <LoansByAge asOf={asOf} branchId={branchId} />
 
-      <PostingRulesCard />
-    </div>
+        <PostingRulesCard />
+      </ScrollBox>
+    </PageFill>
   );
 }
 

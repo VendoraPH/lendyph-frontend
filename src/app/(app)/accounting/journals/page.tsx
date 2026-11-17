@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Search } from "lucide-react";
 import { PermissionGate, RouteGuard, TablePagination } from "@/components/common";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -31,6 +32,8 @@ import { accountingService } from "@/services";
 import { getErrorMessage } from "@/lib/api-error";
 import { formatCentavos } from "@/lib/accounting/money";
 import { formatDate, todayISO } from "@/lib/format";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 import type { JournalPage } from "@/types";
 import { AccountingPageHeader } from "../_components/page-header";
 import {
@@ -136,7 +139,7 @@ function JournalEntriesContent() {
     };
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       <AccountingPageHeader
         title="Journal Entries"
         description="Every entry in the books, automatic and manual."
@@ -214,13 +217,17 @@ function JournalEntriesContent() {
         </div>
       </FilterBar>
 
-      <Card>
-        <CardContent className="space-y-4 pt-6">
+      <Card className={FIT_CLASSES.section}>
+        <CardContent className={cn(FIT_CLASSES.section, "space-y-4 pt-6")}>
           <p className="text-sm text-muted-foreground" aria-live="polite">
             {meta ? journalStatusCounts(meta.stats) : "Loading…"}
           </p>
 
-          <div className={settled && !failed ? undefined : "opacity-60"} aria-busy={!settled}>
+          {/* With no rows the box keeps its natural height, so the message sits under the headings. */}
+          <ScrollBox
+            className={cn(!(settled && !failed) && "opacity-60", rows.length === 0 && "fit:flex-initial")}
+            aria-busy={!settled}
+          >
             <Table>
               <TableHeader>
                 <TableRow>
@@ -285,7 +292,7 @@ function JournalEntriesContent() {
                 </TableRow>
               </TableFooter>
             </Table>
-          </div>
+          </ScrollBox>
 
           {settled && rows.length === 0 && (
             <div className="space-y-3 py-12 text-center text-sm text-muted-foreground">
@@ -321,7 +328,7 @@ function JournalEntriesContent() {
           )}
         </CardContent>
       </Card>
-    </div>
+    </PageFill>
   );
 }
 

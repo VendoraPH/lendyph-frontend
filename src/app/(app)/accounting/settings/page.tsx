@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Save } from "lucide-react";
 import { toast } from "sonner";
 import { PermissionGate, RouteGuard } from "@/components/common";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAccountingResource, useChartOfAccounts } from "@/hooks";
@@ -44,7 +45,7 @@ function AccountingSettingsContent() {
   };
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       <AccountingPageHeader
         title="Accounting Settings"
         description="Which account each automatic entry posts to."
@@ -58,7 +59,7 @@ function AccountingSettingsContent() {
         }
       />
 
-      <div className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
+      <div className="shrink-0 rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
         Set these once. Every entry Lendy writes for a release, a collection,
         a fee or a penalty resolves its accounts from here — change one and
         future entries follow it, while entries already posted keep the
@@ -74,7 +75,8 @@ function AccountingSettingsContent() {
         ]}
       >
         {() => (
-          <div className="space-y-4">
+          // Save stays in the header; the posting rules scroll under it.
+          <ScrollBox className="space-y-4 p-px">
             {GROUPS.map((group) => (
               <Card key={group.title}>
                 <CardContent className="space-y-4 pt-6">
@@ -108,10 +110,10 @@ function AccountingSettingsContent() {
                 </CardContent>
               </Card>
             ))}
-          </div>
+          </ScrollBox>
         )}
       </DataState>
-    </div>
+    </PageFill>
   );
 }
 

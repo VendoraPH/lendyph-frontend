@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { RouteGuard } from "@/components/common";
+import { FillSection, PageFill, ScrollBox } from "@/components/common/page-fill";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -88,7 +89,7 @@ function ReconciliationContent() {
   };
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       <AccountingPageHeader
         title="Reconciliation"
         description={DESCRIPTION}
@@ -106,7 +107,7 @@ function ReconciliationContent() {
         the ledger is missing something real or the statement is — and the
         only way to know which is to look line by line.
       */}
-      <div className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
+      <div className="shrink-0 rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
         A difference between your books and the statement is a real
         discrepancy, not a rounding artefact. Find the missing line rather
         than adjusting the balance.
@@ -167,12 +168,15 @@ function ReconciliationContent() {
           }
 
           return (
-            <div className="space-y-4">
+            <FillSection className="gap-4">
               {notice}
-              {shown.map((item) => (
-                <ReconciliationCard key={item.id} reconciliation={item} />
-              ))}
-            </div>
+              {/* The reconciliations scroll under the filters. */}
+              <ScrollBox className="space-y-4 p-px">
+                {shown.map((item) => (
+                  <ReconciliationCard key={item.id} reconciliation={item} />
+                ))}
+              </ScrollBox>
+            </FillSection>
           );
         }}
       </DataState>
@@ -184,7 +188,7 @@ function ReconciliationContent() {
         onOpenChange={setCreating}
         onCreated={created}
       />
-    </div>
+    </PageFill>
   );
 }
 
@@ -236,39 +240,42 @@ function ReconciliationCard({
           />
         </div>
 
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-28">Date</TableHead>
-              <TableHead>Description</TableHead>
-              <TableHead className="w-36">Reference</TableHead>
-              <TableHead className="w-36">Match</TableHead>
-              <TableHead className="w-32 text-right">Amount</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {reconciliation.lines.map((line) => {
-              const figures = rowFigures(line);
-              return (
-                <TableRow key={`${line.statement_line_id ?? "l"}-${line.journal_line_id ?? "s"}`}>
-                  <TableCell className="text-sm">
-                    <FigureWithNote figure={figures.date} note={figures.dateNote} />
-                  </TableCell>
-                  <TableCell className="text-sm">{line.description}</TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground">
-                    {line.external_reference || "—"}
-                  </TableCell>
-                  <TableCell>
-                    <RowMatchBadge row={line} />
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm">
-                    <FigureWithNote figure={figures.amount} note={figures.amountNote} />
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
+        {/* The card would clip a wide table, so it scrolls sideways here. */}
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-28">Date</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead className="w-36">Reference</TableHead>
+                <TableHead className="w-36">Match</TableHead>
+                <TableHead className="w-32 text-right">Amount</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {reconciliation.lines.map((line) => {
+                const figures = rowFigures(line);
+                return (
+                  <TableRow key={`${line.statement_line_id ?? "l"}-${line.journal_line_id ?? "s"}`}>
+                    <TableCell className="text-sm">
+                      <FigureWithNote figure={figures.date} note={figures.dateNote} />
+                    </TableCell>
+                    <TableCell className="text-sm">{line.description}</TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {line.external_reference || "—"}
+                    </TableCell>
+                    <TableCell>
+                      <RowMatchBadge row={line} />
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-sm">
+                      <FigureWithNote figure={figures.amount} note={figures.amountNote} />
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
       </CardContent>
     </Card>
   );

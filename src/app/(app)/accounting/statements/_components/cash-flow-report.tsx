@@ -2,6 +2,8 @@
 
 import { useCallback } from "react";
 import { AlertTriangle } from "lucide-react";
+import { ExpandableCard } from "@/components/common/expandable-card";
+import { FillSection, ScrollBox } from "@/components/common/page-fill";
 import { Card, CardContent } from "@/components/ui/card";
 import { accountingService } from "@/services";
 import { formatDate } from "@/lib/format";
@@ -41,8 +43,8 @@ export function CashFlowReport({ from, to, branchId }: CashFlowReportProps) {
       endpoints={["GET /accounting/statements/cash-flow"]}
     >
       {(report) => (
-        <div className="space-y-4">
-          <Card className="border-2">
+        <FillSection className="gap-4">
+          <Card className="shrink-0 border-2">
             <CardContent className="grid gap-4 py-4 sm:grid-cols-3">
               <Line label="Cash at start" value={report.opening_cash} />
               <Line label="Net change" value={report.net_change} />
@@ -51,7 +53,7 @@ export function CashFlowReport({ from, to, branchId }: CashFlowReportProps) {
           </Card>
 
           {report.is_reconciled === false && (
-            <Card role="alert" className="border-2 border-amber-500/60">
+            <Card role="alert" className="shrink-0 border-2 border-amber-500/60">
               <CardContent className="flex items-center gap-3 py-4">
                 <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" aria-hidden />
                 <div className="flex-1">
@@ -69,42 +71,45 @@ export function CashFlowReport({ from, to, branchId }: CashFlowReportProps) {
             </Card>
           )}
 
-          <p className="text-sm text-muted-foreground">
-            {formatDate(report.from)} to {formatDate(report.to)}
-          </p>
+          <ExpandableCard
+            title="Cash Flow"
+            description={`${formatDate(report.from)} to ${formatDate(report.to)}`}
+          >
+            <ScrollBox className="space-y-4 p-px">
+            <ReportSection
+              title="Operating activities"
+              lines={cashFlowLines(report.operating.lines, "operating")}
+              total={report.operating.total}
+            />
+            <ReportSection
+              title="Investing activities"
+              lines={cashFlowLines(report.investing.lines, "investing")}
+              total={report.investing.total}
+            />
+            <ReportSection
+              title="Financing activities"
+              lines={cashFlowLines(report.financing.lines, "financing")}
+              total={report.financing.total}
+            />
 
-          <ReportSection
-            title="Operating activities"
-            lines={cashFlowLines(report.operating.lines, "operating")}
-            total={report.operating.total}
-          />
-          <ReportSection
-            title="Investing activities"
-            lines={cashFlowLines(report.investing.lines, "investing")}
-            total={report.investing.total}
-          />
-          <ReportSection
-            title="Financing activities"
-            lines={cashFlowLines(report.financing.lines, "financing")}
-            total={report.financing.total}
-          />
-
-          {report.non_cash && (
-            <section aria-labelledby="cash-flow-non-cash" className="space-y-2 pt-2">
-              <p id="cash-flow-non-cash" className="text-sm text-muted-foreground">
-                Fees and deductions kept back from loan proceeds. No cash moved
-                for them, so they are outside every total above.
-              </p>
-              <ReportSection
-                title={report.non_cash.label}
-                lines={cashFlowLines(report.non_cash.lines, "non_cash")}
-                total={report.non_cash.total}
-                totalLabel="Total withheld (non-cash)"
-                emptyMessage="Nothing was withheld at release in this period."
-              />
-            </section>
-          )}
-        </div>
+            {report.non_cash && (
+              <section aria-labelledby="cash-flow-non-cash" className="space-y-2 pt-2">
+                <p id="cash-flow-non-cash" className="text-sm text-muted-foreground">
+                  Fees and deductions kept back from loan proceeds. No cash moved
+                  for them, so they are outside every total above.
+                </p>
+                <ReportSection
+                  title={report.non_cash.label}
+                  lines={cashFlowLines(report.non_cash.lines, "non_cash")}
+                  total={report.non_cash.total}
+                  totalLabel="Total withheld (non-cash)"
+                  emptyMessage="Nothing was withheld at release in this period."
+                />
+              </section>
+            )}
+            </ScrollBox>
+          </ExpandableCard>
+        </FillSection>
       )}
     </StatementState>
   );

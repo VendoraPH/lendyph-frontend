@@ -2,9 +2,12 @@
 
 import { useState } from "react";
 import { RouteGuard } from "@/components/common";
+import { PageFill } from "@/components/common/page-fill";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { formatDateISO, todayISO } from "@/lib/format";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 import type { BookKind, ColumnBookKind } from "@/types";
 import { AccountingPageHeader } from "../_components/page-header";
 import {
@@ -112,16 +115,18 @@ export default function AccountingBooksPage() {
   const [view, setView] = useState<BookView>("columns");
 
   const branchId = branchParam(branch);
+  // The layout switch sits beside the tabs, for the books that have one.
+  const activeHasColumns = BOOKS.some((book) => book.kind === tab && book.columns);
 
   return (
     <RouteGuard permission="accounting:view" pageName="Accounting Books">
-      <div className="space-y-6">
+      <PageFill className="gap-4">
         <AccountingPageHeader
           title="Accounting Books"
           description="The books of account, kept automatically from posted entries."
         />
 
-        <div className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
+        <div className="shrink-0 rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
           These are generated from posted journal entries, so they never
           disagree with the ledger. Nothing here is typed in by hand.
         </div>
@@ -132,20 +137,23 @@ export default function AccountingBooksPage() {
           <BranchFilter value={branch} onChange={setBranch} />
         </FilterBar>
 
-        <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
-          <TabsList className="max-w-full justify-start overflow-x-auto">
-            {BOOKS.map((book) => (
-              <TabsTrigger key={book.kind} value={book.kind}>
-                {book.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+        <Tabs value={tab} onValueChange={(v) => setTab(String(v))} className={FIT_CLASSES.section}>
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
+            <TabsList className="max-w-full justify-start overflow-x-auto">
+              {BOOKS.map((book) => (
+                <TabsTrigger key={book.kind} value={book.kind}>
+                  {book.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            {activeHasColumns && <BookViewSwitch value={view} onChange={setView} />}
+          </div>
 
           {BOOKS.map((book) => (
-            <TabsContent key={book.kind} value={book.kind} className="mt-4 min-w-0 space-y-4">
-              {book.columns && <BookViewSwitch value={view} onChange={setView} />}
+            <TabsContent key={book.kind} value={book.kind} className={cn("mt-2 min-w-0", FIT_CLASSES.section)}>
               {book.columns && view === "columns" ? (
                 <ColumnBookReport
+                  title={book.label}
                   kind={book.columns.kind}
                   from={from}
                   to={to}
@@ -155,6 +163,7 @@ export default function AccountingBooksPage() {
                 />
               ) : (
                 <BookReport
+                  title={book.label}
                   kind={book.kind}
                   from={from}
                   to={to}
@@ -166,7 +175,7 @@ export default function AccountingBooksPage() {
             </TabsContent>
           ))}
         </Tabs>
-      </div>
+      </PageFill>
     </RouteGuard>
   );
 }

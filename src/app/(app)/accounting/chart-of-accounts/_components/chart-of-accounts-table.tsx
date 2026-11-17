@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
+import { ScrollBox } from "@/components/common/page-fill";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -100,114 +101,117 @@ export function ChartOfAccountsTable({ accounts, onEdit, onToggleActive }: Chart
         />
       </div>
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-24">Code</TableHead>
-            <TableHead>Account</TableHead>
-            <TableHead className="w-28">Type</TableHead>
-            <TableHead className="w-32">Normal Balance</TableHead>
-            <TableHead className="w-36 text-right">Balance</TableHead>
-            <TableHead className="w-24">Status</TableHead>
-            {hasActions && <TableHead className="w-44 text-right">Actions</TableHead>}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.length === 0 ? (
+      {/* The search stays put; the accounts scroll under their pinned headings. */}
+      <ScrollBox>
+        <Table>
+          <TableHeader>
             <TableRow>
-              <TableCell
-                colSpan={columnCount}
-                className="py-8 text-center text-sm text-muted-foreground"
-              >
-                No account matches &ldquo;{query}&rdquo;.
-              </TableCell>
+              <TableHead className="w-24">Code</TableHead>
+              <TableHead>Account</TableHead>
+              <TableHead className="w-28">Type</TableHead>
+              <TableHead className="w-32">Normal Balance</TableHead>
+              <TableHead className="w-36 text-right">Balance</TableHead>
+              <TableHead className="w-24">Status</TableHead>
+              {hasActions && <TableHead className="w-44 text-right">Actions</TableHead>}
             </TableRow>
-          ) : (
-            rows.map(({ account, depth }) => (
-              <TableRow
-                key={account.id}
-                className={cn(!account.is_active && "opacity-60")}
-              >
-                <TableCell className="font-mono text-xs">
-                  {account.code}
+          </TableHeader>
+          <TableBody>
+            {rows.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  colSpan={columnCount}
+                  className="py-8 text-center text-sm text-muted-foreground"
+                >
+                  No account matches &ldquo;{query}&rdquo;.
                 </TableCell>
-                <TableCell>
-                  <div
-                    className={cn(
-                      "flex items-center gap-2",
-                      account.is_group && "font-semibold",
-                    )}
-                    style={{ paddingLeft: depth * 20 }}
-                  >
-                    {account.name}
-                    {account.is_contra && (
-                      <Badge variant="outline" className="text-[10px]">
-                        Contra
-                      </Badge>
-                    )}
-                    {account.cash_kind && (
-                      <Badge variant="outline" className="text-[10px]">
-                        {cashKindLabel(account.cash_kind)}
-                      </Badge>
-                    )}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <Badge variant="outline" className={TYPE_STYLES[account.type]}>
-                    {accountTypeLabel(account.type)}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {/* Group headings never carry a balance of their own. */}
-                  {account.is_group ? "—" : normalBalanceLabel(account.normal_balance)}
-                </TableCell>
-                <TableCell className="text-right font-mono text-sm">
-                  {accountBalanceText(account)}
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-xs",
-                      account.is_active
-                        ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
-                        : "text-muted-foreground",
-                    )}
-                  >
-                    {accountStatusLabel(account)}
-                  </Badge>
-                </TableCell>
-                {hasActions && (
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      {onEdit && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => onEdit(account)}
-                          aria-label={`Edit ${account.code} ${account.name}`}
-                        >
-                          Edit
-                        </Button>
+              </TableRow>
+            ) : (
+              rows.map(({ account, depth }) => (
+                <TableRow
+                  key={account.id}
+                  className={cn(!account.is_active && "opacity-60")}
+                >
+                  <TableCell className="font-mono text-xs">
+                    {account.code}
+                  </TableCell>
+                  <TableCell>
+                    <div
+                      className={cn(
+                        "flex items-center gap-2",
+                        account.is_group && "font-semibold",
                       )}
-                      {onToggleActive && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => onToggleActive(account)}
-                          aria-label={`${account.is_active ? "Deactivate" : "Reactivate"} ${account.code} ${account.name}`}
-                        >
-                          {account.is_active ? "Deactivate" : "Reactivate"}
-                        </Button>
+                      style={{ paddingLeft: depth * 20 }}
+                    >
+                      {account.name}
+                      {account.is_contra && (
+                        <Badge variant="outline" className="text-[10px]">
+                          Contra
+                        </Badge>
+                      )}
+                      {account.cash_kind && (
+                        <Badge variant="outline" className="text-[10px]">
+                          {cashKindLabel(account.cash_kind)}
+                        </Badge>
                       )}
                     </div>
                   </TableCell>
-                )}
-              </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
+                  <TableCell>
+                    <Badge variant="outline" className={TYPE_STYLES[account.type]}>
+                      {accountTypeLabel(account.type)}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {/* Group headings never carry a balance of their own. */}
+                    {account.is_group ? "—" : normalBalanceLabel(account.normal_balance)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm">
+                    {accountBalanceText(account)}
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-xs",
+                        account.is_active
+                          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
+                          : "text-muted-foreground",
+                      )}
+                    >
+                      {accountStatusLabel(account)}
+                    </Badge>
+                  </TableCell>
+                  {hasActions && (
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        {onEdit && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => onEdit(account)}
+                            aria-label={`Edit ${account.code} ${account.name}`}
+                          >
+                            Edit
+                          </Button>
+                        )}
+                        {onToggleActive && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => onToggleActive(account)}
+                            aria-label={`${account.is_active ? "Deactivate" : "Reactivate"} ${account.code} ${account.name}`}
+                          >
+                            {account.is_active ? "Deactivate" : "Reactivate"}
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  )}
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </ScrollBox>
     </>
   );
 }

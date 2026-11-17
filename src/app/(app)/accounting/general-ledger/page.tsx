@@ -4,6 +4,7 @@ import { Suspense, useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { RouteGuard, TablePagination } from "@/components/common";
+import { FillSection, PageFill, PageLoader, ScrollBox } from "@/components/common/page-fill";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,7 +16,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Spinner } from "@/components/ui/spinner";
 import {
   Table,
   TableBody,
@@ -29,6 +29,7 @@ import { accountingService } from "@/services";
 import { formatCentavos } from "@/lib/accounting/money";
 import { todayISO } from "@/lib/format";
 import { formatValue } from "@/lib/report-format";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { cn } from "@/lib/utils";
 import type { GeneralLedgerPage as LedgerPage, JournalSource } from "@/types";
 import { AccountingPageHeader } from "../_components/page-header";
@@ -141,7 +142,7 @@ function GeneralLedgerContent() {
   const account = postable.find((a) => a.id === accountId);
 
   return (
-    <div className="space-y-6">
+    <FillSection className="gap-6">
       <FilterBar>
         <AccountSelect
           label="Account"
@@ -198,13 +199,13 @@ function GeneralLedgerContent() {
       </FilterBar>
 
       {accountId === null ? (
-        <Card>
+        <Card className="shrink-0">
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
             Choose an account to see its ledger.
           </CardContent>
         </Card>
       ) : toError ? (
-        <Card>
+        <Card className="shrink-0">
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
             Correct the To date to see the ledger.
           </CardContent>
@@ -216,8 +217,8 @@ function GeneralLedgerContent() {
           endpoints={["GET /accounting/general-ledger"]}
         >
           {({ data: rows, meta }) => (
-            <Card>
-              <CardContent className="space-y-4 pt-6">
+            <Card className={FIT_CLASSES.section}>
+              <CardContent className={cn(FIT_CLASSES.section, "space-y-4 pt-6")}>
                 {account && (
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono text-sm text-muted-foreground">
@@ -250,10 +251,7 @@ function GeneralLedgerContent() {
                   </p>
                 )}
 
-                <div
-                  className={cn("overflow-x-auto transition-opacity", paging && "opacity-60")}
-                  aria-busy={paging}
-                >
+                <ScrollBox className={cn("transition-opacity", paging && "opacity-60")} aria-busy={paging}>
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -310,7 +308,7 @@ function GeneralLedgerContent() {
                       )}
                     </TableBody>
                   </Table>
-                </div>
+                </ScrollBox>
 
                 <TablePagination
                   page={page}
@@ -325,7 +323,7 @@ function GeneralLedgerContent() {
           )}
         </DataState>
       )}
-    </div>
+    </FillSection>
   );
 }
 
@@ -341,21 +339,15 @@ function LedgerFigure({ label, value }: { label: string; value: number | undefin
 export default function GeneralLedgerPage() {
   return (
     <RouteGuard permission="accounting:view" pageName="General Ledger">
-      <div className="space-y-6">
+      <PageFill>
         <AccountingPageHeader
           title="General Ledger"
           description="Every movement through a single account."
         />
-        <Suspense
-          fallback={
-            <div className="flex justify-center py-12">
-              <Spinner className="h-6 w-6" />
-            </div>
-          }
-        >
+        <Suspense fallback={<PageLoader />}>
           <GeneralLedgerContent />
         </Suspense>
-      </div>
+      </PageFill>
     </RouteGuard>
   );
 }

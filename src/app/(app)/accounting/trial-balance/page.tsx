@@ -3,6 +3,8 @@
 import { useCallback, useState } from "react";
 import { CheckCircle2, XCircle } from "lucide-react";
 import { RouteGuard } from "@/components/common";
+import { ExpandableCard } from "@/components/common/expandable-card";
+import { FillSection, PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
@@ -41,7 +43,7 @@ function TrialBalanceContent() {
   const resource = useAccountingResource<TrialBalance>(fetcher);
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       <AccountingPageHeader
         title="Trial Balance"
         description="Every account's balance, and proof they agree."
@@ -60,7 +62,7 @@ function TrialBalanceContent() {
         emptyMessage="No account carries a balance as at this date."
       >
         {(tb) => (
-          <div className="space-y-4">
+          <FillSection className="gap-4">
             {/*
               The headline is not the totals, it is whether they match. An
               out-of-balance trial balance means something was posted that
@@ -69,7 +71,7 @@ function TrialBalanceContent() {
             */}
             <Card
               className={cn(
-                "border-2",
+                "shrink-0 border-2",
                 tb.is_balanced ? "border-emerald-500/30" : "border-destructive/40",
               )}
             >
@@ -93,8 +95,9 @@ function TrialBalanceContent() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardContent className="pt-6">
+            {/* The balance check stays put; the accounts scroll inside, with the totals pinned. */}
+            <ExpandableCard title="Trial Balance">
+              <ScrollBox>
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -135,12 +138,12 @@ function TrialBalanceContent() {
                     </TableRow>
                   </TableFooter>
                 </Table>
-              </CardContent>
-            </Card>
-          </div>
+              </ScrollBox>
+            </ExpandableCard>
+          </FillSection>
         )}
       </DataState>
-    </div>
+    </PageFill>
   );
 }
 

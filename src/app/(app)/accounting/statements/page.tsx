@@ -2,11 +2,14 @@
 
 import { useState } from "react";
 import { RouteGuard } from "@/components/common";
+import { PageFill } from "@/components/common/page-fill";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { env } from "@/config/env";
 import { usePermission } from "@/hooks";
 import { todayISO } from "@/lib/format";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 import { AccountingPageHeader } from "../_components/page-header";
 import {
   ALL_BRANCHES,
@@ -30,13 +33,16 @@ function startOfYearISO(): string {
 /** Shown in place of a range statement while From is after To; nothing is sent. */
 function RangeRefused({ message }: { message: string }) {
   return (
-    <Card>
+    <Card className="shrink-0">
       <CardContent className="py-12 text-center text-sm text-muted-foreground">
         {message} Change the dates to see this statement.
       </CardContent>
     </Card>
   );
 }
+
+/** A statement's tab: at fit it takes the height left, and the statement scrolls inside. */
+const TAB_PANEL = cn("mt-4", FIT_CLASSES.section);
 
 /**
  * The four statements, as tabs rather than as four sidebar entries (plus Notes, below).
@@ -71,7 +77,7 @@ export default function FinancialStatementsPage() {
 
   return (
     <RouteGuard permission="accounting:view" pageName="Financial Statements">
-      <div className="space-y-6">
+      <PageFill>
         <AccountingPageHeader
           title="Financial Statements"
           description={
@@ -98,8 +104,8 @@ export default function FinancialStatementsPage() {
           )}
         </FilterBar>
 
-        <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
-          <TabsList>
+        <Tabs value={tab} onValueChange={(v) => setTab(String(v))} className={FIT_CLASSES.section}>
+          <TabsList className="shrink-0">
             <TabsTrigger value="balance-sheet">Balance Sheet</TabsTrigger>
             <TabsTrigger value="income-statement">Income Statement</TabsTrigger>
             <TabsTrigger value="cash-flow">Cash Flow</TabsTrigger>
@@ -107,24 +113,24 @@ export default function FinancialStatementsPage() {
             {showNotes && <TabsTrigger value="notes">Notes</TabsTrigger>}
           </TabsList>
 
-          <TabsContent value="balance-sheet" className="mt-4">
+          <TabsContent value="balance-sheet" className={TAB_PANEL}>
             <BalanceSheetReport asOf={asOf} branchId={branchId} />
           </TabsContent>
-          <TabsContent value="income-statement" className="mt-4">
+          <TabsContent value="income-statement" className={TAB_PANEL}>
             {rangeError ? (
               <RangeRefused message={rangeError} />
             ) : (
               <IncomeStatementReport from={from} to={to} branchId={branchId} />
             )}
           </TabsContent>
-          <TabsContent value="cash-flow" className="mt-4">
+          <TabsContent value="cash-flow" className={TAB_PANEL}>
             {rangeError ? (
               <RangeRefused message={rangeError} />
             ) : (
               <CashFlowReport from={from} to={to} branchId={branchId} />
             )}
           </TabsContent>
-          <TabsContent value="equity" className="mt-4">
+          <TabsContent value="equity" className={TAB_PANEL}>
             {rangeError ? (
               <RangeRefused message={rangeError} />
             ) : (
@@ -132,12 +138,12 @@ export default function FinancialStatementsPage() {
             )}
           </TabsContent>
           {showNotes && (
-            <TabsContent value="notes" className="mt-4">
+            <TabsContent value="notes" className={TAB_PANEL}>
               <StatementNotesReport year={Number(to.slice(0, 4))} />
             </TabsContent>
           )}
         </Tabs>
-      </div>
+      </PageFill>
     </RouteGuard>
   );
 }

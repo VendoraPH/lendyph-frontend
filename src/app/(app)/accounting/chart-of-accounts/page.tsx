@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { PermissionGate, RouteGuard } from "@/components/common";
+import { PageFill } from "@/components/common/page-fill";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,6 +11,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { useChartOfAccounts, usePermission } from "@/hooks";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { accountingService } from "@/services";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 import type { Account } from "@/types";
 import { AccountingPageHeader } from "../_components/page-header";
 import { AccountDialog, type AccountDialogState } from "./_components/account-dialog";
@@ -60,7 +63,7 @@ function ChartOfAccountsContent() {
   };
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       <AccountingPageHeader
         title="Chart of Accounts"
         description="The account tree every journal entry posts into."
@@ -79,7 +82,7 @@ function ChartOfAccountsContent() {
       />
 
       {loading ? (
-        <Card>
+        <Card className="shrink-0">
           <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
             <Spinner className="h-6 w-6" />
             <p className="text-sm text-muted-foreground">Loading…</p>
@@ -97,8 +100,8 @@ function ChartOfAccountsContent() {
             <SeedChartCard notBuiltYet={notBuiltYet} onSeeded={refetch} />
           )}
 
-          <Card>
-            <CardContent className="space-y-4 pt-6">
+          <Card className={FIT_CLASSES.section}>
+            <CardContent className={cn(FIT_CLASSES.section, "space-y-4 pt-6")}>
               {isTemplate && (
                 <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
                   <span className="font-medium">Lending company template.</span>{" "}
@@ -142,7 +145,7 @@ function ChartOfAccountsContent() {
         onClose={() => setStatusTarget(null)}
         onConfirm={setActive}
       />
-    </div>
+    </PageFill>
   );
 }
 

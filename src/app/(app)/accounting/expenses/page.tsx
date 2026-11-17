@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { Inbox, Plus, Search } from "lucide-react";
 import { PermissionGate, RouteGuard, TablePagination } from "@/components/common";
+import { hasIllustration, Illustration } from "@/components/common/illustration";
+import { FillSection, PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +19,8 @@ import {
 import { useAccountingResource } from "@/hooks";
 import { SEARCH_DEBOUNCE_MS } from "@/hooks/use-search-page";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 import { accountingService } from "@/services";
 import type { PayExpenseData } from "@/services/accounting.service";
 import type { Expense, ExpensePage } from "@/types";
@@ -117,7 +121,7 @@ function ExpensesContent() {
   const filtered = status !== ANY_STATUS || search.trim() !== "";
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       <AccountingPageHeader
         title="Expenses & Payables"
         description="Operating costs, paid and owed."
@@ -188,8 +192,8 @@ function ExpensesContent() {
           const counts = loading ? [] : expenseStatusCounts(answer.meta?.stats);
           const rows = answer.data ?? [];
           return (
-            <div className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-3">
+            <FillSection className="gap-4">
+              <div className="grid shrink-0 gap-4 sm:grid-cols-3">
                 <Figure label="Recorded" value={totals?.amount} />
                 <Figure label="Paid" value={totals?.amount_paid} />
                 <Figure label="Outstanding" value={totals?.amount_due} emphasis />
@@ -202,19 +206,21 @@ function ExpensesContent() {
                 </p>
               )}
 
-              <Card aria-busy={loading}>
-                <CardContent className={loading ? "pt-6 opacity-60 transition-opacity" : "pt-6 transition-opacity"}>
+              <Card aria-busy={loading} className={FIT_CLASSES.section}>
+                <CardContent
+                  className={cn(FIT_CLASSES.section, "pt-6 transition-opacity", loading && "opacity-60")}
+                >
                   {rows.length === 0 ? (
-                    <p className="py-12 text-center text-sm text-muted-foreground">
-                      {filtered ? "No expense matches these filters." : "No expense recorded yet."}
-                    </p>
+                    <EmptyExpenses filtered={filtered} />
                   ) : (
-                    <ExpenseTable
-                      rows={rows}
-                      onPay={setPaying}
-                      onEdit={setEditing}
-                      onAttachments={setAttaching}
-                    />
+                    <ScrollBox>
+                      <ExpenseTable
+                        rows={rows}
+                        onPay={setPaying}
+                        onEdit={setEditing}
+                        onAttachments={setAttaching}
+                      />
+                    </ScrollBox>
                   )}
                   {typeof answer.meta?.total === "number" && answer.meta.total > 0 && (
                     <TablePagination
@@ -228,7 +234,7 @@ function ExpensesContent() {
                   )}
                 </CardContent>
               </Card>
-            </div>
+            </FillSection>
           );
         }}
       </DataState>
@@ -248,7 +254,7 @@ function ExpensesContent() {
         expense={attaching}
         onOpenChange={(open) => !open && setAttaching(null)}
       />
-    </div>
+    </PageFill>
   );
 }
 
@@ -257,6 +263,29 @@ export default function ExpensesPage() {
     <RouteGuard permission="expenses:view" pageName="Expenses & Payables">
       <ExpensesContent />
     </RouteGuard>
+  );
+}
+
+/**
+ * The list's empty state, with the same picture and wording as `DataState`'s:
+ * the server's totals and counts above it stay on screen, so it sits inside
+ * the card rather than replacing the page.
+ */
+function EmptyExpenses({ filtered }: { filtered: boolean }) {
+  const name = filtered ? "noResults" : "empty";
+  return (
+    <div className="flex flex-col items-center gap-4 py-12 text-center">
+      {hasIllustration(name) ? (
+        <Illustration name={name} />
+      ) : (
+        <div className="rounded-full bg-muted p-3">
+          <Inbox className="h-6 w-6 text-muted-foreground" />
+        </div>
+      )}
+      <p className="text-sm text-muted-foreground">
+        {filtered ? "No expense matches these filters." : "No expense recorded yet."}
+      </p>
+    </div>
   );
 }
 

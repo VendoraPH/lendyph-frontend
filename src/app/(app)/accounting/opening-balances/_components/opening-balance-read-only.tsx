@@ -74,50 +74,48 @@ export function OpeningBalanceReadOnly({ opening }: { opening: OpeningBalance })
       )}
 
       {opening.lines.length > 0 && (
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-24">Code</TableHead>
-                <TableHead>Account</TableHead>
-                <TableHead className="w-36 text-right">Debit</TableHead>
-                <TableHead className="w-36 text-right">Credit</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {opening.lines.map((line) => {
-                const isEquity = line.account_id === equityId;
-                return (
-                  <TableRow key={line.id} className={cn(isEquity && "bg-primary/5")}>
-                    <TableCell className="font-mono text-xs">{line.account_code}</TableCell>
-                    <TableCell className="text-sm">
-                      {isEquity ? OPENING_EQUITY_LABEL : line.account_name}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-sm">
-                      {line.debit ? formatCentavos(line.debit) : ""}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-sm">
-                      {line.credit ? formatCentavos(line.credit) : ""}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-            <TableFooter>
-              <TableRow>
-                <TableCell colSpan={2} className="font-semibold">
-                  Total
-                </TableCell>
-                <TableCell className="text-right font-mono font-semibold">
-                  {formatCentavos(opening.total_debit)}
-                </TableCell>
-                <TableCell className="text-right font-mono font-semibold">
-                  {formatCentavos(opening.total_credit)}
-                </TableCell>
-              </TableRow>
-            </TableFooter>
-          </Table>
-        </div>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-24">Code</TableHead>
+              <TableHead>Account</TableHead>
+              <TableHead className="w-36 text-right">Debit</TableHead>
+              <TableHead className="w-36 text-right">Credit</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {opening.lines.map((line) => {
+              const isEquity = line.account_id === equityId;
+              return (
+                <TableRow key={line.id} className={cn(isEquity && "bg-primary/5")}>
+                  <TableCell className="font-mono text-xs">{line.account_code}</TableCell>
+                  <TableCell className="text-sm">
+                    {isEquity ? OPENING_EQUITY_LABEL : line.account_name}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm">
+                    {line.debit ? formatCentavos(line.debit) : ""}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm">
+                    {line.credit ? formatCentavos(line.credit) : ""}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+          <TableFooter>
+            <TableRow>
+              <TableCell colSpan={2} className="font-semibold">
+                Total
+              </TableCell>
+              <TableCell className="text-right font-mono font-semibold">
+                {formatCentavos(opening.total_debit)}
+              </TableCell>
+              <TableCell className="text-right font-mono font-semibold">
+                {formatCentavos(opening.total_credit)}
+              </TableCell>
+            </TableRow>
+          </TableFooter>
+        </Table>
       )}
     </div>
   );
