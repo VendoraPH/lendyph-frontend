@@ -123,7 +123,7 @@ export function RegisterScreen() {
         isEmpty={(res) => res.data.length === 0}
         emptyMessage="No transactions match these filters."
         emptyIllustration={
-          search || type !== "all" || branch !== ALL_BRANCHES || dateFrom || dateTo ? "noResults" : "empty"
+          search || type !== "all" || branch !== ALL_BRANCHES || dateFrom || dateTo ? "noResults" : "emptySavings"
         }
       >
         {(res) => (

@@ -5,6 +5,8 @@ import { AlertTriangle } from "lucide-react";
 import { RouteGuard } from "@/components/common";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { hasIllustration, Illustration } from "@/components/common/illustration";
+import { emptyArt } from "@/lib/illustrations";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -201,6 +203,9 @@ function SubsidiaryLedgerContent() {
 
   const loading = membersPage?.key !== membersKey;
   const failed = membersPage?.failed ?? false;
+  // The module's picture while nothing is searched or filtered.
+  const membersPicture = emptyArt("emptyShareCapital", Boolean(debouncedSearch));
+  const entriesPicture = emptyArt("emptyShareCapital", Boolean(dateRange?.from));
   const members = membersPage?.members ?? [];
   const memberTotal = membersPage?.total ?? 0;
   const bookTotals = membersPage?.totals ?? null;
@@ -530,6 +535,9 @@ function SubsidiaryLedgerContent() {
                     {members.length === 0 && (
                       <TableRow>
                         <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                          {!failed && hasIllustration(membersPicture) && (
+                            <Illustration name={membersPicture} className="mx-auto mb-3 block" />
+                          )}
                           No members found.
                         </TableCell>
                       </TableRow>
@@ -753,6 +761,9 @@ function SubsidiaryLedgerContent() {
                     {displayedEntries.length === 0 && (
                       <TableRow>
                         <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                          {hasIllustration(entriesPicture) && (
+                            <Illustration name={entriesPicture} className="mx-auto mb-3 block" />
+                          )}
                           <p>No entries found{dateRange?.from ? " for this period" : ""}.</p>
                           <p className="text-xs mt-1">Create entries via Pledge Entry → Entry button</p>
                         </TableCell>

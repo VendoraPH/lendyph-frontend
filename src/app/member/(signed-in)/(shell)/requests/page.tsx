@@ -41,7 +41,7 @@ export default function RequestsPage() {
         onRetry={reload}
         empty={data?.data.length === 0}
         emptyText="You haven't sent any requests."
-        emptyIllustration="empty"
+        emptyIllustration="emptyDocuments"
       >
         {data && (
           <>

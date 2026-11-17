@@ -135,6 +135,7 @@ export function SnapshotHistory({ reportId }: { reportId: number }) {
           summary="This report's finalized versions"
           isEmpty={(d) => d.length === 0}
           emptyMessage="No finalized versions yet. Finalizing the report keeps its first one."
+          emptyIllustration="emptyDocuments"
         >
           {(items) => (
             <ul className="divide-y">

@@ -7,6 +7,8 @@ import { notifyError } from "@/lib/notify";
 import { repaymentService } from "@/services";
 import { PermissionButton, RouteGuard, TablePagination } from "@/components/common";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { hasIllustration, Illustration } from "@/components/common/illustration";
+import { emptyArt } from "@/lib/illustrations";
 import { FIT_CLASSES } from "@/lib/page-fill";
 import { SEARCH_DEBOUNCE_MS } from "@/hooks/use-search-page";
 import type { Repayment } from "@/types";
@@ -518,6 +520,11 @@ function PaymentHistoryContent() {
   }, [request]);
 
   const shown = shownPaymentPage(answer, requestKey);
+  // The module's picture while nothing is searched or filtered.
+  const emptyPicture = emptyArt(
+    "emptyPayments",
+    search.trim() !== "" || dateFrom !== "" || dateTo !== "" || statusTab !== "all"
+  );
   const payments = shown.rows;
   const loading = shown.pending;
   const failed = !loading && failedKey === requestKey;
@@ -826,6 +833,9 @@ function PaymentHistoryContent() {
                       colSpan={8}
                       className="h-32 text-center text-muted-foreground"
                     >
+                      {!failed && hasIllustration(emptyPicture) && (
+                        <Illustration name={emptyPicture} className="mx-auto mb-3 block" />
+                      )}
                       {failed ? "The payments couldn't be loaded." : "No payments found."}
                     </TableCell>
                   </TableRow>
@@ -884,6 +894,9 @@ function PaymentHistoryContent() {
             )}
             {!loading && payments.length === 0 && (
               <div className="py-12 text-center text-muted-foreground text-sm">
+                {!failed && hasIllustration(emptyPicture) && (
+                  <Illustration name={emptyPicture} className="mx-auto mb-3 block" />
+                )}
                 {failed ? "The payments couldn't be loaded." : "No payments found."}
               </div>
             )}

@@ -27,6 +27,7 @@ import type { Permission } from "@/types/rbac";
 import { RecordFormDialog, type FileSlot } from "./record-form-dialog";
 import type { RecordDraft, RecordField, RecordValues } from "../_lib/record-form";
 import type { RecordStepGroup } from "../_lib/record-steps";
+import type { EmptyIllustrationName } from "@/lib/illustrations";
 
 export interface RegisterColumn<T> {
   header: string;
@@ -61,8 +62,11 @@ interface RegisterTableProps<T extends { id: number }> {
    * register stacked above a report), the card keeps its natural height.
    */
   fill?: boolean;
-  /** The empty list's picture: "noResults" while the list is filtered. */
-  emptyIllustration?: "empty" | "noResults" | "allCaughtUp";
+  /**
+   * The empty list's picture: "noResults" while the list is filtered, or the
+   * module's own picture for a list with nothing in it yet.
+   */
+  emptyIllustration?: EmptyIllustrationName;
   /** A long form's steps (`RecordFormDialog`); without them the form is one page. */
   steps?: readonly RecordStepGroup[];
   /** Fields for editing, when they differ from the new row's. */
@@ -152,7 +156,7 @@ export function RegisterTable<T extends { id: number }>(props: RegisterTableProp
           summary={`The ${noun[1]} register`}
           isEmpty={(d) => d.rows.length === 0}
           emptyMessage={`No ${noun[1]} recorded yet.`}
-          emptyIllustration={props.emptyIllustration}
+          emptyIllustration={props.emptyIllustration ?? "emptyCompliance"}
         >
           {(data) => (
             <>

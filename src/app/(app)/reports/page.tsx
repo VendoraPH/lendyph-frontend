@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { FileBarChart, Search, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { visibleReports } from "./_lib/report-catalog";
-import { CATEGORY_META } from "./_lib/types";
+import { CATEGORY_ILLUSTRATION, CATEGORY_META } from "./_lib/types";
 import type { ReportCategory, ReportDefinition } from "./_lib/types";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { hasIllustration, Illustration } from "@/components/common/illustration";
@@ -111,14 +111,20 @@ export default function ReportsPage() {
               const meta = CATEGORY_META[cat];
               return (
                 <section key={cat}>
-                  <div className="mb-3 flex items-baseline justify-between">
-                    <div>
-                      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                        {meta.label}
-                      </h2>
-                      <p className="text-xs text-muted-foreground/80">
-                        {meta.description}
-                      </p>
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <Illustration
+                        name={CATEGORY_ILLUSTRATION[cat]}
+                        className="h-14 max-h-14 w-14 shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                          {meta.label}
+                        </h2>
+                        <p className="text-xs text-muted-foreground/80">
+                          {meta.description}
+                        </p>
+                      </div>
                     </div>
                     <span className="text-xs text-muted-foreground">
                       {items.length}{" "}

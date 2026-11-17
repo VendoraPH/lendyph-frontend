@@ -141,7 +141,7 @@ export function AccountsScreen() {
         summary="Savings accounts will be listed here, with balances and status, once the savings service is connected."
         isEmpty={(res) => res.data.length === 0}
         emptyMessage={search ? "No account matches this search." : "No savings accounts yet."}
-        emptyIllustration={search || status !== "all" || branch !== ALL_BRANCHES ? "noResults" : "empty"}
+        emptyIllustration={search || status !== "all" || branch !== ALL_BRANCHES ? "noResults" : "emptySavings"}
       >
         {(res) => (
           <div className={FIT_CLASSES.section}>

@@ -8,6 +8,8 @@ import { PLEDGE_ENTRY_CREATE_GATE, PLEDGE_UPDATE_GATE } from "@/lib/lending-writ
 import { usePermission } from "@/hooks/use-permission";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { hasIllustration, Illustration } from "@/components/common/illustration";
+import { emptyArt } from "@/lib/illustrations";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -259,6 +261,11 @@ function PledgeEntryContent() {
   const totalPages = Math.max(1, Math.ceil(processed.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const paginated = processed.slice((safePage - 1) * pageSize, safePage * pageSize);
+  // The module's picture while nothing is searched or filtered.
+  const emptyPicture = emptyArt(
+    "emptyShareCapital",
+    Boolean(search) || filterSchedule !== "all" || filterStatus !== "all"
+  );
 
   // ── Handlers ──
 
@@ -929,6 +936,9 @@ function PledgeEntryContent() {
                 {paginated.length === 0 && !loading && (
                   <TableRow>
                     <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                      {!failed && hasIllustration(emptyPicture) && (
+                        <Illustration name={emptyPicture} className="mx-auto mb-3 block" />
+                      )}
                       <p>No pledges found.</p>
                       <p className="text-xs mt-1">Pledges are created when members are added to the system.</p>
                     </TableCell>

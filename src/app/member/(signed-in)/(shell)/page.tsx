@@ -2,6 +2,7 @@
 
 import { useCallback } from "react";
 import Link from "next/link";
+import { Illustration } from "@/components/common/illustration";
 import { FillSection, PageFill } from "@/components/common/page-fill";
 import { LoadState } from "@/components/portal/load-state";
 import { PortalPageHeader } from "@/components/portal/page-header";
@@ -14,7 +15,7 @@ import { DashboardLists } from "./_components/dashboard-lists";
  * Home: the member's figures at a glance, every one from `/portal/dashboard`
  * (portal design §3). At the `fit:` size the greeting and the figure cards
  * stay put and the two lists below share the rest, each scrolling inside its
- * card. The greeting row's right side is left free for a welcome picture.
+ * card. The welcome picture sits on the greeting row's right side from `md` up.
  */
 export default function MemberDashboardPage() {
   const fetcher = useCallback(() => portalService.dashboard(), []);
@@ -31,6 +32,14 @@ export default function MemberDashboardPage() {
               {data.member.branch_name ? ` · ${data.member.branch_name}` : ""}
             </>
           ) : undefined
+        }
+        actions={
+          // The row's own height (heading plus member line), so the page still
+          // fits at 1366x768; phones skip it.
+          <Illustration
+            name="portalWelcome"
+            className="hidden aspect-video h-14 max-h-14 md:block"
+          />
         }
       />
       <LoadState loading={loading} error={error} onRetry={reload}>

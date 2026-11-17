@@ -90,7 +90,7 @@ export function RegistrationsTab({
     if (registrations.length === 0) {
       const { Icon, title, hint } = variant.empty;
       // Nothing waiting for approval is good news; nothing rejected is just empty.
-      const emptyArt = status === "pending" ? "allCaughtUp" : "empty";
+      const emptyArt = status === "pending" ? "allCaughtUp" : "emptyMembers";
       return (
         <div className="flex flex-col items-center justify-center py-12 text-center fit:flex-1">
           {hasIllustration(emptyArt) ? (

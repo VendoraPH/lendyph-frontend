@@ -65,6 +65,7 @@ export function TemplatesPanel() {
           summary="Every CDA report template and its versions"
           isEmpty={(d) => d.length === 0}
           emptyMessage="No templates yet."
+          emptyIllustration="emptyCompliance"
         >
           {(templates) => (
             <ScrollBox>

@@ -58,6 +58,7 @@ export function BookReport({
       endpoints={[endpoint]}
       isEmpty={(book) => book.rows.length === 0}
       emptyMessage="Nothing recorded in this book for the chosen dates."
+      emptyIllustration="emptyLedger"
     >
       {(book) => (
         <ExpandableCard

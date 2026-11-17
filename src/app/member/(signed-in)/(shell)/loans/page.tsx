@@ -30,7 +30,7 @@ export default function LoansPage() {
         onRetry={reload}
         empty={data?.length === 0}
         emptyText="You have no released loans."
-        emptyIllustration="empty"
+        emptyIllustration="emptyLoans"
       >
         <ScrollBox className="p-px">
           <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">

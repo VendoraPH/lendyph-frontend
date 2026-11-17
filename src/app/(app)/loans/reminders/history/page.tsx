@@ -30,6 +30,7 @@ import { reminderService } from "@/services";
 import type { ReminderHistoryFilters, ReminderMessage } from "@/types/reminder";
 import { ReminderFilters, StatusSelect } from "../_components/reminder-filters";
 import { MessageDetailSheet } from "./_components/message-detail-sheet";
+import { emptyArt, filtersActive } from "@/lib/illustrations";
 
 const PER_PAGE_OPTIONS = [20, 50, 100] as const;
 
@@ -59,6 +60,7 @@ export default function ReminderHistoryPage() {
         endpoints={["GET /reminders/history", "GET /reminders/history/{id}"]}
         isEmpty={(res) => res.data.length === 0}
         emptyMessage="No messages match these filters."
+        emptyIllustration={emptyArt("emptyReminders", filtersActive(filters))}
       >
         {(res) => (
           <div className={cn(FIT_CLASSES.section, "gap-3")}>

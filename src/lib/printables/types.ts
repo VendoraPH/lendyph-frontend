@@ -15,6 +15,8 @@
  * template carry fields it does not use.
  */
 
+import type { ModuleIllustrationName } from "@/lib/illustrations";
+
 /** Every document the catalog can produce. */
 export type PrintableId =
   | "disclosure_statement"
@@ -259,4 +261,17 @@ export const SUBJECT_ACCENT: Record<
   savings_account: { text: "text-teal-600", bg: "bg-teal-50", ring: "ring-teal-200" },
   savings_withdrawal: { text: "text-orange-600", bg: "bg-orange-50", ring: "ring-orange-200" },
   time_deposit: { text: "text-amber-600", bg: "bg-amber-50", ring: "ring-amber-200" },
+};
+
+/**
+ * The small picture beside each subject's heading on `/printables`: the
+ * picture its module's empty lists use.
+ */
+export const SUBJECT_ILLUSTRATION: Record<PrintableSubject, ModuleIllustrationName> = {
+  loan: "emptyLoans",
+  borrower: "emptyMembers",
+  repayment: "emptyPayments",
+  savings_account: "emptySavings",
+  savings_withdrawal: "emptySavings",
+  time_deposit: "emptySavings",
 };

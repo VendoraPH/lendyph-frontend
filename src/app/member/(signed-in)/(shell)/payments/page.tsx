@@ -18,7 +18,7 @@ export default function PaymentsPage() {
   return (
     <PageFill className="gap-5">
       <PortalPageHeader title="Payments" description="Payments received on your loans. Pay at your branch as usual." />
-      <LoadState loading={loading} error={error} onRetry={reload} empty={data?.data.length === 0} emptyText="No payments yet." emptyIllustration="empty">
+      <LoadState loading={loading} error={error} onRetry={reload} empty={data?.data.length === 0} emptyText="No payments yet." emptyIllustration="emptyPayments">
         {data && (
           <>
             <ScrollBox className="p-px">

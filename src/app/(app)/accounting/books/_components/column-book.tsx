@@ -68,6 +68,7 @@ export function ColumnBookReport({
       endpoints={[endpoint]}
       isEmpty={(book) => book.rows.length === 0}
       emptyMessage="Nothing recorded in this book for the chosen dates."
+      emptyIllustration="emptyLedger"
     >
       {(book) => <ColumnBookCard book={book} title={title} />}
     </DataState>

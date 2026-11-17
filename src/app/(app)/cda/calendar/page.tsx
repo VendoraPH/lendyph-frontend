@@ -62,6 +62,7 @@ function Calendar({ year }: { year: number }) {
         summary={`The ${year} filing deadlines`}
         isEmpty={(rows) => rows.length === 0}
         emptyMessage="Nothing is due for this year."
+        emptyIllustration="emptyCompliance"
       >
         {(rows) => (
           <Card className={FIT_CLASSES.section}>

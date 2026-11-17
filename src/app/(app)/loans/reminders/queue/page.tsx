@@ -12,6 +12,7 @@ import { reminderService } from "@/services";
 import type { ReminderListFilters, ReminderQueueStatus } from "@/types/reminder";
 import { QueueTable } from "../_components/queue-table";
 import { ReminderFilters } from "../_components/reminder-filters";
+import { emptyArt, filtersActive } from "@/lib/illustrations";
 
 const STATUSES = Object.keys(QUEUE_STATUS_META) as ReminderQueueStatus[];
 const PER_PAGE_OPTIONS = [20, 50, 100] as const;
@@ -87,6 +88,7 @@ export default function ReminderQueuePage() {
         endpoints={["GET /reminders/queue"]}
         isEmpty={(res) => res.data.length === 0}
         emptyMessage="No reminders match these filters."
+        emptyIllustration={emptyArt("emptyReminders", filtersActive(filters))}
       >
         {(res) => (
           <div className={cn(FIT_CLASSES.section, "gap-3")}>
