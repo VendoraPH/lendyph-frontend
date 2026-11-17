@@ -19,6 +19,7 @@ import {
   PiggyBank,
   ClipboardCheck,
   MonitorSmartphone,
+  Sparkles,
 } from "lucide-react";
 import { GCashIcon } from "@/components/icons/gcash-icon";
 import { env } from "@/config/env";
@@ -201,6 +202,19 @@ const CREDIT_SCORING_NAV: NavItem = {
   ],
 };
 
+/**
+ * Linda's own page: the same conversation as the floating button's panel, on
+ * a full page. Gated on NEXT_PUBLIC_ENABLE_LINDA at build time; the route also
+ * answers not found when the flag is off (linda/layout.tsx), and the page
+ * guards on `linda:use`, as the server does.
+ */
+export const LINDA_NAV: NavItem = {
+  title: "Linda",
+  href: "/linda",
+  icon: Sparkles,
+  permission: "linda:use",
+};
+
 export const SIDEBAR_NAV: NavItem[] = [
   {
     title: "Dashboard",
@@ -208,6 +222,7 @@ export const SIDEBAR_NAV: NavItem[] = [
     icon: LayoutDashboard,
     permission: "dashboard:view",
   },
+  ...(env.features.linda ? [LINDA_NAV] : []),
   {
     title: "Members",
     href: "/borrowers",

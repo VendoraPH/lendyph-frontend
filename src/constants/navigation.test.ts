@@ -194,6 +194,12 @@ test("Settings → Linda is off when the flag isn't set, and its route answers n
   assert.match(read("src/constants/navigation.ts"), /env\.features\.linda \? \[LINDA_SETTINGS_NAV\]/);
 });
 
+test("the Linda menu item is off when the flag isn't set", () => {
+  assert.equal(env.features.linda, false);
+  assert.equal(SIDEBAR_NAV.some((item) => item.href === "/linda"), false);
+  assert.match(read("src/constants/navigation.ts"), /env\.features\.linda \? \[LINDA_NAV\]/);
+});
+
 test("Settings → Linda needs linda:settings and every branch, as its page and the server do", () => {
   const holds = (...held: string[]) => (p: string) => held.includes(p);
   assert.equal(LINDA_SETTINGS_NAV.title, "Linda");

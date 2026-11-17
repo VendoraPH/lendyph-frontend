@@ -11,6 +11,8 @@ import { isSessionRejection, isTokenExpired } from "@/lib/session-token";
 import { SessionProvider } from "@/components/providers/session-provider";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
+import { LindaFab } from "@/components/linda/linda-fab";
+import { LindaModal } from "@/components/linda/linda-modal";
 import { LindaPanel } from "@/components/linda/linda-panel";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -116,6 +118,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
         {/* Beside the page, not over it: opening Linda narrows the content. */}
         <LindaPanel />
+        {/* The floating button that opens the panel, and the panel's expanded chat. */}
+        <LindaFab />
+        <LindaModal />
       </div>
     </SessionProvider>
   );
