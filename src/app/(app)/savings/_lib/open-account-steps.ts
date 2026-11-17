@@ -9,6 +9,7 @@
  */
 
 import type { FormStepDef } from "@/lib/form-stepper";
+import type { OpenSavingsAccountInput } from "@/types";
 import { presentErrors } from "./step-errors";
 
 /**
@@ -26,7 +27,7 @@ export const OPEN_ACCOUNT_SENT_FIELDS = [
   "source_of_funds",
   "source_of_funds_other",
   "beneficiary",
-] as const;
+] as const satisfies ReadonlyArray<keyof OpenSavingsAccountInput>;
 
 export const OPEN_ACCOUNT_STEPS: readonly FormStepDef[] = [
   { id: "member", title: "Member & product", fields: ["borrower_id", "product_id"] },

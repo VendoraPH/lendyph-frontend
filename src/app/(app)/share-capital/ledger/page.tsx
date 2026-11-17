@@ -381,7 +381,7 @@ function SubsidiaryLedgerContent() {
           {[...Array(4)].map((_, i) => (
             <Card key={i}>
               <CardContent className="py-4 fit:py-0">
-                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <div className="flex flex-col gap-1">
                   <div className="h-4 w-24 bg-muted animate-pulse rounded" />
                   <div className="h-7 w-16 bg-muted animate-pulse rounded" />
                 </div>
@@ -419,7 +419,7 @@ function SubsidiaryLedgerContent() {
           <div className="grid shrink-0 gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
             <Card>
               <CardContent className="py-4 fit:py-0">
-                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Landmark className="h-4 w-4" />
                     <span className="text-sm font-medium">Total Members</span>
@@ -430,7 +430,7 @@ function SubsidiaryLedgerContent() {
             </Card>
             <Card>
               <CardContent className="py-4 fit:py-0">
-                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <div className="flex flex-col gap-1">
                   <span className="text-sm font-medium text-muted-foreground">Total Credits</span>
                   <span className="text-2xl font-bold text-green-600">{money(bookTotals?.total_credits)}</span>
                 </div>
@@ -438,7 +438,7 @@ function SubsidiaryLedgerContent() {
             </Card>
             <Card>
               <CardContent className="py-4 fit:py-0">
-                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <div className="flex flex-col gap-1">
                   <span className="text-sm font-medium text-muted-foreground">Total Debits</span>
                   <span className="text-2xl font-bold text-red-600">{money(bookTotals?.total_debits)}</span>
                 </div>
@@ -446,7 +446,7 @@ function SubsidiaryLedgerContent() {
             </Card>
             <Card>
               <CardContent className="py-4 fit:py-0">
-                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <div className="flex flex-col gap-1">
                   <span className="text-sm font-medium text-muted-foreground">Total Share Capital</span>
                   <span className="text-2xl font-bold text-brand-orange">{money(bookTotals?.balance)}</span>
                 </div>

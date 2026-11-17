@@ -86,14 +86,14 @@ export function RegisterScreen() {
 
       <div className="flex shrink-0 flex-wrap items-end gap-2">
         <OptionSelect value={type} onChange={firstPage(setType)} options={TYPE_OPTIONS} className="w-48" />
-        <AlignedBranchFilter value={branch} onChange={firstPage(setBranch)} className="w-56" />
+        <AlignedBranchFilter value={branch} onChange={firstPage(setBranch)} className="w-48" />
         <label className="flex flex-col gap-1.5 text-xs text-muted-foreground">
           From
-          <Input type="date" value={dateFrom} onChange={(e) => firstPage(setDateFrom)(e.target.value)} className="w-40" />
+          <Input type="date" value={dateFrom} onChange={(e) => firstPage(setDateFrom)(e.target.value)} className="w-36" />
         </label>
         <label className="flex flex-col gap-1.5 text-xs text-muted-foreground">
           To
-          <Input type="date" value={dateTo} onChange={(e) => firstPage(setDateTo)(e.target.value)} className="w-40" />
+          <Input type="date" value={dateTo} onChange={(e) => firstPage(setDateTo)(e.target.value)} className="w-36" />
         </label>
         <form
           className="flex gap-2"

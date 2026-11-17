@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { AlignedBranchFilter } from "../../_components/aligned-branch-filter";
-import { ProductFilter } from "../../_components/product-filter";
+import { AlignedProductFilter } from "../../_components/aligned-product-filter";
 import { DASHBOARD_PRESETS, type DashboardPeriod, type DashboardPreset } from "../_lib/dashboard-period";
 
 interface DashboardFiltersProps {
@@ -42,7 +42,7 @@ export function DashboardFilters({
               aria-pressed={preset === p.id}
               onClick={() => onPreset(p.id)}
               className={cn(
-                "h-9 rounded-md border px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "h-8 rounded-md border px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 preset === p.id
                   ? "border-brand-orange bg-brand-orange text-brand-orange-foreground"
                   : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -62,7 +62,7 @@ export function DashboardFilters({
           type="date"
           value={period.from}
           onChange={(e) => onCustom({ ...period, from: e.target.value })}
-          className="h-9 w-36"
+          className="w-36"
         />
       </div>
       <div className="flex shrink-0 flex-col gap-1.5">
@@ -74,18 +74,21 @@ export function DashboardFilters({
           type="date"
           value={period.to}
           onChange={(e) => onCustom({ ...period, to: e.target.value })}
-          className="h-9 w-36"
+          className="w-36"
         />
       </div>
       <AlignedBranchFilter
         value={branch}
         onChange={onBranch}
-        className="h-9 w-full"
+        className="w-full"
         wrapperClassName="w-48 xl:w-auto xl:max-w-56 xl:min-w-36 xl:flex-1"
       />
-      <div className="w-56 xl:w-auto xl:max-w-64 xl:min-w-36 xl:flex-1">
-        <ProductFilter value={product} onChange={(value) => onProduct(value)} className="h-9 w-full" />
-      </div>
+      <AlignedProductFilter
+        value={product}
+        onChange={(value) => onProduct(value)}
+        className="w-full"
+        wrapperClassName="w-56 xl:w-auto xl:max-w-64 xl:min-w-36 xl:flex-1"
+      />
     </div>
   );
 }

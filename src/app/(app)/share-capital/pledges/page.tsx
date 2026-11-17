@@ -538,7 +538,7 @@ function PledgeEntryContent() {
       <div className="grid shrink-0 gap-4 grid-cols-1 sm:grid-cols-3">
         <Card>
           <CardContent className="py-4 fit:py-0">
-            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <div className="flex flex-col gap-1">
               <span className="text-sm font-medium text-muted-foreground">Total Pledges</span>
               <span className="text-2xl font-bold">{pledges.length}</span>
             </div>
@@ -546,7 +546,7 @@ function PledgeEntryContent() {
         </Card>
         <Card>
           <CardContent className="py-4 fit:py-0">
-            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <div className="flex flex-col gap-1">
               <span className="text-sm font-medium text-green-600">Active Auto-Credit</span>
               <span className="text-2xl font-bold text-green-600">{activeCount}</span>
             </div>
@@ -554,7 +554,7 @@ function PledgeEntryContent() {
         </Card>
         <Card>
           <CardContent className="py-4 fit:py-0">
-            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <div className="flex flex-col gap-1">
               <span className="text-sm font-medium text-muted-foreground">Total Amount</span>
               <span className="text-2xl font-bold text-brand-orange">{currencyOrDash(totalAmount)}</span>
             </div>
