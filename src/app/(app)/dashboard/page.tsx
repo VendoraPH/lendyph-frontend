@@ -271,7 +271,7 @@ function DashboardContent() {
                   "h-full rounded-xl border border-border shadow-sm transition-all duration-200 group-hover:shadow-md group-hover:border-brand-orange/30 group-hover:scale-[1.02] cursor-pointer",
                 )}
               >
-                <CardContent className="flex h-full flex-col justify-center gap-1">
+                <CardContent className={kpiClasses.content}>
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-2.5">
                       <div

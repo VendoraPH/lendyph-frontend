@@ -23,3 +23,13 @@ test("each KPI card is its own size container, and its sparkline shows only when
   assert.ok(tokens(sparkline).includes("hidden"), sparkline);
   assert.ok(tokens(sparkline).includes("@min-[14rem]/kpi:block"), sparkline);
 });
+
+test("every card's figure sits at the top, so the figures line up whatever a card adds under them", () => {
+  // The Collected card adds the insurance premium line under its figure.
+  // Centring each card's content lifted that figure above the other cards'.
+  const { content, grid } = dashboardKpiClasses();
+  assert.ok(tokens(content).includes("justify-start"), content);
+  assert.ok(!tokens(content).includes("justify-center"), content);
+  // Three plus two: the second row's cards match the first row's height.
+  assert.ok(tokens(grid).includes("auto-rows-fr"), grid);
+});
