@@ -8,6 +8,7 @@ import { useRoleLabel } from "@/hooks/use-role-label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { viewableModuleNames } from "@/lib/permission-module-names";
+import { hasIllustration, Illustration } from "./illustration";
 
 interface AccessDeniedProps {
   pageName?: string;
@@ -24,9 +25,13 @@ export function AccessDenied({ pageName = "this page" }: AccessDeniedProps) {
   return (
     <div className="flex min-h-[80vh] flex-col items-center justify-center px-4">
       <div className="flex max-w-md flex-col items-center text-center">
-        <div className="mb-6 rounded-full bg-destructive/10 p-4">
-          <ShieldX className="size-12 text-destructive" />
-        </div>
+        {hasIllustration("noAccess") ? (
+          <Illustration name="noAccess" className="mb-6" />
+        ) : (
+          <div className="mb-6 rounded-full bg-destructive/10 p-4">
+            <ShieldX className="size-12 text-destructive" />
+          </div>
+        )}
 
         <h1 className="mb-2 text-2xl font-bold tracking-tight">
           Access Restricted

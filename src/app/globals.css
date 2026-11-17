@@ -4,6 +4,13 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * `fit:` — the screen is big enough for a page to fit under the header with
+ * its long lists scrolling inside (at least 1024 x 640). Below it nothing
+ * changes: pages scroll as they always have. See src/lib/page-fill.ts.
+ */
+@custom-variant fit (@media (min-width: 1024px) and (min-height: 640px));
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -91,6 +98,12 @@
   --chart-4: oklch(0.68 0.16 54);
   --chart-5: oklch(0.72 0.12 248);
   --radius: 0.625rem;
+
+  /*
+   * Room kept clear of the floating Linda button (16px from the corner, 48px
+   * wide, 56px on touch screens), plus an 8px gap.
+   */
+  --linda-fab-clearance: 4.5rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.35 0.02 260);
   --sidebar-primary: oklch(0.748 0.202 54.1);
@@ -194,4 +207,78 @@
 @keyframes collapsible-up {
   from { height: var(--collapsible-panel-height); }
   to { height: 0; }
+}
+
+@media (pointer: coarse) {
+  :root {
+    --linda-fab-clearance: 5rem;
+  }
+}
+
+/*
+ * Clearance for the floating Linda button. The shell root carries
+ * `data-linda-fab` while the button shows (FE-L sets it); nothing here applies
+ * otherwise. Deliberately outside any layer, so it wins over padding
+ * utilities on the same element.
+ * - At fit, controls pinned at the bottom right (`data-fab-clear`, e.g.
+ *   TablePagination, a form's action bar) keep their right end clear, and a
+ *   scroll box's last row and a sticky totals row can scroll clear of it.
+ * - Below fit the page itself scrolls, so the main area keeps room at its foot.
+ */
+@media (min-width: 1024px) and (min-height: 640px) {
+  [data-linda-fab] [data-fab-clear] {
+    padding-right: var(--linda-fab-clearance);
+  }
+  [data-linda-fab] [data-slot="scroll-box"]::after {
+    content: "";
+    display: block;
+    flex-shrink: 0;
+    height: var(--linda-fab-clearance);
+  }
+  [data-linda-fab] [data-slot="scroll-box"] tfoot tr > :last-child,
+  [data-linda-fab] [data-slot="scroll-box"] tr[data-total] > :last-child {
+    padding-right: var(--linda-fab-clearance);
+  }
+}
+
+@media not all and (min-width: 1024px), not all and (min-height: 640px) {
+  [data-linda-fab] [data-app-main] {
+    padding-bottom: var(--linda-fab-clearance);
+  }
+}
+
+/*
+ * Printing a page shows all of it, on the full page width: the side menu,
+ * the header and Linda's panel are left out, and the shell and every scroll
+ * box give up their fixed height and inner scrolling, so nothing is cut at
+ * the window's edge. Printables opened in their own tab are unaffected.
+ */
+@media print {
+  [data-app-shell] > aside,
+  [data-app-column] > header {
+    display: none !important;
+  }
+  [data-app-shell] {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  [data-app-shell] [data-app-column] {
+    display: block !important;
+    width: 100% !important;
+  }
+  [data-app-main] {
+    padding: 0 !important;
+  }
+  [data-app-shell] [data-app-column],
+  [data-app-main],
+  [data-slot="scroll-box"],
+  [data-slot="page-fill"],
+  [data-slot="fill-section"] {
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    flex: none !important;
+  }
 }

@@ -1,23 +1,25 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { dashboardKpiClasses } from "./kpi-layout";
+import { DASHBOARD_PAGE_CLASS, dashboardKpiClasses } from "./kpi-layout";
 
-// The classes the dashboard rendered before Linda existed. Any change to them
-// would change the dashboard for deployments that never turn Linda on.
-const UNCHANGED = { page: "space-y-6", grid: "grid grid-cols-2 lg:grid-cols-5 gap-4" };
+const tokens = (classes: string) => classes.split(/\s+/).filter(Boolean);
 
-test("with Linda off the dashboard keeps its classes, whatever the panel state says", () => {
-  assert.deepEqual(dashboardKpiClasses({ lindaEnabled: false, lindaOpen: false }), UNCHANGED);
-  assert.deepEqual(dashboardKpiClasses({ lindaEnabled: false, lindaOpen: true }), UNCHANGED);
+test("the page is the dashboard's size container, so the KPI row follows its width", () => {
+  assert.equal(DASHBOARD_PAGE_CLASS, "@container/dashboard");
 });
 
-test("with Linda on but closed the dashboard keeps its classes", () => {
-  assert.deepEqual(dashboardKpiClasses({ lindaEnabled: true, lindaOpen: false }), UNCHANGED);
+test("the KPI row is five across on a wide page and three plus two on a narrow one", () => {
+  // A narrow page: 1024px wide, or Linda's side panel open. Five cards across
+  // squeezed the sparklines to slivers and wrapped the premium line 4-5 times.
+  const c = tokens(dashboardKpiClasses().grid);
+  for (const t of ["grid", "gap-4", "grid-cols-2", "lg:grid-cols-5", "lg:@max-[52rem]/dashboard:grid-cols-3"]) {
+    assert.ok(c.includes(t), t);
+  }
 });
 
-test("while Linda is open a narrow page shows three KPI cards across instead of five", () => {
-  const c = dashboardKpiClasses({ lindaEnabled: true, lindaOpen: true });
-  assert.match(c.page, /(^| )@container\/dashboard( |$)/);
-  assert.match(c.grid, /(^| )lg:grid-cols-5( |$)/);
-  assert.match(c.grid, /(^| )lg:@max-\[43rem\]\/dashboard:grid-cols-3( |$)/);
+test("each KPI card is its own size container, and its sparkline shows only when the card is wide enough", () => {
+  const { card, sparkline } = dashboardKpiClasses();
+  assert.ok(tokens(card).includes("@container/kpi"), card);
+  assert.ok(tokens(sparkline).includes("hidden"), sparkline);
+  assert.ok(tokens(sparkline).includes("@min-[14rem]/kpi:block"), sparkline);
 });
