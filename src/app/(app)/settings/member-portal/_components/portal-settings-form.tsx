@@ -125,9 +125,12 @@ export function PortalSettingsForm({ settings, onSaved }: { settings: PortalSett
               <FormField id="mp-support" label="Support contact (optional)" hint="Shown to members, for example the branch's phone number.">
                 <Input id="mp-support" maxLength={255} value={form.support_contact} onChange={(e) => set("support_contact", e.target.value)} />
               </FormField>
-              <FormField id="mp-pay" label="How to pay (optional)" hint="Shown to members beside their loans.">
-                <Textarea id="mp-pay" rows={2} maxLength={2000} value={form.payment_instructions} onChange={(e) => set("payment_instructions", e.target.value)} />
-              </FormField>
+              {/* FormField takes no className, so the span sits on a wrapper. */}
+              <div className="md:col-span-2 xl:col-span-1">
+                <FormField id="mp-pay" label="How to pay (optional)" hint="Shown to members beside their loans.">
+                  <Textarea id="mp-pay" rows={2} maxLength={2000} value={form.payment_instructions} onChange={(e) => set("payment_instructions", e.target.value)} />
+                </FormField>
+              </div>
             </div>
           </CardContent>
         </Card>

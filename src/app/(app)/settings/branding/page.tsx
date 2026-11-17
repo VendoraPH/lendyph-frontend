@@ -258,7 +258,7 @@ function BrandingSettingsContent() {
                     </p>
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-2 md:col-span-2 xl:col-span-1">
                     <Label htmlFor="organization-address">Address</Label>
                     <Textarea
                       id="organization-address"
