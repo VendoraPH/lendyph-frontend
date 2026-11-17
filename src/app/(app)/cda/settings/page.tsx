@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePermission } from "@/hooks";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 import { CdaPage } from "../_components/cda-page";
 import { DeadlineSettingsForm } from "./_components/deadline-settings-form";
 import { ExtensionForm } from "./_components/extension-form";
@@ -27,26 +29,26 @@ export default function Page() {
       yearless
     >
       {(ctx) => (
-        <Tabs value={tab} onValueChange={(next) => setTab(String(next))}>
+        <Tabs value={tab} onValueChange={(next) => setTab(String(next))} className={FIT_CLASSES.section}>
           {!can("cda:settings") && (
-            <p className="mb-3 rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+            <p className="mb-3 shrink-0 rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
               You can read these settings. Changing them needs the CDA Compliance: Configure CDA settings permission.
             </p>
           )}
-          <TabsList>
+          <TabsList className="shrink-0">
             <TabsTrigger value="profile">Regulatory profile</TabsTrigger>
             <TabsTrigger value="deadlines">Deadlines</TabsTrigger>
             {templateManager && <TabsTrigger value="templates">Templates</TabsTrigger>}
           </TabsList>
-          <TabsContent value="profile" className="pt-4">
+          <TabsContent value="profile" className={cn(FIT_CLASSES.section, "pt-4")}>
             <ProfileForm />
           </TabsContent>
-          <TabsContent value="deadlines" className="space-y-4 pt-4">
+          <TabsContent value="deadlines" className={cn(FIT_CLASSES.section, "gap-4 pt-4")}>
             <DeadlineSettingsForm />
             {ctx && <ExtensionForm key={ctx.year} period={ctx.period} onSaved={ctx.reloadPeriods} />}
           </TabsContent>
           {templateManager && (
-            <TabsContent value="templates" className="pt-4">
+            <TabsContent value="templates" className={cn(FIT_CLASSES.section, "pt-4")}>
               <TemplatesPanel />
             </TabsContent>
           )}

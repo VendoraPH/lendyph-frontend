@@ -10,8 +10,10 @@ import { useApiResource, usePermission } from "@/hooks";
 import { cdaService } from "@/services";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { formatDate, formatDateTime } from "@/lib/format";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { cn } from "@/lib/utils";
 import type { CdaLoanClassificationPage } from "@/types/cda";
+import { StackScroll } from "../../_components/stack-scroll";
 import { cdaCount, cdaMoney, cdaPercent } from "../../_lib/money";
 
 function Kpi({ label, value, danger }: { label: string; value: string; danger?: boolean }) {
@@ -168,23 +170,26 @@ export function LoanClassification({ year }: { year: number }) {
       {(body) => {
         const d = body.data;
         return (
-          <div className="space-y-4">
+          <div className={cn(FIT_CLASSES.section, "gap-4")}>
             {d.warning && (
-              <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100">
+              <p className="shrink-0 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100">
                 {d.warning}
               </p>
             )}
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid shrink-0 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Kpi label="Principal Balance" value={cdaMoney(d.total_outstanding_principal)} />
               <Kpi label="Required allowance" value={cdaMoney(d.required_allowance)} />
               <Kpi label="Allowance on the books (1200)" value={cdaMoney(d.existing_allowance)} />
               <Kpi label="Provision gap" value={cdaMoney(d.provision_gap)} danger={!d.provision_gap.startsWith("-") && d.provision_gap !== "0.00"} />
             </div>
-            <Buckets body={body} />
-            <p className="text-sm text-muted-foreground">
-              Unpaid interest due: {cdaMoney(d.unpaid_interest_due)}. {d.memo_note}
-            </p>
-            {d.loans_visible && <Loans body={body} onPage={(page, perPage) => setPaging({ page, perPage })} />}
+            {/* The totals stay in view; the classes, the memo and the loan list scroll under them. */}
+            <StackScroll className="space-y-4">
+              <Buckets body={body} />
+              <p className="text-sm text-muted-foreground">
+                Unpaid interest due: {cdaMoney(d.unpaid_interest_due)}. {d.memo_note}
+              </p>
+              {d.loans_visible && <Loans body={body} onPage={(page, perPage) => setPaging({ page, perPage })} />}
+            </StackScroll>
           </div>
         );
       }}

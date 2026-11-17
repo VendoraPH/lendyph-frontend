@@ -172,7 +172,11 @@ function ReportBody({ report, drafts, setDrafts, reloading, onChange, onReload }
       <Summary report={report} onChange={onChange} />
       <Notices report={report} onRefresh={refresh} refreshing={refreshing} />
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      {/*
+        At fit the workflow and Save bar stays at the top of the page's scroll
+        box while the sections scroll under it (hidden when it holds nothing).
+      */}
+      <div className="flex flex-wrap items-center justify-between gap-2 fit:sticky fit:top-0 fit:z-20 fit:rounded-lg fit:border fit:bg-card fit:px-3 fit:py-2 fit:shadow-sm fit:empty:hidden">
         <WorkflowActions report={report} onChange={onChange} onReload={onReload} reloading={reloading} />
         {canEdit && (
           <PermissionButton permission="cda:prepare" size="sm" onClick={save} disabled={!dirty || saving || reloading}>

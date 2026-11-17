@@ -42,7 +42,7 @@ export function ExtensionForm({ period, onSaved }: { period: CdaPeriod; onSaved:
   }
 
   return (
-    <Card>
+    <Card className="shrink-0">
       <CardHeader>
         <CardTitle className="text-base">{period.year} deadline extension</CardTitle>
         <CardDescription>

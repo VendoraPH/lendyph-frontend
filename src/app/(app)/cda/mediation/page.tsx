@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CdaPage } from "../_components/cda-page";
 import { ReportWorkspace } from "../_components/report-workspace";
+import { StackScroll } from "../_components/stack-scroll";
 import { PART_LABELS, REPORT_PAGES } from "../_lib/labels";
 import { linkedPart, withoutParams } from "../_lib/link-params";
 import { MediationCases } from "./_components/cases";
@@ -47,7 +48,10 @@ function MediationReports({ year, version }: { year: number; version: number }) 
   );
 }
 
-/** Mediation is two reports a year, one per half, each with its own deadline and workflow. */
+/**
+ * Mediation is two reports a year, one per half, each with its own deadline and
+ * workflow. The cases and both halves scroll in one box under the page header.
+ */
 export default function Page() {
   const page = REPORT_PAGES.mediation;
   const [version, setVersion] = useState(0);
@@ -56,10 +60,10 @@ export default function Page() {
     <CdaPage title={page.title} description={page.description} restriction={page.restriction}>
       {(ctx) =>
         ctx && (
-          <div className="space-y-6">
+          <StackScroll>
             <MediationCases key={ctx.year} year={ctx.year} onChanged={changed} />
             <MediationReports year={ctx.year} version={version} />
-          </div>
+          </StackScroll>
         )
       }
     </CdaPage>

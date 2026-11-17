@@ -10,7 +10,10 @@ import { useApiResource, usePermission } from "@/hooks";
 import { cdaService } from "@/services";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { notifyError, notifySuccess, notifyValidation } from "@/lib/notify";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 import type { CdaSettings } from "@/types/cda";
+import { StackScroll } from "../../_components/stack-scroll";
 import { POSITION_LABELS } from "../../_lib/labels";
 import { POSITIONS, draftToSettings, settingsToDraft, type SettingsDraft } from "../_lib/settings-forms";
 
@@ -50,65 +53,68 @@ function SettingsEditor({ settings }: { settings: CdaSettings }) {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Field
-          id="cda-annual-days"
-          label="Annual reports due (days after Dec 31)"
-          inputMode="numeric"
-          value={draft.annual_deadline_days}
-          onChange={set("annual_deadline_days")}
-          disabled={disabled}
-          help="Applies to periods opened after a change."
-        />
-        <Field
-          id="cda-mediation-days"
-          label="Mediation reports due (days after each half)"
-          inputMode="numeric"
-          value={draft.mediation_deadline_days}
-          onChange={set("mediation_deadline_days")}
-          disabled={disabled}
-        />
-        <Field
-          id="cda-reminder-days"
-          label="Remind this many days before"
-          placeholder="30, 15, 7, 3"
-          value={draft.reminder_days}
-          onChange={set("reminder_days")}
-          disabled={disabled}
-          help="Staff are also reminded on the day and once when overdue."
-        />
-      </div>
-      <div className="space-y-2">
-        <p className="text-sm font-medium">Asset size bounds (₱, total assets up to)</p>
+    <div className={cn(FIT_CLASSES.section, "gap-6")}>
+      {/* At fit the fields scroll inside the card and Save stays pinned at its foot. */}
+      <StackScroll>
         <div className="grid gap-4 sm:grid-cols-3">
-          <Field id="cda-micro" label="Micro" inputMode="decimal" value={draft.micro} onChange={set("micro")} disabled={disabled} />
-          <Field id="cda-small" label="Small" inputMode="decimal" value={draft.small} onChange={set("small")} disabled={disabled} />
-          <Field id="cda-medium" label="Medium" inputMode="decimal" value={draft.medium} onChange={set("medium")} disabled={disabled} />
+          <Field
+            id="cda-annual-days"
+            label="Annual reports due (days after Dec 31)"
+            inputMode="numeric"
+            value={draft.annual_deadline_days}
+            onChange={set("annual_deadline_days")}
+            disabled={disabled}
+            help="Applies to periods opened after a change."
+          />
+          <Field
+            id="cda-mediation-days"
+            label="Mediation reports due (days after each half)"
+            inputMode="numeric"
+            value={draft.mediation_deadline_days}
+            onChange={set("mediation_deadline_days")}
+            disabled={disabled}
+          />
+          <Field
+            id="cda-reminder-days"
+            label="Remind this many days before"
+            placeholder="30, 15, 7, 3"
+            value={draft.reminder_days}
+            onChange={set("reminder_days")}
+            disabled={disabled}
+            help="Staff are also reminded on the day and once when overdue."
+          />
         </div>
-        <p className="text-xs text-muted-foreground">Above the medium bound is large.</p>
-      </div>
-      <div className="space-y-2">
-        <p className="text-sm font-medium">Mandatory trainings by position</p>
-        <p className="text-xs text-muted-foreground">
-          Training keys, comma-separated (lower-case letters, digits and underscores). A training meets one when its
-          requirement key matches.
-        </p>
-        <div className="grid gap-4 sm:grid-cols-2">
-          {POSITIONS.map((position) => (
-            <Field
-              key={position}
-              id={`cda-trainings-${position}`}
-              label={POSITION_LABELS[position]}
-              placeholder="e.g. basic_coop_course"
-              value={draft.trainings[position] ?? ""}
-              onChange={(e) => setDraft({ ...draft, trainings: { ...draft.trainings, [position]: e.target.value } })}
-              disabled={disabled}
-            />
-          ))}
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Asset size bounds (₱, total assets up to)</p>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Field id="cda-micro" label="Micro" inputMode="decimal" value={draft.micro} onChange={set("micro")} disabled={disabled} />
+            <Field id="cda-small" label="Small" inputMode="decimal" value={draft.small} onChange={set("small")} disabled={disabled} />
+            <Field id="cda-medium" label="Medium" inputMode="decimal" value={draft.medium} onChange={set("medium")} disabled={disabled} />
+          </div>
+          <p className="text-xs text-muted-foreground">Above the medium bound is large.</p>
         </div>
-      </div>
-      <div className="flex justify-end">
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Mandatory trainings by position</p>
+          <p className="text-xs text-muted-foreground">
+            Training keys, comma-separated (lower-case letters, digits and underscores). A training meets one when its
+            requirement key matches.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {POSITIONS.map((position) => (
+              <Field
+                key={position}
+                id={`cda-trainings-${position}`}
+                label={POSITION_LABELS[position]}
+                placeholder="e.g. basic_coop_course"
+                value={draft.trainings[position] ?? ""}
+                onChange={(e) => setDraft({ ...draft, trainings: { ...draft.trainings, [position]: e.target.value } })}
+                disabled={disabled}
+              />
+            ))}
+          </div>
+        </div>
+      </StackScroll>
+      <div data-fab-clear className="flex shrink-0 justify-end fit:border-t fit:pt-4">
         <PermissionButton permission="cda:settings" onClick={save} disabled={busy}>
           {busy ? "Saving…" : "Save settings"}
         </PermissionButton>
@@ -121,12 +127,12 @@ function SettingsEditor({ settings }: { settings: CdaSettings }) {
 export function DeadlineSettingsForm() {
   const resource = useApiResource(useCallback(() => cdaService.getSettings(), []));
   return (
-    <Card>
+    <Card className={FIT_CLASSES.section}>
       <CardHeader>
         <CardTitle className="text-base">Deadlines, reminders and requirements</CardTitle>
         <CardDescription>A CDA extension for a year is recorded on the year, below.</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className={FIT_CLASSES.section}>
         <DataState resource={resource} endpoints={[`GET ${API_ENDPOINTS.CDA.SETTINGS}`]} summary="The CDA settings">
           {(settings) => <SettingsEditor settings={settings} />}
         </DataState>

@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, type ReactNode } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { DataState } from "@/components/common/data-state";
+import { FillSection, PageFill } from "@/components/common/page-fill";
 import { Card, CardContent } from "@/components/ui/card";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { useApiResource } from "@/hooks";
@@ -53,7 +54,7 @@ function Header({
   onPick: (year: number) => void;
 }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="flex shrink-0 flex-wrap items-start justify-between gap-3">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         <p className="text-sm text-muted-foreground">{description}</p>
@@ -84,7 +85,7 @@ function Header({
 
 function DefaultNoPeriod() {
   return (
-    <Card>
+    <Card className="shrink-0">
       <CardContent className="py-10 text-center text-sm text-muted-foreground">
         No CDA reporting period is open yet. Open one from the{" "}
         <Link href="/cda" className="font-medium text-primary hover:underline">
@@ -120,18 +121,21 @@ function PageBody({ title, description, actions, noPeriod, yearless, children }:
     ctx === null && !yearless ? (noPeriod ? noPeriod(resource.refetch) : <DefaultNoPeriod />) : children(ctx);
 
   return (
-    <div className="space-y-6">
+    <PageFill className="fit:gap-4">
       <Header title={title} description={description} periods={periods} year={year} actions={actions?.(ctx)} onPick={pick} />
-      {resource.data !== null && !resource.error ? (
-        // A reload (after opening a year or saving an extension) keeps the
-        // page in place instead of swapping it for a spinner.
-        body()
-      ) : (
-        <DataState resource={resource} endpoints={[`GET ${API_ENDPOINTS.CDA.PERIODS}`]} summary="The CDA reporting periods">
-          {body}
-        </DataState>
-      )}
-    </div>
+      {/* The page's body takes the height under the header; a page gives the part that scrolls its own box. */}
+      <FillSection className="gap-6 fit:gap-4">
+        {resource.data !== null && !resource.error ? (
+          // A reload (after opening a year or saving an extension) keeps the
+          // page in place instead of swapping it for a spinner.
+          body()
+        ) : (
+          <DataState resource={resource} endpoints={[`GET ${API_ENDPOINTS.CDA.PERIODS}`]} summary="The CDA reporting periods">
+            {body}
+          </DataState>
+        )}
+      </FillSection>
+    </PageFill>
   );
 }
 
