@@ -84,8 +84,8 @@ export function TemplatesPanel() {
                     const status = TEMPLATE_STATUS_META[t.status] ?? { label: "Other", tone: "neutral" as const };
                     return (
                       <TableRow key={t.id}>
-                        <TableCell>{labelOf(REPORT_TYPE_LABELS, t.report_type)}</TableCell>
-                        <TableCell>
+                        <TableCell className="min-w-32 whitespace-normal wrap-anywhere">{labelOf(REPORT_TYPE_LABELS, t.report_type)}</TableCell>
+                        <TableCell className="min-w-48 whitespace-normal wrap-anywhere">
                           <p className="font-medium">{t.name}</p>
                           <p className="text-xs text-muted-foreground">
                             Version {t.version}
