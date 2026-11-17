@@ -8,7 +8,7 @@ import { Figure, SectionShell, SourceGate } from "./section-shell";
 
 const dash = (v: number | null, format: "currency" | "count" | "percent") => (v === null ? "—" : formatMetric(v, format));
 
-/** Borrowers, releases, and the loan officers' books. */
+/** Members, releases, and the loan officers' books. */
 export function OperationsSection({ data }: { data: ExecutiveData }) {
   const borrowers = readyData(data.borrowers);
   const releases = readyData(data.disbursements);
@@ -16,16 +16,16 @@ export function OperationsSection({ data }: { data: ExecutiveData }) {
 
   return (
     <SectionShell
-      title="Borrowers & Operations"
+      title="Members & Operations"
       icon={<Users className="size-4" />}
-      note="New and repeat borrowers, and releases, cover the selected period. Officer balances are as of today."
+      note="New and repeat members, and releases, cover the selected period. Officer balances are as of today."
     >
       <div className="grid gap-4 lg:grid-cols-2">
         <SourceGate source={data.borrowers} height="h-24">
           <div className="grid grid-cols-2 gap-2">
-            <Figure label="Active borrowers" value={formatMetric(toNumber(borrowers?.total_active_borrowers), "count")} />
-            <Figure label="New borrowers" value={formatMetric(toNumber(borrowers?.new_borrowers), "count")} />
-            <Figure label="Repeat borrowers" value={formatMetric(toNumber(borrowers?.repeat_borrowers), "count")} />
+            <Figure label="Active members" value={formatMetric(toNumber(borrowers?.total_active_borrowers), "count")} />
+            <Figure label="New members" value={formatMetric(toNumber(borrowers?.new_borrowers), "count")} />
+            <Figure label="Repeat members" value={formatMetric(toNumber(borrowers?.repeat_borrowers), "count")} />
             <Figure label="Average loan size" value={formatMetric(toNumber(borrowers?.avg_loan_size), "currency")} />
           </div>
         </SourceGate>
@@ -47,7 +47,7 @@ export function OperationsSection({ data }: { data: ExecutiveData }) {
             <thead className="text-xs text-muted-foreground">
               <tr className="border-b">
                 <th scope="col" className="py-2 text-left font-medium">Officer</th>
-                <th scope="col" className="py-2 text-right font-medium">Borrowers</th>
+                <th scope="col" className="py-2 text-right font-medium">Members</th>
                 <th scope="col" className="py-2 text-right font-medium">Released</th>
                 <th scope="col" className="py-2 text-right font-medium">Collected</th>
                 <th scope="col" className="py-2 text-right font-medium">Outstanding</th>

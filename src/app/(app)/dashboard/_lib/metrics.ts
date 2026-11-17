@@ -56,7 +56,7 @@ export const METRICS = {
     href: "/loans",
   },
   active_borrowers: {
-    label: "Active Borrowers",
+    label: "Active Members",
     kind: "balance",
     format: "count",
     formula: "Members holding at least one active loan.",

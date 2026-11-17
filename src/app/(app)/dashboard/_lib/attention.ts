@@ -98,7 +98,7 @@ export function attentionItems(d: ExecutiveData): AttentionItem[] {
       id: "awaiting-release",
       tone: "warning",
       title: `${plural(approved, "approved loan")} not yet released`,
-      detail: "Approved applications whose proceeds have not been released to the borrower.",
+      detail: "Approved applications whose proceeds have not been released to the member.",
       href: "/loans",
     });
   }

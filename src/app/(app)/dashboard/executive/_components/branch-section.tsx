@@ -33,7 +33,7 @@ export function BranchSection({ data }: { data: ExecutiveData }) {
             <thead className="text-xs text-muted-foreground">
               <tr className="border-b">
                 <th scope="col" className="py-2 text-left font-medium">Branch</th>
-                <th scope="col" className="py-2 text-right font-medium">Borrowers</th>
+                <th scope="col" className="py-2 text-right font-medium">Members</th>
                 <th scope="col" className="py-2 text-right font-medium">Outstanding</th>
                 <th scope="col" className="py-2 text-right font-medium">Released</th>
                 <th scope="col" className="py-2 text-right font-medium">Collected</th>

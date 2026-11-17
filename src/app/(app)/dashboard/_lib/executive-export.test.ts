@@ -31,7 +31,7 @@ test("a figure that failed exports as Data Unavailable, never zero, and a refuse
   if (grid.kind !== "kpi_grid") throw new Error("expected the KPI grid first");
   const byLabel = Object.fromEntries(grid.items.map((i) => [i.label, i.value]));
   assert.equal(byLabel["Outstanding Portfolio"], DATA_UNAVAILABLE);
-  assert.equal(byLabel["Active Borrowers"], "No access");
+  assert.equal(byLabel["Active Members"], "No access");
   assert.ok(!Object.values(byLabel).includes("₱0"));
 });
 
