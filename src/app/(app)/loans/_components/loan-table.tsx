@@ -60,125 +60,124 @@ export function LoanTable({
   onRowClick,
   onAutoPayClick,
 }: LoanTableProps) {
+  // The page puts the table in a ScrollBox, which scrolls it and pins its headings.
   return (
-    <div className="overflow-x-auto">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            {COLUMNS.map((col) => {
-              const isActive = sort.key === col.key;
-              const Icon = !isActive
-                ? ArrowUpDown
-                : sort.dir === "asc"
-                  ? ArrowUp
-                  : ArrowDown;
-              return (
-                <TableHead
-                  key={col.key}
-                  className={cn(col.align === "right" && "text-right")}
-                  aria-sort={isActive ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
-                >
-                  <button
-                    type="button"
-                    onClick={() => onSortChange(col.key)}
-                    className={cn(
-                      "inline-flex items-center gap-1.5 hover:text-foreground transition-colors",
-                      col.align === "right" && "ml-auto",
-                      isActive ? "text-foreground" : "text-muted-foreground",
-                    )}
-                    aria-label={`Sort by ${col.label}`}
-                  >
-                    {col.label}
-                    <Icon className="h-3.5 w-3.5" />
-                  </button>
-                </TableHead>
-              );
-            })}
-            <TableHead>Auto-Pay</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {loans.map((loan) => (
-            <TableRow
-              key={loan.id}
-              className="cursor-pointer hover:bg-muted/50"
-              onClick={() => onRowClick(loan.id)}
-            >
-              <TableCell className="font-mono text-sm">
-                {loan.application_number}
-              </TableCell>
-              <TableCell className="font-medium">
-                {loanBorrowerName(loan) || "—"}
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {loanProductName(loan) || "—"}
-              </TableCell>
-              <TableCell className="text-right font-medium">
-                {formatCurrency(loan.principal_amount)}
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {loanTerm(loan) ?? 0}mo /{" "}
-                {(PAYMENT_FREQUENCY_LABELS[
-                  (loan.frequency ?? loan.payment_frequency ?? "") as keyof typeof PAYMENT_FREQUENCY_LABELS
-                ] ??
-                  loan.frequency ??
-                  loan.payment_frequency) ||
-                  "—"}
-              </TableCell>
-              <TableCell>
-                <Badge variant="outline" className={LOAN_STATUS_COLORS[loanDisplayStatus(loan)]}>
-                  {loanRowStatusLabel(loan)}
-                </Badge>
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {formatDate(loan.created_at)}
-              </TableCell>
-              <TableCell onClick={(e) => e.stopPropagation()}>
-                {offersAutoPay(loan.status) ? (
-                  <PermissionButton
-                    permission={AUTO_PAY_TOGGLE_GATE.permission}
-                    tooltip={AUTO_PAY_TOGGLE_GATE.tooltip}
-                    variant="outline"
-                    size="xs"
-                    className="gap-1.5 rounded-full px-2.5 font-medium"
-                    onClick={() => onAutoPayClick(loan)}
-                  >
-                    <Zap
-                      className={cn(
-                        "h-3 w-3",
-                        loan.auto_pay_enabled
-                          ? "text-blue-600"
-                          : "text-muted-foreground",
-                      )}
-                    />
-                    <span
-                      className={
-                        loan.auto_pay_enabled
-                          ? "text-blue-700 dark:text-blue-300"
-                          : "text-muted-foreground"
-                      }
-                    >
-                      {loan.auto_pay_enabled ? "Enabled" : "Enable"}
-                    </span>
-                  </PermissionButton>
-                ) : (
-                  <span className="text-xs text-muted-foreground">—</span>
-                )}
-              </TableCell>
-            </TableRow>
-          ))}
-          {loans.length === 0 && (
-            <TableRow>
-              <TableCell
-                colSpan={COLUMNS.length + 1}
-                className="h-24 text-center text-muted-foreground"
+    <Table>
+      <TableHeader>
+        <TableRow>
+          {COLUMNS.map((col) => {
+            const isActive = sort.key === col.key;
+            const Icon = !isActive
+              ? ArrowUpDown
+              : sort.dir === "asc"
+                ? ArrowUp
+                : ArrowDown;
+            return (
+              <TableHead
+                key={col.key}
+                className={cn(col.align === "right" && "text-right")}
+                aria-sort={isActive ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
               >
-                No loan applications found.
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
-    </div>
+                <button
+                  type="button"
+                  onClick={() => onSortChange(col.key)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 hover:text-foreground transition-colors",
+                    col.align === "right" && "ml-auto",
+                    isActive ? "text-foreground" : "text-muted-foreground",
+                  )}
+                  aria-label={`Sort by ${col.label}`}
+                >
+                  {col.label}
+                  <Icon className="h-3.5 w-3.5" />
+                </button>
+              </TableHead>
+            );
+          })}
+          <TableHead>Auto-Pay</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {loans.map((loan) => (
+          <TableRow
+            key={loan.id}
+            className="cursor-pointer hover:bg-muted/50"
+            onClick={() => onRowClick(loan.id)}
+          >
+            <TableCell className="font-mono text-sm">
+              {loan.application_number}
+            </TableCell>
+            <TableCell className="font-medium">
+              {loanBorrowerName(loan) || "—"}
+            </TableCell>
+            <TableCell className="text-muted-foreground">
+              {loanProductName(loan) || "—"}
+            </TableCell>
+            <TableCell className="text-right font-medium">
+              {formatCurrency(loan.principal_amount)}
+            </TableCell>
+            <TableCell className="text-muted-foreground">
+              {loanTerm(loan) ?? 0}mo /{" "}
+              {(PAYMENT_FREQUENCY_LABELS[
+                (loan.frequency ?? loan.payment_frequency ?? "") as keyof typeof PAYMENT_FREQUENCY_LABELS
+              ] ??
+                loan.frequency ??
+                loan.payment_frequency) ||
+                "—"}
+            </TableCell>
+            <TableCell>
+              <Badge variant="outline" className={LOAN_STATUS_COLORS[loanDisplayStatus(loan)]}>
+                {loanRowStatusLabel(loan)}
+              </Badge>
+            </TableCell>
+            <TableCell className="text-muted-foreground">
+              {formatDate(loan.created_at)}
+            </TableCell>
+            <TableCell onClick={(e) => e.stopPropagation()}>
+              {offersAutoPay(loan.status) ? (
+                <PermissionButton
+                  permission={AUTO_PAY_TOGGLE_GATE.permission}
+                  tooltip={AUTO_PAY_TOGGLE_GATE.tooltip}
+                  variant="outline"
+                  size="xs"
+                  className="gap-1.5 rounded-full px-2.5 font-medium"
+                  onClick={() => onAutoPayClick(loan)}
+                >
+                  <Zap
+                    className={cn(
+                      "h-3 w-3",
+                      loan.auto_pay_enabled
+                        ? "text-blue-600"
+                        : "text-muted-foreground",
+                    )}
+                  />
+                  <span
+                    className={
+                      loan.auto_pay_enabled
+                        ? "text-blue-700 dark:text-blue-300"
+                        : "text-muted-foreground"
+                    }
+                  >
+                    {loan.auto_pay_enabled ? "Enabled" : "Enable"}
+                  </span>
+                </PermissionButton>
+              ) : (
+                <span className="text-xs text-muted-foreground">—</span>
+              )}
+            </TableCell>
+          </TableRow>
+        ))}
+        {loans.length === 0 && (
+          <TableRow>
+            <TableCell
+              colSpan={COLUMNS.length + 1}
+              className="h-24 text-center text-muted-foreground"
+            >
+              No loan applications found.
+            </TableCell>
+          </TableRow>
+        )}
+      </TableBody>
+    </Table>
   );
 }

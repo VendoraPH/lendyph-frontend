@@ -9,7 +9,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ScrollBox } from "@/components/common/page-fill";
 import { usePermission } from "@/hooks";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 import { formatCurrencyExact, formatDate, formatDateTime } from "@/lib/format";
 import { queueStatusWentOut, recipientLabel, reminderReason, rowTestMode, type SendMode } from "@/lib/reminders";
 import type { ReminderQueueItem } from "@/types/reminder";
@@ -27,73 +30,77 @@ export function QueueTable({ items, testMode }: { items: ReminderQueueItem[]; te
   // A null recipient is hidden or missing; only `borrowers:view` tells which.
   const canSeeContacts = usePermission().can("borrowers:view");
   return (
-    <div className="overflow-x-auto rounded-xl border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Member</TableHead>
-            <TableHead>Loan</TableHead>
-            <TableHead>Installment</TableHead>
-            <TableHead className="text-right">Amount due</TableHead>
-            <TableHead>Rule</TableHead>
-            <TableHead>Channel</TableHead>
-            <TableHead>Scheduled</TableHead>
-            <TableHead>Status</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {items.map((item) => {
-            const mode = rowTestMode(item, testMode);
-            const loggedOnly = mode === true && queueStatusWentOut(item.status);
-            const reason = reminderReason(item, { failed: item.status === "failed" });
-            return (
-              <TableRow key={item.id}>
-                <TableCell>
-                  <Link href={`/borrowers/${item.borrower_id}`} className="font-medium hover:underline">
-                    {item.borrower_name}
-                  </Link>
-                </TableCell>
-                <TableCell>
-                  <Link href={`/loans/${item.loan_id}`} className="text-brand-orange hover:underline">
-                    {item.loan_account_number}
-                  </Link>
-                </TableCell>
-                <TableCell className="whitespace-nowrap">
-                  #{item.installment_number}
-                  <span className="block text-xs text-muted-foreground">due {formatDate(item.due_date)}</span>
-                </TableCell>
-                <TableCell className="text-right tabular-nums">{formatCurrencyExact(item.amount_due)}</TableCell>
-                <TableCell className="text-sm">
-                  {item.rule_name ?? (item.source === "manual" ? "Manual" : "—")}
-                </TableCell>
-                <TableCell>
-                  <span className="flex items-center gap-1.5 text-sm">
-                    {item.channel === "sms" ? (
-                      <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
-                    ) : (
-                      <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+    // In a filling column the box takes the height left and pins its headings;
+    // it is card-coloured so the pinned headings match the rows.
+    <div className={cn("rounded-xl border bg-card", FIT_CLASSES.section)}>
+      <ScrollBox>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Member</TableHead>
+              <TableHead>Loan</TableHead>
+              <TableHead>Installment</TableHead>
+              <TableHead className="text-right">Amount due</TableHead>
+              <TableHead>Rule</TableHead>
+              <TableHead>Channel</TableHead>
+              <TableHead>Scheduled</TableHead>
+              <TableHead>Status</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {items.map((item) => {
+              const mode = rowTestMode(item, testMode);
+              const loggedOnly = mode === true && queueStatusWentOut(item.status);
+              const reason = reminderReason(item, { failed: item.status === "failed" });
+              return (
+                <TableRow key={item.id}>
+                  <TableCell>
+                    <Link href={`/borrowers/${item.borrower_id}`} className="font-medium hover:underline">
+                      {item.borrower_name}
+                    </Link>
+                  </TableCell>
+                  <TableCell>
+                    <Link href={`/loans/${item.loan_id}`} className="text-brand-orange hover:underline">
+                      {item.loan_account_number}
+                    </Link>
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    #{item.installment_number}
+                    <span className="block text-xs text-muted-foreground">due {formatDate(item.due_date)}</span>
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{formatCurrencyExact(item.amount_due)}</TableCell>
+                  <TableCell className="min-w-32 whitespace-normal text-sm">
+                    {item.rule_name ?? (item.source === "manual" ? "Manual" : "—")}
+                  </TableCell>
+                  <TableCell>
+                    <span className="flex items-center gap-1.5 text-sm">
+                      {item.channel === "sms" ? (
+                        <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+                      ) : (
+                        <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                      )}
+                      {recipientLabel(item.recipient, canSeeContacts)}
+                    </span>
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-sm">{formatDateTime(item.scheduled_at)}</TableCell>
+                  <TableCell>
+                    <span className="flex flex-wrap items-center gap-1">
+                      <QueueStatusBadge status={item.status} mode={mode} />
+                      {loggedOnly && <TestModeBadge />}
+                    </span>
+                    {reason && (
+                      <span className="mt-1 block max-w-[14rem] whitespace-normal text-xs text-muted-foreground">{reason}</span>
                     )}
-                    {recipientLabel(item.recipient, canSeeContacts)}
-                  </span>
-                </TableCell>
-                <TableCell className="whitespace-nowrap text-sm">{formatDateTime(item.scheduled_at)}</TableCell>
-                <TableCell>
-                  <span className="flex flex-wrap items-center gap-1">
-                    <QueueStatusBadge status={item.status} mode={mode} />
-                    {loggedOnly && <TestModeBadge />}
-                  </span>
-                  {reason && (
-                    <span className="mt-1 block max-w-[14rem] text-xs text-muted-foreground">{reason}</span>
-                  )}
-                  {item.attempts > 1 && (
-                    <span className="block text-xs text-muted-foreground">{item.attempts} attempts</span>
-                  )}
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
+                    {item.attempts > 1 && (
+                      <span className="block text-xs text-muted-foreground">{item.attempts} attempts</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </ScrollBox>
     </div>
   );
 }

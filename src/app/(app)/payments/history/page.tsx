@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
 import { repaymentService } from "@/services";
 import { PermissionButton, RouteGuard, TablePagination } from "@/components/common";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { SEARCH_DEBOUNCE_MS } from "@/hooks/use-search-page";
 import type { Repayment } from "@/types";
 import { Loader2 } from "lucide-react";
@@ -542,7 +544,7 @@ function PaymentHistoryContent() {
   };
 
   return (
-    <div className="space-y-6">
+    <PageFill className="gap-4 fit:gap-3">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Payment History</h1>
@@ -553,7 +555,7 @@ function PaymentHistoryContent() {
 
       {/* Summary Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
+        <Card className="fit:gap-1 fit:py-3">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">
               Total Collected
@@ -561,7 +563,7 @@ function PaymentHistoryContent() {
             <CheckCircle2 className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-green-700">
+            <p className="text-2xl font-bold fit:text-xl text-green-700">
               {totalFigure(shown.totals?.collected)}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -570,13 +572,13 @@ function PaymentHistoryContent() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="fit:gap-1 fit:py-3">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Total Voided</CardTitle>
             <XCircle className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-destructive">
+            <p className="text-2xl font-bold fit:text-xl text-destructive">
               {totalFigure(shown.totals?.voided)}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -585,13 +587,13 @@ function PaymentHistoryContent() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="fit:gap-1 fit:py-3">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Insurance Premium Collected</CardTitle>
             <ShieldCheck className="h-4 w-4 text-purple-600" />
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-purple-700 dark:text-purple-300">
+            <p className="text-2xl font-bold fit:text-xl text-purple-700 dark:text-purple-300">
               {totalFigure(shown.totals?.insurance)}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -600,7 +602,7 @@ function PaymentHistoryContent() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="fit:gap-1 fit:py-3">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">
               Transactions Count
@@ -608,7 +610,7 @@ function PaymentHistoryContent() {
             <ReceiptText className="h-4 w-4 text-brand-orange" />
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{shown.total ?? "—"}</p>
+            <p className="text-2xl font-bold fit:text-xl">{shown.total ?? "—"}</p>
             <p className="text-xs text-muted-foreground mt-0.5">
               {paymentStatusBreakdown(shown.stats, { search, dateFrom, dateTo })}
             </p>
@@ -616,85 +618,83 @@ function PaymentHistoryContent() {
         </Card>
       </div>
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="pt-4 pb-4">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
-            {/* Search */}
-            <div className="flex-1 space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Search</Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Receipt #, member name, or loan account..."
-                  value={search}
-                  onChange={(e) => changeFilter(setSearch)(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
-            </div>
-
-            {/* Date range */}
-            <div className="flex gap-2 items-end">
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">From</Label>
-                <Input
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => changeFilter(setDateFrom)(e.target.value)}
-                  className="w-36"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">To</Label>
-                <Input
-                  type="date"
-                  value={dateTo}
-                  onChange={(e) => changeFilter(setDateTo)(e.target.value)}
-                  className="w-36"
-                />
-              </div>
-            </div>
-
-            {/* Reset filters */}
-            {(search || dateFrom || dateTo) && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setSearch("");
-                  setDateFrom("");
-                  setDateTo("");
-                  setPage(1);
-                }}
-              >
-                Clear
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Status Tabs + Table */}
-      <Card>
+      <Card className={cn(FIT_CLASSES.section, "fit:gap-3 fit:py-3")}>
         <CardHeader className="pb-0">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <CardTitle className="text-sm font-medium">
-              Transactions ({shown.total ?? "—"})
-            </CardTitle>
-            <Tabs value={statusTab} onValueChange={changeFilter(setStatusTab)}>
-              <TabsList>
-                <TabsTrigger value="all">All</TabsTrigger>
-                <TabsTrigger value="completed">Completed</TabsTrigger>
-                <TabsTrigger value="voided">Voided</TabsTrigger>
-              </TabsList>
-            </Tabs>
+          {/* The title, the status tabs and the filters share one row on wide
+              screens, so the table keeps the height. */}
+          <div className="flex flex-col gap-4 lg:flex-row lg:flex-wrap lg:items-end">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 lg:justify-start lg:gap-4">
+              <CardTitle className="text-sm font-medium">
+                Transactions ({shown.total ?? "—"})
+              </CardTitle>
+              <Tabs value={statusTab} onValueChange={changeFilter(setStatusTab)}>
+                <TabsList>
+                  <TabsTrigger value="all">All</TabsTrigger>
+                  <TabsTrigger value="completed">Completed</TabsTrigger>
+                  <TabsTrigger value="voided">Voided</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end lg:min-w-0 lg:flex-1">
+              {/* Search */}
+              <div className="min-w-48 flex-1 space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Search</Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Receipt #, member name, or loan account..."
+                    value={search}
+                    onChange={(e) => changeFilter(setSearch)(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+              </div>
+
+              {/* Date range */}
+              <div className="flex gap-2 items-end">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">From</Label>
+                  <Input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => changeFilter(setDateFrom)(e.target.value)}
+                    className="w-36"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">To</Label>
+                  <Input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => changeFilter(setDateTo)(e.target.value)}
+                    className="w-36"
+                  />
+                </div>
+              </div>
+
+              {/* Reset filters */}
+              {(search || dateFrom || dateTo) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSearch("");
+                    setDateFrom("");
+                    setDateTo("");
+                    setPage(1);
+                  }}
+                >
+                  Clear
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
 
-        <CardContent className={cn("pt-4 transition-opacity", loading && payments.length > 0 && "opacity-60")} aria-busy={loading}>
+        <CardContent className={cn("pt-4 fit:pt-0 transition-opacity", FIT_CLASSES.section, loading && payments.length > 0 && "opacity-60")} aria-busy={loading}>
           {/* Desktop Table */}
-          <div className="hidden md:block overflow-x-auto">
+          <ScrollBox className="hidden md:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -865,7 +865,7 @@ function PaymentHistoryContent() {
                   ))}
               </div>
             )}
-          </div>
+          </ScrollBox>
 
           {/* Mobile Cards */}
           <div className="grid gap-3 md:hidden">
@@ -909,7 +909,7 @@ function PaymentHistoryContent() {
         onOpenChange={setVoidDialogOpen}
         onVoid={handleVoid}
       />
-    </div>
+    </PageFill>
   );
 }
 

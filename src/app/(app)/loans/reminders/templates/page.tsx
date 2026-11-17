@@ -3,11 +3,14 @@
 import { useCallback, useState } from "react";
 import { Mail, MessageSquare, Plus } from "lucide-react";
 import { DataState } from "@/components/common/data-state";
+import { ScrollBox } from "@/components/common/page-fill";
 import { PermissionButton } from "@/components/common/permission-button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { useApiResource, usePermission } from "@/hooks";
 import { formatDate } from "@/lib/format";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 import { COMPANY_WIDE_REASON, TEMPLATES_PAGE_INTRO, TEMPLATE_TYPES, TEMPLATE_TYPE_LABELS } from "@/lib/reminders";
 import { reminderService } from "@/services";
 import type { Permission } from "@/types";
@@ -64,7 +67,7 @@ export default function ReminderTemplatesPage() {
   const write = useTemplateWrite();
 
   return (
-    <div className="space-y-4">
+    <div className={cn(FIT_CLASSES.section, "gap-4")}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">
           {TEMPLATES_PAGE_INTRO}
@@ -88,15 +91,15 @@ export default function ReminderTemplatesPage() {
         emptyMessage="No templates yet. Create one for each reminder type you send."
       >
         {(rows) => (
-          <div className="space-y-4">
+          <ScrollBox className="space-y-4 p-px">
             {TEMPLATE_TYPES.map((type) => {
               const group = rows.filter((t) => t.type === type);
               if (group.length === 0) return null;
               return (
                 <Card key={type}>
-                  <CardContent className="pt-6">
+                  <CardContent>
                     <p className="mb-3 text-sm font-semibold">{TEMPLATE_TYPE_LABELS[type]}</p>
-                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    <div className="grid grid-cols-[repeat(auto-fit,minmax(min(20rem,100%),1fr))] gap-3">
                       {group.map((t) => (
                         <TemplateCard key={t.id} template={t} onEdit={() => setDialog({ template: t })} />
                       ))}
@@ -105,7 +108,7 @@ export default function ReminderTemplatesPage() {
                 </Card>
               );
             })}
-          </div>
+          </ScrollBox>
         )}
       </DataState>
 
