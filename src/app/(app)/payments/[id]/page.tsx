@@ -310,49 +310,50 @@ function PaymentReceiptContent({
         </div>
       </div>
 
+      {/* Void confirmation: outside the scroll box, so it shows under the
+          header's Void button however far the receipt is scrolled. */}
+      {showVoidConfirm && (
+        <div className="shrink-0 print:hidden">
+          <Card className="mx-auto max-w-md border-destructive/30">
+            <CardContent className="p-4 space-y-3">
+              <p className="text-sm font-semibold text-destructive">Void this payment?</p>
+              <p className="text-xs text-muted-foreground">
+                This action cannot be undone. The payment of {formatCurrency(receipt.total)} for {receipt.borrower_name} will be voided.
+              </p>
+              <textarea
+                className="w-full rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder="Reason for voiding (required)"
+                rows={2}
+                value={voidReason}
+                onChange={(e) => setVoidReason(e.target.value)}
+              />
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowVoidConfirm(false);
+                    setVoidReason("");
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={voiding || !voidReason.trim()}
+                  onClick={handleVoid}
+                >
+                  {voiding ? "Voiding..." : "Confirm Void"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* The receipt scrolls under the header. Print shows all of it (globals.css). */}
       <ScrollBox className="space-y-6 p-px">
-        {/* Void confirmation dialog */}
-        {showVoidConfirm && (
-          <div className="print:hidden">
-            <Card className="mx-auto max-w-md border-destructive/30">
-              <CardContent className="p-4 space-y-3">
-                <p className="text-sm font-semibold text-destructive">Void this payment?</p>
-                <p className="text-xs text-muted-foreground">
-                  This action cannot be undone. The payment of {formatCurrency(receipt.total)} for {receipt.borrower_name} will be voided.
-                </p>
-                <textarea
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                  placeholder="Reason for voiding (required)"
-                  rows={2}
-                  value={voidReason}
-                  onChange={(e) => setVoidReason(e.target.value)}
-                />
-                <div className="flex justify-end gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setShowVoidConfirm(false);
-                      setVoidReason("");
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    disabled={voiding || !voidReason.trim()}
-                    onClick={handleVoid}
-                  >
-                    {voiding ? "Voiding..." : "Confirm Void"}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
         {/* Receipt card */}
         <div className="mx-auto w-full max-w-md">
           <Card className="overflow-hidden border shadow-md print:shadow-none print:border-0">
