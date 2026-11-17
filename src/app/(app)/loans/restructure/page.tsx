@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef, Suspense, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { notifyError, notifyInfo, notifyValidation } from "@/lib/notify";
@@ -17,7 +17,10 @@ import {
 } from "lucide-react";
 
 import { RouteGuard } from "@/components/common";
-import { PageFill, PageLoader, ScrollBox } from "@/components/common/page-fill";
+import { PageFill, PageLoader } from "@/components/common/page-fill";
+import { FormStep, FormStepper, type FormStepperHandle } from "@/components/common/form-stepper";
+import { FORM_STEP_GRID, stepErrorsOf, type StepErrors } from "@/lib/form-stepper";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { StaffPicker } from "@/components/common/staff-picker";
 import {
@@ -27,7 +30,6 @@ import {
   lockLabel,
 } from "@/lib/collateral-lock";
 import { Spinner } from "@/components/ui/spinner";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -119,6 +121,8 @@ import {
   LOAN_STATUS_COLORS,
 } from "@/constants";
 import { loanDisplayStatus, loanRowStatusLabel } from "@/constants/loan-status";
+import { serverFieldErrors } from "@/app/(app)/loans/new/_lib/loan-form-steps";
+import { RESTRUCTURE_STEPS, restructureMissing } from "./_lib/restructure-steps";
 
 import type { CollateralType, Loan, LoanStatus, StaffMember } from "@/types";
 import { loanMemberOptions } from "@/app/(app)/loans/new/_lib/member-picker";
@@ -676,33 +680,43 @@ function RestructureLoanInner() {
     [products],
   );
 
+  // ── Steps ──
+  // The shortfall rules are the server's: wait for its figures, then require
+  // what it says a principal below the restructurable balance needs.
+  const check = restructureSubmitCheck({
+    previewStatus: preview.status,
+    principal,
+    restructure,
+    remarks,
+    canWriteOff,
+    summaryBalance: sourceOutstanding,
+  });
+  // Every field the user still needs to fix, by field: each step checks its
+  // own, and the submit lists them all in one pop-up, as before. The source
+  // loan counts once its details have loaded and the form shows.
+  const missingFields = restructureMissing({
+    hasMember: borrowerId !== null,
+    hasSourceLoan: sourceLoanId !== null && formVisible,
+    hasProduct: productId !== null,
+    principalOk: principal > 0 && !principalError,
+    termOk: term > 0 && !termError,
+    hasFrequency: paymentFrequency !== null,
+    rateOk: rate > 0,
+    hasRestructureDate: restructureDate !== undefined,
+    remarksMissing: check.missing.includes("Remarks"),
+  });
+  const stepperRef = useRef<FormStepperHandle>(null);
+  function validateStep(stepId: string): StepErrors | true {
+    const step = RESTRUCTURE_STEPS.find((s) => s.id === stepId);
+    return step ? stepErrorsOf(missingFields, step) : true;
+  }
+
   const handleSubmit = async () => {
-    // Collect every field the user still needs to fix and surface them in a
-    // single consolidated pop-up instead of inline red messages.
-    const missing: string[] = [];
-    if (borrowerId === null) missing.push("Member");
-    if (sourceLoanId === null) missing.push("Source loan");
-    if (productId === null) missing.push("Loan product");
-    if (!(principal > 0) || principalError) missing.push("Principal amount");
-    if (!(term > 0) || termError) missing.push("Term");
-    if (paymentFrequency === null) missing.push("Payment frequency");
-    if (!(rate > 0)) missing.push("Interest rate");
-    if (restructureDate === undefined) missing.push("Restructure date");
-    // The shortfall rules are the server's: wait for its figures, then require
-    // what it says a principal below the restructurable balance needs.
-    const check = restructureSubmitCheck({
-      previewStatus: preview.status,
-      principal,
-      restructure,
-      remarks,
-      canWriteOff,
-      summaryBalance: sourceOutstanding,
-    });
     if (check.wait) {
       notifyInfo(check.wait);
       return;
     }
-    missing.push(...check.missing);
+    const missing = Object.values(missingFields);
     if (missing.length > 0) {
       notifyValidation(missing);
       return;
@@ -778,12 +792,19 @@ function RestructureLoanInner() {
       router.push(`/loans/${newLoan.id}`);
     } catch (err: unknown) {
       notifyError(err, "We couldn't restructure this loan. Please try again.");
+      // A 422 opens the first step holding one of its fields.
+      stepperRef.current?.showErrors(serverFieldErrors(err));
     } finally {
       setSubmitting(false);
     }
   };
 
   // ── Loading state ──
+  function onFormSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void handleSubmit();
+  }
+
   if (loadingData) {
     return <PageLoader />;
   }
@@ -807,8 +828,26 @@ function RestructureLoanInner() {
           </div>
         </div>
 
-        {/* The form scrolls under the header; Cancel and Submit stay at the foot. */}
-        <ScrollBox className="space-y-6 p-px">
+        {/* One step per card. At fit the open step scrolls under the rail;
+            Cancel, Back, Next and Submit stay at the foot. */}
+        <form noValidate onSubmit={onFormSubmit} className={FIT_CLASSES.section}>
+        <FormStepper
+          ref={stepperRef}
+          steps={RESTRUCTURE_STEPS}
+          mode="create"
+          validateStep={validateStep}
+          submitLabel="Submit Restructure Application"
+          submitting={submitting}
+          actions={
+            formVisible ? (
+              <Button variant="outline" onClick={() => router.back()}>
+                Cancel
+              </Button>
+            ) : undefined
+          }
+        >
+        {/* ── Step 1: Source Loan, then the member & co-makers it carries ── */}
+        <FormStep id="source">
           {loanShortfall && (
             <IncompleteListNotice
               shown={loanShortfall.shown}
@@ -818,14 +857,9 @@ function RestructureLoanInner() {
             />
           )}
 
-          {/* ── Step 1: Source Loan Selection ── */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Source Loan</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2">
               {/* Borrower combobox */}
-              <div className="space-y-1.5">
+              <div className="space-y-1.5" data-field="borrower_id">
                 <Label>Member</Label>
                 <MemberSearchPicker
                   aria-label="Member"
@@ -838,7 +872,7 @@ function RestructureLoanInner() {
               </div>
 
               {/* Active loan combobox */}
-              <div className="space-y-1.5">
+              <div className="space-y-1.5" data-field="source_loan_id">
                 <Label>Active Loan to Restructure</Label>
                 {loadingLoans ? (
                   <div className="flex h-10 items-center gap-2 rounded-md border px-3 text-sm text-muted-foreground">
@@ -899,8 +933,7 @@ function RestructureLoanInner() {
                   </Popover>
                 )}
               </div>
-            </CardContent>
-          </Card>
+          </div>
 
           {/* Loading loan detail spinner */}
           {loadingLoanDetail && (
@@ -910,17 +943,12 @@ function RestructureLoanInner() {
             </div>
           )}
 
-          {/* ── Form (shown after loan is selected + loaded) ── */}
+          {/* ── The form (shown after the loan is selected + loaded) ── */}
           {formVisible && (
-            // Full width: from xl the shorter cards sit in pairs; the
-            // collaterals, remarks and schedule take the whole row.
-            <div className="grid items-start gap-6 xl:grid-cols-2">
-              {/* Member & Co-Maker */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Member & Co-Maker</CardTitle>
-                </CardHeader>
-                <CardContent className="grid gap-4 md:grid-cols-2">
+              <section className="space-y-3" aria-labelledby="restructure-member-title">
+                <h3 id="restructure-member-title" className="text-sm font-semibold">Member & Co-Maker</h3>
+                {/* The co-maker list grows and scrolls with the step. */}
+                <div className={FORM_STEP_GRID.grid}>
                   {/* Borrower (locked) */}
                   <div className="space-y-1.5">
                     <Label>Member</Label>
@@ -933,7 +961,7 @@ function RestructureLoanInner() {
                   </div>
 
                   {/* Co-makers */}
-                  <div className="space-y-2">
+                  <div className="space-y-2" data-field="co_maker_ids">
                     <Label>Co-Maker(s)</Label>
                     {coMakerIds.map((cmId, idx) => (
                       <div key={idx} className="flex gap-2">
@@ -977,7 +1005,7 @@ function RestructureLoanInner() {
                   </div>
 
                   {/* Account Officer */}
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5" data-field="account_officer_id">
                     <Label htmlFor="account-officer">Account Officer <span className="text-muted-foreground">(optional)</span></Label>
                     <StaffPicker
                       id="account-officer"
@@ -988,27 +1016,28 @@ function RestructureLoanInner() {
                   </div>
 
                   {/* Purpose */}
-                  <div className="space-y-1.5 md:col-span-2">
+                  <div className="space-y-1.5 col-span-full 2xl:col-span-1">
                     <Label>Purpose <span className="text-muted-foreground">(optional)</span></Label>
                     <Textarea
+                      name="purpose"
                       placeholder="Loan purpose…"
                       value={purpose}
                       onChange={(e) => setPurpose(e.target.value)}
                       rows={2}
                     />
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </section>
+          )}
+        </FormStep>
 
-              {/* Loan Product & Terms */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Loan Product & Terms</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid gap-4 md:grid-cols-2">
+        {/* ── Step 2: Loan Product & Terms, with the restructure date ── */}
+        <FormStep id="terms">
+          {formVisible && (
+            <>
+                  <div className={FORM_STEP_GRID.grid}>
                     {/* Product */}
-                    <div className="space-y-1.5">
+                    <div className="space-y-1.5" data-field="loan_product_id">
                       <Label>Loan Product</Label>
                       <Select
                         value={productId ?? null}
@@ -1038,6 +1067,7 @@ function RestructureLoanInner() {
                         <span className="ml-1 text-xs text-muted-foreground">(restructurable balance)</span>
                       </Label>
                       <Input
+                        name="principal_amount"
                         type="number"
                         min="0"
                         step="0.01"
@@ -1065,6 +1095,7 @@ function RestructureLoanInner() {
                     <div className="space-y-1.5">
                       <Label>Term ({termUnit})</Label>
                       <Input
+                        name="term"
                         type="number"
                         min="1"
                         placeholder="e.g. 12"
@@ -1074,7 +1105,7 @@ function RestructureLoanInner() {
                     </div>
 
                     {/* Payment Frequency */}
-                    <div className="space-y-1.5">
+                    <div className="space-y-1.5" data-field="frequency">
                       <Label>Payment Frequency</Label>
                       <Select
                         value={paymentFrequency ?? null}
@@ -1103,6 +1134,7 @@ function RestructureLoanInner() {
                     <div className="space-y-1.5">
                       <Label>Interest Rate (% per {ratePeriodWord(rateFrequency)})</Label>
                       <Input
+                        name="interest_rate"
                         inputMode="decimal"
                         placeholder="e.g. 2"
                         value={interestRate}
@@ -1137,6 +1169,7 @@ function RestructureLoanInner() {
                           )}
                         </Label>
                         <Input
+                          name="scb_amount"
                           type="number"
                           min={selectedProduct.min_scb ?? 0}
                           max={selectedProduct.max_scb ?? undefined}
@@ -1148,21 +1181,59 @@ function RestructureLoanInner() {
                       </div>
                     )}
                   </div>
-                </CardContent>
-              </Card>
 
-              {/* Collaterals */}
-              <Card className="col-span-full">
-                <CardHeader className="flex flex-row items-start justify-between">
+              {/* Restructure Date */}
+              <section className="space-y-3" aria-labelledby="restructure-date-title">
+                <h3 id="restructure-date-title" className="text-sm font-semibold">Restructure Date</h3>
+                <div className={FORM_STEP_GRID.grid}>
+                  <div className="space-y-1.5" data-field="start_date">
+                    <Label>Date Restructured (new release date)</Label>
+                    <Popover open={restructureDateOpen} onOpenChange={setRestructureDateOpen}>
+                      <PopoverTrigger
+                        render={<Button variant="outline" className="w-full justify-start font-normal" />}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {restructureDate ? formatDateObj(restructureDate) : "Pick a date"}
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={restructureDate}
+                          onSelect={(date) => {
+                            setRestructureDate(date);
+                            setRestructureDateOpen(false);
+                          }}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  {restructureDate && term > 0 && (
+                    <div className="space-y-1.5">
+                      <Label>Projected Maturity Date</Label>
+                      <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground">
+                        {previewMaturity
+                          ? formatDateObj(calendarDate(previewMaturity))
+                          : "—"}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </section>
+            </>
+          )}
+        </FormStep>
+
+        {/* ── Step 3: Collaterals ── */}
+        <FormStep id="collaterals">
+          {formVisible && (
+              <div className="space-y-4" data-field="collaterals">
+                <div className="flex flex-row items-start justify-between gap-4">
                   <div className="space-y-1">
-                    <CardTitle className="text-base">
-                      Collaterals
-                      {(previewCollateral === null || shownSecurityStatus(previewCollateral) !== null) && (
-                        <Badge variant="outline" className="ml-2 text-xs">
-                          {previewCollateral ? shownSecurityStatus(previewCollateral) : "—"}
-                        </Badge>
-                      )}
-                    </CardTitle>
+                    {(previewCollateral === null || shownSecurityStatus(previewCollateral) !== null) && (
+                      <Badge variant="outline" className="text-xs">
+                        {previewCollateral ? shownSecurityStatus(previewCollateral) : "—"}
+                      </Badge>
+                    )}
                     {/* The source loan's security carries over to the replacement
                         rather than being released — say so, because the picker
                         below now shows those same collaterals as held and an
@@ -1187,8 +1258,9 @@ function RestructureLoanInner() {
                     <Plus className="mr-1.5 h-4 w-4" />
                     Manage
                   </Button>
-                </CardHeader>
-                <CardContent>
+                </div>
+                {/* The attached list grows and scrolls with the step. */}
+                <div>
                   {selectedCollaterals.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No collaterals attached.</p>
                   ) : (
@@ -1231,8 +1303,7 @@ function RestructureLoanInner() {
                       </div>
                     </div>
                   )}
-                </CardContent>
-              </Card>
+                </div>
 
               {/* Collateral Picker Dialog */}
               <Dialog open={collateralPickerOpen} onOpenChange={setCollateralPickerOpen}>
@@ -1322,55 +1393,17 @@ function RestructureLoanInner() {
                   </div>
                 </DialogContent>
               </Dialog>
+              </div>
+          )}
+        </FormStep>
 
-              {/* Restructure Date */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Restructure Date</CardTitle>
-                </CardHeader>
-                <CardContent className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label>Date Restructured (new release date)</Label>
-                    <Popover open={restructureDateOpen} onOpenChange={setRestructureDateOpen}>
-                      <PopoverTrigger
-                        render={<Button variant="outline" className="w-full justify-start font-normal" />}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {restructureDate ? formatDateObj(restructureDate) : "Pick a date"}
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={restructureDate}
-                          onSelect={(date) => {
-                            setRestructureDate(date);
-                            setRestructureDateOpen(false);
-                          }}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                  {restructureDate && term > 0 && (
-                    <div className="space-y-1.5">
-                      <Label>Projected Maturity Date</Label>
-                      <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground">
-                        {previewMaturity
-                          ? formatDateObj(calendarDate(previewMaturity))
-                          : "—"}
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Deductions: a restructure pays nothing out, so the card shows
-                  what is collected from the member and what is paid out. */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Deductions</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid gap-4 md:grid-cols-2">
+        {/* ── Step 4: Deductions ── */}
+        <FormStep id="deductions">
+          {formVisible && (
+              // A restructure pays nothing out, so the step shows what is
+              // collected from the member and what is paid out.
+              <div className="space-y-4" data-field="deductions">
+                  <div className={FORM_STEP_GRID.grid}>
                     {/* Processing Fee */}
                     <div className="space-y-1.5">
                       <Label>Processing Fee (%)</Label>
@@ -1528,15 +1561,16 @@ function RestructureLoanInner() {
                       </Button>
                     </div>
                   )}
-                </CardContent>
-              </Card>
+              </div>
+          )}
+        </FormStep>
 
-              {/* Remarks & Policy Exception */}
-              <Card className="col-span-full">
-                <CardHeader>
-                  <CardTitle className="text-base">Remarks & Policy Exception</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
+        {/* ── Step 5: Remarks & Policy Exception, then the server's schedule ── */}
+        <FormStep id="remarks">
+          {formVisible && (
+            // The remarks beside the schedule from xl, so the step fits.
+            <div className="grid items-start gap-6 xl:grid-cols-2">
+              <div className="space-y-4">
                   {shortfallState.showsShortfall && (
                     <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50/50 p-3 text-sm dark:border-amber-700 dark:bg-amber-900/10">
                       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
@@ -1569,6 +1603,7 @@ function RestructureLoanInner() {
                     </Label>
                     <Textarea
                       id="remarks"
+                      name="remarks"
                       placeholder={
                         remarksRequired
                           ? "Explain why the restructured principal is below the outstanding balance…"
@@ -1584,7 +1619,7 @@ function RestructureLoanInner() {
 
                   <Separator />
 
-                  <div className="flex items-start gap-3">
+                  <div className="flex items-start gap-3" data-field="policy_exception">
                     <Checkbox
                       id="policy-exception"
                       checked={policyException}
@@ -1609,6 +1644,7 @@ function RestructureLoanInner() {
                       <Label htmlFor="policy-exception-details">Policy Exception Details</Label>
                       <Textarea
                         id="policy-exception-details"
+                        name="policy_exception_details"
                         placeholder="Describe why this restructure requires a policy exception…"
                         value={policyExceptionDetails}
                         onChange={(e) => setPolicyExceptionDetails(e.target.value)}
@@ -1616,21 +1652,18 @@ function RestructureLoanInner() {
                       />
                     </div>
                   )}
-                </CardContent>
-              </Card>
+              </div>
 
-              {/* Amortization Preview — the server's schedule for these terms */}
+              {/* Amortization Preview — the server's schedule for these terms;
+                  it scrolls inside its own box, as before. */}
               {amortization && amortization.rows.length > 0 && (
-                <Card className="col-span-full">
-                  <CardHeader>
-                    <CardTitle className="text-base">
+                <section className="space-y-3" aria-labelledby="restructure-schedule-title">
+                  <h3 id="restructure-schedule-title" className="text-sm font-semibold">
                       Amortization Preview
                       <span className="ml-2 text-sm font-normal text-muted-foreground">
                         ({amortization.rows.length} periods)
                       </span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
+                  </h3>
                     <div className="max-h-64 overflow-y-auto rounded-md border">
                       <Table>
                         <TableHeader>
@@ -1666,29 +1699,14 @@ function RestructureLoanInner() {
                         </TableFooter>
                       </Table>
                     </div>
-                  </CardContent>
-                </Card>
+                </section>
               )}
             </div>
           )}
-        </ScrollBox>
+        </FormStep>
+        </FormStepper>
+        </form>
 
-        {/* Submit: stays at the foot while the form scrolls. */}
-        {formVisible && (
-          <div data-fab-clear className="flex shrink-0 justify-end gap-3 border-t pt-4">
-            <Button variant="outline" onClick={() => router.back()}>
-              Cancel
-            </Button>
-            <Button
-              disabled={submitting}
-              onClick={handleSubmit}
-              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-            >
-              {submitting && <Spinner className="mr-2 size-4" />}
-              Submit Restructure Application
-            </Button>
-          </div>
-        )}
       </PageFill>
     </>
   );
