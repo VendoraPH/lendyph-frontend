@@ -521,7 +521,7 @@ function EditBorrowerContent() {
             <div className="grid gap-6 xl:grid-cols-[20rem_minmax(0,1fr)]">
               {/* Profile Photo */}
               <Card>
-                <CardContent className="pt-6 space-y-4 lg:max-xl:flex lg:max-xl:items-center lg:max-xl:gap-4 lg:max-xl:space-y-0">
+                <CardContent className="pt-6 fit:pt-0 space-y-4 lg:max-xl:flex lg:max-xl:items-center lg:max-xl:gap-4 lg:max-xl:space-y-0">
                   <h3 className="text-base font-semibold">Profile Photo</h3>
                   <div className="flex flex-wrap items-center gap-6 lg:max-xl:contents">
                     <div className="relative lg:max-xl:order-first">
@@ -590,7 +590,7 @@ function EditBorrowerContent() {
 
               {/* Personal Information */}
               <Card>
-                <CardContent className="pt-6">
+                <CardContent className="pt-6 fit:pt-0">
                   <div className={`${FORM_STEP_GRID.grid} lg:grid-cols-4`}>
                     <div className="space-y-2">
                       <Label htmlFor="first_name">
@@ -714,7 +714,7 @@ function EditBorrowerContent() {
           <FormStep id="branch">
             {/* Branch Assignment */}
             <Card>
-              <CardContent className="pt-6 space-y-4">
+              <CardContent className="pt-6 fit:pt-0 space-y-4">
                 <p className="text-sm text-muted-foreground">
                   Currently assigned to:{" "}
                   <span className="font-medium text-foreground">
@@ -767,7 +767,7 @@ function EditBorrowerContent() {
           {form.civil_status === "married" && (
             <FormStep id="spouse">
               <Card>
-                <CardContent className="pt-6">
+                <CardContent className="pt-6 fit:pt-0">
                   <div className={FORM_STEP_GRID.grid}>
                     <div className="space-y-2">
                       <Label htmlFor="spouse_first_name">First Name</Label>
@@ -824,7 +824,7 @@ function EditBorrowerContent() {
           <FormStep id="contact">
             {/* Contact Information */}
             <Card>
-              <CardContent className="pt-6">
+              <CardContent className="pt-6 fit:pt-0">
                 <div className={FORM_STEP_GRID.grid}>
                   <div className="space-y-2">
                     <Label htmlFor="contact_number">
@@ -898,7 +898,7 @@ function EditBorrowerContent() {
           <FormStep id="employment">
             {/* Employment & Income */}
             <Card>
-              <CardContent className="pt-6">
+              <CardContent className="pt-6 fit:pt-0">
                 <div className={FORM_STEP_GRID.grid}>
                   <div className="space-y-2">
                     <Label htmlFor="employer_or_business">Employer / Business Name</Label>
@@ -929,7 +929,7 @@ function EditBorrowerContent() {
           <FormStep id="valid_ids">
             {/* Valid IDs */}
             <Card>
-              <CardContent className="pt-6 space-y-4">
+              <CardContent className="pt-6 fit:pt-0 space-y-4">
                 <div className="flex items-center justify-end">
                   <Button type="button" variant="outline" size="sm" onClick={addValidId}>
                     <Plus className="h-3.5 w-3.5 mr-1" />

@@ -708,7 +708,7 @@ function NewBorrowerContent() {
             <div className="grid gap-6 xl:grid-cols-[20rem_minmax(0,1fr)]">
               {/* Profile Photo */}
               <Card>
-                <CardContent className="pt-6 space-y-4 lg:max-xl:flex lg:max-xl:items-center lg:max-xl:gap-4 lg:max-xl:space-y-0">
+                <CardContent className="pt-6 fit:pt-0 space-y-4 lg:max-xl:flex lg:max-xl:items-center lg:max-xl:gap-4 lg:max-xl:space-y-0">
                   <h3 className="text-base font-semibold">Profile Photo</h3>
                   <div className="flex flex-wrap items-center gap-6 lg:max-xl:contents">
                     <div className="relative lg:max-xl:order-first">
@@ -777,7 +777,7 @@ function NewBorrowerContent() {
 
               {/* Personal Information */}
               <Card>
-                <CardContent className="pt-6">
+                <CardContent className="pt-6 fit:pt-0">
                   <div className={`${FORM_STEP_GRID.grid} lg:grid-cols-4`}>
                     {assignedBranches.length > 1 && (
                       <div className="space-y-2" data-field="branch_id">
@@ -924,7 +924,7 @@ function NewBorrowerContent() {
           {form.civil_status === "married" && (
             <FormStep id="spouse">
               <Card>
-                <CardContent className="pt-6">
+                <CardContent className="pt-6 fit:pt-0">
                   <div className={FORM_STEP_GRID.grid}>
                     <div className="space-y-2">
                       <Label htmlFor="spouse_first_name">First Name</Label>
@@ -981,7 +981,7 @@ function NewBorrowerContent() {
           {/* Contact Information */}
           <FormStep id="contact">
             <Card>
-              <CardContent className="pt-6">
+              <CardContent className="pt-6 fit:pt-0">
                 <div className={FORM_STEP_GRID.grid}>
                   <div className="space-y-2">
                     <Label htmlFor="contact_number">
@@ -1056,7 +1056,7 @@ function NewBorrowerContent() {
           {/* Employment & Income */}
           <FormStep id="employment">
             <Card>
-              <CardContent className="pt-6">
+              <CardContent className="pt-6 fit:pt-0">
                 <div className={FORM_STEP_GRID.grid}>
                   <div className="space-y-2">
                     <Label htmlFor="employer_or_business">Employer / Business Name</Label>
@@ -1100,7 +1100,7 @@ function NewBorrowerContent() {
           {/* Valid IDs */}
           <FormStep id="valid_ids">
             <Card>
-              <CardContent className="pt-6 space-y-4">
+              <CardContent className="pt-6 fit:pt-0 space-y-4">
                 <div className="flex items-center justify-end">
                   <Button
                     type="button"
