@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { RouteGuard } from "@/components/common";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
 import { Camera, KeyRound, Loader2, User } from "lucide-react";
@@ -176,9 +177,9 @@ function EditProfileCard() {
       <Separator />
       <CardContent className="pt-6">
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {/* Full Name */}
-            <div className="space-y-2 sm:col-span-2">
+            <div className="space-y-2 md:col-span-2">
               <Label htmlFor="profile-name">Full Name *</Label>
               <Input
                 id="profile-name"
@@ -297,22 +298,24 @@ function ChangePasswordCard() {
 export default function ProfileSettingsPage() {
   return (
     <RouteGuard permission="settings:view" pageName="Profile Settings">
-    <div className="space-y-6 min-w-0">
+    <PageFill className="min-w-0">
       {/* Header */}
-      <div>
+      <div className="shrink-0">
         <h1 className="text-2xl font-bold tracking-tight">My Profile</h1>
         <p className="text-muted-foreground">Manage your account settings</p>
       </div>
 
-      {/* Profile summary card */}
-      <ProfileCard />
+      <ScrollBox className="space-y-6 p-px">
+        {/* Profile summary card */}
+        <ProfileCard />
 
-      {/* Edit profile form */}
-      <EditProfileCard />
-
-      {/* Change password form */}
-      <ChangePasswordCard />
-    </div>
+        {/* Edit profile and change password: side by side from xl */}
+        <div className="grid items-start gap-6 xl:grid-cols-2">
+          <EditProfileCard />
+          <ChangePasswordCard />
+        </div>
+      </ScrollBox>
+    </PageFill>
     </RouteGuard>
   );
 }

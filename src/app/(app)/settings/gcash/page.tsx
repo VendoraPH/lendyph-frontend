@@ -14,6 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { RouteGuard } from "@/components/common";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { gcashService } from "@/services/gcash.service";
 import { extractGCashErrorMessage } from "@/lib/gcash-errors";
 import type { GCashTier, GCashTierInput } from "@/types";
@@ -118,8 +119,8 @@ function GCashSettingsContent() {
   };
 
   return (
-    <div className="space-y-6 p-6">
-      <div>
+    <PageFill>
+      <div className="shrink-0">
         <h1 className="text-2xl font-semibold">GCash Tiered Charges</h1>
         <p className="text-sm text-muted-foreground">
           Charges are computed at transaction time based on the amount tier.
@@ -127,7 +128,7 @@ function GCashSettingsContent() {
         </p>
       </div>
 
-      <div className="rounded-md border">
+      <ScrollBox className="rounded-md border bg-card">
         <Table>
           <TableHeader>
             <TableRow>
@@ -238,9 +239,9 @@ function GCashSettingsContent() {
             )}
           </TableBody>
         </Table>
-      </div>
+      </ScrollBox>
 
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         <Button type="button" variant="outline" onClick={addRow}>
           <Plus className="mr-2 h-4 w-4" />
           Add Tier
@@ -249,7 +250,7 @@ function GCashSettingsContent() {
           {saving ? "Saving…" : "Save Tiers"}
         </Button>
       </div>
-    </div>
+    </PageFill>
   );
 }
 

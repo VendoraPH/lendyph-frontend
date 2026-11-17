@@ -18,6 +18,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { AlertTriangle, Info, RotateCw } from "lucide-react";
 
+import { FillSection, ScrollBox } from "@/components/common/page-fill";
 import { StepIndicator } from "@/components/common/step-indicator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,7 @@ import {
 } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
 import { clearImportSession, type ImportSession } from "@/lib/import-session";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { cn } from "@/lib/utils";
 import type { ImportRunStatus } from "@/types/data-import";
 
@@ -403,11 +405,11 @@ export function DataImportView() {
   }
 
   return (
-    <div className="space-y-4">
+    <FillSection className="gap-4">
       {notice ? (
         // A caution, not a failure: nothing broke, an expected thing turned out
         // not to be there. Amber, matching the prior-import notice on step 1.
-        <Alert className="border-amber-200 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-900/10">
+        <Alert className="shrink-0 border-amber-200 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-900/10">
           <Info className="text-amber-600" />
           <AlertTitle>Picking up where you left off wasn&apos;t possible</AlertTitle>
           <AlertDescription className="space-y-3">
@@ -419,18 +421,20 @@ export function DataImportView() {
         </Alert>
       ) : null}
 
-      <Card>
-        <CardContent className="py-6">
-          <StepIndicator current={currentIndex + 1} labels={stepLabels} />
+      <Card className={FIT_CLASSES.section}>
+        <CardContent className={cn(FIT_CLASSES.section, "py-6")}>
+          <div className="shrink-0">
+            <StepIndicator current={currentIndex + 1} labels={stepLabels} />
 
-          <p className="mb-4 text-[11px] font-bold tracking-widest text-brand-orange uppercase">
-            Step {currentIndex + 1} of {IMPORT_STEPS.length} —{" "}
-            {STEP_LABELS[step]}
-          </p>
+            <p className="mb-4 text-[11px] font-bold tracking-widest text-brand-orange uppercase">
+              Step {currentIndex + 1} of {IMPORT_STEPS.length} —{" "}
+              {STEP_LABELS[step]}
+            </p>
+          </div>
 
-          {renderStep()}
+          <ScrollBox className="p-px">{renderStep()}</ScrollBox>
         </CardContent>
       </Card>
-    </div>
+    </FillSection>
   );
 }

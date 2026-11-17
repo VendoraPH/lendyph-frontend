@@ -2,6 +2,8 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { RouteGuard } from "@/components/common";
+import { FillSection, PageFill, ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { useDialogOpening } from "@/hooks";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -952,9 +954,9 @@ function UserRolesContent() {
   }
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       {/* Header */}
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex shrink-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Role and Permissions</h1>
           <p className="text-sm text-muted-foreground">
@@ -973,7 +975,7 @@ function UserRolesContent() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid shrink-0 gap-4 sm:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Total Roles</CardTitle>
@@ -1011,7 +1013,7 @@ function UserRolesContent() {
       </div>
 
       {/* Search */}
-      <div className="relative max-w-sm">
+      <div className="relative max-w-sm shrink-0">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           placeholder="Search roles..."
@@ -1021,183 +1023,189 @@ function UserRolesContent() {
         />
       </div>
 
-      {/* Roles Table */}
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Modules</TableHead>
-                  <TableHead>Permissions</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading && (
+      {/*
+        Roles table, with the module reference beside it from 2xl, where both
+        fit. Below 2xl the reference is a collapsed section under the table, so
+        the table keeps the width for its columns and actions.
+      */}
+      <FillSection className="gap-6 2xl:grid 2xl:grid-cols-[minmax(0,1fr)_20rem] fit:2xl:grid-rows-[minmax(0,1fr)]">
+        {/* Roles Table */}
+        <Card className={FIT_CLASSES.section}>
+          <CardContent className={cn(FIT_CLASSES.section, "p-0")}>
+            <ScrollBox>
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center">
-                      <div className="flex items-center justify-center">
-                        <Spinner className="size-5 text-muted-foreground" />
-                      </div>
-                    </TableCell>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Modules</TableHead>
+                    <TableHead>Permissions</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                )}
-                {!loading &&
-                  filtered.map((r) => {
-                    const moduleCount = roleModuleCount(r.permissions);
-                    const editLock = editLockReason(r.key, caller);
-                    return (
-                      <TableRow
-                        key={r.key}
-                        className={cn(
-                          "cursor-pointer hover:bg-muted/50",
-                          !r.isActive && "opacity-60"
-                        )}
-                        onClick={() => openView(r)}
-                      >
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <ShieldCheck className="h-4 w-4 text-brand-orange shrink-0" />
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "font-medium",
-                                ROLE_BADGE[r.key] ??
-                                  "bg-slate-500/10 text-slate-700 border-slate-500/30"
-                              )}
-                            >
-                              {r.label}
-                            </Badge>
-                            {roleStatusMark(r.isActive) && (
-                              <Badge variant="outline" className="text-xs text-muted-foreground">
-                                {roleStatusMark(r.isActive)}
+                </TableHeader>
+                <TableBody>
+                  {loading && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="h-24 text-center">
+                        <div className="flex items-center justify-center">
+                          <Spinner className="size-5 text-muted-foreground" />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {!loading &&
+                    filtered.map((r) => {
+                      const moduleCount = roleModuleCount(r.permissions);
+                      const editLock = editLockReason(r.key, caller);
+                      return (
+                        <TableRow
+                          key={r.key}
+                          className={cn(
+                            "cursor-pointer hover:bg-muted/50",
+                            !r.isActive && "opacity-60"
+                          )}
+                          onClick={() => openView(r)}
+                        >
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <ShieldCheck className="h-4 w-4 text-brand-orange shrink-0" />
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "font-medium",
+                                  ROLE_BADGE[r.key] ??
+                                    "bg-slate-500/10 text-slate-700 border-slate-500/30"
+                                )}
+                              >
+                                {r.label}
                               </Badge>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-sm text-muted-foreground">
-                            {r.description || "—"}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-sm">
-                            {moduleCount}{" "}
-                            <span className="text-muted-foreground">of {totalModules}</span>
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-xs">
-                            {r.permissions.length}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <PermissionGate permission="settings:update">
-                              <span title={editLock ?? undefined} className="inline-flex">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 gap-1 text-xs"
-                                  disabled={editLock !== null}
-                                  aria-label={editLock ? `Edit (${editLock})` : undefined}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    openEdit(r);
-                                  }}
-                                >
-                                  <Pencil className="h-3 w-3" />
-                                  Edit
-                                </Button>
-                              </span>
-                            </PermissionGate>
-                            {canToggleActive(r.key) && (
+                              {roleStatusMark(r.isActive) && (
+                                <Badge variant="outline" className="text-xs text-muted-foreground">
+                                  {roleStatusMark(r.isActive)}
+                                </Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="min-w-56 whitespace-normal">
+                            <span className="text-sm text-muted-foreground">
+                              {r.description || "—"}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-sm">
+                              {moduleCount}{" "}
+                              <span className="text-muted-foreground">of {totalModules}</span>
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">
+                              {r.permissions.length}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-1">
                               <PermissionGate permission="settings:update">
-                                <>
+                                <span title={editLock ?? undefined} className="inline-flex">
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    className="h-7 w-7 p-0"
-                                    title={r.isActive ? "Deactivate role" : "Reactivate role"}
-                                    disabled={actionLoading}
+                                    className="h-7 gap-1 text-xs"
+                                    disabled={editLock !== null}
+                                    aria-label={editLock ? `Edit (${editLock})` : undefined}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      handleToggleActive(r);
+                                      openEdit(r);
                                     }}
                                   >
-                                    {r.isActive ? (
-                                      <PowerOff className="h-3 w-3" />
-                                    ) : (
-                                      <Power className="h-3 w-3" />
-                                    )}
+                                    <Pencil className="h-3 w-3" />
+                                    Edit
                                   </Button>
-                                </>
+                                </span>
                               </PermissionGate>
-                            )}
-                            <PermissionGate permission="settings:delete">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
-                                title="Delete role"
-                                disabled={actionLoading}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setDeleteTarget(r);
-                                }}
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            </PermissionGate>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                {!loading && filtered.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                      No roles match your search.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+                              {canToggleActive(r.key) && (
+                                <PermissionGate permission="settings:update">
+                                  <>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 w-7 p-0"
+                                      title={r.isActive ? "Deactivate role" : "Reactivate role"}
+                                      disabled={actionLoading}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleToggleActive(r);
+                                      }}
+                                    >
+                                      {r.isActive ? (
+                                        <PowerOff className="h-3 w-3" />
+                                      ) : (
+                                        <Power className="h-3 w-3" />
+                                      )}
+                                    </Button>
+                                  </>
+                                </PermissionGate>
+                              )}
+                              <PermissionGate permission="settings:delete">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
+                                  title="Delete role"
+                                  disabled={actionLoading}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDeleteTarget(r);
+                                  }}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </PermissionGate>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  {!loading && filtered.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                        No roles match your search.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </ScrollBox>
+          </CardContent>
+        </Card>
 
-      {/* Module reference */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium">Module Reference</CardTitle>
-          <p className="text-xs text-muted-foreground">
-            Every feature area protected by access control
-          </p>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {(Object.keys(MODULE_META) as UIModule[]).map((mod) => {
-              const meta = MODULE_META[mod];
-              const Icon = meta.icon;
-              return (
-                <div key={mod} className="flex items-start gap-3 rounded-lg border p-3">
-                  <div className="h-8 w-8 rounded-md bg-brand-orange/10 text-brand-orange flex items-center justify-center shrink-0">
-                    <Icon className="h-4 w-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold">{meta.label}</p>
-                    <p className="text-xs text-muted-foreground">{meta.description}</p>
-                  </div>
-                </div>
-              );
-            })}
+        {/* Module reference: beside the table from 2xl */}
+        <Card className={cn(FIT_CLASSES.section, "hidden 2xl:flex")}>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium">Module Reference</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Every feature area protected by access control
+            </p>
+          </CardHeader>
+          <CardContent className={FIT_CLASSES.section}>
+            <ScrollBox className="p-px">
+              <ModuleReferenceList className="grid gap-3" />
+            </ScrollBox>
+          </CardContent>
+        </Card>
+
+        {/* Module reference: a collapsed section under the table below 2xl */}
+        <details className="shrink-0 rounded-xl bg-card text-sm ring-1 ring-foreground/10 2xl:hidden">
+          <summary className="cursor-pointer px-4 py-3">
+            <span className="font-medium">Module Reference</span>
+            <span className="ml-2 text-xs text-muted-foreground">
+              Every feature area protected by access control
+            </span>
+          </summary>
+          <div className="border-t p-4 fit:max-h-[40dvh] fit:overflow-y-auto">
+            <ModuleReferenceList className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" />
           </div>
-        </CardContent>
-      </Card>
+        </details>
+      </FillSection>
 
       <RoleFormDialog
         open={formOpen}
@@ -1241,6 +1249,29 @@ function UserRolesContent() {
           </div>
         </DialogContent>
       </Dialog>
+    </PageFill>
+  );
+}
+
+/** Every feature area protected by access control, for the Module Reference. */
+function ModuleReferenceList({ className }: { className: string }) {
+  return (
+    <div className={className}>
+      {(Object.keys(MODULE_META) as UIModule[]).map((mod) => {
+        const meta = MODULE_META[mod];
+        const Icon = meta.icon;
+        return (
+          <div key={mod} className="flex items-start gap-3 rounded-lg border p-3">
+            <div className="h-8 w-8 rounded-md bg-brand-orange/10 text-brand-orange flex items-center justify-center shrink-0">
+              <Icon className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">{meta.label}</p>
+              <p className="text-xs text-muted-foreground">{meta.description}</p>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

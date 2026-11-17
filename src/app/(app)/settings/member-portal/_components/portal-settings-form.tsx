@@ -95,105 +95,119 @@ export function PortalSettingsForm({ settings, onSaved }: { settings: PortalSett
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">The portal</CardTitle>
-          <CardDescription>
-            {settings.updated_by
-              ? `Last changed by ${settings.updated_by.name}${settings.updated_at ? `, ${formatDateTime(settings.updated_at)}` : ""}.`
-              : "Not changed yet."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <SwitchRow
-            id="mp-enabled"
-            label="Member Portal is on"
-            hint={settings.terms ? "Members can sign in." : "Publish the terms below before turning the portal on."}
-            checked={form.enabled}
-            disabled={!settings.terms && !settings.enabled}
-            onChange={(on) => set("enabled", on)}
-          />
-          <FormField id="mp-name" label="Portal name" error={submitted ? (problems.portal_name ?? null) : null}>
-            <Input id="mp-name" maxLength={100} value={form.portal_name} onChange={(e) => set("portal_name", e.target.value)} />
-          </FormField>
-          <FormField id="mp-welcome" label="Welcome message (optional)">
-            <Textarea id="mp-welcome" rows={2} maxLength={1000} value={form.welcome_message} onChange={(e) => set("welcome_message", e.target.value)} />
-          </FormField>
-          <FormField id="mp-support" label="Support contact (optional)" hint="Shown to members, for example the branch's phone number.">
-            <Input id="mp-support" maxLength={255} value={form.support_contact} onChange={(e) => set("support_contact", e.target.value)} />
-          </FormField>
-          <FormField id="mp-pay" label="How to pay (optional)" hint="Shown to members beside their loans.">
-            <Textarea id="mp-pay" rows={2} maxLength={2000} value={form.payment_instructions} onChange={(e) => set("payment_instructions", e.target.value)} />
-          </FormField>
-        </CardContent>
-      </Card>
+      {/* The portal on the left, signing in and member access on the right, from xl */}
+      <div className="grid items-start gap-6 xl:grid-cols-2">
+        <Card className="xl:row-span-2">
+          <CardHeader>
+            <CardTitle className="text-base">The portal</CardTitle>
+            <CardDescription>
+              {settings.updated_by
+                ? `Last changed by ${settings.updated_by.name}${settings.updated_at ? `, ${formatDateTime(settings.updated_at)}` : ""}.`
+                : "Not changed yet."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <SwitchRow
+              id="mp-enabled"
+              label="Member Portal is on"
+              hint={settings.terms ? "Members can sign in." : "Publish the terms below before turning the portal on."}
+              checked={form.enabled}
+              disabled={!settings.terms && !settings.enabled}
+              onChange={(on) => set("enabled", on)}
+            />
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
+              <FormField id="mp-name" label="Portal name" error={submitted ? (problems.portal_name ?? null) : null}>
+                <Input id="mp-name" maxLength={100} value={form.portal_name} onChange={(e) => set("portal_name", e.target.value)} />
+              </FormField>
+              <FormField id="mp-welcome" label="Welcome message (optional)">
+                <Textarea id="mp-welcome" rows={2} maxLength={1000} value={form.welcome_message} onChange={(e) => set("welcome_message", e.target.value)} />
+              </FormField>
+              <FormField id="mp-support" label="Support contact (optional)" hint="Shown to members, for example the branch's phone number.">
+                <Input id="mp-support" maxLength={255} value={form.support_contact} onChange={(e) => set("support_contact", e.target.value)} />
+              </FormField>
+              {/* FormField takes no className, so the span sits on a wrapper. */}
+              <div className="md:col-span-2 xl:col-span-1">
+                <FormField id="mp-pay" label="How to pay (optional)" hint="Shown to members beside their loans.">
+                  <Textarea id="mp-pay" rows={2} maxLength={2000} value={form.payment_instructions} onChange={(e) => set("payment_instructions", e.target.value)} />
+                </FormField>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Signing in</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">{SECURITY.map(numberInput)}</div>
-          <SwitchRow
-            id="mp-otp"
-            label="Ask for a one-time password by text message"
-            hint={otpSwitchDisabled(settings) ? settings.otp_blocked_reason : "Sent to the member's registered mobile when they use a code."}
-            checked={form.otp_required}
-            disabled={otpSwitchDisabled(settings)}
-            onChange={(on) => set("otp_required", on)}
-          />
-        </CardContent>
-      </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Signing in</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">{SECURITY.map(numberInput)}</div>
+            <SwitchRow
+              id="mp-otp"
+              label="Ask for a one-time password by text message"
+              hint={otpSwitchDisabled(settings) ? settings.otp_blocked_reason : "Sent to the member's registered mobile when they use a code."}
+              checked={form.otp_required}
+              disabled={otpSwitchDisabled(settings)}
+              onChange={(on) => set("otp_required", on)}
+            />
+          </CardContent>
+        </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">What members can see and ask for</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <fieldset className="grid gap-3 sm:grid-cols-2">
-            <legend className="mb-2 text-sm font-medium">Parts of the portal</legend>
-            {FEATURES.map((f) => (
-              <SwitchRow
-                key={f.value}
-                id={`mp-feature-${f.value}`}
-                label={f.label}
-                checked={form.features[f.value as PortalFeature] !== false}
-                onChange={(on) => set("features", { ...form.features, [f.value]: on })}
-              />
-            ))}
-          </fieldset>
-          <fieldset className="grid gap-2 sm:grid-cols-2">
-            <legend className="mb-2 text-sm font-medium">Dashboard cards</legend>
-            {CARDS.map((c) => (
-              <label key={c.value} className="flex items-center gap-2 text-sm">
-                <Checkbox
-                  checked={form.dashboard_cards.includes(c.value)}
-                  onCheckedChange={(on) => set("dashboard_cards", toggle<PortalDashboardCard>(form.dashboard_cards, c.value, on === true))}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">What members can see and ask for</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <fieldset className="grid gap-3 sm:grid-cols-2">
+              <legend className="mb-2 text-sm font-medium">Parts of the portal</legend>
+              {FEATURES.map((f) => (
+                <SwitchRow
+                  key={f.value}
+                  id={`mp-feature-${f.value}`}
+                  label={f.label}
+                  checked={form.features[f.value as PortalFeature] !== false}
+                  onChange={(on) => set("features", { ...form.features, [f.value]: on })}
                 />
-                {c.label}
-              </label>
-            ))}
-          </fieldset>
-          <fieldset className="space-y-2">
-            <legend className="mb-2 text-sm font-medium">Withdrawal payout methods</legend>
-            {METHODS.map((m) => (
-              <label key={m.value} className="flex items-center gap-2 text-sm">
-                <Checkbox
-                  checked={form.withdrawal_methods.includes(m.value)}
-                  onCheckedChange={(on) =>
-                    set("withdrawal_methods", toggle<PortalWithdrawalMethod>(form.withdrawal_methods, m.value, on === true))
-                  }
-                />
-                {m.label}
-              </label>
-            ))}
-            {submitted && problems.withdrawal_methods && <p className="text-xs text-destructive">{problems.withdrawal_methods}</p>}
-          </fieldset>
-          <div className="grid gap-4 sm:grid-cols-2">{REQUESTS.map(numberInput)}</div>
-        </CardContent>
-      </Card>
+              ))}
+            </fieldset>
+            <fieldset className="grid gap-2 sm:grid-cols-2">
+              <legend className="mb-2 text-sm font-medium">Dashboard cards</legend>
+              {CARDS.map((c) => (
+                <label key={c.value} className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={form.dashboard_cards.includes(c.value)}
+                    onCheckedChange={(on) => set("dashboard_cards", toggle<PortalDashboardCard>(form.dashboard_cards, c.value, on === true))}
+                  />
+                  {c.label}
+                </label>
+              ))}
+            </fieldset>
+            <fieldset className="space-y-2">
+              <legend className="mb-2 text-sm font-medium">Withdrawal payout methods</legend>
+              {METHODS.map((m) => (
+                <label key={m.value} className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={form.withdrawal_methods.includes(m.value)}
+                    onCheckedChange={(on) =>
+                      set("withdrawal_methods", toggle<PortalWithdrawalMethod>(form.withdrawal_methods, m.value, on === true))
+                    }
+                  />
+                  {m.label}
+                </label>
+              ))}
+              {submitted && problems.withdrawal_methods && <p className="text-xs text-destructive">{problems.withdrawal_methods}</p>}
+            </fieldset>
+            <div className="grid gap-4 sm:grid-cols-2">{REQUESTS.map(numberInput)}</div>
+          </CardContent>
+        </Card>
+      </div>
 
-      <div className="flex justify-end">
+      {/*
+        Pinned to the foot of the page's scroll box while these settings are in
+        view; it scrolls away with them when the terms card below comes up. The
+        terms card stays a sibling of this form (not inside it), so saving these
+        settings never resets an unpublished terms draft.
+      */}
+      <div data-fab-clear className="sticky bottom-0 z-10 flex justify-end gap-2 border-t bg-background py-3">
         <Button onClick={save} disabled={submitting}>
           {submitting ? "Saving…" : "Save settings"}
         </Button>

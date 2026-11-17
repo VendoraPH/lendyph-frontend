@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { RouteGuard, PermissionButton } from "@/components/common";
+import { PageFill, PageLoader, ScrollBox } from "@/components/common/page-fill";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ import { toast } from "sonner";
 import { feeService, loanProductService } from "@/services";
 import type { Fee, FeeType, FeeConditions, LoanProduct } from "@/types";
 import { cn } from "@/lib/utils";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { formatCurrencyExact, formatRate } from "@/lib/format";
 import { decimalInputValue } from "@/lib/percent";
 import {
@@ -577,17 +579,13 @@ function FeesContent() {
   }
 
   if (loading) {
-    return (
-      <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <PageLoader />;
   }
 
   return (
     <>
-      <div className="space-y-6">
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+      <PageFill>
+        <div className="flex shrink-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Fees</h1>
             <p className="text-sm text-muted-foreground">
@@ -606,14 +604,14 @@ function FeesContent() {
         </div>
 
         {(loadError || productsError) && (
-          <div role="alert" className="rounded-lg border border-destructive/30 p-4 text-sm space-y-2">
+          <div role="alert" className="shrink-0 rounded-lg border border-destructive/30 p-4 text-sm space-y-2">
             {loadError && <p>Fees could not be loaded. {loadError}</p>}
             {productsError && <p>Loan products could not be loaded. {productsError} Fee editing is unavailable until they load.</p>}
             <Button variant="outline" size="sm" onClick={reload}>Retry</Button>
           </div>
         )}
         {!loadError && <>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid shrink-0 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Total Fees</CardTitle>
@@ -652,7 +650,7 @@ function FeesContent() {
           </Card>
         </div>
 
-        <div className="relative max-w-sm">
+        <div className="relative max-w-sm shrink-0">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search fees..."
@@ -662,9 +660,9 @@ function FeesContent() {
           />
         </div>
 
-        <Card>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
+        <Card className={FIT_CLASSES.section}>
+          <CardContent className={cn(FIT_CLASSES.section, "p-0")}>
+            <ScrollBox>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -756,7 +754,7 @@ function FeesContent() {
                   )}
                 </TableBody>
               </Table>
-            </div>
+            </ScrollBox>
           </CardContent>
         </Card>
 
@@ -775,7 +773,7 @@ function FeesContent() {
           fee={deleteTarget}
           onConfirm={reload}
         />
-      </div>
+      </PageFill>
     </>
   );
 }
