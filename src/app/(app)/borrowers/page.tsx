@@ -346,9 +346,9 @@ function BorrowersContent() {
 
   return (
     <PageFill>
-      <NoBranchBanner />
+      <NoBranchBanner className="shrink-0" />
       {/* Header */}
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex shrink-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
             Member Management
@@ -369,7 +369,7 @@ function BorrowersContent() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid shrink-0 gap-4 md:grid-cols-4">
         <StatCard
           label="Total Members"
           value={memberCount}
@@ -400,7 +400,7 @@ function BorrowersContent() {
 
       {/* Main tab switcher */}
       <div
-        className="flex border-b border-border"
+        className="flex shrink-0 border-b border-border"
         role="group"
         aria-label="Members and applications"
       >
@@ -445,7 +445,7 @@ function BorrowersContent() {
       {/* Filters + Table */}
       {mainTab === "members" && (
       <Card id="members-panel" role="region" aria-labelledby="members-tab" className={FIT_CLASSES.section}>
-        <div className="p-6 pb-0">
+        <div className="shrink-0 p-6 pb-0">
           <BorrowerFilters
             search={search}
             onSearchChange={handleSearchChange}

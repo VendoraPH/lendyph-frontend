@@ -119,7 +119,7 @@ export default function PrintableDetailPage() {
     <RouteGuard permission="reports:view" pageName="Documents">
       <PageFill>
         {/* Breadcrumb */}
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
           <Link href="/printables" className="hover:text-foreground transition-colors">
             Documents
           </Link>
@@ -128,7 +128,7 @@ export default function PrintableDetailPage() {
         </div>
 
         {/* Header */}
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex shrink-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex items-start gap-4 min-w-0">
             <div
               className={cn(

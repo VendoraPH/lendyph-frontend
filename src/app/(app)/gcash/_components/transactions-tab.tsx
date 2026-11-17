@@ -120,7 +120,7 @@ export function TransactionsTab() {
 
   return (
     <div className={cn("gap-4", FIT_CLASSES.section)}>
-      <div className="flex flex-wrap gap-2 items-end">
+      <div className="flex shrink-0 flex-wrap gap-2 items-end">
         <div className="space-y-1">
           <label className="text-xs text-muted-foreground">Type</label>
           <Select

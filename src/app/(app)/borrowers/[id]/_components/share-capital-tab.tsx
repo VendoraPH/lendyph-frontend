@@ -123,12 +123,13 @@ export function ShareCapitalTab({ borrowerId }: ShareCapitalTabProps) {
           shown={shortfall.shown}
           total={shortfall.total}
           noun="share capital entries"
+          className="shrink-0"
           consequence="The totals and the Balance column are the server's figures over every entry; only the list of entries below is incomplete."
         />
       )}
 
       {/* Summary Cards */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+      <div className="grid shrink-0 gap-4 grid-cols-1 sm:grid-cols-3">
         <Card>
           <CardContent className="py-4">
             <p className="text-xs text-muted-foreground mb-1">Total Credits</p>

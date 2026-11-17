@@ -57,7 +57,7 @@ export function PaymentsTab({ payments, loans, summary }: PaymentsTabProps) {
 
   return (
     <div className={cn("gap-4", FIT_CLASSES.section)}>
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid shrink-0 gap-4 md:grid-cols-4">
         <Card>
           <CardContent className="py-4">
             <div className="flex items-center justify-between">

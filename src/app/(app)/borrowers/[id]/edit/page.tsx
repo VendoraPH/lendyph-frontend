@@ -516,7 +516,7 @@ function EditBorrowerContent() {
   return (
     <PageFill className="mx-auto w-full max-w-3xl">
       {/* Header */}
-      <div>
+      <div className="shrink-0">
         <Link
           href={`/borrowers/${borrowerId}`}
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"

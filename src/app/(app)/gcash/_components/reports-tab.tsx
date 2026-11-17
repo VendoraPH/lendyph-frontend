@@ -108,7 +108,7 @@ export function ReportsTab() {
 
   return (
     <div className={cn("gap-6", FIT_CLASSES.section)}>
-      <Card>
+      <Card className="shrink-0">
         <CardHeader>
           <CardTitle>Total Income</CardTitle>
           <CardDescription>
@@ -194,6 +194,7 @@ export function ReportsTab() {
               shown={pendingShortfall.shown}
               total={pendingShortfall.total}
               noun="pending payments"
+              className="shrink-0"
               consequence="A pending Cash In that is not listed here cannot be marked paid from this screen."
             />
           )}

@@ -157,7 +157,7 @@ function CreditScoringDashboardContent() {
         </DataState>
       </ScrollBox>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid shrink-0 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {SHORTCUTS.map((s) => (
           <Button key={s.href} variant="outline" className="h-auto justify-start gap-2 p-4" nativeButton={false} render={<Link href={s.href} />}>
             <s.icon className="h-4 w-4" />

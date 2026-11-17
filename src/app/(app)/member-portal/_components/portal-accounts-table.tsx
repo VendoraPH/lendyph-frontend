@@ -46,7 +46,7 @@ export function PortalAccountsTable({ branchId }: { branchId: number | undefined
 
   return (
     <div className={cn("gap-3", FIT_CLASSES.section)}>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
         <form
           className="relative min-w-56 flex-1"
           role="search"

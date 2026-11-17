@@ -98,19 +98,19 @@ function ScorecardConfigurationContent() {
           const current = draft ?? scorecardDraftFrom(config);
           return (
             <div className={cn("gap-6", FIT_CLASSES.section, TABS_FILL)}>
-              <div className="flex flex-wrap items-center gap-2 text-sm">
+              <div className="flex shrink-0 flex-wrap items-center gap-2 text-sm">
                 <span>Scorecard v{config.version}</span>
                 {!config.validated && <Badge variant="outline">Unvalidated</Badge>}
               </div>
 
               {note && (
-                <p role="status" className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                <p role="status" className="shrink-0 rounded-md border bg-muted/40 px-3 py-2 text-sm">
                   {note}
                 </p>
               )}
 
               <Tabs value={tab} onValueChange={(next) => setTab(String(next))}>
-                <TabsList>
+                <TabsList className="shrink-0">
                   <TabsTrigger value="categories">Categories</TabsTrigger>
                   <TabsTrigger value="bands">Risk Bands</TabsTrigger>
                   <TabsTrigger value="factors">Factor Ranges</TabsTrigger>

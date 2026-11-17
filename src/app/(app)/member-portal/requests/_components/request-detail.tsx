@@ -72,7 +72,7 @@ export function RequestDetail({ id }: { id: number }) {
 function Header({ request: r, onDecide }: { request: PortalRequestDetail; onDecide: (d: PortalRequestDecision) => void }) {
   const decisions = decisionsFor(r.status);
   return (
-    <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="flex shrink-0 flex-wrap items-start justify-between gap-4">
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">{labelOf(REQUEST_TYPE_LABELS, r.type)}</h1>
         <p className="font-mono text-sm text-muted-foreground">{r.reference}</p>

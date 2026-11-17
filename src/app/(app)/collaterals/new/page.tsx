@@ -20,7 +20,7 @@ export default function NewCollateralPage() {
         </Link>
 
         {/* Page header */}
-        <header className="space-y-1.5">
+        <header className="shrink-0 space-y-1.5">
           <h1 className="text-2xl font-semibold tracking-tight">
             Register New Collateral
           </h1>

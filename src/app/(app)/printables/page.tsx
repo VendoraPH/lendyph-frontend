@@ -97,7 +97,7 @@ export default function PrintablesPage() {
     <RouteGuard permission="reports:view" pageName="Documents">
       <PageFill>
         {/* Hero / header */}
-        <div className="rounded-xl border bg-gradient-to-br from-brand-orange/10 via-background to-background p-6 sm:p-8">
+        <div className="shrink-0 rounded-xl border bg-gradient-to-br from-brand-orange/10 via-background to-background p-6 sm:p-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex items-start gap-4">
               <div className="hidden sm:flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-brand-orange/15 text-brand-orange">

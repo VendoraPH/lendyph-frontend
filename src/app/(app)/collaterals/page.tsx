@@ -100,7 +100,7 @@ function CollateralListingContent() {
   return (
     <PageFill>
       {/* Header */}
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex shrink-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
             Collateral Management
@@ -120,7 +120,7 @@ function CollateralListingContent() {
       {data?.meta.names_hidden && (
         <div
           role="status"
-          className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4"
+          className="flex shrink-0 items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4"
         >
           <AlertTriangle
             className="mt-0.5 size-5 shrink-0 text-amber-600"
@@ -143,7 +143,7 @@ function CollateralListingContent() {
 
       {/* Filters + Table */}
       <Card className={FIT_CLASSES.section}>
-        <div className="p-6 pb-0 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="p-6 pb-0 flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center">
           <div className="relative flex-1">
             <Search
               className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"

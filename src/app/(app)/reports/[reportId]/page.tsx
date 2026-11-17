@@ -417,7 +417,7 @@ function ReportDetailContent({
   return (
     <PageFill>
       {/* Breadcrumb + back */}
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <div className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
         <Link
           href="/reports"
           className="hover:text-foreground transition-colors"
@@ -429,7 +429,7 @@ function ReportDetailContent({
       </div>
 
       {/* Header */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex shrink-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex items-start gap-4 min-w-0">
           <div
             className={cn(
@@ -468,7 +468,7 @@ function ReportDetailContent({
       </div>
 
       {/* Controls card */}
-      <Card>
+      <Card className="shrink-0">
         <CardContent className="p-4 sm:p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             {report.noDateRange ? (
@@ -681,7 +681,7 @@ function ReportDetailContent({
       {/* The preview scrolls in its own card at fit, and opens full size. */}
       {doc && !generating && (
         <ExpandableCard title={report.title}>
-          <ScrollBox>
+          <ScrollBox className="p-px">
             <ReportPreview doc={doc} />
           </ScrollBox>
         </ExpandableCard>

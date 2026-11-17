@@ -33,7 +33,7 @@ function GCashPageContent() {
 
   return (
     <PageFill>
-      <div>
+      <div className="shrink-0">
         <h1 className="text-2xl font-semibold">GCash</h1>
         <p className="text-sm text-muted-foreground">
           Record Cash In / Cash Out transactions for members and walk-ins,
@@ -42,7 +42,7 @@ function GCashPageContent() {
       </div>
 
       <Tabs value={active} onValueChange={setTab} className={FIT_CLASSES.section}>
-        <TabsList>
+        <TabsList className="shrink-0">
           <TabsTrigger value="members">Members</TabsTrigger>
           <TabsTrigger value="transactions">Transactions</TabsTrigger>
           <TabsTrigger value="reports">Reports</TabsTrigger>

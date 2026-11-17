@@ -86,7 +86,7 @@ export function BorrowerHeader({ borrower, onEdit, onPhotoUpdate }: BorrowerHead
     .join(" · ");
 
   return (
-    <div className="space-y-4">
+    <div className="shrink-0 space-y-4">
       <Link
         href="/borrowers"
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"

@@ -61,7 +61,7 @@ export function RequestsScreen() {
 
   return (
     <PageFill>
-      <div>
+      <div className="shrink-0">
         <h1 className="text-2xl font-semibold tracking-tight">Portal Requests</h1>
         <p className="text-sm text-muted-foreground">
           Profile changes, savings withdrawals and new savings accounts members asked for in the portal. Nothing changes
@@ -69,7 +69,7 @@ export function RequestsScreen() {
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
         <form
           className="relative min-w-56 flex-1"
           role="search"
@@ -107,7 +107,7 @@ export function RequestsScreen() {
         />
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="shrink-0 overflow-x-auto">
         <Tabs
           value={status}
           onValueChange={(v) => {

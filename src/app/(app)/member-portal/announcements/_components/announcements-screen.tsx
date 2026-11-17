@@ -66,7 +66,7 @@ export function AnnouncementsScreen() {
 
   return (
     <PageFill>
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex shrink-0 flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Portal Announcements</h1>
           <p className="text-sm text-muted-foreground">
@@ -84,6 +84,7 @@ export function AnnouncementsScreen() {
           setTab(v as typeof tab);
           setPage(1);
         }}
+        className="shrink-0"
       >
         <TabsList>
           {TABS.map((t) => (

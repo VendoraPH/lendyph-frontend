@@ -256,7 +256,7 @@ function RegistrationReviewContent() {
           <ArrowLeft className="h-4 w-4" />
           Back to Members
         </Link>
-        <div className="flex items-center gap-5">
+        <div className="flex shrink-0 items-center gap-5">
           <button
             type="button"
             aria-label={registration.photo_url ? "View profile photo" : "Profile photo"}

@@ -476,7 +476,7 @@ function AuditTrailContent() {
   return (
     <PageFill>
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex shrink-0 items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Audit Trail</h1>
           <p className="text-muted-foreground">
@@ -505,7 +505,7 @@ function AuditTrailContent() {
         total beside a truncated one, and the server offers no per-filter
         equivalent to compute them from.
       */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid shrink-0 gap-4 md:grid-cols-4">
         <Card>
           <CardContent className="py-4">
             <p className="text-xs text-muted-foreground">Total Events</p>
@@ -763,13 +763,13 @@ function AuditTrailContent() {
 function AuditTrailRestricted({ message }: { message: string }) {
   return (
     <PageFill>
-      <div>
+      <div className="shrink-0">
         <h1 className="text-2xl font-bold tracking-tight">Audit Trail</h1>
         <p className="text-muted-foreground">
           Track and review all user actions across the system
         </p>
       </div>
-      <Card>
+      <Card className="shrink-0">
         <CardContent className="flex items-start gap-3 py-6">
           <ShieldAlert className="h-5 w-5 shrink-0 text-muted-foreground" />
           <div className="space-y-1">

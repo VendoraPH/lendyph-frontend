@@ -40,7 +40,7 @@ export default function DataTemplatePage() {
   return (
     <RouteGuard permission="reports:view" pageName="Documents">
       <PageFill>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
           <Link
             href="/printables"
             className="transition-colors hover:text-foreground"
@@ -51,7 +51,7 @@ export default function DataTemplatePage() {
           <span className="text-foreground">Data Import Template</span>
         </div>
 
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex shrink-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex min-w-0 items-start gap-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-teal-50 ring-1 ring-teal-200">
               <Table2 className="h-6 w-6 text-teal-600" />
@@ -77,7 +77,7 @@ export default function DataTemplatePage() {
         </div>
 
         <Tabs value={tab} onValueChange={setTab} className={FIT_CLASSES.section}>
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
             <TabsList>
               {draft.sheets.map((sheet) => {
                 const count = issuesForSheet(issues, sheet.id).length;

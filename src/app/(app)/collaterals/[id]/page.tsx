@@ -49,7 +49,7 @@ function EditCollateralContent() {
       </Link>
 
       {/* Page header */}
-      <header className="space-y-1.5">
+      <header className="shrink-0 space-y-1.5">
         <h1 className="text-2xl font-semibold tracking-tight">
           Edit Collateral
         </h1>
@@ -60,7 +60,7 @@ function EditCollateralContent() {
       </header>
 
       {loading ? (
-        <Card>
+        <Card className="shrink-0">
           <CardContent className="flex items-center justify-center py-16">
             <div className="flex flex-col items-center gap-3 text-muted-foreground">
               <Spinner className="size-6" />
@@ -71,7 +71,7 @@ function EditCollateralContent() {
       ) : collateral ? (
         <CollateralForm mode="edit" initial={collateral} />
       ) : (
-        <Card>
+        <Card className="shrink-0">
           <CardContent className="flex flex-col items-center justify-center gap-3 py-16 text-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
               <FileQuestion className="h-6 w-6" />

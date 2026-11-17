@@ -79,7 +79,7 @@ export function LedgerTab({ borrowerId }: LedgerTabProps) {
 
   return (
     <div className={cn("gap-4", FIT_CLASSES.section)}>
-      <Card>
+      <Card className="shrink-0">
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
             <FileText className="h-4 w-4 text-muted-foreground" />

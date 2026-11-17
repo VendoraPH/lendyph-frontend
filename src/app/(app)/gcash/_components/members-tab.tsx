@@ -94,7 +94,7 @@ export function MembersTab() {
 
   return (
     <div className={cn("gap-4", FIT_CLASSES.section)}>
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex shrink-0 items-center justify-between gap-2">
         <div className="relative max-w-sm w-full">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input

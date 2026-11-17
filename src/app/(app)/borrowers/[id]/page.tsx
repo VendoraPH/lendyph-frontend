@@ -223,7 +223,7 @@ function BorrowerDetailContent() {
 
       {/* Member documents — the same catalog `/printables` serves, opened for
           the member already on screen instead of re-picking them there. */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">
           Open a member document on your cooperative&apos;s letterhead, ready to
           print.
@@ -240,6 +240,7 @@ function BorrowerDetailContent() {
           shown={loanShortfall.shown}
           total={loanShortfall.total}
           noun="loans"
+          className="shrink-0"
           consequence="The Loans tab, the Overview and the balances on the Payments tab cover only the loans that loaded."
         />
       )}
@@ -249,12 +250,13 @@ function BorrowerDetailContent() {
           shown={paymentShortfall.shown}
           total={paymentShortfall.total}
           noun="payments"
+          className="shrink-0"
           consequence="The Payments tab's list and count cover only the payments that loaded."
         />
       )}
 
       <Tabs defaultValue="overview" className={FIT_CLASSES.section}>
-        <TabsList variant="line">
+        <TabsList variant="line" className="shrink-0">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="loans">Loans ({loans.length})</TabsTrigger>
           <TabsTrigger value="payments">Payments ({payments.length})</TabsTrigger>

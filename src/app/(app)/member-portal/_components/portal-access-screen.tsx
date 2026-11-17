@@ -34,7 +34,7 @@ export function PortalAccessScreen() {
 
   return (
     <PageFill>
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex shrink-0 flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Portal Access</h1>
           <p className="text-sm text-muted-foreground">
@@ -45,7 +45,7 @@ export function PortalAccessScreen() {
       </div>
       <DataState resource={stats} endpoints={[]} summary="The Member Portal counts for your branches.">
         {(s) => (
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="grid shrink-0 grid-cols-2 gap-3 md:grid-cols-4">
             {STAT_CARDS.map((c) => (
               <Kpi key={c.key} label={c.label} value={String(s[c.key] ?? 0)} />
             ))}
