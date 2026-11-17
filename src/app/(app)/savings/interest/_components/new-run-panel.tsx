@@ -131,7 +131,7 @@ export function NewRunPanel({ productOptions, onCreated }: { productOptions: rea
             value={form.branch}
             onChange={(branch) => change({ branch })}
             className="w-full"
-            wrapperClassName="[&_label]:text-sm [&_label]:text-foreground"
+            wrapperClassName="[&>div]:flex [&>div]:flex-col [&>div]:gap-1.5 [&_label]:mb-0 [&_label]:text-sm [&_label]:leading-none [&_label]:text-foreground"
           />
         </div>
         <div className="flex flex-wrap gap-2">

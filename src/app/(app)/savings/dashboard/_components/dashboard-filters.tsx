@@ -33,7 +33,7 @@ export function DashboardFilters({
     // One row from xl: the presets and dates keep their size, and the branch and product pickers share the rest.
     <div className="flex shrink-0 flex-wrap items-end gap-3 rounded-lg border bg-card p-3 xl:flex-nowrap">
       <fieldset className="shrink-0 space-y-1.5">
-        <legend className="text-xs text-muted-foreground">Period</legend>
+        <legend className="text-xs font-medium text-muted-foreground">Period</legend>
         <div className="flex flex-wrap gap-1.5">
           {DASHBOARD_PRESETS.map((p) => (
             <button
