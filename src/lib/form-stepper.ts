@@ -97,10 +97,15 @@ const LAYOUTS: Record<FormStepperLayout, StepperLayoutClasses> = {
   dialog: {
     // A dialog is narrower than the screen, so the rail follows the dialog's
     // own width (container query) rather than the viewport's.
-    // From sm the body keeps a steady minimum height, so the dialog doesn't
-    // resize (and the footer doesn't jump) between steps of different
-    // lengths. A form can override it through `className`.
-    root: "@container flex min-h-0 flex-1 flex-col gap-4 sm:min-h-[min(26rem,60dvh)]",
+    // From sm the stepper has one fixed height, so the dialog never resizes
+    // and the footer never moves between steps: a taller step scrolls inside
+    // the body, a shorter one leaves room below it. Hidden steps take no
+    // room, which is why a minimum height wasn't enough. `sm:flex-initial`
+    // lets the height apply (flex-1's zero basis ignores it) while the root
+    // can still shrink inside a short screen's dialog. Phones keep a dialog
+    // sized to its content. A form can override the height through
+    // `className` (e.g. `sm:h-[min(44rem,80dvh)]`).
+    root: "@container flex min-h-0 flex-1 flex-col gap-4 sm:h-[min(36rem,70dvh)] sm:flex-initial",
     scrollAlways: true,
     // DialogFooter's own look, so a stepper dialog matches the others.
     footer:
