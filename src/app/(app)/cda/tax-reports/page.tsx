@@ -2,8 +2,11 @@
 
 import { Info } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 import { CdaPage } from "../_components/cda-page";
 import { ReportWorkspace } from "../_components/report-workspace";
+import { StackScroll } from "../_components/stack-scroll";
 import { REPORT_PAGES } from "../_lib/labels";
 
 /**
@@ -21,22 +24,26 @@ export default function Page() {
     >
       {(ctx) =>
         ctx && (
-          <div className="space-y-4">
-            <p className="flex items-start gap-2 rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+          <div className={cn(FIT_CLASSES.section, "gap-4")}>
+            <p className="flex shrink-0 items-start gap-2 rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
               <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
               Both reports apply only while the cooperative holds a valid Certificate of Tax Exemption for the year. Set
               the CTE in CDA Settings.
             </p>
-            <Tabs defaultValue="atir">
-              <TabsList>
+            <Tabs defaultValue="atir" className={FIT_CLASSES.section}>
+              <TabsList className="shrink-0">
                 <TabsTrigger value="atir">Annual Tax Incentives Report</TabsTrigger>
                 <TabsTrigger value="abr">Annual Benefits Report</TabsTrigger>
               </TabsList>
-              <TabsContent value="atir" className="pt-4">
-                <ReportWorkspace key={`atir-${ctx.year}`} year={ctx.year} type="atir" />
+              <TabsContent value="atir" className={cn(FIT_CLASSES.section, "pt-4")}>
+                <StackScroll>
+                  <ReportWorkspace key={`atir-${ctx.year}`} year={ctx.year} type="atir" />
+                </StackScroll>
               </TabsContent>
-              <TabsContent value="abr" className="pt-4">
-                <ReportWorkspace key={`abr-${ctx.year}`} year={ctx.year} type="abr" />
+              <TabsContent value="abr" className={cn(FIT_CLASSES.section, "pt-4")}>
+                <StackScroll>
+                  <ReportWorkspace key={`abr-${ctx.year}`} year={ctx.year} type="abr" />
+                </StackScroll>
               </TabsContent>
             </Tabs>
           </div>

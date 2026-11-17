@@ -6,6 +6,8 @@ import { DataState } from "@/components/common/data-state";
 import { PermissionGate } from "@/components/common/permission-gate";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useApiResource } from "@/hooks";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 import { cdaService } from "@/services";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { formatDate } from "@/lib/format";
@@ -14,6 +16,7 @@ import { CdaPage } from "./_components/cda-page";
 import { OpenPeriodForm } from "./_components/open-period";
 import { ReadinessMeter } from "./_components/readiness-meter";
 import { ReportTile } from "./_components/report-tile";
+import { StackScroll } from "./_components/stack-scroll";
 import { DeadlineBadge } from "./_components/tone-badge";
 import { ValidationPanel } from "./_components/validation-panel";
 import { REPORT_PAGES, reportName } from "./_lib/labels";
@@ -21,8 +24,8 @@ import { REPORT_PAGES, reportName } from "./_lib/labels";
 function Overview({ data }: { data: CdaDashboard }) {
   const next = data.next_deadline;
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-3">
+    <div className={cn(FIT_CLASSES.section, "gap-6 fit:gap-4")}>
+      <div className="grid shrink-0 gap-4 md:grid-cols-3">
         <Card className="md:col-span-2">
           <CardHeader>
             <CardDescription>
@@ -64,19 +67,22 @@ function Overview({ data }: { data: CdaDashboard }) {
         </Card>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {data.reports.map((r) => (
-          <ReportTile key={r.id} report={r} />
-        ))}
-      </div>
+      {/* The readiness and next deadline stay in view; the report tiles and open issues scroll under them. */}
+      <StackScroll>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+          {data.reports.map((r) => (
+            <ReportTile key={r.id} report={r} />
+          ))}
+        </div>
 
-      <ValidationPanel
-        issues={data.issues}
-        critical={data.counts.critical}
-        warnings={data.counts.warnings}
-        showReport
-        title="Open issues across reports"
-      />
+        <ValidationPanel
+          issues={data.issues}
+          critical={data.counts.critical}
+          warnings={data.counts.warnings}
+          showReport
+          title="Open issues across reports"
+        />
+      </StackScroll>
     </div>
   );
 }
@@ -108,7 +114,7 @@ export default function Page() {
         )
       }
       noPeriod={(reload) => (
-        <Card>
+        <Card className="shrink-0">
           <CardHeader>
             <CardTitle className="text-base">No reporting period is open yet</CardTitle>
             <CardDescription>

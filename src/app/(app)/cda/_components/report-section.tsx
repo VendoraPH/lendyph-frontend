@@ -6,8 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDate } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { currentValue, formatCell, formatFieldValue, isOverriding, type FieldDraft, type FieldDrafts } from "../_lib/report-fields";
 import { currentEvidence, evidenceEditable } from "../_lib/screen-gaps";
+import { fieldGridCells } from "../_lib/field-grid";
 import { EvidenceEditor } from "./evidence-editor";
 import { FieldInput } from "./field-input";
 import { ToneBadge } from "./tone-badge";
@@ -39,7 +41,13 @@ function SourceLine({ field }: { field: CdaField }) {
   );
 }
 
-function FieldRow({ field, drafts, canEdit, onEdit }: Omit<ReportSectionProps, "section"> & { field: CdaField }) {
+function FieldRow({
+  field,
+  drafts,
+  canEdit,
+  onEdit,
+  cellClassName,
+}: Omit<ReportSectionProps, "section"> & { field: CdaField; cellClassName: string }) {
   const draft = drafts[field.field_key];
   const value = currentValue(field, drafts);
   const id = `cda-${field.field_key}`;
@@ -49,7 +57,7 @@ function FieldRow({ field, drafts, canEdit, onEdit }: Omit<ReportSectionProps, "
   const reverting = draft?.revert === true;
 
   return (
-    <div className="grid gap-2 py-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] sm:items-start">
+    <div className={cn("grid gap-2 py-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] sm:items-start", cellClassName)}>
       <div className="space-y-1">
         <Label htmlFor={editable ? id : undefined}>
           {field.label} {field.required && <span className="text-destructive">*</span>}
@@ -188,6 +196,7 @@ function TableBlock({ section }: { section: CdaTableSection }) {
 /** One template section as the server lays it out: fields, or a table of figures from the system. */
 export function ReportSection(props: ReportSectionProps) {
   const { section } = props;
+  const cells = section.kind === "fields" ? fieldGridCells(section.fields.map((f) => f.type)) : [];
   return (
     <Card>
       <CardHeader>
@@ -196,9 +205,17 @@ export function ReportSection(props: ReportSectionProps) {
       </CardHeader>
       <CardContent>
         {section.kind === "fields" ? (
-          <div className="divide-y">
-            {section.fields.map((field) => (
-              <FieldRow key={field.field_key} field={field} drafts={props.drafts} canEdit={props.canEdit} onEdit={props.onEdit} />
+          // From 2xl the field rows run in two columns, in the template's order (left to right); text areas take both.
+          <div className="divide-y 2xl:grid 2xl:grid-cols-2 2xl:gap-x-8 2xl:divide-y-0">
+            {section.fields.map((field, i) => (
+              <FieldRow
+                key={field.field_key}
+                field={field}
+                drafts={props.drafts}
+                canEdit={props.canEdit}
+                onEdit={props.onEdit}
+                cellClassName={cells[i]}
+              />
             ))}
           </div>
         ) : (

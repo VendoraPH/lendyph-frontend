@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { Plus } from "lucide-react";
 import { DataState } from "@/components/common/data-state";
+import { ScrollBox } from "@/components/common/page-fill";
 import { PermissionButton } from "@/components/common/permission-button";
 import { ConfirmDeleteDialog } from "@/components/common/confirm-delete-dialog";
 import { Card, CardContent } from "@/components/ui/card";
@@ -11,6 +12,8 @@ import { useApiResource, usePermission } from "@/hooks";
 import { cdaService } from "@/services";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { notifySuccess } from "@/lib/notify";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 import type { CdaRequirement } from "@/types/cda";
 import { CdaPage } from "../_components/cda-page";
 import { notifyCdaError } from "../_lib/notify-cda";
@@ -42,8 +45,8 @@ function Calendar({ year }: { year: number }) {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className={cn(FIT_CLASSES.section, "gap-4")}>
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-muted-foreground">
           Reports and the cooperative&apos;s own compliance requirements, soonest first.
         </p>
@@ -61,40 +64,42 @@ function Calendar({ year }: { year: number }) {
         emptyMessage="Nothing is due for this year."
       >
         {(rows) => (
-          <Card>
-            <CardContent className="overflow-x-auto pt-6">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Report or requirement</TableHead>
-                    <TableHead>Due</TableHead>
-                    <TableHead>Moved to</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Time left</TableHead>
-                    {canPrepare && (
-                      <TableHead>
-                        <span className="sr-only">Actions</span>
-                      </TableHead>
+          <Card className={FIT_CLASSES.section}>
+            <CardContent className={cn(FIT_CLASSES.section, "pt-6")}>
+              <ScrollBox>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Report or requirement</TableHead>
+                      <TableHead>Due</TableHead>
+                      <TableHead>Moved to</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Time left</TableHead>
+                      {canPrepare && (
+                        <TableHead>
+                          <span className="sr-only">Actions</span>
+                        </TableHead>
+                      )}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {rows.map((row) =>
+                      isRequirementRow(row) ? (
+                        <RequirementRow
+                          key={calendarRowKey(row)}
+                          row={row}
+                          canPrepare={canPrepare}
+                          onEdit={() => setEditing({ requirement: row })}
+                          onMarkFiled={() => setFiling(row)}
+                          onDelete={() => setDeleting(row)}
+                        />
+                      ) : (
+                        <ReportRow key={calendarRowKey(row)} row={row} withActions={canPrepare} />
+                      ),
                     )}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.map((row) =>
-                    isRequirementRow(row) ? (
-                      <RequirementRow
-                        key={calendarRowKey(row)}
-                        row={row}
-                        canPrepare={canPrepare}
-                        onEdit={() => setEditing({ requirement: row })}
-                        onMarkFiled={() => setFiling(row)}
-                        onDelete={() => setDeleting(row)}
-                      />
-                    ) : (
-                      <ReportRow key={calendarRowKey(row)} row={row} withActions={canPrepare} />
-                    ),
-                  )}
-                </TableBody>
-              </Table>
+                  </TableBody>
+                </Table>
+              </ScrollBox>
             </CardContent>
           </Card>
         )}

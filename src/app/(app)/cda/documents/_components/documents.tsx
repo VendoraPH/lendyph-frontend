@@ -125,7 +125,7 @@ export function Documents({ year }: { year: number }) {
   return (
     <>
       {subject && (
-        <p role="status" className="flex flex-wrap items-center gap-x-2 rounded-md border bg-muted/40 px-3 py-2 text-sm">
+        <p role="status" className="flex shrink-0 flex-wrap items-center gap-x-2 rounded-md border bg-muted/40 px-3 py-2 text-sm">
           <span>Showing the active documents attached to one {SUBJECT_NOUNS[subject.type]}.</span>
           <Link href={`/cda/documents?year=${year}`} className="font-medium text-primary underline-offset-4 hover:underline">
             Show every document for {year}
@@ -136,6 +136,8 @@ export function Documents({ year }: { year: number }) {
         title={subject ? `Documents attached to this ${SUBJECT_NOUNS[subject.type]}` : `Documents for ${year}`}
         description="Signed reports, audit reports, minutes and certificates. Each upload is kept as a version."
         noun={["document", "documents"]}
+        fill
+        emptyIllustration={subject ? "noResults" : "empty"}
         resource={resource}
         endpoints={[`GET ${API_ENDPOINTS.CDA.DOCUMENTS(year)}`]}
         columns={COLUMNS}

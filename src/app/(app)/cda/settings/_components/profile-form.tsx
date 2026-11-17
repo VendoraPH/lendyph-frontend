@@ -9,8 +9,11 @@ import { cdaService } from "@/services";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { formatDate } from "@/lib/format";
 import { notifyError, notifySuccess, notifyValidation } from "@/lib/notify";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 import type { CdaOfficer, CdaRegulatoryProfile } from "@/types/cda";
 import { RecordFields } from "../../_components/record-fields";
+import { StackScroll } from "../../_components/stack-scroll";
 import { ASSET_CLASS_LABELS, labelOf } from "../../_lib/labels";
 import { cdaMoney } from "../../_lib/money";
 import { missingFields, toDraft, type RecordDraft } from "../../_lib/record-form";
@@ -77,7 +80,7 @@ function Pulled({ profile }: { profile: CdaRegulatoryProfile }) {
   return (
     <div className="space-y-2 rounded-md border bg-muted/30 p-3 text-sm">
       <p className="font-medium">From elsewhere in the system (read only)</p>
-      <dl className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
+      <dl className="grid gap-x-4 gap-y-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         {Object.entries(PULLED_LABELS).map(([key, label]) => {
           const item = profile.pulled[key];
           return (
@@ -127,19 +130,22 @@ function ProfileEditor({ profile }: { profile: CdaRegulatoryProfile }) {
   }
 
   return (
-    <div className="space-y-4">
-      <Pulled profile={profile} />
-      <div className="grid gap-4 sm:grid-cols-2">
-        <RecordFields fields={PROFILE_FIELDS} draft={draft} onChange={setDraft} disabled={busy || !editable} />
-      </div>
-      <AuthorisedRep
-        officers={officerRows}
-        failed={!officers.loading && officerRows === null}
-        draft={draft}
-        onChange={setDraft}
-        disabled={busy || !editable}
-      />
-      <div className="flex justify-end">
+    <div className={cn(FIT_CLASSES.section, "gap-4")}>
+      {/* At fit the fields scroll inside the card and Save stays pinned at its foot; dropdowns fill their cell like the other fields. */}
+      <StackScroll className="space-y-4 [&_[data-slot=native-select-wrapper]]:w-full">
+        <Pulled profile={profile} />
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+          <RecordFields fields={PROFILE_FIELDS} draft={draft} onChange={setDraft} disabled={busy || !editable} />
+        </div>
+        <AuthorisedRep
+          officers={officerRows}
+          failed={!officers.loading && officerRows === null}
+          draft={draft}
+          onChange={setDraft}
+          disabled={busy || !editable}
+        />
+      </StackScroll>
+      <div data-fab-clear className="flex shrink-0 justify-end fit:border-t fit:pt-4">
         <PermissionButton permission="cda:settings" onClick={save} disabled={busy}>
           {busy ? "Saving…" : "Save profile"}
         </PermissionButton>
@@ -152,14 +158,14 @@ function ProfileEditor({ profile }: { profile: CdaRegulatoryProfile }) {
 export function ProfileForm() {
   const resource = useApiResource(useCallback(() => cdaService.getProfile(), []));
   return (
-    <Card>
+    <Card className={FIT_CLASSES.section}>
       <CardHeader>
         <CardTitle className="text-base">Regulatory profile</CardTitle>
         <CardDescription>
           Registration, tax exemption and classification. The name, address and contact are kept in Settings › Branding.
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className={FIT_CLASSES.section}>
         <DataState resource={resource} endpoints={[`GET ${API_ENDPOINTS.CDA.REGULATORY_PROFILE}`]} summary="The cooperative's CDA profile">
           {(profile) => <ProfileEditor profile={profile} />}
         </DataState>
