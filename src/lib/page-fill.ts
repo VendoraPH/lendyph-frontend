@@ -24,7 +24,9 @@ const STICKY_TABLE = [
   // overflow, so un-clipping it there would cut a wide table off.
   "[&>[data-slot=table-container]]:overflow-visible",
   "[&_thead_th:not([data-unpinned]_*)]:sticky",
-  "[&_thead_th:not([data-unpinned]_*)]:top-0",
+  // 1px above the box top: a box that starts at a fractional y would
+  // otherwise show one pixel row of the scrolled row above the heading.
+  "[&_thead_th:not([data-unpinned]_*)]:-top-px",
   "[&_thead_th:not([data-unpinned]_*)]:z-10",
   "[&_thead_th:not([data-unpinned]_*)]:bg-card",
   // Row borders don't travel with sticky cells, so the line under the
