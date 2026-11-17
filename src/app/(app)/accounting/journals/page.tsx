@@ -236,7 +236,7 @@ function JournalEntriesContent() {
             {meta ? journalStatusCounts(meta.stats) : "Loading…"}
           </p>
 
-          {/* With no rows the box keeps its natural height, so the message sits under the headings. */}
+          {/* With no rows the box keeps its natural height; a failed load's message sits under it. */}
           <ScrollBox
             className={cn(!(settled && !failed) && "opacity-60", rows.length === 0 && "fit:flex-initial")}
             aria-busy={!settled}
@@ -289,6 +289,20 @@ function JournalEntriesContent() {
                     </TableCell>
                   </TableRow>
                 ))}
+                {/* Inside the box, so the pinned register total below always shows whole. */}
+                {settled && !failed && rows.length === 0 && (
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell colSpan={8} className="py-6 text-center text-sm text-muted-foreground">
+                      {hasIllustration(emptyPicture) && (
+                        <Illustration
+                          name={emptyPicture}
+                          className="mx-auto mb-3 block fit:max-h-[min(6rem,11dvh)]"
+                        />
+                      )}
+                      No journal entry matches these filters.
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
               <TableFooter>
                 <TableRow>
@@ -307,19 +321,12 @@ function JournalEntriesContent() {
             </Table>
           </ScrollBox>
 
-          {settled && rows.length === 0 && (
+          {settled && failed && rows.length === 0 && (
             <div className="space-y-3 py-12 text-center text-sm text-muted-foreground">
-              {!failed && hasIllustration(emptyPicture) && (
-                <Illustration name={emptyPicture} className="mx-auto block fit:max-h-[min(8rem,14dvh)]" />
-              )}
-              <p className={failed ? "text-destructive" : undefined}>
-                {failed ? answer.error : "No journal entry matches these filters."}
-              </p>
-              {failed && (
-                <Button variant="outline" size="sm" onClick={() => setReload((n) => n + 1)}>
-                  Try again
-                </Button>
-              )}
+              <p className="text-destructive">{answer.error}</p>
+              <Button variant="outline" size="sm" onClick={() => setReload((n) => n + 1)}>
+                Try again
+              </Button>
             </div>
           )}
 

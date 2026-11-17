@@ -379,15 +379,15 @@ export const CATEGORY_META: Record<
 };
 
 /**
- * The small picture beside each category's heading on `/reports`: the picture
- * its module's empty lists use.
+ * The small picture beside each category's heading on `/reports`, one of the
+ * module pictures, chosen so no two neighbouring sections repeat.
  */
 export const CATEGORY_ILLUSTRATION: Record<ReportCategory, ModuleIllustrationName> = {
   operations: "emptyPayments",
-  portfolio: "emptyLoans",
+  portfolio: "emptyCollaterals",
   member: "emptyMembers",
   disbursement: "emptyLoans",
   financial: "emptyLedger",
-  performance: "emptyPayments",
+  performance: "emptyShareCapital",
   savings: "emptySavings",
 };

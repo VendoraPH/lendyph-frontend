@@ -264,14 +264,14 @@ export const SUBJECT_ACCENT: Record<
 };
 
 /**
- * The small picture beside each subject's heading on `/printables`: the
- * picture its module's empty lists use.
+ * The small picture beside each subject's heading on `/printables`, one of the
+ * module pictures, chosen so no two neighbouring sections repeat.
  */
 export const SUBJECT_ILLUSTRATION: Record<PrintableSubject, ModuleIllustrationName> = {
   loan: "emptyLoans",
   borrower: "emptyMembers",
   repayment: "emptyPayments",
   savings_account: "emptySavings",
-  savings_withdrawal: "emptySavings",
-  time_deposit: "emptySavings",
+  savings_withdrawal: "emptyWallet",
+  time_deposit: "emptyShareCapital",
 };

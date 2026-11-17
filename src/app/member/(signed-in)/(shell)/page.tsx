@@ -15,7 +15,7 @@ import { DashboardLists } from "./_components/dashboard-lists";
  * Home: the member's figures at a glance, every one from `/portal/dashboard`
  * (portal design §3). At the `fit:` size the greeting and the figure cards
  * stay put and the two lists below share the rest, each scrolling inside its
- * card. The welcome picture sits on the greeting row's right side from `md` up.
+ * card. The welcome picture sits on the greeting's right side from `md` up.
  */
 export default function MemberDashboardPage() {
   const fetcher = useCallback(() => portalService.dashboard(), []);
@@ -23,25 +23,31 @@ export default function MemberDashboardPage() {
 
   return (
     <PageFill className="gap-5">
-      <PortalPageHeader
-        title={data ? `Hello, ${data.member.first_name}` : "Welcome"}
-        description={
-          data ? (
-            <>
-              Member number {data.member.member_number}
-              {data.member.branch_name ? ` · ${data.member.branch_name}` : ""}
-            </>
-          ) : undefined
-        }
-        actions={
-          // The row's own height (heading plus member line), so the page still
-          // fits at 1366x768; phones skip it.
-          <Illustration
-            name="portalWelcome"
-            className="hidden aspect-video h-14 max-h-14 md:block"
+      {/*
+        From `lg` the greeting is a compact welcome area: the greeting on the
+        left, the picture on the right at about 112 px, so the home still fits
+        at 1366x768. At `md` the picture keeps the row's height; phones skip it.
+        The picture's white background sits on the card's white, with no tile.
+      */}
+      <div className="flex shrink-0 items-center justify-between gap-4 lg:rounded-xl lg:border lg:bg-card lg:py-2 lg:pl-6 lg:pr-4">
+        <div className="min-w-0 flex-1">
+          <PortalPageHeader
+            title={data ? `Hello, ${data.member.first_name}` : "Welcome"}
+            description={
+              data ? (
+                <>
+                  Member number {data.member.member_number}
+                  {data.member.branch_name ? ` · ${data.member.branch_name}` : ""}
+                </>
+              ) : undefined
+            }
           />
-        }
-      />
+        </div>
+        <Illustration
+          name="portalWelcome"
+          className="hidden aspect-video h-14 max-h-14 shrink-0 rounded-xl bg-transparent p-0 md:block lg:h-28 lg:max-h-28"
+        />
+      </div>
       <LoadState loading={loading} error={error} onRetry={reload}>
         {data && (
           <FillSection className="gap-5">

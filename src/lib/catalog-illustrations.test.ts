@@ -2,8 +2,8 @@
  * The small picture beside each heading of the Reports and Documents catalogs.
  *
  * WHAT THIS PROVES: every report category and every printable subject has a
- * module picture, the picture is the one its module's empty screens use, and
- * that picture is a filled slot.
+ * module picture, the agreed one for that section, no two neighbouring
+ * sections repeat, and each picture is a filled slot.
  * WHAT IT DOES NOT PROVE: how the heading draws it, or that the page still fits
  * at 1366x768 (browser check).
  */
@@ -17,11 +17,11 @@ test("each report category shows its module's picture", () => {
   assert.deepEqual(Object.keys(CATEGORY_ILLUSTRATION).sort(), Object.keys(CATEGORY_META).sort());
   assert.deepEqual(CATEGORY_ILLUSTRATION, {
     operations: "emptyPayments",
-    portfolio: "emptyLoans",
+    portfolio: "emptyCollaterals",
     member: "emptyMembers",
     disbursement: "emptyLoans",
     financial: "emptyLedger",
-    performance: "emptyPayments",
+    performance: "emptyShareCapital",
     savings: "emptySavings",
   });
 });
@@ -33,9 +33,18 @@ test("each printable subject shows its module's picture", () => {
     borrower: "emptyMembers",
     repayment: "emptyPayments",
     savings_account: "emptySavings",
-    savings_withdrawal: "emptySavings",
-    time_deposit: "emptySavings",
+    savings_withdrawal: "emptyWallet",
+    time_deposit: "emptyShareCapital",
   });
+});
+
+test("no two neighbouring catalog sections share a picture", () => {
+  const reports = Object.keys(CATEGORY_META).map((c) => CATEGORY_ILLUSTRATION[c as keyof typeof CATEGORY_ILLUSTRATION]);
+  const subjects = ["loan", "borrower", "repayment", "savings_account", "savings_withdrawal", "time_deposit"] as const;
+  const printables = subjects.map((s) => SUBJECT_ILLUSTRATION[s]);
+  for (const list of [reports, printables]) {
+    for (let i = 1; i < list.length; i++) assert.notEqual(list[i], list[i - 1], `${list[i - 1]} repeats`);
+  }
 });
 
 test("every catalog picture is a filled module slot", () => {
