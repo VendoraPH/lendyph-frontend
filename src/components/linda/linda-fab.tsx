@@ -65,6 +65,7 @@ function LindaFabButton() {
             width={128}
             height={128}
             unoptimized
+            loading="eager"
             draggable={false}
             className="size-full select-none rounded-full object-cover"
           />

@@ -63,7 +63,7 @@ function LindaExpandedChat() {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            <LindaNewChatButton />
+            <LindaNewChatButton inputRef={inputRef} />
             <Button
               variant="ghost"
               size="icon-sm"

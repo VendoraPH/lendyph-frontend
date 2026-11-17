@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { RouteGuard } from "@/components/common/route-guard";
 import { PageFill } from "@/components/common/page-fill";
 import { Card, CardContent } from "@/components/ui/card";
 import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 import { useLindaStore } from "@/store";
 import { LindaBust } from "@/components/linda/linda-avatar";
 import { LindaConversation } from "@/components/linda/linda-conversation";
@@ -25,10 +26,13 @@ function LindaScreen() {
   useEffect(() => {
     useLindaStore.getState().hide();
   }, []);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   return (
-    <PageFill className="gap-4">
-      <div className="flex items-center justify-between gap-3">
+    // A chat fills the screen at every size (min-h-full below fit), so on a
+    // phone the composer stays at the foot while the conversation is short.
+    <PageFill className="min-h-full gap-4">
+      <div className="flex shrink-0 items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <LindaBust decorative className="size-12 rounded-full bg-brand-orange/10 ring-1 ring-brand-orange/25" />
           <div className="min-w-0">
@@ -36,12 +40,12 @@ function LindaScreen() {
             <p className="text-sm text-muted-foreground">AI Lending Assistant</p>
           </div>
         </div>
-        <LindaNewChatButton labelled />
+        <LindaNewChatButton labelled inputRef={inputRef} />
       </div>
 
-      <Card className={FIT_CLASSES.section}>
-        <CardContent className={FIT_CLASSES.section}>
-          <LindaConversation layout="page" onNavigate={() => {}} autoFocus={false} />
+      <Card className={cn(FIT_CLASSES.section, "flex-1")}>
+        <CardContent className={cn(FIT_CLASSES.section, "flex-1")}>
+          <LindaConversation layout="page" onNavigate={() => {}} autoFocus={false} inputRef={inputRef} />
         </CardContent>
       </Card>
     </PageFill>

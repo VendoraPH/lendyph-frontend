@@ -133,7 +133,7 @@ export function LindaConversation({ onNavigate, autoFocus, layout, inputRef: out
     <>
       {layout === "page" ? (
         <ScrollBox ref={scrollRef} aria-live="polite" className="px-1 py-1">
-          <div className="mx-auto w-full max-w-3xl">{body}</div>
+          {body}
         </ScrollBox>
       ) : (
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4" aria-live="polite">
@@ -145,7 +145,7 @@ export function LindaConversation({ onNavigate, autoFocus, layout, inputRef: out
         className={cn(
           "shrink-0 space-y-2",
           layout === "page"
-            ? "sticky bottom-0 mx-auto w-full max-w-3xl bg-card pt-3"
+            ? "sticky bottom-0 mt-auto w-full bg-card pt-3"
             : "border-t border-border px-4 pb-4 pt-3",
         )}
       >

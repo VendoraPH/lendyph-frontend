@@ -43,6 +43,7 @@ function LindaSidePanel() {
   const reset = useLindaStore((s) => s.reset);
   const isMobile = useIsMobile();
   const panelRef = useRef<HTMLElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const modal = open && isMobile;
   const onTab = useLindaPanelFocus(panelRef, open, modal);
 
@@ -86,7 +87,7 @@ function LindaSidePanel() {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            <LindaNewChatButton className="max-md:size-11" />
+            <LindaNewChatButton className="max-md:size-11" inputRef={inputRef} />
             {/* Phones already show the panel full screen. */}
             {!isMobile && (
               <Button
@@ -113,6 +114,7 @@ function LindaSidePanel() {
             // away (the conversation stays for the floating button).
             onNavigate={isMobile ? hide : () => {}}
             autoFocus={!isMobile}
+            inputRef={inputRef}
           />
         )}
       </div>
