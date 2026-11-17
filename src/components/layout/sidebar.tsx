@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SIDEBAR_NAV } from "@/constants";
-import { navChildAllowed, navItemAllowed, navItemHref, type NavItem } from "@/constants/navigation";
+import { LINDA_NAV, navChildAllowed, navItemAllowed, navItemHref, type NavItem } from "@/constants/navigation";
 import { usePermission } from "@/hooks";
 import { useRegistrations } from "@/hooks/use-registrations";
 import {
@@ -28,6 +28,7 @@ import {
 import { BrandLogo } from "@/components/common";
 import { Icon3D } from "@/components/common/icon-3d";
 import { ICON_3D_TILE_CLASS } from "@/lib/icons-3d";
+import { LindaAvatar } from "@/components/linda/linda-avatar";
 import { selectSidebarCollapsed, useUIStore } from "@/store/ui-store";
 import { systemService } from "@/services";
 import { collapsedNavLabel, countLabel } from "./sidebar-labels";
@@ -41,13 +42,14 @@ const MIN_WIDTH = 64;
 const DEFAULT_WIDTH = 260;
 const MAX_WIDTH = 600;
 
-/** Linda and GCash, which keep their own icon, still sit on today's grey tile. */
+/** GCash, which keeps its own brand mark, still sits on today's grey tile. */
 const LINE_ICON_TILE = "bg-gradient-to-br from-gray-400 to-gray-500 text-white";
 
 /**
- * An item's icon on its tile: the 3D icon on the soft neutral tile, or, for
- * Linda and GCash, their own icon on the grey tile. The tile keeps today's size
- * (36px collapsed, 32px open), so nothing in the menu moves.
+ * An item's icon on its tile: the 3D icon on the soft neutral tile, Linda's
+ * face on the same tile (as on her floating button), or, for GCash, its own
+ * mark on the grey tile. The tile keeps today's size (36px collapsed, 32px
+ * open), so nothing in the menu moves.
  */
 function NavItemIcon({ item, collapsed, className, children }: {
   item: NavItem;
@@ -55,17 +57,20 @@ function NavItemIcon({ item, collapsed, className, children }: {
   className?: string;
   children?: React.ReactNode;
 }) {
+  const isLinda = item.href === LINDA_NAV.href;
   return (
     <span
       className={cn(
         "relative flex shrink-0 items-center justify-center rounded-xl shadow-sm",
         collapsed ? "h-9 w-9" : "h-8 w-8",
-        item.icon3d ? ICON_3D_TILE_CLASS : LINE_ICON_TILE,
+        item.icon3d || isLinda ? ICON_3D_TILE_CLASS : LINE_ICON_TILE,
         className
       )}
     >
       {item.icon3d ? (
         <Icon3D name={item.icon3d} size={collapsed ? 28 : 24} eager />
+      ) : isLinda ? (
+        <LindaAvatar decorative className={collapsed ? "size-7" : "size-6"} />
       ) : (
         <item.icon className={collapsed ? "h-4 w-4" : "h-3.5 w-3.5"} />
       )}

@@ -120,8 +120,15 @@ test("the side menu draws the 3D icon on the neutral tile, in both the full and 
   // One helper draws the item's icon for all three layouts (collapsed, plain
   // link, expander), so the collapsed menu shows the same icons.
   assert.equal((sidebar.match(/<NavItemIcon\b/g) ?? []).length, 3);
-  // The line icon is drawn once, inside that helper, for Linda and GCash only.
+  // The line icon is drawn once, inside that helper, for GCash only.
   assert.equal((sidebar.match(/<item\.icon\b/g) ?? []).length, 1);
+});
+
+test("Linda's menu tile shows her face on the neutral tile, as her floating button does", () => {
+  const sidebar = read("src/components/layout/sidebar.tsx");
+  assert.match(sidebar, /from "@\/components\/linda\/linda-avatar"/);
+  assert.match(sidebar, /item\.href === LINDA_NAV\.href/);
+  assert.equal((sidebar.match(/<LindaAvatar\b/g) ?? []).length, 1);
 });
 
 test("every dashboard figure card has its agreed 3D icon", async () => {

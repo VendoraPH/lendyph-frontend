@@ -60,8 +60,8 @@ export interface NavItem {
   /** The line icon, for the command palette and items without a 3D icon. */
   icon: ComponentType<{ className?: string }>;
   /**
-   * The side menu's 3D icon (`@/lib/icons-3d`). Linda and GCash (its brand
-   * mark) have none and keep their own icon.
+   * The side menu's 3D icon (`@/lib/icons-3d`). Linda (her face) and GCash
+   * (its brand mark) have none and keep their own picture.
    */
   icon3d?: Icon3DName;
   permission: Permission;
