@@ -32,3 +32,15 @@ test("on phones the open panel covers the screen", () => {
   const c = lindaPanelClass(true);
   for (const t of ["fixed", "inset-0", "z-50", "flex"]) assert.ok(has(c, t), t);
 });
+
+test("opening shows the panel at once, so focus can move into it; closing hides it only after it slides out", () => {
+  // A visibility transition keeps the start value at its first frame, so
+  // transitioning it on open left the panel hidden when the composer took
+  // focus, and focus fell to the page (browser check R3).
+  const opened = lindaPanelClass(true);
+  assert.ok(has(opened, "md:transition-transform"), opened);
+  assert.ok(!has(opened, "md:transition-[transform,visibility]"), opened);
+  const closed = lindaPanelClass(false);
+  assert.ok(has(closed, "md:transition-[transform,visibility]"), closed);
+});
+
