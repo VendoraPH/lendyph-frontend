@@ -33,3 +33,11 @@ test("every card's figure sits at the top, so the figures line up whatever a car
   // Three plus two: the second row's cards match the first row's height.
   assert.ok(tokens(grid).includes("auto-rows-fr"), grid);
 });
+
+test("every card's figure row is as tall as a sparkline, so a card without one keeps its figure level", () => {
+  // The figure and label are centred against the 40px sparkline (Sparkline's
+  // height). Share Capital has no sparkline, so its row was shorter and its
+  // figure sat about 2px higher than the others at 1920 wide.
+  const { row } = dashboardKpiClasses();
+  for (const t of ["flex", "items-center", "justify-between", "min-h-10"]) assert.ok(tokens(row).includes(t), t);
+});

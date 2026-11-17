@@ -272,7 +272,7 @@ function DashboardContent() {
                 )}
               >
                 <CardContent className={kpiClasses.content}>
-                  <div className="flex items-center justify-between gap-2">
+                  <div className={kpiClasses.row}>
                     <div className="flex min-w-0 items-center gap-2.5">
                       <div
                         className="h-7 w-7 rounded-full flex items-center justify-center shrink-0"
