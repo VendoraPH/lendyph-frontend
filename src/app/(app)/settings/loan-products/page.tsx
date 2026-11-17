@@ -14,7 +14,7 @@ import { PermissionGate, RouteGuard } from "@/components/common";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { FIT_CLASSES } from "@/lib/page-fill";
 import { FormStep, FormStepper, type FormStepperHandle } from "@/components/common/form-stepper";
-import { FORM_STEP_GRID, type StepErrors } from "@/lib/form-stepper";
+import { errorMessages, FORM_STEP_GRID } from "@/lib/form-stepper";
 import { Spinner } from "@/components/ui/spinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -160,20 +160,6 @@ function getTermDisplay(product: LoanProduct): string {
 
 // ── Product Form Dialog ──
 
-/**
- * The inputs the browser finds invalid (`required`, `min`, `max`), by name,
- * with the browser's own message. Read, never reported: reading `validity`
- * fires no event.
- */
-function invalidInputsOf(form: HTMLFormElement | null): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const el of Array.from(form?.elements ?? [])) {
-    if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement)) continue;
-    if (el.name && !el.validity.valid && !(el.name in out)) out[el.name] = el.validationMessage;
-  }
-  return out;
-}
-
 const SECTION_TITLE = "text-sm font-semibold text-muted-foreground uppercase tracking-wider";
 
 function ProductFormDialog({
@@ -203,7 +189,6 @@ function ProductFormDialog({
   // The server's refusal, shown in the dialog. The dialog stays open on a
   // refusal so nothing the user typed is lost.
   const [saveError, setSaveError] = useState<string | null>(null);
-  const formRef = useRef<HTMLFormElement>(null);
   const stepperRef = useRef<FormStepperHandle>(null);
 
   if (useDialogOpening(open, initialData)) {
@@ -213,23 +198,6 @@ function ProductFormDialog({
 
   const update = (field: keyof ProductForm, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
-
-  const checkStep = (stepId: string) => productStepCheck(stepId, form, invalidInputsOf(formRef.current));
-
-  // A step fails as the form did before: the browser's own bubble on the
-  // input, or the Default Term toast. The bubble waits for the step to show.
-  const showStepErrors = (_errors: StepErrors, stepId: string) => {
-    const { toast: message } = checkStep(stepId);
-    if (message) {
-      toast.error(message);
-      return;
-    }
-    requestAnimationFrame(() => {
-      formRef.current
-        ?.querySelector<HTMLInputElement>(`[data-step-panel="${stepId}"] :is(input, textarea, select):invalid`)
-        ?.reportValidity();
-    });
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -259,7 +227,7 @@ function ProductFormDialog({
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
-        <form ref={formRef} onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col gap-4">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col gap-4">
           {saveError && (
             <p role="alert" className="shrink-0 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
               {saveError}
@@ -271,8 +239,9 @@ function ProductFormDialog({
             layout="dialog"
             mode={initialData ? "edit" : "create"}
             steps={PRODUCT_STEPS}
-            validateStep={(stepId) => checkStep(stepId).errors}
-            onInvalid={showStepErrors}
+            validateStep={(stepId) => productStepCheck(stepId, form)}
+            // The browser reports its own checks; the Default Term reads as the toast it was.
+            onInvalid={(errors) => toast.error(errorMessages(errors)[0])}
             submitLabel={initialData ? "Save Changes" : "Create Product"}
             submittingLabel="Saving…"
             submitting={saving}

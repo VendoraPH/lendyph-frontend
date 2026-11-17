@@ -9,7 +9,7 @@
  * save's message about its own fields and nothing about the others.
  */
 
-import { buildFeePayload, buildFormulaFields, EMPTY_FORMULA_FIELDS } from "@/lib/fee-form";
+import { buildFeePayload, buildFormulaFields, EMPTY_FORMULA_FIELDS, type FormulaFieldsInput } from "@/lib/fee-form";
 import type { FormStepDef, StepErrors } from "@/lib/form-stepper";
 
 export const FEE_STEPS: readonly FormStepDef[] = [
@@ -25,6 +25,9 @@ export const FEE_STEPS: readonly FormStepDef[] = [
 /** The save's message when a written formula hasn't passed the server's check yet. */
 export const FORMULA_CHECK_PENDING = "Wait for the formula check to pass before saving.";
 
+/** The Amount step's message for the same wait, which Next shows too, so it names no button. */
+export const FORMULA_CHECK_PENDING_STEP = "Wait for the formula check to pass.";
+
 type FeeForm = Parameters<typeof buildFeePayload>[0];
 
 export interface FeeStepInput {
@@ -38,6 +41,17 @@ export interface FeeStepInput {
 /** Whether the fee is worked out by a written formula, as the dialog decides it. */
 export function isWrittenFormula({ form, expressions }: Pick<FeeStepInput, "form" | "expressions">): boolean {
   return expressions && form.type === "formula" && form.formula?.mode === "expression";
+}
+
+/**
+ * The bound a formula fee's bounds error is about: the maximum when only its
+ * own value is wrong, else the minimum (its own value, or a minimum above the
+ * maximum).
+ */
+function boundsField(fields: FormulaFieldsInput): "min_amount" | "max_amount" {
+  const minAlone = buildFormulaFields({ ...fields, maxAmount: "" });
+  const maxAlone = buildFormulaFields({ ...fields, minAmount: "" });
+  return !("error" in minAlone) && "error" in maxAlone ? "max_amount" : "min_amount";
 }
 
 function saveError(form: FeeForm, expressions: boolean): string | null {
@@ -56,11 +70,12 @@ export function feeStepErrors(stepId: string, input: FeeStepInput): StepErrors {
     const written = isWrittenFormula(input);
     const error = saveError({ ...form, name: "Fee", conditions: {} }, expressions);
     if (error) {
-      const bounds = form.type === "formula" ? buildFormulaFields(form.formula ?? EMPTY_FORMULA_FIELDS) : null;
+      const fields = form.formula ?? EMPTY_FORMULA_FIELDS;
+      const bounds = form.type === "formula" ? buildFormulaFields(fields) : null;
       const onBounds = bounds !== null && "error" in bounds && bounds.error === error;
-      return { [onBounds ? "min_amount" : written ? "formula_expression" : "value"]: error };
+      return { [onBounds ? boundsField(fields) : written ? "formula_expression" : "value"]: error };
     }
-    return written && !input.formulaCheckValid ? { formula_expression: FORMULA_CHECK_PENDING } : {};
+    return written && !input.formulaCheckValid ? { formula_expression: FORMULA_CHECK_PENDING_STEP } : {};
   }
   if (stepId === "products") {
     const error = saveError(

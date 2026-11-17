@@ -7,7 +7,7 @@
  * can name), so a refusal opens the step holding the field.
  */
 
-import { hasStepErrors, stepErrorsOf, type FormStepDef, type StepErrors } from "@/lib/form-stepper";
+import type { FormStepDef, StepErrors } from "@/lib/form-stepper";
 import { defaultTermError, type ProductForm } from "./product-form";
 
 export const PRODUCT_STEPS: readonly FormStepDef[] = [
@@ -49,27 +49,12 @@ export const PRODUCT_STEPS: readonly FormStepDef[] = [
   { id: "scb", title: "Share Capital Build-Up", fields: ["scb_required", "min_scb", "max_scb"] },
 ];
 
-/** A step's errors, and the toast that shows them (null: the browser shows them). */
-export interface ProductStepCheck {
-  errors: StepErrors;
-  toast: string | null;
-}
-
 /**
- * The form's own checks for one step, in the order the save ran them: first
- * the browser's checks of the step's inputs (`required`, `min`, `max`),
- * given as the invalid inputs' names and messages, then the Default Term
- * range, which the save showed as a toast.
+ * The form's own check for one step beyond the browser's (which the stepper
+ * runs itself on Next and on Save): the Default Term range, on Basic Info,
+ * with the message the save showed as a toast.
  */
-export function productStepCheck(
-  stepId: string,
-  form: ProductForm,
-  invalidInputs: StepErrors,
-): ProductStepCheck {
-  const step = PRODUCT_STEPS.find((s) => s.id === stepId);
-  if (!step) return { errors: {}, toast: null };
-  const native = stepErrorsOf(invalidInputs, step);
-  if (hasStepErrors(native)) return { errors: native, toast: null };
+export function productStepCheck(stepId: string, form: ProductForm): StepErrors {
   const termError = stepId === "basic" ? defaultTermError(form) : null;
-  return termError ? { errors: { term: termError }, toast: termError } : { errors: {}, toast: null };
+  return termError ? { term: termError } : {};
 }

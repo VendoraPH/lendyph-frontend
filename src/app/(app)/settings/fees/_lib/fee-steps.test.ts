@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { firstStepWithError, stepIndexForField } from "@/lib/form-stepper";
 import { buildFeePayload, EMPTY_FORMULA_FIELDS } from "@/lib/fee-form";
-import { FEE_STEPS, feeStepErrors, type FeeStepInput } from "./fee-steps";
+import { FEE_STEPS, FORMULA_CHECK_PENDING, feeStepErrors, type FeeStepInput } from "./fee-steps";
 
 const fixed: FeeStepInput = {
   form: { name: "Notarial Fee", type: "fixed", value: "500", productIds: [], conditions: {}, formula: EMPTY_FORMULA_FIELDS },
@@ -78,19 +78,31 @@ test("Amount checks the amount or rate, whatever the name and conditions hold", 
   assert.deepEqual(feeStepErrors("amount", percent), { value: "A percentage fee cannot exceed 100% of the loan amount." });
 });
 
-test("Amount checks a formula fee's minimum and maximum, on the minimum's field", () => {
-  const input = { ...written, form: { ...written.form, formula: { ...written.form.formula!, minAmount: "500", maxAmount: "100" } } };
-  const errors = feeStepErrors("amount", input);
-  assert.deepEqual(Object.keys(errors), ["min_amount"]);
-  assert.match(String(errors.min_amount), /cannot be more than the maximum/);
+test("Amount checks a formula fee's minimum and maximum, on the field that is wrong", () => {
+  const withBounds = (minAmount: string, maxAmount: string) =>
+    feeStepErrors("amount", { ...written, form: { ...written.form, formula: { ...written.form.formula!, minAmount, maxAmount } } });
+  // A minimum above the maximum: the minimum's field.
+  const above = withBounds("500", "100");
+  assert.deepEqual(Object.keys(above), ["min_amount"]);
+  assert.match(String(above.min_amount), /cannot be more than the maximum/);
+  // A bad minimum: the minimum's field, whatever the maximum holds.
+  assert.deepEqual(Object.keys(withBounds("1.234", "")), ["min_amount"]);
+  assert.deepEqual(Object.keys(withBounds("1.234", "9.999")), ["min_amount"]);
+  // A bad maximum: the maximum's field.
+  const max = withBounds("100", "1.234");
+  assert.deepEqual(Object.keys(max), ["max_amount"]);
+  assert.match(String(max.max_amount), /^Maximum must be a peso amount/);
+  assert.deepEqual(Object.keys(withBounds("", "-5")), ["max_amount"]);
 });
 
 test("a written formula is checked on its own field, and waits for the server's check", () => {
   const empty = { ...written, form: { ...written.form, formula: { ...written.form.formula!, expression: " " } } };
   assert.deepEqual(feeStepErrors("amount", empty), { formula_expression: "Write the fee formula." });
+  // Next shows the step's check too, so its wait names no button; the save keeps its own message.
   assert.deepEqual(feeStepErrors("amount", { ...written, formulaCheckValid: false }), {
-    formula_expression: "Wait for the formula check to pass before saving.",
+    formula_expression: "Wait for the formula check to pass.",
   });
+  assert.equal(FORMULA_CHECK_PENDING, "Wait for the formula check to pass before saving.");
   // The rate recipe and the other types never wait on the check.
   const recipe = { ...written, formulaCheckValid: false, form: { ...written.form, value: "2", formula: { ...written.form.formula!, mode: "rate" as const } } };
   assert.deepEqual(feeStepErrors("amount", recipe), {});

@@ -60,42 +60,22 @@ test("a server 422 opens the step holding its field, dotted keys included", () =
   );
 });
 
-test("a step passes when none of its own controls is invalid and the term is in range", () => {
+test("every step passes a complete form", () => {
   for (const step of PRODUCT_STEPS) {
-    assert.deepEqual(productStepCheck(step.id, filled, {}), { errors: {}, toast: null }, step.id);
+    assert.deepEqual(productStepCheck(step.id, filled), {}, step.id);
   }
 });
 
-test("a step fails on the browser's own check of its controls, shown by the browser", () => {
-  const check = productStepCheck("basic", { ...filled, name: "" }, { name: "Please fill out this field." });
-  assert.deepEqual(check, { errors: { name: "Please fill out this field." }, toast: null });
+test("a default term out of range fails Basic Info with the save's own message", () => {
+  for (const term of ["30", "0", "1.5", ""]) {
+    const form = { ...filled, term };
+    assert.deepEqual(productStepCheck("basic", form), { term: defaultTermError(form) }, term);
+  }
 });
 
-test("another step's invalid controls never fail this one", () => {
-  assert.deepEqual(productStepCheck("interest", filled, { name: "Please fill out this field." }).errors, {});
-  assert.deepEqual(productStepCheck("basic", filled, { min_scb: "Please fill out this field." }).errors, {});
-});
-
-test("a default term out of range fails Basic Info with today's message, as a toast", () => {
-  const form = { ...filled, term: "30" };
-  const check = productStepCheck("basic", form, {});
-  assert.deepEqual(check, { errors: { term: defaultTermError(form) }, toast: defaultTermError(form) });
-  // The browser's checks come first, as they did before the save ran.
-  assert.equal(productStepCheck("basic", form, { name: "Please fill out this field." }).toast, null);
-  // Only Basic Info holds the term.
-  assert.deepEqual(productStepCheck("interest", form, {}).errors, {});
-});
-
-test("grace days and the build-up range are checked only while they are switched on", () => {
-  // The inputs exist (and are required) only while switched on, so only then
-  // can the browser report them; the step reads whatever the browser reports.
-  assert.deepEqual(productStepCheck("fees", { ...filled, grace_period_enabled: false }, {}).errors, {});
-  assert.deepEqual(
-    productStepCheck("fees", { ...filled, grace_period_enabled: true }, { grace_period_days: "Please fill out this field." }).errors,
-    { grace_period_days: "Please fill out this field." },
-  );
-  assert.deepEqual(
-    productStepCheck("scb", { ...filled, scb_required: true }, { min_scb: "Please fill out this field." }).errors,
-    { min_scb: "Please fill out this field." },
-  );
+test("only Basic Info checks the term; the other steps leave their fields to the browser", () => {
+  const form = { ...filled, term: "30", name: "", min_interest_rate: "", grace_period_enabled: true, scb_required: true };
+  for (const step of PRODUCT_STEPS.filter((s) => s.id !== "basic")) {
+    assert.deepEqual(productStepCheck(step.id, form), {}, step.id);
+  }
 });
