@@ -277,6 +277,20 @@ export function stepProgressText(index: number, count: number, title?: string): 
   return name ? `${base} · ${name}` : base;
 }
 
+/**
+ * The phone step menu: in `edit` mode the compact "Step 2 of 4 · Contact" line
+ * becomes a menu of every step, each labelled the same way, so an editor can
+ * jump to any step on a phone too. `null` (the plain line) in `create` mode,
+ * where steps open in order, and when there is only one step.
+ */
+export function stepMenuOptions(
+  steps: readonly FormStepDef[],
+  mode: FormStepperMode
+): { id: string; label: string }[] | null {
+  if (mode !== "edit" || steps.length < 2) return null;
+  return steps.map((s, i) => ({ id: s.id, label: stepProgressText(i, steps.length, s.title) }));
+}
+
 /** How full the phone progress bar is: steps up to and including the current one, in %. */
 export function stepProgressPercent(index: number, count: number): number {
   if (count <= 0) return 0;

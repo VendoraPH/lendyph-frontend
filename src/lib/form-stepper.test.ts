@@ -12,6 +12,7 @@ import {
   previousStepIndex,
   stepErrorsOf,
   stepFooterButtons,
+  stepMenuOptions,
   stepIndexForField,
   stepProgressPercent,
   stepProgressText,
@@ -231,4 +232,21 @@ test("stepper classes: a page fits only at fit, a dialog always scrolls its body
   assert.match(dialog.railFull, /@xl:flex/);
   // Pinned to the dialog's foot like DialogFooter.
   assert.match(dialog.footer, /-mb-4/);
+});
+
+test("phones: edit mode lists every step in a menu, labelled like the compact line", () => {
+  assert.deepEqual(stepMenuOptions(steps, "edit"), [
+    { id: "personal", label: "Step 1 of 4 · Personal" },
+    { id: "contact", label: "Step 2 of 4 · Contact" },
+    { id: "ids", label: "Step 3 of 4 · Valid IDs" },
+    { id: "review", label: "Step 4 of 4 · Review" },
+  ]);
+});
+
+test("phones: create mode keeps the plain compact line, with no menu", () => {
+  assert.equal(stepMenuOptions(steps, "create"), null);
+});
+
+test("phones: a single step needs no menu in either mode", () => {
+  assert.equal(stepMenuOptions(steps.slice(0, 1), "edit"), null);
 });
