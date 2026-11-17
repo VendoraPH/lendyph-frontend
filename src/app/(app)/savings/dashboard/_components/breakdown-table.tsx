@@ -47,12 +47,14 @@ export function BreakdownTable({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead scope="col">{groupLabel}</TableHead>
-                  <TableHead scope="col" className="text-right">
+                  <TableHead scope="col" className="whitespace-normal">
+                    {groupLabel}
+                  </TableHead>
+                  <TableHead scope="col" className="text-right whitespace-normal">
                     Open Accounts
                   </TableHead>
                   {MONEY_COLUMNS.map(([key, label]) => (
-                    <TableHead key={key} scope="col" className="text-right">
+                    <TableHead key={key} scope="col" className="text-right whitespace-normal">
                       {label}
                     </TableHead>
                   ))}
@@ -61,7 +63,7 @@ export function BreakdownTable({
               <TableBody>
                 {rows.map((row) => (
                   <TableRow key={`${row.group_id ?? "none"}-${row.group_name}`}>
-                    <TableCell className="text-sm">{row.group_name}</TableCell>
+                    <TableCell className="min-w-28 text-sm whitespace-normal">{row.group_name}</TableCell>
                     <TableCell className="text-right font-mono text-sm tabular-nums">
                       {countOrDash(row.open_accounts)}
                     </TableCell>

@@ -7,6 +7,7 @@ import { DisabledReason } from "@/components/common/disabled-reason";
 import { PLEDGE_ENTRY_CREATE_GATE, PLEDGE_UPDATE_GATE } from "@/lib/lending-write-gates";
 import { usePermission } from "@/hooks/use-permission";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { formatCurrency, todayISO } from "@/lib/format";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { currencyOrDash } from "@/lib/report-format";
 import { notifyError } from "@/lib/notify";
 import { bulkEntryAmounts, parsePledgeAmount } from "./_lib/pledge-amount";
@@ -492,11 +494,11 @@ function PledgeEntryContent() {
   }
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       {failed && (
         <div
           role="alert"
-          className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4"
+          className="flex shrink-0 items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4"
         >
           <AlertTriangle
             className="mt-0.5 size-5 shrink-0 text-amber-600"
@@ -521,10 +523,11 @@ function PledgeEntryContent() {
           total={shortfall.total}
           noun="pledges"
           consequence="Members missing from this worksheet cannot be selected, so a bulk entry posted from here will skip them without saying so."
+          className="shrink-0"
         />
       )}
 
-      <div>
+      <div className="shrink-0">
         <h1 className="text-2xl font-bold tracking-tight">Pledge Entry</h1>
         <p className="text-muted-foreground">
           Configure share capital pledges for members
@@ -532,26 +535,26 @@ function PledgeEntryContent() {
       </div>
 
       {/* Summary */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+      <div className="grid shrink-0 gap-4 grid-cols-1 sm:grid-cols-3">
         <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
+          <CardContent className="py-4 fit:py-0">
+            <div className="flex flex-col gap-1">
               <span className="text-sm font-medium text-muted-foreground">Total Pledges</span>
               <span className="text-2xl font-bold">{pledges.length}</span>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
+          <CardContent className="py-4 fit:py-0">
+            <div className="flex flex-col gap-1">
               <span className="text-sm font-medium text-green-600">Active Auto-Credit</span>
               <span className="text-2xl font-bold text-green-600">{activeCount}</span>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
+          <CardContent className="py-4 fit:py-0">
+            <div className="flex flex-col gap-1">
               <span className="text-sm font-medium text-muted-foreground">Total Amount</span>
               <span className="text-2xl font-bold text-brand-orange">{currencyOrDash(totalAmount)}</span>
             </div>
@@ -561,7 +564,7 @@ function PledgeEntryContent() {
 
       {/* Bulk Entry Action Bar */}
       {selectedIds.size > 0 && (
-        <div className="flex items-center gap-3 rounded-lg border border-brand-orange/30 bg-brand-orange/5 px-4 py-3">
+        <div className="flex shrink-0 items-center gap-3 rounded-lg border border-brand-orange/30 bg-brand-orange/5 px-4 py-3">
           <span className="text-sm font-medium">
             {selectedIds.size} member{selectedIds.size > 1 ? "s" : ""} selected
           </span>
@@ -587,8 +590,8 @@ function PledgeEntryContent() {
       )}
 
       {/* Table */}
-      <Card>
-        <CardHeader>
+      <Card className={FIT_CLASSES.section}>
+        <CardHeader className="shrink-0">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="text-sm font-medium">
               All Pledges
@@ -639,8 +642,8 @@ function PledgeEntryContent() {
             </div>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
+        <CardContent className={FIT_CLASSES.section}>
+          <ScrollBox>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -933,10 +936,10 @@ function PledgeEntryContent() {
                 )}
               </TableBody>
             </Table>
-          </div>
+          </ScrollBox>
 
           {/* Pagination */}
-          <div className="flex items-center justify-between pt-4">
+          <div data-fab-clear className="flex shrink-0 items-center justify-between pt-4">
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">Rows per page</span>
               <Select
@@ -963,6 +966,7 @@ function PledgeEntryContent() {
                 variant="outline"
                 size="icon"
                 className="h-8 w-8"
+                aria-label="Previous page"
                 disabled={safePage <= 1}
                 onClick={() => setPage((p) => p - 1)}
               >
@@ -972,6 +976,7 @@ function PledgeEntryContent() {
                 variant="outline"
                 size="icon"
                 className="h-8 w-8"
+                aria-label="Next page"
                 disabled={safePage >= totalPages}
                 onClick={() => setPage((p) => p + 1)}
               >
@@ -1074,7 +1079,7 @@ function PledgeEntryContent() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageFill>
   );
 }
 

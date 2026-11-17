@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Ban, HandCoins, Printer } from "lucide-react";
 import { DataState } from "@/components/common/data-state";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useApiResource } from "@/hooks";
@@ -50,8 +51,14 @@ export function TimeDepositDetail({ depositId }: { depositId: number }) {
   }
 
   return (
-    <div className="space-y-6">
-      <Button variant="ghost" size="sm" nativeButton={false} render={<Link href="/savings/time-deposits" />}>
+    <PageFill>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="shrink-0 self-start"
+        nativeButton={false}
+        render={<Link href="/savings/time-deposits" />}
+      >
         <ArrowLeft className="h-4 w-4" /> Time deposits
       </Button>
 
@@ -68,7 +75,7 @@ export function TimeDepositDetail({ depositId }: { depositId: number }) {
           const pendingBlock = pendingApprovalBlocker(td);
           return (
             <>
-              <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex shrink-0 flex-wrap items-start justify-between gap-3">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <h1 className="text-2xl font-semibold tracking-tight">{td.certificate_number}</h1>
@@ -119,8 +126,10 @@ export function TimeDepositDetail({ depositId }: { depositId: number }) {
                 </div>
               </div>
 
-              <Figures td={td} today={today} />
-              <Terms td={td} />
+              <ScrollBox className="space-y-6 p-px">
+                <Figures td={td} today={today} />
+                <Terms td={td} />
+              </ScrollBox>
 
               <SettleDialog open={settling} deposit={td} onOpenChange={setSettling} onSettled={settled} />
               <PreterminateDialog open={breaking} deposit={td} onOpenChange={setBreaking} onDone={() => resource.refetch()} />
@@ -128,7 +137,7 @@ export function TimeDepositDetail({ depositId }: { depositId: number }) {
           );
         }}
       </DataState>
-    </div>
+    </PageFill>
   );
 }
 

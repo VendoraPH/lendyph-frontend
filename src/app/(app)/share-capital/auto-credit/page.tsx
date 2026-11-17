@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { RouteGuard } from "@/components/common";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -114,127 +115,129 @@ function AutoCreditContent() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
+    <PageFill>
+      <div className="shrink-0">
         <h1 className="text-2xl font-bold tracking-tight">Auto-Credit</h1>
         <p className="text-muted-foreground">
           Initiate auto-credit of all active pledge entries
         </p>
       </div>
 
-      {/* Status Card */}
-      <Card>
-        <CardContent className="py-8">
-          <div className="flex flex-col items-center text-center gap-4">
-            <div className="h-16 w-16 rounded-full bg-brand-orange/10 flex items-center justify-center">
-              <Zap className="h-8 w-8 text-brand-orange" />
+      <ScrollBox className="space-y-6 p-px">
+        {/* Status Card */}
+        <Card>
+          <CardContent className="py-8">
+            <div className="flex flex-col items-center text-center gap-4">
+              <div className="h-16 w-16 rounded-full bg-brand-orange/10 flex items-center justify-center">
+                <Zap className="h-8 w-8 text-brand-orange" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold">Auto-Credit Share Capital</h2>
+                <p className="text-sm text-muted-foreground mt-1 max-w-md">
+                  This will credit all active pledge amounts to their respective
+                  members&apos; share capital accounts.
+                </p>
+              </div>
+              <Button
+                onClick={handleInitiate}
+                disabled={loading}
+                size="lg"
+                className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark mt-2"
+              >
+                <Zap className="mr-2 h-4 w-4" />
+                Initiate Auto-Credit
+              </Button>
+              {lastRun && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Last run: {lastRun}
+                </p>
+              )}
             </div>
-            <div>
-              <h2 className="text-lg font-semibold">Auto-Credit Share Capital</h2>
-              <p className="text-sm text-muted-foreground mt-1 max-w-md">
-                This will credit all active pledge amounts to their respective
-                members&apos; share capital accounts.
-              </p>
-            </div>
-            <Button
-              onClick={handleInitiate}
-              disabled={loading}
-              size="lg"
-              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark mt-2"
-            >
-              <Zap className="mr-2 h-4 w-4" />
-              Initiate Auto-Credit
-            </Button>
-            {lastRun && (
-              <p className="text-xs text-muted-foreground mt-2">
-                Last run: {lastRun}
-              </p>
+          </CardContent>
+        </Card>
+
+        {/* Info Cards */}
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+          <Card>
+            <CardContent className="py-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-muted-foreground">Active Members</span>
+                <span className="text-2xl font-bold">
+                  {loading ? <Spinner className="size-5 text-muted-foreground" /> : groups.activeCount}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="py-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-muted-foreground">Total to Credit</span>
+                <span className="text-2xl font-bold text-green-600">
+                  {loading ? <Spinner className="size-5 text-muted-foreground" /> : currencyOrDash(totalToCredit)}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="py-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-muted-foreground">Status</span>
+                <Badge variant="outline" className={lastRun ? "bg-green-500/10 text-green-700 border-green-500/30" : "bg-muted text-muted-foreground"}>
+                  {lastRun ? "Completed" : "Pending"}
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Warnings: Disabled & No Pledge */}
+        {(groups.disabledCount > 0 || groups.noPledgeCount > 0) && (
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+            {groups.disabledCount > 0 && (
+              <Card className="border-amber-500/30">
+                <CardContent className="py-4">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">Auto-Credit Disabled</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {groups.disabledCount} member{groups.disabledCount === 1 ? "" : "s"} will not be credited
+                      </p>
+                      <button
+                        className="text-xs text-brand-orange hover:underline mt-1"
+                        onClick={() => setShowDisabled(true)}
+                      >
+                        View accounts →
+                      </button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            {groups.noPledgeCount > 0 && (
+              <Card className="border-red-500/30">
+                <CardContent className="py-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">No Pledge Amount</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {groups.noPledgeCount} member{groups.noPledgeCount === 1 ? "" : "s"} with no pledge amount set
+                      </p>
+                      <button
+                        className="text-xs text-brand-orange hover:underline mt-1"
+                        onClick={() => setShowNoPledge(true)}
+                      >
+                        View accounts →
+                      </button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             )}
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Info Cards */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-muted-foreground">Active Members</span>
-              <span className="text-2xl font-bold">
-                {loading ? <Spinner className="size-5 text-muted-foreground" /> : groups.activeCount}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-muted-foreground">Total to Credit</span>
-              <span className="text-2xl font-bold text-green-600">
-                {loading ? <Spinner className="size-5 text-muted-foreground" /> : currencyOrDash(totalToCredit)}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-muted-foreground">Status</span>
-              <Badge variant="outline" className={lastRun ? "bg-green-500/10 text-green-700 border-green-500/30" : "bg-muted text-muted-foreground"}>
-                {lastRun ? "Completed" : "Pending"}
-              </Badge>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Warnings: Disabled & No Pledge */}
-      {(groups.disabledCount > 0 || groups.noPledgeCount > 0) && (
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
-          {groups.disabledCount > 0 && (
-            <Card className="border-amber-500/30">
-              <CardContent className="py-4">
-                <div className="flex items-start gap-3">
-                  <AlertCircle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">Auto-Credit Disabled</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {groups.disabledCount} member{groups.disabledCount === 1 ? "" : "s"} will not be credited
-                    </p>
-                    <button
-                      className="text-xs text-brand-orange hover:underline mt-1"
-                      onClick={() => setShowDisabled(true)}
-                    >
-                      View accounts →
-                    </button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-          {groups.noPledgeCount > 0 && (
-            <Card className="border-red-500/30">
-              <CardContent className="py-4">
-                <div className="flex items-start gap-3">
-                  <AlertTriangle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">No Pledge Amount</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {groups.noPledgeCount} member{groups.noPledgeCount === 1 ? "" : "s"} with no pledge amount set
-                    </p>
-                    <button
-                      className="text-xs text-brand-orange hover:underline mt-1"
-                      onClick={() => setShowNoPledge(true)}
-                    >
-                      View accounts →
-                    </button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      )}
+        )}
+      </ScrollBox>
 
       {/* Confirm Dialog — Total Pledge Amount (large font) */}
       <Dialog
@@ -308,7 +311,7 @@ function AutoCreditContent() {
               These members have auto-credit turned off and will not be included.
             </DialogDescription>
           </DialogHeader>
-          <div className="max-h-[50vh] overflow-y-auto">
+          <ScrollBox always className="max-h-[50vh]">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -333,7 +336,7 @@ function AutoCreditContent() {
                 ))}
               </TableBody>
             </Table>
-          </div>
+          </ScrollBox>
         </DialogContent>
       </Dialog>
 
@@ -346,7 +349,7 @@ function AutoCreditContent() {
               These members have no pledge amount configured.
             </DialogDescription>
           </DialogHeader>
-          <div className="max-h-[50vh] overflow-y-auto">
+          <ScrollBox always className="max-h-[50vh]">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -374,10 +377,10 @@ function AutoCreditContent() {
                 ))}
               </TableBody>
             </Table>
-          </div>
+          </ScrollBox>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageFill>
   );
 }
 

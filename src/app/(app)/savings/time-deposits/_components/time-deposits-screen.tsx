@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Search } from "lucide-react";
 import { DataState } from "@/components/common/data-state";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { PermissionButton } from "@/components/common/permission-button";
 import { TablePagination } from "@/components/common/table-pagination";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,8 @@ import {
 } from "@/components/ui/table";
 import { useApiResource } from "@/hooks";
 import { formatCurrency, formatDate, formatRate, todayISO } from "@/lib/format";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 import { timeDepositService } from "@/services";
 import { Kpi } from "../../_components/kpi";
 import { maturityHint, pendingApprovalText, tdStatusTabs, termLabel } from "../../_lib/time-deposit-rules";
@@ -52,8 +55,8 @@ export function TimeDepositsScreen() {
   const filtered = Boolean(search) || status !== "all";
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <PageFill>
+      <div className="flex shrink-0 flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Time Deposits</h1>
           <p className="text-sm text-muted-foreground">
@@ -65,7 +68,7 @@ export function TimeDepositsScreen() {
         </PermissionButton>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid shrink-0 gap-4 sm:grid-cols-3">
         <Kpi label="Active placements" value={meta ? String(meta.stats?.active ?? 0) : "—"} />
         <Kpi
           label={filtered ? "Principal (matching)" : "Total principal"}
@@ -74,7 +77,7 @@ export function TimeDepositsScreen() {
         <Kpi label="Maturing in 30 days" value={meta?.totals ? String(meta.totals.maturing_30_days) : "—"} />
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
         <Tabs
           value={status}
           onValueChange={(v) => {
@@ -118,62 +121,65 @@ export function TimeDepositsScreen() {
         summary="Time deposit placements will be listed here, with their maturity dates, once the savings service is connected."
         isEmpty={(res) => res.data.length === 0}
         emptyMessage={search ? "No placement matches this search." : "No time deposits yet."}
+        emptyIllustration={filtered ? "noResults" : "empty"}
       >
         {(res) => (
-          <div className="space-y-3">
-            <div className="overflow-x-auto rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Certificate no.</TableHead>
-                    <TableHead>Member</TableHead>
-                    <TableHead>Product</TableHead>
-                    <TableHead className="text-right">Principal</TableHead>
-                    <TableHead className="text-right">Rate</TableHead>
-                    <TableHead>Term</TableHead>
-                    <TableHead>Maturity</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {res.data.map((td) => {
-                    const hint = maturityHint(td, today);
-                    return (
-                      <TableRow
-                        key={td.id}
-                        className="cursor-pointer"
-                        onClick={() => router.push(`/savings/time-deposits/${td.id}`)}
-                      >
-                        <TableCell className="font-medium">
-                          <Link href={`/savings/time-deposits/${td.id}`} onClick={(e) => e.stopPropagation()}>
-                            {td.certificate_number}
-                          </Link>
-                        </TableCell>
-                        <TableCell>
-                          {td.borrower_name ?? "—"}
-                          {td.borrower_code && (
-                            <span className="block text-xs text-muted-foreground">{td.borrower_code}</span>
-                          )}
-                        </TableCell>
-                        <TableCell>{td.product.name}</TableCell>
-                        <TableCell className="text-right tabular-nums">{formatCurrency(td.principal)}</TableCell>
-                        <TableCell className="text-right tabular-nums">{formatRate(td.annual_rate)}%</TableCell>
-                        <TableCell>{termLabel(td.term_days)}</TableCell>
-                        <TableCell>
-                          {formatDate(td.maturity_date)}
-                          {hint && <span className="block text-xs text-muted-foreground">{hint}</span>}
-                        </TableCell>
-                        <TableCell>
-                          <TdStatusBadge status={td.status} />
-                          {pendingApprovalText(td) && (
-                            <span className="block text-xs text-amber-700 dark:text-amber-400">{pendingApprovalText(td)}</span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+          <div className={FIT_CLASSES.section}>
+            <div className={cn("rounded-lg border bg-card", FIT_CLASSES.section)}>
+              <ScrollBox>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Certificate no.</TableHead>
+                      <TableHead>Member</TableHead>
+                      <TableHead>Product</TableHead>
+                      <TableHead className="text-right">Principal</TableHead>
+                      <TableHead className="text-right">Rate</TableHead>
+                      <TableHead>Term</TableHead>
+                      <TableHead>Maturity</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {res.data.map((td) => {
+                      const hint = maturityHint(td, today);
+                      return (
+                        <TableRow
+                          key={td.id}
+                          className="cursor-pointer"
+                          onClick={() => router.push(`/savings/time-deposits/${td.id}`)}
+                        >
+                          <TableCell className="font-medium">
+                            <Link href={`/savings/time-deposits/${td.id}`} onClick={(e) => e.stopPropagation()}>
+                              {td.certificate_number}
+                            </Link>
+                          </TableCell>
+                          <TableCell>
+                            {td.borrower_name ?? "—"}
+                            {td.borrower_code && (
+                              <span className="block text-xs text-muted-foreground">{td.borrower_code}</span>
+                            )}
+                          </TableCell>
+                          <TableCell>{td.product.name}</TableCell>
+                          <TableCell className="text-right tabular-nums">{formatCurrency(td.principal)}</TableCell>
+                          <TableCell className="text-right tabular-nums">{formatRate(td.annual_rate)}%</TableCell>
+                          <TableCell>{termLabel(td.term_days)}</TableCell>
+                          <TableCell>
+                            {formatDate(td.maturity_date)}
+                            {hint && <span className="block text-xs text-muted-foreground">{hint}</span>}
+                          </TableCell>
+                          <TableCell>
+                            <TdStatusBadge status={td.status} />
+                            {pendingApprovalText(td) && (
+                              <span className="block text-xs text-amber-700 dark:text-amber-400">{pendingApprovalText(td)}</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </ScrollBox>
             </div>
             <TablePagination
               page={page}
@@ -194,6 +200,6 @@ export function TimeDepositsScreen() {
         onOpenChange={setPlacing}
         onPlaced={(td) => router.push(`/savings/time-deposits/${td.id}`)}
       />
-    </div>
+    </PageFill>
   );
 }

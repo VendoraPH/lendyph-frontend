@@ -2,14 +2,18 @@
 
 import { useCallback, useState } from "react";
 import Link from "next/link";
-import { ALL_BRANCHES, BranchFilter, branchIdParam } from "@/components/common/branch-filter";
+import { ALL_BRANCHES, branchIdParam } from "@/components/common/branch-filter";
+import { AlignedBranchFilter } from "../../_components/aligned-branch-filter";
 import { DataState } from "@/components/common/data-state";
+import { ScrollBox } from "@/components/common/page-fill";
 import { TablePagination } from "@/components/common/table-pagination";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useApiResource } from "@/hooks";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 import { savingsInterestService } from "@/services";
 import type { InterestRun } from "@/types";
 import { OptionSelect, type Option } from "../../_components/option-select";
@@ -20,39 +24,41 @@ const ALL_PRODUCTS = "all";
 
 function RunsTable({ runs }: { runs: InterestRun[] }) {
   return (
-    <div className="overflow-x-auto rounded-lg border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Period</TableHead>
-            <TableHead>Product</TableHead>
-            <TableHead>Branch</TableHead>
-            <TableHead className="text-right">Accounts in run</TableHead>
-            <TableHead className="text-right">Gross interest</TableHead>
-            <TableHead className="text-right">Net interest</TableHead>
-            <TableHead>Status</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {runs.map((run) => (
-            <TableRow key={run.id}>
-              <TableCell className="whitespace-nowrap font-medium">
-                <Link href={`/savings/interest/${run.id}`} className="underline-offset-2 hover:underline">
-                  {formatDate(run.period_start)} to {formatDate(run.period_end)}
-                </Link>
-              </TableCell>
-              <TableCell>{run.product_name ?? run.product?.name ?? "—"}</TableCell>
-              <TableCell>{run.branch_name ?? run.branch?.name ?? "—"}</TableCell>
-              <TableCell className="text-right tabular-nums">{run.account_count}</TableCell>
-              <TableCell className="text-right tabular-nums">{formatCurrency(run.total_gross)}</TableCell>
-              <TableCell className="text-right tabular-nums">{formatCurrency(run.total_net)}</TableCell>
-              <TableCell>
-                <RunStatusBadge status={run.status} />
-              </TableCell>
+    <div className={cn("rounded-lg border bg-card", FIT_CLASSES.section)}>
+      <ScrollBox>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Period</TableHead>
+              <TableHead>Product</TableHead>
+              <TableHead>Branch</TableHead>
+              <TableHead className="text-right">Accounts in run</TableHead>
+              <TableHead className="text-right">Gross interest</TableHead>
+              <TableHead className="text-right">Net interest</TableHead>
+              <TableHead>Status</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {runs.map((run) => (
+              <TableRow key={run.id}>
+                <TableCell className="whitespace-nowrap font-medium">
+                  <Link href={`/savings/interest/${run.id}`} className="underline-offset-2 hover:underline">
+                    {formatDate(run.period_start)} to {formatDate(run.period_end)}
+                  </Link>
+                </TableCell>
+                <TableCell>{run.product_name ?? run.product?.name ?? "—"}</TableCell>
+                <TableCell>{run.branch_name ?? run.branch?.name ?? "—"}</TableCell>
+                <TableCell className="text-right tabular-nums">{run.account_count}</TableCell>
+                <TableCell className="text-right tabular-nums">{formatCurrency(run.total_gross)}</TableCell>
+                <TableCell className="text-right tabular-nums">{formatCurrency(run.total_net)}</TableCell>
+                <TableCell>
+                  <RunStatusBadge status={run.status} />
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </ScrollBox>
     </div>
   );
 }
@@ -79,11 +85,11 @@ export function RunsList({ productOptions }: { productOptions: readonly Option[]
   const resource = useApiResource(fetcher);
 
   return (
-    <section className="space-y-4" aria-labelledby="interest-runs-heading">
-      <h2 id="interest-runs-heading" className="text-lg font-semibold">
+    <section className={cn(FIT_CLASSES.section, "gap-4")} aria-labelledby="interest-runs-heading">
+      <h2 id="interest-runs-heading" className="shrink-0 text-lg font-semibold">
         Interest runs
       </h2>
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex shrink-0 flex-wrap items-end justify-between gap-3">
         <Tabs
           value={status}
           onValueChange={(v) => {
@@ -100,7 +106,7 @@ export function RunsList({ productOptions }: { productOptions: readonly Option[]
           </TabsList>
         </Tabs>
         <div className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1.5">
+          <div className="flex flex-col gap-1.5">
             <Label htmlFor="runs-product" className="text-xs text-muted-foreground">
               Product
             </Label>
@@ -115,7 +121,7 @@ export function RunsList({ productOptions }: { productOptions: readonly Option[]
               className="w-[200px]"
             />
           </div>
-          <BranchFilter
+          <AlignedBranchFilter
             value={branch}
             onChange={(v) => {
               setBranch(v);
@@ -131,9 +137,12 @@ export function RunsList({ productOptions }: { productOptions: readonly Option[]
         summary="Interest runs with their period, product, branch, totals and status."
         isEmpty={(res) => res.data.length === 0}
         emptyMessage="No interest runs match these filters."
+        emptyIllustration={
+          status !== "all" || product !== ALL_PRODUCTS || branch !== ALL_BRANCHES ? "noResults" : "empty"
+        }
       >
         {(res) => (
-          <div className="space-y-3">
+          <div className={FIT_CLASSES.section}>
             <RunsTable runs={res.data} />
             <TablePagination
               page={page}

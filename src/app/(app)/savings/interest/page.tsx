@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { RouteGuard } from "@/components/common";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { usePermission } from "@/hooks";
 import { savingsService } from "@/services";
 import type { SavingsProduct } from "@/types";
@@ -32,17 +33,24 @@ function InterestRunsContent() {
   const productOptions = runProductOptions(products);
 
   return (
-    <div className="min-w-0 space-y-6">
-      <div>
+    <PageFill className="min-w-0">
+      <div className="shrink-0">
         <h1 className="text-2xl font-semibold tracking-tight">Savings Interest</h1>
         <p className="text-sm text-muted-foreground">
           Work out a period&apos;s interest on the server, save it as one draft run per branch, then another user
           approves it before it posts.
         </p>
       </div>
-      {canRun && <NewRunPanel productOptions={productOptions} onCreated={() => setListKey((k) => k + 1)} />}
-      <RunsList key={listKey} productOptions={productOptions} />
-    </div>
+      {canRun ? (
+        // The panel's preview can list every account, so the panel and the runs scroll together.
+        <ScrollBox className="space-y-6 p-px">
+          <NewRunPanel productOptions={productOptions} onCreated={() => setListKey((k) => k + 1)} />
+          <RunsList key={listKey} productOptions={productOptions} />
+        </ScrollBox>
+      ) : (
+        <RunsList key={listKey} productOptions={productOptions} />
+      )}
+    </PageFill>
   );
 }
 

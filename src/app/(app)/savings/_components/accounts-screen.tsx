@@ -4,8 +4,10 @@ import { useCallback, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Search, Settings2 } from "lucide-react";
-import { BranchFilter, ALL_BRANCHES, branchIdParam } from "@/components/common/branch-filter";
+import { ALL_BRANCHES, branchIdParam } from "@/components/common/branch-filter";
+import { AlignedBranchFilter } from "./aligned-branch-filter";
 import { DataState } from "@/components/common/data-state";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { PermissionButton } from "@/components/common/permission-button";
 import { PermissionGate } from "@/components/common/permission-gate";
 import { TablePagination } from "@/components/common/table-pagination";
@@ -22,6 +24,8 @@ import {
 } from "@/components/ui/table";
 import { useApiResource } from "@/hooks";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 import { savingsService } from "@/services";
 import { statusTabs } from "../_lib/savings-rules";
 import { AccountStatusBadge } from "./account-status-badge";
@@ -54,8 +58,8 @@ export function AccountsScreen() {
   const tabs = statusTabs(meta?.stats);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <PageFill>
+      <div className="flex shrink-0 flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Savings Accounts</h1>
           <p className="text-sm text-muted-foreground">
@@ -74,7 +78,7 @@ export function AccountsScreen() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid shrink-0 gap-4 sm:grid-cols-3">
         <Kpi label="Accounts" value={meta?.totals ? String(meta.totals.account_count) : "—"} />
         <Kpi label="Active" value={meta ? String(meta.stats?.active ?? 0) : "—"} />
         <Kpi
@@ -83,7 +87,7 @@ export function AccountsScreen() {
         />
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex shrink-0 flex-wrap items-end justify-between gap-3">
         <Tabs
           value={status}
           onValueChange={(v) => {
@@ -100,8 +104,8 @@ export function AccountsScreen() {
             ))}
           </TabsList>
         </Tabs>
-        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-        <BranchFilter
+        <div className="flex w-full flex-wrap items-end gap-2 sm:w-auto">
+        <AlignedBranchFilter
           value={branch}
           onChange={(v) => {
             setBranch(v);
@@ -137,55 +141,58 @@ export function AccountsScreen() {
         summary="Savings accounts will be listed here, with balances and status, once the savings service is connected."
         isEmpty={(res) => res.data.length === 0}
         emptyMessage={search ? "No account matches this search." : "No savings accounts yet."}
+        emptyIllustration={search || status !== "all" || branch !== ALL_BRANCHES ? "noResults" : "empty"}
       >
         {(res) => (
-          <div className="space-y-3">
-            <div className="overflow-x-auto rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Account no.</TableHead>
-                    <TableHead>Member</TableHead>
-                    <TableHead>Product</TableHead>
-                    <TableHead>Branch</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Balance</TableHead>
-                    <TableHead className="text-right">Available</TableHead>
-                    <TableHead>Last activity</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {res.data.map((a) => (
-                    <TableRow
-                      key={a.id}
-                      className="cursor-pointer"
-                      onClick={() => router.push(`/savings/accounts/${a.id}`)}
-                    >
-                      <TableCell className="font-medium">
-                        <Link href={`/savings/accounts/${a.id}`} onClick={(e) => e.stopPropagation()}>
-                          {a.account_number}
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        {a.borrower_name ?? "—"}
-                        {a.borrower_code && (
-                          <span className="block text-xs text-muted-foreground">{a.borrower_code}</span>
-                        )}
-                      </TableCell>
-                      <TableCell>{a.product.name}</TableCell>
-                      <TableCell>{a.branch_name ?? "—"}</TableCell>
-                      <TableCell>
-                        <AccountStatusBadge status={a.status} />
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">{formatCurrency(a.balance)}</TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {formatCurrency(a.available_balance)}
-                      </TableCell>
-                      <TableCell>{a.last_member_activity_on ? formatDate(a.last_member_activity_on) : "—"}</TableCell>
+          <div className={FIT_CLASSES.section}>
+            <div className={cn("rounded-lg border bg-card", FIT_CLASSES.section)}>
+              <ScrollBox>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Account no.</TableHead>
+                      <TableHead>Member</TableHead>
+                      <TableHead>Product</TableHead>
+                      <TableHead>Branch</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Balance</TableHead>
+                      <TableHead className="text-right">Available</TableHead>
+                      <TableHead>Last activity</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {res.data.map((a) => (
+                      <TableRow
+                        key={a.id}
+                        className="cursor-pointer"
+                        onClick={() => router.push(`/savings/accounts/${a.id}`)}
+                      >
+                        <TableCell className="font-medium">
+                          <Link href={`/savings/accounts/${a.id}`} onClick={(e) => e.stopPropagation()}>
+                            {a.account_number}
+                          </Link>
+                        </TableCell>
+                        <TableCell>
+                          {a.borrower_name ?? "—"}
+                          {a.borrower_code && (
+                            <span className="block text-xs text-muted-foreground">{a.borrower_code}</span>
+                          )}
+                        </TableCell>
+                        <TableCell>{a.product.name}</TableCell>
+                        <TableCell>{a.branch_name ?? "—"}</TableCell>
+                        <TableCell>
+                          <AccountStatusBadge status={a.status} />
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{formatCurrency(a.balance)}</TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {formatCurrency(a.available_balance)}
+                        </TableCell>
+                        <TableCell>{a.last_member_activity_on ? formatDate(a.last_member_activity_on) : "—"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </ScrollBox>
             </div>
             <TablePagination
               page={page}
@@ -206,6 +213,6 @@ export function AccountsScreen() {
         onOpenChange={setOpening}
         onOpened={(account) => router.push(`/savings/accounts/${account.id}`)}
       />
-    </div>
+    </PageFill>
   );
 }

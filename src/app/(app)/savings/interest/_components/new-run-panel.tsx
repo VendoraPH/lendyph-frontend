@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Calculator } from "lucide-react";
-import { ALL_BRANCHES, BranchFilter, branchIdParam } from "@/components/common/branch-filter";
+import { ALL_BRANCHES, branchIdParam } from "@/components/common/branch-filter";
+import { AlignedBranchFilter } from "../../_components/aligned-branch-filter";
 import { PermissionButton } from "@/components/common/permission-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -125,7 +126,13 @@ export function NewRunPanel({ productOptions, onCreated }: { productOptions: rea
               onChange={(e) => change({ periodStart: e.target.value })}
             />
           </FormField>
-          <BranchFilter value={form.branch} onChange={(branch) => change({ branch })} className="w-full" />
+          {/* The form's label style, so Branch reads and lines up like Product and Period starts. */}
+          <AlignedBranchFilter
+            value={form.branch}
+            onChange={(branch) => change({ branch })}
+            className="w-full"
+            wrapperClassName="[&>div]:flex [&>div]:flex-col [&>div]:gap-1.5 [&_label]:mb-0 [&_label]:text-sm [&_label]:leading-none [&_label]:text-foreground"
+          />
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={runPreview} disabled={previewing}>

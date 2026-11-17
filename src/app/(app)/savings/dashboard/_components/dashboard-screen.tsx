@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { ALL_BRANCHES, branchIdParam } from "@/components/common/branch-filter";
 import { DataState } from "@/components/common/data-state";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Card, CardContent } from "@/components/ui/card";
 import { useApiResource, usePermission } from "@/hooks";
 import { formatDateRange } from "@/lib/report-format";
@@ -52,8 +53,8 @@ export function SavingsDashboardScreen() {
   const canReports = can("reports:view");
 
   return (
-    <div className="space-y-6">
-      <div>
+    <PageFill>
+      <div className="shrink-0">
         <h1 className="text-2xl font-semibold tracking-tight">Savings Dashboard</h1>
         <p className="text-sm text-muted-foreground">
           Deposits, withdrawals, interest and time deposits for the period, from the savings records.
@@ -77,53 +78,55 @@ export function SavingsDashboardScreen() {
         onProduct={setProduct}
       />
 
-      {error ? (
-        <Card>
-          <CardContent className="py-8 text-center text-sm text-muted-foreground" role="alert">
-            {error}
-          </CardContent>
-        </Card>
-      ) : (
-        <DataState
-          resource={resource}
-          summary="Savings and time deposit balances, the period's movement, maturities and the check against the books."
-          endpoints={["GET /savings/dashboard"]}
-        >
-          {(data) => (
-            <div className="space-y-6">
-              <p className="text-sm text-muted-foreground">
-                {formatDateRange(data.date_from, data.date_to)}
-              </p>
-              <GlControlNotice kpis={data.kpis} canOpenReport={canReports} />
-              <KpiGrid kpis={data.kpis} />
-              <SeriesCharts series={data.series} />
-              <div className="grid gap-4 xl:grid-cols-2">
-                <BreakdownTable title="Savings by product" groupLabel="Product" breakdown={data.by_product} />
-                <BreakdownTable title="Deposits by branch" groupLabel="Branch" breakdown={data.by_branch} />
+      <ScrollBox className="space-y-6 p-px">
+        {error ? (
+          <Card>
+            <CardContent className="py-8 text-center text-sm text-muted-foreground" role="alert">
+              {error}
+            </CardContent>
+          </Card>
+        ) : (
+          <DataState
+            resource={resource}
+            summary="Savings and time deposit balances, the period's movement, maturities and the check against the books."
+            endpoints={["GET /savings/dashboard"]}
+          >
+            {(data) => (
+              <div className="space-y-6">
+                <p className="text-sm text-muted-foreground">
+                  {formatDateRange(data.date_from, data.date_to)}
+                </p>
+                <GlControlNotice kpis={data.kpis} canOpenReport={canReports} />
+                <KpiGrid kpis={data.kpis} />
+                <SeriesCharts series={data.series} />
+                <div className="grid gap-4 min-[1800px]:grid-cols-2">
+                  <BreakdownTable title="Savings by product" groupLabel="Product" breakdown={data.by_product} />
+                  <BreakdownTable title="Deposits by branch" groupLabel="Branch" breakdown={data.by_branch} />
+                </div>
+                <MaturityBuckets buckets={data.maturity_buckets} asOf={data.date_to} />
               </div>
-              <MaturityBuckets buckets={data.maturity_buckets} asOf={data.date_to} />
-            </div>
-          )}
-        </DataState>
-      )}
+            )}
+          </DataState>
+        )}
 
-      {canReports && (
-        <nav aria-label="Savings reports">
-          <p className="mb-3 text-sm font-medium text-muted-foreground">Reports</p>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {REPORT_LINKS.map(({ href, label }) => (
-              <Link
-                key={href}
-                href={href}
-                className="flex items-center justify-between gap-3 rounded-lg border bg-card p-4 text-sm transition-colors hover:bg-accent"
-              >
-                {label}
-                <ArrowRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-              </Link>
-            ))}
-          </div>
-        </nav>
-      )}
-    </div>
+        {canReports && (
+          <nav aria-label="Savings reports">
+            <p className="mb-3 text-sm font-medium text-muted-foreground">Reports</p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {REPORT_LINKS.map(({ href, label }) => (
+                <Link
+                  key={href}
+                  href={href}
+                  className="flex items-center justify-between gap-3 rounded-lg border bg-card p-4 text-sm transition-colors hover:bg-accent"
+                >
+                  {label}
+                  <ArrowRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                </Link>
+              ))}
+            </div>
+          </nav>
+        )}
+      </ScrollBox>
+    </PageFill>
   );
 }

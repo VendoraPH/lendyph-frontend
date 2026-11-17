@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, Percent, Pencil, Plus, Trash2 } from "lucide-react";
 import { PermissionButton } from "@/components/common/permission-button";
 import { DataState } from "@/components/common/data-state";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,6 +29,8 @@ import {
 import { useApiResource } from "@/hooks";
 import { formatCurrency, formatRate } from "@/lib/format";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 import { savingsService } from "@/services";
 import type { SavingsProduct } from "@/types";
 import { INTEREST_CREDITING_LABELS, PRODUCT_KIND_LABELS, labelOf } from "../../_lib/savings-rules";
@@ -63,11 +66,17 @@ export function ProductsScreen() {
   }
 
   return (
-    <div className="space-y-6">
-      <Button variant="ghost" size="sm" nativeButton={false} render={<Link href="/savings" />}>
+    <PageFill>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="shrink-0 self-start"
+        nativeButton={false}
+        render={<Link href="/savings" />}
+      >
         <ArrowLeft className="h-4 w-4" /> Savings accounts
       </Button>
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex shrink-0 flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Savings Products</h1>
           <p className="text-sm text-muted-foreground">
@@ -88,95 +97,97 @@ export function ProductsScreen() {
         emptyMessage="No savings products yet. Add one before opening accounts."
       >
         {(rows) => (
-          <div className="overflow-x-auto rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Product</TableHead>
-                  <TableHead>Rates today</TableHead>
-                  <TableHead>Credited</TableHead>
-                  <TableHead className="text-right">Min. to open</TableHead>
-                  <TableHead className="text-right">Maintaining</TableHead>
-                  <TableHead className="text-right">Accounts</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-32">
-                    <span className="sr-only">Actions</span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((p) => (
-                  <TableRow key={p.id}>
-                    <TableCell>
-                      <span className="font-medium">{p.name}</span>
-                      <span className="block text-xs text-muted-foreground">
-                        {p.code} · {labelOf(PRODUCT_KIND_LABELS, p.kind)}
-                      </span>
-                    </TableCell>
-                    <TableCell className="tabular-nums">
-                      {p.current_rates.length === 0
-                        ? "—"
-                        : p.kind === "time_deposit"
-                          ? p.current_rates.map((r) => (
-                              <span key={`${r.term_days ?? "all"}`} className="block whitespace-nowrap">
-                                {`${rateTermLabel(r.term_days)}: `}
-                                {formatRate(r.annual_rate)}%
-                              </span>
-                            ))
-                          : p.current_rates.flatMap((r) =>
-                              ladderLines(r.tiers?.length ? r.tiers : [{ min_balance: null, annual_rate: r.annual_rate }]).map(
-                                (line) => (
-                                  <span key={line} className="block whitespace-nowrap">
-                                    {line}
-                                  </span>
+          <div className={cn("rounded-lg border bg-card", FIT_CLASSES.section)}>
+            <ScrollBox>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Product</TableHead>
+                    <TableHead>Rates today</TableHead>
+                    <TableHead>Credited</TableHead>
+                    <TableHead className="text-right">Min. to open</TableHead>
+                    <TableHead className="text-right">Maintaining</TableHead>
+                    <TableHead className="text-right">Accounts</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="w-32">
+                      <span className="sr-only">Actions</span>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((p) => (
+                    <TableRow key={p.id}>
+                      <TableCell>
+                        <span className="font-medium">{p.name}</span>
+                        <span className="block text-xs text-muted-foreground">
+                          {p.code} · {labelOf(PRODUCT_KIND_LABELS, p.kind)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="tabular-nums">
+                        {p.current_rates.length === 0
+                          ? "—"
+                          : p.kind === "time_deposit"
+                            ? p.current_rates.map((r) => (
+                                <span key={`${r.term_days ?? "all"}`} className="block whitespace-nowrap">
+                                  {`${rateTermLabel(r.term_days)}: `}
+                                  {formatRate(r.annual_rate)}%
+                                </span>
+                              ))
+                            : p.current_rates.flatMap((r) =>
+                                ladderLines(r.tiers?.length ? r.tiers : [{ min_balance: null, annual_rate: r.annual_rate }]).map(
+                                  (line) => (
+                                    <span key={line} className="block whitespace-nowrap">
+                                      {line}
+                                    </span>
+                                  ),
                                 ),
-                              ),
-                            )}
-                    </TableCell>
-                    <TableCell>
-                      {p.kind === "time_deposit"
-                        ? `At maturity · ${(p.term_options_days ?? []).map(termLabel).join(", ") || "no terms"}`
-                        : labelOf(INTEREST_CREDITING_LABELS, p.interest_crediting)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">{formatCurrency(p.minimum_opening_balance)}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {p.kind === "time_deposit" ? "—" : formatCurrency(p.maintaining_balance)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">{p.account_count}</TableCell>
-                    <TableCell>
-                      <Badge variant={p.is_active ? "secondary" : "outline"}>{p.is_active ? "Active" : "Inactive"}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="icon" aria-label={`Rates of ${p.name}`} onClick={() => setRatesFor(p)}>
-                          <Percent className="h-4 w-4" />
-                        </Button>
-                        <PermissionButton
-                          permission="savings:settings"
-                          variant="ghost"
-                          size="icon"
-                          aria-label={`Edit ${p.name}`}
-                          onClick={() => edit(p)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </PermissionButton>
-                        {p.can_delete && (
+                              )}
+                      </TableCell>
+                      <TableCell>
+                        {p.kind === "time_deposit"
+                          ? `At maturity · ${(p.term_options_days ?? []).map(termLabel).join(", ") || "no terms"}`
+                          : labelOf(INTEREST_CREDITING_LABELS, p.interest_crediting)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{formatCurrency(p.minimum_opening_balance)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {p.kind === "time_deposit" ? "—" : formatCurrency(p.maintaining_balance)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{p.account_count}</TableCell>
+                      <TableCell>
+                        <Badge variant={p.is_active ? "secondary" : "outline"}>{p.is_active ? "Active" : "Inactive"}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex justify-end gap-1">
+                          <Button variant="ghost" size="icon" aria-label={`Rates of ${p.name}`} onClick={() => setRatesFor(p)}>
+                            <Percent className="h-4 w-4" />
+                          </Button>
                           <PermissionButton
                             permission="savings:settings"
                             variant="ghost"
                             size="icon"
-                            aria-label={`Delete ${p.name}`}
-                            onClick={() => setDeleting(p)}
+                            aria-label={`Edit ${p.name}`}
+                            onClick={() => edit(p)}
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Pencil className="h-4 w-4" />
                           </PermissionButton>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                          {p.can_delete && (
+                            <PermissionButton
+                              permission="savings:settings"
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Delete ${p.name}`}
+                              onClick={() => setDeleting(p)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </PermissionButton>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ScrollBox>
           </div>
         )}
       </DataState>
@@ -211,6 +222,6 @@ export function ProductsScreen() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </PageFill>
   );
 }

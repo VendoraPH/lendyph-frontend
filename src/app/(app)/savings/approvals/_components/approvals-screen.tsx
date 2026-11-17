@@ -3,8 +3,10 @@
 import { useCallback, useState } from "react";
 import Link from "next/link";
 import { Check, Undo2, X } from "lucide-react";
-import { BranchFilter, ALL_BRANCHES, branchIdParam } from "@/components/common/branch-filter";
+import { ALL_BRANCHES, branchIdParam } from "@/components/common/branch-filter";
+import { AlignedBranchFilter } from "../../_components/aligned-branch-filter";
 import { DataState } from "@/components/common/data-state";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { TablePagination } from "@/components/common/table-pagination";
 import { Badge } from "@/components/ui/badge";
 import { PermissionButton } from "@/components/common/permission-button";
@@ -19,6 +21,8 @@ import {
 } from "@/components/ui/table";
 import { useApiResource } from "@/hooks";
 import { formatDate, formatDateTime } from "@/lib/format";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 import { savingsApprovalService } from "@/services";
 import { useAuthStore } from "@/store";
 import type { SavingsApproval, SavingsApprovalKind, SavingsApprovalStatus } from "@/types";
@@ -71,8 +75,8 @@ export function ApprovalsScreen() {
   const stats = resource.data?.meta.stats;
 
   return (
-    <div className="space-y-6">
-      <div>
+    <PageFill>
+      <div className="shrink-0">
         <h1 className="text-2xl font-semibold tracking-tight">Savings Approvals</h1>
         <p className="text-sm text-muted-foreground">
           Requests above the approval amount, and reversal requests. The person who made a request can&apos;t
@@ -80,7 +84,7 @@ export function ApprovalsScreen() {
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex shrink-0 flex-wrap items-end justify-between gap-3">
         <Tabs
           value={status}
           onValueChange={(v) => {
@@ -97,7 +101,7 @@ export function ApprovalsScreen() {
             ))}
           </TabsList>
         </Tabs>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-end gap-2">
           <OptionSelect
             value={kind}
             onChange={(v) => {
@@ -107,7 +111,7 @@ export function ApprovalsScreen() {
             options={KIND_OPTIONS}
             className="w-56"
           />
-          <BranchFilter
+          <AlignedBranchFilter
             value={branch}
             onChange={(v) => {
               setBranch(v);
@@ -124,117 +128,120 @@ export function ApprovalsScreen() {
         summary="Requests waiting for approval will be listed here once the savings service is connected."
         isEmpty={(res) => res.data.length === 0}
         emptyMessage={status === "pending" ? "Nothing is waiting for approval." : "No requests here."}
+        emptyIllustration={status === "pending" ? "allCaughtUp" : "empty"}
       >
         {(res) => (
-          <div className="space-y-3">
-            <div className="overflow-x-auto rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Requested</TableHead>
-                    <TableHead>Request</TableHead>
-                    <TableHead>Account</TableHead>
-                    <TableHead>Member</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                    <TableHead>Requested by</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="w-0">
-                      <span className="sr-only">Actions</span>
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {res.data.map((a) => {
-                    const offer = approvalOffer(a, userId);
-                    const href = approvalHref(a);
-                    const progress = approvalProgress(a);
-                    return (
-                      <TableRow key={a.id}>
-                        <TableCell>
-                          {a.created_at ? formatDateTime(a.created_at) : "—"}
-                          {a.status === "pending" && a.expires_at && (
-                            <span className="block text-xs text-muted-foreground">Expires {formatDateTime(a.expires_at)}</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {labelOf(APPROVAL_KIND_LABELS, a.kind)}
-                          {a.check_reason && (
-                            <span className="block max-w-56 text-xs text-muted-foreground">{a.check_reason}</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">
-                          {href ? (
-                            <Link href={href} className="hover:underline">
-                              {approvalSubject(a)}
-                            </Link>
-                          ) : (
-                            approvalSubject(a)
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {a.borrower_name ?? "—"}
-                          {a.branch_name && <span className="block text-xs text-muted-foreground">{a.branch_name}</span>}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {approvalAmountText(a)}
-                          {approvalFeeText(a) && (
-                            <span className="block text-xs text-muted-foreground">{approvalFeeText(a)}</span>
-                          )}
-                        </TableCell>
-                        <TableCell>{actorName(a.requested_by)}</TableCell>
-                        <TableCell>
-                          <Badge variant={a.status === "pending" ? "secondary" : "outline"}>
-                            {labelOf(APPROVAL_STATUS_LABELS, a.status)}
-                          </Badge>
-                          {progress && <span className="block text-xs text-muted-foreground">{progress}</span>}
-                          {a.decided_by && (
-                            <span className="block text-xs text-muted-foreground">
-                              {actorName(a.decided_by)}
-                              {a.decided_at ? `, ${formatDate(a.decided_at)}` : ""}
-                            </span>
-                          )}
-                          {a.decision_reason && (
-                            <span className="block max-w-48 truncate text-xs text-muted-foreground">{a.decision_reason}</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {a.status === "pending" && (
-                            <div className="flex justify-end gap-1">
-                              <ActionButton
-                                permission="savings:approve"
-                                size="sm"
-                                blockedReason={offer.approveBlocked}
-                                onClick={() => setDeciding({ approval: a, decision: "approve" })}
-                              >
-                                <Check className="h-4 w-4" /> Approve
-                              </ActionButton>
-                              <ActionButton
-                                permission="savings:approve"
-                                size="sm"
-                                variant="outline"
-                                blockedReason={offer.rejectBlocked}
-                                onClick={() => setDeciding({ approval: a, decision: "reject" })}
-                              >
-                                <X className="h-4 w-4" /> Reject
-                              </ActionButton>
-                              {offer.canCancel && (
-                                <PermissionButton
-                                  permission="savings:transact"
+          <div className={FIT_CLASSES.section}>
+            <div className={cn("rounded-lg border bg-card", FIT_CLASSES.section)}>
+              <ScrollBox>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Requested</TableHead>
+                      <TableHead>Request</TableHead>
+                      <TableHead>Account</TableHead>
+                      <TableHead>Member</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                      <TableHead>Requested by</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="w-0">
+                        <span className="sr-only">Actions</span>
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {res.data.map((a) => {
+                      const offer = approvalOffer(a, userId);
+                      const href = approvalHref(a);
+                      const progress = approvalProgress(a);
+                      return (
+                        <TableRow key={a.id}>
+                          <TableCell>
+                            {a.created_at ? formatDateTime(a.created_at) : "—"}
+                            {a.status === "pending" && a.expires_at && (
+                              <span className="block text-xs text-muted-foreground">Expires {formatDateTime(a.expires_at)}</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="min-w-32 whitespace-normal">
+                            {labelOf(APPROVAL_KIND_LABELS, a.kind)}
+                            {a.check_reason && (
+                              <span className="block max-w-56 text-xs text-muted-foreground">{a.check_reason}</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {href ? (
+                              <Link href={href} className="hover:underline">
+                                {approvalSubject(a)}
+                              </Link>
+                            ) : (
+                              approvalSubject(a)
+                            )}
+                          </TableCell>
+                          <TableCell className="min-w-32 whitespace-normal">
+                            {a.borrower_name ?? "—"}
+                            {a.branch_name && <span className="block text-xs text-muted-foreground">{a.branch_name}</span>}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {approvalAmountText(a)}
+                            {approvalFeeText(a) && (
+                              <span className="block text-xs text-muted-foreground">{approvalFeeText(a)}</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="min-w-24 whitespace-normal">{actorName(a.requested_by)}</TableCell>
+                          <TableCell>
+                            <Badge variant={a.status === "pending" ? "secondary" : "outline"}>
+                              {labelOf(APPROVAL_STATUS_LABELS, a.status)}
+                            </Badge>
+                            {progress && <span className="block text-xs text-muted-foreground">{progress}</span>}
+                            {a.decided_by && (
+                              <span className="block text-xs text-muted-foreground">
+                                {actorName(a.decided_by)}
+                                {a.decided_at ? `, ${formatDate(a.decided_at)}` : ""}
+                              </span>
+                            )}
+                            {a.decision_reason && (
+                              <span className="block max-w-48 truncate text-xs text-muted-foreground">{a.decision_reason}</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {a.status === "pending" && (
+                              <div className="flex justify-end gap-1">
+                                <ActionButton
+                                  permission="savings:approve"
                                   size="sm"
-                                  variant="ghost"
-                                  onClick={() => setDeciding({ approval: a, decision: "cancel" })}
+                                  blockedReason={offer.approveBlocked}
+                                  onClick={() => setDeciding({ approval: a, decision: "approve" })}
                                 >
-                                  <Undo2 className="h-4 w-4" /> Cancel
-                                </PermissionButton>
-                              )}
-                            </div>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                                  <Check className="h-4 w-4" /> Approve
+                                </ActionButton>
+                                <ActionButton
+                                  permission="savings:approve"
+                                  size="sm"
+                                  variant="outline"
+                                  blockedReason={offer.rejectBlocked}
+                                  onClick={() => setDeciding({ approval: a, decision: "reject" })}
+                                >
+                                  <X className="h-4 w-4" /> Reject
+                                </ActionButton>
+                                {offer.canCancel && (
+                                  <PermissionButton
+                                    permission="savings:transact"
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => setDeciding({ approval: a, decision: "cancel" })}
+                                  >
+                                    <Undo2 className="h-4 w-4" /> Cancel
+                                  </PermissionButton>
+                                )}
+                              </div>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </ScrollBox>
             </div>
             <TablePagination
               page={page}
@@ -256,6 +263,6 @@ export function ApprovalsScreen() {
         onOpenChange={(open) => !open && setDeciding(null)}
         onDecided={() => resource.refetch()}
       />
-    </div>
+    </PageFill>
   );
 }
