@@ -439,7 +439,7 @@ function PaymentsContent() {
             <ReceiptText className="size-4" />
             Members with Loans to Collect
           </CardTitle>
-          <div className="relative w-full sm:w-72">
+          <div className="relative w-full sm:w-96">
             <Input
               aria-label="Search loans to collect"
               placeholder="Search member, account, or product..."

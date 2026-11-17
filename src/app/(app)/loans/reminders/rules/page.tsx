@@ -143,10 +143,10 @@ export default function ReminderRulesPage() {
                       const write = lock ? ("branches:view_all" as const) : ("reminders:settings" as const);
                       return (
                         <TableRow key={rule.id}>
-                          <TableCell className="font-medium">{rule.name}</TableCell>
-                          <TableCell className="text-sm">{describeRule(rule)}</TableCell>
+                          <TableCell className="min-w-32 whitespace-normal font-medium">{rule.name}</TableCell>
+                          <TableCell className="min-w-48 whitespace-normal text-sm">{describeRule(rule)}</TableCell>
                           <TableCell className="text-sm">{TEMPLATE_TYPE_LABELS[rule.template_type]}</TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
+                          <TableCell className="min-w-48 whitespace-normal text-sm text-muted-foreground">
                             {[
                               rule.branch_name ?? "All branches",
                               rule.loan_product_name ?? "All products",

@@ -3709,7 +3709,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   const scheduleTable = scheduleNotice ?? (
                     <div className="space-y-3">
                       <RestructuredBalanceFigures loan={loan} />
-                      <div className="overflow-x-auto">
+                      {/* Its own box at fit, so the headings and totals stay in view. */}
+                      <ScrollBox className="fit:max-h-[min(32rem,60dvh)]">
                         <Table>
                           <TableHeader>
                             <TableRow>
@@ -3757,7 +3758,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                             </TableRow>
                           </TableFooter>
                         </Table>
-                      </div>
+                      </ScrollBox>
                     </div>
                   );
 

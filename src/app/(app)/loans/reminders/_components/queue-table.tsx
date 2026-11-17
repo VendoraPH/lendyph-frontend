@@ -69,7 +69,7 @@ export function QueueTable({ items, testMode }: { items: ReminderQueueItem[]; te
                     <span className="block text-xs text-muted-foreground">due {formatDate(item.due_date)}</span>
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{formatCurrencyExact(item.amount_due)}</TableCell>
-                  <TableCell className="text-sm">
+                  <TableCell className="min-w-32 whitespace-normal text-sm">
                     {item.rule_name ?? (item.source === "manual" ? "Manual" : "—")}
                   </TableCell>
                   <TableCell>
@@ -89,7 +89,7 @@ export function QueueTable({ items, testMode }: { items: ReminderQueueItem[]; te
                       {loggedOnly && <TestModeBadge />}
                     </span>
                     {reason && (
-                      <span className="mt-1 block max-w-[14rem] text-xs text-muted-foreground">{reason}</span>
+                      <span className="mt-1 block max-w-[14rem] whitespace-normal text-xs text-muted-foreground">{reason}</span>
                     )}
                     {item.attempts > 1 && (
                       <span className="block text-xs text-muted-foreground">{item.attempts} attempts</span>

@@ -107,7 +107,7 @@ function validate(form: ReminderSettingsUpdate): string[] {
 function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
   return (
     <Card>
-      <CardContent className="space-y-4 pt-6">
+      <CardContent className="space-y-4">
         <div>
           <p className="font-semibold">{title}</p>
           {description && <p className="text-sm text-muted-foreground">{description}</p>}

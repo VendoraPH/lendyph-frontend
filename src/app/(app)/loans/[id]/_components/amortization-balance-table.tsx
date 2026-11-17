@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ScrollBox } from "@/components/common/page-fill";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -96,7 +97,8 @@ export function AmortizationBalanceTable({ loan, refreshKey }: AmortizationBalan
   const insuranceOwed = insuranceOwedLine(totals.insurance_owed);
 
   return (
-    <div className="overflow-x-auto">
+    // Its own box at fit, so the headings and the totals stay in view.
+    <ScrollBox className="fit:max-h-[min(32rem,60dvh)]">
       <Table>
         <TableHeader>
           <TableRow>
@@ -168,6 +170,6 @@ export function AmortizationBalanceTable({ loan, refreshKey }: AmortizationBalan
           </TableRow>
         </TableFooter>
       </Table>
-    </div>
+    </ScrollBox>
   );
 }

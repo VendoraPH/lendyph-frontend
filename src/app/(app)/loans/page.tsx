@@ -100,15 +100,15 @@ function StatCard({
           : "hover:border-brand-orange/40 hover:shadow-sm",
       )}
     >
-      <div className="py-4 px-6">
+      <div className="py-4 px-6 fit:px-4 fit:py-2.5">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs font-medium text-muted-foreground">{label}</p>
-            <p className={cn("text-2xl font-bold", valueClassName)}>
+            <p className={cn("text-2xl font-bold fit:text-xl", valueClassName)}>
               {value ?? "—"}
             </p>
           </div>
-          <div className={cn("rounded-full p-2.5", iconBg)}>{icon}</div>
+          <div className={cn("rounded-full p-2.5 fit:p-2", iconBg)}>{icon}</div>
         </div>
       </div>
     </button>
@@ -397,7 +397,7 @@ function LoansContent() {
   );
 
   return (
-    <PageFill className="gap-4">
+    <PageFill className="gap-4 fit:gap-3">
       <NoBranchBanner />
       {/* Header */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -473,7 +473,7 @@ function LoansContent() {
             type="button"
             onClick={() => handleTabChange(t.value)}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-all",
+              "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-all fit:py-1",
               tab === t.value
                 ? "border-brand-orange bg-brand-orange/5 text-brand-orange ring-1 ring-brand-orange"
                 : "border-border text-muted-foreground hover:border-brand-orange/40 hover:bg-muted/50",
@@ -501,26 +501,26 @@ function LoansContent() {
       </div>
 
       {/* Data Table */}
-      <Card className={FIT_CLASSES.section}>
-        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <Card className={cn(FIT_CLASSES.section, "fit:gap-3 fit:py-3")}>
+        {/* The title and the filters share a row on wide screens, so the
+            table keeps the height. */}
+        <CardHeader className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-6">
           <CardTitle className="text-sm font-medium">
             Loan Applications{countsKnown ? ` (${total})` : ""}
           </CardTitle>
+          <LoanFilters
+            search={searchDraft}
+            onSearchChange={setSearchDraft}
+            productId={productId}
+            onProductChange={handleProductChange}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onDateRangeChange={handleDateRangeChange}
+            productOptions={productOptions}
+            productsLoading={productsLoading}
+          />
         </CardHeader>
         <CardContent className={FIT_CLASSES.section}>
-          <div className="mb-4 shrink-0">
-            <LoanFilters
-              search={searchDraft}
-              onSearchChange={setSearchDraft}
-              productId={productId}
-              onProductChange={handleProductChange}
-              dateFrom={dateFrom}
-              dateTo={dateTo}
-              onDateRangeChange={handleDateRangeChange}
-              productOptions={productOptions}
-              productsLoading={productsLoading}
-            />
-          </div>
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Spinner className="size-6 text-brand-orange" />

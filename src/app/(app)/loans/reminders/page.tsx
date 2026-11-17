@@ -79,7 +79,7 @@ function SmsCreditsCard({ sms, mode }: { sms: ReminderDashboard["sms"]; mode: Se
     sms.credits_remaining <= sms.low_credit_threshold;
   return (
     <Card>
-      <CardContent className="space-y-3 pt-6">
+      <CardContent className="space-y-3">
         <p className="text-sm font-medium">SMS usage this month</p>
         <dl className="grid grid-cols-2 gap-y-2 text-sm">
           <dt className="text-muted-foreground">{smsMonthLabel(sms, mode)}</dt>
@@ -111,7 +111,7 @@ function DeliveryChart({ daily, mode }: { daily: ReminderDashboard["daily"]; mod
   const hasLogged = daily.some((d) => typeof d.logged === "number");
   return (
     <Card className="lg:col-span-2">
-      <CardContent className="pt-6">
+      <CardContent>
         <p className="mb-2 text-sm font-medium">Reminders, last 7 days</p>
         {daily.length === 0 ? (
           <p className="py-10 text-center text-sm text-muted-foreground">

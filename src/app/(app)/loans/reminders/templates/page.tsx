@@ -97,9 +97,9 @@ export default function ReminderTemplatesPage() {
               if (group.length === 0) return null;
               return (
                 <Card key={type}>
-                  <CardContent className="pt-6">
+                  <CardContent>
                     <p className="mb-3 text-sm font-semibold">{TEMPLATE_TYPE_LABELS[type]}</p>
-                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(min(20rem,100%),1fr))] gap-3">
                       {group.map((t) => (
                         <TemplateCard key={t.id} template={t} onEdit={() => setDialog({ template: t })} />
                       ))}

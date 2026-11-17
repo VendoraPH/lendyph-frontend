@@ -111,10 +111,10 @@ export default function ReminderHistoryPage() {
                             {recipientLabel(m.recipient, canSeeContacts)}
                           </span>
                         </TableCell>
-                        <TableCell className="text-sm">
+                        <TableCell className="min-w-32 whitespace-normal text-sm">
                           {m.template_type ? TEMPLATE_TYPE_LABELS[m.template_type] : "—"}
                         </TableCell>
-                        <TableCell className="text-sm">
+                        <TableCell className="min-w-32 whitespace-normal text-sm">
                           {m.source === "manual" ? `Manual${m.created_by_name ? ` · ${m.created_by_name}` : ""}` : "Automatic"}
                         </TableCell>
                         <TableCell>
