@@ -182,16 +182,13 @@ export function JournalEntryForm({ initial, onSave, saveLabel, cancel }: Journal
 
         <Card>
           <CardContent className="space-y-4 pt-6">
-            {/* The card would clip a wide table, so the lines scroll sideways here. */}
-            <div className="overflow-x-auto">
-              <JournalLineRows
-                lines={draft.lines}
-                accounts={postable}
-                errorRows={errorRows}
-                onChange={patchLine}
-                onRemove={removeLine}
-              />
-            </div>
+            <JournalLineRows
+              lines={draft.lines}
+              accounts={postable}
+              errorRows={errorRows}
+              onChange={patchLine}
+              onRemove={removeLine}
+            />
 
             <Button variant="outline" size="sm" onClick={addLine}>
               <Plus className="mr-2 h-4 w-4" />

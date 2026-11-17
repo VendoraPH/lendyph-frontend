@@ -77,6 +77,8 @@ function AccountingDashboardContent() {
   // Follows As of's month until someone picks a From of their own.
   const [fromPicked, setFromPicked] = useState<string | null>(null);
   const [branch, setBranch] = useState(ALL_BRANCHES);
+  // Held here, outside the data state, so changing a filter keeps the open tab.
+  const [tab, setTab] = useState<DashboardTab>("figures");
   const from = fromPicked ?? defaultDashboardFrom(asOf);
   const datesError = dashboardFromError(from, asOf);
 
@@ -115,7 +117,7 @@ function AccountingDashboardContent() {
           summary="A one-screen position: money on hand, what is owed to and by the business, and the period's result."
           endpoints={["GET /accounting/dashboard"]}
         >
-          {(data) => <DashboardBody data={data} />}
+          {(data) => <DashboardBody data={data} tab={tab} onTabChange={setTab} />}
         </DataState>
       )}
 
@@ -145,7 +147,21 @@ export default function AccountingDashboardPage() {
   );
 }
 
-function DashboardBody({ data }: { data: AccountingDashboard }) {
+type DashboardTab = "figures" | "trends" | "journals";
+
+function isDashboardTab(value: unknown): value is DashboardTab {
+  return value === "figures" || value === "trends" || value === "journals";
+}
+
+function DashboardBody({
+  data,
+  tab,
+  onTabChange,
+}: {
+  data: AccountingDashboard;
+  tab: DashboardTab;
+  onTabChange: (tab: DashboardTab) => void;
+}) {
   const periodLabel = periodRangeLabel(data.period);
   return (
     <FillSection className="gap-4">
@@ -193,7 +209,13 @@ function DashboardBody({ data }: { data: AccountingDashboard }) {
         Like the main dashboard: the balance check above stays put, and the
         rest sits in tabs that each scroll inside, so the page fits the screen.
       */}
-      <Tabs defaultValue="figures" className={FIT_CLASSES.section}>
+      <Tabs
+        value={tab}
+        onValueChange={(value) => {
+          if (isDashboardTab(value)) onTabChange(value);
+        }}
+        className={FIT_CLASSES.section}
+      >
         <TabsList className="shrink-0">
           <TabsTrigger value="figures">Figures</TabsTrigger>
           <TabsTrigger value="trends">Trends</TabsTrigger>

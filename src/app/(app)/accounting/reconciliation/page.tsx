@@ -240,42 +240,39 @@ function ReconciliationCard({
           />
         </div>
 
-        {/* The card would clip a wide table, so it scrolls sideways here. */}
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-28">Date</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead className="w-36">Reference</TableHead>
-                <TableHead className="w-36">Match</TableHead>
-                <TableHead className="w-32 text-right">Amount</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {reconciliation.lines.map((line) => {
-                const figures = rowFigures(line);
-                return (
-                  <TableRow key={`${line.statement_line_id ?? "l"}-${line.journal_line_id ?? "s"}`}>
-                    <TableCell className="text-sm">
-                      <FigureWithNote figure={figures.date} note={figures.dateNote} />
-                    </TableCell>
-                    <TableCell className="text-sm">{line.description}</TableCell>
-                    <TableCell className="font-mono text-xs text-muted-foreground">
-                      {line.external_reference || "—"}
-                    </TableCell>
-                    <TableCell>
-                      <RowMatchBadge row={line} />
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-sm">
-                      <FigureWithNote figure={figures.amount} note={figures.amountNote} />
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-28">Date</TableHead>
+              <TableHead>Description</TableHead>
+              <TableHead className="w-36">Reference</TableHead>
+              <TableHead className="w-36">Match</TableHead>
+              <TableHead className="w-32 text-right">Amount</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {reconciliation.lines.map((line) => {
+              const figures = rowFigures(line);
+              return (
+                <TableRow key={`${line.statement_line_id ?? "l"}-${line.journal_line_id ?? "s"}`}>
+                  <TableCell className="text-sm">
+                    <FigureWithNote figure={figures.date} note={figures.dateNote} />
+                  </TableCell>
+                  <TableCell className="text-sm">{line.description}</TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">
+                    {line.external_reference || "—"}
+                  </TableCell>
+                  <TableCell>
+                    <RowMatchBadge row={line} />
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm">
+                    <FigureWithNote figure={figures.amount} note={figures.amountNote} />
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
       </CardContent>
     </Card>
   );

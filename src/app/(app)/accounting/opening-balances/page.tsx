@@ -97,7 +97,7 @@ function OpeningBalancesContent() {
             {(opening) => (
               <Card className={FIT_CLASSES.section}>
                 <CardContent className={`${FIT_CLASSES.section} pt-6`}>
-                  {/* The lines, totals and finalise step scroll inside, under pinned headings. */}
+                  {/* The lines, totals and finalise step scroll together inside this box; each table scrolls sideways on its own. */}
                   <ScrollBox>
                     {viewFor(opening) === "edit" ? (
                       <OpeningBalanceEditor

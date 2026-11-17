@@ -135,91 +135,88 @@ function PeriodClosingContent() {
                     consequence="A period missing from this table cannot be closed or reopened from here."
                   />
                 )}
-                {/* The card would clip a wide table, so it scrolls sideways here. */}
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-28">Period</TableHead>
-                        <TableHead>Name</TableHead>
-                        <TableHead className="w-56">Dates</TableHead>
-                        <TableHead className="w-28">Status</TableHead>
-                        <TableHead className="w-56">Closed</TableHead>
-                        <TableHead className="w-44" />
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {periods.map((period) => (
-                        <TableRow key={period.id}>
-                          <TableCell className="font-mono text-xs">
-                            {period.code}
-                          </TableCell>
-                          <TableCell className="text-sm">{period.name}</TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {formatDate(period.start_date)} –{" "}
-                            {formatDate(period.end_date)}
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant="outline"
-                              className={
-                                period.status === "open"
-                                  ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/30"
-                                  : "bg-slate-500/10 text-slate-700 border-slate-500/30"
-                              }
-                            >
-                              {period.status === "open" ? (
-                                <LockOpen className="mr-1 h-3 w-3" />
-                              ) : (
-                                <Lock className="mr-1 h-3 w-3" />
-                              )}
-                              {periodStatusLabel(period.status)}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-xs text-muted-foreground">
-                            {yearEndLabels.has(period.id) && (
-                              <p className="font-medium text-foreground">
-                                {yearEndLabels.get(period.id)}
-                              </p>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-28">Period</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead className="w-56">Dates</TableHead>
+                      <TableHead className="w-28">Status</TableHead>
+                      <TableHead className="w-56">Closed</TableHead>
+                      <TableHead className="w-44" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {periods.map((period) => (
+                      <TableRow key={period.id}>
+                        <TableCell className="font-mono text-xs">
+                          {period.code}
+                        </TableCell>
+                        <TableCell className="text-sm">{period.name}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {formatDate(period.start_date)} –{" "}
+                          {formatDate(period.end_date)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={
+                              period.status === "open"
+                                ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/30"
+                                : "bg-slate-500/10 text-slate-700 border-slate-500/30"
+                            }
+                          >
+                            {period.status === "open" ? (
+                              <LockOpen className="mr-1 h-3 w-3" />
+                            ) : (
+                              <Lock className="mr-1 h-3 w-3" />
                             )}
-                            {period.closed_at
-                              ? `${formatDateTime(period.closed_at)}${
-                                  period.closed_by ? ` · ${period.closed_by}` : ""
-                                }`
-                              : "—"}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <PermissionGate permission="accounting:close">
-                              {monthAction(period, yearEndLabels) === "close" && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => setConfirming(period)}
-                                >
-                                  Close
-                                </Button>
-                              )}
-                              {monthAction(period, yearEndLabels) === "reopen" && (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => reopen(period)}
-                                >
-                                  Reopen
-                                </Button>
-                              )}
-                              {monthAction(period, yearEndLabels) === "year" && (
-                                <span className="text-xs text-muted-foreground">
-                                  {REOPEN_THE_YEAR}
-                                </span>
-                              )}
-                            </PermissionGate>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                            {periodStatusLabel(period.status)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {yearEndLabels.has(period.id) && (
+                            <p className="font-medium text-foreground">
+                              {yearEndLabels.get(period.id)}
+                            </p>
+                          )}
+                          {period.closed_at
+                            ? `${formatDateTime(period.closed_at)}${
+                                period.closed_by ? ` · ${period.closed_by}` : ""
+                              }`
+                            : "—"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <PermissionGate permission="accounting:close">
+                            {monthAction(period, yearEndLabels) === "close" && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setConfirming(period)}
+                              >
+                                Close
+                              </Button>
+                            )}
+                            {monthAction(period, yearEndLabels) === "reopen" && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => reopen(period)}
+                              >
+                                Reopen
+                              </Button>
+                            )}
+                            {monthAction(period, yearEndLabels) === "year" && (
+                              <span className="text-xs text-muted-foreground">
+                                {REOPEN_THE_YEAR}
+                              </span>
+                            )}
+                          </PermissionGate>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </CardContent>
             </Card>
           )}

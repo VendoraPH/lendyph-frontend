@@ -123,8 +123,18 @@ function ColumnBookCard({ book, title }: { book: ColumnBook; title: string }) {
     >
       <p className="mb-4 text-xs text-muted-foreground">{columnBookNote(book.kind)}</p>
 
-      {/* Two heading rows: the second pins under the first (each is h-10). */}
-      <ScrollBox className="[&_thead_tr:nth-child(2)_th]:top-10">
+      {/*
+        Two heading rows: the second pins under the first (each is h-10). Two
+        footer rows ("Total" and "Book total"): the footer pins as one block,
+        so the second row never covers the first.
+      */}
+      <ScrollBox
+        className={cn(
+          "[&_thead_tr:nth-child(2)_th]:top-10",
+          "[&_tfoot]:sticky [&_tfoot]:bottom-0 [&_tfoot]:z-10 [&_tfoot]:bg-card",
+          "[&_tfoot_td]:static [&_tfoot_th]:static",
+        )}
+      >
         <Table>
           <caption className="sr-only">
             {book.kind === "cash_receipts" ? "Cash Receipts" : "Cash Disbursements"} in columns,{" "}
