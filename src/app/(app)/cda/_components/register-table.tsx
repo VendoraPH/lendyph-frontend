@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { DataState } from "@/components/common/data-state";
+import { ScrollBox } from "@/components/common/page-fill";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { PermissionButton } from "@/components/common/permission-button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +19,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 import type { ApiResource } from "@/hooks";
 import type { DrainResult } from "@/lib/paginate";
 import type { Permission } from "@/types/rbac";
@@ -51,6 +54,14 @@ interface RegisterTableProps<T extends { id: number }> {
   readOnly?: boolean;
   /** A new row's starting values. */
   defaults?: RecordDraft;
+  /**
+   * The register is the page's main list: at fit the card takes the height
+   * left on the page and its table scrolls inside, headings pinned. Off (a
+   * register stacked above a report), the card keeps its natural height.
+   */
+  fill?: boolean;
+  /** The empty list's picture: "noResults" while the list is filtered. */
+  emptyIllustration?: "empty" | "noResults" | "allCaughtUp";
   /** Fields for editing, when they differ from the new row's. */
   editFields?: RecordField[];
   /**
@@ -71,7 +82,7 @@ interface RegisterTableProps<T extends { id: number }> {
  * field-list form. The server's message says what went wrong.
  */
 export function RegisterTable<T extends { id: number }>(props: RegisterTableProps<T>) {
-  const { title, description, noun, resource, endpoints, columns, fields = [], permission, file, readOnly } = props;
+  const { title, description, noun, resource, endpoints, columns, fields = [], permission, file, readOnly, fill = false } = props;
   const [editing, setEditing] = useState<T | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<T | null>(null);
@@ -119,7 +130,7 @@ export function RegisterTable<T extends { id: number }>(props: RegisterTableProp
   }
 
   return (
-    <Card>
+    <Card className={cn(fill && FIT_CLASSES.section)}>
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2">
         <div>
           <CardTitle className="text-base">{title}</CardTitle>
@@ -131,13 +142,14 @@ export function RegisterTable<T extends { id: number }>(props: RegisterTableProp
           </PermissionButton>
         )}
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className={cn("space-y-3", fill && FIT_CLASSES.section)}>
         <DataState
           resource={resource}
           endpoints={endpoints}
           summary={`The ${noun[1]} register`}
           isEmpty={(d) => d.rows.length === 0}
           emptyMessage={`No ${noun[1]} recorded yet.`}
+          emptyIllustration={props.emptyIllustration}
         >
           {(data) => (
             <>
@@ -149,7 +161,7 @@ export function RegisterTable<T extends { id: number }>(props: RegisterTableProp
                   consequence={`Some ${noun[1]} are missing from this list and from the report totals shown here.`}
                 />
               )}
-              <div className="overflow-x-auto">
+              <TableFrame fill={fill}>
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -202,7 +214,7 @@ export function RegisterTable<T extends { id: number }>(props: RegisterTableProp
                     ))}
                   </TableBody>
                 </Table>
-              </div>
+              </TableFrame>
             </>
           )}
         </DataState>
@@ -241,6 +253,14 @@ export function RegisterTable<T extends { id: number }>(props: RegisterTableProp
       </AlertDialog>
     </Card>
   );
+}
+
+/**
+ * The table's sideways scroll; a filling register's table scrolls inside a
+ * scroll box instead, with its headings pinned.
+ */
+function TableFrame({ fill, children }: { fill: boolean; children: ReactNode }) {
+  return fill ? <ScrollBox>{children}</ScrollBox> : <div className="overflow-x-auto">{children}</div>;
 }
 
 function capitalize(s: string): string {

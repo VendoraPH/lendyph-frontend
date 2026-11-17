@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { Archive, CheckCircle2, FileSpreadsheet, Pencil, Plus } from "lucide-react";
 import { DataState } from "@/components/common/data-state";
+import { ScrollBox } from "@/components/common/page-fill";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,7 @@ import { cdaService } from "@/services";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { formatDate } from "@/lib/format";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import type { CdaTemplate } from "@/types/cda";
 import { ReasonDialog } from "../../_components/reason-dialog";
 import { ToneBadge } from "../../_components/tone-badge";
@@ -46,7 +48,7 @@ export function TemplatesPanel() {
   }
 
   return (
-    <Card>
+    <Card className={FIT_CLASSES.section}>
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4">
         <div className="space-y-1.5">
           <CardTitle className="text-base">Report templates</CardTitle>
@@ -56,7 +58,7 @@ export function TemplatesPanel() {
           <Plus className="mr-1 h-4 w-4" /> New template
         </Button>
       </CardHeader>
-      <CardContent className="overflow-x-auto">
+      <CardContent className={FIT_CLASSES.section}>
         <DataState
           resource={resource}
           endpoints={[`GET ${API_ENDPOINTS.CDA.TEMPLATES}`]}
@@ -65,85 +67,87 @@ export function TemplatesPanel() {
           emptyMessage="No templates yet."
         >
           {(templates) => (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Report</TableHead>
-                  <TableHead>Name and version</TableHead>
-                  <TableHead>In effect</TableHead>
-                  <TableHead>Applies to</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {templates.map((t) => {
-                  const status = TEMPLATE_STATUS_META[t.status] ?? { label: "Other", tone: "neutral" as const };
-                  return (
-                    <TableRow key={t.id}>
-                      <TableCell>{labelOf(REPORT_TYPE_LABELS, t.report_type)}</TableCell>
-                      <TableCell>
-                        <p className="font-medium">{t.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Version {t.version}
-                          {!t.verified && " · to verify against CDA's form"}
-                          {t.excel_template?.file_name && ` · workbook ${t.excel_template.file_name}`}
-                        </p>
-                      </TableCell>
-                      <TableCell>
-                        {formatDate(t.effective_from)}
-                        {t.effective_until ? ` to ${formatDate(t.effective_until)}` : " onward"}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{appliesTo(t)}</TableCell>
-                      <TableCell>
-                        <ToneBadge tone={status.tone} label={status.label} />
-                        {t.reason && <p className="mt-1 text-xs text-muted-foreground">{t.reason}</p>}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex justify-end gap-1">
-                          {t.status === "draft" && (
-                            <>
-                              <Button variant="ghost" size="icon-sm" aria-label={`Edit ${t.name}`} onClick={() => setEditing(t)} disabled={busy !== null}>
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon-sm"
-                                aria-label={`Activate ${t.name}`}
-                                disabled={busy !== null}
-                                onClick={() => act(t.id, cdaService.activateTemplate(t.id), "Template activated", "Could not activate the template")}
-                              >
-                                <CheckCircle2 className="h-4 w-4" />
-                              </Button>
-                              <label className="inline-flex">
-                                <span className="sr-only">Attach the Excel workbook for {t.name}</span>
-                                <FileSpreadsheet className="m-1.5 h-4 w-4 cursor-pointer" aria-hidden="true" />
-                                <Input
-                                  type="file"
-                                  accept=".xlsx"
-                                  className="sr-only"
+            <ScrollBox>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Report</TableHead>
+                    <TableHead>Name and version</TableHead>
+                    <TableHead>In effect</TableHead>
+                    <TableHead>Applies to</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {templates.map((t) => {
+                    const status = TEMPLATE_STATUS_META[t.status] ?? { label: "Other", tone: "neutral" as const };
+                    return (
+                      <TableRow key={t.id}>
+                        <TableCell className="min-w-32 whitespace-normal wrap-anywhere">{labelOf(REPORT_TYPE_LABELS, t.report_type)}</TableCell>
+                        <TableCell className="min-w-48 whitespace-normal wrap-anywhere">
+                          <p className="font-medium">{t.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Version {t.version}
+                            {!t.verified && " · to verify against CDA's form"}
+                            {t.excel_template?.file_name && ` · workbook ${t.excel_template.file_name}`}
+                          </p>
+                        </TableCell>
+                        <TableCell>
+                          {formatDate(t.effective_from)}
+                          {t.effective_until ? ` to ${formatDate(t.effective_until)}` : " onward"}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{appliesTo(t)}</TableCell>
+                        <TableCell className="min-w-40 whitespace-normal">
+                          <ToneBadge tone={status.tone} label={status.label} />
+                          {t.reason && <p className="mt-1 text-xs text-muted-foreground">{t.reason}</p>}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex justify-end gap-1">
+                            {t.status === "draft" && (
+                              <>
+                                <Button variant="ghost" size="icon-sm" aria-label={`Edit ${t.name}`} onClick={() => setEditing(t)} disabled={busy !== null}>
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  aria-label={`Activate ${t.name}`}
                                   disabled={busy !== null}
-                                  onChange={(e) => {
-                                    const file = e.target.files?.[0];
-                                    e.target.value = "";
-                                    if (file) act(t.id, cdaService.attachWorkbook(t.id, file), "Workbook attached", "Could not attach the workbook");
-                                  }}
-                                />
-                              </label>
-                            </>
-                          )}
-                          {t.status === "active" && (
-                            <Button variant="ghost" size="icon-sm" aria-label={`Retire ${t.name}`} onClick={() => setRetiring(t)} disabled={busy !== null}>
-                              <Archive className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                                  onClick={() => act(t.id, cdaService.activateTemplate(t.id), "Template activated", "Could not activate the template")}
+                                >
+                                  <CheckCircle2 className="h-4 w-4" />
+                                </Button>
+                                <label className="inline-flex">
+                                  <span className="sr-only">Attach the Excel workbook for {t.name}</span>
+                                  <FileSpreadsheet className="m-1.5 h-4 w-4 cursor-pointer" aria-hidden="true" />
+                                  <Input
+                                    type="file"
+                                    accept=".xlsx"
+                                    className="sr-only"
+                                    disabled={busy !== null}
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      e.target.value = "";
+                                      if (file) act(t.id, cdaService.attachWorkbook(t.id, file), "Workbook attached", "Could not attach the workbook");
+                                    }}
+                                  />
+                                </label>
+                              </>
+                            )}
+                            {t.status === "active" && (
+                              <Button variant="ghost" size="icon-sm" aria-label={`Retire ${t.name}`} onClick={() => setRetiring(t)} disabled={busy !== null}>
+                                <Archive className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </ScrollBox>
           )}
         </DataState>
       </CardContent>

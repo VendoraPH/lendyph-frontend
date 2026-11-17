@@ -35,7 +35,7 @@ export const PROFILE_FIELDS: RecordField[] = [
   { key: "cte_number", label: "CTE number", type: "text" },
   { key: "cte_issued_on", label: "CTE issued on", type: "date" },
   { key: "cte_expires_on", label: "CTE expires on", type: "date" },
-  { key: "address_line", label: "Street address", type: "text" },
+  { key: "address_line", label: "Street address", type: "text", wide: true },
   { key: "address_barangay", label: "Barangay", type: "text" },
   { key: "address_city", label: "City or municipality", type: "text" },
   { key: "address_province", label: "Province", type: "text" },

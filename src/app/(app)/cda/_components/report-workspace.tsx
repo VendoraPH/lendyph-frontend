@@ -40,7 +40,7 @@ import type { CdaReport, CdaReportPart, CdaReportType } from "@/types/cda";
 function Summary({ report, onChange }: { report: CdaReport; onChange: (r: CdaReport) => void }) {
   return (
     <Card>
-      <CardContent className="flex flex-wrap items-center justify-between gap-4 pt-6">
+      <CardContent className="flex flex-wrap items-center justify-between gap-4 pt-6 fit:pt-0">
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <ReportStatusBadge status={report.display_status} />
@@ -172,7 +172,11 @@ function ReportBody({ report, drafts, setDrafts, reloading, onChange, onReload }
       <Summary report={report} onChange={onChange} />
       <Notices report={report} onRefresh={refresh} refreshing={refreshing} />
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      {/*
+        At fit the workflow and Save bar stays at the top of the page's scroll
+        box while the sections scroll under it (hidden when it holds nothing).
+      */}
+      <div className="flex flex-wrap items-center justify-between gap-2 fit:sticky fit:top-0 fit:z-20 fit:rounded-lg fit:border fit:bg-card fit:px-3 fit:py-2 fit:shadow-sm fit:empty:hidden">
         <WorkflowActions report={report} onChange={onChange} onReload={onReload} reloading={reloading} />
         {canEdit && (
           <PermissionButton permission="cda:prepare" size="sm" onClick={save} disabled={!dirty || saving || reloading}>

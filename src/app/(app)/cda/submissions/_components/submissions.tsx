@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { FileText, Pencil, Upload } from "lucide-react";
 import { DataState } from "@/components/common/data-state";
+import { ScrollBox } from "@/components/common/page-fill";
 import { PermissionButton } from "@/components/common/permission-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +13,7 @@ import { cdaService } from "@/services";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { formatDate } from "@/lib/format";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import type { CdaSubmission } from "@/types/cda";
 import { CDA_FILE_ACCEPT, RecordFormDialog } from "../../_components/record-form-dialog";
 import { ToneBadge } from "../../_components/tone-badge";
@@ -102,12 +104,12 @@ export function Submissions({ year }: { year: number }) {
   }
 
   return (
-    <Card>
+    <Card className={FIT_CLASSES.section}>
       <CardHeader>
         <CardTitle className="text-base">Filings for {year}</CardTitle>
         <CardDescription>Record a filing from its report once the report is finalized.</CardDescription>
       </CardHeader>
-      <CardContent className="overflow-x-auto">
+      <CardContent className={FIT_CLASSES.section}>
         <DataState
           resource={resource}
           endpoints={[`GET ${API_ENDPOINTS.CDA.SUBMISSIONS(year)}`]}
@@ -116,24 +118,26 @@ export function Submissions({ year }: { year: number }) {
           emptyMessage="Nothing filed for this year yet."
         >
           {(rows) => (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Report</TableHead>
-                  <TableHead>How</TableHead>
-                  <TableHead>Filed on</TableHead>
-                  <TableHead>References</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Filed by</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((row) => (
-                  <SubmissionRow key={row.id} row={row} onEdit={() => setEditing(row)} onProof={() => setProofFor(row)} />
-                ))}
-              </TableBody>
-            </Table>
+            <ScrollBox>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Report</TableHead>
+                    <TableHead>How</TableHead>
+                    <TableHead>Filed on</TableHead>
+                    <TableHead>References</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Filed by</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((row) => (
+                    <SubmissionRow key={row.id} row={row} onEdit={() => setEditing(row)} onProof={() => setProofFor(row)} />
+                  ))}
+                </TableBody>
+              </Table>
+            </ScrollBox>
           )}
         </DataState>
       </CardContent>

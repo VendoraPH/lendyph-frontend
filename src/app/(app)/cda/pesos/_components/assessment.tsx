@@ -75,19 +75,19 @@ function Indicators({ data }: { data: CdaPesos }) {
               const status = PESOS_STATUS_META[m.status] ?? { label: "Other", tone: "neutral" as const };
               return (
                 <TableRow key={m.key}>
-                  <TableCell>
+                  <TableCell className="min-w-48 whitespace-normal">
                     <p className="font-medium">{m.label}</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-foreground wrap-anywhere">
                       {labelOf(PESOS_DIRECTION_LABELS, m.direction)}
                       {m.source && ` · Source: ${m.source}`}
                     </p>
                     {m.recommendation && <p className="text-xs italic text-muted-foreground">{m.recommendation}</p>}
                   </TableCell>
-                  <TableCell className="text-xs">{m.formula}</TableCell>
+                  <TableCell className="min-w-36 text-xs whitespace-normal wrap-anywhere">{m.formula}</TableCell>
                   <TableCell className="text-right tabular-nums">{asSent(m.value)}</TableCell>
                   <TableCell className="text-right tabular-nums">{asSent(m.score)}</TableCell>
                   <TableCell className="text-right tabular-nums">{asSent(m.weight)}</TableCell>
-                  <TableCell>
+                  <TableCell className="min-w-32 whitespace-normal">
                     <ToneBadge tone={status.tone} label={status.label} />
                     {m.note && <p className="mt-1 text-xs text-muted-foreground">{m.note}</p>}
                   </TableCell>
