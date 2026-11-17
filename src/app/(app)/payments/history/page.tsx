@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
 import { repaymentService } from "@/services";
 import { PermissionButton, RouteGuard, TablePagination } from "@/components/common";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { SEARCH_DEBOUNCE_MS } from "@/hooks/use-search-page";
 import type { Repayment } from "@/types";
 import { Loader2 } from "lucide-react";
@@ -542,7 +544,7 @@ function PaymentHistoryContent() {
   };
 
   return (
-    <div className="space-y-6">
+    <PageFill className="gap-4">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Payment History</h1>
@@ -617,7 +619,7 @@ function PaymentHistoryContent() {
       </div>
 
       {/* Filters */}
-      <Card>
+      <Card className="shrink-0">
         <CardContent className="pt-4 pb-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
             {/* Search */}
@@ -676,7 +678,7 @@ function PaymentHistoryContent() {
       </Card>
 
       {/* Status Tabs + Table */}
-      <Card>
+      <Card className={FIT_CLASSES.section}>
         <CardHeader className="pb-0">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <CardTitle className="text-sm font-medium">
@@ -692,9 +694,9 @@ function PaymentHistoryContent() {
           </div>
         </CardHeader>
 
-        <CardContent className={cn("pt-4 transition-opacity", loading && payments.length > 0 && "opacity-60")} aria-busy={loading}>
+        <CardContent className={cn("pt-4 transition-opacity", FIT_CLASSES.section, loading && payments.length > 0 && "opacity-60")} aria-busy={loading}>
           {/* Desktop Table */}
-          <div className="hidden md:block overflow-x-auto">
+          <ScrollBox className="hidden md:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -865,7 +867,7 @@ function PaymentHistoryContent() {
                   ))}
               </div>
             )}
-          </div>
+          </ScrollBox>
 
           {/* Mobile Cards */}
           <div className="grid gap-3 md:hidden">
@@ -909,7 +911,7 @@ function PaymentHistoryContent() {
         onOpenChange={setVoidDialogOpen}
         onVoid={handleVoid}
       />
-    </div>
+    </PageFill>
   );
 }
 

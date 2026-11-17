@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Lock } from "lucide-react";
+import { ScrollBox } from "@/components/common/page-fill";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,8 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { usePermission } from "@/hooks";
 import { notifyError, notifySuccess, notifyValidation } from "@/lib/notify";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 import {
   COMPANY_WIDE_REASON,
   CONTACT_HOURS_LIMIT,
@@ -173,7 +176,7 @@ export function SettingsForm({ settings, onSaved }: { settings: ReminderSettings
   };
 
   return (
-    <div className="space-y-4">
+    <div className={cn(FIT_CLASSES.section, "gap-4")}>
       {locked && (
         <p
           id="company-wide-lock"
@@ -183,251 +186,254 @@ export function SettingsForm({ settings, onSaved }: { settings: ReminderSettings
           {COMPANY_WIDE_REASON} You can change your branch&apos;s own settings below.
         </p>
       )}
-      <fieldset
-        disabled={locked}
-        aria-describedby={locked ? "company-wide-lock" : undefined}
-        className="min-w-0 space-y-4"
-      >
-        <legend className="sr-only">Company-wide settings</legend>
-        <Section title="General">
-          <div className="space-y-1">
-            <label className="flex items-center gap-2 text-sm">
-              <Switch disabled={locked} checked={form.enabled} onCheckedChange={(enabled) => patch({ enabled })} />
-              Send automated reminders
-            </label>
-            <p className="text-xs text-muted-foreground">
-              The cooperative&apos;s own switch, off to start. While test mode is on, reminders are logged and nothing
-              is sent to members, whatever this switch says.
-            </p>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field id="set-tz" label="Timezone">
-              <NativeSelect id="set-tz" className="w-full" value={form.timezone} onChange={(e) => patch({ timezone: e.target.value })}>
-                {TIMEZONES.map((tz) => (
-                  <NativeSelectOption key={tz} value={tz}>
-                    {tz}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </Field>
-            <Field id="set-time" label="Default send time" hint="Used by new rules.">
-              <Input id="set-time" type="time" value={form.default_send_time} onChange={(e) => patch({ default_send_time: e.target.value })} />
-            </Field>
-          </div>
-          <div className="flex flex-wrap gap-6">
-            <label className="flex items-center gap-2 text-sm">
-              <Switch disabled={locked} checked={form.channels.sms} onCheckedChange={(sms) => patch({ channels: { ...form.channels, sms } })} />
-              SMS
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <Switch disabled={locked} checked={form.channels.email} onCheckedChange={(email) => patch({ channels: { ...form.channels, email } })} />
-              Email
-            </label>
-          </div>
-        </Section>
-
-        <Section
-          title="Contact hours"
-          description={`Reminders only go out inside this window, and never before ${formatSendTime(CONTACT_HOURS_LIMIT.start)} or after ${formatSendTime(CONTACT_HOURS_LIMIT.end)}. One queued outside it waits for the next opening.`}
+      {/* The fields scroll; the save bar stays at the foot. */}
+      <ScrollBox className="space-y-4 p-px">
+        <fieldset
+          disabled={locked}
+          aria-describedby={locked ? "company-wide-lock" : undefined}
+          className="min-w-0 space-y-4"
         >
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field id="set-start" label="From">
-              <Input
-                id="set-start"
-                type="time"
-                min={CONTACT_HOURS_LIMIT.start}
-                max={CONTACT_HOURS_LIMIT.end}
-                value={form.contact_hours.start}
-                onChange={(e) => patch({ contact_hours: { ...form.contact_hours, start: e.target.value } })}
-              />
-            </Field>
-            <Field id="set-end" label="Until">
-              <Input
-                id="set-end"
-                type="time"
-                min={CONTACT_HOURS_LIMIT.start}
-                max={CONTACT_HOURS_LIMIT.end}
-                value={form.contact_hours.end}
-                onChange={(e) => patch({ contact_hours: { ...form.contact_hours, end: e.target.value } })}
-              />
-            </Field>
-          </div>
-        </Section>
+          <legend className="sr-only">Company-wide settings</legend>
+          <Section title="General">
+            <div className="space-y-1">
+              <label className="flex items-center gap-2 text-sm">
+                <Switch disabled={locked} checked={form.enabled} onCheckedChange={(enabled) => patch({ enabled })} />
+                Send automated reminders
+              </label>
+              <p className="text-xs text-muted-foreground">
+                The cooperative&apos;s own switch, off to start. While test mode is on, reminders are logged and nothing
+                is sent to members, whatever this switch says.
+              </p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field id="set-tz" label="Timezone">
+                <NativeSelect id="set-tz" className="w-full" value={form.timezone} onChange={(e) => patch({ timezone: e.target.value })}>
+                  {TIMEZONES.map((tz) => (
+                    <NativeSelectOption key={tz} value={tz}>
+                      {tz}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </Field>
+              <Field id="set-time" label="Default send time" hint="Used by new rules.">
+                <Input id="set-time" type="time" value={form.default_send_time} onChange={(e) => patch({ default_send_time: e.target.value })} />
+              </Field>
+            </div>
+            <div className="flex flex-wrap gap-6">
+              <label className="flex items-center gap-2 text-sm">
+                <Switch disabled={locked} checked={form.channels.sms} onCheckedChange={(sms) => patch({ channels: { ...form.channels, sms } })} />
+                SMS
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <Switch disabled={locked} checked={form.channels.email} onCheckedChange={(email) => patch({ channels: { ...form.channels, email } })} />
+                Email
+              </label>
+            </div>
+          </Section>
 
-        <Section title="Retries" description="Failed sends are retried; an invalid number or a bounced address is not.">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field id="set-attempts" label={`Retry attempts (max ${MAX_RETRY_ATTEMPTS})`}>
-              <Input
-                id="set-attempts"
-                type="number"
-                min={0}
-                max={MAX_RETRY_ATTEMPTS}
-                value={form.retry.max_attempts}
-                onChange={(e) => patch({ retry: { ...form.retry, max_attempts: e.target.valueAsNumber } })}
-              />
-            </Field>
-            <Field id="set-delay" label="Wait between attempts (minutes)">
-              <Input
-                id="set-delay"
-                type="number"
-                min={1}
-                value={form.retry.delay_minutes}
-                onChange={(e) => patch({ retry: { ...form.retry, delay_minutes: e.target.valueAsNumber } })}
-              />
-            </Field>
-          </div>
-        </Section>
+          <Section
+            title="Contact hours"
+            description={`Reminders only go out inside this window, and never before ${formatSendTime(CONTACT_HOURS_LIMIT.start)} or after ${formatSendTime(CONTACT_HOURS_LIMIT.end)}. One queued outside it waits for the next opening.`}
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field id="set-start" label="From">
+                <Input
+                  id="set-start"
+                  type="time"
+                  min={CONTACT_HOURS_LIMIT.start}
+                  max={CONTACT_HOURS_LIMIT.end}
+                  value={form.contact_hours.start}
+                  onChange={(e) => patch({ contact_hours: { ...form.contact_hours, start: e.target.value } })}
+                />
+              </Field>
+              <Field id="set-end" label="Until">
+                <Input
+                  id="set-end"
+                  type="time"
+                  min={CONTACT_HOURS_LIMIT.start}
+                  max={CONTACT_HOURS_LIMIT.end}
+                  value={form.contact_hours.end}
+                  onChange={(e) => patch({ contact_hours: { ...form.contact_hours, end: e.target.value } })}
+                />
+              </Field>
+            </div>
+          </Section>
 
-        <Section title="SMS provider" description="The API credentials are stored encrypted and never shown again.">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field id="sms-provider" label="Provider">
-              <NativeSelect
-                id="sms-provider"
-                className="w-full"
-                value={form.sms_provider.provider ?? ""}
-                onChange={(e) => patchSms({ provider: (e.target.value || null) as SmsProvider | null })}
-              >
-                <NativeSelectOption value="">Not configured</NativeSelectOption>
-                {SMS_PROVIDERS.map((p) => (
-                  <NativeSelectOption key={p.value} value={p.value}>
-                    {p.label}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </Field>
-            <Field id="sms-sender" label="Sender ID" hint="The name members see, as registered with the provider.">
-              <Input id="sms-sender" value={form.sms_provider.sender_id} onChange={(e) => patchSms({ sender_id: e.target.value })} />
-            </Field>
-            <Field id="sms-key" label="API key" hint={secretHint(settings.sms_provider.has_credentials)}>
-              <Input
-                id="sms-key"
-                type="password"
-                autoComplete="new-password"
-                value={form.sms_provider.api_key ?? ""}
-                onChange={(e) => patchSms({ api_key: e.target.value })}
-              />
-            </Field>
-            <Field id="sms-secret" label="API secret" hint="Only if the provider uses one.">
-              <Input
-                id="sms-secret"
-                type="password"
-                autoComplete="new-password"
-                value={form.sms_provider.api_secret ?? ""}
-                onChange={(e) => patchSms({ api_secret: e.target.value })}
-              />
-            </Field>
-            <Field id="sms-cost" label="Cost per SMS part (₱)" hint="Used for the dashboard's monthly estimate.">
-              <Input
-                id="sms-cost"
-                type="number"
-                min={0}
-                step="0.01"
-                value={form.sms_provider.cost_per_segment ?? ""}
-                onChange={(e) => patchSms({ cost_per_segment: Number.isNaN(e.target.valueAsNumber) ? null : e.target.valueAsNumber })}
-              />
-            </Field>
-          </div>
-        </Section>
+          <Section title="Retries" description="Failed sends are retried; an invalid number or a bounced address is not.">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field id="set-attempts" label={`Retry attempts (max ${MAX_RETRY_ATTEMPTS})`}>
+                <Input
+                  id="set-attempts"
+                  type="number"
+                  min={0}
+                  max={MAX_RETRY_ATTEMPTS}
+                  value={form.retry.max_attempts}
+                  onChange={(e) => patch({ retry: { ...form.retry, max_attempts: e.target.valueAsNumber } })}
+                />
+              </Field>
+              <Field id="set-delay" label="Wait between attempts (minutes)">
+                <Input
+                  id="set-delay"
+                  type="number"
+                  min={1}
+                  value={form.retry.delay_minutes}
+                  onChange={(e) => patch({ retry: { ...form.retry, delay_minutes: e.target.valueAsNumber } })}
+                />
+              </Field>
+            </div>
+          </Section>
 
-        <Section title="Email provider">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field id="email-provider" label="Provider">
-              <NativeSelect
-                id="email-provider"
-                className="w-full"
-                value={form.email_provider.provider ?? ""}
-                onChange={(e) => patchEmail({ provider: (e.target.value || null) as EmailProvider | null })}
-              >
-                <NativeSelectOption value="">Not configured</NativeSelectOption>
-                {EMAIL_PROVIDERS.map((p) => (
-                  <NativeSelectOption key={p.value} value={p.value}>
-                    {p.label}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </Field>
-            <Field id="email-key" label="API key / password" hint={secretHint(settings.email_provider.has_credentials)}>
-              <Input
-                id="email-key"
-                type="password"
-                autoComplete="new-password"
-                value={form.email_provider.api_key ?? ""}
-                onChange={(e) => patchEmail({ api_key: e.target.value })}
-              />
-            </Field>
-            <Field id="email-name" label="Sender name">
-              <Input id="email-name" value={form.email_provider.sender_name} onChange={(e) => patchEmail({ sender_name: e.target.value })} />
-            </Field>
-            <Field id="email-from" label="Sender email">
-              <Input id="email-from" type="email" value={form.email_provider.sender_email} onChange={(e) => patchEmail({ sender_email: e.target.value })} />
-            </Field>
-            <Field id="email-reply" label="Reply-to (optional)">
-              <Input
-                id="email-reply"
-                type="email"
-                value={form.email_provider.reply_to ?? ""}
-                onChange={(e) => patchEmail({ reply_to: e.target.value || null })}
-              />
-            </Field>
-          </div>
-        </Section>
+          <Section title="SMS provider" description="The API credentials are stored encrypted and never shown again.">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field id="sms-provider" label="Provider">
+                <NativeSelect
+                  id="sms-provider"
+                  className="w-full"
+                  value={form.sms_provider.provider ?? ""}
+                  onChange={(e) => patchSms({ provider: (e.target.value || null) as SmsProvider | null })}
+                >
+                  <NativeSelectOption value="">Not configured</NativeSelectOption>
+                  {SMS_PROVIDERS.map((p) => (
+                    <NativeSelectOption key={p.value} value={p.value}>
+                      {p.label}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </Field>
+              <Field id="sms-sender" label="Sender ID" hint="The name members see, as registered with the provider.">
+                <Input id="sms-sender" value={form.sms_provider.sender_id} onChange={(e) => patchSms({ sender_id: e.target.value })} />
+              </Field>
+              <Field id="sms-key" label="API key" hint={secretHint(settings.sms_provider.has_credentials)}>
+                <Input
+                  id="sms-key"
+                  type="password"
+                  autoComplete="new-password"
+                  value={form.sms_provider.api_key ?? ""}
+                  onChange={(e) => patchSms({ api_key: e.target.value })}
+                />
+              </Field>
+              <Field id="sms-secret" label="API secret" hint="Only if the provider uses one.">
+                <Input
+                  id="sms-secret"
+                  type="password"
+                  autoComplete="new-password"
+                  value={form.sms_provider.api_secret ?? ""}
+                  onChange={(e) => patchSms({ api_secret: e.target.value })}
+                />
+              </Field>
+              <Field id="sms-cost" label="Cost per SMS part (₱)" hint="Used for the dashboard's monthly estimate.">
+                <Input
+                  id="sms-cost"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={form.sms_provider.cost_per_segment ?? ""}
+                  onChange={(e) => patchSms({ cost_per_segment: Number.isNaN(e.target.valueAsNumber) ? null : e.target.valueAsNumber })}
+                />
+              </Field>
+            </div>
+          </Section>
 
-        <Section title="Payment instructions" description="Inserted wherever a template uses the payment instructions variable.">
-          <Textarea
-            aria-label="Payment instructions"
-            rows={3}
-            value={form.payment_instructions}
-            onChange={(e) => patch({ payment_instructions: e.target.value })}
-          />
-        </Section>
-      </fieldset>
+          <Section title="Email provider">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field id="email-provider" label="Provider">
+                <NativeSelect
+                  id="email-provider"
+                  className="w-full"
+                  value={form.email_provider.provider ?? ""}
+                  onChange={(e) => patchEmail({ provider: (e.target.value || null) as EmailProvider | null })}
+                >
+                  <NativeSelectOption value="">Not configured</NativeSelectOption>
+                  {EMAIL_PROVIDERS.map((p) => (
+                    <NativeSelectOption key={p.value} value={p.value}>
+                      {p.label}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </Field>
+              <Field id="email-key" label="API key / password" hint={secretHint(settings.email_provider.has_credentials)}>
+                <Input
+                  id="email-key"
+                  type="password"
+                  autoComplete="new-password"
+                  value={form.email_provider.api_key ?? ""}
+                  onChange={(e) => patchEmail({ api_key: e.target.value })}
+                />
+              </Field>
+              <Field id="email-name" label="Sender name">
+                <Input id="email-name" value={form.email_provider.sender_name} onChange={(e) => patchEmail({ sender_name: e.target.value })} />
+              </Field>
+              <Field id="email-from" label="Sender email">
+                <Input id="email-from" type="email" value={form.email_provider.sender_email} onChange={(e) => patchEmail({ sender_email: e.target.value })} />
+              </Field>
+              <Field id="email-reply" label="Reply-to (optional)">
+                <Input
+                  id="email-reply"
+                  type="email"
+                  value={form.email_provider.reply_to ?? ""}
+                  onChange={(e) => patchEmail({ reply_to: e.target.value || null })}
+                />
+              </Field>
+            </div>
+          </Section>
 
-      {form.branches.length > 0 && (
-        <Section title="Branches" description="A branch can sign reminders with its own name and contact details.">
-          <div className="space-y-3">
-            {form.branches.map((b) => (
-              <div key={b.branch_id} className="space-y-3 rounded-lg border p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-medium">{b.branch_name}</p>
-                  <NativeSelect
-                    aria-label={`${b.branch_name} configuration`}
-                    value={b.use_company_default ? "default" : "branch"}
-                    onChange={(e) => patchBranch(b.branch_id, { use_company_default: e.target.value === "default" })}
-                  >
-                    <NativeSelectOption value="default">Use company default</NativeSelectOption>
-                    <NativeSelectOption value="branch">Use branch configuration</NativeSelectOption>
-                  </NativeSelect>
-                </div>
-                {!b.use_company_default && (
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <Input
-                      aria-label="Sender name"
-                      placeholder="Sender name"
-                      value={b.sender_name ?? ""}
-                      onChange={(e) => patchBranch(b.branch_id, { sender_name: e.target.value || null })}
-                    />
-                    <Input
-                      aria-label="Contact phone"
-                      placeholder="Contact phone"
-                      value={b.contact_phone ?? ""}
-                      onChange={(e) => patchBranch(b.branch_id, { contact_phone: e.target.value || null })}
-                    />
-                    <Input
-                      aria-label="Contact email"
-                      placeholder="Contact email"
-                      type="email"
-                      value={b.contact_email ?? ""}
-                      onChange={(e) => patchBranch(b.branch_id, { contact_email: e.target.value || null })}
-                    />
+          <Section title="Payment instructions" description="Inserted wherever a template uses the payment instructions variable.">
+            <Textarea
+              aria-label="Payment instructions"
+              rows={3}
+              value={form.payment_instructions}
+              onChange={(e) => patch({ payment_instructions: e.target.value })}
+            />
+          </Section>
+        </fieldset>
+
+        {form.branches.length > 0 && (
+          <Section title="Branches" description="A branch can sign reminders with its own name and contact details.">
+            <div className="space-y-3">
+              {form.branches.map((b) => (
+                <div key={b.branch_id} className="space-y-3 rounded-lg border p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-medium">{b.branch_name}</p>
+                    <NativeSelect
+                      aria-label={`${b.branch_name} configuration`}
+                      value={b.use_company_default ? "default" : "branch"}
+                      onChange={(e) => patchBranch(b.branch_id, { use_company_default: e.target.value === "default" })}
+                    >
+                      <NativeSelectOption value="default">Use company default</NativeSelectOption>
+                      <NativeSelectOption value="branch">Use branch configuration</NativeSelectOption>
+                    </NativeSelect>
                   </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </Section>
-      )}
+                  {!b.use_company_default && (
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <Input
+                        aria-label="Sender name"
+                        placeholder="Sender name"
+                        value={b.sender_name ?? ""}
+                        onChange={(e) => patchBranch(b.branch_id, { sender_name: e.target.value || null })}
+                      />
+                      <Input
+                        aria-label="Contact phone"
+                        placeholder="Contact phone"
+                        value={b.contact_phone ?? ""}
+                        onChange={(e) => patchBranch(b.branch_id, { contact_phone: e.target.value || null })}
+                      />
+                      <Input
+                        aria-label="Contact email"
+                        placeholder="Contact email"
+                        type="email"
+                        value={b.contact_email ?? ""}
+                        onChange={(e) => patchBranch(b.branch_id, { contact_email: e.target.value || null })}
+                      />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Section>
+        )}
+      </ScrollBox>
 
-      <div className="flex justify-end">
+      <div data-fab-clear className="flex shrink-0 justify-end border-t pt-4">
         <Button onClick={save} disabled={saving}>
           {saving ? "Saving…" : "Save settings"}
         </Button>

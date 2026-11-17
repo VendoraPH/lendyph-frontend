@@ -5,6 +5,9 @@ import { formatDate as formatShortDate } from "@/lib/format";
 import Link from "next/link";
 import { notifyError } from "@/lib/notify";
 import { RouteGuard } from "@/components/common";
+import { Illustration, hasIllustration } from "@/components/common/illustration";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -218,6 +221,7 @@ function PastDueLoansContent() {
   // table only.
   const summary = useMemo(() => summarizePastDue(loans, serverTotals), [loans, serverTotals]);
   const filterActive = search.trim() !== "" || bucket !== "all";
+  const emptyIllustration = loans.length === 0 ? "allCaughtUp" : "noResults";
 
   // A failed load has no figures to show. Rendering the zeroed totals would
   // print "0 members past due / ₱0.00" over a cooperative's real arrears.
@@ -233,7 +237,7 @@ function PastDueLoansContent() {
   };
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       {/* Header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -348,7 +352,7 @@ function PastDueLoansContent() {
       ) : null}
 
       {/* Filters */}
-      <Card>
+      <Card className="shrink-0">
         <CardContent className="py-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <div className="relative flex-1">
@@ -398,8 +402,8 @@ function PastDueLoansContent() {
       ) : null}
 
       {/* Table */}
-      <Card>
-        <CardContent className="p-0">
+      <Card className={FIT_CLASSES.section}>
+        <CardContent className={cn("p-0", FIT_CLASSES.section)}>
           {loading ? (
             <div
               className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground"
@@ -440,7 +444,11 @@ function PastDueLoansContent() {
             </div>
           ) : sorted.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-2 py-16 text-muted-foreground">
-              <AlertTriangle className="h-8 w-8 opacity-40" />
+              {hasIllustration(emptyIllustration) ? (
+                <Illustration name={emptyIllustration} />
+              ) : (
+                <AlertTriangle className="h-8 w-8 opacity-40" />
+              )}
               <p className="text-sm">
                 {loans.length === 0
                   ? "No past due loans — all members are current."
@@ -448,107 +456,109 @@ function PastDueLoansContent() {
               </p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>
-                    <button
-                      type="button"
-                      onClick={() => toggleSort("memberName")}
-                      className="flex items-center gap-1 hover:text-foreground"
-                    >
-                      Member
-                      <ArrowUpDown className="h-3 w-3" />
-                    </button>
-                  </TableHead>
-                  <TableHead>Loan #</TableHead>
-                  <TableHead>
-                    <button
-                      type="button"
-                      onClick={() => toggleSort("daysPastDue")}
-                      className="flex items-center gap-1 hover:text-foreground"
-                    >
-                      Days Past Due
-                      <ArrowUpDown className="h-3 w-3" />
-                    </button>
-                  </TableHead>
-                  <TableHead className="text-right">
-                    <button
-                      type="button"
-                      onClick={() => toggleSort("pastDue")}
-                      className="ml-auto flex items-center gap-1 hover:text-foreground"
-                    >
-                      Past Due Amount
-                      <ArrowUpDown className="h-3 w-3" />
-                    </button>
-                  </TableHead>
-                  <TableHead className="text-right">
-                    <button
-                      type="button"
-                      onClick={() => toggleSort("outstanding")}
-                      className="ml-auto flex items-center gap-1 hover:text-foreground"
-                    >
-                      Outstanding
-                      <ArrowUpDown className="h-3 w-3" />
-                    </button>
-                  </TableHead>
-                  <TableHead>Last Payment</TableHead>
-                  <TableHead>Branch</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sorted.map((l) => (
-                  <TableRow key={l.loanId}>
-                    <TableCell>
-                      <div className="font-medium">{l.memberName}</div>
-                      <div className="text-xs text-muted-foreground tabular-nums">
-                        {l.memberId}
-                      </div>
-                    </TableCell>
-                    <TableCell className="tabular-nums text-sm">
-                      {l.loanNumber}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        className={cn(
-                          "border tabular-nums",
-                          severityClass(l.daysPastDue),
-                        )}
+            <ScrollBox>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>
+                      <button
+                        type="button"
+                        onClick={() => toggleSort("memberName")}
+                        className="flex items-center gap-1 hover:text-foreground"
                       >
-                        {l.daysPastDue} {l.daysPastDue === 1 ? "day" : "days"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums font-semibold text-red-600">
-                      {currencyOrDash(l.pastDueAmount)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {currencyOrDash(l.outstandingBalance)}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {formatDate(l.lastPaymentDate)}
-                    </TableCell>
-                    <TableCell className="text-sm">{l.branch}</TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        nativeButton={false}
-                        render={<Link href={`/loans/${l.loanId}`} />}
-                        aria-label="Open loan"
+                        Member
+                        <ArrowUpDown className="h-3 w-3" />
+                      </button>
+                    </TableHead>
+                    <TableHead>Loan #</TableHead>
+                    <TableHead>
+                      <button
+                        type="button"
+                        onClick={() => toggleSort("daysPastDue")}
+                        className="flex items-center gap-1 hover:text-foreground"
                       >
-                        Open
-                        <ArrowRight className="ml-1 h-3 w-3" />
-                      </Button>
-                    </TableCell>
+                        Days Past Due
+                        <ArrowUpDown className="h-3 w-3" />
+                      </button>
+                    </TableHead>
+                    <TableHead className="text-right">
+                      <button
+                        type="button"
+                        onClick={() => toggleSort("pastDue")}
+                        className="ml-auto flex items-center gap-1 hover:text-foreground"
+                      >
+                        Past Due Amount
+                        <ArrowUpDown className="h-3 w-3" />
+                      </button>
+                    </TableHead>
+                    <TableHead className="text-right">
+                      <button
+                        type="button"
+                        onClick={() => toggleSort("outstanding")}
+                        className="ml-auto flex items-center gap-1 hover:text-foreground"
+                      >
+                        Outstanding
+                        <ArrowUpDown className="h-3 w-3" />
+                      </button>
+                    </TableHead>
+                    <TableHead>Last Payment</TableHead>
+                    <TableHead>Branch</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {sorted.map((l) => (
+                    <TableRow key={l.loanId}>
+                      <TableCell>
+                        <div className="font-medium">{l.memberName}</div>
+                        <div className="text-xs text-muted-foreground tabular-nums">
+                          {l.memberId}
+                        </div>
+                      </TableCell>
+                      <TableCell className="tabular-nums text-sm">
+                        {l.loanNumber}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          className={cn(
+                            "border tabular-nums",
+                            severityClass(l.daysPastDue),
+                          )}
+                        >
+                          {l.daysPastDue} {l.daysPastDue === 1 ? "day" : "days"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums font-semibold text-red-600">
+                        {currencyOrDash(l.pastDueAmount)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {currencyOrDash(l.outstandingBalance)}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {formatDate(l.lastPaymentDate)}
+                      </TableCell>
+                      <TableCell className="text-sm">{l.branch}</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          nativeButton={false}
+                          render={<Link href={`/loans/${l.loanId}`} />}
+                          aria-label="Open loan"
+                        >
+                          Open
+                          <ArrowRight className="ml-1 h-3 w-3" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ScrollBox>
           )}
         </CardContent>
       </Card>
-    </div>
+    </PageFill>
   );
 }
 

@@ -5,11 +5,13 @@ import Link from "next/link";
 import { ArrowLeft, Printer, ReceiptText, Ban, Loader2 } from "lucide-react";
 import { usePrintables } from "@/hooks";
 import { PermissionButton, RouteGuard } from "@/components/common";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { repaymentService } from "@/services";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { INSURANCE_PREMIUM_LABEL, repaymentInsuranceApplied } from "@/lib/insurance-premium";
@@ -223,7 +225,7 @@ function PaymentReceiptContent({
 
   if (loading) {
     return (
-      <div className="flex min-h-[calc(100vh-6rem)] flex-col items-center justify-center gap-3">
+      <div className={cn(FIT_CLASSES.loader, "flex-col gap-3")}>
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         <p className="text-sm text-muted-foreground">Loading receipt...</p>
       </div>
@@ -232,7 +234,7 @@ function PaymentReceiptContent({
 
   if (notFound || !receipt) {
     return (
-      <div className="flex min-h-[calc(100vh-6rem)] flex-col items-center justify-center gap-4">
+      <div className={cn(FIT_CLASSES.loader, "flex-col gap-4")}>
         <ReceiptText className="h-12 w-12 text-muted-foreground" />
         <p className="text-lg font-semibold">Receipt not found</p>
         <p className="text-sm text-muted-foreground">
@@ -255,7 +257,7 @@ function PaymentReceiptContent({
   };
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       {/* Screen-only header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between print:hidden">
         <Link
@@ -308,260 +310,263 @@ function PaymentReceiptContent({
         </div>
       </div>
 
-      {/* Void confirmation dialog */}
-      {showVoidConfirm && (
-        <div className="print:hidden">
-          <Card className="mx-auto max-w-md border-destructive/30">
-            <CardContent className="p-4 space-y-3">
-              <p className="text-sm font-semibold text-destructive">Void this payment?</p>
-              <p className="text-xs text-muted-foreground">
-                This action cannot be undone. The payment of {formatCurrency(receipt.total)} for {receipt.borrower_name} will be voided.
-              </p>
-              <textarea
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="Reason for voiding (required)"
-                rows={2}
-                value={voidReason}
-                onChange={(e) => setVoidReason(e.target.value)}
-              />
-              <div className="flex justify-end gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setShowVoidConfirm(false);
-                    setVoidReason("");
-                  }}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  disabled={voiding || !voidReason.trim()}
-                  onClick={handleVoid}
-                >
-                  {voiding ? "Voiding..." : "Confirm Void"}
-                </Button>
+      {/* The receipt scrolls under the header. Print shows all of it (globals.css). */}
+      <ScrollBox className="space-y-6 p-px">
+        {/* Void confirmation dialog */}
+        {showVoidConfirm && (
+          <div className="print:hidden">
+            <Card className="mx-auto max-w-md border-destructive/30">
+              <CardContent className="p-4 space-y-3">
+                <p className="text-sm font-semibold text-destructive">Void this payment?</p>
+                <p className="text-xs text-muted-foreground">
+                  This action cannot be undone. The payment of {formatCurrency(receipt.total)} for {receipt.borrower_name} will be voided.
+                </p>
+                <textarea
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  placeholder="Reason for voiding (required)"
+                  rows={2}
+                  value={voidReason}
+                  onChange={(e) => setVoidReason(e.target.value)}
+                />
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setShowVoidConfirm(false);
+                      setVoidReason("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={voiding || !voidReason.trim()}
+                    onClick={handleVoid}
+                  >
+                    {voiding ? "Voiding..." : "Confirm Void"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Receipt card */}
+        <div className="mx-auto w-full max-w-md">
+          <Card className="overflow-hidden border shadow-md print:shadow-none print:border-0">
+            <CardContent className="p-0">
+              {/* Brand header */}
+              <div className="bg-brand-orange px-6 py-5 text-center text-white print:bg-black print:text-white">
+                <div className="flex items-center justify-center gap-2">
+                  <ReceiptText className="h-5 w-5" />
+                  <span className="text-xl font-extrabold tracking-tight">
+                    LENDY.PH
+                  </span>
+                </div>
+                <p className="mt-0.5 text-sm font-medium opacity-90">
+                  Official Payment Receipt
+                </p>
+              </div>
+
+              <div className="space-y-5 px-6 py-5">
+                {/* Receipt meta */}
+                <div className="flex items-start justify-between">
+                  <div className="space-y-0.5">
+                    <p className="text-xs text-muted-foreground">Receipt No.</p>
+                    <p className="font-mono text-base font-bold">
+                      {receipt.receipt_number}
+                    </p>
+                  </div>
+                  <div className="text-right space-y-0.5">
+                    <p className="text-xs text-muted-foreground">Date</p>
+                    <p className="text-sm font-medium">
+                      {formatDate(receipt.payment_date)}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Voided watermark */}
+                {receipt.status === "voided" && (
+                  <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-center">
+                    <p className="text-sm font-bold uppercase tracking-widest text-destructive">
+                      VOID
+                    </p>
+                    <p className="text-xs text-destructive/80">
+                      This receipt has been voided
+                    </p>
+                    <p className="text-xs text-destructive/80">
+                      Voided by {receipt.voided_by}
+                    </p>
+                  </div>
+                )}
+
+                <Separator />
+
+                {/* Borrower information */}
+                <div className="space-y-2">
+                  <SectionHeading>Member Information</SectionHeading>
+                  <div className="space-y-1.5">
+                    <ReceiptRow label="Name" value={receipt.borrower_name} />
+                    <ReceiptRow
+                      label="Loan Account"
+                      value={receipt.loan_account_number}
+                    />
+                    <ReceiptRow
+                      label="Loan Product"
+                      value={receipt.loan_product_name}
+                    />
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Payment details */}
+                <div className="space-y-2">
+                  <SectionHeading>Payment Details</SectionHeading>
+                  <div className="space-y-1.5">
+                    <ReceiptRow
+                      label="Payment Date"
+                      value={formatDate(receipt.payment_date)}
+                    />
+                    <ReceiptRow
+                      label="Payment Method"
+                      value={METHOD_LABELS[receipt.method] || receipt.method}
+                    />
+                    {receipt.reference_number && (
+                      <ReceiptRow
+                        label="Reference No."
+                        value={receipt.reference_number}
+                      />
+                    )}
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Payment breakdown */}
+                <div className="space-y-2">
+                  <SectionHeading>Payment Breakdown</SectionHeading>
+                  <div className="space-y-1.5">
+                    {receipt.insurance !== null && (
+                      <ReceiptRow
+                        label={INSURANCE_PREMIUM_LABEL}
+                        value={formatCurrency(receipt.insurance)}
+                      />
+                    )}
+                    <ReceiptRow
+                      label="Penalty"
+                      value={formatCurrency(receipt.penalty)}
+                    />
+                    <ReceiptRow
+                      label="Interest"
+                      value={formatCurrency(receipt.interest)}
+                    />
+                    <ReceiptRow
+                      label="Principal"
+                      value={formatCurrency(receipt.principal)}
+                    />
+                    {receipt.extras.map((line) => (
+                      <ReceiptRow key={line.label} label={line.label} value={line.amount} />
+                    ))}
+                  </div>
+                  <Separator className="my-1" />
+                  <div className="flex justify-between text-sm font-bold">
+                    <span>Total Paid</span>
+                    <span className="font-mono text-base">
+                      {formatCurrency(receipt.total)}
+                    </span>
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Balance summary */}
+                <div className="space-y-2">
+                  <SectionHeading>Balance Summary</SectionHeading>
+                  <div className="space-y-1.5">
+                    {/* The stored balances are principal only, so they are
+                        labelled that way; the premium collected is its own row. */}
+                    <ReceiptRow
+                      label="Principal balance before payment"
+                      value={formatCurrency(receipt.previous_balance)}
+                    />
+                    <ReceiptRow
+                      label="Amount Paid"
+                      value={formatCurrency(receipt.total)}
+                    />
+                    {receipt.insurance !== null && (
+                      <ReceiptRow
+                        label="Insurance premium collected"
+                        value={formatCurrency(receipt.insurance)}
+                      />
+                    )}
+                    <ReceiptRow
+                      label="Principal balance after payment"
+                      value={formatCurrency(receipt.new_balance)}
+                      bold
+                    />
+                    {receipt.next_due_date !== "—" && (
+                      <ReceiptRow
+                        label="Next Due Date"
+                        value={formatDate(receipt.next_due_date)}
+                      />
+                    )}
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Collected by / remarks */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Collected by</span>
+                    <span className="font-medium">{receipt.collected_by}</span>
+                  </div>
+                  {receipt.remarks && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Remarks</span>
+                      <span className="max-w-[55%] text-right">
+                        {receipt.remarks}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Signature line */}
+                <div className="pt-2 text-center">
+                  <div className="mx-auto w-40 border-t border-foreground" />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Authorized Signature
+                  </p>
+                </div>
+
+                {/* Status badge */}
+                <div className="flex justify-center print:hidden">
+                  <Badge
+                    variant="outline"
+                    className={status.className}
+                  >
+                    {status.label}
+                  </Badge>
+                </div>
+
+                {/* Footer note */}
+                <div className="rounded-md bg-muted/50 px-4 py-3 text-center">
+                  <p className="text-[11px] text-muted-foreground">
+                    This receipt is system-generated.
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Keep this as proof of payment.
+                  </p>
+                </div>
               </div>
             </CardContent>
           </Card>
         </div>
-      )}
-
-      {/* Receipt card */}
-      <div className="mx-auto w-full max-w-md">
-        <Card className="overflow-hidden border shadow-md print:shadow-none print:border-0">
-          <CardContent className="p-0">
-            {/* Brand header */}
-            <div className="bg-brand-orange px-6 py-5 text-center text-white print:bg-black print:text-white">
-              <div className="flex items-center justify-center gap-2">
-                <ReceiptText className="h-5 w-5" />
-                <span className="text-xl font-extrabold tracking-tight">
-                  LENDY.PH
-                </span>
-              </div>
-              <p className="mt-0.5 text-sm font-medium opacity-90">
-                Official Payment Receipt
-              </p>
-            </div>
-
-            <div className="space-y-5 px-6 py-5">
-              {/* Receipt meta */}
-              <div className="flex items-start justify-between">
-                <div className="space-y-0.5">
-                  <p className="text-xs text-muted-foreground">Receipt No.</p>
-                  <p className="font-mono text-base font-bold">
-                    {receipt.receipt_number}
-                  </p>
-                </div>
-                <div className="text-right space-y-0.5">
-                  <p className="text-xs text-muted-foreground">Date</p>
-                  <p className="text-sm font-medium">
-                    {formatDate(receipt.payment_date)}
-                  </p>
-                </div>
-              </div>
-
-              {/* Voided watermark */}
-              {receipt.status === "voided" && (
-                <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-center">
-                  <p className="text-sm font-bold uppercase tracking-widest text-destructive">
-                    VOID
-                  </p>
-                  <p className="text-xs text-destructive/80">
-                    This receipt has been voided
-                  </p>
-                  <p className="text-xs text-destructive/80">
-                    Voided by {receipt.voided_by}
-                  </p>
-                </div>
-              )}
-
-              <Separator />
-
-              {/* Borrower information */}
-              <div className="space-y-2">
-                <SectionHeading>Member Information</SectionHeading>
-                <div className="space-y-1.5">
-                  <ReceiptRow label="Name" value={receipt.borrower_name} />
-                  <ReceiptRow
-                    label="Loan Account"
-                    value={receipt.loan_account_number}
-                  />
-                  <ReceiptRow
-                    label="Loan Product"
-                    value={receipt.loan_product_name}
-                  />
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Payment details */}
-              <div className="space-y-2">
-                <SectionHeading>Payment Details</SectionHeading>
-                <div className="space-y-1.5">
-                  <ReceiptRow
-                    label="Payment Date"
-                    value={formatDate(receipt.payment_date)}
-                  />
-                  <ReceiptRow
-                    label="Payment Method"
-                    value={METHOD_LABELS[receipt.method] || receipt.method}
-                  />
-                  {receipt.reference_number && (
-                    <ReceiptRow
-                      label="Reference No."
-                      value={receipt.reference_number}
-                    />
-                  )}
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Payment breakdown */}
-              <div className="space-y-2">
-                <SectionHeading>Payment Breakdown</SectionHeading>
-                <div className="space-y-1.5">
-                  {receipt.insurance !== null && (
-                    <ReceiptRow
-                      label={INSURANCE_PREMIUM_LABEL}
-                      value={formatCurrency(receipt.insurance)}
-                    />
-                  )}
-                  <ReceiptRow
-                    label="Penalty"
-                    value={formatCurrency(receipt.penalty)}
-                  />
-                  <ReceiptRow
-                    label="Interest"
-                    value={formatCurrency(receipt.interest)}
-                  />
-                  <ReceiptRow
-                    label="Principal"
-                    value={formatCurrency(receipt.principal)}
-                  />
-                  {receipt.extras.map((line) => (
-                    <ReceiptRow key={line.label} label={line.label} value={line.amount} />
-                  ))}
-                </div>
-                <Separator className="my-1" />
-                <div className="flex justify-between text-sm font-bold">
-                  <span>Total Paid</span>
-                  <span className="font-mono text-base">
-                    {formatCurrency(receipt.total)}
-                  </span>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Balance summary */}
-              <div className="space-y-2">
-                <SectionHeading>Balance Summary</SectionHeading>
-                <div className="space-y-1.5">
-                  {/* The stored balances are principal only, so they are
-                      labelled that way; the premium collected is its own row. */}
-                  <ReceiptRow
-                    label="Principal balance before payment"
-                    value={formatCurrency(receipt.previous_balance)}
-                  />
-                  <ReceiptRow
-                    label="Amount Paid"
-                    value={formatCurrency(receipt.total)}
-                  />
-                  {receipt.insurance !== null && (
-                    <ReceiptRow
-                      label="Insurance premium collected"
-                      value={formatCurrency(receipt.insurance)}
-                    />
-                  )}
-                  <ReceiptRow
-                    label="Principal balance after payment"
-                    value={formatCurrency(receipt.new_balance)}
-                    bold
-                  />
-                  {receipt.next_due_date !== "—" && (
-                    <ReceiptRow
-                      label="Next Due Date"
-                      value={formatDate(receipt.next_due_date)}
-                    />
-                  )}
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Collected by / remarks */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Collected by</span>
-                  <span className="font-medium">{receipt.collected_by}</span>
-                </div>
-                {receipt.remarks && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Remarks</span>
-                    <span className="max-w-[55%] text-right">
-                      {receipt.remarks}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* Signature line */}
-              <div className="pt-2 text-center">
-                <div className="mx-auto w-40 border-t border-foreground" />
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Authorized Signature
-                </p>
-              </div>
-
-              {/* Status badge */}
-              <div className="flex justify-center print:hidden">
-                <Badge
-                  variant="outline"
-                  className={status.className}
-                >
-                  {status.label}
-                </Badge>
-              </div>
-
-              {/* Footer note */}
-              <div className="rounded-md bg-muted/50 px-4 py-3 text-center">
-                <p className="text-[11px] text-muted-foreground">
-                  This receipt is system-generated.
-                </p>
-                <p className="text-[11px] text-muted-foreground">
-                  Keep this as proof of payment.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+      </ScrollBox>
+    </PageFill>
   );
 }
 

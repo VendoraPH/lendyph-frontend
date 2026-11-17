@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 
 import { RouteGuard } from "@/components/common";
+import { PageFill, PageLoader, ScrollBox } from "@/components/common/page-fill";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { StaffPicker } from "@/components/common/staff-picker";
 import {
@@ -784,18 +785,14 @@ function RestructureLoanInner() {
 
   // ── Loading state ──
   if (loadingData) {
-    return (
-      <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
-        <Spinner className="size-6 text-muted-foreground" />
-      </div>
-    );
+    return <PageLoader />;
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <>
-      <div className="mx-auto w-full max-w-4xl space-y-6 pb-10">
+      <PageFill className="mx-auto w-full max-w-4xl pb-10 fit:pb-0">
 
         {/* Header */}
         <div className="flex items-center gap-4">
@@ -810,895 +807,894 @@ function RestructureLoanInner() {
           </div>
         </div>
 
-        {loanShortfall && (
-          <IncompleteListNotice
-            shown={loanShortfall.shown}
-            total={loanShortfall.total}
-            noun="loans"
-            consequence="Some of this member's loans are missing from the source-loan picker below, so a restructurable loan may not be listed."
-          />
-        )}
+        {/* The form scrolls under the header; Cancel and Submit stay at the foot. */}
+        <ScrollBox className="space-y-6 p-px">
+          {loanShortfall && (
+            <IncompleteListNotice
+              shown={loanShortfall.shown}
+              total={loanShortfall.total}
+              noun="loans"
+              consequence="Some of this member's loans are missing from the source-loan picker below, so a restructurable loan may not be listed."
+            />
+          )}
 
-        {/* ── Step 1: Source Loan Selection ── */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Source Loan</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
-            {/* Borrower combobox */}
-            <div className="space-y-1.5">
-              <Label>Member</Label>
-              <MemberSearchPicker
-                aria-label="Member"
-                value={selectedBorrower}
-                onChange={handleBorrowerChange}
-                canSearch={canListMembers}
-                showCode
-                placeholder={canListMembers ? "Select member…" : "Your role can't view members"}
-              />
-            </div>
+          {/* ── Step 1: Source Loan Selection ── */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Source Loan</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4 sm:grid-cols-2">
+              {/* Borrower combobox */}
+              <div className="space-y-1.5">
+                <Label>Member</Label>
+                <MemberSearchPicker
+                  aria-label="Member"
+                  value={selectedBorrower}
+                  onChange={handleBorrowerChange}
+                  canSearch={canListMembers}
+                  showCode
+                  placeholder={canListMembers ? "Select member…" : "Your role can't view members"}
+                />
+              </div>
 
-            {/* Active loan combobox */}
-            <div className="space-y-1.5">
-              <Label>Active Loan to Restructure</Label>
-              {loadingLoans ? (
-                <div className="flex h-10 items-center gap-2 rounded-md border px-3 text-sm text-muted-foreground">
-                  <Spinner className="size-4" /> Loading loans…
-                </div>
-              ) : (
-                <Popover open={loanOpen} onOpenChange={setLoanOpen}>
-                  <PopoverTrigger
-                    render={<Button variant="outline" role="combobox" disabled={!borrowerId} className="w-full justify-between font-normal" />}
-                  >
-                    {selectedSourceLoan
-                      ? `${selectedSourceLoan.loan_account_number ?? selectedSourceLoan.application_number} — Principal Balance ${currencyOrDash((selectedSourceLoan as LoanWithPrincipalBalance).outstanding_principal)}`
-                      : borrowerId
-                      ? borrowerLoans.length === 0
-                        ? "No eligible loans"
-                        : "Select loan…"
-                      : "Select a member first"}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder="Search loan…" />
-                      <CommandList>
-                        <CommandEmpty>No eligible loans found.</CommandEmpty>
-                        <CommandGroup>
-                          {borrowerLoans.map((l) => (
-                            <CommandItem
-                              key={l.id}
-                              value={`${l.loan_account_number ?? l.application_number} ${l.principal_amount}`}
-                              onSelect={() => {
-                                setSourceLoanId(l.id === sourceLoanId ? null : l.id);
-                                setLoanOpen(false);
-                              }}
-                            >
-                              <Check
-                                className={cn("mr-2 h-4 w-4", sourceLoanId === l.id ? "opacity-100" : "opacity-0")}
-                              />
-                              <div className="flex flex-col">
-                                <span className="font-mono text-sm">
-                                  {l.loan_account_number ?? l.application_number}
-                                </span>
-                                <span className="text-xs text-muted-foreground">
-                                  {formatCurrency(l.principal_amount)} ·{" "}
-                                  <Badge
-                                    variant="outline"
-                                    className={cn("text-[10px] py-0 px-1", LOAN_STATUS_COLORS[loanDisplayStatus(l)])}
-                                  >
-                                    {loanRowStatusLabel(l)}
-                                  </Badge>
-                                </span>
-                              </div>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Loading loan detail spinner */}
-        {loadingLoanDetail && (
-          <div className="flex items-center justify-center py-8">
-            <Spinner className="size-6 text-brand-orange" />
-            <span className="ml-2 text-sm text-muted-foreground">Loading loan details…</span>
-          </div>
-        )}
-
-        {/* ── Form (shown after loan is selected + loaded) ── */}
-        {formVisible && (
-          <>
-            {/* Member & Co-Maker */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Member & Co-Maker</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Borrower (locked) */}
-                <div className="space-y-1.5">
-                  <Label>Member</Label>
-                  <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm">
-                    {selectedBorrower?.full_name ?? "—"}
-                    <Badge variant="outline" className="ml-2 text-xs">
-                      {selectedBorrower?.borrower_code}
-                    </Badge>
+              {/* Active loan combobox */}
+              <div className="space-y-1.5">
+                <Label>Active Loan to Restructure</Label>
+                {loadingLoans ? (
+                  <div className="flex h-10 items-center gap-2 rounded-md border px-3 text-sm text-muted-foreground">
+                    <Spinner className="size-4" /> Loading loans…
                   </div>
-                </div>
-
-                {/* Co-makers */}
-                <div className="space-y-2">
-                  <Label>Co-Maker(s)</Label>
-                  {coMakerIds.map((cmId, idx) => (
-                    <div key={idx} className="flex gap-2">
-                      <MemberSearchPicker
-                        aria-label={`Co-maker ${idx + 1}`}
-                        className="flex-1"
-                        value={cmId ? knownMembers[cmId] ?? null : null}
-                        onChange={(picked) => {
-                          if (picked) setKnownMembers((known) => rememberMembers(known, [picked]));
-                          setCoMakerIds((prev) => prev.map((v, i) => (i === idx ? (picked?.id ?? null) : v)));
-                        }}
-                        canSearch={canListMembers}
-                        showCode
-                        exclude={[borrowerId, ...coMakerIds.filter((_, i) => i !== idx)]}
-                        placeholder={canListMembers ? "Select co-maker (optional)" : "Your role can't view members"}
-                      />
-                      {coMakerIds.length > 1 && (
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() =>
-                            setCoMakerIds((prev) => {
-                              const next = prev.filter((_, i) => i !== idx);
-                              return next.length === 0 ? [null] : next;
-                            })
-                          }
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCoMakerIds((prev) => [...prev, null])}
-                  >
-                    <Plus className="mr-1.5 h-4 w-4" />
-                    Add Co-Maker
-                  </Button>
-                </div>
-
-                {/* Account Officer */}
-                <div className="space-y-1.5">
-                  <Label htmlFor="account-officer">Account Officer <span className="text-muted-foreground">(optional)</span></Label>
-                  <StaffPicker
-                    id="account-officer"
-                    value={accountOfficer}
-                    onChange={setAccountOfficer}
-                    clearable
-                  />
-                </div>
-
-                {/* Purpose */}
-                <div className="space-y-1.5">
-                  <Label>Purpose <span className="text-muted-foreground">(optional)</span></Label>
-                  <Textarea
-                    placeholder="Loan purpose…"
-                    value={purpose}
-                    onChange={(e) => setPurpose(e.target.value)}
-                    rows={2}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Loan Product & Terms */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Loan Product & Terms</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {/* Product */}
-                  <div className="space-y-1.5">
-                    <Label>Loan Product</Label>
-                    <Select
-                      value={productId ?? null}
-                      onValueChange={(v) => handleProductChange(v)}
-                      items={productItems}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select product…" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {products.map((p) => (
-                          <SelectItem key={p.id} value={String(p.id)} disabled={!p.is_active}>
-                            {p.name}
-                            {!p.is_active && (
-                              <span className="text-muted-foreground"> (Inactive)</span>
-                            )}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Loan Amount */}
-                  <div className="space-y-1.5">
-                    <Label>
-                      Loan Amount
-                      <span className="ml-1 text-xs text-muted-foreground">(restructurable balance)</span>
-                    </Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="0.00"
-                      value={principalAmount}
-                      onChange={(e) => setPrincipalAmount(e.target.value)}
-                      aria-describedby={hintBalance !== null ? "principal-hint" : undefined}
-                    />
-                    {hintBalance !== null && (
-                      <p
-                        id="principal-hint"
-                        className={cn(
-                          "text-xs",
-                          remarksRequired
-                            ? "text-amber-600 dark:text-amber-500"
-                            : "text-muted-foreground",
-                        )}
-                      >
-                        {restructurableBalanceHint(shortfallState.showsShortfall, restructure.shortfall, hintBalance)}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Term */}
-                  <div className="space-y-1.5">
-                    <Label>Term ({termUnit})</Label>
-                    <Input
-                      type="number"
-                      min="1"
-                      placeholder="e.g. 12"
-                      value={termValue}
-                      onChange={(e) => setTermValue(e.target.value)}
-                    />
-                  </div>
-
-                  {/* Payment Frequency */}
-                  <div className="space-y-1.5">
-                    <Label>Payment Frequency</Label>
-                    <Select
-                      value={paymentFrequency ?? null}
-                      onValueChange={(v) => setPaymentFrequency(v ?? null)}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select frequency…">
-                          {(value: string | null) =>
-                            value ? PAYMENT_FREQUENCY_LABELS[value] ?? value : "Select frequency…"
-                          }
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PAYMENT_FREQUENCY_OPTIONS.filter(
-                          (o) => productFrequencies.length === 0 || productFrequencies.includes(o.value),
-                        ).map((o) => (
-                          <SelectItem key={o.value} value={o.value}>
-                            {o.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Interest Rate */}
-                  <div className="space-y-1.5">
-                    <Label>Interest Rate (% per {ratePeriodWord(rateFrequency)})</Label>
-                    <Input
-                      inputMode="decimal"
-                      placeholder="e.g. 2"
-                      value={interestRate}
-                      onChange={(e) => setInterestRate(sanitizeDecimalInput(e.target.value))}
-                    />
-                  </div>
-
-                  {/* Interest Type — read-only: the API snapshots it from the product */}
-                  <div className="space-y-1.5">
-                    <Label htmlFor="interest-type">Interest Type</Label>
-                    {/* <output> is labelable, so the read-only value keeps its label */}
-                    <output
-                      id="interest-type"
-                      className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm"
-                    >
-                      {interestTypeLabel ?? (
-                        <span className="text-muted-foreground">Select a product first</span>
-                      )}
-                    </output>
-                    <p className="text-xs text-muted-foreground">Set by loan product</p>
-                  </div>
-
-                  {/* SCB Amount */}
-                  {selectedProduct?.scb_required && (
-                    <div className="space-y-1.5">
-                      <Label>
-                        Share Capital Build-Up
-                        {selectedProduct.min_scb != null && selectedProduct.max_scb != null && (
-                          <span className="ml-1 text-xs text-muted-foreground">
-                            ({formatCurrency(selectedProduct.min_scb)} – {formatCurrency(selectedProduct.max_scb)})
-                          </span>
-                        )}
-                      </Label>
-                      <Input
-                        type="number"
-                        min={selectedProduct.min_scb ?? 0}
-                        max={selectedProduct.max_scb ?? undefined}
-                        step="1"
-                        placeholder="0"
-                        value={scbAmount}
-                        onChange={(e) => setScbAmount(e.target.value)}
-                      />
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Collaterals */}
-            <Card>
-              <CardHeader className="flex flex-row items-start justify-between">
-                <div className="space-y-1">
-                  <CardTitle className="text-base">
-                    Collaterals
-                    {(previewCollateral === null || shownSecurityStatus(previewCollateral) !== null) && (
-                      <Badge variant="outline" className="ml-2 text-xs">
-                        {previewCollateral ? shownSecurityStatus(previewCollateral) : "—"}
-                      </Badge>
-                    )}
-                  </CardTitle>
-                  {/* The source loan's security carries over to the replacement
-                      rather than being released — say so, because the picker
-                      below now shows those same collaterals as held and an
-                      operator could otherwise read that as a conflict. */}
-                  <p className="text-sm text-muted-foreground">
-                    The source loan&rsquo;s collaterals carry over to the
-                    replacement loan. Restructuring does not release them.
-                  </p>
-                  {!canAddCollateral && (
-                    <p className="text-sm text-muted-foreground">
-                      Adding other collateral needs permission to edit loans
-                      and collaterals.
-                    </p>
-                  )}
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCollateralPickerOpen(true)}
-                  disabled={!borrowerId || !canAddCollateral}
-                >
-                  <Plus className="mr-1.5 h-4 w-4" />
-                  Manage
-                </Button>
-              </CardHeader>
-              <CardContent>
-                {selectedCollaterals.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No collaterals attached.</p>
                 ) : (
-                  <div className="space-y-2">
-                    {selectedCollaterals.map(({ collateral, shown_value, carried }) => (
-                      <div
-                        key={collateral.id}
-                        className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
-                      >
-                        <span>{collateral.detail_value ?? collateral.type?.name ?? "Collateral"}</span>
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">
-                            {shown_value === null ? "—" : formatCurrency(shown_value)}
-                          </span>
-                          {/* A carried collateral cannot be dropped here: the
-                              API copies it onto the new loan regardless. */}
-                          {carried ? (
-                            <Badge variant="outline" className="text-[10px]">
-                              Carries over
-                            </Badge>
-                          ) : (
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              aria-label="Remove collateral"
-                              onClick={() =>
-                                setSelectedCollaterals((prev) =>
-                                  prev.filter((c) => c.collateral.id !== collateral.id),
-                                )
-                              }
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                    <div className="flex justify-end pt-1 text-sm font-medium">
-                      Total: {currencyOrDash(previewCollateral?.total_value)}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Collateral Picker Dialog */}
-            <Dialog open={collateralPickerOpen} onOpenChange={setCollateralPickerOpen}>
-              <DialogContent className="max-w-lg">
-                <DialogHeader>
-                  <DialogTitle>Select Collaterals</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-2 max-h-80 overflow-y-auto">
-                  {pickerRows.length === 0 ? (
-                    <p className="text-sm text-muted-foreground py-4 text-center">
-                      No collaterals found for this member.
-                    </p>
-                  ) : (
-                    pickerRows.map(({ collateral, isSelected, isCarried, isLocked, isValueUnknown }) => (
-                      <button
-                        key={collateral.id}
-                        disabled={
-                          isCarried ||
-                          (isLocked && !isSelected) ||
-                          (isValueUnknown && !isSelected)
-                        }
-                        onClick={() => {
-                          if (isSelected) {
-                            setSelectedCollaterals((prev) =>
-                              prev.filter((c) => c.collateral.id !== collateral.id),
-                            );
-                          } else {
-                            setSelectedCollaterals((prev) => [
-                              ...prev,
-                              {
-                                collateral,
-                                shown_value: collateral.effective_value ?? collateral.amount,
-                                carried: false,
-                              },
-                            ]);
-                          }
-                        }}
-                        className={cn(
-                          "flex w-full items-center justify-between rounded-md border px-3 py-2 text-sm transition-colors",
-                          isSelected
-                            ? "border-brand-orange bg-brand-orange/5"
-                            : "hover:bg-muted/50",
-                          isCarried && "cursor-not-allowed",
-                          isLocked && !isSelected && "opacity-50 cursor-not-allowed",
-                          isValueUnknown && !isSelected && "opacity-50 cursor-not-allowed",
-                        )}
-                      >
-                        <div className="flex items-center gap-2">
-                          <div
-                            className={cn(
-                              "h-4 w-4 rounded border flex items-center justify-center",
-                              isSelected && "bg-brand-orange border-brand-orange",
-                            )}
-                          >
-                            {isSelected && <Check className="h-3 w-3 text-white" />}
-                          </div>
-                          <span>{collateral.detail_value ?? collateral.type?.name ?? "Collateral"}</span>
-                          {/* Shown even when selected. A collateral carried over
-                              from the source loan can ALSO be held by a third
-                              active loan, and releasing the new loan is then
-                              refused (CollateralPledgeGuard) — so the conflict
-                              has to be visible now, not at release. */}
-                          {isLocked && (
-                            <Badge
-                              variant="outline"
-                              className="text-[10px]"
-                              title={holdersSentence(collateral.lock) ?? undefined}
-                            >
-                              {lockLabel(collateral.lock) ?? "Locked"}
-                            </Badge>
-                          )}
-                        </div>
-                        <span
-                          className={
-                            isValueUnknown
-                              ? "text-amber-700 dark:text-amber-500"
-                              : "text-muted-foreground"
-                          }
-                        >
-                          {isValueUnknown
-                            ? SHARE_CAPITAL_UNAVAILABLE_LABEL
-                            : formatCurrency(collateral.effective_value ?? collateral.amount)}
-                        </span>
-                      </button>
-                    ))
-                  )}
-                </div>
-              </DialogContent>
-            </Dialog>
-
-            {/* Restructure Date */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Restructure Date</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label>Date Restructured (new release date)</Label>
-                  <Popover open={restructureDateOpen} onOpenChange={setRestructureDateOpen}>
+                  <Popover open={loanOpen} onOpenChange={setLoanOpen}>
                     <PopoverTrigger
-                      render={<Button variant="outline" className="w-full justify-start font-normal" />}
+                      render={<Button variant="outline" role="combobox" disabled={!borrowerId} className="w-full justify-between font-normal" />}
                     >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {restructureDate ? formatDateObj(restructureDate) : "Pick a date"}
+                      {selectedSourceLoan
+                        ? `${selectedSourceLoan.loan_account_number ?? selectedSourceLoan.application_number} — Principal Balance ${currencyOrDash((selectedSourceLoan as LoanWithPrincipalBalance).outstanding_principal)}`
+                        : borrowerId
+                        ? borrowerLoans.length === 0
+                          ? "No eligible loans"
+                          : "Select loan…"
+                        : "Select a member first"}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={restructureDate}
-                        onSelect={(date) => {
-                          setRestructureDate(date);
-                          setRestructureDateOpen(false);
-                        }}
-                      />
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search loan…" />
+                        <CommandList>
+                          <CommandEmpty>No eligible loans found.</CommandEmpty>
+                          <CommandGroup>
+                            {borrowerLoans.map((l) => (
+                              <CommandItem
+                                key={l.id}
+                                value={`${l.loan_account_number ?? l.application_number} ${l.principal_amount}`}
+                                onSelect={() => {
+                                  setSourceLoanId(l.id === sourceLoanId ? null : l.id);
+                                  setLoanOpen(false);
+                                }}
+                              >
+                                <Check
+                                  className={cn("mr-2 h-4 w-4", sourceLoanId === l.id ? "opacity-100" : "opacity-0")}
+                                />
+                                <div className="flex flex-col">
+                                  <span className="font-mono text-sm">
+                                    {l.loan_account_number ?? l.application_number}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {formatCurrency(l.principal_amount)} ·{" "}
+                                    <Badge
+                                      variant="outline"
+                                      className={cn("text-[10px] py-0 px-1", LOAN_STATUS_COLORS[loanDisplayStatus(l)])}
+                                    >
+                                      {loanRowStatusLabel(l)}
+                                    </Badge>
+                                  </span>
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
                     </PopoverContent>
                   </Popover>
-                </div>
-                {restructureDate && term > 0 && (
-                  <div className="space-y-1.5">
-                    <Label>Projected Maturity Date</Label>
-                    <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground">
-                      {previewMaturity
-                        ? formatDateObj(calendarDate(previewMaturity))
-                        : "—"}
-                    </div>
-                  </div>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </CardContent>
+          </Card>
 
-            {/* Deductions: a restructure pays nothing out, so the card shows
-                what is collected from the member and what is paid out. */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Deductions</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {/* Processing Fee */}
+          {/* Loading loan detail spinner */}
+          {loadingLoanDetail && (
+            <div className="flex items-center justify-center py-8">
+              <Spinner className="size-6 text-brand-orange" />
+              <span className="ml-2 text-sm text-muted-foreground">Loading loan details…</span>
+            </div>
+          )}
+
+          {/* ── Form (shown after loan is selected + loaded) ── */}
+          {formVisible && (
+            <>
+              {/* Member & Co-Maker */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Member & Co-Maker</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Borrower (locked) */}
                   <div className="space-y-1.5">
-                    <Label>Processing Fee (%)</Label>
-                    <div className="flex gap-2">
-                      <Input
-                        inputMode="decimal"
-                        value={editingFeeRate === "processing" ? processingFeeRate : processingFeeRate}
-                        onChange={(e) => {
-                          setEditingFeeRate("processing");
-                          setProcessingFeeRate(sanitizeDecimalInput(e.target.value));
-                        }}
-                        onBlur={() => setEditingFeeRate(null)}
-                        className="w-24"
-                      />
-                      <div className="flex h-10 flex-1 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground">
-                        {currencyOrDash(
-                          previewDeductionAmount(previewDeductions?.items, deductions, processingFeeInput),
-                        )}
-                      </div>
+                    <Label>Member</Label>
+                    <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm">
+                      {selectedBorrower?.full_name ?? "—"}
+                      <Badge variant="outline" className="ml-2 text-xs">
+                        {selectedBorrower?.borrower_code}
+                      </Badge>
                     </div>
                   </div>
 
-                  {/* Service Fee */}
-                  <div className="space-y-1.5">
-                    <Label>Service Fee (%)</Label>
-                    <div className="flex gap-2">
-                      <Input
-                        inputMode="decimal"
-                        value={serviceFeeRate}
-                        onChange={(e) => {
-                          setEditingFeeRate("service");
-                          setServiceFeeRate(sanitizeDecimalInput(e.target.value));
-                        }}
-                        onBlur={() => setEditingFeeRate(null)}
-                        className="w-24"
-                      />
-                      <div className="flex h-10 flex-1 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground">
-                        {currencyOrDash(
-                          previewDeductionAmount(previewDeductions?.items, deductions, serviceFeeInput),
+                  {/* Co-makers */}
+                  <div className="space-y-2">
+                    <Label>Co-Maker(s)</Label>
+                    {coMakerIds.map((cmId, idx) => (
+                      <div key={idx} className="flex gap-2">
+                        <MemberSearchPicker
+                          aria-label={`Co-maker ${idx + 1}`}
+                          className="flex-1"
+                          value={cmId ? knownMembers[cmId] ?? null : null}
+                          onChange={(picked) => {
+                            if (picked) setKnownMembers((known) => rememberMembers(known, [picked]));
+                            setCoMakerIds((prev) => prev.map((v, i) => (i === idx ? (picked?.id ?? null) : v)));
+                          }}
+                          canSearch={canListMembers}
+                          showCode
+                          exclude={[borrowerId, ...coMakerIds.filter((_, i) => i !== idx)]}
+                          placeholder={canListMembers ? "Select co-maker (optional)" : "Your role can't view members"}
+                        />
+                        {coMakerIds.length > 1 && (
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() =>
+                              setCoMakerIds((prev) => {
+                                const next = prev.filter((_, i) => i !== idx);
+                                return next.length === 0 ? [null] : next;
+                              })
+                            }
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
                         )}
                       </div>
-                    </div>
+                    ))}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCoMakerIds((prev) => [...prev, null])}
+                    >
+                      <Plus className="mr-1.5 h-4 w-4" />
+                      Add Co-Maker
+                    </Button>
                   </div>
-                </div>
 
-                {/* Other deductions */}
-                <div className="space-y-2">
-                  <Label>Other Deductions</Label>
-                  {otherDeductions.map((d, idx) => (
-                    <div key={idx} className="flex gap-2">
-                      <Input
-                        placeholder="Label"
-                        value={d.name}
-                        onChange={(e) =>
-                          setOtherDeductions((prev) =>
-                            prev.map((x, i) => (i === idx ? { ...x, name: e.target.value } : x)),
-                          )
-                        }
-                        className="flex-1"
-                      />
+                  {/* Account Officer */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="account-officer">Account Officer <span className="text-muted-foreground">(optional)</span></Label>
+                    <StaffPicker
+                      id="account-officer"
+                      value={accountOfficer}
+                      onChange={setAccountOfficer}
+                      clearable
+                    />
+                  </div>
+
+                  {/* Purpose */}
+                  <div className="space-y-1.5">
+                    <Label>Purpose <span className="text-muted-foreground">(optional)</span></Label>
+                    <Textarea
+                      placeholder="Loan purpose…"
+                      value={purpose}
+                      onChange={(e) => setPurpose(e.target.value)}
+                      rows={2}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Loan Product & Terms */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Loan Product & Terms</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {/* Product */}
+                    <div className="space-y-1.5">
+                      <Label>Loan Product</Label>
+                      <Select
+                        value={productId ?? null}
+                        onValueChange={(v) => handleProductChange(v)}
+                        items={productItems}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select product…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {products.map((p) => (
+                            <SelectItem key={p.id} value={String(p.id)} disabled={!p.is_active}>
+                              {p.name}
+                              {!p.is_active && (
+                                <span className="text-muted-foreground"> (Inactive)</span>
+                              )}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Loan Amount */}
+                    <div className="space-y-1.5">
+                      <Label>
+                        Loan Amount
+                        <span className="ml-1 text-xs text-muted-foreground">(restructurable balance)</span>
+                      </Label>
                       <Input
                         type="number"
                         min="0"
                         step="0.01"
                         placeholder="0.00"
-                        value={d.amount}
-                        onChange={(e) =>
-                          setOtherDeductions((prev) =>
-                            prev.map((x, i) => (i === idx ? { ...x, amount: e.target.value } : x)),
-                          )
-                        }
-                        className="w-32"
+                        value={principalAmount}
+                        onChange={(e) => setPrincipalAmount(e.target.value)}
+                        aria-describedby={hintBalance !== null ? "principal-hint" : undefined}
                       />
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() =>
-                          setOtherDeductions((prev) => prev.filter((_, i) => i !== idx))
-                        }
+                      {hintBalance !== null && (
+                        <p
+                          id="principal-hint"
+                          className={cn(
+                            "text-xs",
+                            remarksRequired
+                              ? "text-amber-600 dark:text-amber-500"
+                              : "text-muted-foreground",
+                          )}
+                        >
+                          {restructurableBalanceHint(shortfallState.showsShortfall, restructure.shortfall, hintBalance)}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Term */}
+                    <div className="space-y-1.5">
+                      <Label>Term ({termUnit})</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        placeholder="e.g. 12"
+                        value={termValue}
+                        onChange={(e) => setTermValue(e.target.value)}
+                      />
+                    </div>
+
+                    {/* Payment Frequency */}
+                    <div className="space-y-1.5">
+                      <Label>Payment Frequency</Label>
+                      <Select
+                        value={paymentFrequency ?? null}
+                        onValueChange={(v) => setPaymentFrequency(v ?? null)}
                       >
-                        <X className="h-4 w-4" />
-                      </Button>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select frequency…">
+                            {(value: string | null) =>
+                              value ? PAYMENT_FREQUENCY_LABELS[value] ?? value : "Select frequency…"
+                            }
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PAYMENT_FREQUENCY_OPTIONS.filter(
+                            (o) => productFrequencies.length === 0 || productFrequencies.includes(o.value),
+                          ).map((o) => (
+                            <SelectItem key={o.value} value={o.value}>
+                              {o.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
-                  ))}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setOtherDeductions((prev) => [...prev, { name: "", amount: "" }])}
-                  >
-                    <Plus className="mr-1.5 h-4 w-4" />
-                    Add Deduction
-                  </Button>
-                </div>
 
-                <Separator />
+                    {/* Interest Rate */}
+                    <div className="space-y-1.5">
+                      <Label>Interest Rate (% per {ratePeriodWord(rateFrequency)})</Label>
+                      <Input
+                        inputMode="decimal"
+                        placeholder="e.g. 2"
+                        value={interestRate}
+                        onChange={(e) => setInterestRate(sanitizeDecimalInput(e.target.value))}
+                      />
+                    </div>
 
-                {/* Configured fees the release would add for this loan, from the server */}
-                {previewDeductions && previewDeductions.configured_fees.length > 0 && (
-                  <div className="space-y-1 text-sm">
-                    {previewDeductions.configured_fees.map((f) => (
-                      <div key={f.fee_id} className="flex justify-between">
-                        <span className="text-muted-foreground">{f.name}</span>
-                        <span>{formatCurrency(f.amount)}</span>
+                    {/* Interest Type — read-only: the API snapshots it from the product */}
+                    <div className="space-y-1.5">
+                      <Label htmlFor="interest-type">Interest Type</Label>
+                      {/* <output> is labelable, so the read-only value keeps its label */}
+                      <output
+                        id="interest-type"
+                        className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm"
+                      >
+                        {interestTypeLabel ?? (
+                          <span className="text-muted-foreground">Select a product first</span>
+                        )}
+                      </output>
+                      <p className="text-xs text-muted-foreground">Set by loan product</p>
+                    </div>
+
+                    {/* SCB Amount */}
+                    {selectedProduct?.scb_required && (
+                      <div className="space-y-1.5">
+                        <Label>
+                          Share Capital Build-Up
+                          {selectedProduct.min_scb != null && selectedProduct.max_scb != null && (
+                            <span className="ml-1 text-xs text-muted-foreground">
+                              ({formatCurrency(selectedProduct.min_scb)} – {formatCurrency(selectedProduct.max_scb)})
+                            </span>
+                          )}
+                        </Label>
+                        <Input
+                          type="number"
+                          min={selectedProduct.min_scb ?? 0}
+                          max={selectedProduct.max_scb ?? undefined}
+                          step="1"
+                          placeholder="0"
+                          value={scbAmount}
+                          onChange={(e) => setScbAmount(e.target.value)}
+                        />
                       </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Totals — the server's; a dash until it has sent them */}
-                <div
-                  className="space-y-1 text-sm"
-                  aria-live="polite"
-                  aria-busy={preview.status === "loading"}
-                >
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Loan Amount</span>
-                    <span>{formatCurrency(principal)}</span>
-                  </div>
-                  <div className="flex justify-between text-red-600 dark:text-red-400">
-                    <span>Total Deductions</span>
-                    <span>
-                      {previewDeductions?.total_deductions == null
-                        ? "—"
-                        : formatDeduction(previewDeductions.total_deductions)}
-                    </span>
-                  </div>
-                  <Separator />
-                  {proceedsFigures(true, {
-                    totalDeductions: previewDeductions?.total_deductions ?? null,
-                    netProceeds: null,
-                    restructure: previewRestructure,
-                  }, { collectedLabel: COLLECTED_BEFORE_INSURANCE }).map((figure) => (
-                    <div key={figure.label} className="flex justify-between font-semibold">
-                      <span>{figure.label}</span>
-                      <span>{currencyOrDash(figure.amount)}</span>
-                    </div>
-                  ))}
-                </div>
-                {previewDeductions?.error && (
-                  <p role="alert" className="flex items-center gap-1.5 text-sm text-destructive">
-                    <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
-                    {previewDeductions.error}
-                  </p>
-                )}
-                {preview.status === "error" && (
-                  <div role="alert" className="flex flex-wrap items-center gap-2 text-sm">
-                    <p className="flex items-center gap-1.5 text-destructive">
-                      <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
-                      We couldn&rsquo;t load the preview.
-                    </p>
-                    <span className="text-xs text-muted-foreground">{previewError}</span>
-                    <Button type="button" variant="outline" size="sm" onClick={retryPreview}>
-                      <RefreshCw className="mr-2 size-4" />
-                      Retry
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Remarks & Policy Exception */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Remarks & Policy Exception</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {shortfallState.showsShortfall && (
-                  <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50/50 p-3 text-sm dark:border-amber-700 dark:bg-amber-900/10">
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                    <p>
-                      The new principal is {currencyOrDash(restructure.shortfall)}{" "}
-                      below this loan&rsquo;s restructurable balance of{" "}
-                      {currencyOrDash(hintBalance)}. The difference is written off, so a
-                      reason is required.
-                    </p>
-                  </div>
-                )}
-                {shortfallState.blockedByWriteOff && (
-                  <div
-                    role="alert"
-                    className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm"
-                  >
-                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
-                    <p>{writeOffNotice(restructure, sourceOutstanding)}</p>
-                  </div>
-                )}
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="remarks">
-                    Remarks{" "}
-                    {remarksRequired ? (
-                      <span className="text-destructive">*</span>
-                    ) : (
-                      <span className="text-muted-foreground">(optional)</span>
                     )}
-                  </Label>
-                  <Textarea
-                    id="remarks"
-                    placeholder={
-                      remarksRequired
-                        ? "Explain why the restructured principal is below the outstanding balance…"
-                        : "Notes about this restructure…"
-                    }
-                    value={remarks}
-                    onChange={(e) => setRemarks(e.target.value)}
-                    rows={3}
-                    required={remarksRequired}
-                    aria-invalid={remarksRequired && !remarks.trim()}
-                  />
-                </div>
-
-                <Separator />
-
-                <div className="flex items-start gap-3">
-                  <Checkbox
-                    id="policy-exception"
-                    checked={policyException}
-                    onCheckedChange={(checked) => {
-                      setPolicyException(checked === true);
-                      if (!checked) setPolicyExceptionDetails("");
-                    }}
-                  />
-                  <div>
-                    <Label htmlFor="policy-exception" className="cursor-pointer font-medium">
-                      Policy Exception
-                    </Label>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      Check this if the restructure requires policy exception approval (full BOD
-                      review)
-                    </p>
-                  </div>
-                </div>
-
-                {policyException && (
-                  <div className="space-y-1.5 rounded-lg border border-amber-300 bg-amber-50/50 p-4 dark:border-amber-700 dark:bg-amber-900/10">
-                    <Label htmlFor="policy-exception-details">Policy Exception Details</Label>
-                    <Textarea
-                      id="policy-exception-details"
-                      placeholder="Describe why this restructure requires a policy exception…"
-                      value={policyExceptionDetails}
-                      onChange={(e) => setPolicyExceptionDetails(e.target.value)}
-                      rows={3}
-                    />
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Amortization Preview — the server's schedule for these terms */}
-            {amortization && amortization.rows.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">
-                    Amortization Preview
-                    <span className="ml-2 text-sm font-normal text-muted-foreground">
-                      ({amortization.rows.length} periods)
-                    </span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="max-h-64 overflow-y-auto rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-12">#</TableHead>
-                          <TableHead>Due Date</TableHead>
-                          <TableHead className="text-right">Principal</TableHead>
-                          <TableHead className="text-right">Interest</TableHead>
-                          {scb > 0 && <TableHead className="text-right">SCB</TableHead>}
-                          <TableHead className="text-right">Total</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {amortization.rows.map((row) => (
-                          <TableRow key={row.period_number}>
-                            <TableCell className="text-muted-foreground">{row.period_number}</TableCell>
-                            <TableCell>{formatDateObj(calendarDate(row.due_date))}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(row.principal_due)}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(row.interest_due)}</TableCell>
-                            {scb > 0 && <TableCell className="text-right">{formatCurrency(row.share_capital_build_up)}</TableCell>}
-                            <TableCell className="text-right font-medium">{formatCurrency(row.total_payment)}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                      <TableFooter>
-                        <TableRow>
-                          <TableCell colSpan={2} className="font-semibold">Total</TableCell>
-                          <TableCell className="text-right font-semibold">{formatCurrency(amortization.totals.principal_due)}</TableCell>
-                          <TableCell className="text-right font-semibold">{formatCurrency(amortization.totals.interest_due)}</TableCell>
-                          {scb > 0 && <TableCell className="text-right font-semibold">{formatCurrency(amortization.totals.share_capital_build_up)}</TableCell>}
-                          <TableCell className="text-right font-semibold">{formatCurrency(amortization.totals.total_payment)}</TableCell>
-                        </TableRow>
-                      </TableFooter>
-                    </Table>
                   </div>
                 </CardContent>
               </Card>
-            )}
 
-            {/* Submit */}
-            <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={() => router.back()}>
-                Cancel
-              </Button>
-              <Button
-                disabled={submitting}
-                onClick={handleSubmit}
-                className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-              >
-                {submitting && <Spinner className="mr-2 size-4" />}
-                Submit Restructure Application
-              </Button>
-            </div>
-          </>
+              {/* Collaterals */}
+              <Card>
+                <CardHeader className="flex flex-row items-start justify-between">
+                  <div className="space-y-1">
+                    <CardTitle className="text-base">
+                      Collaterals
+                      {(previewCollateral === null || shownSecurityStatus(previewCollateral) !== null) && (
+                        <Badge variant="outline" className="ml-2 text-xs">
+                          {previewCollateral ? shownSecurityStatus(previewCollateral) : "—"}
+                        </Badge>
+                      )}
+                    </CardTitle>
+                    {/* The source loan's security carries over to the replacement
+                        rather than being released — say so, because the picker
+                        below now shows those same collaterals as held and an
+                        operator could otherwise read that as a conflict. */}
+                    <p className="text-sm text-muted-foreground">
+                      The source loan&rsquo;s collaterals carry over to the
+                      replacement loan. Restructuring does not release them.
+                    </p>
+                    {!canAddCollateral && (
+                      <p className="text-sm text-muted-foreground">
+                        Adding other collateral needs permission to edit loans
+                        and collaterals.
+                      </p>
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCollateralPickerOpen(true)}
+                    disabled={!borrowerId || !canAddCollateral}
+                  >
+                    <Plus className="mr-1.5 h-4 w-4" />
+                    Manage
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  {selectedCollaterals.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No collaterals attached.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {selectedCollaterals.map(({ collateral, shown_value, carried }) => (
+                        <div
+                          key={collateral.id}
+                          className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
+                        >
+                          <span>{collateral.detail_value ?? collateral.type?.name ?? "Collateral"}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">
+                              {shown_value === null ? "—" : formatCurrency(shown_value)}
+                            </span>
+                            {/* A carried collateral cannot be dropped here: the
+                                API copies it onto the new loan regardless. */}
+                            {carried ? (
+                              <Badge variant="outline" className="text-[10px]">
+                                Carries over
+                              </Badge>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label="Remove collateral"
+                                onClick={() =>
+                                  setSelectedCollaterals((prev) =>
+                                    prev.filter((c) => c.collateral.id !== collateral.id),
+                                  )
+                                }
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      <div className="flex justify-end pt-1 text-sm font-medium">
+                        Total: {currencyOrDash(previewCollateral?.total_value)}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Collateral Picker Dialog */}
+              <Dialog open={collateralPickerOpen} onOpenChange={setCollateralPickerOpen}>
+                <DialogContent className="max-w-lg">
+                  <DialogHeader>
+                    <DialogTitle>Select Collaterals</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-2 max-h-80 overflow-y-auto">
+                    {pickerRows.length === 0 ? (
+                      <p className="text-sm text-muted-foreground py-4 text-center">
+                        No collaterals found for this member.
+                      </p>
+                    ) : (
+                      pickerRows.map(({ collateral, isSelected, isCarried, isLocked, isValueUnknown }) => (
+                        <button
+                          key={collateral.id}
+                          disabled={
+                            isCarried ||
+                            (isLocked && !isSelected) ||
+                            (isValueUnknown && !isSelected)
+                          }
+                          onClick={() => {
+                            if (isSelected) {
+                              setSelectedCollaterals((prev) =>
+                                prev.filter((c) => c.collateral.id !== collateral.id),
+                              );
+                            } else {
+                              setSelectedCollaterals((prev) => [
+                                ...prev,
+                                {
+                                  collateral,
+                                  shown_value: collateral.effective_value ?? collateral.amount,
+                                  carried: false,
+                                },
+                              ]);
+                            }
+                          }}
+                          className={cn(
+                            "flex w-full items-center justify-between rounded-md border px-3 py-2 text-sm transition-colors",
+                            isSelected
+                              ? "border-brand-orange bg-brand-orange/5"
+                              : "hover:bg-muted/50",
+                            isCarried && "cursor-not-allowed",
+                            isLocked && !isSelected && "opacity-50 cursor-not-allowed",
+                            isValueUnknown && !isSelected && "opacity-50 cursor-not-allowed",
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div
+                              className={cn(
+                                "h-4 w-4 rounded border flex items-center justify-center",
+                                isSelected && "bg-brand-orange border-brand-orange",
+                              )}
+                            >
+                              {isSelected && <Check className="h-3 w-3 text-white" />}
+                            </div>
+                            <span>{collateral.detail_value ?? collateral.type?.name ?? "Collateral"}</span>
+                            {/* Shown even when selected. A collateral carried over
+                                from the source loan can ALSO be held by a third
+                                active loan, and releasing the new loan is then
+                                refused (CollateralPledgeGuard) — so the conflict
+                                has to be visible now, not at release. */}
+                            {isLocked && (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px]"
+                                title={holdersSentence(collateral.lock) ?? undefined}
+                              >
+                                {lockLabel(collateral.lock) ?? "Locked"}
+                              </Badge>
+                            )}
+                          </div>
+                          <span
+                            className={
+                              isValueUnknown
+                                ? "text-amber-700 dark:text-amber-500"
+                                : "text-muted-foreground"
+                            }
+                          >
+                            {isValueUnknown
+                              ? SHARE_CAPITAL_UNAVAILABLE_LABEL
+                              : formatCurrency(collateral.effective_value ?? collateral.amount)}
+                          </span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </DialogContent>
+              </Dialog>
+
+              {/* Restructure Date */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Restructure Date</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label>Date Restructured (new release date)</Label>
+                    <Popover open={restructureDateOpen} onOpenChange={setRestructureDateOpen}>
+                      <PopoverTrigger
+                        render={<Button variant="outline" className="w-full justify-start font-normal" />}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {restructureDate ? formatDateObj(restructureDate) : "Pick a date"}
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={restructureDate}
+                          onSelect={(date) => {
+                            setRestructureDate(date);
+                            setRestructureDateOpen(false);
+                          }}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  {restructureDate && term > 0 && (
+                    <div className="space-y-1.5">
+                      <Label>Projected Maturity Date</Label>
+                      <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground">
+                        {previewMaturity
+                          ? formatDateObj(calendarDate(previewMaturity))
+                          : "—"}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Deductions: a restructure pays nothing out, so the card shows
+                  what is collected from the member and what is paid out. */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Deductions</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {/* Processing Fee */}
+                    <div className="space-y-1.5">
+                      <Label>Processing Fee (%)</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          inputMode="decimal"
+                          value={editingFeeRate === "processing" ? processingFeeRate : processingFeeRate}
+                          onChange={(e) => {
+                            setEditingFeeRate("processing");
+                            setProcessingFeeRate(sanitizeDecimalInput(e.target.value));
+                          }}
+                          onBlur={() => setEditingFeeRate(null)}
+                          className="w-24"
+                        />
+                        <div className="flex h-10 flex-1 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground">
+                          {currencyOrDash(
+                            previewDeductionAmount(previewDeductions?.items, deductions, processingFeeInput),
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Service Fee */}
+                    <div className="space-y-1.5">
+                      <Label>Service Fee (%)</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          inputMode="decimal"
+                          value={serviceFeeRate}
+                          onChange={(e) => {
+                            setEditingFeeRate("service");
+                            setServiceFeeRate(sanitizeDecimalInput(e.target.value));
+                          }}
+                          onBlur={() => setEditingFeeRate(null)}
+                          className="w-24"
+                        />
+                        <div className="flex h-10 flex-1 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground">
+                          {currencyOrDash(
+                            previewDeductionAmount(previewDeductions?.items, deductions, serviceFeeInput),
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Other deductions */}
+                  <div className="space-y-2">
+                    <Label>Other Deductions</Label>
+                    {otherDeductions.map((d, idx) => (
+                      <div key={idx} className="flex gap-2">
+                        <Input
+                          placeholder="Label"
+                          value={d.name}
+                          onChange={(e) =>
+                            setOtherDeductions((prev) =>
+                              prev.map((x, i) => (i === idx ? { ...x, name: e.target.value } : x)),
+                            )
+                          }
+                          className="flex-1"
+                        />
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={d.amount}
+                          onChange={(e) =>
+                            setOtherDeductions((prev) =>
+                              prev.map((x, i) => (i === idx ? { ...x, amount: e.target.value } : x)),
+                            )
+                          }
+                          className="w-32"
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() =>
+                            setOtherDeductions((prev) => prev.filter((_, i) => i !== idx))
+                          }
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setOtherDeductions((prev) => [...prev, { name: "", amount: "" }])}
+                    >
+                      <Plus className="mr-1.5 h-4 w-4" />
+                      Add Deduction
+                    </Button>
+                  </div>
+
+                  <Separator />
+
+                  {/* Configured fees the release would add for this loan, from the server */}
+                  {previewDeductions && previewDeductions.configured_fees.length > 0 && (
+                    <div className="space-y-1 text-sm">
+                      {previewDeductions.configured_fees.map((f) => (
+                        <div key={f.fee_id} className="flex justify-between">
+                          <span className="text-muted-foreground">{f.name}</span>
+                          <span>{formatCurrency(f.amount)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Totals — the server's; a dash until it has sent them */}
+                  <div
+                    className="space-y-1 text-sm"
+                    aria-live="polite"
+                    aria-busy={preview.status === "loading"}
+                  >
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Loan Amount</span>
+                      <span>{formatCurrency(principal)}</span>
+                    </div>
+                    <div className="flex justify-between text-red-600 dark:text-red-400">
+                      <span>Total Deductions</span>
+                      <span>
+                        {previewDeductions?.total_deductions == null
+                          ? "—"
+                          : formatDeduction(previewDeductions.total_deductions)}
+                      </span>
+                    </div>
+                    <Separator />
+                    {proceedsFigures(true, {
+                      totalDeductions: previewDeductions?.total_deductions ?? null,
+                      netProceeds: null,
+                      restructure: previewRestructure,
+                    }, { collectedLabel: COLLECTED_BEFORE_INSURANCE }).map((figure) => (
+                      <div key={figure.label} className="flex justify-between font-semibold">
+                        <span>{figure.label}</span>
+                        <span>{currencyOrDash(figure.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {previewDeductions?.error && (
+                    <p role="alert" className="flex items-center gap-1.5 text-sm text-destructive">
+                      <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
+                      {previewDeductions.error}
+                    </p>
+                  )}
+                  {preview.status === "error" && (
+                    <div role="alert" className="flex flex-wrap items-center gap-2 text-sm">
+                      <p className="flex items-center gap-1.5 text-destructive">
+                        <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
+                        We couldn&rsquo;t load the preview.
+                      </p>
+                      <span className="text-xs text-muted-foreground">{previewError}</span>
+                      <Button type="button" variant="outline" size="sm" onClick={retryPreview}>
+                        <RefreshCw className="mr-2 size-4" />
+                        Retry
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Remarks & Policy Exception */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Remarks & Policy Exception</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {shortfallState.showsShortfall && (
+                    <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50/50 p-3 text-sm dark:border-amber-700 dark:bg-amber-900/10">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                      <p>
+                        The new principal is {currencyOrDash(restructure.shortfall)}{" "}
+                        below this loan&rsquo;s restructurable balance of{" "}
+                        {currencyOrDash(hintBalance)}. The difference is written off, so a
+                        reason is required.
+                      </p>
+                    </div>
+                  )}
+                  {shortfallState.blockedByWriteOff && (
+                    <div
+                      role="alert"
+                      className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm"
+                    >
+                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
+                      <p>{writeOffNotice(restructure, sourceOutstanding)}</p>
+                    </div>
+                  )}
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="remarks">
+                      Remarks{" "}
+                      {remarksRequired ? (
+                        <span className="text-destructive">*</span>
+                      ) : (
+                        <span className="text-muted-foreground">(optional)</span>
+                      )}
+                    </Label>
+                    <Textarea
+                      id="remarks"
+                      placeholder={
+                        remarksRequired
+                          ? "Explain why the restructured principal is below the outstanding balance…"
+                          : "Notes about this restructure…"
+                      }
+                      value={remarks}
+                      onChange={(e) => setRemarks(e.target.value)}
+                      rows={3}
+                      required={remarksRequired}
+                      aria-invalid={remarksRequired && !remarks.trim()}
+                    />
+                  </div>
+
+                  <Separator />
+
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      id="policy-exception"
+                      checked={policyException}
+                      onCheckedChange={(checked) => {
+                        setPolicyException(checked === true);
+                        if (!checked) setPolicyExceptionDetails("");
+                      }}
+                    />
+                    <div>
+                      <Label htmlFor="policy-exception" className="cursor-pointer font-medium">
+                        Policy Exception
+                      </Label>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Check this if the restructure requires policy exception approval (full BOD
+                        review)
+                      </p>
+                    </div>
+                  </div>
+
+                  {policyException && (
+                    <div className="space-y-1.5 rounded-lg border border-amber-300 bg-amber-50/50 p-4 dark:border-amber-700 dark:bg-amber-900/10">
+                      <Label htmlFor="policy-exception-details">Policy Exception Details</Label>
+                      <Textarea
+                        id="policy-exception-details"
+                        placeholder="Describe why this restructure requires a policy exception…"
+                        value={policyExceptionDetails}
+                        onChange={(e) => setPolicyExceptionDetails(e.target.value)}
+                        rows={3}
+                      />
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Amortization Preview — the server's schedule for these terms */}
+              {amortization && amortization.rows.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">
+                      Amortization Preview
+                      <span className="ml-2 text-sm font-normal text-muted-foreground">
+                        ({amortization.rows.length} periods)
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="max-h-64 overflow-y-auto rounded-md border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-12">#</TableHead>
+                            <TableHead>Due Date</TableHead>
+                            <TableHead className="text-right">Principal</TableHead>
+                            <TableHead className="text-right">Interest</TableHead>
+                            {scb > 0 && <TableHead className="text-right">SCB</TableHead>}
+                            <TableHead className="text-right">Total</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {amortization.rows.map((row) => (
+                            <TableRow key={row.period_number}>
+                              <TableCell className="text-muted-foreground">{row.period_number}</TableCell>
+                              <TableCell>{formatDateObj(calendarDate(row.due_date))}</TableCell>
+                              <TableCell className="text-right">{formatCurrency(row.principal_due)}</TableCell>
+                              <TableCell className="text-right">{formatCurrency(row.interest_due)}</TableCell>
+                              {scb > 0 && <TableCell className="text-right">{formatCurrency(row.share_capital_build_up)}</TableCell>}
+                              <TableCell className="text-right font-medium">{formatCurrency(row.total_payment)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                        <TableFooter>
+                          <TableRow>
+                            <TableCell colSpan={2} className="font-semibold">Total</TableCell>
+                            <TableCell className="text-right font-semibold">{formatCurrency(amortization.totals.principal_due)}</TableCell>
+                            <TableCell className="text-right font-semibold">{formatCurrency(amortization.totals.interest_due)}</TableCell>
+                            {scb > 0 && <TableCell className="text-right font-semibold">{formatCurrency(amortization.totals.share_capital_build_up)}</TableCell>}
+                            <TableCell className="text-right font-semibold">{formatCurrency(amortization.totals.total_payment)}</TableCell>
+                          </TableRow>
+                        </TableFooter>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          )}
+        </ScrollBox>
+
+        {/* Submit: stays at the foot while the form scrolls. */}
+        {formVisible && (
+          <div data-fab-clear className="flex shrink-0 justify-end gap-3 border-t pt-4">
+            <Button variant="outline" onClick={() => router.back()}>
+              Cancel
+            </Button>
+            <Button
+              disabled={submitting}
+              onClick={handleSubmit}
+              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+            >
+              {submitting && <Spinner className="mr-2 size-4" />}
+              Submit Restructure Application
+            </Button>
+          </div>
         )}
-      </div>
+      </PageFill>
     </>
   );
 }
 
 export default function RestructureLoanPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
-          <Spinner className="size-6 text-muted-foreground" />
-        </div>
-      }
-    >
+    <Suspense fallback={<PageLoader />}>
       <RouteGuard permission="loans:restructure" pageName="Restructure Loan">
         {/* The loan being restructured is read under `loans:view`. */}
         <RouteGuard permission="loans:view" pageName="Restructure Loan">

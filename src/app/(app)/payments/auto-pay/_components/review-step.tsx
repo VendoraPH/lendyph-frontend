@@ -1,6 +1,7 @@
 "use client";
 
 import { Info } from "lucide-react";
+import { ScrollBox } from "@/components/common/page-fill";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { PartialRowsTable } from "./partial-rows-table";
@@ -10,6 +11,7 @@ import { formatCurrency } from "@/lib/format";
 import { loanIssues, loansAffected, partialInsuranceNote, previewTotals } from "../_lib/auto-pay-view";
 import { useAutoPaySelection } from "../_hooks/use-auto-pay-selection";
 import { cn } from "@/lib/utils";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import type { AutoPayFilter, AutoPayPreview } from "@/types";
 
 interface ReviewStepProps {
@@ -44,108 +46,111 @@ export function ReviewStep({
   const updating = !view.upToDate && view.error === null;
 
   return (
-    <div className="space-y-6">
-      {/* Summary Cards: the server's totals for the loans with full dues */}
-      <div
-        aria-busy={updating}
-        className={cn("grid grid-cols-2 gap-3 sm:grid-cols-3", updating && "opacity-60")}
-      >
-        <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-center dark:border-green-800 dark:bg-green-950/20">
-          <p className="text-xl font-bold text-green-700 dark:text-green-300">
-            {formatCurrency(totals.principal)}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">Total Principal</p>
+    <div className={cn(FIT_CLASSES.section, "gap-6")}>
+      {/* The review scrolls; Back and Run Auto-Pay stay at the foot. */}
+      <ScrollBox className="space-y-6 p-px">
+        {/* Summary Cards: the server's totals for the loans with full dues */}
+        <div
+          aria-busy={updating}
+          className={cn("grid grid-cols-2 gap-3 sm:grid-cols-3", updating && "opacity-60")}
+        >
+          <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-center dark:border-green-800 dark:bg-green-950/20">
+            <p className="text-xl font-bold text-green-700 dark:text-green-300">
+              {formatCurrency(totals.principal)}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Total Principal</p>
+          </div>
+          <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-center dark:border-yellow-800 dark:bg-yellow-950/20">
+            <p className="text-xl font-bold text-yellow-700 dark:text-yellow-300">
+              {formatCurrency(totals.interest)}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Total Interest</p>
+          </div>
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-center dark:border-red-800 dark:bg-red-950/20">
+            <p className="text-xl font-bold text-red-700 dark:text-red-300">
+              {totals.penalty === null ? "—" : formatCurrency(totals.penalty)}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Total Penalty</p>
+          </div>
+          <div className="rounded-lg border border-purple-200 bg-purple-50 p-4 text-center dark:border-purple-800 dark:bg-purple-950/20">
+            <p className="text-xl font-bold text-purple-700 dark:text-purple-300">
+              {totals.insurance === null ? "—" : formatCurrency(totals.insurance)}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Total Insurance Premium</p>
+          </div>
+          <div className="rounded-lg border p-4 text-center">
+            <p className="text-xl font-bold">{formatCurrency(totals.amount)}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Total Amount (incl. penalty and premium)</p>
+          </div>
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-center dark:border-blue-800 dark:bg-blue-950/20">
+            <p className="text-xl font-bold text-blue-700 dark:text-blue-300">
+              {loanCount}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Loans Affected</p>
+          </div>
         </div>
-        <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-center dark:border-yellow-800 dark:bg-yellow-950/20">
-          <p className="text-xl font-bold text-yellow-700 dark:text-yellow-300">
-            {formatCurrency(totals.interest)}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">Total Interest</p>
-        </div>
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-center dark:border-red-800 dark:bg-red-950/20">
-          <p className="text-xl font-bold text-red-700 dark:text-red-300">
-            {totals.penalty === null ? "—" : formatCurrency(totals.penalty)}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">Total Penalty</p>
-        </div>
-        <div className="rounded-lg border border-purple-200 bg-purple-50 p-4 text-center dark:border-purple-800 dark:bg-purple-950/20">
-          <p className="text-xl font-bold text-purple-700 dark:text-purple-300">
-            {totals.insurance === null ? "—" : formatCurrency(totals.insurance)}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">Total Insurance Premium</p>
-        </div>
-        <div className="rounded-lg border p-4 text-center">
-          <p className="text-xl font-bold">{formatCurrency(totals.amount)}</p>
-          <p className="mt-1 text-xs text-muted-foreground">Total Amount (incl. penalty and premium)</p>
-        </div>
-        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-center dark:border-blue-800 dark:bg-blue-950/20">
-          <p className="text-xl font-bold text-blue-700 dark:text-blue-300">
-            {loanCount}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">Loans Affected</p>
-        </div>
-      </div>
-      <p className="-mt-3 text-xs text-muted-foreground">
-        Totals cover the loans with full dues listed below. Insurance premium
-        still owed on a loan is charged first, on top of its periods. The run
-        total adds the part-paid periods you include.
-      </p>
-
-      {/* The run's total for the current selection, from the server */}
-      <div
-        aria-live="polite"
-        className="rounded-lg border-2 border-brand-orange/40 p-4"
-      >
-        {updating ? (
-          <p className="text-sm text-muted-foreground">Updating the preview for this selection…</p>
-        ) : run === null ? (
-          <p className="text-sm text-destructive">{view.error}</p>
-        ) : (
-          <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm">
-            <dt className="text-muted-foreground">Selected part-paid periods</dt>
-            <dd className="text-right tabular-nums">
-              {formatCurrency(run.partialTotal)}
-              {partialPremiumNote !== null && (
-                <span className="block text-xs text-muted-foreground">{partialPremiumNote}</span>
-              )}
-            </dd>
-            <dt className="text-base font-semibold">Run total</dt>
-            <dd className="text-right text-base font-semibold tabular-nums">
-              {formatCurrency(run.grandTotal)}
-            </dd>
-          </dl>
-        )}
-      </div>
-
-      <DueLoansTable loans={shown.loans ?? []} totals={totals} />
-
-      {/* Partial Rows Review */}
-      {preview.partial_rows.length > 0 && (
-        <PartialRowsTable
-          rows={preview.partial_rows}
-          includedIds={includedPartialIds}
-          onToggle={onTogglePartial}
-        />
-      )}
-
-      <LoanIssuesList
-        title="Skipped loans"
-        description="Left out of this run."
-        issues={skips}
-        tone="amber"
-      />
-
-      {/* CBS Note */}
-      <div className="flex gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-200">
-        <Info className="mt-0.5 h-4 w-4 shrink-0" />
-        <p>
-          Compare the totals above with your CBS report before confirming. If
-          amounts differ, click Back to review the included accounts.
+        <p className="-mt-3 text-xs text-muted-foreground">
+          Totals cover the loans with full dues listed below. Insurance premium
+          still owed on a loan is charged first, on top of its periods. The run
+          total adds the part-paid periods you include.
         </p>
-      </div>
+
+        {/* The run's total for the current selection, from the server */}
+        <div
+          aria-live="polite"
+          className="rounded-lg border-2 border-brand-orange/40 p-4"
+        >
+          {updating ? (
+            <p className="text-sm text-muted-foreground">Updating the preview for this selection…</p>
+          ) : run === null ? (
+            <p className="text-sm text-destructive">{view.error}</p>
+          ) : (
+            <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm">
+              <dt className="text-muted-foreground">Selected part-paid periods</dt>
+              <dd className="text-right tabular-nums">
+                {formatCurrency(run.partialTotal)}
+                {partialPremiumNote !== null && (
+                  <span className="block text-xs text-muted-foreground">{partialPremiumNote}</span>
+                )}
+              </dd>
+              <dt className="text-base font-semibold">Run total</dt>
+              <dd className="text-right text-base font-semibold tabular-nums">
+                {formatCurrency(run.grandTotal)}
+              </dd>
+            </dl>
+          )}
+        </div>
+
+        <DueLoansTable loans={shown.loans ?? []} totals={totals} />
+
+        {/* Partial Rows Review */}
+        {preview.partial_rows.length > 0 && (
+          <PartialRowsTable
+            rows={preview.partial_rows}
+            includedIds={includedPartialIds}
+            onToggle={onTogglePartial}
+          />
+        )}
+
+        <LoanIssuesList
+          title="Skipped loans"
+          description="Left out of this run."
+          issues={skips}
+          tone="amber"
+        />
+
+        {/* CBS Note */}
+        <div className="flex gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-200">
+          <Info className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>
+            Compare the totals above with your CBS report before confirming. If
+            amounts differ, click Back to review the included accounts.
+          </p>
+        </div>
+      </ScrollBox>
 
       {/* Actions */}
-      <div className="flex gap-3">
+      <div data-fab-clear className="flex shrink-0 gap-3">
         <Button
           variant="outline"
           onClick={onBack}

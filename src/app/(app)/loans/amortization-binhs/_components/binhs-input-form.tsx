@@ -15,7 +15,7 @@ export function BinhsInputForm({ value, onChange }: Props) {
     onChange({ ...value, ...patch });
 
   return (
-    <Card>
+    <Card className="shrink-0">
       <CardHeader>
         <CardTitle>Loan Inputs</CardTitle>
       </CardHeader>

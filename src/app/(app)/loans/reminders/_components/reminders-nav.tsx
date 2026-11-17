@@ -21,7 +21,7 @@ export function RemindersNav() {
   const { can } = usePermission();
 
   return (
-    <nav className="-mx-1 overflow-x-auto overflow-y-hidden border-b" aria-label="Reminders">
+    <nav className="-mx-1 shrink-0 overflow-x-auto overflow-y-hidden border-b" aria-label="Reminders">
       <ul className="flex min-w-max gap-1 px-1">
         {TABS.filter((t) => !t.permission || can(t.permission)).map((tab) => {
           const active = pathname === tab.href;

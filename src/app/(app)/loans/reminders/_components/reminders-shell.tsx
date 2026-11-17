@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { BellRing, PauseCircle, PlayCircle } from "lucide-react";
 import { PermissionButton } from "@/components/common/permission-button";
 import { PermissionGate } from "@/components/common/permission-gate";
+import { FillSection, PageFill } from "@/components/common/page-fill";
 import { PauseDialog } from "@/components/reminders/pause-dialog";
 import {
   ReminderTestModeProvider,
@@ -52,7 +53,7 @@ export function RemindersShell({ children }: { children: React.ReactNode }) {
 
   return (
     <ReminderTestModeProvider value={testMode}>
-      <div className="space-y-4">
+      <PageFill className="gap-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
@@ -111,7 +112,8 @@ export function RemindersShell({ children }: { children: React.ReactNode }) {
 
         <RemindersNav />
 
-        {children}
+        {/* Each tab fills the rest: its filters stay put and its list scrolls inside. */}
+        <FillSection>{children}</FillSection>
 
         <PauseDialog
           open={pauseOpen}
@@ -119,7 +121,7 @@ export function RemindersShell({ children }: { children: React.ReactNode }) {
           scope="global"
           onPaused={pauses.refetch}
         />
-      </div>
+      </PageFill>
     </ReminderTestModeProvider>
   );
 }

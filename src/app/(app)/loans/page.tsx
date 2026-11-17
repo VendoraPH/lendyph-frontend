@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef, useLayoutEffect } from "react";
 import { RouteGuard, PermissionGate, TablePagination } from "@/components/common";
 import { NoBranchBanner } from "@/components/common/no-branch-banner";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { AutoPayToggleDialog } from "@/components/auto-pay-toggle-dialog";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
@@ -22,6 +23,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { formatDateISO } from "@/lib/format";
 import type { Loan, LoanProduct } from "@/types/loan";
 import { LoanTable } from "./_components/loan-table";
@@ -395,7 +397,7 @@ function LoansContent() {
   );
 
   return (
-    <div className="space-y-6">
+    <PageFill className="gap-4">
       <NoBranchBanner />
       {/* Header */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -499,14 +501,14 @@ function LoansContent() {
       </div>
 
       {/* Data Table */}
-      <Card>
+      <Card className={FIT_CLASSES.section}>
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="text-sm font-medium">
             Loan Applications{countsKnown ? ` (${total})` : ""}
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="mb-4">
+        <CardContent className={FIT_CLASSES.section}>
+          <div className="mb-4 shrink-0">
             <LoanFilters
               search={searchDraft}
               onSearchChange={setSearchDraft}
@@ -541,20 +543,22 @@ function LoansContent() {
             </div>
           ) : (
             <>
-              <LoanTable
-                loans={loans}
-                sort={{ key: sortKey, dir: sortDir }}
-                onSortChange={handleSortChange}
-                onRowClick={(id) => router.push(`/loans/${id}`)}
-                onAutoPayClick={(loan) =>
-                  setAutoPayTarget({
-                    loanId: loan.id,
-                    loanAccountNumber: loan.loan_account_number,
-                    enabled: loan.auto_pay_enabled ?? false,
-                    cbsReference: loan.auto_pay_cbs_reference,
-                  })
-                }
-              />
+              <ScrollBox>
+                <LoanTable
+                  loans={loans}
+                  sort={{ key: sortKey, dir: sortDir }}
+                  onSortChange={handleSortChange}
+                  onRowClick={(id) => router.push(`/loans/${id}`)}
+                  onAutoPayClick={(loan) =>
+                    setAutoPayTarget({
+                      loanId: loan.id,
+                      loanAccountNumber: loan.loan_account_number,
+                      enabled: loan.auto_pay_enabled ?? false,
+                      cbsReference: loan.auto_pay_cbs_reference,
+                    })
+                  }
+                />
+              </ScrollBox>
               <TablePagination
                 page={page}
                 perPage={perPage}
@@ -592,7 +596,7 @@ function LoansContent() {
           }}
         />
       )}
-    </div>
+    </PageFill>
   );
 }
 

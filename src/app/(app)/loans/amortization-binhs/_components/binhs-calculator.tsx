@@ -5,6 +5,9 @@ import { useSearchParams } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { RouteGuard } from "@/components/common";
+import { PageFill } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 import { getErrorMessage } from "@/lib/api-error";
 import { formatDateISO } from "@/lib/format";
 import { notifyError } from "@/lib/notify";
@@ -120,8 +123,9 @@ function BinhsPageContent() {
     setPaid(Object.fromEntries(paidFlags.map((_, i) => [i, value])));
 
   return (
-    <div className="space-y-6 p-6">
-      <Card>
+    // The shell's main area already pads the page.
+    <PageFill className="gap-4">
+      <Card className="shrink-0">
         <CardHeader>
           <CardTitle>Amortization (BINHS)</CardTitle>
           <CardDescription>
@@ -143,19 +147,19 @@ function BinhsPageContent() {
         </p>
       )}
 
-      <Tabs defaultValue="ideal" className="space-y-4">
+      <Tabs defaultValue="ideal" className={cn(FIT_CLASSES.section, "gap-3")}>
         <TabsList>
           <TabsTrigger value="ideal">Ideal</TabsTrigger>
           <TabsTrigger value="worst">Worst Case</TabsTrigger>
           <TabsTrigger value="custom">Custom</TabsTrigger>
         </TabsList>
-        <TabsContent value="ideal">
+        <TabsContent value="ideal" className={FIT_CLASSES.section}>
           <BinhsScheduleTable scenario={scenarios?.ideal ?? null} emptyMessage={emptyMessage} busy={busy} />
         </TabsContent>
-        <TabsContent value="worst">
+        <TabsContent value="worst" className={FIT_CLASSES.section}>
           <BinhsScheduleTable scenario={scenarios?.worst_case ?? null} emptyMessage={emptyMessage} busy={busy} />
         </TabsContent>
-        <TabsContent value="custom">
+        <TabsContent value="custom" className={FIT_CLASSES.section}>
           <BinhsCustomTab
             scenario={scenarios?.custom ?? null}
             paidFlags={paidFlags}
@@ -166,14 +170,14 @@ function BinhsPageContent() {
           />
         </TabsContent>
       </Tabs>
-    </div>
+    </PageFill>
   );
 }
 
 export function BinhsCalculator() {
   return (
     <RouteGuard permission="loans:view" pageName="Amortization BINHS">
-      <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
+      <Suspense fallback={<div className="text-sm text-muted-foreground">Loading…</div>}>
         <BinhsPageContent />
       </Suspense>
     </RouteGuard>

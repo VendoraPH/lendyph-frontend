@@ -4,6 +4,9 @@ import { useState, useMemo, useEffect } from "react";
 import { RouteGuard, PermissionButton } from "@/components/common";
 import { PAYMENT_CREATE_GATE } from "@/lib/lending-write-gates";
 import { TablePagination } from "@/components/common/table-pagination";
+import { Illustration, hasIllustration } from "@/components/common/illustration";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { repaymentService } from "@/services";
@@ -381,7 +384,7 @@ function PaymentsContent() {
 
   return (
     <>
-    <div className="space-y-6">
+    <PageFill>
       {/* Header */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -430,7 +433,7 @@ function PaymentsContent() {
       </div>
 
       {/* Borrower Loan List */}
-      <Card>
+      <Card className={FIT_CLASSES.section}>
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="flex items-center gap-2 text-base">
             <ReceiptText className="size-4" />
@@ -447,7 +450,7 @@ function PaymentsContent() {
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className={FIT_CLASSES.section}>
           {list.error ? (
             // Deliberately NOT the empty state. "No loans to collect" after a
             // failed request tells a cashier the member in front of them has
@@ -474,7 +477,10 @@ function PaymentsContent() {
               Loading loans...
             </div>
           ) : list.rows.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
+            <div className="flex flex-col items-center gap-3 text-center py-12 text-muted-foreground">
+              {hasIllustration(list.query ? "noResults" : "allCaughtUp") && (
+                <Illustration name={list.query ? "noResults" : "allCaughtUp"} />
+              )}
               {list.query
                 ? `No loans to collect matching "${list.query}"`
                 : "No loans to collect"}
@@ -488,89 +494,92 @@ function PaymentsContent() {
               aria-busy={list.pending}
               className={cn(
                 "rounded-md border overflow-hidden transition-opacity",
+                FIT_CLASSES.section,
                 list.pending && "opacity-60",
               )}
             >
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Member</TableHead>
-                    <TableHead className="hidden sm:table-cell">Loan Product</TableHead>
-                    <TableHead className="hidden md:table-cell">Next Due</TableHead>
-                    <TableHead className="text-right">Due Amount</TableHead>
-                    <TableHead className="text-right hidden sm:table-cell">Outstanding</TableHead>
-                    <TableHead className="text-center">Status</TableHead>
-                    <TableHead className="w-[80px]"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {list.rows.map((loan) => {
-                    return (
-                      <TableRow
-                        key={loan.id}
-                        className={cn(
-                          "hover:bg-muted/50 transition-colors",
-                          canRecordPayment && "cursor-pointer",
-                        )}
-                        onClick={canRecordPayment ? () => handleSelectLoan(loan) : undefined}
-                      >
-                        <TableCell>
-                          <div>
-                            <p className="font-medium text-sm">{loan.borrower_name}</p>
-                            <p className="text-xs text-muted-foreground">{loan.loan_account_number}</p>
-                          </div>
-                        </TableCell>
-                        <TableCell className="hidden sm:table-cell">
-                          <span className="text-sm">{loan.loan_product_name}</span>
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell">
-                          <span className="text-sm">{formatDate(loan.next_due_date)}</span>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {(() => {
-                            const cell = activeLoanDueCell(loan);
-                            return (
-                              <div>
-                                <p className="text-sm font-semibold tabular-nums">{cell.amount}</p>
-                                {cell.penaltyNote && (
-                                  <p className="text-[10px] text-destructive">{cell.penaltyNote}</p>
-                                )}
-                                {cell.insuranceNote && (
-                                  <p className="text-[10px] text-muted-foreground">{cell.insuranceNote}</p>
-                                )}
-                              </div>
-                            );
-                          })()}
-                        </TableCell>
-                        <TableCell className="text-right hidden sm:table-cell">
-                          <span className="text-sm font-medium tabular-nums">
-                            {currencyOrDash(loan.total_outstanding)}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <PaymentStatusPill loan={loan} />
-                        </TableCell>
-                        <TableCell onClick={(e) => e.stopPropagation()}>
-                          <PermissionButton
-                            permission={PAYMENT_CREATE_GATE.permission}
-                            tooltip={PAYMENT_CREATE_GATE.tooltip}
-                            size="sm"
-                            variant="ghost"
-                            className="gap-1 text-xs text-brand-orange hover:text-brand-orange-dark"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSelectLoan(loan);
-                            }}
-                          >
-                            Pay
-                            <ArrowRight className="size-3" />
-                          </PermissionButton>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+              <ScrollBox>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Member</TableHead>
+                      <TableHead className="hidden sm:table-cell">Loan Product</TableHead>
+                      <TableHead className="hidden md:table-cell">Next Due</TableHead>
+                      <TableHead className="text-right">Due Amount</TableHead>
+                      <TableHead className="text-right hidden sm:table-cell">Outstanding</TableHead>
+                      <TableHead className="text-center">Status</TableHead>
+                      <TableHead className="w-[80px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {list.rows.map((loan) => {
+                      return (
+                        <TableRow
+                          key={loan.id}
+                          className={cn(
+                            "hover:bg-muted/50 transition-colors",
+                            canRecordPayment && "cursor-pointer",
+                          )}
+                          onClick={canRecordPayment ? () => handleSelectLoan(loan) : undefined}
+                        >
+                          <TableCell>
+                            <div>
+                              <p className="font-medium text-sm">{loan.borrower_name}</p>
+                              <p className="text-xs text-muted-foreground">{loan.loan_account_number}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell className="hidden sm:table-cell">
+                            <span className="text-sm">{loan.loan_product_name}</span>
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell">
+                            <span className="text-sm">{formatDate(loan.next_due_date)}</span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {(() => {
+                              const cell = activeLoanDueCell(loan);
+                              return (
+                                <div>
+                                  <p className="text-sm font-semibold tabular-nums">{cell.amount}</p>
+                                  {cell.penaltyNote && (
+                                    <p className="text-[10px] text-destructive">{cell.penaltyNote}</p>
+                                  )}
+                                  {cell.insuranceNote && (
+                                    <p className="text-[10px] text-muted-foreground">{cell.insuranceNote}</p>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </TableCell>
+                          <TableCell className="text-right hidden sm:table-cell">
+                            <span className="text-sm font-medium tabular-nums">
+                              {currencyOrDash(loan.total_outstanding)}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <PaymentStatusPill loan={loan} />
+                          </TableCell>
+                          <TableCell onClick={(e) => e.stopPropagation()}>
+                            <PermissionButton
+                              permission={PAYMENT_CREATE_GATE.permission}
+                              tooltip={PAYMENT_CREATE_GATE.tooltip}
+                              size="sm"
+                              variant="ghost"
+                              className="gap-1 text-xs text-brand-orange hover:text-brand-orange-dark"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectLoan(loan);
+                              }}
+                            >
+                              Pay
+                              <ArrowRight className="size-3" />
+                            </PermissionButton>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </ScrollBox>
             </div>
             <TablePagination
               page={list.page}
@@ -585,7 +594,7 @@ function PaymentsContent() {
         </CardContent>
       </Card>
 
-    </div>
+    </PageFill>
 
     {/* Payment Entry Dialog */}
     <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) resetForm(); }}>
