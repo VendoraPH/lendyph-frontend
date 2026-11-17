@@ -34,7 +34,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Spinner } from "@/components/ui/spinner";
 
 import { borrowerService } from "@/services/borrower.service";
 import { MAX_PER_PAGE } from "@/lib/paginate";
@@ -45,8 +44,17 @@ import { PhotoCropDialog } from "@/components/borrower/photo-crop-dialog";
 import { ValidIdFilePicker } from "@/components/borrower/valid-id-file-picker";
 import { removeValidIdRowLabel, validIdRowName } from "@/lib/valid-id-names";
 import { CIVIL_STATUS_OPTIONS, SUFFIX_OPTIONS, VALID_ID_OPTIONS } from "@/constants";
-import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { PageFill } from "@/components/common/page-fill";
 import { FIT_CLASSES } from "@/lib/page-fill";
+import { FormStep, FormStepper, type FormStepperHandle, type StepErrors } from "@/components/common/form-stepper";
+import { errorMessages, FORM_STEP_GRID } from "@/lib/form-stepper";
+import {
+  memberFormSteps,
+  newMemberPayload,
+  requiredMemberFieldErrors,
+  validateMemberStep,
+  type NewMemberFormData,
+} from "../_lib/member-form-steps";
 
 // Last-resort copy for the duplicate dialog when NONE of name/code/birthdate
 // could be parsed out of the backend's 422. Without this the admin gets a
@@ -83,30 +91,7 @@ interface ValidIdEntry {
   back_preview: string | null;
 }
 
-interface BorrowerFormData {
-  first_name: string;
-  middle_name: string;
-  last_name: string;
-  suffix: string;
-  birthdate: string;
-  gender: string;
-  civil_status: string;
-  contact_number: string;
-  email: string;
-  address: string;
-  barangay: string;
-  city: string;
-  province: string;
-  employer_or_business: string;
-  monthly_income: string;
-  branch_id: string;
-  pledge_amount: string;
-  spouse_first_name: string;
-  spouse_middle_name: string;
-  spouse_last_name: string;
-  spouse_contact_number: string;
-  spouse_occupation: string;
-}
+type BorrowerFormData = NewMemberFormData;
 
 function emptyForm(): BorrowerFormData {
   return {
@@ -159,6 +144,8 @@ function NewBorrowerContent() {
   // the submit button while it's in flight so the form doesn't feel stuck.
   const [checkingDuplicate, setCheckingDuplicate] = useState(false);
   const [creatingAnyway, setCreatingAnyway] = useState(false);
+  const stepperRef = useRef<FormStepperHandle>(null);
+  const steps = memberFormSteps({ mode: "create", married: form.civil_status === "married" });
 
   // Profile photo
   const [profilePhoto, setProfilePhoto] = useState<File | null>(null);
@@ -355,6 +342,13 @@ function NewBorrowerContent() {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
+  // A step's missing fields read as before: one "Please complete: …" toast, and
+  // an incomplete ID in sentences ("Enter the ID number for ID 2.").
+  function notifyStepErrors(errors: StepErrors, stepId: string) {
+    if (stepId === "valid_ids") toast.error(sentencesMessage(errorMessages(errors)));
+    else notifyValidation(errorMessages(errors));
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
@@ -362,28 +356,23 @@ function NewBorrowerContent() {
     // configuration problem, not something the operator can fix on this form.
     if (!form.branch_id) {
       toast.error("Your account is not assigned to a branch. Contact an administrator.");
+      // A user with several branches picks one on the first step: open it.
+      if (assignedBranches.length > 1) stepperRef.current?.showErrors({ branch_id: "Branch" });
       return;
     }
 
     // Client-side validation — collect human labels for every empty required
     // field and surface them in a single consolidated toast.
-    const missing: string[] = [];
-    if (!form.first_name.trim()) missing.push("First name");
-    if (!form.last_name.trim()) missing.push("Last name");
     // middle_name is deliberately NOT required. The backend has it nullable, the
     // client's Guidelines sheet says to leave it blank when the member has none,
     // and the public registration form already allows that. Requiring it here
     // only diverged from every other source of truth.
-    if (!form.birthdate) missing.push("Date of birth");
-    if (!form.gender) missing.push("Gender");
-    if (!form.civil_status) missing.push("Civil status");
-    if (!form.contact_number.trim()) missing.push("Contact number");
-    if (!form.address.trim()) missing.push("Street address");
-    if (!form.city.trim()) missing.push("City / Municipality");
-    if (!form.province.trim()) missing.push("Province");
+    const missingFields = requiredMemberFieldErrors(form);
+    const missing = Object.values(missingFields);
 
     if (missing.length > 0) {
       notifyValidation(missing);
+      stepperRef.current?.showErrors(missingFields);
       return;
     }
 
@@ -579,44 +568,6 @@ function NewBorrowerContent() {
     return null;
   }
 
-  function buildBorrowerPayload(force: boolean): Record<string, unknown> {
-    const payload: Record<string, unknown> = {
-      first_name: form.first_name.trim(),
-      last_name: form.last_name.trim(),
-      branch_id: Number(form.branch_id),
-    };
-
-    if (form.middle_name.trim()) payload.middle_name = form.middle_name.trim();
-    if (form.suffix && form.suffix !== "none") payload.suffix = form.suffix;
-    if (form.birthdate) payload.birthdate = form.birthdate;
-    if (form.gender) payload.gender = form.gender;
-    if (form.civil_status) payload.civil_status = form.civil_status;
-    if (form.contact_number.trim()) payload.contact_number = form.contact_number.trim();
-    if (form.email.trim()) payload.email = form.email.trim();
-    if (form.address.trim()) {
-      const street = form.address.trim();
-      payload.street_address = street;
-      payload.address = street;
-    }
-    if (form.barangay.trim()) payload.barangay = form.barangay.trim();
-    if (form.city.trim()) payload.city = form.city.trim();
-    if (form.province.trim()) payload.province = form.province.trim();
-    if (form.employer_or_business.trim()) payload.employer_or_business = form.employer_or_business.trim();
-    if (form.monthly_income) payload.monthly_income = Number(form.monthly_income);
-    payload.pledge_amount = form.pledge_amount ? Number(form.pledge_amount) : 0;
-
-    if (form.civil_status === "married") {
-      if (form.spouse_first_name.trim()) payload.spouse_first_name = form.spouse_first_name.trim();
-      if (form.spouse_middle_name.trim()) payload.spouse_middle_name = form.spouse_middle_name.trim();
-      if (form.spouse_last_name.trim()) payload.spouse_last_name = form.spouse_last_name.trim();
-      if (form.spouse_contact_number.trim()) payload.spouse_contact_number = form.spouse_contact_number.trim();
-      if (form.spouse_occupation.trim()) payload.spouse_occupation = form.spouse_occupation.trim();
-    }
-
-    if (force) payload.force = true;
-    return payload;
-  }
-
   // Parse the backend's duplicate 422 error message into structured pieces
   // so the dialog can show the match cleanly without exposing the internal
   // "Pass force=true" hint. Expected format:
@@ -637,7 +588,7 @@ function NewBorrowerContent() {
     else setSubmitting(true);
     try {
       const created = await borrowerService.create(
-        buildBorrowerPayload(force) as Parameters<typeof borrowerService.create>[0]
+        newMemberPayload(form, force) as Parameters<typeof borrowerService.create>[0]
       );
       const borrowerId = (created as unknown as { id: number }).id;
 
@@ -708,6 +659,8 @@ function NewBorrowerContent() {
         return;
       }
 
+      // Open the step holding the first field the server refused.
+      if (apiError?.response?.status === 422) stepperRef.current?.showErrors(errs);
       notifyError(err, "We couldn't save this member. Please check the details and try again.");
     } finally {
       setSubmitting(false);
@@ -733,657 +686,653 @@ function NewBorrowerContent() {
       </div>
 
       <form onSubmit={handleSubmit} className={FIT_CLASSES.section}>
-        <ScrollBox className="space-y-6 p-px">
-          <div className="grid gap-6 xl:grid-cols-[20rem_minmax(0,1fr)]">
-            {/* Profile Photo */}
-            <Card>
-              <CardContent className="pt-6 space-y-4">
-                <h2 className="text-base font-semibold">Profile Photo</h2>
-                <div className="flex flex-wrap items-center gap-6">
-                  <div className="relative">
-                    {photoPreview ? (
-                      <div className="relative h-24 w-24">
-                        <div className="h-24 w-24 rounded-full overflow-hidden border-2 border-border">
-                          {/* eslint-disable-next-line @next/next/no-img-element -- local data: preview, outside the /storage/** next/image allowlist; CLAUDE.md "Images" rule requires plain <img> */}
-                          <img
-                            src={photoPreview}
-                            alt="Profile preview"
-                            className="h-full w-full object-cover"
-                          />
+        <FormStepper
+          ref={stepperRef}
+          steps={steps}
+          mode="create"
+          validateStep={(id) => validateMemberStep(steps.find((s) => s.id === id), form, validIds)}
+          onInvalid={notifyStepErrors}
+          submitLabel="Create Member"
+          submittingLabel={checkingDuplicate ? "Checking..." : "Creating..."}
+          submitting={submitting || checkingDuplicate}
+          actions={
+            <Link
+              href="/borrowers"
+              className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
+            >
+              Cancel
+            </Link>
+          }
+        >
+          <FormStep id="personal">
+            <div className="grid gap-6 xl:grid-cols-[20rem_minmax(0,1fr)]">
+              {/* Profile Photo */}
+              <Card>
+                <CardContent className="pt-6 fit:pt-0 space-y-4 lg:max-xl:flex lg:max-xl:items-center lg:max-xl:gap-4 lg:max-xl:space-y-0">
+                  <h3 className="text-base font-semibold">Profile Photo</h3>
+                  <div className="flex flex-wrap items-center gap-6 lg:max-xl:contents">
+                    <div className="relative lg:max-xl:order-first">
+                      {photoPreview ? (
+                        <div className="relative h-24 w-24 lg:max-xl:size-12">
+                          <div className="h-24 w-24 lg:max-xl:size-12 rounded-full overflow-hidden border-2 border-border">
+                            {/* eslint-disable-next-line @next/next/no-img-element -- local data: preview, outside the /storage/** next/image allowlist; CLAUDE.md "Images" rule requires plain <img> */}
+                            <img
+                              src={photoPreview}
+                              alt="Profile preview"
+                              className="h-full w-full object-cover"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={removePhoto}
+                            className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center hover:bg-destructive/90 shadow-sm"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
                         </div>
-                        <button
+                      ) : (
+                        <div className="h-24 w-24 lg:max-xl:size-12 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center">
+                          <Camera className="h-6 w-6 text-muted-foreground/50" />
+                        </div>
+                      )}
+                      <input
+                        ref={photoInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handlePhotoChange}
+                        className="hidden"
+                      />
+                    </div>
+                    <div className="space-y-2 lg:max-xl:flex lg:max-xl:min-w-0 lg:max-xl:flex-1 lg:max-xl:items-center lg:max-xl:justify-between lg:max-xl:gap-4 lg:max-xl:space-y-0">
+                      <div className="space-y-2">
+                        <p className="text-sm text-muted-foreground">Upload a profile photo of the member.</p>
+                        <p className="text-xs text-muted-foreground">JPG, PNG up to 5MB</p>
+                      </div>
+                      <div className="flex items-center gap-2 pt-1 lg:max-xl:pt-0">
+                        <Button
                           type="button"
-                          onClick={removePhoto}
-                          className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center hover:bg-destructive/90 shadow-sm"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5"
+                          onClick={openCamera}
                         >
-                          <X className="h-3 w-3" />
-                        </button>
+                          <Camera className="h-3.5 w-3.5" />
+                          Camera
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5"
+                          onClick={() => photoInputRef.current?.click()}
+                        >
+                          <ImageIcon className="h-3.5 w-3.5" />
+                          Gallery
+                        </Button>
                       </div>
-                    ) : (
-                      <div className="h-24 w-24 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center">
-                        <Camera className="h-6 w-6 text-muted-foreground/50" />
-                      </div>
-                    )}
-                    <input
-                      ref={photoInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handlePhotoChange}
-                      className="hidden"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">Upload a profile photo of the member.</p>
-                    <p className="text-xs text-muted-foreground">JPG, PNG up to 5MB</p>
-                    <div className="flex items-center gap-2 pt-1">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="gap-1.5"
-                        onClick={openCamera}
-                      >
-                        <Camera className="h-3.5 w-3.5" />
-                        Camera
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="gap-1.5"
-                        onClick={() => photoInputRef.current?.click()}
-                      >
-                        <ImageIcon className="h-3.5 w-3.5" />
-                        Gallery
-                      </Button>
                     </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
-            {/* Personal Information */}
-            <Card>
-              <CardContent className="pt-6 space-y-4">
-                <h2 className="text-base font-semibold">Personal Information</h2>
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-                  {assignedBranches.length > 1 && (
+              {/* Personal Information */}
+              <Card>
+                <CardContent className="pt-6 fit:pt-0">
+                  <div className={`${FORM_STEP_GRID.grid} lg:grid-cols-4`}>
+                    {assignedBranches.length > 1 && (
+                      <div className="space-y-2" data-field="branch_id">
+                        <Label htmlFor="member-branch">
+                          Branch <span className="text-red-500">*</span>
+                        </Label>
+                        <Select
+                          items={branchSelectItems(assignedBranches)}
+                          value={form.branch_id || null}
+                          onValueChange={(v) => update("branch_id", v ?? "")}
+                        >
+                          <SelectTrigger id="member-branch" className="w-full">
+                            <SelectValue placeholder="Select a branch" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {assignedBranches.map((branch) => (
+                              <SelectItem key={branch.id} value={String(branch.id)}>
+                                {branch.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                     <div className="space-y-2">
-                      <Label htmlFor="member-branch">
-                        Branch <span className="text-red-500">*</span>
+                      <Label htmlFor="first_name">
+                        First Name <span className="text-destructive">*</span>
                       </Label>
+                      <Input
+                        id="first_name"
+                        placeholder="Juan"
+                        value={form.first_name}
+                        onChange={(e) => update("first_name", e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="last_name">
+                        Last Name <span className="text-destructive">*</span>
+                      </Label>
+                      <Input
+                        id="last_name"
+                        placeholder="Santos"
+                        value={form.last_name}
+                        onChange={(e) => update("last_name", e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="middle_name">Middle Name</Label>
+                      <Input
+                        id="middle_name"
+                        placeholder="Dela Cruz"
+                        value={form.middle_name}
+                        onChange={(e) => update("middle_name", e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="suffix">Suffix</Label>
                       <Select
-                        items={branchSelectItems(assignedBranches)}
-                        value={form.branch_id || null}
-                        onValueChange={(v) => update("branch_id", v ?? "")}
+                        value={form.suffix || null}
+                        onValueChange={(v) => update("suffix", v ?? "")}
                       >
-                        <SelectTrigger id="member-branch" className="w-full">
-                          <SelectValue placeholder="Select a branch" />
+                        <SelectTrigger id="suffix" className="w-full">
+                          <SelectValue placeholder="None">
+                            {(value: string | null) =>
+                              value
+                                ? (SUFFIX_OPTIONS.find((o) => (o.value || "none") === value)?.label ?? value)
+                                : "None"
+                            }
+                          </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                          {assignedBranches.map((branch) => (
-                            <SelectItem key={branch.id} value={String(branch.id)}>
-                              {branch.name}
+                          {SUFFIX_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value || "none"} value={opt.value || "none"}>
+                              {opt.label}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
-                  )}
+                    <div className="space-y-2">
+                      <Label htmlFor="birthdate">
+                        Birthdate <span className="text-destructive">*</span>
+                      </Label>
+                      <Input
+                        id="birthdate"
+                        type="date"
+                        value={form.birthdate}
+                        onChange={(e) => update("birthdate", e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2" data-field="gender">
+                      <Label id="gender-label">
+                        Gender <span className="text-destructive">*</span>
+                      </Label>
+                      <RadioGroup
+                        aria-labelledby="gender-label"
+                        className="flex gap-4 pt-2"
+                        value={form.gender || null}
+                        onValueChange={(v) => update("gender", v ?? "")}
+                      >
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <RadioGroupItem value="male" />
+                          <span className="text-sm">Male</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <RadioGroupItem value="female" />
+                          <span className="text-sm">Female</span>
+                        </label>
+                      </RadioGroup>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="civil_status">
+                        Civil Status <span className="text-destructive">*</span>
+                      </Label>
+                      <Select
+                        value={form.civil_status || null}
+                        onValueChange={(v) => update("civil_status", v ?? "")}
+                      >
+                        <SelectTrigger id="civil_status" className="w-full">
+                          <SelectValue placeholder="Select civil status">
+                            {(value: string | null) =>
+                              value
+                                ? (CIVIL_STATUS_OPTIONS.find((o) => o.value === value)?.label ?? value)
+                                : "Select civil status"
+                            }
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {CIVIL_STATUS_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </FormStep>
+
+          {/* Spouse Information (visible only when married) */}
+          {form.civil_status === "married" && (
+            <FormStep id="spouse">
+              <Card>
+                <CardContent className="pt-6 fit:pt-0">
+                  <div className={FORM_STEP_GRID.grid}>
+                    <div className="space-y-2">
+                      <Label htmlFor="spouse_first_name">First Name</Label>
+                      <Input
+                        id="spouse_first_name"
+                        placeholder="First name"
+                        value={form.spouse_first_name ?? ""}
+                        onChange={(e) => update("spouse_first_name", e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="spouse_middle_name">Middle Name</Label>
+                      <Input
+                        id="spouse_middle_name"
+                        placeholder="Middle name"
+                        value={form.spouse_middle_name ?? ""}
+                        onChange={(e) => update("spouse_middle_name", e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="spouse_last_name">Last Name</Label>
+                      <Input
+                        id="spouse_last_name"
+                        placeholder="Last name"
+                        value={form.spouse_last_name ?? ""}
+                        onChange={(e) => update("spouse_last_name", e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="spouse_contact_number">Contact Number</Label>
+                      <Input
+                        id="spouse_contact_number"
+                        type="tel"
+                        placeholder="09XXXXXXXXX"
+                        value={form.spouse_contact_number ?? ""}
+                        onChange={(e) => update("spouse_contact_number", e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="spouse_occupation">Occupation</Label>
+                      <Input
+                        id="spouse_occupation"
+                        placeholder="Occupation or employer"
+                        value={form.spouse_occupation ?? ""}
+                        onChange={(e) => update("spouse_occupation", e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </FormStep>
+          )}
+
+          {/* Contact Information */}
+          <FormStep id="contact">
+            <Card>
+              <CardContent className="pt-6 fit:pt-0">
+                <div className={FORM_STEP_GRID.grid}>
                   <div className="space-y-2">
-                    <Label htmlFor="first_name">
-                      First Name <span className="text-destructive">*</span>
+                    <Label htmlFor="contact_number">
+                      Contact Number <span className="text-destructive">*</span>
                     </Label>
                     <Input
-                      id="first_name"
-                      placeholder="Juan"
-                      value={form.first_name}
-                      onChange={(e) => update("first_name", e.target.value)}
+                      id="contact_number"
+                      type="tel"
+                      placeholder="09XXXXXXXXX"
+                      value={form.contact_number}
+                      onChange={(e) => update("contact_number", e.target.value)}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="last_name">
-                      Last Name <span className="text-destructive">*</span>
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="name@example.com"
+                      value={form.email}
+                      onChange={(e) => update("email", e.target.value)}
+                    />
+                  </div>
+                  <div className={`space-y-2 ${FORM_STEP_GRID.wide}`} data-field="street_address">
+                    <Label htmlFor="address">
+                      Street Address <span className="text-destructive">*</span>
                     </Label>
                     <Input
-                      id="last_name"
-                      placeholder="Santos"
-                      value={form.last_name}
-                      onChange={(e) => update("last_name", e.target.value)}
+                      id="address"
+                      placeholder="House/Lot/Block number, Street name"
+                      value={form.address}
+                      onChange={(e) => update("address", e.target.value)}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="middle_name">Middle Name</Label>
+                    <Label htmlFor="barangay">Barangay</Label>
                     <Input
-                      id="middle_name"
-                      placeholder="Dela Cruz"
-                      value={form.middle_name}
-                      onChange={(e) => update("middle_name", e.target.value)}
+                      id="barangay"
+                      placeholder="Barangay"
+                      value={form.barangay}
+                      onChange={(e) => update("barangay", e.target.value)}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="suffix">Suffix</Label>
-                    <Select
-                      value={form.suffix || null}
-                      onValueChange={(v) => update("suffix", v ?? "")}
-                    >
-                      <SelectTrigger id="suffix" className="w-full">
-                        <SelectValue placeholder="None">
-                          {(value: string | null) =>
-                            value
-                              ? (SUFFIX_OPTIONS.find((o) => (o.value || "none") === value)?.label ?? value)
-                              : "None"
-                          }
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {SUFFIX_OPTIONS.map((opt) => (
-                          <SelectItem key={opt.value || "none"} value={opt.value || "none"}>
-                            {opt.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="birthdate">
-                      Birthdate <span className="text-destructive">*</span>
+                    <Label htmlFor="city">
+                      City / Municipality <span className="text-destructive">*</span>
                     </Label>
                     <Input
-                      id="birthdate"
-                      type="date"
-                      value={form.birthdate}
-                      onChange={(e) => update("birthdate", e.target.value)}
+                      id="city"
+                      placeholder="City name"
+                      value={form.city}
+                      onChange={(e) => update("city", e.target.value)}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label id="gender-label">
-                      Gender <span className="text-destructive">*</span>
+                    <Label htmlFor="province">
+                      Province <span className="text-destructive">*</span>
                     </Label>
-                    <RadioGroup
-                      aria-labelledby="gender-label"
-                      className="flex gap-4 pt-2"
-                      value={form.gender || null}
-                      onValueChange={(v) => update("gender", v ?? "")}
-                    >
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <RadioGroupItem value="male" />
-                        <span className="text-sm">Male</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <RadioGroupItem value="female" />
-                        <span className="text-sm">Female</span>
-                      </label>
-                    </RadioGroup>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="civil_status">
-                      Civil Status <span className="text-destructive">*</span>
-                    </Label>
-                    <Select
-                      value={form.civil_status || null}
-                      onValueChange={(v) => update("civil_status", v ?? "")}
-                    >
-                      <SelectTrigger id="civil_status" className="w-full">
-                        <SelectValue placeholder="Select civil status">
-                          {(value: string | null) =>
-                            value
-                              ? (CIVIL_STATUS_OPTIONS.find((o) => o.value === value)?.label ?? value)
-                              : "Select civil status"
-                          }
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CIVIL_STATUS_OPTIONS.map((opt) => (
-                          <SelectItem key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Input
+                      id="province"
+                      placeholder="Province"
+                      value={form.province}
+                      onChange={(e) => update("province", e.target.value)}
+                    />
                   </div>
                 </div>
               </CardContent>
             </Card>
-          </div>
 
-          {/* Camera Capture Dialog */}
-          <Dialog open={cameraOpen} onOpenChange={handleCameraDialogChange}>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Take Photo</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-black">
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="h-full w-full object-cover"
-                  />
+          </FormStep>
+
+          {/* Employment & Income */}
+          <FormStep id="employment">
+            <Card>
+              <CardContent className="pt-6 fit:pt-0">
+                <div className={FORM_STEP_GRID.grid}>
+                  <div className="space-y-2">
+                    <Label htmlFor="employer_or_business">Employer / Business Name</Label>
+                    <Input
+                      id="employer_or_business"
+                      placeholder="Company or business name"
+                      value={form.employer_or_business}
+                      onChange={(e) => update("employer_or_business", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="monthly_income">Monthly Income (₱)</Label>
+                    <Input
+                      id="monthly_income"
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      placeholder="0"
+                      value={form.monthly_income}
+                      onChange={(e) => update("monthly_income", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="pledge_amount">Pledge Amount (₱)</Label>
+                    <Input
+                      id="pledge_amount"
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      placeholder="0"
+                      value={form.pledge_amount}
+                      onChange={(e) => update("pledge_amount", e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">Share capital pledge. Defaults to ₱0 if left empty.</p>
+                  </div>
                 </div>
-                <canvas ref={canvasRef} className="hidden" />
-                <div className="flex items-center justify-center gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-10 w-10 rounded-full"
-                    onClick={toggleFacingMode}
-                    title="Switch camera"
-                  >
-                    <SwitchCamera className="h-4 w-4" />
-                  </Button>
-                  <button
-                    type="button"
-                    onClick={capturePhoto}
-                    className="h-14 w-14 rounded-full border-4 border-brand-orange bg-white hover:bg-brand-orange/10 transition-colors flex items-center justify-center"
-                    title="Capture"
-                  >
-                    <div className="h-10 w-10 rounded-full bg-brand-orange" />
-                  </button>
+              </CardContent>
+            </Card>
+          </FormStep>
+
+          {/* Valid IDs */}
+          <FormStep id="valid_ids">
+            <Card>
+              <CardContent className="pt-6 fit:pt-0 space-y-4">
+                <div className="flex items-center justify-end">
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => handleCameraDialogChange(false)}
+                    onClick={addValidId}
                   >
-                    Cancel
+                    <Plus className="h-3.5 w-3.5 mr-1" />
+                    Add ID
                   </Button>
                 </div>
-              </div>
-            </DialogContent>
-          </Dialog>
 
-          {/* Spouse Information (visible only when married) */}
-          {form.civil_status === "married" && (
-            <Card>
-              <CardContent className="pt-6 space-y-4">
-                <h2 className="text-base font-semibold">Spouse Information</h2>
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="spouse_first_name">First Name</Label>
-                    <Input
-                      id="spouse_first_name"
-                      placeholder="First name"
-                      value={form.spouse_first_name ?? ""}
-                      onChange={(e) => update("spouse_first_name", e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="spouse_middle_name">Middle Name</Label>
-                    <Input
-                      id="spouse_middle_name"
-                      placeholder="Middle name"
-                      value={form.spouse_middle_name ?? ""}
-                      onChange={(e) => update("spouse_middle_name", e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="spouse_last_name">Last Name</Label>
-                    <Input
-                      id="spouse_last_name"
-                      placeholder="Last name"
-                      value={form.spouse_last_name ?? ""}
-                      onChange={(e) => update("spouse_last_name", e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="spouse_contact_number">Contact Number</Label>
-                    <Input
-                      id="spouse_contact_number"
-                      type="tel"
-                      placeholder="09XXXXXXXXX"
-                      value={form.spouse_contact_number ?? ""}
-                      onChange={(e) => update("spouse_contact_number", e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="spouse_occupation">Occupation</Label>
-                    <Input
-                      id="spouse_occupation"
-                      placeholder="Occupation or employer"
-                      value={form.spouse_occupation ?? ""}
-                      onChange={(e) => update("spouse_occupation", e.target.value)}
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                {validIds.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-4 text-center">
+                    No valid IDs added. Click &quot;Add ID&quot; to attach identification documents.
+                  </p>
+                ) : (
+                  <div className="grid gap-4 xl:grid-cols-2">
+                    {validIds.map((entry, index) => (
+                      <div key={index} className="relative space-y-3 p-4 rounded-lg border bg-muted/30">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={removeValidIdRowLabel(entry, index)}
+                          onClick={() => removeValidId(index)}
+                          className="absolute top-2 right-2 text-destructive hover:text-destructive"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
 
-          {/* Contact Information */}
-          <Card>
-            <CardContent className="pt-6 space-y-4">
-              <h2 className="text-base font-semibold">Contact Information</h2>
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-                <div className="space-y-2">
-                  <Label htmlFor="contact_number">
-                    Contact Number <span className="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    id="contact_number"
-                    type="tel"
-                    placeholder="09XXXXXXXXX"
-                    value={form.contact_number}
-                    onChange={(e) => update("contact_number", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="name@example.com"
-                    value={form.email}
-                    onChange={(e) => update("email", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2 md:col-span-2 xl:col-span-1 2xl:col-span-2">
-                  <Label htmlFor="address">
-                    Street Address <span className="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    id="address"
-                    placeholder="House/Lot/Block number, Street name"
-                    value={form.address}
-                    onChange={(e) => update("address", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="barangay">Barangay</Label>
-                  <Input
-                    id="barangay"
-                    placeholder="Barangay"
-                    value={form.barangay}
-                    onChange={(e) => update("barangay", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="city">
-                    City / Municipality <span className="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    id="city"
-                    placeholder="City name"
-                    value={form.city}
-                    onChange={(e) => update("city", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="province">
-                    Province <span className="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    id="province"
-                    placeholder="Province"
-                    value={form.province}
-                    onChange={(e) => update("province", e.target.value)}
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Valid IDs */}
-          <Card>
-            <CardContent className="pt-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-base font-semibold">Valid IDs</h2>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={addValidId}
-                >
-                  <Plus className="h-3.5 w-3.5 mr-1" />
-                  Add ID
-                </Button>
-              </div>
-
-              {validIds.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-4 text-center">
-                  No valid IDs added. Click &quot;Add ID&quot; to attach identification documents.
-                </p>
-              ) : (
-                <div className="grid gap-4 xl:grid-cols-2">
-                  {validIds.map((entry, index) => (
-                    <div key={index} className="relative space-y-3 p-4 rounded-lg border bg-muted/30">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label={removeValidIdRowLabel(entry, index)}
-                        onClick={() => removeValidId(index)}
-                        className="absolute top-2 right-2 text-destructive hover:text-destructive"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-
-                      {/* ID Type + ID Number (and custom name when "Others") */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pr-8">
-                        <div className="space-y-2">
-                          <Label htmlFor={`valid_id_type_${index}`}>ID Type</Label>
-                          <Select
-                            value={entry.type || null}
-                            onValueChange={(v) => updateValidId(index, "type", v ?? "")}
-                          >
-                            <SelectTrigger id={`valid_id_type_${index}`} className="w-full">
-                              <SelectValue placeholder="Select ID type">
-                                {(value: string | null) =>
-                                  value
-                                    ? (VALID_ID_OPTIONS.find((o) => o.value === value)?.label ?? value)
-                                    : "Select ID type"
-                                }
-                              </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                              {VALID_ID_OPTIONS.map((opt) => (
-                                <SelectItem key={opt.value} value={opt.value}>
-                                  {opt.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor={`valid_id_number_${index}`}>ID Number</Label>
-                          <Input
-                            id={`valid_id_number_${index}`}
-                            placeholder="ID number"
-                            value={entry.id_number}
-                            onChange={(e) => updateValidId(index, "id_number", e.target.value)}
-                          />
-                        </div>
-                        {entry.type === "others" && (
-                          <div className="space-y-2 sm:col-span-2">
-                            <Label htmlFor={`valid_id_name_${index}`}>
-                              ID Name <span className="text-destructive">*</span>
-                            </Label>
+                        {/* ID Type + ID Number (and custom name when "Others") */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pr-8">
+                          <div className="space-y-2" data-field={`valid_ids.${index}.type`}>
+                            <Label htmlFor={`valid_id_type_${index}`}>ID Type</Label>
+                            <Select
+                              value={entry.type || null}
+                              onValueChange={(v) => updateValidId(index, "type", v ?? "")}
+                            >
+                              <SelectTrigger id={`valid_id_type_${index}`} className="w-full">
+                                <SelectValue placeholder="Select ID type">
+                                  {(value: string | null) =>
+                                    value
+                                      ? (VALID_ID_OPTIONS.find((o) => o.value === value)?.label ?? value)
+                                      : "Select ID type"
+                                  }
+                                </SelectValue>
+                              </SelectTrigger>
+                              <SelectContent>
+                                {VALID_ID_OPTIONS.map((opt) => (
+                                  <SelectItem key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2" data-field={`valid_ids.${index}.id_number`}>
+                            <Label htmlFor={`valid_id_number_${index}`}>ID Number</Label>
                             <Input
-                              id={`valid_id_name_${index}`}
-                              placeholder="e.g. Senior Citizen ID, Company ID"
-                              value={entry.custom_type_name}
-                              onChange={(e) =>
-                                updateValidId(index, "custom_type_name", e.target.value)
-                              }
+                              id={`valid_id_number_${index}`}
+                              placeholder="ID number"
+                              value={entry.id_number}
+                              onChange={(e) => updateValidId(index, "id_number", e.target.value)}
                             />
                           </div>
-                        )}
-                      </div>
-
-                      {/* Front / Back Uploads */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="space-y-2">
-                          <Label htmlFor={entry.front_preview ? undefined : `valid_id_front_${index}`}>Front of ID</Label>
-                          {entry.front_preview ? (
-                            <div className="space-y-2">
-                              <div className="relative h-44 rounded-lg overflow-hidden border bg-muted/30">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={entry.front_preview}
-                                  alt="Front ID preview"
-                                  className="h-full w-full object-contain"
-                                />
-                                <button
-                                  type="button"
-                                  aria-label={`Remove front of ${validIdRowName(entry, index)}`}
-                                  onClick={() => {
-                                    updateValidId(index, "front_file", null);
-                                    updateValidId(index, "front_preview", null);
-                                  }}
-                                  className="absolute top-1 right-1 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center hover:bg-destructive/90"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </div>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="w-full h-8 text-xs gap-1"
-                                aria-label={`Crop front of ${validIdRowName(entry, index)}`}
-                                onClick={() => setCropTarget({ index, side: "front", src: entry.front_preview! })}
-                              >
-                                <CropIcon className="h-3.5 w-3.5" />
-                                Crop
-                              </Button>
+                          {entry.type === "others" && (
+                            <div className="space-y-2 sm:col-span-2" data-field={`valid_ids.${index}.custom_type_name`}>
+                              <Label htmlFor={`valid_id_name_${index}`}>
+                                ID Name <span className="text-destructive">*</span>
+                              </Label>
+                              <Input
+                                id={`valid_id_name_${index}`}
+                                placeholder="e.g. Senior Citizen ID, Company ID"
+                                value={entry.custom_type_name}
+                                onChange={(e) =>
+                                  updateValidId(index, "custom_type_name", e.target.value)
+                                }
+                              />
                             </div>
-                          ) : (
-                            <ValidIdFilePicker
-                              controlId={`valid_id_front_${index}`}
-                              side="front"
-                              rowName={validIdRowName(entry, index)}
-                              onPick={(e) => handleValidIdFile(index, "front", e)}
-                            />
                           )}
                         </div>
-                        <div className="space-y-2">
-                          <Label htmlFor={entry.back_preview ? undefined : `valid_id_back_${index}`}>Back of ID</Label>
-                          {entry.back_preview ? (
-                            <div className="space-y-2">
-                              <div className="relative h-44 rounded-lg overflow-hidden border bg-muted/30">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={entry.back_preview}
-                                  alt="Back ID preview"
-                                  className="h-full w-full object-contain"
-                                />
-                                <button
+
+                        {/* Front / Back Uploads */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-2" data-field={`valid_ids.${index}.front_file`}>
+                            <Label htmlFor={entry.front_preview ? undefined : `valid_id_front_${index}`}>Front of ID</Label>
+                            {entry.front_preview ? (
+                              <div className="space-y-2">
+                                <div className="relative h-44 rounded-lg overflow-hidden border bg-muted/30">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={entry.front_preview}
+                                    alt="Front ID preview"
+                                    className="h-full w-full object-contain"
+                                  />
+                                  <button
+                                    type="button"
+                                    aria-label={`Remove front of ${validIdRowName(entry, index)}`}
+                                    onClick={() => {
+                                      updateValidId(index, "front_file", null);
+                                      updateValidId(index, "front_preview", null);
+                                    }}
+                                    className="absolute top-1 right-1 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center hover:bg-destructive/90"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                </div>
+                                <Button
                                   type="button"
-                                  aria-label={`Remove back of ${validIdRowName(entry, index)}`}
-                                  onClick={() => {
-                                    updateValidId(index, "back_file", null);
-                                    updateValidId(index, "back_preview", null);
-                                  }}
-                                  className="absolute top-1 right-1 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center hover:bg-destructive/90"
+                                  variant="outline"
+                                  size="sm"
+                                  className="w-full h-8 text-xs gap-1"
+                                  aria-label={`Crop front of ${validIdRowName(entry, index)}`}
+                                  onClick={() => setCropTarget({ index, side: "front", src: entry.front_preview! })}
                                 >
-                                  <X className="h-3 w-3" />
-                                </button>
+                                  <CropIcon className="h-3.5 w-3.5" />
+                                  Crop
+                                </Button>
                               </div>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="w-full h-8 text-xs gap-1"
-                                aria-label={`Crop back of ${validIdRowName(entry, index)}`}
-                                onClick={() => setCropTarget({ index, side: "back", src: entry.back_preview! })}
-                              >
-                                <CropIcon className="h-3.5 w-3.5" />
-                                Crop
-                              </Button>
-                            </div>
-                          ) : (
-                            <ValidIdFilePicker
-                              controlId={`valid_id_back_${index}`}
-                              side="back"
-                              rowName={validIdRowName(entry, index)}
-                              onPick={(e) => handleValidIdFile(index, "back", e)}
-                            />
-                          )}
+                            ) : (
+                              <ValidIdFilePicker
+                                controlId={`valid_id_front_${index}`}
+                                side="front"
+                                rowName={validIdRowName(entry, index)}
+                                onPick={(e) => handleValidIdFile(index, "front", e)}
+                              />
+                            )}
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor={entry.back_preview ? undefined : `valid_id_back_${index}`}>Back of ID</Label>
+                            {entry.back_preview ? (
+                              <div className="space-y-2">
+                                <div className="relative h-44 rounded-lg overflow-hidden border bg-muted/30">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={entry.back_preview}
+                                    alt="Back ID preview"
+                                    className="h-full w-full object-contain"
+                                  />
+                                  <button
+                                    type="button"
+                                    aria-label={`Remove back of ${validIdRowName(entry, index)}`}
+                                    onClick={() => {
+                                      updateValidId(index, "back_file", null);
+                                      updateValidId(index, "back_preview", null);
+                                    }}
+                                    className="absolute top-1 right-1 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center hover:bg-destructive/90"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="w-full h-8 text-xs gap-1"
+                                  aria-label={`Crop back of ${validIdRowName(entry, index)}`}
+                                  onClick={() => setCropTarget({ index, side: "back", src: entry.back_preview! })}
+                                >
+                                  <CropIcon className="h-3.5 w-3.5" />
+                                  Crop
+                                </Button>
+                              </div>
+                            ) : (
+                              <ValidIdFilePicker
+                                controlId={`valid_id_back_${index}`}
+                                side="back"
+                                rowName={validIdRowName(entry, index)}
+                                onPick={(e) => handleValidIdFile(index, "back", e)}
+                              />
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Employment & Income */}
-          <Card>
-            <CardContent className="pt-6 space-y-4">
-              <h2 className="text-base font-semibold">Employment & Income</h2>
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-                <div className="space-y-2">
-                  <Label htmlFor="employer_or_business">Employer / Business Name</Label>
-                  <Input
-                    id="employer_or_business"
-                    placeholder="Company or business name"
-                    value={form.employer_or_business}
-                    onChange={(e) => update("employer_or_business", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="monthly_income">Monthly Income (₱)</Label>
-                  <Input
-                    id="monthly_income"
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    placeholder="0"
-                    value={form.monthly_income}
-                    onChange={(e) => update("monthly_income", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="pledge_amount">Pledge Amount (₱)</Label>
-                  <Input
-                    id="pledge_amount"
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    placeholder="0"
-                    value={form.pledge_amount}
-                    onChange={(e) => update("pledge_amount", e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground">Share capital pledge. Defaults to ₱0 if left empty.</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </ScrollBox>
-
-        {/* Submit */}
-        <div data-fab-clear className="flex shrink-0 justify-end gap-3 border-t pt-4 pb-8 fit:pb-0">
-          <Link
-            href="/borrowers"
-            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
-          >
-            Cancel
-          </Link>
-          <Button
-            type="submit"
-            disabled={submitting || checkingDuplicate}
-            className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-          >
-            {checkingDuplicate ? (
-              <>
-                <Spinner className="size-4 mr-2" />
-                Checking...
-              </>
-            ) : submitting ? (
-              <>
-                <Spinner className="size-4 mr-2" />
-                Creating...
-              </>
-            ) : (
-              "Create Member"
-            )}
-          </Button>
-        </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </FormStep>
+        </FormStepper>
       </form>
+
+      {/* Camera Capture Dialog */}
+      <Dialog open={cameraOpen} onOpenChange={handleCameraDialogChange}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Take Photo</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-black">
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="h-full w-full object-cover"
+              />
+            </div>
+            <canvas ref={canvasRef} className="hidden" />
+            <div className="flex items-center justify-center gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-10 w-10 rounded-full"
+                onClick={toggleFacingMode}
+                title="Switch camera"
+              >
+                <SwitchCamera className="h-4 w-4" />
+              </Button>
+              <button
+                type="button"
+                onClick={capturePhoto}
+                className="h-14 w-14 rounded-full border-4 border-brand-orange bg-white hover:bg-brand-orange/10 transition-colors flex items-center justify-center"
+                title="Capture"
+              >
+                <div className="h-10 w-10 rounded-full bg-brand-orange" />
+              </button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => handleCameraDialogChange(false)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Profile Photo Crop Dialog — drag/zoom to position the image */}
       <PhotoCropDialog
