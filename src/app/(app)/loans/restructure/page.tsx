@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 
 import { RouteGuard } from "@/components/common";
-import { PageFill, PageLoader } from "@/components/common/page-fill";
+import { PageFill, PageLoader, ScrollBox } from "@/components/common/page-fill";
 import { FormStep, FormStepper, type FormStepperHandle } from "@/components/common/form-stepper";
 import { FORM_STEP_GRID, stepErrorsOf, type StepErrors } from "@/lib/form-stepper";
 import { FIT_CLASSES } from "@/lib/page-fill";
@@ -875,7 +875,7 @@ function RestructureLoanInner() {
               <div className="space-y-1.5" data-field="source_loan_id">
                 <Label>Active Loan to Restructure</Label>
                 {loadingLoans ? (
-                  <div className="flex h-10 items-center gap-2 rounded-md border px-3 text-sm text-muted-foreground">
+                  <div className="flex h-8 items-center gap-2 rounded-lg border border-input px-2.5 text-sm text-muted-foreground">
                     <Spinner className="size-4" /> Loading loans…
                   </div>
                 ) : (
@@ -952,7 +952,7 @@ function RestructureLoanInner() {
                   {/* Borrower (locked) */}
                   <div className="space-y-1.5">
                     <Label>Member</Label>
-                    <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm">
+                    <div className="flex h-8 items-center rounded-lg border border-input bg-muted/40 px-2.5 text-sm">
                       {selectedBorrower?.full_name ?? "—"}
                       <Badge variant="outline" className="ml-2 text-xs">
                         {selectedBorrower?.borrower_code}
@@ -1148,7 +1148,7 @@ function RestructureLoanInner() {
                       {/* <output> is labelable, so the read-only value keeps its label */}
                       <output
                         id="interest-type"
-                        className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm"
+                        className="flex h-8 items-center rounded-lg border border-input bg-muted/40 px-2.5 text-sm"
                       >
                         {interestTypeLabel ?? (
                           <span className="text-muted-foreground">Select a product first</span>
@@ -1159,7 +1159,7 @@ function RestructureLoanInner() {
 
                     {/* SCB Amount */}
                     {selectedProduct?.scb_required && (
-                      <div className="space-y-1.5">
+                      <div className={cn("space-y-1.5", FORM_STEP_GRID.wide)}>
                         <Label>
                           Share Capital Build-Up
                           {selectedProduct.min_scb != null && selectedProduct.max_scb != null && (
@@ -1210,7 +1210,7 @@ function RestructureLoanInner() {
                   {restructureDate && term > 0 && (
                     <div className="space-y-1.5">
                       <Label>Projected Maturity Date</Label>
-                      <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground">
+                      <div className="flex h-8 items-center rounded-lg border border-input bg-muted/40 px-2.5 text-sm text-muted-foreground">
                         {previewMaturity
                           ? formatDateObj(calendarDate(previewMaturity))
                           : "—"}
@@ -1418,7 +1418,7 @@ function RestructureLoanInner() {
                           onBlur={() => setEditingFeeRate(null)}
                           className="w-24"
                         />
-                        <div className="flex h-10 flex-1 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground">
+                        <div className="flex h-8 flex-1 items-center rounded-lg border border-input bg-muted/40 px-2.5 text-sm text-muted-foreground">
                           {currencyOrDash(
                             previewDeductionAmount(previewDeductions?.items, deductions, processingFeeInput),
                           )}
@@ -1440,7 +1440,7 @@ function RestructureLoanInner() {
                           onBlur={() => setEditingFeeRate(null)}
                           className="w-24"
                         />
-                        <div className="flex h-10 flex-1 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground">
+                        <div className="flex h-8 flex-1 items-center rounded-lg border border-input bg-muted/40 px-2.5 text-sm text-muted-foreground">
                           {currencyOrDash(
                             previewDeductionAmount(previewDeductions?.items, deductions, serviceFeeInput),
                           )}
@@ -1664,7 +1664,7 @@ function RestructureLoanInner() {
                         ({amortization.rows.length} periods)
                       </span>
                   </h3>
-                    <div className="max-h-64 overflow-y-auto rounded-md border">
+                    <ScrollBox always className="max-h-64 rounded-md border">
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -1690,7 +1690,10 @@ function RestructureLoanInner() {
                         </TableBody>
                         <TableFooter>
                           <TableRow>
-                            <TableCell colSpan={2} className="font-semibold">Total</TableCell>
+                            {/* Two cells, not one spanning both: a pinned cell
+                                spanning columns can sit off its columns. */}
+                            <TableCell className="font-semibold">Total</TableCell>
+                            <TableCell />
                             <TableCell className="text-right font-semibold">{formatCurrency(amortization.totals.principal_due)}</TableCell>
                             <TableCell className="text-right font-semibold">{formatCurrency(amortization.totals.interest_due)}</TableCell>
                             {scb > 0 && <TableCell className="text-right font-semibold">{formatCurrency(amortization.totals.share_capital_build_up)}</TableCell>}
@@ -1698,7 +1701,7 @@ function RestructureLoanInner() {
                           </TableRow>
                         </TableFooter>
                       </Table>
-                    </div>
+                    </ScrollBox>
                 </section>
               )}
             </div>

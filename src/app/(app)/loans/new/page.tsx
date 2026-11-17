@@ -2001,9 +2001,12 @@ function NewLoanApplicationInner() {
                       </TableBody>
                       <TableFooter>
                         <TableRow>
-                          <TableCell colSpan={2} className="font-semibold">
+                          {/* Two cells, not one spanning both: a pinned cell
+                              spanning columns can sit off its columns. */}
+                          <TableCell className="font-semibold">
                             Total
                           </TableCell>
+                          <TableCell />
                           <TableCell className="text-right font-semibold">
                             {formatCurrency(amortization.totals.principal_due)}
                           </TableCell>
