@@ -16,13 +16,15 @@ const start = css.indexOf("Clearance for the floating Linda button");
 const block = css.slice(start, css.indexOf("@media not all", start));
 
 test("a scroll box keeps the end spacer only when no pinned bar follows it", () => {
-  assert.ok(block.includes('[data-linda-fab] [data-slot="scroll-box"]:not(:has(~ [data-fab-clear]))::after'), block);
+  // A pinned bar after the box itself, or after one of its wrappers (a list
+  // whose pagination follows the box's parent), means the box ends above it.
+  assert.ok(block.includes('[data-linda-fab] [data-slot="scroll-box"]:not(:has(~ [data-fab-clear]), :has(~ [data-fab-clear]) *)::after'), block);
   assert.ok(!/\[data-slot="scroll-box"\]::after/.test(block), "no unconditional spacer");
 });
 
 test("a pinned totals row stays lined up: the gutter is on every row of the box's own table, never on the totals alone", () => {
   assert.ok(
-    block.includes('[data-linda-fab] [data-slot="scroll-box"]:not(:has(~ [data-fab-clear])) > [data-slot="table-container"] tr > :last-child'),
+    block.includes('[data-linda-fab] [data-slot="scroll-box"]:not(:has(~ [data-fab-clear]), :has(~ [data-fab-clear]) *) > [data-slot="table-container"] tr > :last-child'),
     block,
   );
   assert.ok(!block.includes("tfoot tr > :last-child"), "no totals-only gutter");

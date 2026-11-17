@@ -222,24 +222,26 @@
  * utilities on the same element.
  * - At fit, controls pinned at the bottom right (`data-fab-clear`, e.g.
  *   TablePagination, a form's action bar) keep their right end clear.
- * - A scroll box with no pinned bar after it can end under the button, so its
- *   last row can scroll clear (the end spacer), and its own table keeps a
- *   right gutter on every row, so a pinned totals row clears the button and
- *   stays lined up with its column. A box followed by a pinned bar ends above
- *   the button and gets neither (no empty band under a list or a form step).
+ * - A scroll box with no pinned bar after it, or after one of its wrappers
+ *   (a list whose pagination follows the box's parent), can end under the
+ *   button. So its last row can scroll clear (the end spacer), and its own
+ *   table keeps a right gutter on every row, so a pinned totals row clears
+ *   the button and stays lined up with its column. A box followed by a pinned
+ *   bar ends above the button and gets neither: no empty band under a list or
+ *   a form step.
  * - Below fit the page itself scrolls, so the main area keeps room at its foot.
  */
 @media (min-width: 1024px) and (min-height: 640px) {
   [data-linda-fab] [data-fab-clear] {
     padding-right: var(--linda-fab-clearance);
   }
-  [data-linda-fab] [data-slot="scroll-box"]:not(:has(~ [data-fab-clear]))::after {
+  [data-linda-fab] [data-slot="scroll-box"]:not(:has(~ [data-fab-clear]), :has(~ [data-fab-clear]) *)::after {
     content: "";
     display: block;
     flex-shrink: 0;
     height: var(--linda-fab-clearance);
   }
-  [data-linda-fab] [data-slot="scroll-box"]:not(:has(~ [data-fab-clear])) > [data-slot="table-container"] tr > :last-child {
+  [data-linda-fab] [data-slot="scroll-box"]:not(:has(~ [data-fab-clear]), :has(~ [data-fab-clear]) *) > [data-slot="table-container"] tr > :last-child {
     padding-right: calc(var(--linda-fab-clearance) - 1.5rem);
   }
 }

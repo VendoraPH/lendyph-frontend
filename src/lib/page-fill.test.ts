@@ -86,7 +86,7 @@ test("a pinned heading covers the sliver of the row scrolled away above it", () 
   for (const always of [false, true]) {
     const th = tokens(scrollBoxClass({ always })).find((t) => t.startsWith("[&_thead_th:not([data-unpinned]_*)]:shadow-"));
     assert.ok(th, "headings carry a shadow");
-    assert.match(th!, /0_-[0-9]+px_0_var\(--card\)/, th);
+    assert.match(th!, /0_-[4-9]px_0_var\(--card\)/, th);
     assert.match(th!, /inset_0_-1px_0_var\(--border\)/, "the line under the headings stays");
   }
 });

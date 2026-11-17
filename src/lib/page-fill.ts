@@ -30,8 +30,8 @@ const STICKY_TABLE = [
   // Row borders don't travel with sticky cells, so the line under the
   // headings is drawn on the cells themselves. The upward shadow in the card
   // colour covers the sliver of the scrolled-away row that shows above the
-  // headings when the box starts at a fractional y.
-  "[&_thead_th:not([data-unpinned]_*)]:shadow-[inset_0_-1px_0_var(--border),0_-2px_0_var(--card)]",
+  // headings when the box starts at a fractional y (up to about 4px).
+  "[&_thead_th:not([data-unpinned]_*)]:shadow-[inset_0_-1px_0_var(--border),0_-4px_0_var(--card)]",
   "[&_tfoot_td:not([data-unpinned]_*)]:sticky",
   "[&_tfoot_td:not([data-unpinned]_*)]:bottom-0",
   "[&_tfoot_td:not([data-unpinned]_*)]:z-10",
