@@ -40,6 +40,13 @@ export type ReportId =
   | "savings_account_activity"
   | "savings_member_statement";
 
+/**
+ * Every document the exporters print: a catalog report, or a page exported as
+ * a report without being one (the executive dashboard). Kept apart from
+ * `ReportId` so the dashboard is not offered as a `/reports/[reportId]` route.
+ */
+export type DocumentId = ReportId | "executive_dashboard";
+
 export type ReportCategory =
   | "operations"
   | "portfolio"
@@ -149,7 +156,7 @@ export interface ReportChrome {
 }
 
 export interface ReportDocument {
-  reportId: ReportId;
+  reportId: DocumentId;
   meta: {
     title: string;
     subtitle?: string;

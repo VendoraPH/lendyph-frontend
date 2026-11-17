@@ -12,7 +12,7 @@ import { useIsClient, usePermission } from "@/hooks";
 import { AreaChart, Area } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Wallet, FileText, PhilippinePeso, AlertTriangle, TrendingUp, Landmark } from "lucide-react";
+import { Wallet, FileText, PhilippinePeso, AlertTriangle, TrendingUp, Landmark, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatDateFull } from "@/lib/format";
 import { shareCapitalService } from "@/services";
@@ -364,6 +364,15 @@ function DashboardPageFill() {
   return (
     <PageFill className={cn(DASHBOARD_PAGE_CLASS, "gap-4")}>
       <NoBranchBanner />
+      <div className="flex shrink-0 justify-end">
+        <Link
+          href="/dashboard/executive"
+          className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium hover:bg-muted"
+        >
+          <BarChart3 className="size-3.5" aria-hidden="true" />
+          Executive Dashboard
+        </Link>
+      </div>
       <DashboardContent />
     </PageFill>
   );
