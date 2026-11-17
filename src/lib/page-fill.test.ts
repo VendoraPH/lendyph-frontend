@@ -51,15 +51,15 @@ test("inside a scroll box the table wrapper stops clipping and the headings and 
   const c = scrollBoxClass();
   for (const t of [
     "[&>[data-slot=table-container]]:overflow-visible",
-    "[&_thead_th]:sticky",
-    "[&_thead_th]:top-0",
-    "[&_thead_th]:z-10",
-    "[&_thead_th]:bg-card",
-    "[&_tfoot_td]:sticky",
-    "[&_tfoot_td]:bottom-0",
-    "[&_tfoot_td]:bg-card",
-    "[&_tr[data-total]>*]:sticky",
-    "[&_tr[data-total]>*]:bottom-0",
+    "[&_thead_th:not([data-unpinned]_*)]:sticky",
+    "[&_thead_th:not([data-unpinned]_*)]:top-0",
+    "[&_thead_th:not([data-unpinned]_*)]:z-10",
+    "[&_thead_th:not([data-unpinned]_*)]:bg-card",
+    "[&_tfoot_td:not([data-unpinned]_*)]:sticky",
+    "[&_tfoot_td:not([data-unpinned]_*)]:bottom-0",
+    "[&_tfoot_td:not([data-unpinned]_*)]:bg-card",
+    "[&_tr[data-total]:not([data-unpinned]_*)>*]:sticky",
+    "[&_tr[data-total]:not([data-unpinned]_*)>*]:bottom-0",
   ]) {
     assert.ok(has(c, t), t);
   }
@@ -71,7 +71,7 @@ test("the dialog's scroll box scrolls at every size and lets inner scroll boxes 
     assert.ok(has(c, t), t);
   }
   assert.ok(!has(c, "fit:overflow-auto"), "no fit-only scrolling in the dialog");
-  assert.ok(has(c, "[&_thead_th]:sticky"), "headings stay pinned in the dialog");
+  assert.ok(has(c, "[&_thead_th:not([data-unpinned]_*)]:sticky"), "headings stay pinned in the dialog");
 });
 
 test("the page loader fills its page at fit and keeps a sensible height below it", () => {
@@ -84,9 +84,20 @@ test("a pinned heading covers the sliver of the row scrolled away above it", () 
   // The box can start at a fractional y, which leaves about 1px of the row
   // above showing; an upward shadow in the card colour paints over it.
   for (const always of [false, true]) {
-    const th = tokens(scrollBoxClass({ always })).find((t) => t.startsWith("[&_thead_th]:shadow-"));
+    const th = tokens(scrollBoxClass({ always })).find((t) => t.startsWith("[&_thead_th:not([data-unpinned]_*)]:shadow-"));
     assert.ok(th, "headings carry a shadow");
     assert.match(th!, /0_-[0-9]+px_0_var\(--card\)/, th);
     assert.match(th!, /inset_0_-1px_0_var\(--border\)/, "the line under the headings stays");
+  }
+});
+
+test("pinning skips tables inside [data-unpinned], so a table that styles its own heading band and totals keeps them", () => {
+  // A report preview paints its own grey heading band and tinted totals and
+  // scrolls its tables itself; the box must not paint over them with the
+  // card colour, in the page or in the expanded dialog.
+  for (const always of [false, true]) {
+    const pinning = tokens(scrollBoxClass({ always })).filter((t) => /^\[&_(thead|tfoot|tr\[data-total\])/.test(t));
+    assert.ok(pinning.length >= 18, `${pinning.length} pinning tokens`);
+    for (const t of pinning) assert.ok(t.includes(":not([data-unpinned]_*)"), t);
   }
 });
