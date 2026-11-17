@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { RouteGuard, PermissionButton } from "@/components/common";
 import { PageFill, PageLoader, ScrollBox } from "@/components/common/page-fill";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,6 +25,9 @@ import { feeService, loanProductService } from "@/services";
 import type { Fee, FeeType, FeeConditions, LoanProduct } from "@/types";
 import { cn } from "@/lib/utils";
 import { FIT_CLASSES } from "@/lib/page-fill";
+import { FormStep, FormStepper, type FormStepperHandle } from "@/components/common/form-stepper";
+import { errorMessages, FORM_STEP_GRID } from "@/lib/form-stepper";
+import { validationErrors } from "@/lib/credit-scoring/field-errors";
 import { formatCurrencyExact, formatRate } from "@/lib/format";
 import { decimalInputValue } from "@/lib/percent";
 import {
@@ -38,6 +41,7 @@ import { completeRows } from "@/lib/paginate";
 import { env } from "@/config/env";
 import { FormulaExpressionField } from "./_components/formula-expression-field";
 import { useFormulaCheck } from "./_hooks/use-formula-check";
+import { FEE_STEPS, FORMULA_CHECK_PENDING, feeStepErrors, isWrittenFormula, type FeeStepInput } from "./_lib/fee-steps";
 
 // Formula fees written as an expression, where the backend evaluates them.
 const FEE_FORMULAS = env.features.feeFormulas;
@@ -107,13 +111,16 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
     setFormulaSaveError(null);
   }, [fee, open]);
 
-  const writtenFormula = FEE_FORMULAS && type === "formula" && formula.mode === "expression";
+  const stepperRef = useRef<FormStepperHandle>(null);
+  const feeForm: FeeStepInput["form"] = { name, type, value, productIds: selectedProducts, conditions, formula };
+  const writtenFormula = isWrittenFormula({ form: feeForm, expressions: FEE_FORMULAS });
   const formulaCheck = useFormulaCheck({
     enabled: open && writtenFormula,
     expression: formula.expression ?? "",
     minAmount: formula.minAmount,
     maxAmount: formula.maxAmount,
   });
+  const stepInput: FeeStepInput = { form: feeForm, expressions: FEE_FORMULAS, formulaCheckValid: formulaCheck.valid };
 
   function toggleProduct(id: number) {
     setSelectedProducts((prev) =>
@@ -136,16 +143,13 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (saving) return;
-    const result = buildFeePayload(
-      { name, type, value, productIds: selectedProducts, conditions, formula },
-      { expressions: FEE_FORMULAS },
-    );
+    const result = buildFeePayload(feeForm, { expressions: FEE_FORMULAS });
     if ("error" in result) {
       toast.error(result.error);
       return;
     }
     if (writtenFormula && !formulaCheck.valid) {
-      toast.error("Wait for the formula check to pass before saving.");
+      toast.error(FORMULA_CHECK_PENDING);
       return;
     }
     const { payload } = result;
@@ -164,6 +168,8 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
     } catch (err) {
       if (writtenFormula) setFormulaSaveError(formulaExpressionError(err));
       notifyError(err, isEdit ? "We couldn't update the fee. Please try again." : "We couldn't create the fee. Please try again.");
+      const fieldErrors = validationErrors(err);
+      if (fieldErrors) stepperRef.current?.showErrors(fieldErrors);
     } finally {
       setSaving(false);
     }
@@ -171,7 +177,7 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+      <DialogContent size="xl">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit Fee" : "Add New Fee"}</DialogTitle>
           <DialogDescription>
@@ -180,237 +186,256 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
               : "Create a reusable fee that can apply to one or more loan products."}
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="fee-name">
-                Fee Name <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="fee-name"
-                placeholder="e.g. Notarial Fee"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="fee-type">
-                Type <span className="text-destructive">*</span>
-              </Label>
-              <Select value={type} onValueChange={(v) => setType(v as FeeType)} items={FEE_TYPE_ITEMS}>
-                <SelectTrigger id="fee-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="fixed">Fixed Amount</SelectItem>
-                  <SelectItem value="percentage">Percentage</SelectItem>
-                  <SelectItem value="formula">Formula</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {FEE_FORMULAS && type === "formula" && (
-            <div role="radiogroup" aria-label="How the formula fee is worked out" className="grid grid-cols-2 gap-2">
-              {FORMULA_MODES.map(({ mode, label }) => (
-                <label
-                  key={mode}
-                  className={cn(
-                    "flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm",
-                    formula.mode === mode && "border-brand-orange bg-brand-orange/5",
-                  )}
-                >
-                  <input
-                    type="radio"
-                    name="formula-mode"
-                    value={mode}
-                    checked={formula.mode === mode}
-                    onChange={() => setFormula((prev) => ({ ...prev, mode }))}
-                  />
-                  {label}
-                </label>
-              ))}
-            </div>
-          )}
-
-          {writtenFormula ? (
-            <FormulaExpressionField
-              value={formula.expression ?? ""}
-              onChange={(expression) => {
-                setFormula((prev) => ({ ...prev, expression }));
-                setFormulaSaveError(null);
-              }}
-              check={formulaCheck}
-              saveError={formulaSaveError}
-            />
-          ) : (
-          <div className="space-y-2">
-            <Label htmlFor="fee-value">
-              {type === "fixed" ? "Amount (₱)" : "Rate (%)"}{" "}
-              <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="fee-value"
-              type="number"
-              min="0"
-              step={type === "fixed" ? "0.01" : "0.0001"}
-              placeholder={type === "fixed" ? "500" : "2"}
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              required
-            />
-          </div>
-          )}
-
-          {type === "formula" && (
-            <div className="space-y-3 rounded-md border p-3">
-              {!writtenFormula && <p className="text-xs text-muted-foreground">{FORMULA_FEE_HELP}</p>}
-              {!writtenFormula && (
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={formula.perMonth}
-                  onChange={(e) => setFormula((prev) => ({ ...prev, perMonth: e.target.checked }))}
-                  className="rounded border-input"
-                />
-                Per month of term
-              </label>
-              )}
-              <div className="grid grid-cols-2 gap-4">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <FormStepper
+            ref={stepperRef}
+            layout="dialog"
+            mode={isEdit ? "edit" : "create"}
+            steps={FEE_STEPS}
+            validateStep={(stepId) => feeStepErrors(stepId, stepInput)}
+            onInvalid={(errors) => toast.error(errorMessages(errors)[0])}
+            submitLabel={isEdit ? "Update Fee" : "Create Fee"}
+            submitting={saving}
+            submitDisabled={!name.trim() || (writtenFormula ? !formulaCheck.valid : value === "")}
+            actions={
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+            }
+          >
+            <FormStep id="details">
+              <div className={FORM_STEP_GRID.roomy}>
                 <div className="space-y-2">
-                  <Label htmlFor="fee-min-amount">Minimum (₱)</Label>
+                  <Label htmlFor="fee-name">
+                    Fee Name <span className="text-destructive">*</span>
+                  </Label>
                   <Input
-                    id="fee-min-amount"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="None"
-                    value={formula.minAmount}
-                    onChange={(e) => setFormula((prev) => ({ ...prev, minAmount: e.target.value }))}
+                    id="fee-name"
+                    name="name"
+                    placeholder="e.g. Notarial Fee"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="fee-max-amount">Maximum (₱)</Label>
-                  <Input
-                    id="fee-max-amount"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="None"
-                    value={formula.maxAmount}
-                    onChange={(e) => setFormula((prev) => ({ ...prev, maxAmount: e.target.value }))}
-                  />
+                <div className="space-y-2" data-field="type">
+                  <Label htmlFor="fee-type">
+                    Type <span className="text-destructive">*</span>
+                  </Label>
+                  <Select value={type} onValueChange={(v) => setType(v as FeeType)} items={FEE_TYPE_ITEMS}>
+                    <SelectTrigger id="fee-type" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="fixed">Fixed Amount</SelectItem>
+                      <SelectItem value="percentage">Percentage</SelectItem>
+                      <SelectItem value="formula">Formula</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
-            </div>
-          )}
+            </FormStep>
 
-          <div className="space-y-2">
-            <Label>Applicable Loan Products</Label>
-            <p className="text-xs text-muted-foreground">
-              Select which loan products this fee applies to. Leave empty to apply to all.
-            </p>
-            <div className="max-h-40 overflow-y-auto rounded-md border p-2 space-y-1.5">
-              {products.length === 0 ? (
-                <p className="text-xs text-muted-foreground py-2 text-center">
-                  No loan products defined yet.
-                </p>
-              ) : (
-                products.map((p) => (
-                  <label
-                    key={p.id}
-                    className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 rounded px-2 py-1"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedProducts.includes(p.id)}
-                      onChange={() => toggleProduct(p.id)}
-                      className="h-4 w-4 rounded border-border"
+            <FormStep id="amount">
+              {FEE_FORMULAS && type === "formula" && (
+                <div role="radiogroup" aria-label="How the formula fee is worked out" className={FORM_STEP_GRID.roomy}>
+                  {FORMULA_MODES.map(({ mode, label }) => (
+                    <label
+                      key={mode}
+                      className={cn(
+                        "flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm",
+                        formula.mode === mode && "border-brand-orange bg-brand-orange/5",
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="formula-mode"
+                        value={mode}
+                        checked={formula.mode === mode}
+                        onChange={() => setFormula((prev) => ({ ...prev, mode }))}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              <div className={FORM_STEP_GRID.roomy}>
+                {writtenFormula ? (
+                  <div className={FORM_STEP_GRID.wide} data-field="formula_expression">
+                    <FormulaExpressionField
+                      value={formula.expression ?? ""}
+                      onChange={(expression) => {
+                        setFormula((prev) => ({ ...prev, expression }));
+                        setFormulaSaveError(null);
+                      }}
+                      check={formulaCheck}
+                      saveError={formulaSaveError}
                     />
-                    <span>{p.name}</span>
-                  </label>
-                ))
-              )}
-            </div>
-          </div>
+                  </div>
+                ) : (
+                <div className="space-y-2">
+                  <Label htmlFor="fee-value">
+                    {type === "fixed" ? "Amount (₱)" : "Rate (%)"}{" "}
+                    <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="fee-value"
+                    name="value"
+                    type="number"
+                    min="0"
+                    step={type === "fixed" ? "0.01" : "0.0001"}
+                    placeholder={type === "fixed" ? "500" : "2"}
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                    required
+                  />
+                </div>
+                )}
 
-          <div className="space-y-2">
-            <Label>Conditions (optional)</Label>
-            <p className="text-xs text-muted-foreground">
-              Leave blank to always apply. Fill only the conditions you need.
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="cond-term-gt" className="text-xs">Term days &gt;</Label>
-                <Input
-                  id="cond-term-gt"
-                  type="number"
-                  value={conditions.term_days_gt ?? ""}
-                  onChange={(e) => updateCondition("term_days_gt", e.target.value)}
-                />
+                {type === "formula" && (
+                  <div className={cn("h-fit space-y-3 rounded-md border p-3", !writtenFormula && FORM_STEP_GRID.wide)}>
+                    {!writtenFormula && <p className="text-xs text-muted-foreground">{FORMULA_FEE_HELP}</p>}
+                    {!writtenFormula && (
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        name="per_month"
+                        checked={formula.perMonth}
+                        onChange={(e) => setFormula((prev) => ({ ...prev, perMonth: e.target.checked }))}
+                        className="rounded border-input"
+                      />
+                      Per month of term
+                    </label>
+                    )}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="fee-min-amount">Minimum (₱)</Label>
+                        <Input
+                          id="fee-min-amount"
+                          name="min_amount"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="None"
+                          value={formula.minAmount}
+                          onChange={(e) => setFormula((prev) => ({ ...prev, minAmount: e.target.value }))}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="fee-max-amount">Maximum (₱)</Label>
+                        <Input
+                          id="fee-max-amount"
+                          name="max_amount"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="None"
+                          value={formula.maxAmount}
+                          onChange={(e) => setFormula((prev) => ({ ...prev, maxAmount: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="space-y-1">
-                <Label htmlFor="cond-term-lt" className="text-xs">Term days &lt;</Label>
-                <Input
-                  id="cond-term-lt"
-                  type="number"
-                  value={conditions.term_days_lt ?? ""}
-                  onChange={(e) => updateCondition("term_days_lt", e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="cond-term-eq" className="text-xs">Term days =</Label>
-                <Input
-                  id="cond-term-eq"
-                  type="number"
-                  value={conditions.term_days_eq ?? ""}
-                  onChange={(e) => updateCondition("term_days_eq", e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="cond-amt-gt" className="text-xs">Loan amount &gt;</Label>
-                <Input
-                  id="cond-amt-gt"
-                  type="number"
-                  value={conditions.loan_amount_gt ?? ""}
-                  onChange={(e) => updateCondition("loan_amount_gt", e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="cond-amt-lt" className="text-xs">Loan amount &lt;</Label>
-                <Input
-                  id="cond-amt-lt"
-                  type="number"
-                  value={conditions.loan_amount_lt ?? ""}
-                  onChange={(e) => updateCondition("loan_amount_lt", e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="cond-amt-eq" className="text-xs">Loan amount =</Label>
-                <Input
-                  id="cond-amt-eq"
-                  type="number"
-                  value={conditions.loan_amount_eq ?? ""}
-                  onChange={(e) => updateCondition("loan_amount_eq", e.target.value)}
-                />
-              </div>
-            </div>
-          </div>
+            </FormStep>
 
-          <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={saving || !name.trim() || (writtenFormula ? !formulaCheck.valid : value === "")}
-              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-            >
-              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {isEdit ? "Update Fee" : "Create Fee"}
-            </Button>
-          </div>
+            <FormStep id="products">
+              <div className="space-y-2" data-field="applicable_product_ids">
+                <Label>Applicable Loan Products</Label>
+                <p className="text-xs text-muted-foreground">
+                  Select which loan products this fee applies to. Leave empty to apply to all.
+                </p>
+                {/* The product list grows with the catalogue, so it scrolls in its own box. */}
+                <div className="max-h-48 overflow-y-auto rounded-md border p-2 grid gap-1.5 md:grid-cols-2 xl:grid-cols-3">
+                  {products.length === 0 ? (
+                    <p className="col-span-full text-xs text-muted-foreground py-2 text-center">
+                      No loan products defined yet.
+                    </p>
+                  ) : (
+                    products.map((p) => (
+                      <label
+                        key={p.id}
+                        className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 rounded px-2 py-1"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedProducts.includes(p.id)}
+                          onChange={() => toggleProduct(p.id)}
+                          className="h-4 w-4 rounded border-border"
+                        />
+                        <span>{p.name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2" data-field="conditions">
+                <Label>Conditions (optional)</Label>
+                <p className="text-xs text-muted-foreground">
+                  Leave blank to always apply. Fill only the conditions you need.
+                </p>
+                <div className={FORM_STEP_GRID.roomy}>
+                  <div className="space-y-1">
+                    <Label htmlFor="cond-term-gt" className="text-xs">Term days &gt;</Label>
+                    <Input
+                      id="cond-term-gt"
+                      type="number"
+                      value={conditions.term_days_gt ?? ""}
+                      onChange={(e) => updateCondition("term_days_gt", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="cond-term-lt" className="text-xs">Term days &lt;</Label>
+                    <Input
+                      id="cond-term-lt"
+                      type="number"
+                      value={conditions.term_days_lt ?? ""}
+                      onChange={(e) => updateCondition("term_days_lt", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="cond-term-eq" className="text-xs">Term days =</Label>
+                    <Input
+                      id="cond-term-eq"
+                      type="number"
+                      value={conditions.term_days_eq ?? ""}
+                      onChange={(e) => updateCondition("term_days_eq", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="cond-amt-gt" className="text-xs">Loan amount &gt;</Label>
+                    <Input
+                      id="cond-amt-gt"
+                      type="number"
+                      value={conditions.loan_amount_gt ?? ""}
+                      onChange={(e) => updateCondition("loan_amount_gt", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="cond-amt-lt" className="text-xs">Loan amount &lt;</Label>
+                    <Input
+                      id="cond-amt-lt"
+                      type="number"
+                      value={conditions.loan_amount_lt ?? ""}
+                      onChange={(e) => updateCondition("loan_amount_lt", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="cond-amt-eq" className="text-xs">Loan amount =</Label>
+                    <Input
+                      id="cond-amt-eq"
+                      type="number"
+                      value={conditions.loan_amount_eq ?? ""}
+                      onChange={(e) => updateCondition("loan_amount_eq", e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+            </FormStep>
+          </FormStepper>
         </form>
       </DialogContent>
     </Dialog>

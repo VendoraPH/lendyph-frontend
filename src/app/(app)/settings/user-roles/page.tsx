@@ -1,9 +1,12 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { RouteGuard } from "@/components/common";
 import { FillSection, PageFill, ScrollBox } from "@/components/common/page-fill";
 import { FIT_CLASSES } from "@/lib/page-fill";
+import { FormStep, FormStepper, type FormStepperHandle } from "@/components/common/form-stepper";
+import { FORM_STEP_GRID } from "@/lib/form-stepper";
+import { validationErrors } from "@/lib/credit-scoring/field-errors";
 import { useDialogOpening } from "@/hooks";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -93,6 +96,14 @@ import {
   type GrantingCaller,
 } from "./_lib/role-grant";
 import { completeRows } from "@/lib/paginate";
+import {
+  ROLE_STEPS,
+  roleFormErrors,
+  roleStepErrors,
+  roleStepProblem,
+  type RoleStepInput,
+  type RoleStepProblem,
+} from "./_lib/role-steps";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -498,7 +509,8 @@ interface RoleFormDialogProps {
   onOpenChange: (open: boolean) => void;
   role: RoleItem | null; // null = create
   existingKeys: string[];
-  onSave: (role: RoleItem) => void;
+  /** Saves the role: the server's 422 field errors when it refused them, else null. */
+  onSave: (role: RoleItem) => Promise<Record<string, string[]> | null>;
   readOnly?: boolean;
   /** Switch a read-only view into the editor. */
   onEdit?: () => void;
@@ -522,6 +534,7 @@ function RoleFormDialog({
   const [label, setLabel] = useState("");
   const [description, setDescription] = useState("");
   const [permissions, setPermissions] = useState<Set<Permission>>(new Set());
+  const stepperRef = useRef<FormStepperHandle>(null);
 
   if (useDialogOpening(open, role)) {
     setLabel(role?.label ?? "");
@@ -537,29 +550,35 @@ function RoleFormDialog({
     setPermissions((prev) => setModulePermissions(prev, mod, enable, (p) => canGrant(caller, p)));
   }
 
-  function handleSave() {
-    const missing: string[] = [];
-    if (!label.trim()) missing.push("Role name");
-    if (!description.trim()) missing.push("Description");
-    if (missing.length > 0) {
-      notifyValidation(missing);
-      return;
+  const stepInput: RoleStepInput = {
+    label,
+    description,
+    permissionCount: permissions.size,
+    isEdit,
+    roleKey: role?.key ?? null,
+    existingKeys,
+  };
+
+  // A step fails as the save did: one "Please complete" toast for the missing
+  // fields, or the problem's own toast.
+  function showProblem(problem: RoleStepProblem) {
+    if (!problem) return;
+    if (problem.kind === "missing") notifyValidation(problem.fields.map((f) => f.label));
+    else toast.error(problem.message);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    for (const step of ROLE_STEPS) {
+      const problem = roleStepProblem(step.id, stepInput);
+      if (problem) {
+        showProblem(problem);
+        return;
+      }
     }
     const key = isEdit && role ? role.key : slugify(label);
-    if (!key) {
-      toast.error("Role name must contain at least one letter or number");
-      return;
-    }
-    if (!isEdit && existingKeys.includes(key)) {
-      toast.error(`A role named "${label}" already exists`);
-      return;
-    }
-    if (permissions.size === 0) {
-      toast.error("Select at least one permission");
-      return;
-    }
 
-    onSave({
+    const errors = await onSave({
       id: role?.id,
       key,
       label: label.trim(),
@@ -568,6 +587,7 @@ function RoleFormDialog({
       isSystem: role?.isSystem ?? false,
       isActive: role?.isActive ?? true,
     });
+    if (errors) stepperRef.current?.showErrors(roleFormErrors(errors));
   }
 
   const modules = Object.keys(MODULE_META) as UIModule[];
@@ -582,9 +602,155 @@ function RoleFormDialog({
       })
     );
 
+  const detailsFields = (
+    <div className={FORM_STEP_GRID.roomy}>
+      <div className="space-y-2">
+        <Label htmlFor="role-label">
+          Role Name <span className="text-destructive">*</span>
+        </Label>
+        <Input
+          id="role-label"
+          name="label"
+          placeholder="e.g. Branch Manager"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          disabled={readOnly}
+        />
+      </div>
+      <div className={cn("space-y-2", FORM_STEP_GRID.wide)}>
+        <Label htmlFor="role-desc">
+          Description <span className="text-destructive">*</span>
+        </Label>
+        <Input
+          id="role-desc"
+          name="description"
+          placeholder="Short description of this role"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          disabled={readOnly}
+        />
+      </div>
+    </div>
+  );
+
+  // The permissions matrix. In the editor it is the Permissions step, whose
+  // title names it, and it scrolls inside the step.
+  const permissionsMatrix = (
+    <div data-field="permissions">
+      <div className={cn("flex items-center mb-2", readOnly ? "justify-between" : "justify-end")}>
+        {readOnly && <Label className="text-sm font-semibold">Permissions</Label>}
+        <Badge variant="outline" className="text-xs">
+          {totalSelected} selected
+        </Badge>
+      </div>
+      {someLocked && (
+        <p className="mb-2 text-xs text-muted-foreground">
+          {GRANT_LOCK_REASON}, so the boxes for the others are locked.
+        </p>
+      )}
+
+      <div className="space-y-3">
+        {modules.map((mod) => {
+          const meta = MODULE_META[mod];
+          const Icon = meta.icon;
+          const actions = MODULE_ACTIONS[mod];
+          const grantedCount = actions.filter((a) =>
+            permissions.has(`${mod}:${a}` as Permission)
+          ).length;
+          // The header toggle covers every action but the own-checkbox
+          // ones (write_off) that the role has or the caller can grant,
+          // so it reads checked when those are all on.
+          const toggleTargets = moduleToggleTargets(mod, permissions, caller);
+          const allSelected =
+            toggleTargets.length > 0 &&
+            toggleTargets.every((a) => permissions.has(`${mod}:${a}` as Permission));
+          const someSelected = grantedCount > 0 && !allSelected;
+
+          return (
+            <div
+              key={mod}
+              className={cn(
+                "rounded-lg border p-3 transition-colors",
+                grantedCount > 0 ? "bg-card" : "bg-muted/30"
+              )}
+            >
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <div className="flex items-start gap-3 min-w-0">
+                  <div
+                    className={cn(
+                      "h-8 w-8 rounded-md flex items-center justify-center shrink-0",
+                      grantedCount > 0
+                        ? "bg-brand-orange/10 text-brand-orange"
+                        : "bg-muted text-muted-foreground"
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold">{meta.label}</p>
+                    <p className="text-xs text-muted-foreground">{meta.description}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs text-muted-foreground">
+                    {grantedCount}/{actions.length}
+                  </span>
+                  <Checkbox
+                    checked={allSelected}
+                    indeterminate={someSelected}
+                    onCheckedChange={() => toggleModule(mod, !allSelected)}
+                    disabled={readOnly || toggleTargets.length === 0}
+                    title={!readOnly && toggleTargets.length === 0 ? GRANT_LOCK_REASON : undefined}
+                    aria-label={`Toggle all ${meta.label} permissions`}
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2 pl-11">
+                {actions.map((act) => {
+                  const perm = `${mod}:${act}` as Permission;
+                  const granted = permissions.has(perm);
+                  const lockReason = readOnly ? null : grantLockReason(caller, perm, granted);
+                  const actLabel = moduleActionLabel(mod, act) ?? ACTION_META[act].label;
+                  return (
+                    <label
+                      key={act}
+                      title={lockReason ?? undefined}
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs select-none transition-colors",
+                        readOnly ? "cursor-default" : lockReason ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+                        granted
+                          ? ACTION_META[act].colorClass
+                          : "bg-background text-muted-foreground border-border",
+                        !readOnly && !granted && !lockReason && "hover:bg-muted"
+                      )}
+                    >
+                      <Checkbox
+                        checked={granted}
+                        onCheckedChange={() => togglePermission(mod, act)}
+                        disabled={readOnly || lockReason !== null}
+                        className="h-3.5 w-3.5"
+                        aria-label={
+                          lockReason
+                            ? `${meta.label} ${actLabel} (${lockReason})`
+                            : `${meta.label} ${actLabel}`
+                        }
+                      />
+                      {actLabel}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-brand-orange" />
@@ -605,181 +771,58 @@ function RoleFormDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 pt-2">
-          {/* Basic info */}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="role-label">
-                Role Name <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="role-label"
-                placeholder="e.g. Branch Manager"
-                value={label}
-                onChange={(e) => setLabel(e.target.value)}
-                disabled={readOnly}
-              />
+        {readOnly ? (
+          <>
+            {/* Viewing isn't a form: the details and the matrix read as one scrolling page. */}
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pt-2">
+              {detailsFields}
+              {permissionsMatrix}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="role-desc">
-                Description <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="role-desc"
-                placeholder="Short description of this role"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                disabled={readOnly}
-              />
+
+            <div className="flex shrink-0 justify-end gap-3 pt-4 border-t">
+              <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+                Close
+              </Button>
+              {onEdit && (
+                <PermissionGate permission="settings:update">
+                  <span title={editLock ?? undefined} className="inline-flex">
+                    <Button
+                      onClick={onEdit}
+                      disabled={editLock !== null}
+                      aria-label={editLock ? `Edit (${editLock})` : undefined}
+                      className="gap-1 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                    >
+                      <Pencil className="h-4 w-4" />
+                      Edit
+                    </Button>
+                  </span>
+                </PermissionGate>
+              )}
             </div>
-          </div>
-
-          {/* Permissions matrix */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <Label className="text-sm font-semibold">Permissions</Label>
-              <Badge variant="outline" className="text-xs">
-                {totalSelected} selected
-              </Badge>
-            </div>
-            {someLocked && (
-              <p className="mb-2 text-xs text-muted-foreground">
-                {GRANT_LOCK_REASON}, so the boxes for the others are locked.
-              </p>
-            )}
-
-            <div className="space-y-3">
-              {modules.map((mod) => {
-                const meta = MODULE_META[mod];
-                const Icon = meta.icon;
-                const actions = MODULE_ACTIONS[mod];
-                const grantedCount = actions.filter((a) =>
-                  permissions.has(`${mod}:${a}` as Permission)
-                ).length;
-                // The header toggle covers every action but the own-checkbox
-                // ones (write_off) that the role has or the caller can grant,
-                // so it reads checked when those are all on.
-                const toggleTargets = moduleToggleTargets(mod, permissions, caller);
-                const allSelected =
-                  toggleTargets.length > 0 &&
-                  toggleTargets.every((a) => permissions.has(`${mod}:${a}` as Permission));
-                const someSelected = grantedCount > 0 && !allSelected;
-
-                return (
-                  <div
-                    key={mod}
-                    className={cn(
-                      "rounded-lg border p-3 transition-colors",
-                      grantedCount > 0 ? "bg-card" : "bg-muted/30"
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-3 mb-2">
-                      <div className="flex items-start gap-3 min-w-0">
-                        <div
-                          className={cn(
-                            "h-8 w-8 rounded-md flex items-center justify-center shrink-0",
-                            grantedCount > 0
-                              ? "bg-brand-orange/10 text-brand-orange"
-                              : "bg-muted text-muted-foreground"
-                          )}
-                        >
-                          <Icon className="h-4 w-4" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold">{meta.label}</p>
-                          <p className="text-xs text-muted-foreground">{meta.description}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-xs text-muted-foreground">
-                          {grantedCount}/{actions.length}
-                        </span>
-                        <Checkbox
-                          checked={allSelected}
-                          indeterminate={someSelected}
-                          onCheckedChange={() => toggleModule(mod, !allSelected)}
-                          disabled={readOnly || toggleTargets.length === 0}
-                          title={!readOnly && toggleTargets.length === 0 ? GRANT_LOCK_REASON : undefined}
-                          aria-label={`Toggle all ${meta.label} permissions`}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2 pl-11">
-                      {actions.map((act) => {
-                        const perm = `${mod}:${act}` as Permission;
-                        const granted = permissions.has(perm);
-                        const lockReason = readOnly ? null : grantLockReason(caller, perm, granted);
-                        const actLabel = moduleActionLabel(mod, act) ?? ACTION_META[act].label;
-                        return (
-                          <label
-                            key={act}
-                            title={lockReason ?? undefined}
-                            className={cn(
-                              "flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs select-none transition-colors",
-                              readOnly ? "cursor-default" : lockReason ? "cursor-not-allowed opacity-60" : "cursor-pointer",
-                              granted
-                                ? ACTION_META[act].colorClass
-                                : "bg-background text-muted-foreground border-border",
-                              !readOnly && !granted && !lockReason && "hover:bg-muted"
-                            )}
-                          >
-                            <Checkbox
-                              checked={granted}
-                              onCheckedChange={() => togglePermission(mod, act)}
-                              disabled={readOnly || lockReason !== null}
-                              className="h-3.5 w-3.5"
-                              aria-label={
-                                lockReason
-                                  ? `${meta.label} ${actLabel} (${lockReason})`
-                                  : `${meta.label} ${actLabel}`
-                              }
-                            />
-                            {actLabel}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-3 pt-4 border-t">
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={saving}
-          >
-            {readOnly ? "Close" : "Cancel"}
-          </Button>
-          {readOnly && onEdit && (
-            <PermissionGate permission="settings:update">
-              <span title={editLock ?? undefined} className="inline-flex">
-                <Button
-                  onClick={onEdit}
-                  disabled={editLock !== null}
-                  aria-label={editLock ? `Edit (${editLock})` : undefined}
-                  className="gap-1 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                >
-                  <Pencil className="h-4 w-4" />
-                  Edit
+          </>
+        ) : (
+          <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+            <FormStepper
+              ref={stepperRef}
+              layout="dialog"
+              mode={isEdit ? "edit" : "create"}
+              steps={ROLE_STEPS}
+              validateStep={(stepId) => roleStepErrors(roleStepProblem(stepId, stepInput))}
+              onInvalid={(_errors, stepId) => showProblem(roleStepProblem(stepId, stepInput))}
+              submitLabel={isEdit ? "Save Changes" : "Create Role"}
+              submittingLabel="Saving..."
+              submitting={saving}
+              actions={
+                <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+                  Cancel
                 </Button>
-              </span>
-            </PermissionGate>
-          )}
-          {!readOnly && (
-            <Button
-              onClick={handleSave}
-              disabled={saving}
-              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+              }
             >
-              {saving ? "Saving..." : isEdit ? "Save Changes" : "Create Role"}
-            </Button>
-          )}
-        </div>
+              <FormStep id="details">{detailsFields}</FormStep>
+              <FormStep id="permissions">{permissionsMatrix}</FormStep>
+            </FormStepper>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -826,7 +869,8 @@ function UserRolesContent() {
     loadRoles();
   }, []);
 
-  async function handleSaveRole(item: RoleItem) {
+  // Answers the 422's field errors, so the dialog opens the step holding them.
+  async function handleSaveRole(item: RoleItem): Promise<Record<string, string[]> | null> {
     setActionLoading(true);
     try {
       const payload = rolePayload(item, { isEdit: formMode === "edit" });
@@ -842,6 +886,7 @@ function UserRolesContent() {
       if (formMode === "edit") {
         await maybeRefreshCurrentUser(item.key);
       }
+      return null;
     } catch (err) {
       // The role was deleted by another request while this save waited:
       // nothing was written, so close the form and show the current list.
@@ -850,7 +895,7 @@ function UserRolesContent() {
         toast.error(conflict);
         setFormOpen(false);
         await loadRoles();
-        return;
+        return null;
       }
       // A permission the server doesn't seed comes back as a raw
       // "permissions.N is invalid"; name the permission instead.
@@ -858,13 +903,14 @@ function UserRolesContent() {
       if (refused) {
         toast.error(refused);
         for (const message of otherRoleSaveErrors(err)) toast.error(message);
-        return;
+        return validationErrors(err);
       }
       // The API's own reason (a taken name, a permission it does not have)
       // is what tells the admin what to change; a bare "try again" hid it.
       // Permission keys it lists read as the matrix labels them.
       const fallback = formMode === "create" ? "We couldn't create the role. Please try again." : "We couldn't update the role. Please try again.";
       toast.error(readablePermissionKeys(getErrorMessage(err, fallback), describeMatrixPermission));
+      return validationErrors(err);
     } finally {
       setActionLoading(false);
     }
