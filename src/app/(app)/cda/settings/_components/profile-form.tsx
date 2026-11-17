@@ -80,7 +80,7 @@ function Pulled({ profile }: { profile: CdaRegulatoryProfile }) {
   return (
     <div className="space-y-2 rounded-md border bg-muted/30 p-3 text-sm">
       <p className="font-medium">From elsewhere in the system (read only)</p>
-      <dl className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
+      <dl className="grid gap-x-4 gap-y-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         {Object.entries(PULLED_LABELS).map(([key, label]) => {
           const item = profile.pulled[key];
           return (
@@ -134,7 +134,7 @@ function ProfileEditor({ profile }: { profile: CdaRegulatoryProfile }) {
       {/* At fit the fields scroll inside the card and Save stays pinned at its foot. */}
       <StackScroll className="space-y-4">
         <Pulled profile={profile} />
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           <RecordFields fields={PROFILE_FIELDS} draft={draft} onChange={setDraft} disabled={busy || !editable} />
         </div>
         <AuthorisedRep

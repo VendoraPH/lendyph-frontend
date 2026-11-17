@@ -69,7 +69,7 @@ function Overview({ data }: { data: CdaDashboard }) {
 
       {/* The readiness and next deadline stay in view; the report tiles and open issues scroll under them. */}
       <StackScroll>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {data.reports.map((r) => (
             <ReportTile key={r.id} report={r} />
           ))}

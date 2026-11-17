@@ -63,6 +63,12 @@ function FieldControl({
   );
 }
 
+/** A text area spans the whole row; a wide field two columns from `md`. */
+function fieldSpan(field: RecordField): string {
+  if (field.type === "textarea") return "col-span-full space-y-2";
+  return field.wide ? "space-y-2 md:col-span-2" : "space-y-2";
+}
+
 /**
  * A two-column grid of inputs driven by a field list (carried over from #510
  * by Augustin). Textareas span both columns; money is typed as text and sent
@@ -82,7 +88,7 @@ export function RecordFields({
   return (
     <>
       {fields.map((field) => (
-        <div key={field.key} className={field.type === "textarea" ? "space-y-2 sm:col-span-2" : "space-y-2"}>
+        <div key={field.key} className={fieldSpan(field)}>
           <Label htmlFor={`rec-${field.key}`}>
             {field.label} {field.required && <span className="text-destructive">*</span>}
           </Label>

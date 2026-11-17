@@ -196,7 +196,8 @@ export function ReportSection(props: ReportSectionProps) {
       </CardHeader>
       <CardContent>
         {section.kind === "fields" ? (
-          <div className="divide-y">
+          // From 2xl the field rows run in two columns, in the template's order (left to right).
+          <div className="divide-y 2xl:grid 2xl:grid-cols-2 2xl:gap-x-8 2xl:divide-y-0 2xl:[&>*]:border-t">
             {section.fields.map((field) => (
               <FieldRow key={field.field_key} field={field} drafts={props.drafts} canEdit={props.canEdit} onEdit={props.onEdit} />
             ))}

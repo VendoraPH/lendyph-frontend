@@ -43,7 +43,15 @@ export default function Page() {
           <TabsContent value="profile" className={cn(FIT_CLASSES.section, "pt-4")}>
             <ProfileForm />
           </TabsContent>
-          <TabsContent value="deadlines" className={cn(FIT_CLASSES.section, "gap-4 pt-4")}>
+          {/* From xl the year's extension sits beside the settings form, which keeps the page's height. */}
+          <TabsContent
+            value="deadlines"
+            className={cn(
+              FIT_CLASSES.section,
+              "gap-4 pt-4",
+              ctx && "xl:grid xl:grid-cols-[minmax(0,1fr)_24rem] xl:grid-rows-[minmax(0,1fr)]",
+            )}
+          >
             <DeadlineSettingsForm />
             {ctx && <ExtensionForm key={ctx.year} period={ctx.period} onSaved={ctx.reloadPeriods} />}
           </TabsContent>

@@ -17,6 +17,8 @@ export interface RecordField {
   options?: { value: string; label: string }[];
   placeholder?: string;
   help?: string;
+  /** Layout only: a long one-line field (a street address) takes two columns from `md`. */
+  wide?: boolean;
 }
 
 /** What the form sends: text as typed, a whole number for a count, true or false for a checkbox, null when blank. */
