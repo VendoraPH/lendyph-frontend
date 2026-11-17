@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { RouteGuard, PermissionButton } from "@/components/common";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
+import { PageFill, PageLoader, ScrollBox } from "@/components/common/page-fill";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -61,6 +62,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
 import { completeRows } from "@/lib/paginate";
@@ -1115,16 +1117,12 @@ function UsersContent() {
   const filteredUsers = filterUsers(users, search);
 
   if (loading) {
-    return (
-      <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
-        <Spinner className="size-6 text-muted-foreground" />
-      </div>
-    );
+    return <PageLoader />;
   }
 
   return (
-    <div className="space-y-6">
-      <Card>
+    <PageFill>
+      <Card className="shrink-0">
         <CardContent className="py-5">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -1144,13 +1142,14 @@ function UsersContent() {
         <IncompleteListNotice
           shown={shortfall.shown}
           total={shortfall.total}
+          className="shrink-0"
           noun="users"
           consequence="The Total, the role counts and the search box below cover only the users that loaded, and a user missing here cannot be edited, reset or deactivated from this screen."
         />
       )}
 
-      {/* Role Summary Cards */}
-      <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-6">
+      {/* Role Summary Cards: one row at fit, scrolling sideways when the roles don't all fit */}
+      <div className="grid shrink-0 gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-6 fit:grid-flow-col fit:grid-cols-none fit:auto-cols-[minmax(10rem,1fr)] fit:overflow-x-auto fit:p-px fit:pb-2">
         <Card>
           <CardContent className="py-4">
             <div className="flex items-center justify-between">
@@ -1172,7 +1171,7 @@ function UsersContent() {
       </div>
 
       {/* Users Table */}
-      <Card>
+      <Card className={FIT_CLASSES.section}>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-sm font-medium">
             All Users ({filteredUsers.length})
@@ -1187,8 +1186,8 @@ function UsersContent() {
             />
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
+        <CardContent className={FIT_CLASSES.section}>
+          <ScrollBox>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -1259,10 +1258,10 @@ function UsersContent() {
                 )}
               </TableBody>
             </Table>
-          </div>
+          </ScrollBox>
         </CardContent>
       </Card>
-    </div>
+    </PageFill>
   );
 }
 

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { RouteGuard, PermissionButton } from "@/components/common";
 import { ConfirmDeleteDialog } from "@/components/common/confirm-delete-dialog";
 import { DataState } from "@/components/common/data-state";
+import { FillSection, PageFill } from "@/components/common/page-fill";
 import { Input } from "@/components/ui/input";
 import { useApiResource, usePermission } from "@/hooks";
 import { notifyError } from "@/lib/notify";
@@ -83,8 +84,8 @@ function PenaltiesContent() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <PageFill>
+      <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Penalties</h1>
           <p className="text-sm text-muted-foreground">
@@ -103,12 +104,12 @@ function PenaltiesContent() {
       </div>
 
       {canListProducts && productsResource.error && !productsResource.loading && (
-        <p role="alert" className="rounded-lg border border-destructive/30 p-3 text-sm">
+        <p role="alert" className="shrink-0 rounded-lg border border-destructive/30 p-3 text-sm">
           Loan products could not be loaded, so configurations can&apos;t be edited right now. {productsResource.error}
         </p>
       )}
       {!canListProducts && (
-        <p className="rounded-lg bg-muted/60 p-3 text-sm text-muted-foreground">
+        <p className="shrink-0 rounded-lg bg-muted/60 p-3 text-sm text-muted-foreground">
           Your role can&apos;t view loan products, so configurations can be viewed but not edited.
         </p>
       )}
@@ -128,8 +129,8 @@ function PenaltiesContent() {
           const term = search.trim().toLowerCase();
           const filtered = term ? rows.filter((c) => c.name.toLowerCase().includes(term)) : rows;
           return (
-            <div className="space-y-4">
-              <div className="relative max-w-sm">
+            <FillSection className="gap-4">
+              <div className="relative max-w-sm shrink-0">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder="Search configurations..."
@@ -149,7 +150,7 @@ function PenaltiesContent() {
                 onToggleStatus={setToggling}
                 onDelete={setDeleting}
               />
-            </div>
+            </FillSection>
           );
         }}
       </DataState>
@@ -172,7 +173,7 @@ function PenaltiesContent() {
         onCancel={() => setDeleting(null)}
         onConfirm={confirmDelete}
       />
-    </div>
+    </PageFill>
   );
 }
 

@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 
 import { RouteGuard } from "@/components/common";
+import { PageFill } from "@/components/common/page-fill";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -62,8 +63,8 @@ function WizardFallback() {
 export default function DataImportPage() {
   return (
     <RouteGuard permission="imports:process" pageName="Data Import">
-      <div className="mx-auto max-w-4xl space-y-4">
-        <header>
+      <PageFill className="mx-auto max-w-4xl gap-4">
+        <header className="shrink-0">
           <h1 className="text-2xl font-semibold">Data Import</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Bring an existing member and loan book into Lendyph from CSV. This
@@ -75,7 +76,7 @@ export default function DataImportPage() {
         <Suspense fallback={<WizardFallback />}>
           <DataImportView />
         </Suspense>
-      </div>
+      </PageFill>
     </RouteGuard>
   );
 }

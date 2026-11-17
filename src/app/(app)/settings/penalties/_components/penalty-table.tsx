@@ -2,11 +2,14 @@
 
 import { Eye, Pencil, Power, PowerOff, Trash2 } from "lucide-react";
 import { PermissionButton } from "@/components/common";
+import { ScrollBox } from "@/components/common/page-fill";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 import type { PenaltyConfig } from "@/types/penalty";
 import { describeCondition } from "../_lib/penalty-form";
 import { StatusBadge } from "./penalty-view-dialog";
@@ -36,9 +39,9 @@ export function PenaltyTable({
   configs, productNames, canEdit, emptyMessage, onView, onEdit, onToggleStatus, onDelete,
 }: PenaltyTableProps) {
   return (
-    <Card>
-      <CardContent className="p-0">
-        <div className="overflow-x-auto">
+    <Card className={FIT_CLASSES.section}>
+      <CardContent className={cn(FIT_CLASSES.section, "p-0")}>
+        <ScrollBox>
           <Table>
             <TableHeader>
               <TableRow>
@@ -110,7 +113,7 @@ export function PenaltyTable({
               )}
             </TableBody>
           </Table>
-        </div>
+        </ScrollBox>
       </CardContent>
     </Card>
   );

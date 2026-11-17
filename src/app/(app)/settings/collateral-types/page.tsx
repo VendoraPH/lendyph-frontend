@@ -16,6 +16,9 @@ import {
   EyeOff,
 } from "lucide-react";
 import { RouteGuard } from "@/components/common";
+import { Illustration, hasIllustration } from "@/components/common/illustration";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -187,8 +190,8 @@ function CollateralTypesSettingsContent() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+    <PageFill>
+      <div className="flex shrink-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
             Collateral Types
@@ -203,129 +206,134 @@ function CollateralTypesSettingsContent() {
         </Button>
       </div>
 
-      <Card>
+      <Card className={FIT_CLASSES.section}>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="text-sm font-medium">
             Configured Types
           </CardTitle>
           <ShieldCheck className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
-        <CardContent>
+        <CardContent className={FIT_CLASSES.section}>
           {loading ? (
-            <div className="flex items-center justify-center py-12">
+            <div className="flex items-center justify-center py-12 fit:flex-1">
               <Spinner className="size-6 text-muted-foreground" />
             </div>
           ) : types.length === 0 ? (
-            <p className="py-12 text-center text-sm text-muted-foreground">
-              No collateral types yet.
-            </p>
+            <div className="flex flex-col items-center justify-center gap-4 py-12 text-center fit:flex-1">
+              {hasIllustration("empty") && <Illustration name="empty" />}
+              <p className="text-sm text-muted-foreground">
+                No collateral types yet.
+              </p>
+            </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-20">Order</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Detail Label</TableHead>
-                  <TableHead>Amount Label</TableHead>
-                  <TableHead>Source</TableHead>
-                  <TableHead>Visible</TableHead>
-                  <TableHead className="w-1"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {types.map((t, i) => (
-                  <TableRow key={t.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon-xs"
-                          disabled={i === 0}
-                          onClick={() => handleMove(i, -1)}
-                          aria-label="Move up"
-                        >
-                          <ArrowUp className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon-xs"
-                          disabled={i === types.length - 1}
-                          onClick={() => handleMove(i, 1)}
-                          aria-label="Move down"
-                        >
-                          <ArrowDown className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        {t.name}
-                        {t.is_seed && (
-                          <Badge variant="outline" className="text-xs">
-                            Default
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {t.detail_field_label}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {t.amount_field_label}
-                    </TableCell>
-                    <TableCell>
-                      {t.source === "share_capital" ? (
-                        <Badge className="bg-blue-500/10 text-blue-700 hover:bg-blue-500/10">
-                          Share Capital
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary">Manual</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => handleToggleVisible(t)}
-                        aria-label={t.is_visible ? "Hide" : "Show"}
-                      >
-                        {t.is_visible ? (
-                          <Eye className="h-4 w-4" />
-                        ) : (
-                          <EyeOff className="h-4 w-4 text-muted-foreground" />
-                        )}
-                      </Button>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => openEdit(t)}
-                          aria-label="Edit"
-                        >
-                          <PencilLine className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          disabled={t.is_seed}
-                          title={
-                            t.is_seed
-                              ? "Default types can't be deleted — hide them instead"
-                              : "Delete"
-                          }
-                          onClick={() => setDeleting(t)}
-                          aria-label="Delete"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
+            <ScrollBox>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-20">Order</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Detail Label</TableHead>
+                    <TableHead>Amount Label</TableHead>
+                    <TableHead>Source</TableHead>
+                    <TableHead>Visible</TableHead>
+                    <TableHead className="w-1"></TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {types.map((t, i) => (
+                    <TableRow key={t.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            disabled={i === 0}
+                            onClick={() => handleMove(i, -1)}
+                            aria-label="Move up"
+                          >
+                            <ArrowUp className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            disabled={i === types.length - 1}
+                            onClick={() => handleMove(i, 1)}
+                            aria-label="Move down"
+                          >
+                            <ArrowDown className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          {t.name}
+                          {t.is_seed && (
+                            <Badge variant="outline" className="text-xs">
+                              Default
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {t.detail_field_label}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {t.amount_field_label}
+                      </TableCell>
+                      <TableCell>
+                        {t.source === "share_capital" ? (
+                          <Badge className="bg-blue-500/10 text-blue-700 hover:bg-blue-500/10">
+                            Share Capital
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary">Manual</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => handleToggleVisible(t)}
+                          aria-label={t.is_visible ? "Hide" : "Show"}
+                        >
+                          {t.is_visible ? (
+                            <Eye className="h-4 w-4" />
+                          ) : (
+                            <EyeOff className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </Button>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => openEdit(t)}
+                            aria-label="Edit"
+                          >
+                            <PencilLine className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            disabled={t.is_seed}
+                            title={
+                              t.is_seed
+                                ? "Default types can't be deleted — hide them instead"
+                                : "Delete"
+                            }
+                            onClick={() => setDeleting(t)}
+                            aria-label="Delete"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ScrollBox>
           )}
         </CardContent>
       </Card>
@@ -464,7 +472,7 @@ function CollateralTypesSettingsContent() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </PageFill>
   );
 }
 

@@ -2,6 +2,7 @@
 
 import { useCallback } from "react";
 import { DataState } from "@/components/common/data-state";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { usePermission } from "@/hooks";
 import { portalAdminService } from "@/services/portal-admin.service";
 import { usePortalResource } from "@/app/(app)/member-portal/_hooks/use-portal-resource";
@@ -17,8 +18,8 @@ export function PortalSettingsScreen() {
   const { can } = usePermission();
   const viewAll = can("branches:view_all");
   return (
-    <div className="space-y-6">
-      <div>
+    <PageFill>
+      <div className="shrink-0">
         <h1 className="text-2xl font-semibold tracking-tight">Member Portal</h1>
         <p className="text-sm text-muted-foreground">
           How members sign in and what they can see and ask for online. Members sign in with their member number and a
@@ -28,12 +29,12 @@ export function PortalSettingsScreen() {
       {viewAll ? (
         <SettingsBody />
       ) : (
-        <p className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+        <p className="shrink-0 rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
           Member Portal settings apply to every branch, so they need the Branch Access: See all branches permission as
           well.
         </p>
       )}
-    </div>
+    </PageFill>
   );
 }
 
@@ -43,10 +44,10 @@ function SettingsBody() {
   return (
     <DataState resource={resource} endpoints={[]} summary="The Member Portal settings.">
       {(settings) => (
-        <div className="space-y-6">
+        <ScrollBox className="space-y-6 p-px">
           <PortalSettingsForm key={settings.updated_at ?? "new"} settings={settings} onSaved={resource.refetch} />
           <TermsCard current={settings.terms} onPublished={resource.refetch} />
-        </div>
+        </ScrollBox>
       )}
     </DataState>
   );

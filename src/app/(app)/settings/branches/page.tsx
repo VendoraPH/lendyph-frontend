@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { RouteGuard } from "@/components/common";
+import { PageFill, PageLoader, ScrollBox } from "@/components/common/page-fill";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,7 @@ import { toast } from "sonner";
 import { branchService } from "@/services";
 import type { ApiBranch, CreateBranchData, UpdateBranchData } from "@/services/branch.service";
 import { completeRows } from "@/lib/paginate";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -230,17 +232,13 @@ function BranchesContent() {
   }
 
   if (loading) {
-    return (
-      <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <PageLoader />;
   }
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       {/* Header */}
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex shrink-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Branches</h1>
           <p className="text-sm text-muted-foreground">
@@ -257,7 +255,7 @@ function BranchesContent() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid shrink-0 gap-4 sm:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Total Branches</CardTitle>
@@ -288,7 +286,7 @@ function BranchesContent() {
       </div>
 
       {/* Search */}
-      <div className="relative max-w-sm">
+      <div className="relative max-w-sm shrink-0">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           placeholder="Search branches..."
@@ -299,9 +297,9 @@ function BranchesContent() {
       </div>
 
       {/* Table */}
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
+      <Card className={FIT_CLASSES.section}>
+        <CardContent className={cn(FIT_CLASSES.section, "p-0")}>
+          <ScrollBox>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -394,7 +392,7 @@ function BranchesContent() {
                 )}
               </TableBody>
             </Table>
-          </div>
+          </ScrollBox>
         </CardContent>
       </Card>
 
@@ -405,7 +403,7 @@ function BranchesContent() {
         branch={editBranch}
         onSave={fetchBranches}
       />
-    </div>
+    </PageFill>
   );
 }
 

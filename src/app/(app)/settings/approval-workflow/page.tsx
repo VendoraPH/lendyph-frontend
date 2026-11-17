@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { RouteGuard } from "@/components/common";
+import { PageFill, PageLoader, ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { useDialogOpening, usePermission } from "@/hooks";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -468,19 +470,15 @@ function ApprovalWorkflowContent() {
   }
 
   if (loading) {
-    return (
-      <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <PageLoader />;
   }
 
   const existingIds = steps.map((s) => s.id);
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       {/* Header row: title + actions */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex shrink-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight">
             Approval Workflow
@@ -534,7 +532,7 @@ function ApprovalWorkflowContent() {
       </div>
 
       {/* Workflow Type Tabs — own row so they never fight with title/actions */}
-      <div className="flex w-full rounded-lg border p-1 bg-muted/50 sm:w-fit">
+      <div className="flex w-full shrink-0 rounded-lg border p-1 bg-muted/50 sm:w-fit">
         <button
           type="button"
           onClick={() => setActiveTab("normal")}
@@ -584,7 +582,7 @@ function ApprovalWorkflowContent() {
         <>
 
           {/* Summary cards */}
-          <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+          <div className="grid shrink-0 gap-4 grid-cols-2 md:grid-cols-4">
             <Card>
               <CardContent className="py-4">
                 <div className="flex items-center justify-between">
@@ -635,7 +633,7 @@ function ApprovalWorkflowContent() {
 
           {/* Validation warning */}
           {validationError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 dark:border-red-800/40 dark:bg-red-900/10 p-3 flex items-start gap-2">
+            <div className="shrink-0 rounded-lg border border-red-200 bg-red-50 dark:border-red-800/40 dark:bg-red-900/10 p-3 flex items-start gap-2">
               <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
               <div className="text-sm">
                 <p className="font-medium text-red-700 dark:text-red-400">
@@ -650,7 +648,7 @@ function ApprovalWorkflowContent() {
 
           {/* Unsaved changes indicator */}
           {isDirty && !validationError && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-900/10 p-3 flex items-start gap-2">
+            <div className="shrink-0 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-900/10 p-3 flex items-start gap-2">
               <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
               <p className="text-sm text-amber-700 dark:text-amber-400">
                 You have unsaved changes. Click <strong>Save Changes</strong> to apply,
@@ -660,7 +658,7 @@ function ApprovalWorkflowContent() {
           )}
 
           {/* Steps list */}
-          <Card>
+          <Card className={FIT_CLASSES.section}>
             <CardHeader>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <CardTitle className="text-sm font-medium">Chain Steps</CardTitle>
@@ -675,116 +673,118 @@ function ApprovalWorkflowContent() {
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="space-y-2">
-              {steps.length === 0 && (
-                <div className="text-center py-12 text-muted-foreground text-sm">
-                  No steps configured. Click <strong>Add Step</strong> to start.
-                </div>
-              )}
-              {steps.map((step, i) => {
-                const meta = KIND_META[step.kind];
-                const Icon = meta.icon;
-                const apiRole = roles.find((r) => r.name === step.role);
-                return (
-                  <div
-                    key={step.id}
-                    className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border p-3 bg-card hover:bg-muted/30 transition-colors"
-                  >
-                    {/* Reorder buttons */}
-                    <div className="flex flex-col gap-0.5 shrink-0">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-5 w-5"
-                        disabled={i === 0}
-                        onClick={() => moveStep(i, "up")}
-                        aria-label="Move up"
-                      >
-                        <ChevronUp className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-5 w-5"
-                        disabled={i === steps.length - 1}
-                        onClick={() => moveStep(i, "down")}
-                        aria-label="Move down"
-                      >
-                        <ChevronDown className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-
-                    {/* Position number */}
-                    <div className="h-8 w-8 rounded-full bg-muted text-muted-foreground flex items-center justify-center text-xs font-semibold shrink-0">
-                      {i + 1}
-                    </div>
-
-                    {/* Kind icon */}
-                    <div
-                      className={cn(
-                        "h-9 w-9 rounded-md flex items-center justify-center shrink-0",
-                        meta.colorClass
-                      )}
-                    >
-                      <Icon className="h-4 w-4" />
-                    </div>
-
-                    {/* Name + role */}
-                    <div className="min-w-0 flex-1 basis-[180px]">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-semibold truncate">{step.name}</p>
-                        <Badge
-                          variant="outline"
-                          className={cn("text-[10px] h-4 px-1.5", meta.colorClass)}
-                        >
-                          {meta.label}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                        Role:{" "}
-                        <span className="font-mono">
-                          {apiRole ? roleDisplayName(apiRole) : step.role}
-                        </span>
-                        {!apiRole && (
-                          <span className="ml-1 text-amber-600">
-                            (role removed)
-                          </span>
-                        )}
-                        {step.status && (
-                          <>
-                            <span className="mx-1.5 text-muted-foreground/40">
-                              ·
-                            </span>
-                            Status:{" "}
-                            <span className="font-mono">{step.status}</span>
-                          </>
-                        )}
-                      </p>
-                    </div>
-
-                    {/* Actions — wrap to their own row on very narrow widths */}
-                    <div className="flex items-center gap-1 shrink-0 ml-auto">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs"
-                        onClick={() => openEdit(step)}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs text-destructive border-destructive/30 hover:bg-destructive/5"
-                        onClick={() => handleDeleteStep(step.id)}
-                        aria-label="Delete step"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
+            <CardContent className={FIT_CLASSES.section}>
+              <ScrollBox className="space-y-2 p-px">
+                {steps.length === 0 && (
+                  <div className="text-center py-12 text-muted-foreground text-sm">
+                    No steps configured. Click <strong>Add Step</strong> to start.
                   </div>
-                );
-              })}
+                )}
+                {steps.map((step, i) => {
+                  const meta = KIND_META[step.kind];
+                  const Icon = meta.icon;
+                  const apiRole = roles.find((r) => r.name === step.role);
+                  return (
+                    <div
+                      key={step.id}
+                      className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border p-3 bg-card hover:bg-muted/30 transition-colors"
+                    >
+                      {/* Reorder buttons */}
+                      <div className="flex flex-col gap-0.5 shrink-0">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5"
+                          disabled={i === 0}
+                          onClick={() => moveStep(i, "up")}
+                          aria-label="Move up"
+                        >
+                          <ChevronUp className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5"
+                          disabled={i === steps.length - 1}
+                          onClick={() => moveStep(i, "down")}
+                          aria-label="Move down"
+                        >
+                          <ChevronDown className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+
+                      {/* Position number */}
+                      <div className="h-8 w-8 rounded-full bg-muted text-muted-foreground flex items-center justify-center text-xs font-semibold shrink-0">
+                        {i + 1}
+                      </div>
+
+                      {/* Kind icon */}
+                      <div
+                        className={cn(
+                          "h-9 w-9 rounded-md flex items-center justify-center shrink-0",
+                          meta.colorClass
+                        )}
+                      >
+                        <Icon className="h-4 w-4" />
+                      </div>
+
+                      {/* Name + role */}
+                      <div className="min-w-0 flex-1 basis-[180px]">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-semibold truncate">{step.name}</p>
+                          <Badge
+                            variant="outline"
+                            className={cn("text-[10px] h-4 px-1.5", meta.colorClass)}
+                          >
+                            {meta.label}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                          Role:{" "}
+                          <span className="font-mono">
+                            {apiRole ? roleDisplayName(apiRole) : step.role}
+                          </span>
+                          {!apiRole && (
+                            <span className="ml-1 text-amber-600">
+                              (role removed)
+                            </span>
+                          )}
+                          {step.status && (
+                            <>
+                              <span className="mx-1.5 text-muted-foreground/40">
+                                ·
+                              </span>
+                              Status:{" "}
+                              <span className="font-mono">{step.status}</span>
+                            </>
+                          )}
+                        </p>
+                      </div>
+
+                      {/* Actions — wrap to their own row on very narrow widths */}
+                      <div className="flex items-center gap-1 shrink-0 ml-auto">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => openEdit(step)}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs text-destructive border-destructive/30 hover:bg-destructive/5"
+                          onClick={() => handleDeleteStep(step.id)}
+                          aria-label="Delete step"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </ScrollBox>
             </CardContent>
           </Card>
 
@@ -830,7 +830,7 @@ function ApprovalWorkflowContent() {
           </Dialog>
         </>
       )}
-    </div>
+    </PageFill>
   );
 }
 

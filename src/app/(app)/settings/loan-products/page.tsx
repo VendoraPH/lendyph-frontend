@@ -10,6 +10,8 @@ import { completeRows } from "@/lib/paginate";
 import { productSaveRefusal } from "./_lib/product-save";
 import { decimalInputValue } from "@/lib/percent";
 import { PermissionGate, RouteGuard } from "@/components/common";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { Spinner } from "@/components/ui/spinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -218,125 +220,189 @@ function ProductFormDialog({
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-6 max-h-[50vh] lg:max-h-none overflow-y-auto lg:overflow-y-visible overflow-x-hidden px-1">
-          {/* Basic Info */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-              Basic Info
-            </h3>
-            <div className="space-y-2">
-              <Label htmlFor="product-name">{PRODUCT_FIELD_LABELS.name} *</Label>
-              <Input
-                id="product-name"
-                placeholder="e.g. Salary Loan"
-                value={form.name}
-                onChange={(e) => update("name", e.target.value)}
-                required
-              />
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-col gap-4">
+          <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overflow-x-hidden px-1">
+            {/* Basic Info */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                Basic Info
+              </h3>
+              <div className="space-y-2">
+                <Label htmlFor="product-name">{PRODUCT_FIELD_LABELS.name} *</Label>
+                <Input
+                  id="product-name"
+                  placeholder="e.g. Salary Loan"
+                  value={form.name}
+                  onChange={(e) => update("name", e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="product-description">{PRODUCT_FIELD_LABELS.description}</Label>
+                <Textarea
+                  id="product-description"
+                  placeholder="Brief description of this loan product"
+                  value={form.description}
+                  onChange={(e) => update("description", e.target.value)}
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="product-description">{PRODUCT_FIELD_LABELS.description}</Label>
-              <Textarea
-                id="product-description"
-                placeholder="Brief description of this loan product"
-                value={form.description}
-                onChange={(e) => update("description", e.target.value)}
-              />
-            </div>
-          </div>
 
-          {/* Amount & Term */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-              Amount & Term
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="min-amount">{PRODUCT_FIELD_LABELS.min_amount} (₱) *</Label>
-                <Input
-                  id="min-amount"
-                  type="number"
-                  min={0}
-                  step="1"
-                  placeholder="5,000"
-                  value={form.min_amount}
-                  onChange={(e) => update("min_amount", e.target.value)}
-                  required
-                />
+            {/* Amount & Term */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                Amount & Term
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="min-amount">{PRODUCT_FIELD_LABELS.min_amount} (₱) *</Label>
+                  <Input
+                    id="min-amount"
+                    type="number"
+                    min={0}
+                    step="1"
+                    placeholder="5,000"
+                    value={form.min_amount}
+                    onChange={(e) => update("min_amount", e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="max-amount">{PRODUCT_FIELD_LABELS.max_amount} (₱) *</Label>
+                  <Input
+                    id="max-amount"
+                    type="number"
+                    min={0}
+                    step="1"
+                    placeholder="50,000"
+                    value={form.max_amount}
+                    onChange={(e) => update("max_amount", e.target.value)}
+                    required
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="max-amount">{PRODUCT_FIELD_LABELS.max_amount} (₱) *</Label>
-                <Input
-                  id="max-amount"
-                  type="number"
-                  min={0}
-                  step="1"
-                  placeholder="50,000"
-                  value={form.max_amount}
-                  onChange={(e) => update("max_amount", e.target.value)}
-                  required
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="min-term">{PRODUCT_FIELD_LABELS.min_term} <span className="text-red-500">*</span></Label>
+                  <Input
+                    id="min-term"
+                    type="number"
+                    min={1}
+                    placeholder="1"
+                    value={form.min_term}
+                    onChange={(e) => update("min_term", e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="max-term">{PRODUCT_FIELD_LABELS.max_term} <span className="text-red-500">*</span></Label>
+                  <Input
+                    id="max-term"
+                    type="number"
+                    min={1}
+                    placeholder="24"
+                    value={form.max_term}
+                    onChange={(e) => update("max_term", e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="default-term">{PRODUCT_FIELD_LABELS.term} <span className="text-red-500">*</span></Label>
+                  <Input
+                    id="default-term"
+                    type="number"
+                    min={form.min_term || 1}
+                    max={form.max_term || undefined}
+                    placeholder="12"
+                    value={form.term}
+                    onChange={(e) => update("term", e.target.value)}
+                    aria-describedby="default-term-help"
+                    required
+                  />
+                  <p id="default-term-help" className="text-xs text-muted-foreground">
+                    Between the minimum and maximum term.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="term-unit">{PRODUCT_FIELD_LABELS.term_unit} <span className="text-red-500">*</span></Label>
+                  <Select
+                    value={form.term_unit}
+                    onValueChange={(v) => update("term_unit", v ?? "months")}
+                  >
+                    <SelectTrigger id="term-unit" className="w-full">
+                      <SelectValue>
+                        {(v: string | null) =>
+                          TERM_UNIT_OPTIONS.find((o) => o.value === v)?.label ?? v ?? "Select unit"
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TERM_UNIT_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="min-term">{PRODUCT_FIELD_LABELS.min_term} <span className="text-red-500">*</span></Label>
-                <Input
-                  id="min-term"
-                  type="number"
-                  min={1}
-                  placeholder="1"
-                  value={form.min_term}
-                  onChange={(e) => update("min_term", e.target.value)}
-                  required
-                />
+
+            {/* Interest */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                Interest
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="min-interest-rate">{PRODUCT_FIELD_LABELS.min_interest_rate} (%) <span className="text-red-500">*</span></Label>
+                  <Input
+                    id="min-interest-rate"
+                    type="number"
+                    min={0}
+                    step="0.0001"
+                    placeholder="1"
+                    value={form.min_interest_rate}
+                    onChange={(e) => update("min_interest_rate", e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="max-interest-rate">{PRODUCT_FIELD_LABELS.max_interest_rate} (%) <span className="text-red-500">*</span></Label>
+                  <Input
+                    id="max-interest-rate"
+                    type="number"
+                    min={0}
+                    step="0.0001"
+                    placeholder="5"
+                    value={form.max_interest_rate}
+                    onChange={(e) => update("max_interest_rate", e.target.value)}
+                    required
+                  />
+                </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="max-term">{PRODUCT_FIELD_LABELS.max_term} <span className="text-red-500">*</span></Label>
-                <Input
-                  id="max-term"
-                  type="number"
-                  min={1}
-                  placeholder="24"
-                  value={form.max_term}
-                  onChange={(e) => update("max_term", e.target.value)}
-                  required
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="default-term">{PRODUCT_FIELD_LABELS.term} <span className="text-red-500">*</span></Label>
-                <Input
-                  id="default-term"
-                  type="number"
-                  min={form.min_term || 1}
-                  max={form.max_term || undefined}
-                  placeholder="12"
-                  value={form.term}
-                  onChange={(e) => update("term", e.target.value)}
-                  aria-describedby="default-term-help"
-                  required
-                />
-                <p id="default-term-help" className="text-xs text-muted-foreground">
-                  Between the minimum and maximum term.
+                <Label htmlFor="interest-rate-frequency">
+                  {PRODUCT_FIELD_LABELS.interest_rate_frequency} <span className="text-red-500">*</span>
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  The period each interest rate figure applies to, e.g. 3% <span className="font-medium">per month</span>.
                 </p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="term-unit">{PRODUCT_FIELD_LABELS.term_unit} <span className="text-red-500">*</span></Label>
                 <Select
-                  value={form.term_unit}
-                  onValueChange={(v) => update("term_unit", v ?? "months")}
+                  value={form.interest_rate_frequency}
+                  onValueChange={(v) => update("interest_rate_frequency", v ?? "monthly")}
                 >
-                  <SelectTrigger id="term-unit" className="w-full">
+                  <SelectTrigger id="interest-rate-frequency" className="w-full sm:w-1/2">
                     <SelectValue>
                       {(v: string | null) =>
-                        TERM_UNIT_OPTIONS.find((o) => o.value === v)?.label ?? v ?? "Select unit"
+                        INTEREST_RATE_FREQUENCY_OPTIONS.find((o) => o.value === v)?.label ?? v ?? "Select frequency"
                       }
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    {TERM_UNIT_OPTIONS.map((opt) => (
+                    {INTEREST_RATE_FREQUENCY_OPTIONS.map((opt) => (
                       <SelectItem key={opt.value} value={opt.value}>
                         {opt.label}
                       </SelectItem>
@@ -344,121 +410,47 @@ function ProductFormDialog({
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-          </div>
-
-          {/* Interest */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-              Interest
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="min-interest-rate">{PRODUCT_FIELD_LABELS.min_interest_rate} (%) <span className="text-red-500">*</span></Label>
-                <Input
-                  id="min-interest-rate"
-                  type="number"
-                  min={0}
-                  step="0.0001"
-                  placeholder="1"
-                  value={form.min_interest_rate}
-                  onChange={(e) => update("min_interest_rate", e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="max-interest-rate">{PRODUCT_FIELD_LABELS.max_interest_rate} (%) <span className="text-red-500">*</span></Label>
-                <Input
-                  id="max-interest-rate"
-                  type="number"
-                  min={0}
-                  step="0.0001"
-                  placeholder="5"
-                  value={form.max_interest_rate}
-                  onChange={(e) => update("max_interest_rate", e.target.value)}
-                  required
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="interest-rate-frequency">
-                {PRODUCT_FIELD_LABELS.interest_rate_frequency} <span className="text-red-500">*</span>
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                The period each interest rate figure applies to, e.g. 3% <span className="font-medium">per month</span>.
-              </p>
-              <Select
-                value={form.interest_rate_frequency}
-                onValueChange={(v) => update("interest_rate_frequency", v ?? "monthly")}
-              >
-                <SelectTrigger id="interest-rate-frequency" className="w-full sm:w-1/2">
-                  <SelectValue>
-                    {(v: string | null) =>
-                      INTEREST_RATE_FREQUENCY_OPTIONS.find((o) => o.value === v)?.label ?? v ?? "Select frequency"
-                    }
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {INTEREST_RATE_FREQUENCY_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>{PRODUCT_FIELD_LABELS.interest_method} *</Label>
-                <Select
-                  value={form.interest_method}
-                  onValueChange={(v) => update("interest_method", v as string)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select method">
-                      {(value: string | null) =>
-                        value
-                          ? (INTEREST_TYPE_OPTIONS.find((o) => o.value === value)?.label ?? value)
-                          : "Select method"
-                      }
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {INTEREST_TYPE_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>{PRODUCT_FIELD_LABELS.frequencies} <span className="text-red-500">*</span></Label>
-                <Popover>
-                  <PopoverTrigger
-                    className="flex w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>{PRODUCT_FIELD_LABELS.interest_method} *</Label>
+                  <Select
+                    value={form.interest_method}
+                    onValueChange={(v) => update("interest_method", v as string)}
                   >
-                    <span className="flex flex-wrap gap-1 min-h-[20px]">
-                      {form.frequencies.length > 0
-                        ? form.frequencies.map((f) => (
-                            <Badge key={f} variant="secondary" className="text-xs font-normal gap-1">
-                              {PAYMENT_FREQUENCY_LABELS[f] ?? f}
-                              <span
-                                role="button"
-                                tabIndex={0}
-                                className="hover:text-destructive cursor-pointer"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  e.preventDefault();
-                                  if (form.frequencies.length > 1) {
-                                    setForm((prev) => ({
-                                      ...prev,
-                                      frequencies: prev.frequencies.filter((v) => v !== f),
-                                    }));
-                                  }
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter" || e.key === " ") {
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select method">
+                        {(value: string | null) =>
+                          value
+                            ? (INTEREST_TYPE_OPTIONS.find((o) => o.value === value)?.label ?? value)
+                            : "Select method"
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {INTEREST_TYPE_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>{PRODUCT_FIELD_LABELS.frequencies} <span className="text-red-500">*</span></Label>
+                  <Popover>
+                    <PopoverTrigger
+                      className="flex w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                    >
+                      <span className="flex flex-wrap gap-1 min-h-[20px]">
+                        {form.frequencies.length > 0
+                          ? form.frequencies.map((f) => (
+                              <Badge key={f} variant="secondary" className="text-xs font-normal gap-1">
+                                {PAYMENT_FREQUENCY_LABELS[f] ?? f}
+                                <span
+                                  role="button"
+                                  tabIndex={0}
+                                  className="hover:text-destructive cursor-pointer"
+                                  onClick={(e) => {
                                     e.stopPropagation();
                                     e.preventDefault();
                                     if (form.frequencies.length > 1) {
@@ -467,275 +459,287 @@ function ProductFormDialog({
                                         frequencies: prev.frequencies.filter((v) => v !== f),
                                       }));
                                     }
-                                  }
-                                }}
-                              >
-                                <X className="h-3 w-3" />
-                              </span>
-                            </Badge>
-                          ))
-                        : <span className="text-muted-foreground">Select frequencies</span>}
-                    </span>
-                    <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
-                  </PopoverTrigger>
-                  <PopoverContent align="start" className="w-(--anchor-width) p-1">
-                    {PAYMENT_FREQUENCY_OPTIONS.map((opt) => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        className={cn(
-                          "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent cursor-pointer",
-                          form.frequencies.includes(opt.value) && "bg-accent"
-                        )}
-                        onClick={() => {
-                          setForm((prev) => {
-                            const has = prev.frequencies.includes(opt.value);
-                            const next = has
-                              ? prev.frequencies.filter((f) => f !== opt.value)
-                              : [...prev.frequencies, opt.value];
-                            return { ...prev, frequencies: next.length > 0 ? next : prev.frequencies };
-                          });
-                        }}
-                      >
-                        <Checkbox
-                          checked={form.frequencies.includes(opt.value)}
-                          className="pointer-events-none"
-                        />
-                        {opt.label}
-                      </button>
-                    ))}
-                  </PopoverContent>
-                </Popover>
-              </div>
-            </div>
-          </div>
-
-          {/* Fees & Penalties */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-              Fees & Penalties
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>{PRODUCT_FIELD_LABELS.processing_fee} (%)</Label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.0001"
-                    placeholder="Min"
-                    value={form.min_processing_fee}
-                    onChange={(e) => update("min_processing_fee", e.target.value)}
-                  />
-                  <span className="text-muted-foreground text-sm shrink-0">–</span>
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.0001"
-                    placeholder="Max"
-                    value={form.max_processing_fee}
-                    onChange={(e) => update("max_processing_fee", e.target.value)}
-                  />
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" || e.key === " ") {
+                                      e.stopPropagation();
+                                      e.preventDefault();
+                                      if (form.frequencies.length > 1) {
+                                        setForm((prev) => ({
+                                          ...prev,
+                                          frequencies: prev.frequencies.filter((v) => v !== f),
+                                        }));
+                                      }
+                                    }
+                                  }}
+                                >
+                                  <X className="h-3 w-3" />
+                                </span>
+                              </Badge>
+                            ))
+                          : <span className="text-muted-foreground">Select frequencies</span>}
+                      </span>
+                      <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-(--anchor-width) p-1">
+                      {PAYMENT_FREQUENCY_OPTIONS.map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          className={cn(
+                            "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent cursor-pointer",
+                            form.frequencies.includes(opt.value) && "bg-accent"
+                          )}
+                          onClick={() => {
+                            setForm((prev) => {
+                              const has = prev.frequencies.includes(opt.value);
+                              const next = has
+                                ? prev.frequencies.filter((f) => f !== opt.value)
+                                : [...prev.frequencies, opt.value];
+                              return { ...prev, frequencies: next.length > 0 ? next : prev.frequencies };
+                            });
+                          }}
+                        >
+                          <Checkbox
+                            checked={form.frequencies.includes(opt.value)}
+                            className="pointer-events-none"
+                          />
+                          {opt.label}
+                        </button>
+                      ))}
+                    </PopoverContent>
+                  </Popover>
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label>{PRODUCT_FIELD_LABELS.service_fee} (%)</Label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.0001"
-                    placeholder="Min"
-                    value={form.min_service_fee}
-                    onChange={(e) => update("min_service_fee", e.target.value)}
-                  />
-                  <span className="text-muted-foreground text-sm shrink-0">–</span>
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.0001"
-                    placeholder="Max"
-                    value={form.max_service_fee}
-                    onChange={(e) => update("max_service_fee", e.target.value)}
-                  />
-                </div>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="notarial-fee">{PRODUCT_FIELD_LABELS.notarial_fee} (%)</Label>
-                <Input
-                  id="notarial-fee"
-                  type="number"
-                  min={0}
-                  max={100}
-                  step="0.0001"
-                  placeholder="1"
-                  value={form.notarial_fee}
-                  onChange={(e) => update("notarial_fee", e.target.value)}
-                />
-              </div>
-              {env.features.penaltyConfigs ? (
-                // Penalty terms are set in Settings → Penalties; the stored rate
-                // is sent back unchanged, so the server's answer decides.
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">Penalty</p>
-                  <p className="text-sm text-muted-foreground">
-                    <PenaltySourceLine source={penaltySource} isNew={!initialData} />
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <Label htmlFor="penalty-rate">{PRODUCT_FIELD_LABELS.penalty_rate} (% per month)</Label>
-                  <Input
-                    id="penalty-rate"
-                    type="number"
-                    min={0}
-                    step="0.0001"
-                    placeholder="3"
-                    value={form.penalty_rate}
-                    onChange={(e) => update("penalty_rate", e.target.value)}
-                  />
-                </div>
-              )}
             </div>
 
-            {/* Grace Period Toggle */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="grace-period-toggle" className="cursor-pointer">
-                  {PRODUCT_FIELD_LABELS.grace_period_days}
-                </Label>
-                <Switch
-                  id="grace-period-toggle"
-                  checked={form.grace_period_enabled}
-                  onCheckedChange={(checked) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      grace_period_enabled: checked,
-                      grace_period_days: checked ? prev.grace_period_days : "",
-                    }))
-                  }
-                />
-              </div>
-              {form.grace_period_enabled && (
+            {/* Fees & Penalties */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                Fees & Penalties
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="grace-period">{PRODUCT_FIELD_LABELS.grace_period_days} (days)</Label>
+                  <Label>{PRODUCT_FIELD_LABELS.processing_fee} (%)</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.0001"
+                      placeholder="Min"
+                      value={form.min_processing_fee}
+                      onChange={(e) => update("min_processing_fee", e.target.value)}
+                    />
+                    <span className="text-muted-foreground text-sm shrink-0">–</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.0001"
+                      placeholder="Max"
+                      value={form.max_processing_fee}
+                      onChange={(e) => update("max_processing_fee", e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>{PRODUCT_FIELD_LABELS.service_fee} (%)</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.0001"
+                      placeholder="Min"
+                      value={form.min_service_fee}
+                      onChange={(e) => update("min_service_fee", e.target.value)}
+                    />
+                    <span className="text-muted-foreground text-sm shrink-0">–</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.0001"
+                      placeholder="Max"
+                      value={form.max_service_fee}
+                      onChange={(e) => update("max_service_fee", e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="notarial-fee">{PRODUCT_FIELD_LABELS.notarial_fee} (%)</Label>
                   <Input
-                    id="grace-period"
+                    id="notarial-fee"
                     type="number"
-                    min={1}
-                    placeholder="3"
-                    value={form.grace_period_days}
-                    onChange={(e) => update("grace_period_days", e.target.value)}
-                    required
+                    min={0}
+                    max={100}
+                    step="0.0001"
+                    placeholder="1"
+                    value={form.notarial_fee}
+                    onChange={(e) => update("notarial_fee", e.target.value)}
                   />
                 </div>
-              )}
-            </div>
-          </div>
+                {env.features.penaltyConfigs ? (
+                  // Penalty terms are set in Settings → Penalties; the stored rate
+                  // is sent back unchanged, so the server's answer decides.
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Penalty</p>
+                    <p className="text-sm text-muted-foreground">
+                      <PenaltySourceLine source={penaltySource} isNew={!initialData} />
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label htmlFor="penalty-rate">{PRODUCT_FIELD_LABELS.penalty_rate} (% per month)</Label>
+                    <Input
+                      id="penalty-rate"
+                      type="number"
+                      min={0}
+                      step="0.0001"
+                      placeholder="3"
+                      value={form.penalty_rate}
+                      onChange={(e) => update("penalty_rate", e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
 
-          {/* Share Capital Build-Up */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-              Share Capital Build-Up
-            </h3>
-            <div className="rounded-lg border p-4 space-y-4">
-              <div className="flex items-start justify-between gap-4">
-                <div className="space-y-0.5">
-                  <Label htmlFor="scb-required" className="cursor-pointer text-sm font-medium">
-                    Make Share Capital Build-Up Required
+              {/* Grace Period Toggle */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="grace-period-toggle" className="cursor-pointer">
+                    {PRODUCT_FIELD_LABELS.grace_period_days}
                   </Label>
-                  <p className="text-xs text-muted-foreground">
-                    When enabled, every loan using this product will include an
-                    SCB amount added to each amortization period. When the
-                    member pays, the SCB portion is credited to their share
-                    capital.
-                  </p>
+                  <Switch
+                    id="grace-period-toggle"
+                    checked={form.grace_period_enabled}
+                    onCheckedChange={(checked) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        grace_period_enabled: checked,
+                        grace_period_days: checked ? prev.grace_period_days : "",
+                      }))
+                    }
+                  />
                 </div>
-                <Switch
-                  id="scb-required"
-                  checked={form.scb_required}
-                  onCheckedChange={(checked) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      scb_required: checked,
-                      min_scb: checked ? prev.min_scb : "",
-                      max_scb: checked ? prev.max_scb : "",
-                    }))
-                  }
-                />
+                {form.grace_period_enabled && (
+                  <div className="space-y-2">
+                    <Label htmlFor="grace-period">{PRODUCT_FIELD_LABELS.grace_period_days} (days)</Label>
+                    <Input
+                      id="grace-period"
+                      type="number"
+                      min={1}
+                      placeholder="3"
+                      value={form.grace_period_days}
+                      onChange={(e) => update("grace_period_days", e.target.value)}
+                      required
+                    />
+                  </div>
+                )}
               </div>
-              {form.scb_required && (
-                <div className="grid grid-cols-2 gap-4 pt-2 border-t">
-                  <div className="space-y-2">
-                    <Label htmlFor="min-scb">
-                      {PRODUCT_FIELD_LABELS.min_scb} (₱){" "}
-                      <span className="text-destructive">*</span>
-                    </Label>
-                    <Input
-                      id="min-scb"
-                      type="number"
-                      min={0}
-                      step="1"
-                      placeholder="100"
-                      value={form.min_scb}
-                      onChange={(e) => update("min_scb", e.target.value)}
-                      required={form.scb_required}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="max-scb">
-                      {PRODUCT_FIELD_LABELS.max_scb} (₱){" "}
-                      <span className="text-destructive">*</span>
-                    </Label>
-                    <Input
-                      id="max-scb"
-                      type="number"
-                      min={0}
-                      step="1"
-                      placeholder="1000"
-                      value={form.max_scb}
-                      onChange={(e) => update("max_scb", e.target.value)}
-                      required={form.scb_required}
-                    />
-                  </div>
-                  <p className="col-span-2 text-xs text-muted-foreground">
-                    When creating a loan with this product, the loan officer
-                    picks an SCB amount within this range.
-                  </p>
-                </div>
-              )}
             </div>
-          </div>
 
-          {retiredFeesNotice && (
-            <Alert>
-              <Info aria-hidden="true" />
-              <AlertTitle>Additional fees are retired</AlertTitle>
-              <AlertDescription className="space-y-2">
-                <p>{retiredFeesNotice}</p>
-                <PermissionGate permission="fees:view">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    nativeButton={false}
-                    render={<Link href="/settings/fees" />}
-                  >
-                    Open Fees settings
-                  </Button>
-                </PermissionGate>
-              </AlertDescription>
-            </Alert>
-          )}
+            {/* Share Capital Build-Up */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                Share Capital Build-Up
+              </h3>
+              <div className="rounded-lg border p-4 space-y-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="scb-required" className="cursor-pointer text-sm font-medium">
+                      Make Share Capital Build-Up Required
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      When enabled, every loan using this product will include an
+                      SCB amount added to each amortization period. When the
+                      member pays, the SCB portion is credited to their share
+                      capital.
+                    </p>
+                  </div>
+                  <Switch
+                    id="scb-required"
+                    checked={form.scb_required}
+                    onCheckedChange={(checked) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        scb_required: checked,
+                        min_scb: checked ? prev.min_scb : "",
+                        max_scb: checked ? prev.max_scb : "",
+                      }))
+                    }
+                  />
+                </div>
+                {form.scb_required && (
+                  <div className="grid grid-cols-2 gap-4 pt-2 border-t">
+                    <div className="space-y-2">
+                      <Label htmlFor="min-scb">
+                        {PRODUCT_FIELD_LABELS.min_scb} (₱){" "}
+                        <span className="text-destructive">*</span>
+                      </Label>
+                      <Input
+                        id="min-scb"
+                        type="number"
+                        min={0}
+                        step="1"
+                        placeholder="100"
+                        value={form.min_scb}
+                        onChange={(e) => update("min_scb", e.target.value)}
+                        required={form.scb_required}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="max-scb">
+                        {PRODUCT_FIELD_LABELS.max_scb} (₱){" "}
+                        <span className="text-destructive">*</span>
+                      </Label>
+                      <Input
+                        id="max-scb"
+                        type="number"
+                        min={0}
+                        step="1"
+                        placeholder="1000"
+                        value={form.max_scb}
+                        onChange={(e) => update("max_scb", e.target.value)}
+                        required={form.scb_required}
+                      />
+                    </div>
+                    <p className="col-span-2 text-xs text-muted-foreground">
+                      When creating a loan with this product, the loan officer
+                      picks an SCB amount within this range.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {retiredFeesNotice && (
+              <Alert>
+                <Info aria-hidden="true" />
+                <AlertTitle>Additional fees are retired</AlertTitle>
+                <AlertDescription className="space-y-2">
+                  <p>{retiredFeesNotice}</p>
+                  <PermissionGate permission="fees:view">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      nativeButton={false}
+                      render={<Link href="/settings/fees" />}
+                    >
+                      Open Fees settings
+                    </Button>
+                  </PermissionGate>
+                </AlertDescription>
+              </Alert>
+            )}
+          </div>
 
           {saveError && (
-            <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+            <p role="alert" className="shrink-0 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
               {saveError}
             </p>
           )}
 
-          <div className="flex justify-end gap-3 pt-2">
+          <div className="flex shrink-0 justify-end gap-3 border-t pt-4">
             <Button
               type="button"
               variant="outline"
@@ -1015,9 +1019,9 @@ function LoanProductsContent() {
   };
 
   return (
-    <div className="space-y-6 min-w-0">
+    <PageFill className="min-w-0">
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex shrink-0 flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Loan Products</h1>
           <p className="text-muted-foreground">
@@ -1036,7 +1040,7 @@ function LoanProductsContent() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+      <div className="grid shrink-0 gap-4 grid-cols-1 sm:grid-cols-3">
         <Card>
           <CardContent className="py-4">
             <div className="flex items-center justify-between">
@@ -1171,14 +1175,14 @@ function LoanProductsContent() {
       </div>
 
       {/* Desktop Table View */}
-      <Card className="hidden md:block min-w-0 overflow-hidden">
+      <Card className={cn(FIT_CLASSES.section, "hidden md:flex min-w-0 overflow-hidden")}>
         <CardHeader>
           <CardTitle className="text-sm font-medium">
             All Products ({products.length})
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
+        <CardContent className={FIT_CLASSES.section}>
+          <ScrollBox>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -1268,7 +1272,7 @@ function LoanProductsContent() {
                 )}
               </TableBody>
             </Table>
-          </div>
+          </ScrollBox>
         </CardContent>
       </Card>
 
@@ -1283,7 +1287,7 @@ function LoanProductsContent() {
         title="Add Loan Product"
         description="Create a new loan product that staff can select during loan applications."
       />
-    </div>
+    </PageFill>
   );
 }
 

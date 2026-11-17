@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Loader2, Plus, RotateCcw, Save, Trash2 } from "lucide-react";
 import { DataState } from "@/components/common/data-state";
+import { FillSection, ScrollBox } from "@/components/common/page-fill";
 import { PermissionButton } from "@/components/common/permission-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +19,7 @@ import { useApiResource } from "@/hooks";
 import { cdaService } from "@/services";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { notifyInfo, notifySuccess } from "@/lib/notify";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { roleLabelForKey } from "@/lib/role-display-name";
 import type { ApiRole } from "@/services/role.service";
 import type { CdaReviewChain } from "@/types/cda";
@@ -84,8 +86,8 @@ function Editor({ chain, roles, onSaved }: EditorProps) {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <FillSection className="gap-4">
+      <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <p className="max-w-2xl text-sm text-muted-foreground">
           A CDA report sent for review goes through these steps in order. Each step is approved by someone holding its
           role and CDA approval, never the person who sent the report and never the same person twice. Only the last
@@ -131,13 +133,13 @@ function Editor({ chain, roles, onSaved }: EditorProps) {
       </div>
 
       {problem && (
-        <div role="alert" className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800/40 dark:bg-red-900/10">
+        <div role="alert" className="flex shrink-0 items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800/40 dark:bg-red-900/10">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
           <p className="text-sm text-red-700 dark:text-red-400">{problem}</p>
         </div>
       )}
       {dirty && !problem && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800/40 dark:bg-amber-900/10">
+        <div className="flex shrink-0 items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800/40 dark:bg-amber-900/10">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
           <p className="text-sm text-amber-700 dark:text-amber-400">
             You have unsaved changes. Reports already in review keep the review they started with.
@@ -145,7 +147,7 @@ function Editor({ chain, roles, onSaved }: EditorProps) {
         </div>
       )}
 
-      <Card>
+      <Card className={FIT_CLASSES.section}>
         <CardHeader>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="text-sm font-medium">Review steps</CardTitle>
@@ -161,75 +163,77 @@ function Editor({ chain, roles, onSaved }: EditorProps) {
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="space-y-2">
-          {steps.length === 0 && (
-            <div className="py-12 text-center text-sm text-muted-foreground">
-              No review steps: each report has a single review. Click <strong>Add Step</strong> to set up a chain.
-            </div>
-          )}
-          <ol className="space-y-2" aria-label="CDA review steps">
-            {steps.map((step, i) => (
-              <li
-                key={step.key}
-                className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border bg-card p-3 transition-colors hover:bg-muted/30"
-              >
-                <div className="flex shrink-0 flex-col gap-0.5">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-5 w-5"
-                    disabled={i === 0}
-                    onClick={() => setEdited(moveDraft(steps, i, "up"))}
-                    aria-label={`Move ${step.name} up`}
-                  >
-                    <ChevronUp className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-5 w-5"
-                    disabled={i === steps.length - 1}
-                    onClick={() => setEdited(moveDraft(steps, i, "down"))}
-                    aria-label={`Move ${step.name} down`}
-                  >
-                    <ChevronDown className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground">
-                  {i + 1}
-                </div>
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-green-500/30 bg-green-500/10 text-green-700">
-                  <CheckCircle2 className="h-4 w-4" />
-                </div>
-                <div className="min-w-0 flex-1 basis-[180px]">
-                  <p className="truncate text-sm font-semibold">{step.name}</p>
-                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                    Role: {roleName(step.role)}
-                    {step.status.trim() && (
-                      <>
-                        <span className="mx-1.5 text-muted-foreground/40">·</span>
-                        Status: {step.status.trim()}
-                      </>
-                    )}
-                  </p>
-                </div>
-                <div className="ml-auto flex shrink-0 items-center gap-1">
-                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setDialog({ step })}>
-                    Edit
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 border-destructive/30 text-xs text-destructive hover:bg-destructive/5"
-                    onClick={() => setEdited(steps.filter((s) => s.key !== step.key))}
-                    aria-label={`Remove ${step.name}`}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ol>
+        <CardContent className={FIT_CLASSES.section}>
+          <ScrollBox className="space-y-2 p-px">
+            {steps.length === 0 && (
+              <div className="py-12 text-center text-sm text-muted-foreground">
+                No review steps: each report has a single review. Click <strong>Add Step</strong> to set up a chain.
+              </div>
+            )}
+            <ol className="space-y-2" aria-label="CDA review steps">
+              {steps.map((step, i) => (
+                <li
+                  key={step.key}
+                  className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border bg-card p-3 transition-colors hover:bg-muted/30"
+                >
+                  <div className="flex shrink-0 flex-col gap-0.5">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-5 w-5"
+                      disabled={i === 0}
+                      onClick={() => setEdited(moveDraft(steps, i, "up"))}
+                      aria-label={`Move ${step.name} up`}
+                    >
+                      <ChevronUp className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-5 w-5"
+                      disabled={i === steps.length - 1}
+                      onClick={() => setEdited(moveDraft(steps, i, "down"))}
+                      aria-label={`Move ${step.name} down`}
+                    >
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground">
+                    {i + 1}
+                  </div>
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-green-500/30 bg-green-500/10 text-green-700">
+                    <CheckCircle2 className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0 flex-1 basis-[180px]">
+                    <p className="truncate text-sm font-semibold">{step.name}</p>
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                      Role: {roleName(step.role)}
+                      {step.status.trim() && (
+                        <>
+                          <span className="mx-1.5 text-muted-foreground/40">·</span>
+                          Status: {step.status.trim()}
+                        </>
+                      )}
+                    </p>
+                  </div>
+                  <div className="ml-auto flex shrink-0 items-center gap-1">
+                    <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setDialog({ step })}>
+                      Edit
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 border-destructive/30 text-xs text-destructive hover:bg-destructive/5"
+                      onClick={() => setEdited(steps.filter((s) => s.key !== step.key))}
+                      aria-label={`Remove ${step.name}`}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </ScrollBox>
         </CardContent>
       </Card>
 
@@ -261,7 +265,7 @@ function Editor({ chain, roles, onSaved }: EditorProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </FillSection>
   );
 }
 
