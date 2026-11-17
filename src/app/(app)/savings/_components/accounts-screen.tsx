@@ -4,7 +4,8 @@ import { useCallback, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Search, Settings2 } from "lucide-react";
-import { BranchFilter, ALL_BRANCHES, branchIdParam } from "@/components/common/branch-filter";
+import { ALL_BRANCHES, branchIdParam } from "@/components/common/branch-filter";
+import { AlignedBranchFilter } from "./aligned-branch-filter";
 import { DataState } from "@/components/common/data-state";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { PermissionButton } from "@/components/common/permission-button";
@@ -86,7 +87,7 @@ export function AccountsScreen() {
         />
       </div>
 
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
+      <div className="flex shrink-0 flex-wrap items-end justify-between gap-3">
         <Tabs
           value={status}
           onValueChange={(v) => {
@@ -103,8 +104,8 @@ export function AccountsScreen() {
             ))}
           </TabsList>
         </Tabs>
-        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-        <BranchFilter
+        <div className="flex w-full flex-wrap items-end gap-2 sm:w-auto">
+        <AlignedBranchFilter
           value={branch}
           onChange={(v) => {
             setBranch(v);

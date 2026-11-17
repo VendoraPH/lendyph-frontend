@@ -3,7 +3,8 @@
 import { useCallback, useState } from "react";
 import Link from "next/link";
 import { Search, Undo2 } from "lucide-react";
-import { BranchFilter, ALL_BRANCHES, branchIdParam } from "@/components/common/branch-filter";
+import { ALL_BRANCHES, branchIdParam } from "@/components/common/branch-filter";
+import { AlignedBranchFilter } from "../../_components/aligned-branch-filter";
 import { DataState } from "@/components/common/data-state";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { TablePagination } from "@/components/common/table-pagination";
@@ -85,12 +86,12 @@ export function RegisterScreen() {
 
       <div className="flex shrink-0 flex-wrap items-end gap-2">
         <OptionSelect value={type} onChange={firstPage(setType)} options={TYPE_OPTIONS} className="w-48" />
-        <BranchFilter value={branch} onChange={firstPage(setBranch)} className="w-56" />
-        <label className="text-xs text-muted-foreground">
+        <AlignedBranchFilter value={branch} onChange={firstPage(setBranch)} className="w-56" />
+        <label className="flex flex-col gap-1.5 text-xs text-muted-foreground">
           From
           <Input type="date" value={dateFrom} onChange={(e) => firstPage(setDateFrom)(e.target.value)} className="w-40" />
         </label>
-        <label className="text-xs text-muted-foreground">
+        <label className="flex flex-col gap-1.5 text-xs text-muted-foreground">
           To
           <Input type="date" value={dateTo} onChange={(e) => firstPage(setDateTo)(e.target.value)} className="w-40" />
         </label>

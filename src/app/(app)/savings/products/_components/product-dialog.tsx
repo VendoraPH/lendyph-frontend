@@ -15,11 +15,12 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useDialogOpening } from "@/hooks";
 import { getFieldErrors, httpStatusOf } from "@/lib/api-error";
+import { cn } from "@/lib/utils";
 import { FORM_STEP_GRID } from "@/lib/form-stepper";
 import { notifyError, notifySuccess, notifyValidation } from "@/lib/notify";
 import { savingsService } from "@/services";
 import type { InterestCrediting, SavingsProduct, SavingsProductKind } from "@/types";
-import { FormField } from "../../_components/field";
+import { ALIGNED_FIELDS, FormField } from "../../_components/field";
 import { OptionSelect } from "../../_components/option-select";
 import { INTEREST_CREDITING_LABELS, PRODUCT_KIND_LABELS } from "../../_lib/savings-rules";
 import { errorsForStep, serverStepErrors } from "../../_lib/step-errors";
@@ -152,7 +153,7 @@ export function ProductDialog({ open, product, products, onOpenChange, onSaved }
             }
           >
             <FormStep id="details" className="space-y-4">
-              <div className={FORM_STEP_GRID.roomy}>
+              <div className={cn(FORM_STEP_GRID.roomy, ALIGNED_FIELDS)}>
                 <FormField
                   id="pd-kind"
                   field="kind"
@@ -197,7 +198,7 @@ export function ProductDialog({ open, product, products, onOpenChange, onSaved }
             </FormStep>
 
             <FormStep id="interest">
-              <div className={FORM_STEP_GRID.roomy}>
+              <div className={cn(FORM_STEP_GRID.roomy, ALIGNED_FIELDS)}>
                 {!product && (
                   <FormField
                     id="pd-rate"

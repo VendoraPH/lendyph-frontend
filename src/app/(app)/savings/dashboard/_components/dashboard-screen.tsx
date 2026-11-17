@@ -99,7 +99,7 @@ export function SavingsDashboardScreen() {
                 <GlControlNotice kpis={data.kpis} canOpenReport={canReports} />
                 <KpiGrid kpis={data.kpis} />
                 <SeriesCharts series={data.series} />
-                <div className="grid gap-4 xl:grid-cols-2">
+                <div className="grid gap-4 min-[1800px]:grid-cols-2">
                   <BreakdownTable title="Savings by product" groupLabel="Product" breakdown={data.by_product} />
                   <BreakdownTable title="Deposits by branch" groupLabel="Branch" breakdown={data.by_branch} />
                 </div>

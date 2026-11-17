@@ -31,7 +31,7 @@ export function ProductFilter({ value, onChange, kind, className }: ProductFilte
   const options = productFilterOptions(products.data, kind);
 
   return (
-    <div className="space-y-1">
+    <div className="flex flex-col gap-1.5">
       <Label htmlFor={id} className="text-xs">
         Product
       </Label>

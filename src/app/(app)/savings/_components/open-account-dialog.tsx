@@ -14,6 +14,7 @@ import { FormStep, FormStepper, type FormStepperHandle } from "@/components/comm
 import { MemberSearchPicker } from "@/components/common/member-search-picker";
 import { useApiResource, useDialogOpening, usePermission } from "@/hooks";
 import type { MemberOption } from "@/hooks/use-member-search";
+import { cn } from "@/lib/utils";
 import { FORM_STEP_GRID } from "@/lib/form-stepper";
 import { formatCurrency, todayISO } from "@/lib/format";
 import { notifyError, notifySuccess } from "@/lib/notify";
@@ -33,7 +34,7 @@ import {
 } from "../_lib/opening-draft";
 import { OPEN_ACCOUNT_STEPS, openAccountErrors } from "../_lib/open-account-steps";
 import { errorsForStep, serverStepErrors } from "../_lib/step-errors";
-import { FormField } from "./field";
+import { ALIGNED_FIELDS, FormField } from "./field";
 import { MemberCheckPanel } from "./member-check-panel";
 import { OpeningDetailsFields } from "./opening-details-fields";
 import { OptionSelect } from "./option-select";
@@ -225,7 +226,7 @@ export function OpenAccountDialog({ open, onOpenChange, onOpened }: OpenAccountD
             </FormStep>
 
             <FormStep id="deposit">
-              <div className={FORM_STEP_GRID.roomy}>
+              <div className={cn(FORM_STEP_GRID.roomy, ALIGNED_FIELDS)}>
                 <FormField id="sv-date" field="opened_at" label="Opening date" error={show("deposit", dateError)}>
                   <Input
                     id="sv-date"

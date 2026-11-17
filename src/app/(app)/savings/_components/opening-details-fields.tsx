@@ -2,9 +2,10 @@
 
 import { Input } from "@/components/ui/input";
 import { StaffPicker } from "@/components/common/staff-picker";
+import { cn } from "@/lib/utils";
 import { FORM_STEP_GRID } from "@/lib/form-stepper";
 import { SOURCE_OF_FUNDS_OPTIONS, type OpeningDetailsDraft } from "../_lib/opening-draft";
-import { FormField } from "./field";
+import { ALIGNED_FIELDS, FormField } from "./field";
 import { OptionSelect } from "./option-select";
 
 interface OpeningDetailsFieldsProps {
@@ -21,7 +22,7 @@ const SOURCE_OPTIONS = [{ value: NO_SOURCE, label: "Not given" }, ...SOURCE_OF_F
 export function OpeningDetailsFields({ value, onChange, sourceError }: OpeningDetailsFieldsProps) {
   return (
     <div className="space-y-4">
-      <div className={FORM_STEP_GRID.roomy}>
+      <div className={cn(FORM_STEP_GRID.roomy, ALIGNED_FIELDS)}>
         <FormField id="sv-officer" field="account_officer_id" label="Account officer (optional)">
           <StaffPicker
             id="sv-officer"
@@ -58,7 +59,7 @@ export function OpeningDetailsFields({ value, onChange, sourceError }: OpeningDe
       </div>
       <fieldset data-field="beneficiary" className="space-y-2">
         <legend className="text-sm font-medium">Beneficiary (optional)</legend>
-        <div className={FORM_STEP_GRID.roomy}>
+        <div className={cn(FORM_STEP_GRID.roomy, ALIGNED_FIELDS)}>
           <FormField id="sv-ben-name" label="Name">
             <Input
               id="sv-ben-name"

@@ -176,7 +176,9 @@ function Header({
   const canEnterShareCapital = usePermission().can("share_capital:create");
   const notActive = canWithdraw(account) ? null : "Only an active account can be withdrawn from or transferred out of.";
   return (
-    <div className="flex shrink-0 flex-wrap items-start justify-between gap-3">
+    // The actions sit on their own row under the title until the screen has room for both, so they stay
+    // on one row at 1366.
+    <div className="flex shrink-0 flex-col gap-3 2xl:flex-row 2xl:items-start 2xl:justify-between">
       <div className="space-y-1">
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-semibold tracking-tight">{account.account_number}</h1>
@@ -198,13 +200,14 @@ function Header({
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" onClick={onPrint} disabled={printing}>
+        <Button variant="outline" size="sm" onClick={onPrint} disabled={printing}>
           <Printer className="h-4 w-4" /> {printing ? "Preparing…" : "Print passbook"}
         </Button>
-        <DocumentsMenu documents={ACCOUNT_DOCUMENTS} subjectId={account.id} />
+        <DocumentsMenu documents={ACCOUNT_DOCUMENTS} subjectId={account.id} size="sm" />
         <PermissionGate permission="reports:view">
           <Button
             variant="outline"
+            size="sm"
             nativeButton={false}
             render={<Link href={`/reports/savings_statement?account=${account.id}`} />}
           >
@@ -214,19 +217,33 @@ function Header({
         {account.status !== "closed" && (
           <>
             <ActionButton
+              size="sm"
               permission="savings:transact"
               onClick={onDeposit}
               blockedReason={canDeposit(account) ? null : "A frozen account takes no deposits."}
             >
               <ArrowDownToLine className="h-4 w-4" /> Deposit
             </ActionButton>
-            <ActionButton permission="savings:transact" variant="outline" onClick={onWithdraw} blockedReason={notActive}>
+            <ActionButton
+              size="sm"
+              permission="savings:transact"
+              variant="outline"
+              onClick={onWithdraw}
+              blockedReason={notActive}
+            >
               <ArrowUpFromLine className="h-4 w-4" /> Withdraw
             </ActionButton>
-            <ActionButton permission="savings:transact" variant="outline" onClick={onTransfer} blockedReason={notActive}>
+            <ActionButton
+              size="sm"
+              permission="savings:transact"
+              variant="outline"
+              onClick={onTransfer}
+              blockedReason={notActive}
+            >
               <ArrowLeftRight className="h-4 w-4" /> Transfer
             </ActionButton>
             <ActionButton
+              size="sm"
               permission="savings:post"
               variant="outline"
               onClick={onShareCapital}
@@ -239,11 +256,18 @@ function Header({
               <Landmark className="h-4 w-4" /> Transfer to share capital
             </ActionButton>
             {statusOffers.map((offer) => (
-              <ActionButton key={offer.label} permission="savings:close" variant="outline" onClick={() => onStatus(offer)}>
+              <ActionButton
+                key={offer.label}
+                size="sm"
+                permission="savings:close"
+                variant="outline"
+                onClick={() => onStatus(offer)}
+              >
                 <Snowflake className="h-4 w-4" /> {offer.label}
               </ActionButton>
             ))}
             <ActionButton
+              size="sm"
               permission="savings:close"
               variant="outline"
               onClick={onClose}
@@ -267,16 +291,16 @@ function Balances({ account }: { account: SavingsAccount }) {
     { label: "Accrued interest (not yet credited)", value: account.accrued_interest },
   ];
   return (
+    // Each card spans three rows of the grid (label, figure, note) through a subgrid, so a label that
+    // wraps leaves every figure in the row at the same height.
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
       {items.map((i) => (
-        <Card key={i.label}>
-          <CardContent className="py-4">
-            <p className="text-xs text-muted-foreground">{i.label}</p>
-            <p className={`mt-1 tabular-nums ${i.strong ? "text-2xl font-semibold" : "text-xl font-medium"}`}>
-              {formatCurrency(i.value)}
-            </p>
-            {"note" in i && i.note && <p className="mt-1 text-xs text-muted-foreground">{i.note}</p>}
-          </CardContent>
+        <Card key={i.label} className="row-span-3 grid grid-rows-subgrid gap-1 px-4">
+          <p className="self-end text-xs text-muted-foreground">{i.label}</p>
+          <p className={`tabular-nums ${i.strong ? "text-2xl font-semibold" : "text-xl font-medium"}`}>
+            {formatCurrency(i.value)}
+          </p>
+          {"note" in i && i.note && <p className="text-xs text-muted-foreground">{i.note}</p>}
         </Card>
       ))}
     </div>

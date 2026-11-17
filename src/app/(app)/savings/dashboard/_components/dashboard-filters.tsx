@@ -1,9 +1,9 @@
 "use client";
 
-import { BranchFilter } from "@/components/common/branch-filter";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { AlignedBranchFilter } from "../../_components/aligned-branch-filter";
 import { ProductFilter } from "../../_components/product-filter";
 import { DASHBOARD_PRESETS, type DashboardPeriod, type DashboardPreset } from "../_lib/dashboard-period";
 
@@ -30,8 +30,9 @@ export function DashboardFilters({
   onProduct,
 }: DashboardFiltersProps) {
   return (
-    <div className="flex shrink-0 flex-wrap items-end gap-4 rounded-lg border bg-card p-4">
-      <fieldset className="space-y-1.5">
+    // One row from xl: the presets and dates keep their size, and the branch and product pickers share the rest.
+    <div className="flex shrink-0 flex-wrap items-end gap-3 rounded-lg border bg-card p-3 xl:flex-nowrap">
+      <fieldset className="shrink-0 space-y-1.5">
         <legend className="text-xs text-muted-foreground">Period</legend>
         <div className="flex flex-wrap gap-1.5">
           {DASHBOARD_PRESETS.map((p) => (
@@ -41,7 +42,7 @@ export function DashboardFilters({
               aria-pressed={preset === p.id}
               onClick={() => onPreset(p.id)}
               className={cn(
-                "h-9 rounded-md border px-3 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "h-9 rounded-md border px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 preset === p.id
                   ? "border-brand-orange bg-brand-orange text-brand-orange-foreground"
                   : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -52,7 +53,7 @@ export function DashboardFilters({
           ))}
         </div>
       </fieldset>
-      <div className="space-y-1.5">
+      <div className="flex shrink-0 flex-col gap-1.5">
         <Label htmlFor="savings-dashboard-from" className="text-xs text-muted-foreground">
           From
         </Label>
@@ -61,10 +62,10 @@ export function DashboardFilters({
           type="date"
           value={period.from}
           onChange={(e) => onCustom({ ...period, from: e.target.value })}
-          className="h-9 w-40"
+          className="h-9 w-36"
         />
       </div>
-      <div className="space-y-1.5">
+      <div className="flex shrink-0 flex-col gap-1.5">
         <Label htmlFor="savings-dashboard-to" className="text-xs text-muted-foreground">
           To
         </Label>
@@ -73,11 +74,18 @@ export function DashboardFilters({
           type="date"
           value={period.to}
           onChange={(e) => onCustom({ ...period, to: e.target.value })}
-          className="h-9 w-40"
+          className="h-9 w-36"
         />
       </div>
-      <BranchFilter value={branch} onChange={onBranch} className="h-9 w-48" />
-      <ProductFilter value={product} onChange={(value) => onProduct(value)} />
+      <AlignedBranchFilter
+        value={branch}
+        onChange={onBranch}
+        className="h-9 w-full"
+        wrapperClassName="w-48 xl:w-auto xl:max-w-56 xl:min-w-36 xl:flex-1"
+      />
+      <div className="w-56 xl:w-auto xl:max-w-64 xl:min-w-36 xl:flex-1">
+        <ProductFilter value={product} onChange={(value) => onProduct(value)} className="h-9 w-full" />
+      </div>
     </div>
   );
 }

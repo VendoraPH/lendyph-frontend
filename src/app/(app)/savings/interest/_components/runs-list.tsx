@@ -2,7 +2,8 @@
 
 import { useCallback, useState } from "react";
 import Link from "next/link";
-import { ALL_BRANCHES, BranchFilter, branchIdParam } from "@/components/common/branch-filter";
+import { ALL_BRANCHES, branchIdParam } from "@/components/common/branch-filter";
+import { AlignedBranchFilter } from "../../_components/aligned-branch-filter";
 import { DataState } from "@/components/common/data-state";
 import { ScrollBox } from "@/components/common/page-fill";
 import { TablePagination } from "@/components/common/table-pagination";
@@ -105,7 +106,7 @@ export function RunsList({ productOptions }: { productOptions: readonly Option[]
           </TabsList>
         </Tabs>
         <div className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1.5">
+          <div className="flex flex-col gap-1.5">
             <Label htmlFor="runs-product" className="text-xs text-muted-foreground">
               Product
             </Label>
@@ -120,7 +121,7 @@ export function RunsList({ productOptions }: { productOptions: readonly Option[]
               className="w-[200px]"
             />
           </div>
-          <BranchFilter
+          <AlignedBranchFilter
             value={branch}
             onChange={(v) => {
               setBranch(v);

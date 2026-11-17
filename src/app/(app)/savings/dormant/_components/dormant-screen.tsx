@@ -2,7 +2,8 @@
 
 import { useCallback, useState } from "react";
 import Link from "next/link";
-import { ALL_BRANCHES, BranchFilter, branchIdParam } from "@/components/common/branch-filter";
+import { ALL_BRANCHES, branchIdParam } from "@/components/common/branch-filter";
+import { AlignedBranchFilter } from "../../_components/aligned-branch-filter";
 import { DataState } from "@/components/common/data-state";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { TablePagination } from "@/components/common/table-pagination";
@@ -58,7 +59,7 @@ export function DormantScreen() {
         ))}
       </div>
 
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
+      <div className="flex shrink-0 flex-wrap items-end justify-between gap-3">
         <Tabs
           value={list}
           onValueChange={(v) => {
@@ -74,7 +75,7 @@ export function DormantScreen() {
             ))}
           </TabsList>
         </Tabs>
-        <BranchFilter
+        <AlignedBranchFilter
           value={branch}
           onChange={(v) => {
             setBranch(v);

@@ -6,10 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useApiResource } from "@/hooks";
+import { cn } from "@/lib/utils";
 import { FORM_STEP_GRID } from "@/lib/form-stepper";
 import { branchService } from "@/services";
 import type { SavingsMemberType } from "@/types";
-import { FormField } from "../../_components/field";
+import { ALIGNED_FIELDS, FormField } from "../../_components/field";
 import { OptionSelect } from "../../_components/option-select";
 import { MEMBER_TYPE_LABELS } from "../../_lib/opening-draft";
 import { MEMBER_TYPES, type ProductDraft } from "../_lib/product-draft";
@@ -70,7 +71,7 @@ export function ProductLimitsFields({ draft, set }: Omit<ProductRulesFieldsProps
       <fieldset className="space-y-3">
         <legend className="text-sm font-medium">Limits</legend>
         <p className="text-xs text-muted-foreground">In pesos. Leave a field blank for no limit.</p>
-        <div className={FORM_STEP_GRID.roomy}>
+        <div className={cn(FORM_STEP_GRID.roomy, ALIGNED_FIELDS)}>
           {limit("maxBalance", "max_balance", "Maximum balance")}
           {limit("minDeposit", "min_deposit", "Minimum deposit")}
           {limit("maxDeposit", "max_deposit", "Maximum deposit")}
@@ -81,7 +82,7 @@ export function ProductLimitsFields({ draft, set }: Omit<ProductRulesFieldsProps
 
       <fieldset className="space-y-3">
         <legend className="text-sm font-medium">Withdrawals</legend>
-        <div className={FORM_STEP_GRID.roomy}>
+        <div className={cn(FORM_STEP_GRID.roomy, ALIGNED_FIELDS)}>
           <FormField
             id={`${uid}-free`}
             field="free_withdrawals_per_month"

@@ -3,7 +3,8 @@
 import { useCallback, useState } from "react";
 import Link from "next/link";
 import { Check, Undo2, X } from "lucide-react";
-import { BranchFilter, ALL_BRANCHES, branchIdParam } from "@/components/common/branch-filter";
+import { ALL_BRANCHES, branchIdParam } from "@/components/common/branch-filter";
+import { AlignedBranchFilter } from "../../_components/aligned-branch-filter";
 import { DataState } from "@/components/common/data-state";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { TablePagination } from "@/components/common/table-pagination";
@@ -83,7 +84,7 @@ export function ApprovalsScreen() {
         </p>
       </div>
 
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
+      <div className="flex shrink-0 flex-wrap items-end justify-between gap-3">
         <Tabs
           value={status}
           onValueChange={(v) => {
@@ -100,7 +101,7 @@ export function ApprovalsScreen() {
             ))}
           </TabsList>
         </Tabs>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-end gap-2">
           <OptionSelect
             value={kind}
             onChange={(v) => {
@@ -110,7 +111,7 @@ export function ApprovalsScreen() {
             options={KIND_OPTIONS}
             className="w-56"
           />
-          <BranchFilter
+          <AlignedBranchFilter
             value={branch}
             onChange={(v) => {
               setBranch(v);

@@ -538,7 +538,7 @@ function PledgeEntryContent() {
       <div className="grid shrink-0 gap-4 grid-cols-1 sm:grid-cols-3">
         <Card>
           <CardContent className="py-4 fit:py-0">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
               <span className="text-sm font-medium text-muted-foreground">Total Pledges</span>
               <span className="text-2xl font-bold">{pledges.length}</span>
             </div>
@@ -546,7 +546,7 @@ function PledgeEntryContent() {
         </Card>
         <Card>
           <CardContent className="py-4 fit:py-0">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
               <span className="text-sm font-medium text-green-600">Active Auto-Credit</span>
               <span className="text-2xl font-bold text-green-600">{activeCount}</span>
             </div>
@@ -554,7 +554,7 @@ function PledgeEntryContent() {
         </Card>
         <Card>
           <CardContent className="py-4 fit:py-0">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
               <span className="text-sm font-medium text-muted-foreground">Total Amount</span>
               <span className="text-2xl font-bold text-brand-orange">{currencyOrDash(totalAmount)}</span>
             </div>
@@ -939,7 +939,7 @@ function PledgeEntryContent() {
           </ScrollBox>
 
           {/* Pagination */}
-          <div className="flex shrink-0 items-center justify-between pt-4">
+          <div data-fab-clear className="flex shrink-0 items-center justify-between pt-4">
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">Rows per page</span>
               <Select
@@ -966,6 +966,7 @@ function PledgeEntryContent() {
                 variant="outline"
                 size="icon"
                 className="h-8 w-8"
+                aria-label="Previous page"
                 disabled={safePage <= 1}
                 onClick={() => setPage((p) => p - 1)}
               >
@@ -975,6 +976,7 @@ function PledgeEntryContent() {
                 variant="outline"
                 size="icon"
                 className="h-8 w-8"
+                aria-label="Next page"
                 disabled={safePage >= totalPages}
                 onClick={() => setPage((p) => p + 1)}
               >

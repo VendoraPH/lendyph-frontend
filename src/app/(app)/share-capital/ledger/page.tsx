@@ -377,18 +377,18 @@ function SubsidiaryLedgerContent() {
           LOADING STATE
           ════════════════════════════════════════════ */}
       {(selectedMember ? detailLoading : loading) ? (
-        <div className="grid shrink-0 gap-4 grid-cols-1 sm:grid-cols-4">
+        <div className="grid shrink-0 gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
           {[...Array(4)].map((_, i) => (
             <Card key={i}>
               <CardContent className="py-4 fit:py-0">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                   <div className="h-4 w-24 bg-muted animate-pulse rounded" />
                   <div className="h-7 w-16 bg-muted animate-pulse rounded" />
                 </div>
               </CardContent>
             </Card>
           ))}
-          <Card className="sm:col-span-4">
+          <Card className="sm:col-span-2 xl:col-span-4">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div className="h-4 w-20 bg-muted animate-pulse rounded" />
@@ -416,10 +416,10 @@ function SubsidiaryLedgerContent() {
       !selectedMember ? (
         <>
           {/* Summary Cards */}
-          <div className="grid shrink-0 gap-4 grid-cols-1 sm:grid-cols-4">
+          <div className="grid shrink-0 gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
             <Card>
               <CardContent className="py-4 fit:py-0">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Landmark className="h-4 w-4" />
                     <span className="text-sm font-medium">Total Members</span>
@@ -430,7 +430,7 @@ function SubsidiaryLedgerContent() {
             </Card>
             <Card>
               <CardContent className="py-4 fit:py-0">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                   <span className="text-sm font-medium text-muted-foreground">Total Credits</span>
                   <span className="text-2xl font-bold text-green-600">{money(bookTotals?.total_credits)}</span>
                 </div>
@@ -438,7 +438,7 @@ function SubsidiaryLedgerContent() {
             </Card>
             <Card>
               <CardContent className="py-4 fit:py-0">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                   <span className="text-sm font-medium text-muted-foreground">Total Debits</span>
                   <span className="text-2xl font-bold text-red-600">{money(bookTotals?.total_debits)}</span>
                 </div>
@@ -446,7 +446,7 @@ function SubsidiaryLedgerContent() {
             </Card>
             <Card>
               <CardContent className="py-4 fit:py-0">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                   <span className="text-sm font-medium text-muted-foreground">Total Share Capital</span>
                   <span className="text-2xl font-bold text-brand-orange">{money(bookTotals?.balance)}</span>
                 </div>
@@ -553,7 +553,7 @@ function SubsidiaryLedgerContent() {
               </ScrollBox>
 
               {/* Pagination */}
-              <div className="flex shrink-0 items-center justify-between pt-4">
+              <div data-fab-clear className="flex shrink-0 items-center justify-between pt-4">
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground">Rows per page</span>
                   <Select
@@ -576,10 +576,10 @@ function SubsidiaryLedgerContent() {
                       ? "0 of 0"
                       : `${(masterSafePage - 1) * masterPageSize + 1}–${Math.min(masterSafePage * masterPageSize, memberTotal)} of ${memberTotal}`}
                   </span>
-                  <Button variant="outline" size="icon" className="h-8 w-8" disabled={masterSafePage <= 1} onClick={() => setMasterPage((p) => p - 1)}>
+                  <Button variant="outline" size="icon" className="h-8 w-8" aria-label="Previous page" disabled={masterSafePage <= 1} onClick={() => setMasterPage((p) => p - 1)}>
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
-                  <Button variant="outline" size="icon" className="h-8 w-8" disabled={masterSafePage >= masterTotalPages} onClick={() => setMasterPage((p) => p + 1)}>
+                  <Button variant="outline" size="icon" className="h-8 w-8" aria-label="Next page" disabled={masterSafePage >= masterTotalPages} onClick={() => setMasterPage((p) => p + 1)}>
                     <ChevronRight className="h-4 w-4" />
                   </Button>
                 </div>
@@ -594,7 +594,7 @@ function SubsidiaryLedgerContent() {
         <>
           {/* Member Summary Cards */}
           {period && (
-            <div className="grid shrink-0 gap-4 grid-cols-1 sm:grid-cols-4">
+            <div className="grid shrink-0 gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
               <Card>
                 <CardContent className="py-4 fit:py-0">
                   <p className="text-xs text-muted-foreground mb-1">Opening Balance</p>

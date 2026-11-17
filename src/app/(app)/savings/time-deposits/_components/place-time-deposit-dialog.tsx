@@ -15,12 +15,13 @@ import { MemberSearchPicker } from "@/components/common/member-search-picker";
 import { useApiResource, useDialogOpening, usePermission } from "@/hooks";
 import type { MemberOption } from "@/hooks/use-member-search";
 import { useSubmitGuard } from "@/hooks/use-submit-guard";
+import { cn } from "@/lib/utils";
 import { FORM_STEP_GRID } from "@/lib/form-stepper";
 import { formatCurrency, todayISO } from "@/lib/format";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { savingsService, timeDepositService } from "@/services";
 import type { MaturityInstruction, SavingsMethod, TimeDeposit } from "@/types";
-import { FormField } from "../../_components/field";
+import { ALIGNED_FIELDS, FormField } from "../../_components/field";
 import { OptionSelect } from "../../_components/option-select";
 import { ProductChoiceNotice } from "../../_components/product-choice-notice";
 import { useBooksReady } from "../../_hooks/use-books-ready";
@@ -165,7 +166,7 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
                 />
               </FormField>
 
-              <div className={FORM_STEP_GRID.roomy}>
+              <div className={cn(FORM_STEP_GRID.roomy, ALIGNED_FIELDS)}>
                 <FormField
                   id="td-product"
                   field="product_id"
@@ -211,7 +212,7 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
             </FormStep>
 
             <FormStep id="payment">
-              <div className={FORM_STEP_GRID.roomy}>
+              <div className={cn(FORM_STEP_GRID.roomy, ALIGNED_FIELDS)}>
                 <FormField id="td-amount" field="principal" label="Amount placed" error={show("payment", errors.amount)}>
                   <Input
                     id="td-amount"
