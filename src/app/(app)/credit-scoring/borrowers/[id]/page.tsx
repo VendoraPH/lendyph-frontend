@@ -24,6 +24,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { SCORE_TYPE_LABELS } from "@/lib/credit-scoring/labels";
 import { isDetailsHidden } from "@/lib/credit-scoring/score-state";
 import type { CreditScore, PolicyFlagList } from "@/types/credit-scoring";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 
 function BorrowerCreditProfileContent({
   params,
@@ -49,7 +50,7 @@ function BorrowerCreditProfileContent({
   const flagsResource = useApiResource<PolicyFlagList>(flagsFetcher);
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       <DataState
         resource={profileResource}
         summary="This member's credit score, breakdown and factors."
@@ -77,37 +78,39 @@ function BorrowerCreditProfileContent({
                 }
               />
 
-              {summaryOnly ? null : flagsResource.unavailable || flagsResource.error ? (
-                <Card>
-                  <CardContent className="pt-6 text-sm text-muted-foreground">
-                    Policy flags unavailable — this member&apos;s hard-flag status
-                    could not be loaded. Treat this member as unscreened for hard
-                    flags until this is resolved.
-                  </CardContent>
-                </Card>
-              ) : (
-                flagsResource.data &&
-                flagsResource.data.data.length > 0 && <PolicyFlagAlert flags={flagsResource.data.data} />
-              )}
+              <ScrollBox className="space-y-6 p-px">
+                {summaryOnly ? null : flagsResource.unavailable || flagsResource.error ? (
+                  <Card>
+                    <CardContent className="pt-6 text-sm text-muted-foreground">
+                      Policy flags unavailable — this member&apos;s hard-flag status
+                      could not be loaded. Treat this member as unscreened for hard
+                      flags until this is resolved.
+                    </CardContent>
+                  </Card>
+                ) : (
+                  flagsResource.data &&
+                  flagsResource.data.data.length > 0 && <PolicyFlagAlert flags={flagsResource.data.data} />
+                )}
 
-              <ScoreDetail score={profile} detailsHidden={summaryOnly} />
+                <ScoreDetail score={profile} detailsHidden={summaryOnly} />
 
-              {!summaryOnly && profile.status !== "not_scored" && (
-                <Card>
-                  <CardContent className="pt-6">
-                    <CapacitySection capacity={profile.capacity ?? null} financialsHidden={profile.financials_hidden} />
-                  </CardContent>
-                </Card>
-              )}
+                {!summaryOnly && profile.status !== "not_scored" && (
+                  <Card>
+                    <CardContent className="pt-6">
+                      <CapacitySection capacity={profile.capacity ?? null} financialsHidden={profile.financials_hidden} />
+                    </CardContent>
+                  </Card>
+                )}
 
-              <ScoreHistoryChart borrowerId={borrowerId} />
-              <MemberDecisions key={decisionsVersion} borrowerId={borrowerId} />
-              <MemberScoreHistory borrowerId={borrowerId} />
+                <ScoreHistoryChart borrowerId={borrowerId} />
+                <MemberDecisions key={decisionsVersion} borrowerId={borrowerId} />
+                <MemberScoreHistory borrowerId={borrowerId} />
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                {lindaOn && <LindaChatPlaceholder />}
-                <CicPlaceholder />
-              </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {lindaOn && <LindaChatPlaceholder />}
+                  <CicPlaceholder />
+                </div>
+              </ScrollBox>
 
               {profile.id !== null && (
                 <ManualOverrideDialog
@@ -125,7 +128,7 @@ function BorrowerCreditProfileContent({
           );
         }}
       </DataState>
-    </div>
+    </PageFill>
   );
 }
 

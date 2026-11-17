@@ -8,6 +8,7 @@ import type { PortalStats } from "@/types/portal-admin";
 import { Kpi } from "../../savings/_components/kpi";
 import { usePortalResource } from "../_hooks/use-portal-resource";
 import { PortalAccountsTable } from "./portal-accounts-table";
+import { PageFill } from "@/components/common/page-fill";
 
 const STAT_CARDS: { key: keyof PortalStats; label: string }[] = [
   { key: "eligible", label: "Active members" },
@@ -32,7 +33,7 @@ export function PortalAccessScreen() {
   const stats = usePortalResource(fetchStats);
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Portal Access</h1>
@@ -52,6 +53,6 @@ export function PortalAccessScreen() {
         )}
       </DataState>
       <PortalAccountsTable branchId={branchId} />
-    </div>
+    </PageFill>
   );
 }

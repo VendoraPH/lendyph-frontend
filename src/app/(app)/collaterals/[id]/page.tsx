@@ -10,6 +10,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { collateralService } from "@/services";
 import type { Collateral } from "@/types";
 import { CollateralForm } from "../_components/collateral-form";
+import { PageFill } from "@/components/common/page-fill";
 
 function EditCollateralContent() {
   const params = useParams<{ id: string }>();
@@ -37,11 +38,11 @@ function EditCollateralContent() {
   }, [id]);
 
   return (
-    <div className="mx-auto w-full max-w-2xl space-y-6 py-2">
+    <PageFill className="mx-auto w-full max-w-2xl py-2">
       {/* Breadcrumb */}
       <Link
         href="/collaterals"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        className="inline-flex items-center gap-1.5 self-start text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />
         Back to Collaterals
@@ -85,7 +86,7 @@ function EditCollateralContent() {
           </CardContent>
         </Card>
       )}
-    </div>
+    </PageFill>
   );
 }
 

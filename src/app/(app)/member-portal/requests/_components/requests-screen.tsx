@@ -24,6 +24,9 @@ import {
   toneOf,
 } from "../../_lib/labels";
 import { StateBadge } from "../../_components/state-badge";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 
 const TYPE_OPTIONS = [{ value: "all", label: "Every request type" }, ...optionsOf(REQUEST_TYPE_LABELS)];
 const PER_PAGE = 25;
@@ -57,7 +60,7 @@ export function RequestsScreen() {
   const reset = () => setPage(1);
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Portal Requests</h1>
         <p className="text-sm text-muted-foreground">
@@ -129,10 +132,11 @@ export function RequestsScreen() {
         summary="Members' portal requests."
         isEmpty={(res) => res.data.length === 0}
         emptyMessage={status === "submitted" ? "No new requests." : "No requests here."}
+        emptyIllustration={status === "submitted" ? "allCaughtUp" : "empty"}
       >
         {(res) => (
-          <div className="space-y-3">
-            <div className="overflow-x-auto rounded-lg border">
+          <div className={cn("gap-3", FIT_CLASSES.section)}>
+            <ScrollBox className="rounded-lg border">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -184,7 +188,7 @@ export function RequestsScreen() {
                   ))}
                 </TableBody>
               </Table>
-            </div>
+            </ScrollBox>
             <TablePagination
               page={page}
               perPage={PER_PAGE}
@@ -196,6 +200,6 @@ export function RequestsScreen() {
           </div>
         )}
       </DataState>
-    </div>
+    </PageFill>
   );
 }

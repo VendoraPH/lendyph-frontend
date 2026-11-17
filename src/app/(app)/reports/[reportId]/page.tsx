@@ -73,6 +73,9 @@ import { savingsCsvReport } from "../_lib/savings-csv";
 import { ProductFilter } from "../../savings/_components/product-filter";
 import { OptionSelect } from "../../savings/_components/option-select";
 import { ALL_PRODUCTS, productIdParam } from "../../savings/_lib/product-filter";
+import { ExpandableCard } from "@/components/common/expandable-card";
+import { hasIllustration, Illustration } from "@/components/common/illustration";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 
 type BackendExporter = (params?: Record<string, unknown>) => Promise<Blob>;
 
@@ -412,7 +415,7 @@ function ReportDetailContent({
   const Icon = report.icon;
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       {/* Breadcrumb + back */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Link
@@ -668,16 +671,23 @@ function ReportDetailContent({
         />
       )}
       {generating && (
-        <div className="rounded-xl border bg-muted/30 py-24 flex items-center justify-center">
+        <div className="rounded-xl border bg-muted/30 py-24 flex items-center justify-center fit:flex-1">
           <div className="flex flex-col items-center gap-3 text-muted-foreground">
             <Loader2 className="h-6 w-6 animate-spin" />
             <p className="text-sm">Fetching data &amp; building preview…</p>
           </div>
         </div>
       )}
-      {doc && !generating && <ReportPreview doc={doc} />}
+      {/* The preview scrolls in its own card at fit, and opens full size. */}
+      {doc && !generating && (
+        <ExpandableCard title={report.title}>
+          <ScrollBox>
+            <ReportPreview doc={doc} />
+          </ScrollBox>
+        </ExpandableCard>
+      )}
       {doc && !generating && <ReportPrintSheet doc={doc} />}
-    </div>
+    </PageFill>
   );
 }
 
@@ -796,11 +806,15 @@ function ExportMenu({ doc, noCsv = false, exportingFormat, onExport }: ExportMen
 
 function EmptyPreview({ reportTitle, pick }: { reportTitle: string; pick: string }) {
   return (
-    <div className="rounded-xl border border-dashed bg-muted/20 py-16 px-6">
+    <div className="flex flex-col justify-center rounded-xl border border-dashed bg-muted/20 py-16 px-6 fit:flex-1 fit:py-6">
       <div className="max-w-md mx-auto text-center space-y-3">
-        <div className="mx-auto h-12 w-12 rounded-full bg-brand-orange/10 flex items-center justify-center">
-          <FileSpreadsheet className="h-6 w-6 text-brand-orange" />
-        </div>
+        {hasIllustration("pickReport") ? (
+          <Illustration name="pickReport" className="mx-auto" />
+        ) : (
+          <div className="mx-auto h-12 w-12 rounded-full bg-brand-orange/10 flex items-center justify-center">
+            <FileSpreadsheet className="h-6 w-6 text-brand-orange" />
+          </div>
+        )}
         <h3 className="text-base font-semibold">
           Ready to generate {reportTitle}
         </h3>

@@ -44,6 +44,9 @@ import {
 import type { Borrower } from "@/types";
 import { memberStatusLabel, statusBadgeColor } from "./utils";
 import { getInitials } from "@/lib/initials";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
+import { ScrollBox } from "@/components/common/page-fill";
 import { BorrowerActionsCell } from "./borrower-actions";
 
 interface BorrowerTableProps {
@@ -198,7 +201,7 @@ export function BorrowerTable({
     2; // status + actions (always visible)
 
   return (
-    <div className="space-y-2">
+    <div className={cn("gap-2", FIT_CLASSES.section)}>
       <AlertDialog open={confirmBulkDelete} onOpenChange={setConfirmBulkDelete}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -284,7 +287,7 @@ export function BorrowerTable({
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto">
+      <ScrollBox>
         <Table>
           <TableHeader>
             <TableRow>
@@ -404,7 +407,7 @@ export function BorrowerTable({
             )}
           </TableBody>
         </Table>
-      </div>
+      </ScrollBox>
     </div>
   );
 }

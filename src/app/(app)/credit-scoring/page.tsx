@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import type { CreditScoringDashboardSummary, RiskLevel } from "@/types/credit-scoring";
 import type { LucideIcon } from "lucide-react";
 import { Users, TrendingUp, ShieldAlert, History } from "lucide-react";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 
 const CHART_HEX: Record<RiskLevel, string> = {
   very_low: "#10b981",
@@ -140,19 +141,21 @@ function CreditScoringDashboardContent() {
   const resource = useApiResource<CreditScoringDashboardSummary>(fetcher);
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       <CreditScoringPageHeader
         title="Credit Scoring"
         description="Portfolio-wide view of member credit scores and risk distribution."
       />
 
-      <DataState
-        resource={resource}
-        summary="The credit scoring dashboard summarizes scored members, the average score, the risk distribution, risk by branch and the high risk members' outstanding balance."
-        endpoints={["GET /credit-scoring/dashboard"]}
-      >
-        {(data) => <DashboardBody data={data} />}
-      </DataState>
+      <ScrollBox className="p-px">
+        <DataState
+          resource={resource}
+          summary="The credit scoring dashboard summarizes scored members, the average score, the risk distribution, risk by branch and the high risk members' outstanding balance."
+          endpoints={["GET /credit-scoring/dashboard"]}
+        >
+          {(data) => <DashboardBody data={data} />}
+        </DataState>
+      </ScrollBox>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {SHORTCUTS.map((s) => (
@@ -162,7 +165,7 @@ function CreditScoringDashboardContent() {
           </Button>
         ))}
       </div>
-    </div>
+    </PageFill>
   );
 }
 

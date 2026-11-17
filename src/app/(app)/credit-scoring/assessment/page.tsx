@@ -8,6 +8,7 @@ import { CreditAssessmentPanel } from "./_components/credit-assessment-panel";
 import { Label } from "@/components/ui/label";
 import { usePermission } from "@/hooks";
 import type { MemberOption } from "@/hooks/use-member-search";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 
 function CreditAssessmentContent() {
   const [member, setMember] = useState<MemberOption | null>(null);
@@ -16,7 +17,7 @@ function CreditAssessmentContent() {
   const canListMembers = usePermission().can("borrowers:view");
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       <CreditScoringPageHeader
         title="Credit Assessment"
         description="See a member's current credit score, worked out every night and when their records change."
@@ -38,8 +39,12 @@ function CreditAssessmentContent() {
         />
       </div>
 
-      {member && <CreditAssessmentPanel borrowerId={member.id} />}
-    </div>
+      {member && (
+        <ScrollBox className="p-px">
+          <CreditAssessmentPanel borrowerId={member.id} />
+        </ScrollBox>
+      )}
+    </PageFill>
   );
 }
 

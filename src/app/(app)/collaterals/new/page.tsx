@@ -4,15 +4,16 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { RouteGuard } from "@/components/common";
 import { CollateralForm } from "../_components/collateral-form";
+import { PageFill } from "@/components/common/page-fill";
 
 export default function NewCollateralPage() {
   return (
     <RouteGuard permission="collaterals:create" pageName="Collateral Entry">
-      <div className="mx-auto w-full max-w-2xl space-y-6 py-2">
+      <PageFill className="mx-auto w-full max-w-2xl py-2">
         {/* Breadcrumb */}
         <Link
           href="/collaterals"
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          className="inline-flex items-center gap-1.5 self-start text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to Collaterals
@@ -30,7 +31,7 @@ export default function NewCollateralPage() {
         </header>
 
         <CollateralForm mode="create" />
-      </div>
+      </PageFill>
     </RouteGuard>
   );
 }

@@ -46,6 +46,10 @@ import {
   useCollateralRegister,
 } from "./_hooks/use-collateral-register";
 import { ALL_TYPES, REGISTER_SEARCH_MAX } from "./_lib/register";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { hasIllustration, Illustration } from "@/components/common/illustration";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 
 function CollateralListingContent() {
   const register = useCollateralRegister();
@@ -94,7 +98,7 @@ function CollateralListingContent() {
   const groups = data?.data ?? [];
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       {/* Header */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -138,7 +142,7 @@ function CollateralListingContent() {
       <RegisterSummary totals={data?.meta.totals ?? null} />
 
       {/* Filters + Table */}
-      <Card>
+      <Card className={FIT_CLASSES.section}>
         <div className="p-6 pb-0 flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="relative flex-1">
             <Search
@@ -175,13 +179,13 @@ function CollateralListingContent() {
           </div>
         </div>
 
-        <CardContent className="pt-4">
+        <CardContent className={cn("pt-4", FIT_CLASSES.section)}>
           {register.loading ? (
-            <div className="flex items-center justify-center py-12">
+            <div className="flex items-center justify-center py-12 fit:flex-1">
               <Spinner className="size-6 text-muted-foreground" />
             </div>
           ) : register.unavailable ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
+            <div className="flex flex-col items-center justify-center py-12 text-center fit:flex-1">
               <Construction className="h-10 w-10 text-muted-foreground/50 mb-3" aria-hidden="true" />
               <p className="text-sm font-medium text-muted-foreground">
                 The collateral register is not connected yet
@@ -194,7 +198,7 @@ function CollateralListingContent() {
           ) : register.error ? (
             <div
               role="alert"
-              className="flex flex-col items-center justify-center gap-3 py-12 text-center"
+              className="flex flex-col items-center justify-center gap-3 py-12 text-center fit:flex-1"
             >
               <AlertCircle className="h-10 w-10 text-destructive/70" aria-hidden="true" />
               <div>
@@ -209,8 +213,12 @@ function CollateralListingContent() {
               </Button>
             </div>
           ) : groups.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <ShieldCheck className="h-10 w-10 text-muted-foreground/50 mb-3" aria-hidden="true" />
+            <div className="flex flex-col items-center justify-center py-12 text-center fit:flex-1">
+              {hasIllustration(register.filtered ? "noResults" : "empty") ? (
+                <Illustration name={register.filtered ? "noResults" : "empty"} className="mb-3" />
+              ) : (
+                <ShieldCheck className="h-10 w-10 text-muted-foreground/50 mb-3" aria-hidden="true" />
+              )}
               {register.filtered ? (
                 <>
                   <p className="text-sm font-medium text-muted-foreground">
@@ -233,14 +241,16 @@ function CollateralListingContent() {
             </div>
           ) : (
             <>
-              <RegisterTable
-                groups={groups}
-                sort={register.sort}
-                onSortChange={register.changeSort}
-                expanded={expandedMembers}
-                onToggle={toggleMember}
-                onDelete={setDeleting}
-              />
+              <ScrollBox>
+                <RegisterTable
+                  groups={groups}
+                  sort={register.sort}
+                  onSortChange={register.changeSort}
+                  expanded={expandedMembers}
+                  onToggle={toggleMember}
+                  onDelete={setDeleting}
+                />
+              </ScrollBox>
               <TablePagination
                 page={register.page}
                 perPage={register.perPage}
@@ -283,7 +293,7 @@ function CollateralListingContent() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </PageFill>
   );
 }
 

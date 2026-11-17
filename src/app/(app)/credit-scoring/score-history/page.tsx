@@ -14,6 +14,9 @@ import { ScoreHistoryTable } from "../_components/score-history-table";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import type { CreditScoreHistoryEntry, CreditScoringPage, ScoreHistoryFilters } from "@/types/credit-scoring";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 
 function ScoreHistoryContent() {
   const [branch, setBranch] = useState(ALL_BRANCHES);
@@ -34,7 +37,7 @@ function ScoreHistoryContent() {
   const resource = useApiResource<CreditScoringPage<CreditScoreHistoryEntry>>(fetcher);
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       <CreditScoringPageHeader
         title="Score History"
         description="Every recorded member score, newest first. A loan application's own scores are on that loan's Credit Assessment."
@@ -82,10 +85,13 @@ function ScoreHistoryContent() {
         endpoints={["GET /credit-scoring/score-history"]}
         isEmpty={(res) => res.total === 0}
         emptyMessage="No scores in this range."
+        emptyIllustration="noResults"
       >
         {(res) => (
-          <div className="rounded-lg border p-2">
-            <ScoreHistoryTable rows={res.data} />
+          <div className={cn("rounded-lg border p-2", FIT_CLASSES.section)}>
+            <ScrollBox>
+              <ScoreHistoryTable rows={res.data} />
+            </ScrollBox>
             <TablePagination
               page={res.current_page}
               perPage={res.per_page}
@@ -100,7 +106,7 @@ function ScoreHistoryContent() {
           </div>
         )}
       </DataState>
-    </div>
+    </PageFill>
   );
 }
 

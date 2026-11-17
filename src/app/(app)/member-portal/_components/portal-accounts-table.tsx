@@ -14,6 +14,9 @@ import { OptionSelect } from "../../savings/_components/option-select";
 import { usePortalResource } from "../_hooks/use-portal-resource";
 import { ACCESS_STATE_LABELS, ACCESS_STATE_TONES, MEMBER_STATUS_LABELS, labelOf, optionsOf, toneOf } from "../_lib/labels";
 import { StateBadge } from "./state-badge";
+import { ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 
 const STATE_OPTIONS = [{ value: "all", label: "Every state" }, ...optionsOf(ACCESS_STATE_LABELS)];
 
@@ -42,7 +45,7 @@ export function PortalAccountsTable({ branchId }: { branchId: number | undefined
   const resource = usePortalResource(fetcher);
 
   return (
-    <div className="space-y-3">
+    <div className={cn("gap-3", FIT_CLASSES.section)}>
       <div className="flex flex-wrap items-center gap-2">
         <form
           className="relative min-w-56 flex-1"
@@ -79,10 +82,11 @@ export function PortalAccountsTable({ branchId }: { branchId: number | undefined
         summary="Members and their portal state."
         isEmpty={(res) => res.data.length === 0}
         emptyMessage="No members match these filters."
+        emptyIllustration="noResults"
       >
         {(res) => (
-          <div className="space-y-3">
-            <div className="overflow-x-auto rounded-lg border">
+          <div className={cn("gap-3", FIT_CLASSES.section)}>
+            <ScrollBox className="rounded-lg border">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -121,7 +125,7 @@ export function PortalAccountsTable({ branchId }: { branchId: number | undefined
                   ))}
                 </TableBody>
               </Table>
-            </div>
+            </ScrollBox>
             <TablePagination
               page={page}
               perPage={perPage}

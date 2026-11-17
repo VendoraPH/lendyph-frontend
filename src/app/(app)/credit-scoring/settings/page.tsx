@@ -21,6 +21,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import type { CreditScoringSettings } from "@/types/credit-scoring";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 
 type FieldKey = PolicyFigureKey | "privacy_notice";
 type Errors = Partial<Record<FieldKey, string[]>>;
@@ -185,7 +188,7 @@ function CreditScoringSettingsContent() {
   }
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       <CreditScoringPageHeader
         title="Settings"
         description="The privacy notice, the policy figures behind capacity and flags, and the definitions shown to staff."
@@ -199,21 +202,25 @@ function CreditScoringSettingsContent() {
         {(settings) => {
           const form = draft ?? settingsFormFrom(settings);
           return (
-            <div className="space-y-6">
-              <SettingsBody
-                settings={settings}
-                form={form}
-                errors={errors}
-                onChange={(key, value) => setDraft({ ...form, [key]: value })}
-              />
-              <Button onClick={() => handleSave(form)} disabled={saving}>
-                {saving ? "Saving…" : "Save Settings"}
-              </Button>
+            <div className={cn("gap-4", FIT_CLASSES.section)}>
+              <ScrollBox className="p-px">
+                <SettingsBody
+                  settings={settings}
+                  form={form}
+                  errors={errors}
+                  onChange={(key, value) => setDraft({ ...form, [key]: value })}
+                />
+              </ScrollBox>
+              <div data-fab-clear className="flex shrink-0 border-t pt-4">
+                <Button onClick={() => handleSave(form)} disabled={saving}>
+                  {saving ? "Saving…" : "Save Settings"}
+                </Button>
+              </div>
             </div>
           );
         }}
       </DataState>
-    </div>
+    </PageFill>
   );
 }
 

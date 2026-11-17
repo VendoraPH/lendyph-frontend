@@ -19,6 +19,9 @@ import { audienceText } from "../../_lib/announcement-form";
 import { notifyPortalError } from "../../_lib/notify-portal-error";
 import { StateBadge } from "../../_components/state-badge";
 import { AnnouncementDialog } from "./announcement-dialog";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 
 const TABS: { value: "all" | PortalAnnouncementStatus; label: string }[] = [
   { value: "all", label: "All" },
@@ -62,7 +65,7 @@ export function AnnouncementsScreen() {
       .catch((err: unknown) => notifyPortalError(err, "The announcement couldn't be changed."));
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Portal Announcements</h1>
@@ -99,8 +102,8 @@ export function AnnouncementsScreen() {
         emptyMessage="No announcements here."
       >
         {(res) => (
-          <div className="space-y-3">
-            <div className="overflow-x-auto rounded-lg border">
+          <div className={cn("gap-3", FIT_CLASSES.section)}>
+            <ScrollBox className="rounded-lg border">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -177,7 +180,7 @@ export function AnnouncementsScreen() {
                   ))}
                 </TableBody>
               </Table>
-            </div>
+            </ScrollBox>
             <TablePagination
               page={page}
               perPage={PER_PAGE}
@@ -206,6 +209,6 @@ export function AnnouncementsScreen() {
           if (deleting) act(() => portalAdminService.deleteAnnouncement(deleting.id), "Draft deleted", () => setDeleting(null));
         }}
       />
-    </div>
+    </PageFill>
   );
 }

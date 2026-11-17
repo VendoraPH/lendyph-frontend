@@ -45,6 +45,8 @@ import {
 import { formatCurrency } from "@/utils/format";
 import type { Collateral, CollateralType } from "@/types";
 import { knownMemberId, memberPlaceholderOption } from "../_lib/member-option";
+import { FIT_CLASSES, scrollBoxClass } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 
 interface Props {
   initial?: Collateral;
@@ -262,7 +264,7 @@ export function CollateralForm({ initial, mode }: Props) {
   }
 
   return (
-    <Card>
+    <Card className={FIT_CLASSES.section}>
       <CardHeader className="border-b border-border/60">
         <div className="flex items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-orange/10 text-brand-orange">
@@ -280,7 +282,7 @@ export function CollateralForm({ initial, mode }: Props) {
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-6 pt-6">
+      <CardContent className={cn("space-y-6 pt-6", scrollBoxClass())}>
         {initialLock && isLocked(initialLock) && (
           <div
             role="status"
@@ -436,7 +438,7 @@ export function CollateralForm({ initial, mode }: Props) {
         )}
       </CardContent>
 
-      <CardFooter className="justify-end gap-2 border-t border-border/60 bg-muted/20 px-6 py-4">
+      <CardFooter data-fab-clear className="shrink-0 justify-end gap-2 border-t border-border/60 bg-muted/20 px-6 py-4">
         <Button
           variant="outline"
           nativeButton={false}

@@ -60,7 +60,7 @@ export function ReviewActionPanel({
   const reviewer = reviewerLabel(registration);
 
   return (
-    <Card className="sticky top-6">
+    <Card className="sticky top-0 self-start">
       <CardContent className="pt-5 space-y-4">
         <h3 className="text-sm font-bold text-foreground">Admin Decision</h3>
 

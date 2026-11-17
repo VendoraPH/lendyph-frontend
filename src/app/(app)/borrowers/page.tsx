@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { RouteGuard, PermissionGate, TablePagination } from "@/components/common";
 import { NoBranchBanner } from "@/components/common/no-branch-banner";
+import { PageFill } from "@/components/common/page-fill";
+import { hasIllustration, Illustration } from "@/components/common/illustration";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Users,
@@ -24,6 +26,7 @@ import { BorrowerTable } from "./_components/borrower-table";
 import { RegistrationsTab } from "./_components/registrations-tab";
 import { useRegistrations } from "@/hooks/use-registrations";
 import { cn } from "@/lib/utils";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { usePublicBranches } from "@/hooks/use-public-branches";
 
 /**
@@ -342,7 +345,7 @@ function BorrowersContent() {
   ];
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       <NoBranchBanner />
       {/* Header */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -441,7 +444,7 @@ function BorrowersContent() {
 
       {/* Filters + Table */}
       {mainTab === "members" && (
-      <Card id="members-panel" role="region" aria-labelledby="members-tab">
+      <Card id="members-panel" role="region" aria-labelledby="members-tab" className={FIT_CLASSES.section}>
         <div className="p-6 pb-0">
           <BorrowerFilters
             search={search}
@@ -457,13 +460,13 @@ function BorrowersContent() {
             }}
           />
         </div>
-        <CardContent className="pt-4">
+        <CardContent className={cn("pt-4", FIT_CLASSES.section)}>
           {loading ? (
-            <div className="flex items-center justify-center py-12">
+            <div className="flex items-center justify-center py-12 fit:flex-1">
               <Spinner className="size-6 text-muted-foreground" />
             </div>
           ) : error ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
+            <div className="flex flex-col items-center justify-center py-12 text-center fit:flex-1">
               <AlertTriangle className="h-8 w-8 text-destructive/60 mb-3" />
               <p className="text-sm text-muted-foreground">{error}</p>
               <button
@@ -474,8 +477,12 @@ function BorrowersContent() {
               </button>
             </div>
           ) : borrowers.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <Users className="h-10 w-10 text-muted-foreground/50 mb-3" />
+            <div className="flex flex-col items-center justify-center py-12 text-center fit:flex-1">
+              {hasIllustration(hasFilters ? "noResults" : "empty") ? (
+                <Illustration name={hasFilters ? "noResults" : "empty"} className="mb-3" />
+              ) : (
+                <Users className="h-10 w-10 text-muted-foreground/50 mb-3" />
+              )}
               <p className="text-sm font-medium text-muted-foreground">
                 {hasFilters ? "No members match your filters" : "No members yet"}
               </p>
@@ -508,8 +515,8 @@ function BorrowersContent() {
       )}
 
       {mainTab === "pending" && (
-        <Card id="pending-panel" role="region" aria-labelledby="pending-tab">
-          <CardContent className="pt-6">
+        <Card id="pending-panel" role="region" aria-labelledby="pending-tab" className={FIT_CLASSES.section}>
+          <CardContent className={cn("pt-6", FIT_CLASSES.section)}>
             <RegistrationsTab
               status="pending"
               registrations={pending.registrations}
@@ -528,8 +535,8 @@ function BorrowersContent() {
       )}
 
       {mainTab === "rejected" && (
-        <Card id="rejected-panel" role="region" aria-labelledby="rejected-tab">
-          <CardContent className="pt-6">
+        <Card id="rejected-panel" role="region" aria-labelledby="rejected-tab" className={FIT_CLASSES.section}>
+          <CardContent className={cn("pt-6", FIT_CLASSES.section)}>
             <RegistrationsTab
               status="rejected"
               registrations={rejected.registrations}
@@ -546,7 +553,7 @@ function BorrowersContent() {
           </CardContent>
         </Card>
       )}
-    </div>
+    </PageFill>
   );
 }
 

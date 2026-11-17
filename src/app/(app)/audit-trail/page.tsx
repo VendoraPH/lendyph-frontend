@@ -6,6 +6,7 @@ import { RouteGuard, TablePagination } from "@/components/common";
 // barrel is not tree-shaken and is pulled in by nearly every page, so
 // re-exporting a calendar there would ship react-day-picker to all of them.
 import { DateRangeFilter } from "@/components/common/date-range-filter";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -50,6 +51,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { MAX_PER_PAGE } from "@/lib/paginate";
 import { formatDate, formatDateISO, formatTime, todayISO } from "@/lib/format";
 import type { AuditLog, AuditAction } from "@/types";
@@ -472,7 +474,7 @@ function AuditTrailContent() {
   };
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -559,7 +561,7 @@ function AuditTrailContent() {
       </div>
 
       {/* Logs Table */}
-      <Card>
+      <Card className={FIT_CLASSES.section}>
         <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="text-sm font-medium">
             {/* The count of every matching row, not of the visible page — the
@@ -620,107 +622,109 @@ function AuditTrailContent() {
             )}
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className={FIT_CLASSES.section}>
           {loading ? (
             <div className="flex items-center justify-center h-32">
               <Spinner className="size-6 text-muted-foreground" />
             </div>
           ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-40">Timestamp</TableHead>
-                  <TableHead>User</TableHead>
-                  <TableHead>Action</TableHead>
-                  <TableHead>Module</TableHead>
-                  <TableHead className="min-w-[200px]">
-                    Description
-                  </TableHead>
-                  <TableHead className="w-12" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {logs.map((log) => {
-                  const actionColor = ACTION_COLOR[log.action] ?? "";
-                  return (
-                    <TableRow
-                      key={log.id}
-                      className="cursor-pointer hover:bg-muted/50"
-                      onClick={async () => {
-                        setSelectedLog(log);
-                        try {
-                          const fresh = await auditService.detail(log.id);
-                          if (fresh) setSelectedLog(fresh);
-                        } catch {
-                          // Keep the list row data if detail fetch fails
-                        }
-                      }}
-                    >
-                      <TableCell>
-                        <div>
-                          <p className="text-sm">
-                            {formatDate(log.created_at)}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {formatTime(log.created_at)}
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-orange/10 text-brand-orange text-xs font-semibold">
-                            <AuditAvatarContent log={log} iconClassName="h-4 w-4" />
-                          </div>
+          <>
+            <ScrollBox>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-40">Timestamp</TableHead>
+                    <TableHead>User</TableHead>
+                    <TableHead>Action</TableHead>
+                    <TableHead>Module</TableHead>
+                    <TableHead className="min-w-[200px]">
+                      Description
+                    </TableHead>
+                    <TableHead className="w-12" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {logs.map((log) => {
+                    const actionColor = ACTION_COLOR[log.action] ?? "";
+                    return (
+                      <TableRow
+                        key={log.id}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={async () => {
+                          setSelectedLog(log);
+                          try {
+                            const fresh = await auditService.detail(log.id);
+                            if (fresh) setSelectedLog(fresh);
+                          } catch {
+                            // Keep the list row data if detail fetch fails
+                          }
+                        }}
+                      >
+                        <TableCell>
                           <div>
-                            <p className="text-sm font-medium">
-                              {auditUserName(log)}
+                            <p className="text-sm">
+                              {formatDate(log.created_at)}
                             </p>
-                            <p className="text-xs text-muted-foreground capitalize">
-                              {auditUserRole(log)}
+                            <p className="text-xs text-muted-foreground">
+                              {formatTime(log.created_at)}
                             </p>
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={cn(actionColor)}
-                        >
-                          {auditActionLabel(log.action)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-sm">
-                          {auditModuleLabel(log)}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <p className="text-sm text-muted-foreground truncate max-w-xs">
-                          {auditDescription(log)}
-                        </p>
-                      </TableCell>
-                      <TableCell>
-                        <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-orange/10 text-brand-orange text-xs font-semibold">
+                              <AuditAvatarContent log={log} iconClassName="h-4 w-4" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium">
+                                {auditUserName(log)}
+                              </p>
+                              <p className="text-xs text-muted-foreground capitalize">
+                                {auditUserRole(log)}
+                              </p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={cn(actionColor)}
+                          >
+                            {auditActionLabel(log.action)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm">
+                            {auditModuleLabel(log)}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <p className="text-sm text-muted-foreground truncate max-w-xs">
+                            {auditDescription(log)}
+                          </p>
+                        </TableCell>
+                        <TableCell>
+                          <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  {logs.length === 0 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={6}
+                        className="h-24 text-center text-muted-foreground"
+                      >
+                        {loadRestriction ??
+                          (hasFilters
+                            ? "No audit logs match these filters."
+                            : "No audit logs found.")}
                       </TableCell>
                     </TableRow>
-                  );
-                })}
-                {logs.length === 0 && (
-                  <TableRow>
-                    <TableCell
-                      colSpan={6}
-                      className="h-24 text-center text-muted-foreground"
-                    >
-                      {loadRestriction ??
-                        (hasFilters
-                          ? "No audit logs match these filters."
-                          : "No audit logs found.")}
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                  )}
+                </TableBody>
+              </Table>
+            </ScrollBox>
             {/*
               An audit log only grows, so this paginates rather than draining:
               there is no page count at which "fetch everything" stops being a
@@ -736,7 +740,7 @@ function AuditTrailContent() {
               onPageChange={setPage}
               onPerPageChange={changePerPage}
             />
-          </div>
+          </>
           )}
         </CardContent>
       </Card>
@@ -751,14 +755,14 @@ function AuditTrailContent() {
           }}
         />
       )}
-    </div>
+    </PageFill>
   );
 }
 
 /** The Audit Trail in place of its logs, for a user the API would refuse them to. */
 function AuditTrailRestricted({ message }: { message: string }) {
   return (
-    <div className="space-y-6">
+    <PageFill>
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Audit Trail</h1>
         <p className="text-muted-foreground">
@@ -776,7 +780,7 @@ function AuditTrailRestricted({ message }: { message: string }) {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </PageFill>
   );
 }
 
