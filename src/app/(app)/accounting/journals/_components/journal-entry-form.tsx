@@ -100,8 +100,8 @@ export function JournalEntryForm({ initial, onSave, saveLabel, cancel }: Journal
   // fields scroll inside, and the server's totals and the Save bar stay pinned
   // at the foot. Inside another scroll box it is a plain stack.
   return (
-    <div className={cn(FIT_CLASSES.section, "gap-4")}>
-      <ScrollBox className="space-y-6 p-px fit:space-y-4">
+    <div className={cn(FIT_CLASSES.section, "gap-4 fit:gap-3")}>
+      <ScrollBox className="space-y-6 p-px fit:space-y-3">
         {/*
           A picker missing rows reads as "that account does not exist", and an
           account the chart drain never reached cannot be posted to at all.
@@ -181,7 +181,7 @@ export function JournalEntryForm({ initial, onSave, saveLabel, cancel }: Journal
         </Card>
 
         <Card>
-          <CardContent className="space-y-4 pt-6 fit:pt-0">
+          <CardContent className="space-y-4 pt-6 fit:space-y-3 fit:pt-0">
             <JournalLineRows
               lines={draft.lines}
               accounts={postable}
@@ -201,7 +201,7 @@ export function JournalEntryForm({ initial, onSave, saveLabel, cancel }: Journal
       {/* At fit the totals and the buttons share one row, so the lines keep the height. */}
       <div
         data-fab-clear
-        className="flex shrink-0 flex-col gap-4 border-t pt-4 fit:flex-row fit:items-center fit:gap-6"
+        className="flex shrink-0 flex-col gap-4 border-t pt-4 fit:flex-row fit:items-center fit:gap-6 fit:pt-3"
       >
         <div className="min-w-0 fit:flex-1">
           <JournalBalancePanel preview={preview} failed={failed} onRetry={retry} />

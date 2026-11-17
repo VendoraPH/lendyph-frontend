@@ -36,7 +36,7 @@ function NewJournalEntryContent() {
   };
 
   return (
-    <PageFill>
+    <PageFill className="gap-4">
       <AccountingPageHeader
         title="New Journal Entry"
         description="Saves as a draft. Nothing moves in the books until it is posted."
