@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { DataState } from "@/components/common/data-state";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { TablePagination } from "@/components/common/table-pagination";
 import { useReminderTestModeContext } from "@/components/reminders/test-mode";
 import { useApiResource } from "@/hooks";
@@ -42,7 +43,7 @@ function StatusFilter({
     ...STATUSES.map((s) => ({ key: s, label: options[s].label, count: stats ? (stats[s] ?? 0) : null })),
   ];
   return (
-    <div className="-mx-1 overflow-x-auto">
+    <div className="-mx-1 shrink-0 overflow-x-auto">
       <div className="flex min-w-max gap-1 px-1" role="group" aria-label="Filter the queue by status">
         {tabs.map((t) => (
           <button
@@ -72,7 +73,7 @@ export default function ReminderQueuePage() {
   const { testMode } = useReminderTestModeContext();
 
   return (
-    <div className="space-y-4">
+    <div className={cn(FIT_CLASSES.section, "gap-4")}>
       <ReminderFilters value={filters} onChange={setFilters} dates="range" />
       <StatusFilter
         value={filters.status}
@@ -88,7 +89,7 @@ export default function ReminderQueuePage() {
         emptyMessage="No reminders match these filters."
       >
         {(res) => (
-          <div className="space-y-3">
+          <div className={cn(FIT_CLASSES.section, "gap-3")}>
             <QueueTable items={res.data} testMode={testMode} />
             <TablePagination
               page={res.meta.current_page}

@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { Pencil, Plus } from "lucide-react";
 import { DataState } from "@/components/common/data-state";
+import { ScrollBox } from "@/components/common/page-fill";
 import { PermissionButton } from "@/components/common/permission-button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -15,6 +16,8 @@ import {
 } from "@/components/ui/table";
 import { useApiResource, usePermission } from "@/hooks";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 import {
   CONTACT_HOURS_LIMIT,
   DEFAULT_RULES,
@@ -91,7 +94,7 @@ export default function ReminderRulesPage() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className={cn(FIT_CLASSES.section, "gap-4")}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">
           Rules decide when reminders go out. A rule never sends for an installment that is already paid.
@@ -116,77 +119,81 @@ export default function ReminderRulesPage() {
       >
         {(rows) =>
           rows.length === 0 ? (
-            <SuggestedRules onUse={(draft) => setDialog({ rule: null, draft })} />
+            <ScrollBox className="p-px">
+              <SuggestedRules onUse={(draft) => setDialog({ rule: null, draft })} />
+            </ScrollBox>
           ) : (
-            <div className="overflow-x-auto rounded-xl border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Rule</TableHead>
-                    <TableHead>Schedule</TableHead>
-                    <TableHead>Template</TableHead>
-                    <TableHead>Applies to</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.map((rule) => {
-                    // Every-branch rules need `branches:view_all` (403 otherwise).
-                    const lock = ruleLockReason(rule, viewAll);
-                    const write = lock ? ("branches:view_all" as const) : ("reminders:settings" as const);
-                    return (
-                      <TableRow key={rule.id}>
-                        <TableCell className="font-medium">{rule.name}</TableCell>
-                        <TableCell className="text-sm">{describeRule(rule)}</TableCell>
-                        <TableCell className="text-sm">{TEMPLATE_TYPE_LABELS[rule.template_type]}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {[
-                            rule.branch_name ?? "All branches",
-                            rule.loan_product_name ?? "All products",
-                            BORROWER_TYPE_LABELS[rule.borrower_type],
-                          ].join(" · ")}
-                        </TableCell>
-                        <TableCell>
-                          {rule.is_active ? (
-                            <Badge variant="outline" className="border-green-200 bg-green-100 text-green-700 dark:border-green-800 dark:bg-green-500/15 dark:text-green-400">
-                              Active
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-muted-foreground">
-                              Inactive
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right whitespace-nowrap">
-                          <PermissionButton
-                            permission={write}
-                            tooltip={lock ?? undefined}
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setDialog({ rule })}
-                          >
-                            <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
-                          </PermissionButton>
-                          {rule.is_active && (
+            <div className={cn("rounded-xl border bg-card", FIT_CLASSES.section)}>
+              <ScrollBox>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Rule</TableHead>
+                      <TableHead>Schedule</TableHead>
+                      <TableHead>Template</TableHead>
+                      <TableHead>Applies to</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {rows.map((rule) => {
+                      // Every-branch rules need `branches:view_all` (403 otherwise).
+                      const lock = ruleLockReason(rule, viewAll);
+                      const write = lock ? ("branches:view_all" as const) : ("reminders:settings" as const);
+                      return (
+                        <TableRow key={rule.id}>
+                          <TableCell className="min-w-32 whitespace-normal font-medium">{rule.name}</TableCell>
+                          <TableCell className="min-w-48 whitespace-normal text-sm">{describeRule(rule)}</TableCell>
+                          <TableCell className="text-sm">{TEMPLATE_TYPE_LABELS[rule.template_type]}</TableCell>
+                          <TableCell className="min-w-48 whitespace-normal text-sm text-muted-foreground">
+                            {[
+                              rule.branch_name ?? "All branches",
+                              rule.loan_product_name ?? "All products",
+                              BORROWER_TYPE_LABELS[rule.borrower_type],
+                            ].join(" · ")}
+                          </TableCell>
+                          <TableCell>
+                            {rule.is_active ? (
+                              <Badge variant="outline" className="border-green-200 bg-green-100 text-green-700 dark:border-green-800 dark:bg-green-500/15 dark:text-green-400">
+                                Active
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-muted-foreground">
+                                Inactive
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right whitespace-nowrap">
                             <PermissionButton
                               permission={write}
                               tooltip={lock ?? undefined}
                               size="sm"
                               variant="ghost"
-                              className="text-destructive"
-                              disabled={deactivating === rule.id}
-                              onClick={() => deactivate(rule)}
+                              onClick={() => setDialog({ rule })}
                             >
-                              {deactivating === rule.id ? "Deactivating…" : "Deactivate"}
+                              <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
                             </PermissionButton>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                            {rule.is_active && (
+                              <PermissionButton
+                                permission={write}
+                                tooltip={lock ?? undefined}
+                                size="sm"
+                                variant="ghost"
+                                className="text-destructive"
+                                disabled={deactivating === rule.id}
+                                onClick={() => deactivate(rule)}
+                              >
+                                {deactivating === rule.id ? "Deactivating…" : "Deactivate"}
+                              </PermissionButton>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </ScrollBox>
             </div>
           )
         }

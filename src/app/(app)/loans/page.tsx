@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef, useLayoutEffect } from "react";
 import { RouteGuard, PermissionGate, TablePagination } from "@/components/common";
 import { NoBranchBanner } from "@/components/common/no-branch-banner";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { AutoPayToggleDialog } from "@/components/auto-pay-toggle-dialog";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
@@ -22,6 +23,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { formatDateISO } from "@/lib/format";
 import type { Loan, LoanProduct } from "@/types/loan";
 import { LoanTable } from "./_components/loan-table";
@@ -98,15 +100,15 @@ function StatCard({
           : "hover:border-brand-orange/40 hover:shadow-sm",
       )}
     >
-      <div className="py-4 px-6">
+      <div className="py-4 px-6 fit:px-4 fit:py-2.5">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs font-medium text-muted-foreground">{label}</p>
-            <p className={cn("text-2xl font-bold", valueClassName)}>
+            <p className={cn("text-2xl font-bold fit:text-xl", valueClassName)}>
               {value ?? "—"}
             </p>
           </div>
-          <div className={cn("rounded-full p-2.5", iconBg)}>{icon}</div>
+          <div className={cn("rounded-full p-2.5 fit:p-2", iconBg)}>{icon}</div>
         </div>
       </div>
     </button>
@@ -395,7 +397,7 @@ function LoansContent() {
   );
 
   return (
-    <div className="space-y-6">
+    <PageFill className="gap-4 fit:gap-3">
       <NoBranchBanner />
       {/* Header */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -463,15 +465,15 @@ function LoansContent() {
         />
       </div>
 
-      {/* Status Filter Tabs */}
-      <div className="flex flex-wrap gap-2">
+      {/* Status Filter Tabs: one row at fit, scrolling sideways if it must. */}
+      <div className="flex flex-wrap gap-2 fit:shrink-0 fit:flex-nowrap fit:overflow-x-auto fit:p-px">
         {FILTER_TABS.map((t) => (
           <button
             key={t.value}
             type="button"
             onClick={() => handleTabChange(t.value)}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-all",
+              "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-all fit:py-1",
               tab === t.value
                 ? "border-brand-orange bg-brand-orange/5 text-brand-orange ring-1 ring-brand-orange"
                 : "border-border text-muted-foreground hover:border-brand-orange/40 hover:bg-muted/50",
@@ -499,26 +501,26 @@ function LoansContent() {
       </div>
 
       {/* Data Table */}
-      <Card>
-        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <Card className={cn(FIT_CLASSES.section, "fit:gap-3 fit:py-3")}>
+        {/* The title and the filters share a row on wide screens, so the
+            table keeps the height. */}
+        <CardHeader className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-6">
           <CardTitle className="text-sm font-medium">
             Loan Applications{countsKnown ? ` (${total})` : ""}
           </CardTitle>
+          <LoanFilters
+            search={searchDraft}
+            onSearchChange={setSearchDraft}
+            productId={productId}
+            onProductChange={handleProductChange}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onDateRangeChange={handleDateRangeChange}
+            productOptions={productOptions}
+            productsLoading={productsLoading}
+          />
         </CardHeader>
-        <CardContent>
-          <div className="mb-4">
-            <LoanFilters
-              search={searchDraft}
-              onSearchChange={setSearchDraft}
-              productId={productId}
-              onProductChange={handleProductChange}
-              dateFrom={dateFrom}
-              dateTo={dateTo}
-              onDateRangeChange={handleDateRangeChange}
-              productOptions={productOptions}
-              productsLoading={productsLoading}
-            />
-          </div>
+        <CardContent className={FIT_CLASSES.section}>
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Spinner className="size-6 text-brand-orange" />
@@ -541,20 +543,22 @@ function LoansContent() {
             </div>
           ) : (
             <>
-              <LoanTable
-                loans={loans}
-                sort={{ key: sortKey, dir: sortDir }}
-                onSortChange={handleSortChange}
-                onRowClick={(id) => router.push(`/loans/${id}`)}
-                onAutoPayClick={(loan) =>
-                  setAutoPayTarget({
-                    loanId: loan.id,
-                    loanAccountNumber: loan.loan_account_number,
-                    enabled: loan.auto_pay_enabled ?? false,
-                    cbsReference: loan.auto_pay_cbs_reference,
-                  })
-                }
-              />
+              <ScrollBox>
+                <LoanTable
+                  loans={loans}
+                  sort={{ key: sortKey, dir: sortDir }}
+                  onSortChange={handleSortChange}
+                  onRowClick={(id) => router.push(`/loans/${id}`)}
+                  onAutoPayClick={(loan) =>
+                    setAutoPayTarget({
+                      loanId: loan.id,
+                      loanAccountNumber: loan.loan_account_number,
+                      enabled: loan.auto_pay_enabled ?? false,
+                      cbsReference: loan.auto_pay_cbs_reference,
+                    })
+                  }
+                />
+              </ScrollBox>
               <TablePagination
                 page={page}
                 perPage={perPage}
@@ -592,7 +596,7 @@ function LoansContent() {
           }}
         />
       )}
-    </div>
+    </PageFill>
   );
 }
 

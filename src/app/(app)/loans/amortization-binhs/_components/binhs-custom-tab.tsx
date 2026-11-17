@@ -1,6 +1,8 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 import type { BinhsScenario } from "@/lib/binhs";
 import { BinhsScheduleTable } from "./binhs-schedule-table";
 
@@ -18,8 +20,8 @@ export function BinhsCustomTab({ scenario, paidFlags, onTogglePaid, onMarkAll, e
   const disabled = paidFlags.length === 0;
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className={cn(FIT_CLASSES.section, "gap-3")}>
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
         <Button type="button" variant="outline" size="sm" onClick={() => onMarkAll(true)} disabled={disabled}>
           Mark all paid
         </Button>

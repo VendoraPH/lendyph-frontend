@@ -2,6 +2,7 @@
 
 import { AlertCircle, RefreshCw } from "lucide-react";
 import { PermissionButton } from "@/components/common/permission-button";
+import { ScrollBox } from "@/components/common/page-fill";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -180,7 +181,8 @@ export function LedgerTable({
   const totalCols = hasScb ? 18 : 15;
   const closing: LedgerBalancesView = ledger.closing;
   return (
-    <div className="overflow-x-auto">
+    // Its own box at fit, so the headings and the closing balance stay in view.
+    <ScrollBox className="fit:max-h-[min(32rem,calc(100dvh-23rem))]">
       {failed && (
         <div role="alert" className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2 text-xs text-destructive">
           <span className="flex items-center gap-1.5">
@@ -201,7 +203,7 @@ export function LedgerTable({
       )}
       <table className="w-full border-collapse text-xs">
         <thead>
-          <tr className="border-b bg-muted/50 text-center font-semibold uppercase tracking-wide text-muted-foreground">
+          <tr className="border-b bg-muted/50 text-center font-semibold uppercase tracking-wide text-muted-foreground [&>th]:bg-[color-mix(in_oklab,var(--muted)_50%,var(--card))]!">
             <th rowSpan={2} className="border-r px-3 py-2 text-left align-middle">Date</th>
             <th rowSpan={2} className="border-r px-3 py-2 align-middle">Ref No</th>
             <th rowSpan={2} className="border-r px-3 py-2 text-left align-middle">Entry</th>
@@ -213,7 +215,8 @@ export function LedgerTable({
             <th rowSpan={2} className="border-r px-3 py-2 align-middle">Amount Paid</th>
             <th rowSpan={2} className="px-3 py-2 text-left align-middle">Remarks</th>
           </tr>
-          <tr className="border-b bg-muted/30 text-center text-muted-foreground">
+          {/* Pinned under the first heading row (24 px tall). */}
+          <tr className="border-b bg-muted/30 text-center text-muted-foreground [&>th]:top-6! [&>th]:bg-[color-mix(in_oklab,var(--muted)_30%,var(--card))]!">
             {Array.from({ length: hasScb ? 4 : 3 }, (_, i) => (
               <ComponentHeads key={i} />
             ))}
@@ -241,7 +244,7 @@ export function LedgerTable({
           )}
         </tbody>
         <tfoot>
-          <tr className="border-t-2 bg-muted/30">
+          <tr className="border-t-2 bg-muted/30 [&>td]:bg-[color-mix(in_oklab,var(--muted)_30%,var(--card))]!">
             <td colSpan={3} className="border-r px-3 py-2 text-left font-semibold">Closing balance</td>
             <ClosingBalance value={closing.principal} />
             <ClosingBalance value={closing.interest} />
@@ -253,7 +256,7 @@ export function LedgerTable({
           </tr>
         </tfoot>
       </table>
-    </div>
+    </ScrollBox>
   );
 }
 

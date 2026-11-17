@@ -87,7 +87,8 @@ export function FiltersStep({ onPreview, loading }: FiltersStepProps) {
     (allProducts || selectedProductIds.length > 0);
 
   return (
-    <div className="space-y-6">
+    // Full width: the products and the date range sit side by side from md.
+    <div className="grid items-start gap-6 md:grid-cols-2">
       {/* Products */}
       <div className="space-y-2">
         <Label className="text-sm font-semibold">Loan Products</Label>
@@ -199,7 +200,7 @@ export function FiltersStep({ onPreview, loading }: FiltersStepProps) {
       </div>
 
       <Button
-        className="w-full bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+        className="w-full bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark md:col-span-2 md:w-auto md:justify-self-end"
         onClick={handlePreview}
         disabled={!canPreview || loading}
       >

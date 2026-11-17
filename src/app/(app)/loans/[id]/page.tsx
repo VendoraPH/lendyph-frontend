@@ -187,6 +187,7 @@ import { LOAN_ADJUSTMENT_CREATE_GATE, recordPaymentGate } from "@/lib/lending-wr
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { CollapsibleCard } from "@/components/common/collapsible-card";
+import { PageFill, PageLoader, ScrollBox } from "@/components/common/page-fill";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -1475,11 +1476,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
   }, [recordPaymentOpen, loan, paymentAmount, paymentDate, canViewPayments, paymentPreviewRound]);
 
   if (loading) {
-    return (
-      <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
-        <Spinner className="size-6 text-muted-foreground" />
-      </div>
-    );
+    return <PageLoader />;
   }
 
   if (!loan) {
@@ -2357,7 +2354,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
   );
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       {/* Header */}
       <div className="space-y-4">
         <Link
@@ -2419,1583 +2416,1587 @@ function LoanDetail({ loanId }: { loanId: number }) {
         </div>
       </div>
 
+      {/* The header stays put; the loan's cards scroll under it. Dialogs sit
+          outside the box. */}
+      <ScrollBox className="space-y-6 p-px">
+        <LoanCollateralsCard
+          loanId={loan.id}
+          summary={loan.collateral_summary ?? null}
+        />
 
-      <LoanCollateralsCard
-        loanId={loan.id}
-        summary={loan.collateral_summary ?? null}
-      />
-
-      {/* The chain is over for `rejected` and `void` loans — a voided draft used
-          to keep rendering its orphaned chain, complete with a "pending" step on
-          a loan struck from the record. While the chain is loading or
-          unreadable the card still renders, saying which: an empty card would
-          read as "nobody has approved anything". */}
-      {!isApprovalChainHidden(loan.status) &&
-        (approvalLoading ||
-          approvalUnavailable ||
-          approvalSteps.length > 0 ||
-          // A DRAFT has no chain yet — it is seeded on submit — but the only
-          // "Submit for Approval" control lives inside this card, so suppressing
-          // it here left a draft with no way into the chain at all: the chain
-          // seeds on submit, and submit needed the chain. Any draft not
-          // auto-submitted by /loans/new was unrecoverable.
-          loan.status === "draft" ||
-          // Past draft the rows should exist. Empty here means they are
-          // missing, not unwritten — say so rather than rendering nothing,
-          // which reads as "this loan has no approval process".
-          loanShouldHaveAChain(loan.status)) && (
-        <Collapsible open={approvalStepsOpen} onOpenChange={setApprovalStepsOpen}>
-          <Card>
-            <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
-              <CollapsibleTrigger className="w-full text-left group/trigger">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
-                  Loan Approval Process
-                  <Badge variant="outline" className="text-xs font-normal">
-                    {approvalLoading
-                      ? "Loading..."
-                      : approvalUnavailable
-                        ? "Unavailable"
-                        : allStepsApproved
-                          ? "Complete"
-                          : currentStep
-                            ? `Step ${currentStepIndex + 1} of ${approvalSteps.length}`
-                            : approvalSteps.length === 0
-                              ? loan.status === "draft"
-                                ? "Not submitted"
-                                : "No steps found"
-                              : `${approvalSteps.length} steps`}
-                  </Badge>
-                  <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-aria-expanded/trigger:rotate-180 shrink-0" />
-                </CardTitle>
-              </CollapsibleTrigger>
-              {approvalRounds.length > 0 && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Revision {approvalRounds.length + 1} — previously sent back{" "}
-                  {approvalRounds.length} time{approvalRounds.length !== 1 ? "s" : ""}
-                </p>
-              )}
-            </CardHeader>
-            <CollapsibleContent>
-              <CardContent className="space-y-5">
-            {approvalLoading && (
-              <div
-                className="flex items-center gap-2 text-xs text-muted-foreground"
-                role="status"
-                aria-live="polite"
-              >
-                <Spinner className="h-4 w-4" />
-                Loading the approval chain&hellip;
-              </div>
-            )}
-
-            {/* The read failed — 404 while the endpoint is still shipping, or a
-                loan whose chain was never seeded. Says so rather than drawing a
-                chain from `loans.status`: a chain assembled in the browser is a
-                claim about who signed off that nobody can check, which is the
-                whole reason this moved off localStorage. */}
-            {!approvalLoading && approvalUnavailable && (
-              <div className="rounded-lg border border-dashed bg-muted/30 p-3 flex items-start gap-2">
-                <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                <div className="text-xs">
-                  <p className="font-medium">Approval chain unavailable</p>
-                  <p className="text-muted-foreground mt-0.5">
-                    We couldn&rsquo;t load the approval steps for this loan. Reload the
-                    page to try again — approvals are recorded on the server, so
-                    nothing has been lost.
+        {/* The chain is over for `rejected` and `void` loans — a voided draft used
+            to keep rendering its orphaned chain, complete with a "pending" step on
+            a loan struck from the record. While the chain is loading or
+            unreadable the card still renders, saying which: an empty card would
+            read as "nobody has approved anything". */}
+        {!isApprovalChainHidden(loan.status) &&
+          (approvalLoading ||
+            approvalUnavailable ||
+            approvalSteps.length > 0 ||
+            // A DRAFT has no chain yet — it is seeded on submit — but the only
+            // "Submit for Approval" control lives inside this card, so suppressing
+            // it here left a draft with no way into the chain at all: the chain
+            // seeds on submit, and submit needed the chain. Any draft not
+            // auto-submitted by /loans/new was unrecoverable.
+            loan.status === "draft" ||
+            // Past draft the rows should exist. Empty here means they are
+            // missing, not unwritten — say so rather than rendering nothing,
+            // which reads as "this loan has no approval process".
+            loanShouldHaveAChain(loan.status)) && (
+          <Collapsible open={approvalStepsOpen} onOpenChange={setApprovalStepsOpen}>
+            <Card>
+              <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
+                <CollapsibleTrigger className="w-full text-left group/trigger">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+                    Loan Approval Process
+                    <Badge variant="outline" className="text-xs font-normal">
+                      {approvalLoading
+                        ? "Loading..."
+                        : approvalUnavailable
+                          ? "Unavailable"
+                          : allStepsApproved
+                            ? "Complete"
+                            : currentStep
+                              ? `Step ${currentStepIndex + 1} of ${approvalSteps.length}`
+                              : approvalSteps.length === 0
+                                ? loan.status === "draft"
+                                  ? "Not submitted"
+                                  : "No steps found"
+                                : `${approvalSteps.length} steps`}
+                    </Badge>
+                    <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-aria-expanded/trigger:rotate-180 shrink-0" />
+                  </CardTitle>
+                </CollapsibleTrigger>
+                {approvalRounds.length > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Revision {approvalRounds.length + 1} — previously sent back{" "}
+                    {approvalRounds.length} time{approvalRounds.length !== 1 ? "s" : ""}
                   </p>
+                )}
+              </CardHeader>
+              <CollapsibleContent>
+                <CardContent className="space-y-5">
+              {approvalLoading && (
+                <div
+                  className="flex items-center gap-2 text-xs text-muted-foreground"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <Spinner className="h-4 w-4" />
+                  Loading the approval chain&hellip;
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* A draft has no chain yet — it is seeded on submit — so this is
-                the one place Submit for Approval can live. It used to sit inside
-                the active-step panel, which needs a `currentStep` that a draft
-                by definition does not have, so the card was suppressed and the
-                loan had no way in. */}
-            {!approvalLoading && !approvalUnavailable && approvalSteps.length === 0
-              && loan.status === "draft" && (
-              <div className="rounded-lg border border-dashed bg-muted/30 p-3 space-y-3">
-                <div className="flex items-start gap-2">
+              {/* The read failed — 404 while the endpoint is still shipping, or a
+                  loan whose chain was never seeded. Says so rather than drawing a
+                  chain from `loans.status`: a chain assembled in the browser is a
+                  claim about who signed off that nobody can check, which is the
+                  whole reason this moved off localStorage. */}
+              {!approvalLoading && approvalUnavailable && (
+                <div className="rounded-lg border border-dashed bg-muted/30 p-3 flex items-start gap-2">
                   <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
                   <div className="text-xs">
-                    <p className="font-medium">Not yet submitted</p>
+                    <p className="font-medium">Approval chain unavailable</p>
                     <p className="text-muted-foreground mt-0.5">
-                      The approval chain is created when this loan is submitted for
-                      approval. Nobody can sign off on it until then.
+                      We couldn&rsquo;t load the approval steps for this loan. Reload the
+                      page to try again — approvals are recorded on the server, so
+                      nothing has been lost.
                     </p>
                   </div>
                 </div>
-                {canSubmitDraft && (
-                  <ForwardToPicker
-                    key={`forward-${loan.id}-draft`}
-                    loanId={loan.id}
-                    stepKey={forwardKey}
-                    readCandidates={readForwardCandidates}
-                    value={forwardTo}
-                    onChange={handleForwardChange}
-                    disabled={stepActionLoading}
-                    error={forwardErrorMessage}
-                  />
-                )}
-                {/* Void and Edit live in the submit-step panel below, which a
-                    never-submitted draft never reaches — so without these the
-                    draft could not be submitted, edited OR voided from its own
-                    page. */}
-                <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-                  {canVoidLoan && (
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      className="w-full sm:w-auto"
-                      disabled={actionLoading}
-                      onClick={handleVoidLoan}
-                    >
-                      <Ban className="mr-2 h-4 w-4" />
-                      Void Loan
-                    </Button>
-                  )}
-                  {canEditLoanApplication && loan && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full sm:w-auto"
-                      disabled={stepActionLoading}
-                      nativeButton={false}
-                      render={<Link href={`/loans/new?edit=${loan.id}`} />}
-                    >
-                      <Pencil className="mr-2 h-4 w-4" />
-                      Edit Loan Application
-                    </Button>
-                  )}
-                  {canSubmitDraft && (
-                    <Button
-                      size="sm"
-                      className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                      disabled={stepActionLoading}
-                      onClick={handleStepSubmit}
-                    >
-                      {stepActionLoading ? "Submitting…" : "Submit for Approval"}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            )}
+              )}
 
-            {/* Past draft, the rows should already exist. Empty means missing,
-                not unwritten. The server answers 200 with empty arrays either
-                way, so the hook cannot tell them apart — the loan's own status
-                is what distinguishes them. */}
-            {!approvalLoading && !approvalUnavailable && approvalSteps.length === 0
-              && loanShouldHaveAChain(loan.status) && (
-              <div className="rounded-lg border border-dashed bg-muted/30 p-3 flex items-start gap-2">
-                <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                <div className="text-xs">
-                  <p className="font-medium">Approval chain unavailable</p>
-                  <p className="text-muted-foreground mt-0.5">
-                    This loan is {LOAN_STATUS_LABELS[loan.status] ?? loan.status}, but its approval
-                    steps could not be found. Approvals are recorded on the server —
-                    ask an administrator to check this loan rather than re-approving
-                    it.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Horizontal progress tracker — every step at a glance.
-                The step awaiting action is marked with an orange ring. */}
-            {approvalSteps.length > 0 && (
-            <div className="rounded-lg border bg-muted/20 p-3">
-              <div className="flex items-center gap-1 overflow-x-auto pb-1">
-                {approvalSteps.map((step, i) => {
-                  const state = approvalStepState(step.status);
-                  const isCurrent = state === "current";
-                  const isDone = state === "done";
-                  const isSentBack = state === "sent_back";
-                  // Closed when the loan was voided: neutral, never the waiting circle.
-                  const isCancelled = state === "cancelled";
-                  const isLast = i === approvalSteps.length - 1;
-                  return (
-                    <div
-                      key={`mini-${step.index}`}
-                      className="flex items-center shrink-0"
-                    >
-                      <div className="flex flex-col items-center gap-1 min-w-[68px]">
-                        <div
-                          className={cn(
-                            "h-7 w-7 rounded-full flex items-center justify-center shrink-0 text-white text-[10px] font-semibold transition-all",
-                            isCurrent && "bg-brand-orange ring-4 ring-brand-orange/20 scale-110",
-                            isDone && "bg-green-600",
-                            isSentBack && "bg-red-500",
-                            isCancelled && "border border-dashed border-muted-foreground/40 bg-background text-muted-foreground",
-                            state === "waiting" && "bg-muted text-muted-foreground"
-                          )}
-                        >
-                          {isDone ? (
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                          ) : isCancelled ? (
-                            <CircleSlash className="h-3.5 w-3.5" aria-hidden="true" />
-                          ) : isSentBack ? (
-                            <XCircle className="h-3.5 w-3.5" />
-                          ) : isCurrent ? (
-                            step.kind === "submit" ? (
-                              <Send className="h-3.5 w-3.5" />
-                            ) : step.kind === "release" ? (
-                              <Unlock className="h-3.5 w-3.5" />
-                            ) : (
-                              <Clock className="h-3.5 w-3.5" />
-                            )
-                          ) : (
-                            <span>{i + 1}</span>
-                          )}
-                        </div>
-                        <span
-                          className={cn(
-                            "text-[10px] text-center leading-tight font-medium",
-                            isCurrent && "text-brand-orange",
-                            isDone && "text-green-700",
-                            isSentBack && "text-red-700",
-                            (isCancelled || state === "waiting") && "text-muted-foreground"
-                          )}
-                        >
-                          {step.name}
-                          {isCancelled && (
-                            <span className="block font-normal">
-                              Cancelled
-                            </span>
-                          )}
-                          {!isCancelled && assignedToText(step) && (
-                            <span className="block font-normal text-muted-foreground">
-                              {assignedToText(step)}
-                            </span>
-                          )}
-                        </span>
-                      </div>
-                      {!isLast && (
-                        <div
-                          className={cn(
-                            "h-0.5 w-4 mx-0.5 shrink-0 transition-colors",
-                            isDone ? "bg-green-600" : "bg-muted"
-                          )}
-                        />
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            )}
-
-            {/* Previous revision rounds (collapsed summary) */}
-            {approvalRounds.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  Previous Revisions
-                </p>
-                {approvalRounds.map((round) => {
-                  // Any step kind can close a round, a release step included
-                  // (an approved restructure sent back before release).
-                  const view = revisionRoundView(round);
-                  return (
-                    <div
-                      key={round.round}
-                      className="rounded-lg border border-dashed bg-muted/30 p-3"
-                    >
-                      <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <Badge variant="outline" className="text-[10px] h-4 px-1.5">
-                          Round {round.round}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          {view.heading} ·{" "}
-                          {round.sent_back_at ? formatDateTime(round.sent_back_at) : "—"}
-                        </span>
-                      </div>
-                      {view.remarks !== null && (
-                        <p className="text-xs italic text-muted-foreground pl-2 border-l-2 border-red-400/40 mb-2">
-                          &ldquo;{view.remarks}&rdquo;
-                        </p>
-                      )}
-                      <div className="flex flex-wrap gap-1">
-                        {view.badges.map((badge) => (
-                          <Badge
-                            key={badge.key}
-                            variant="outline"
-                            className={cn(
-                              "text-[10px] h-4 px-1.5",
-                              badge.outcome === "approved"
-                                ? "bg-green-500/10 text-green-700 border-green-500/30"
-                                : "bg-red-500/10 text-red-700 border-red-500/30"
-                            )}
-                          >
-                            {badge.text}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            {/* Current step action panel — matches the original screenshot
-                design. Phase header (DRAFT / APPROVAL CHAIN / RELEASE) above,
-                then the orange-bordered step card with inline "You are acting
-                as X" section, remarks textarea, and action buttons. */}
-            {currentStep && canActOnCurrentStep && (
-              <div>
-                {/* Phase header */}
-                <div className="flex items-center gap-2 mb-2">
-                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    {currentStep.kind === "submit"
-                      ? "Draft Preparation"
-                      : currentStep.kind === "release"
-                        ? "Release"
-                        : "Approval Chain"}
-                  </p>
-                  <div className="flex-1 h-px bg-border" />
-                </div>
-
-                {/* Step card with orange border */}
-                <div className="rounded-lg border border-brand-orange/40 bg-brand-orange/5 overflow-hidden">
-                  {/* Header row */}
-                  <div className="flex items-center gap-3 p-3">
-                    <div className="h-9 w-9 rounded-full bg-brand-orange text-white flex items-center justify-center shrink-0">
-                      {currentStep.kind === "submit" ? (
-                        <Send className="h-4 w-4" />
-                      ) : currentStep.kind === "release" ? (
-                        <Unlock className="h-4 w-4" />
-                      ) : (
-                        <Clock className="h-4 w-4" />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-bold">{currentStep.name}</p>
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] px-1.5 py-0 h-4 bg-brand-orange/10 text-brand-orange border-brand-orange/30"
-                        >
-                          Pending your action
-                        </Badge>
-                        {currentStepIsMine && (
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] px-1.5 py-0 h-4"
-                          >
-                            Forwarded to you
-                          </Badge>
-                        )}
-                      </div>
+              {/* A draft has no chain yet — it is seeded on submit — so this is
+                  the one place Submit for Approval can live. It used to sit inside
+                  the active-step panel, which needs a `currentStep` that a draft
+                  by definition does not have, so the card was suppressed and the
+                  loan had no way in. */}
+              {!approvalLoading && !approvalUnavailable && approvalSteps.length === 0
+                && loan.status === "draft" && (
+                <div className="rounded-lg border border-dashed bg-muted/30 p-3 space-y-3">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                    <div className="text-xs">
+                      <p className="font-medium">Not yet submitted</p>
+                      <p className="text-muted-foreground mt-0.5">
+                        The approval chain is created when this loan is submitted for
+                        approval. Nobody can sign off on it until then.
+                      </p>
                     </div>
                   </div>
+                  {canSubmitDraft && (
+                    <ForwardToPicker
+                      key={`forward-${loan.id}-draft`}
+                      loanId={loan.id}
+                      stepKey={forwardKey}
+                      readCandidates={readForwardCandidates}
+                      value={forwardTo}
+                      onChange={handleForwardChange}
+                      disabled={stepActionLoading}
+                      error={forwardErrorMessage}
+                    />
+                  )}
+                  {/* Void and Edit live in the submit-step panel below, which a
+                      never-submitted draft never reaches — so without these the
+                      draft could not be submitted, edited OR voided from its own
+                      page. */}
+                  <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                    {canVoidLoan && (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="w-full sm:w-auto"
+                        disabled={actionLoading}
+                        onClick={handleVoidLoan}
+                      >
+                        <Ban className="mr-2 h-4 w-4" />
+                        Void Loan
+                      </Button>
+                    )}
+                    {canEditLoanApplication && loan && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full sm:w-auto"
+                        disabled={stepActionLoading}
+                        nativeButton={false}
+                        render={<Link href={`/loans/new?edit=${loan.id}`} />}
+                      >
+                        <Pencil className="mr-2 h-4 w-4" />
+                        Edit Loan Application
+                      </Button>
+                    )}
+                    {canSubmitDraft && (
+                      <Button
+                        size="sm"
+                        className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                        disabled={stepActionLoading}
+                        onClick={handleStepSubmit}
+                      >
+                        {stepActionLoading ? "Submitting…" : "Submit for Approval"}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
 
-                  {/* Divider */}
-                  <div className="h-px bg-brand-orange/20" />
+              {/* Past draft, the rows should already exist. Empty means missing,
+                  not unwritten. The server answers 200 with empty arrays either
+                  way, so the hook cannot tell them apart — the loan's own status
+                  is what distinguishes them. */}
+              {!approvalLoading && !approvalUnavailable && approvalSteps.length === 0
+                && loanShouldHaveAChain(loan.status) && (
+                <div className="rounded-lg border border-dashed bg-muted/30 p-3 flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                  <div className="text-xs">
+                    <p className="font-medium">Approval chain unavailable</p>
+                    <p className="text-muted-foreground mt-0.5">
+                      This loan is {LOAN_STATUS_LABELS[loan.status] ?? loan.status}, but its approval
+                      steps could not be found. Approvals are recorded on the server —
+                      ask an administrator to check this loan rather than re-approving
+                      it.
+                    </p>
+                  </div>
+                </div>
+              )}
 
-                  {/* Action body */}
-                  <div className="p-4 space-y-3">
-                    <div>
-                      <p className="text-xs font-semibold">
-                        You are acting as{" "}
-                        <span className="text-brand-orange">{currentStep.name}</span>
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Signed in as {currentUserDisplayName}
-                        {currentStep.kind === "submit" &&
-                          " — submit the draft to forward it to the Manager for approval."}
-                        {currentStep.kind === "approve" &&
-                          (!isConfirmationStep && nextStep
-                            ? ` — on approve, the loan will be forwarded to ${
-                                nextStep.name
-                              }.${
-                                sendBackTargets.length > 1
-                                  ? " You may send it back to any earlier step for revision."
-                                  : " Send back for revision to return it to the Loan Processor."
-                              }`
-                            : ` — this is the final approver. Approve to forward for release${
-                                sendBackTargets.length > 1
-                                  ? ", or send the loan back to any earlier step for revision."
-                                  : "."
-                              }`)}
-                        {currentStep.kind === "release" &&
-                          " — open the release dialog to complete the loan release."}
-                      </p>
-                      {!clientCanActOnCurrentStep && (
-                        <p
-                          className="text-xs text-amber-700 dark:text-amber-400 mt-1"
-                          role="status"
-                        >
-                          {currentStepForwardedElsewhere ? (
-                            <>
-                              This step was forwarded to{" "}
-                              <span className="font-medium">{currentStep.assigned_to?.name}</span>
-                              , so the actions below are disabled.
-                            </>
-                          ) : (
-                            <>
-                              Your signed-in roles don&rsquo;t include{" "}
-                              <span className="font-medium">{roleLabel(currentStep.role)}</span>
-                              , so the actions below are disabled. Sign in again if your
-                              access changed recently.
-                            </>
+              {/* Horizontal progress tracker — every step at a glance.
+                  The step awaiting action is marked with an orange ring. */}
+              {approvalSteps.length > 0 && (
+              <div className="rounded-lg border bg-muted/20 p-3">
+                <div className="flex items-center gap-1 overflow-x-auto pb-1">
+                  {approvalSteps.map((step, i) => {
+                    const state = approvalStepState(step.status);
+                    const isCurrent = state === "current";
+                    const isDone = state === "done";
+                    const isSentBack = state === "sent_back";
+                    // Closed when the loan was voided: neutral, never the waiting circle.
+                    const isCancelled = state === "cancelled";
+                    const isLast = i === approvalSteps.length - 1;
+                    return (
+                      <div
+                        key={`mini-${step.index}`}
+                        className="flex items-center shrink-0"
+                      >
+                        <div className="flex flex-col items-center gap-1 min-w-[68px]">
+                          <div
+                            className={cn(
+                              "h-7 w-7 rounded-full flex items-center justify-center shrink-0 text-white text-[10px] font-semibold transition-all",
+                              isCurrent && "bg-brand-orange ring-4 ring-brand-orange/20 scale-110",
+                              isDone && "bg-green-600",
+                              isSentBack && "bg-red-500",
+                              isCancelled && "border border-dashed border-muted-foreground/40 bg-background text-muted-foreground",
+                              state === "waiting" && "bg-muted text-muted-foreground"
+                            )}
+                          >
+                            {isDone ? (
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                            ) : isCancelled ? (
+                              <CircleSlash className="h-3.5 w-3.5" aria-hidden="true" />
+                            ) : isSentBack ? (
+                              <XCircle className="h-3.5 w-3.5" />
+                            ) : isCurrent ? (
+                              step.kind === "submit" ? (
+                                <Send className="h-3.5 w-3.5" />
+                              ) : step.kind === "release" ? (
+                                <Unlock className="h-3.5 w-3.5" />
+                              ) : (
+                                <Clock className="h-3.5 w-3.5" />
+                              )
+                            ) : (
+                              <span>{i + 1}</span>
+                            )}
+                          </div>
+                          <span
+                            className={cn(
+                              "text-[10px] text-center leading-tight font-medium",
+                              isCurrent && "text-brand-orange",
+                              isDone && "text-green-700",
+                              isSentBack && "text-red-700",
+                              (isCancelled || state === "waiting") && "text-muted-foreground"
+                            )}
+                          >
+                            {step.name}
+                            {isCancelled && (
+                              <span className="block font-normal">
+                                Cancelled
+                              </span>
+                            )}
+                            {!isCancelled && assignedToText(step) && (
+                              <span className="block font-normal text-muted-foreground">
+                                {assignedToText(step)}
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        {!isLast && (
+                          <div
+                            className={cn(
+                              "h-0.5 w-4 mx-0.5 shrink-0 transition-colors",
+                              isDone ? "bg-green-600" : "bg-muted"
+                            )}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              )}
+
+              {/* Previous revision rounds (collapsed summary) */}
+              {approvalRounds.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Previous Revisions
+                  </p>
+                  {approvalRounds.map((round) => {
+                    // Any step kind can close a round, a release step included
+                    // (an approved restructure sent back before release).
+                    const view = revisionRoundView(round);
+                    return (
+                      <div
+                        key={round.round}
+                        className="rounded-lg border border-dashed bg-muted/30 p-3"
+                      >
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <Badge variant="outline" className="text-[10px] h-4 px-1.5">
+                            Round {round.round}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {view.heading} ·{" "}
+                            {round.sent_back_at ? formatDateTime(round.sent_back_at) : "—"}
+                          </span>
+                        </div>
+                        {view.remarks !== null && (
+                          <p className="text-xs italic text-muted-foreground pl-2 border-l-2 border-red-400/40 mb-2">
+                            &ldquo;{view.remarks}&rdquo;
+                          </p>
+                        )}
+                        <div className="flex flex-wrap gap-1">
+                          {view.badges.map((badge) => (
+                            <Badge
+                              key={badge.key}
+                              variant="outline"
+                              className={cn(
+                                "text-[10px] h-4 px-1.5",
+                                badge.outcome === "approved"
+                                  ? "bg-green-500/10 text-green-700 border-green-500/30"
+                                  : "bg-red-500/10 text-red-700 border-red-500/30"
+                              )}
+                            >
+                              {badge.text}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {/* Current step action panel — matches the original screenshot
+                  design. Phase header (DRAFT / APPROVAL CHAIN / RELEASE) above,
+                  then the orange-bordered step card with inline "You are acting
+                  as X" section, remarks textarea, and action buttons. */}
+              {currentStep && canActOnCurrentStep && (
+                <div>
+                  {/* Phase header */}
+                  <div className="flex items-center gap-2 mb-2">
+                    <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      {currentStep.kind === "submit"
+                        ? "Draft Preparation"
+                        : currentStep.kind === "release"
+                          ? "Release"
+                          : "Approval Chain"}
+                    </p>
+                    <div className="flex-1 h-px bg-border" />
+                  </div>
+
+                  {/* Step card with orange border */}
+                  <div className="rounded-lg border border-brand-orange/40 bg-brand-orange/5 overflow-hidden">
+                    {/* Header row */}
+                    <div className="flex items-center gap-3 p-3">
+                      <div className="h-9 w-9 rounded-full bg-brand-orange text-white flex items-center justify-center shrink-0">
+                        {currentStep.kind === "submit" ? (
+                          <Send className="h-4 w-4" />
+                        ) : currentStep.kind === "release" ? (
+                          <Unlock className="h-4 w-4" />
+                        ) : (
+                          <Clock className="h-4 w-4" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-bold">{currentStep.name}</p>
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] px-1.5 py-0 h-4 bg-brand-orange/10 text-brand-orange border-brand-orange/30"
+                          >
+                            Pending your action
+                          </Badge>
+                          {currentStepIsMine && (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] px-1.5 py-0 h-4"
+                            >
+                              Forwarded to you
+                            </Badge>
                           )}
-                        </p>
-                      )}
+                        </div>
+                      </div>
                     </div>
 
-                    {currentStep.kind !== "release" && (
-                      <div className="space-y-1.5">
-                        <Label htmlFor="current-step-remarks" className="text-xs">
-                          {currentStep.kind === "submit"
-                            ? "Processing notes (optional)"
-                            : "Remarks"}{" "}
-                          <span className="text-muted-foreground font-normal">
-                            {currentStep.kind === "approve"
-                              ? "(required for send-back)"
-                              : ""}
-                          </span>
-                        </Label>
-                        <Textarea
-                          id="current-step-remarks"
-                          placeholder={
-                            currentStep.kind === "submit"
-                              ? "Any notes for the approvers..."
-                              : `${currentStep.name}: enter your remarks...`
-                          }
-                          value={stepRemarks}
-                          onChange={(e) => setStepRemarks(e.target.value)}
-                          className="min-h-[80px] text-sm bg-background"
-                        />
+                    {/* Divider */}
+                    <div className="h-px bg-brand-orange/20" />
+
+                    {/* Action body */}
+                    <div className="p-4 space-y-3">
+                      <div>
+                        <p className="text-xs font-semibold">
+                          You are acting as{" "}
+                          <span className="text-brand-orange">{currentStep.name}</span>
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Signed in as {currentUserDisplayName}
+                          {currentStep.kind === "submit" &&
+                            " — submit the draft to forward it to the Manager for approval."}
+                          {currentStep.kind === "approve" &&
+                            (!isConfirmationStep && nextStep
+                              ? ` — on approve, the loan will be forwarded to ${
+                                  nextStep.name
+                                }.${
+                                  sendBackTargets.length > 1
+                                    ? " You may send it back to any earlier step for revision."
+                                    : " Send back for revision to return it to the Loan Processor."
+                                }`
+                              : ` — this is the final approver. Approve to forward for release${
+                                  sendBackTargets.length > 1
+                                    ? ", or send the loan back to any earlier step for revision."
+                                    : "."
+                                }`)}
+                          {currentStep.kind === "release" &&
+                            " — open the release dialog to complete the loan release."}
+                        </p>
+                        {!clientCanActOnCurrentStep && (
+                          <p
+                            className="text-xs text-amber-700 dark:text-amber-400 mt-1"
+                            role="status"
+                          >
+                            {currentStepForwardedElsewhere ? (
+                              <>
+                                This step was forwarded to{" "}
+                                <span className="font-medium">{currentStep.assigned_to?.name}</span>
+                                , so the actions below are disabled.
+                              </>
+                            ) : (
+                              <>
+                                Your signed-in roles don&rsquo;t include{" "}
+                                <span className="font-medium">{roleLabel(currentStep.role)}</span>
+                                , so the actions below are disabled. Sign in again if your
+                                access changed recently.
+                              </>
+                            )}
+                          </p>
+                        )}
                       </div>
-                    )}
 
-                    {currentStep.kind !== "release" && clientCanActOnCurrentStep && (
-                      <ForwardToPicker
-                        key={`forward-${loan.id}-${currentStep.id}`}
-                        loanId={loan.id}
-                        stepKey={forwardKey}
-                        readCandidates={readForwardCandidates}
-                        value={forwardTo}
-                        onChange={handleForwardChange}
-                        disabled={stepActionLoading}
-                        error={forwardErrorMessage}
-                      />
-                    )}
+                      {currentStep.kind !== "release" && (
+                        <div className="space-y-1.5">
+                          <Label htmlFor="current-step-remarks" className="text-xs">
+                            {currentStep.kind === "submit"
+                              ? "Processing notes (optional)"
+                              : "Remarks"}{" "}
+                            <span className="text-muted-foreground font-normal">
+                              {currentStep.kind === "approve"
+                                ? "(required for send-back)"
+                                : ""}
+                            </span>
+                          </Label>
+                          <Textarea
+                            id="current-step-remarks"
+                            placeholder={
+                              currentStep.kind === "submit"
+                                ? "Any notes for the approvers..."
+                                : `${currentStep.name}: enter your remarks...`
+                            }
+                            value={stepRemarks}
+                            onChange={(e) => setStepRemarks(e.target.value)}
+                            className="min-h-[80px] text-sm bg-background"
+                          />
+                        </div>
+                      )}
 
-                    <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-                      {currentStep.kind === "submit" && (
-                        <>
-                          {canVoidLoan && (
+                      {currentStep.kind !== "release" && clientCanActOnCurrentStep && (
+                        <ForwardToPicker
+                          key={`forward-${loan.id}-${currentStep.id}`}
+                          loanId={loan.id}
+                          stepKey={forwardKey}
+                          readCandidates={readForwardCandidates}
+                          value={forwardTo}
+                          onChange={handleForwardChange}
+                          disabled={stepActionLoading}
+                          error={forwardErrorMessage}
+                        />
+                      )}
+
+                      <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                        {currentStep.kind === "submit" && (
+                          <>
+                            {canVoidLoan && (
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                className="w-full sm:w-auto"
+                                disabled={actionLoading}
+                                onClick={handleVoidLoan}
+                              >
+                                <Ban className="mr-2 h-4 w-4" />
+                                Void Loan
+                              </Button>
+                            )}
+                            {canEditLoanApplication && loan && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full sm:w-auto"
+                                disabled={stepActionLoading}
+                                nativeButton={false}
+                                render={<Link href={`/loans/new?edit=${loan.id}`} />}
+                              >
+                                <Pencil className="mr-2 h-4 w-4" />
+                                Edit Loan Application
+                              </Button>
+                            )}
                             <Button
-                              variant="destructive"
                               size="sm"
-                              className="w-full sm:w-auto"
-                              disabled={actionLoading}
-                              onClick={handleVoidLoan}
+                              className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                              onClick={handleStepSubmit}
+                              disabled={stepActionLoading || !clientCanActOnCurrentStep}
                             >
-                              <Ban className="mr-2 h-4 w-4" />
-                              Void Loan
+                              <Send className="mr-2 h-4 w-4" />
+                              Submit for Approval
                             </Button>
-                          )}
-                          {canEditLoanApplication && loan && (
+                          </>
+                        )}
+                        {currentStep.kind === "approve" && (
+                          <>
+                            {sendBackTargets.length > 1 && (
+                              <div className="flex items-center gap-2 w-full sm:w-auto">
+                                <Label
+                                  htmlFor="send-back-target"
+                                  className="text-xs text-muted-foreground whitespace-nowrap"
+                                >
+                                  Send back to
+                                </Label>
+                                <Select
+                                  items={sendBackTargetItems}
+                                  value={String(sendBackTargetIndex)}
+                                  onValueChange={(v) =>
+                                    setSendBackTargetIndex(Number(v))
+                                  }
+                                  disabled={stepActionLoading}
+                                >
+                                  <SelectTrigger
+                                    id="send-back-target"
+                                    className="h-9 w-full sm:w-[180px] text-xs"
+                                  >
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {sendBackTargets.map((t) => (
+                                      <SelectItem
+                                        key={t.index}
+                                        value={String(t.index)}
+                                      >
+                                        {t.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            )}
                             <Button
                               variant="outline"
                               size="sm"
-                              className="w-full sm:w-auto"
-                              disabled={stepActionLoading}
-                              nativeButton={false}
-                              render={<Link href={`/loans/new?edit=${loan.id}`} />}
+                              className="w-full sm:w-auto border-red-500/30 text-red-700 hover:bg-red-50 dark:text-red-400"
+                              onClick={() =>
+                                handleStepSendBack(
+                                  sendBackTargets.length > 1
+                                    ? sendBackTargetIndex
+                                    : sendBackTargets[0]?.index ?? 0
+                                )
+                              }
+                              disabled={
+                                stepActionLoading ||
+                                !stepRemarks.trim() ||
+                                !clientCanActOnCurrentStep ||
+                                sendBackTargets.length === 0
+                              }
                             >
-                              <Pencil className="mr-2 h-4 w-4" />
-                              Edit Loan Application
+                              <XCircle className="mr-2 h-4 w-4" />
+                              Send Back for Revision
                             </Button>
-                          )}
+                            <Button
+                              size="sm"
+                              className="w-full sm:w-auto bg-green-600 text-white hover:bg-green-700"
+                              onClick={handleStepApprove}
+                              disabled={stepActionLoading || !clientCanActOnCurrentStep}
+                            >
+                              <CheckCircle2 className="mr-2 h-4 w-4" />
+                              {isConfirmationStep ? "Confirm & Forward" : "Approve & Forward"}
+                            </Button>
+                          </>
+                        )}
+                        {currentStep.kind === "release" && (
                           <Button
                             size="sm"
                             className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                            onClick={handleStepSubmit}
+                            onClick={handleStepRelease}
                             disabled={stepActionLoading || !clientCanActOnCurrentStep}
                           >
-                            <Send className="mr-2 h-4 w-4" />
-                            Submit for Approval
+                            <Unlock className="mr-2 h-4 w-4" />
+                            Release Loan
                           </Button>
-                        </>
-                      )}
-                      {currentStep.kind === "approve" && (
-                        <>
-                          {sendBackTargets.length > 1 && (
-                            <div className="flex items-center gap-2 w-full sm:w-auto">
-                              <Label
-                                htmlFor="send-back-target"
-                                className="text-xs text-muted-foreground whitespace-nowrap"
-                              >
-                                Send back to
-                              </Label>
-                              <Select
-                                items={sendBackTargetItems}
-                                value={String(sendBackTargetIndex)}
-                                onValueChange={(v) =>
-                                  setSendBackTargetIndex(Number(v))
-                                }
-                                disabled={stepActionLoading}
-                              >
-                                <SelectTrigger
-                                  id="send-back-target"
-                                  className="h-9 w-full sm:w-[180px] text-xs"
-                                >
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {sendBackTargets.map((t) => (
-                                    <SelectItem
-                                      key={t.index}
-                                      value={String(t.index)}
-                                    >
-                                      {t.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          )}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full sm:w-auto border-red-500/30 text-red-700 hover:bg-red-50 dark:text-red-400"
-                            onClick={() =>
-                              handleStepSendBack(
-                                sendBackTargets.length > 1
-                                  ? sendBackTargetIndex
-                                  : sendBackTargets[0]?.index ?? 0
-                              )
-                            }
-                            disabled={
-                              stepActionLoading ||
-                              !stepRemarks.trim() ||
-                              !clientCanActOnCurrentStep ||
-                              sendBackTargets.length === 0
-                            }
-                          >
-                            <XCircle className="mr-2 h-4 w-4" />
-                            Send Back for Revision
-                          </Button>
-                          <Button
-                            size="sm"
-                            className="w-full sm:w-auto bg-green-600 text-white hover:bg-green-700"
-                            onClick={handleStepApprove}
-                            disabled={stepActionLoading || !clientCanActOnCurrentStep}
-                          >
-                            <CheckCircle2 className="mr-2 h-4 w-4" />
-                            {isConfirmationStep ? "Confirm & Forward" : "Approve & Forward"}
-                          </Button>
-                        </>
-                      )}
-                      {currentStep.kind === "release" && (
-                        <Button
-                          size="sm"
-                          className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                          onClick={handleStepRelease}
-                          disabled={stepActionLoading || !clientCanActOnCurrentStep}
-                        >
-                          <Unlock className="mr-2 h-4 w-4" />
-                          Release Loan
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* "Not your turn" message — current step exists but current user lacks the required role */}
-            {currentStep && !canActOnCurrentStep && (
-              <div className="rounded-lg border bg-muted/40 p-3">
-                <div className="flex items-start gap-2">
-                  <Clock className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                  <div className="text-xs">
-                    <p className="font-medium">
-                      Waiting for{" "}
-                      {currentStep.assigned_to
-                        ? `${currentStep.assigned_to.name} (${currentStep.name})`
-                        : currentStep.name}{" "}
-                      {currentStep.kind === "submit"
-                        ? "to submit the draft"
-                        : currentStep.kind === "release"
-                          ? "to release the loan"
-                          : "to approve"}
-                    </p>
-                    <p className="text-muted-foreground mt-0.5">
-                      {currentStep.assigned_to ? (
-                        <>
-                          This step was forwarded to{" "}
-                          <span className="font-medium">{currentStep.assigned_to.name}</span>
-                          , who acts on it with the{" "}
-                          <span className="font-medium">{roleLabel(currentStep.role)}</span>{" "}
-                          role. You are signed in as{" "}
-                        </>
-                      ) : (
-                        <>
-                          Only users with the{" "}
-                          <span className="font-medium">{roleLabel(currentStep.role)}</span>{" "}
-                          role can act on this step. You are signed in as{" "}
-                        </>
-                      )}
-                      {currentUserDisplayName}
-                      {currentUser?.roles && currentUser.roles.length > 0
-                        ? ` (${currentUser.roles.map((role) => roleLabel(role)).join(", ")})`
-                        : " (no role assigned)"}
-                      .
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {readyForRelease(loan.status, allStepsApproved) && (
-              <div className="rounded-lg border border-green-200 bg-green-50 p-3 flex items-start gap-2 dark:border-green-800/40 dark:bg-green-900/10">
-                <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
-                <p className="text-sm text-green-700 dark:text-green-400">
-                  All approvers have signed off. The loan is ready for release.
-                </p>
-              </div>
-            )}
-              </CardContent>
-            </CollapsibleContent>
-          </Card>
-        </Collapsible>
-      )}
-
-      {loan.status === "rejected" && (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4 space-y-2">
-              <div className="flex items-center gap-2">
-                <Ban className="h-5 w-5 text-red-600" />
-                <span className="font-semibold text-red-700">
-                  Loan Rejected
-                </span>
-              </div>
-              <p className="text-sm text-red-600">
-                Rejected by{" "}
-                <span className="font-medium">{loan.rejected_by ?? "—"}</span> on{" "}
-                {loan.rejected_at ? formatDateTime(loan.rejected_at) : "N/A"}
-              </p>
-              {loan.rejection_remarks && (
-                <p className="text-sm text-red-600 italic">
-                  &ldquo;{loan.rejection_remarks}&rdquo;
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Policy Exception Banner */}
-      {loan.policy_exception && (
-        <Card className="border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-900/10">
-          <CardContent className="py-4">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-              <div className="flex-1 space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-amber-700 dark:text-amber-400">Policy Exception</span>
-                  <Badge variant="outline" className="bg-amber-500/10 text-amber-700 border-amber-500/30 text-xs">
-                    Full BOD Approval Required
-                  </Badge>
-                </div>
-                {loan.policy_exception_details && (
-                  <p className="text-sm text-amber-700/80 dark:text-amber-300/80">
-                    {loan.policy_exception_details}
-                  </p>
-                )}
-                {loan.policy_exception_letter && (
-                  <a
-                    href={loan.policy_exception_letter}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-xs text-brand-orange hover:underline"
-                  >
-                    <FileText className="h-3.5 w-3.5" />
-                    View Policy Exception Letter
-                  </a>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Loan Details Cards */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Card 1: Loan Information */}
-        <CollapsibleCard
-          title="Loan Information"
-          icon={<FileText className="h-4 w-4 text-muted-foreground" />}
-          contentClassName="space-y-4"
-        >
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground">
-                  Application Number
-                </p>
-                <p className="text-sm font-medium font-mono">
-                  {loan.application_number}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Loan Product</p>
-                <p className="text-sm font-medium">
-                  {loanProductName || "N/A"}
-                </p>
-              </div>
-              {loan.purpose && (
-                <div className="col-span-2">
-                  <p className="text-xs text-muted-foreground">Purpose</p>
-                  <p className="text-sm font-medium">{loan.purpose}</p>
-                </div>
-              )}
-            </div>
-
-            <Separator />
-
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  Principal Amount
-                  {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
-                </p>
-                <p className="text-sm font-semibold">
-                  {formatCurrency(loan.principal_amount)}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  Interest Amount
-                  {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
-                </p>
-                <p className="text-sm font-semibold">
-                  {loanInterestAmount === null ? "—" : formatCurrency(loanInterestAmount)}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  Interest Rate
-                  {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
-                </p>
-                <p className="text-sm font-medium">
-                  {rateWithPeriod(loan.interest_rate, loan.interest_rate_frequency)}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  Interest Type
-                  {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
-                </p>
-                <p className="text-sm font-medium">
-                  {loanInterestType ? interestMethodLabel(loanInterestType) : "N/A"}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  Term
-                  {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
-                </p>
-                <p className="text-sm font-medium">
-                  {loanTermLabel}
-                </p>
-              </div>
-              {(loan.scb_amount ?? 0) > 0 && (
-                <div>
-                  <p className="text-xs text-muted-foreground">
-                    Share Capital Build-Up
-                  </p>
-                  <p className="text-sm font-semibold">
-                    {storedSchedule.length > 0
-                      ? currencyOrDash(storedScheduleTotals.shareCapitalBuildUp)
-                      : "—"}
-                  </p>
-                </div>
-              )}
-              <div>
-                <p className="text-xs text-muted-foreground">
-                  Payment Frequency
-                </p>
-                <p className="text-sm font-medium">
-                  {(PAYMENT_FREQUENCY_LABELS[loanFrequency as keyof typeof PAYMENT_FREQUENCY_LABELS] ?? loanFrequency) || "N/A"}
-                </p>
-              </div>
-              {/* The penalty terms the loan was created with, from the server. */}
-              {env.features.penaltyConfigs && (
-                <div>
-                  <p className="text-xs text-muted-foreground">Penalty</p>
-                  <PenaltyTerms loan={loan} className="font-medium" />
-                </div>
-              )}
-            </div>
-
-            <Separator />
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground">Total Payable</p>
-                <p className="text-sm font-semibold">
-                  {currencyOrDash(loanTotalPayable)}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Contract Total</p>
-                <p className="text-sm font-semibold">{currencyOrDash(loanContractTotal)}</p>
-              </div>
-              {/* A restructure pays nothing out: what is collected from the
-                  member and Paid out, in place of Net Proceeds. Each figure
-                  is the server's (the preview before release, the loan's
-                  own after), a dash when it sent none. */}
-              {proceedsFigures(!!loan.is_restructure, {
-                totalDeductions: cardPreview
-                  ? cardPreview.status === "loaded"
-                    ? cardPreview.preview.total_deductions
-                    : null
-                  : loan.total_deductions,
-                netProceeds: cardPreview
-                  ? cardPreview.status === "loaded"
-                    ? cardPreview.preview.net_proceeds
-                    : null
-                  : loan.net_proceeds,
-                restructure:
-                  cardSource === "release-preview" && releasePreview.status === "loaded"
-                    ? releasePreview.preview.restructure
-                    : null,
-              }).map((figure) => (
-                <div key={figure.label}>
-                  <p className="text-xs text-muted-foreground">{figure.label}</p>
-                  <p className="text-sm font-semibold">{currencyOrDash(figure.amount)}</p>
-                  {cardEstimated && (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Estimated until release
-                    </p>
-                  )}
-                </div>
-              ))}
-              {/* Insurance premium left unpaid at release: part of the
-                  server's Total Payable, collected before anything else. */}
-              {insuranceOwed !== null && (
-                <div className="col-span-2">
-                  <p className="text-xs text-muted-foreground">{INSURANCE_OWED_LABEL}</p>
-                  <p className="text-sm font-semibold">{formatCurrency(insuranceOwed)}</p>
-                </div>
-              )}
-            </div>
-
-            <Separator />
-
-            {/* Deductions */}
-            <div className="space-y-3">
-              <div className="flex items-baseline justify-between gap-2">
-                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Deductions</p>
-                {cardEstimated && (
-                  <p className="text-xs text-muted-foreground">Estimated until release</p>
-                )}
-              </div>
-              {/* Before release: what the release will withhold, as the server
-                  works it out with the Release dialog's own code. */}
-              {cardPreview ? (
-                cardPreview.status === "loaded" ? (
-                  cardPreview.preview.deductions.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No fees will be withheld.</p>
-                  ) : cardPreview.preview.deductions.map((item, index) => (
-                    <div key={`${item.name}-${index}`} className="flex items-center justify-between gap-4">
-                      <span className="text-sm text-muted-foreground">
-                        {item.name}
-                        {item.fee_id != null && <span className="ml-1.5 text-xs">from Fees settings</span>}
-                        <FormulaSnapshot item={item} />
-                      </span>
-                      <span className="text-sm font-medium">{formatCurrencyExact(item.amount)}</span>
-                    </div>
-                  ))
-                ) : cardPreview.status === "loading" ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Spinner className="size-4" />
-                    Getting the release figures…
-                  </div>
-                ) : (
-                  <div role="alert" className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm text-destructive">{cardPreview.message}</p>
-                    <Button type="button" variant="outline" size="sm" onClick={reloadCardPreview}>
-                      Try again
-                    </Button>
-                  </div>
-                )
-              ) : (() => {
-                // Render every backend-computed deduction as its own line —
-                // including configured fees like "Insurance Premium" — so
-                // product-specific fees aren't silently folded into "Other".
-                const named = deductionsArray
-                  .filter((d) => (d?.name ?? "").trim() && Number(d.amount ?? 0) !== 0)
-                  .map((d) => ({ label: d.name as string, amount: Number(d.amount ?? 0), snapshot: d }));
-                // The server's unitemised remainder, signed; its own line when not 0.
-                const other = Number(loan.unitemised_deductions ?? 0);
-                const rows = named.length > 0
-                  ? named
-                  : [
-                      { label: "Processing Fee", amount: loanProcessingFee },
-                      { label: "Service Fee", amount: loanServiceFee },
-                    ];
-                return (
-                  <>
-                    {rows.map((r) => (
-                      <div key={r.label} className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">
-                          {r.label}
-                          {"snapshot" in r && <FormulaSnapshot item={r.snapshot} />}
-                        </span>
-                        <span className="text-sm font-medium">{formatCurrency(r.amount)}</span>
-                      </div>
-                    ))}
-                    {other !== 0 && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Other Deductions</span>
-                        <span className="text-sm font-medium">{formatCurrency(other)}</span>
-                      </div>
-                    )}
-                  </>
-                );
-              })()}
-              <Separator />
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold">Total Deductions</span>
-                <span className="text-sm font-semibold">
-                  {cardPreview
-                    ? cardPreview.status === "loaded"
-                      ? formatCurrencyExact(cardPreview.preview.total_deductions)
-                      : "—"
-                    : currencyOrDash(loan.total_deductions)}
-                </span>
-              </div>
-            </div>
-        </CollapsibleCard>
-
-        {/* Card 2: Borrower's Active Loans */}
-        <BorrowerActiveLoans
-          loans={borrowerLoans}
-          loading={borrowerLoansLoading}
-          truncated={borrowerLoansTruncated}
-          approvalSteps={approvalSteps}
-          approvalRounds={approvalRounds}
-          loanStatus={loan.status}
-          loan={loan}
-        />
-
-        {/* Card 3: Member & Co-Maker */}
-        <Collapsible open={memberCoMakerOpen} onOpenChange={setMemberCoMakerOpen}>
-          <Card>
-            <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
-              <CollapsibleTrigger className="w-full text-left group/trigger">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <UserCheck className="h-4 w-4 text-muted-foreground" />
-                  Member & Co-Maker
-                  <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-aria-expanded/trigger:rotate-180 shrink-0" />
-                </CardTitle>
-              </CollapsibleTrigger>
-            </CardHeader>
-            <CollapsibleContent>
-              <CardContent className="space-y-4">
-            <div>
-              <p className="text-xs text-muted-foreground">Member</p>
-              <p className="text-sm font-medium">
-                {loanBorrowerName || "N/A"}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">
-                Co-Maker{loanCoMakers.length > 1 ? "s" : ""}
-              </p>
-              {loanCoMakers.length === 0 ? (
-                <p className="text-sm font-medium">None</p>
-              ) : (
-                <ul className="space-y-0.5">
-                  {loanCoMakers.map((cm) => (
-                    <li key={cm.id} className="text-sm font-medium">
-                      {coMakerName(cm) || "—"}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <Separator />
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-xs text-muted-foreground">Account Officer (AO)</p>
-                {!aoEditing && canUpdateLoan && (
-                  <button
-                    type="button"
-                    onClick={() => setAoEditing(true)}
-                    className="text-xs text-brand-orange hover:underline flex items-center gap-1"
-                  >
-                    <Pencil className="h-3 w-3" />
-                    {loan.account_officer_id ? "Change" : "Assign"}
-                  </button>
-                )}
-              </div>
-              {aoEditing ? (
-                <div className="space-y-2">
-                  <StaffPicker
-                    aria-label="Account officer"
-                    value={loan.account_officer ?? null}
-                    onChange={(officer) => {
-                      if (officer) handleSaveAO(officer.id);
-                    }}
-                    disabled={aoSaving}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setAoEditing(false)}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              ) : (
-                <p className="text-sm font-medium">
-                  {loan.account_officer?.full_name ?? "Not assigned"}
-                </p>
-              )}
-            </div>
-              </CardContent>
-            </CollapsibleContent>
-          </Card>
-        </Collapsible>
-
-        {/* Share Capital — current balance for the loan's member */}
-        <ShareCapitalCard
-          borrowerId={loan.borrower?.id ?? loan.borrower_id ?? null}
-          version={shareCapitalVersion}
-        />
-
-        {/* Auto-Pay Status Card: the loans the backend's toggle accepts
-            (Loan::ACTIVE_STATUSES, released and ongoing), which both read
-            "Current". */}
-        {["released", "ongoing", "current"].includes(loan.status) && (
-          <CollapsibleCard
-            title="Auto-Pay"
-            headerExtra={
-              loan.auto_pay_enabled ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-300">
-                  ● Enabled
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/50 px-2.5 py-0.5 text-xs text-muted-foreground">
-                  ○ Disabled
-                </span>
-              )
-            }
-            contentClassName="space-y-3 text-sm"
-          >
-              {loan.auto_pay_enabled && (
-                <>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">CBS Reference</span>
-                    <span className="font-mono font-medium">
-                      {loan.auto_pay_cbs_reference ?? "—"}
-                    </span>
-                  </div>
-                  {loan.auto_pay_enabled_at && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Enabled on</span>
-                      <span>{formatDate(loan.auto_pay_enabled_at)}</span>
-                    </div>
-                  )}
-                </>
-              )}
-              <PermissionButton
-                permission="auto_pay:toggle"
-                tooltip="Turning Auto-Pay on or off needs permission to manage Auto-Pay"
-                variant="outline"
-                size="sm"
-                className="w-full"
-                wrapperClassName="w-full"
-                onClick={() => {
-                  setAutoPayIsPostRelease(false);
-                  setAutoPayDialogOpen(true);
-                }}
-              >
-                {loan.auto_pay_enabled ? "Disable Auto-Pay" : "Enable Auto-Pay"}
-              </PermissionButton>
-          </CollapsibleCard>
-        )}
-
-        {/* Card 4: Workflow History */}
-        <Collapsible open={workflowHistoryOpen} onOpenChange={setWorkflowHistoryOpen}>
-          <Card>
-            <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
-              <CollapsibleTrigger className="w-full text-left group/trigger">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  Workflow History
-                  <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-aria-expanded/trigger:rotate-180 shrink-0" />
-                </CardTitle>
-              </CollapsibleTrigger>
-            </CardHeader>
-            <CollapsibleContent>
-              <CardContent>
-                <WorkflowHistory loan={loan} rounds={approvalRounds} steps={approvalSteps} />
-              </CardContent>
-            </CollapsibleContent>
-          </Card>
-        </Collapsible>
-      </div>
-
-      {/* Release Details — only for released+ loans */}
-      {isLocked && loan.release_date && (
-        <CollapsibleCard
-          icon={<Unlock className="h-4 w-4 text-cyan-600" />}
-          title={
-            <>
-              Release Details
-              {loanSummary && (
-                <Badge variant="outline" className="text-[10px] bg-green-500/10 text-green-700 border-green-500/30">
-                  Server-verified
-                </Badge>
-              )}
-            </>
-          }
-          headerExtra={
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleOpenStatementOfAccount}
-            >
-              <FileText className="mr-2 h-4 w-4" />
-              Statement of Account
-            </Button>
-          }
-        >
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground">Release Date</p>
-                <p className="text-sm font-medium">{formatDate(loan.release_date)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Release Method</p>
-                <p className="text-sm font-medium">{loanReleaseMethod.method}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Release Reference</p>
-                <p className="text-sm font-medium break-all">{loanReleaseMethod.reference}</p>
-              </div>
-              {loan.maturity_date && (
-                <div>
-                  <p className="text-xs text-muted-foreground">Maturity Date</p>
-                  <p className="text-sm font-medium">{formatDate(loan.maturity_date)}</p>
-                </div>
-              )}
-              <div>
-                <p className="text-xs text-muted-foreground">Next Due Date</p>
-                <p className="text-sm font-medium">
-                  {(() => {
-                    // Upon-maturity loans have a single payment due at maturity,
-                    // so the next due date IS the maturity date — never a
-                    // monthly increment off the release date.
-                    const isUponMaturity =
-                      loanFrequency === "upon_maturity" ||
-                      loan.interest_method === "upon_maturity" ||
-                      loan.interest_type === "upon_maturity";
-                    const nextDue = isUponMaturity
-                      ? loan.maturity_date ?? loanSummary?.next_due_date ?? loan.next_due_date
-                      : loanSummary?.next_due_date ?? loan.next_due_date;
-                    return nextDue ? formatDate(nextDue) : "—";
-                  })()}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Outstanding Balance</p>
-                <p className="text-sm font-semibold">{currencyOrDash(loanTotalOutstanding)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Principal Balance</p>
-                <p className="text-sm font-medium">{currencyOrDash(loanPrincipalBalance)}</p>
-              </div>
-            </div>
-            {loanSummary && (
-              <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t">
-                <div>
-                  <p className="text-xs text-muted-foreground">Total Paid</p>
-                  <p className="text-sm font-medium">{currencyOrDash(loanSummary.total_repaid)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Principal Paid</p>
-                  <p className="text-sm font-medium">{currencyOrDash(loanSummary.principal_paid)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Interest Paid</p>
-                  <p className="text-sm font-medium">{currencyOrDash(loanSummary.interest_paid)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Overdue (incl. penalty)</p>
-                  <p className="text-sm font-semibold text-red-600">
-                    {currencyOrDash(loanSummary.overdue_amount)}
-                  </p>
-                  <PenaltyMonthsNote note={summaryPenaltyNote} className="text-xs" />
-                </div>
-              </div>
-            )}
-        </CollapsibleCard>
-      )}
-
-
-      {/* Amortization Schedule — collapsible, open by default. Shown for
-          every loan that has a server schedule to read, rows or not: loading,
-          failed and empty each say so in place of the rows. */}
-      {scheduleSource !== null && (
-        <Card>
-          <CardHeader
-            className="cursor-pointer select-none"
-            onClick={() => setScheduleOpen((o) => !o)}
-          >
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <FileText className="h-4 w-4 text-muted-foreground" />
-                Amortization Schedule
-                {["draft", "for_review", "approved"].includes(loan.status) && (
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-yellow-700 dark:text-yellow-400 border-yellow-500/40 bg-yellow-500/10">
-                    Preview
-                  </Badge>
-                )}
-              </CardTitle>
-              <div className="flex items-center gap-2">
-                {(() => {
-                  const isUponMaturity =
-                    loan.frequency === "upon_maturity" ||
-                    loan.interest_method === "upon_maturity" ||
-                    loan.interest_type === "upon_maturity";
-                  const canAutoPay =
-                    isUponMaturity &&
-                    ["released", "ongoing", "current", "past_due"].includes(loan.status) &&
-                    (loanTotalOutstanding ?? 0) > 0;
-                  if (!canAutoPay) return null;
-                  return (
-                    <Button
-                      size="sm"
-                      className="h-7 px-2.5 text-xs bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setAutoPayConfirmOpen(true);
-                      }}
-                    >
-                      <Zap className="h-3.5 w-3.5 mr-1" />
-                      Auto Pay
-                    </Button>
-                  );
-                })()}
-                {scheduleOpen ? (
-                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                ) : (
-                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                )}
-              </div>
-            </div>
-          </CardHeader>
-          {scheduleOpen && (
-            <CardContent className="pt-0">
-              {(() => {
-                const isReleased = hasServerLoanData;
-                const hasScb = scheduleHasScb;
-                // In place of the rows on both tabs when there are none to draw.
-                const scheduleNotice =
-                  storedSchedule.length > 0 ? null : (
-                    <ScheduleNotice load={scheduleLoad} loan={loan} onRetry={retrySchedule} />
-                  );
-
-                // A restructured loan with rows left (paid ones) still shows
-                // the two write-off figures above them.
-                const scheduleTable = scheduleNotice ?? (
-                  <div className="space-y-3">
-                    <RestructuredBalanceFigures loan={loan} />
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="w-12 text-center">#</TableHead>
-                            <TableHead>Due Date</TableHead>
-                            <TableHead className="text-right">Principal Due</TableHead>
-                            <TableHead className="text-right">Interest</TableHead>
-                            {hasScb && <TableHead className="text-right">Share Capital Build-Up</TableHead>}
-                            <TableHead className="text-right">Total Payment</TableHead>
-                            <TableHead className="text-right">Balance</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {storedSchedule.map((row) => (
-                            <TableRow key={row.period}>
-                              <TableCell className="text-center">{row.periodNumber ?? row.period}</TableCell>
-                              <TableCell>
-                                {formatDateObj(row.dueDate)}
-                                <PenaltyMonthsNote note={row.penaltyNote} />
-                              </TableCell>
-                              <TableCell className="text-right">{currencyOrDash(row.principal)}</TableCell>
-                              <TableCell className="text-right">{currencyOrDash(row.interest)}</TableCell>
-                              {hasScb && (
-                                <TableCell className="text-right text-brand-orange">
-                                  {currencyOrDash(row.shareCapitalBuildUp)}
-                                </TableCell>
-                              )}
-                              <TableCell className="text-right font-medium">{currencyOrDash(row.totalPayment)}</TableCell>
-                              <TableCell className="text-right">{formatCurrency(row.balance)}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                        <TableFooter>
-                          <TableRow>
-                            <TableCell colSpan={2} className="font-semibold">Total</TableCell>
-                            <TableCell className="text-right font-semibold">{currencyOrDash(storedScheduleTotals.principal)}</TableCell>
-                            <TableCell className="text-right font-semibold">{currencyOrDash(storedScheduleTotals.interest)}</TableCell>
-                            {hasScb && (
-                              <TableCell className="text-right font-semibold text-brand-orange">
-                                {currencyOrDash(storedScheduleTotals.shareCapitalBuildUp)}
-                              </TableCell>
-                            )}
-                            <TableCell className="text-right font-bold">{currencyOrDash(storedScheduleTotals.totalPayment)}</TableCell>
-                            <TableCell />
-                          </TableRow>
-                        </TableFooter>
-                      </Table>
-                    </div>
-                  </div>
-                );
-
-                const balancesTable = (
-                  <div className="space-y-3">
-                    {loanSummary && (
-                      <div className="flex flex-wrap gap-4 px-1">
-                        <div>
-                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Current Outstanding</p>
-                          <p className="text-base font-bold text-brand-orange tabular-nums">
-                            {currencyOrDash(loanTotalOutstanding)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Total Paid</p>
-                          <p className="text-base font-bold tabular-nums">{currencyOrDash(loanSummary.total_repaid)}</p>
-                        </div>
-                        {(loanSummary.overdue_amount ?? 0) > 0 && (
-                          <div>
-                            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Overdue</p>
-                            <p className="text-base font-bold text-destructive tabular-nums">
-                              {currencyOrDash(loanSummary.overdue_amount)}
-                            </p>
-                            <PenaltyMonthsNote note={summaryPenaltyNote} />
-                          </div>
                         )}
                       </div>
-                    )}
-                    <RestructuredBalanceFigures loan={loan} />
-                    <AmortizationBalanceTable loan={loan} refreshKey={loanSummary} />
-                  </div>
-                );
-
-                if (!isReleased) return scheduleTable;
-
-                return (
-                  <Tabs defaultValue="schedule" className="gap-3">
-                    <TabsList>
-                      <TabsTrigger value="schedule">Schedule</TabsTrigger>
-                      <TabsTrigger value="balances">Amortization Balance</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="schedule">{scheduleTable}</TabsContent>
-                    <TabsContent value="balances">{balancesTable}</TabsContent>
-                  </Tabs>
-                );
-              })()}
-            </CardContent>
-          )}
-        </Card>
-      )}
-
-      {/* Loan Documents — only for approved+ loans */}
-      {loan.status !== "draft" && loan.status !== "for_review" && (
-        <CollapsibleCard
-          title="Generated Documents"
-          icon={<FileText className="h-4 w-4 text-muted-foreground" />}
-        >
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-muted-foreground">
-                Open a document on your cooperative&apos;s letterhead, ready to
-                print.
-              </p>
-              <PrintableMenu
-                subjectId={loan.id}
-                unavailable={printUnavailable}
-                ids={[
-                  "disclosure_statement",
-                  "promissory_note",
-                  "release_voucher",
-                  "amortization_schedule",
-                  "demand_letter",
-                ]}
-              />
-            </div>
-        </CollapsibleCard>
-      )}
-
-      {/* Attached documents — available for every loan, including drafts so
-          the policy exception letter is reachable from the very first save. */}
-      <LoanDocumentsCard loanId={loan.id} canUpload={canUpdateLoan} canDelete={canDeleteDocuments} />
-      <CreditAssessmentCard loanId={loan.id} status={loan.status} />
-
-      {/* Reminders need a schedule, so only released loans have any. */}
-      {hasServerLoanData && <LoanRemindersCard loanId={loan.id} />}
-
-      {/* Ledger — shown for every status that has server-side repayment data
-          (incl. current / past_due), matching the Adjustments & History card. */}
-      {hasServerLoanData && (
-        <CollapsibleCard
-          title="Ledger"
-          icon={<BookOpen className="h-4 w-4 text-muted-foreground" />}
-          contentClassName="p-0"
-          headerExtra={
-            <>
-                {["released", "ongoing"].includes(loan.status) && (
-                  <PermissionButton
-                    permission={LOAN_ADJUSTMENT_CREATE_GATE.permission}
-                    tooltip={LOAN_ADJUSTMENT_CREATE_GATE.tooltip}
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      // Start every adjustment from a clean form, however many
-                      // have already been raised on this loan.
-                      resetAdjustmentForm();
-                      setCreateAdjustmentOpen(true);
-                    }}
-                  >
-                    <Plus className="mr-1 h-3 w-3" />
-                    New Adjustment
-                  </PermissionButton>
-                )}
-                {canRecordPaymentOn(loan.status) && (
-                  // Recording needs payments:create; an upon-maturity payment
-                  // is also checked against the server's payment preview,
-                  // which needs payments:view. A defaulted loan takes recovery
-                  // payments too.
-                  <PermissionButton
-                    permission={recordPayment.permission}
-                    tooltip={recordPayment.tooltip}
-                    size="sm"
-                    className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                    onClick={() => setRecordPaymentOpen(true)}
-                  >
-                    <Plus className="mr-1 h-3 w-3" />
-                    Record Payment
-                  </PermissionButton>
-                )}
-            </>
-          }
-        >
-            {repaymentsShortfall && !repaymentsLoading && (
-              <IncompleteListNotice
-                className="m-4"
-                shown={repaymentsShortfall.shown}
-                total={repaymentsShortfall.total}
-                noun="payments"
-                consequence="Ledger rows for the payments not loaded show no receipt number or amount paid and can't be voided here. The figures and balances are the server's and are complete."
-              />
-            )}
-            <LedgerTable
-              ledger={ledger}
-              loading={ledgerLoading}
-              failed={ledgerFailed}
-              onRetry={() => void fetchLedger(loan.id)}
-              hasScb={ledgerShowsScb(scheduleHasScb, ledger)}
-              loanStatus={loan.status}
-              repaymentsById={repaymentsById}
-              onVoid={handleVoidRepayment}
-              actionLoading={actionLoading}
-            />
-        </CollapsibleCard>
-      )}
-
-      {/* Adjustments & Extension History — shown for every status that has
-          server-side loan data (incl. current / past_due), matching the set
-          fetchAdjustments loads for. */}
-      {hasServerLoanData && (
-        <CollapsibleCard
-          title={<>Adjustments &amp; History</>}
-          icon={<FileText className="h-4 w-4 text-muted-foreground" />}
-          contentClassName="p-0"
-        >
-            {adjustmentsLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Spinner className="size-5 text-muted-foreground" />
-              </div>
-            ) : adjustments.length === 0 ? (
-              <p className="px-4 py-6 text-center text-sm text-muted-foreground">
-                No adjustments recorded for this loan yet.
-              </p>
-            ) : (
-              <div className="divide-y">
-                {adjustments.map((adj) => (
-                  <div key={adj.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="outline" className="text-xs">
-                          {ADJUSTMENT_TYPE_LABELS[adj.adjustment_type] ?? adj.adjustment_type}
-                        </Badge>
-                        <Badge
-                          variant="outline"
-                          className={cn("text-xs", adjustmentStatusColors[adj.status])}
-                        >
-                          {ADJUSTMENT_STATUS_LABELS[adj.status] ?? adj.status}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          {formatDate(adj.created_at)}
-                        </span>
-                      </div>
-                      {(adj.description || adj.remarks) && (
-                        <p
-                          className="mt-1 text-sm text-muted-foreground truncate"
-                          title={adj.description || adj.remarks}
-                        >
-                          {adj.description || adj.remarks}
-                        </p>
-                      )}
                     </div>
-                    {adj.adjustment_type !== "extension" && adj.status === "pending" && (
-                      <div className="flex shrink-0 items-center gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={actionLoading}
-                          onClick={() => handleAdjustmentAction(adj.id, "approve")}
-                        >
-                          Approve
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-destructive hover:text-destructive"
-                          disabled={actionLoading}
-                          onClick={() => handleAdjustmentAction(adj.id, "reject")}
-                        >
-                          Reject
-                        </Button>
-                      </div>
-                    )}
-                    {adj.adjustment_type !== "extension" && adj.status === "approved" && (
-                      <div className="flex shrink-0 items-center gap-2">
-                        <Button
-                          size="sm"
-                          className="bg-brand-blue text-brand-blue-foreground hover:bg-brand-blue-dark"
-                          disabled={actionLoading}
-                          onClick={() => handleAdjustmentAction(adj.id, "apply")}
-                        >
-                          Apply
-                        </Button>
-                      </div>
+                  </div>
+                </div>
+              )}
+
+              {/* "Not your turn" message — current step exists but current user lacks the required role */}
+              {currentStep && !canActOnCurrentStep && (
+                <div className="rounded-lg border bg-muted/40 p-3">
+                  <div className="flex items-start gap-2">
+                    <Clock className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                    <div className="text-xs">
+                      <p className="font-medium">
+                        Waiting for{" "}
+                        {currentStep.assigned_to
+                          ? `${currentStep.assigned_to.name} (${currentStep.name})`
+                          : currentStep.name}{" "}
+                        {currentStep.kind === "submit"
+                          ? "to submit the draft"
+                          : currentStep.kind === "release"
+                            ? "to release the loan"
+                            : "to approve"}
+                      </p>
+                      <p className="text-muted-foreground mt-0.5">
+                        {currentStep.assigned_to ? (
+                          <>
+                            This step was forwarded to{" "}
+                            <span className="font-medium">{currentStep.assigned_to.name}</span>
+                            , who acts on it with the{" "}
+                            <span className="font-medium">{roleLabel(currentStep.role)}</span>{" "}
+                            role. You are signed in as{" "}
+                          </>
+                        ) : (
+                          <>
+                            Only users with the{" "}
+                            <span className="font-medium">{roleLabel(currentStep.role)}</span>{" "}
+                            role can act on this step. You are signed in as{" "}
+                          </>
+                        )}
+                        {currentUserDisplayName}
+                        {currentUser?.roles && currentUser.roles.length > 0
+                          ? ` (${currentUser.roles.map((role) => roleLabel(role)).join(", ")})`
+                          : " (no role assigned)"}
+                        .
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {readyForRelease(loan.status, allStepsApproved) && (
+                <div className="rounded-lg border border-green-200 bg-green-50 p-3 flex items-start gap-2 dark:border-green-800/40 dark:bg-green-900/10">
+                  <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
+                  <p className="text-sm text-green-700 dark:text-green-400">
+                    All approvers have signed off. The loan is ready for release.
+                  </p>
+                </div>
+              )}
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+        )}
+
+        {loan.status === "rejected" && (
+          <Card>
+            <CardContent className="pt-6">
+              <div className="rounded-lg border border-red-200 bg-red-50 p-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Ban className="h-5 w-5 text-red-600" />
+                  <span className="font-semibold text-red-700">
+                    Loan Rejected
+                  </span>
+                </div>
+                <p className="text-sm text-red-600">
+                  Rejected by{" "}
+                  <span className="font-medium">{loan.rejected_by ?? "—"}</span> on{" "}
+                  {loan.rejected_at ? formatDateTime(loan.rejected_at) : "N/A"}
+                </p>
+                {loan.rejection_remarks && (
+                  <p className="text-sm text-red-600 italic">
+                    &ldquo;{loan.rejection_remarks}&rdquo;
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Policy Exception Banner */}
+        {loan.policy_exception && (
+          <Card className="border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-900/10">
+            <CardContent className="py-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="flex-1 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-amber-700 dark:text-amber-400">Policy Exception</span>
+                    <Badge variant="outline" className="bg-amber-500/10 text-amber-700 border-amber-500/30 text-xs">
+                      Full BOD Approval Required
+                    </Badge>
+                  </div>
+                  {loan.policy_exception_details && (
+                    <p className="text-sm text-amber-700/80 dark:text-amber-300/80">
+                      {loan.policy_exception_details}
+                    </p>
+                  )}
+                  {loan.policy_exception_letter && (
+                    <a
+                      href={loan.policy_exception_letter}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs text-brand-orange hover:underline"
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      View Policy Exception Letter
+                    </a>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Loan Details Cards */}
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Card 1: Loan Information */}
+          <CollapsibleCard
+            title="Loan Information"
+            icon={<FileText className="h-4 w-4 text-muted-foreground" />}
+            contentClassName="space-y-4"
+          >
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    Application Number
+                  </p>
+                  <p className="text-sm font-medium font-mono">
+                    {loan.application_number}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Loan Product</p>
+                  <p className="text-sm font-medium">
+                    {loanProductName || "N/A"}
+                  </p>
+                </div>
+                {loan.purpose && (
+                  <div className="col-span-2">
+                    <p className="text-xs text-muted-foreground">Purpose</p>
+                    <p className="text-sm font-medium">{loan.purpose}</p>
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    Principal Amount
+                    {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
+                  </p>
+                  <p className="text-sm font-semibold">
+                    {formatCurrency(loan.principal_amount)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    Interest Amount
+                    {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
+                  </p>
+                  <p className="text-sm font-semibold">
+                    {loanInterestAmount === null ? "—" : formatCurrency(loanInterestAmount)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    Interest Rate
+                    {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
+                  </p>
+                  <p className="text-sm font-medium">
+                    {rateWithPeriod(loan.interest_rate, loan.interest_rate_frequency)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    Interest Type
+                    {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
+                  </p>
+                  <p className="text-sm font-medium">
+                    {loanInterestType ? interestMethodLabel(loanInterestType) : "N/A"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    Term
+                    {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
+                  </p>
+                  <p className="text-sm font-medium">
+                    {loanTermLabel}
+                  </p>
+                </div>
+                {(loan.scb_amount ?? 0) > 0 && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">
+                      Share Capital Build-Up
+                    </p>
+                    <p className="text-sm font-semibold">
+                      {storedSchedule.length > 0
+                        ? currencyOrDash(storedScheduleTotals.shareCapitalBuildUp)
+                        : "—"}
+                    </p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    Payment Frequency
+                  </p>
+                  <p className="text-sm font-medium">
+                    {(PAYMENT_FREQUENCY_LABELS[loanFrequency as keyof typeof PAYMENT_FREQUENCY_LABELS] ?? loanFrequency) || "N/A"}
+                  </p>
+                </div>
+                {/* The penalty terms the loan was created with, from the server. */}
+                {env.features.penaltyConfigs && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Penalty</p>
+                    <PenaltyTerms loan={loan} className="font-medium" />
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-muted-foreground">Total Payable</p>
+                  <p className="text-sm font-semibold">
+                    {currencyOrDash(loanTotalPayable)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Contract Total</p>
+                  <p className="text-sm font-semibold">{currencyOrDash(loanContractTotal)}</p>
+                </div>
+                {/* A restructure pays nothing out: what is collected from the
+                    member and Paid out, in place of Net Proceeds. Each figure
+                    is the server's (the preview before release, the loan's
+                    own after), a dash when it sent none. */}
+                {proceedsFigures(!!loan.is_restructure, {
+                  totalDeductions: cardPreview
+                    ? cardPreview.status === "loaded"
+                      ? cardPreview.preview.total_deductions
+                      : null
+                    : loan.total_deductions,
+                  netProceeds: cardPreview
+                    ? cardPreview.status === "loaded"
+                      ? cardPreview.preview.net_proceeds
+                      : null
+                    : loan.net_proceeds,
+                  restructure:
+                    cardSource === "release-preview" && releasePreview.status === "loaded"
+                      ? releasePreview.preview.restructure
+                      : null,
+                }).map((figure) => (
+                  <div key={figure.label}>
+                    <p className="text-xs text-muted-foreground">{figure.label}</p>
+                    <p className="text-sm font-semibold">{currencyOrDash(figure.amount)}</p>
+                    {cardEstimated && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Estimated until release
+                      </p>
                     )}
                   </div>
                 ))}
+                {/* Insurance premium left unpaid at release: part of the
+                    server's Total Payable, collected before anything else. */}
+                {insuranceOwed !== null && (
+                  <div className="col-span-2">
+                    <p className="text-xs text-muted-foreground">{INSURANCE_OWED_LABEL}</p>
+                    <p className="text-sm font-semibold">{formatCurrency(insuranceOwed)}</p>
+                  </div>
+                )}
               </div>
+
+              <Separator />
+
+              {/* Deductions */}
+              <div className="space-y-3">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Deductions</p>
+                  {cardEstimated && (
+                    <p className="text-xs text-muted-foreground">Estimated until release</p>
+                  )}
+                </div>
+                {/* Before release: what the release will withhold, as the server
+                    works it out with the Release dialog's own code. */}
+                {cardPreview ? (
+                  cardPreview.status === "loaded" ? (
+                    cardPreview.preview.deductions.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No fees will be withheld.</p>
+                    ) : cardPreview.preview.deductions.map((item, index) => (
+                      <div key={`${item.name}-${index}`} className="flex items-center justify-between gap-4">
+                        <span className="text-sm text-muted-foreground">
+                          {item.name}
+                          {item.fee_id != null && <span className="ml-1.5 text-xs">from Fees settings</span>}
+                          <FormulaSnapshot item={item} />
+                        </span>
+                        <span className="text-sm font-medium">{formatCurrencyExact(item.amount)}</span>
+                      </div>
+                    ))
+                  ) : cardPreview.status === "loading" ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Spinner className="size-4" />
+                      Getting the release figures…
+                    </div>
+                  ) : (
+                    <div role="alert" className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm text-destructive">{cardPreview.message}</p>
+                      <Button type="button" variant="outline" size="sm" onClick={reloadCardPreview}>
+                        Try again
+                      </Button>
+                    </div>
+                  )
+                ) : (() => {
+                  // Render every backend-computed deduction as its own line —
+                  // including configured fees like "Insurance Premium" — so
+                  // product-specific fees aren't silently folded into "Other".
+                  const named = deductionsArray
+                    .filter((d) => (d?.name ?? "").trim() && Number(d.amount ?? 0) !== 0)
+                    .map((d) => ({ label: d.name as string, amount: Number(d.amount ?? 0), snapshot: d }));
+                  // The server's unitemised remainder, signed; its own line when not 0.
+                  const other = Number(loan.unitemised_deductions ?? 0);
+                  const rows = named.length > 0
+                    ? named
+                    : [
+                        { label: "Processing Fee", amount: loanProcessingFee },
+                        { label: "Service Fee", amount: loanServiceFee },
+                      ];
+                  return (
+                    <>
+                      {rows.map((r) => (
+                        <div key={r.label} className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">
+                            {r.label}
+                            {"snapshot" in r && <FormulaSnapshot item={r.snapshot} />}
+                          </span>
+                          <span className="text-sm font-medium">{formatCurrency(r.amount)}</span>
+                        </div>
+                      ))}
+                      {other !== 0 && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">Other Deductions</span>
+                          <span className="text-sm font-medium">{formatCurrency(other)}</span>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+                <Separator />
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold">Total Deductions</span>
+                  <span className="text-sm font-semibold">
+                    {cardPreview
+                      ? cardPreview.status === "loaded"
+                        ? formatCurrencyExact(cardPreview.preview.total_deductions)
+                        : "—"
+                      : currencyOrDash(loan.total_deductions)}
+                  </span>
+                </div>
+              </div>
+          </CollapsibleCard>
+
+          {/* Card 2: Borrower's Active Loans */}
+          <BorrowerActiveLoans
+            loans={borrowerLoans}
+            loading={borrowerLoansLoading}
+            truncated={borrowerLoansTruncated}
+            approvalSteps={approvalSteps}
+            approvalRounds={approvalRounds}
+            loanStatus={loan.status}
+            loan={loan}
+          />
+
+          {/* Card 3: Member & Co-Maker */}
+          <Collapsible open={memberCoMakerOpen} onOpenChange={setMemberCoMakerOpen}>
+            <Card>
+              <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
+                <CollapsibleTrigger className="w-full text-left group/trigger">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <UserCheck className="h-4 w-4 text-muted-foreground" />
+                    Member & Co-Maker
+                    <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-aria-expanded/trigger:rotate-180 shrink-0" />
+                  </CardTitle>
+                </CollapsibleTrigger>
+              </CardHeader>
+              <CollapsibleContent>
+                <CardContent className="space-y-4">
+              <div>
+                <p className="text-xs text-muted-foreground">Member</p>
+                <p className="text-sm font-medium">
+                  {loanBorrowerName || "N/A"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  Co-Maker{loanCoMakers.length > 1 ? "s" : ""}
+                </p>
+                {loanCoMakers.length === 0 ? (
+                  <p className="text-sm font-medium">None</p>
+                ) : (
+                  <ul className="space-y-0.5">
+                    {loanCoMakers.map((cm) => (
+                      <li key={cm.id} className="text-sm font-medium">
+                        {coMakerName(cm) || "—"}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <Separator />
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs text-muted-foreground">Account Officer (AO)</p>
+                  {!aoEditing && canUpdateLoan && (
+                    <button
+                      type="button"
+                      onClick={() => setAoEditing(true)}
+                      className="text-xs text-brand-orange hover:underline flex items-center gap-1"
+                    >
+                      <Pencil className="h-3 w-3" />
+                      {loan.account_officer_id ? "Change" : "Assign"}
+                    </button>
+                  )}
+                </div>
+                {aoEditing ? (
+                  <div className="space-y-2">
+                    <StaffPicker
+                      aria-label="Account officer"
+                      value={loan.account_officer ?? null}
+                      onChange={(officer) => {
+                        if (officer) handleSaveAO(officer.id);
+                      }}
+                      disabled={aoSaving}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setAoEditing(false)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-sm font-medium">
+                    {loan.account_officer?.full_name ?? "Not assigned"}
+                  </p>
+                )}
+              </div>
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+
+          {/* Share Capital — current balance for the loan's member */}
+          <ShareCapitalCard
+            borrowerId={loan.borrower?.id ?? loan.borrower_id ?? null}
+            version={shareCapitalVersion}
+          />
+
+          {/* Auto-Pay Status Card: the loans the backend's toggle accepts
+              (Loan::ACTIVE_STATUSES, released and ongoing), which both read
+              "Current". */}
+          {["released", "ongoing", "current"].includes(loan.status) && (
+            <CollapsibleCard
+              title="Auto-Pay"
+              headerExtra={
+                loan.auto_pay_enabled ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-300">
+                    ● Enabled
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/50 px-2.5 py-0.5 text-xs text-muted-foreground">
+                    ○ Disabled
+                  </span>
+                )
+              }
+              contentClassName="space-y-3 text-sm"
+            >
+                {loan.auto_pay_enabled && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">CBS Reference</span>
+                      <span className="font-mono font-medium">
+                        {loan.auto_pay_cbs_reference ?? "—"}
+                      </span>
+                    </div>
+                    {loan.auto_pay_enabled_at && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Enabled on</span>
+                        <span>{formatDate(loan.auto_pay_enabled_at)}</span>
+                      </div>
+                    )}
+                  </>
+                )}
+                <PermissionButton
+                  permission="auto_pay:toggle"
+                  tooltip="Turning Auto-Pay on or off needs permission to manage Auto-Pay"
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  wrapperClassName="w-full"
+                  onClick={() => {
+                    setAutoPayIsPostRelease(false);
+                    setAutoPayDialogOpen(true);
+                  }}
+                >
+                  {loan.auto_pay_enabled ? "Disable Auto-Pay" : "Enable Auto-Pay"}
+                </PermissionButton>
+            </CollapsibleCard>
+          )}
+
+          {/* Card 4: Workflow History */}
+          <Collapsible open={workflowHistoryOpen} onOpenChange={setWorkflowHistoryOpen}>
+            <Card>
+              <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
+                <CollapsibleTrigger className="w-full text-left group/trigger">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    Workflow History
+                    <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-aria-expanded/trigger:rotate-180 shrink-0" />
+                  </CardTitle>
+                </CollapsibleTrigger>
+              </CardHeader>
+              <CollapsibleContent>
+                <CardContent>
+                  <WorkflowHistory loan={loan} rounds={approvalRounds} steps={approvalSteps} />
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+        </div>
+
+        {/* Release Details — only for released+ loans */}
+        {isLocked && loan.release_date && (
+          <CollapsibleCard
+            icon={<Unlock className="h-4 w-4 text-cyan-600" />}
+            title={
+              <>
+                Release Details
+                {loanSummary && (
+                  <Badge variant="outline" className="text-[10px] bg-green-500/10 text-green-700 border-green-500/30">
+                    Server-verified
+                  </Badge>
+                )}
+              </>
+            }
+            headerExtra={
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleOpenStatementOfAccount}
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                Statement of Account
+              </Button>
+            }
+          >
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <p className="text-xs text-muted-foreground">Release Date</p>
+                  <p className="text-sm font-medium">{formatDate(loan.release_date)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Release Method</p>
+                  <p className="text-sm font-medium">{loanReleaseMethod.method}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Release Reference</p>
+                  <p className="text-sm font-medium break-all">{loanReleaseMethod.reference}</p>
+                </div>
+                {loan.maturity_date && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Maturity Date</p>
+                    <p className="text-sm font-medium">{formatDate(loan.maturity_date)}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-xs text-muted-foreground">Next Due Date</p>
+                  <p className="text-sm font-medium">
+                    {(() => {
+                      // Upon-maturity loans have a single payment due at maturity,
+                      // so the next due date IS the maturity date — never a
+                      // monthly increment off the release date.
+                      const isUponMaturity =
+                        loanFrequency === "upon_maturity" ||
+                        loan.interest_method === "upon_maturity" ||
+                        loan.interest_type === "upon_maturity";
+                      const nextDue = isUponMaturity
+                        ? loan.maturity_date ?? loanSummary?.next_due_date ?? loan.next_due_date
+                        : loanSummary?.next_due_date ?? loan.next_due_date;
+                      return nextDue ? formatDate(nextDue) : "—";
+                    })()}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Outstanding Balance</p>
+                  <p className="text-sm font-semibold">{currencyOrDash(loanTotalOutstanding)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Principal Balance</p>
+                  <p className="text-sm font-medium">{currencyOrDash(loanPrincipalBalance)}</p>
+                </div>
+              </div>
+              {loanSummary && (
+                <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Total Paid</p>
+                    <p className="text-sm font-medium">{currencyOrDash(loanSummary.total_repaid)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Principal Paid</p>
+                    <p className="text-sm font-medium">{currencyOrDash(loanSummary.principal_paid)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Interest Paid</p>
+                    <p className="text-sm font-medium">{currencyOrDash(loanSummary.interest_paid)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Overdue (incl. penalty)</p>
+                    <p className="text-sm font-semibold text-red-600">
+                      {currencyOrDash(loanSummary.overdue_amount)}
+                    </p>
+                    <PenaltyMonthsNote note={summaryPenaltyNote} className="text-xs" />
+                  </div>
+                </div>
+              )}
+          </CollapsibleCard>
+        )}
+
+
+        {/* Amortization Schedule — collapsible, open by default. Shown for
+            every loan that has a server schedule to read, rows or not: loading,
+            failed and empty each say so in place of the rows. */}
+        {scheduleSource !== null && (
+          <Card>
+            <CardHeader
+              className="cursor-pointer select-none"
+              onClick={() => setScheduleOpen((o) => !o)}
+            >
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                  Amortization Schedule
+                  {["draft", "for_review", "approved"].includes(loan.status) && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-yellow-700 dark:text-yellow-400 border-yellow-500/40 bg-yellow-500/10">
+                      Preview
+                    </Badge>
+                  )}
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  {(() => {
+                    const isUponMaturity =
+                      loan.frequency === "upon_maturity" ||
+                      loan.interest_method === "upon_maturity" ||
+                      loan.interest_type === "upon_maturity";
+                    const canAutoPay =
+                      isUponMaturity &&
+                      ["released", "ongoing", "current", "past_due"].includes(loan.status) &&
+                      (loanTotalOutstanding ?? 0) > 0;
+                    if (!canAutoPay) return null;
+                    return (
+                      <Button
+                        size="sm"
+                        className="h-7 px-2.5 text-xs bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAutoPayConfirmOpen(true);
+                        }}
+                      >
+                        <Zap className="h-3.5 w-3.5 mr-1" />
+                        Auto Pay
+                      </Button>
+                    );
+                  })()}
+                  {scheduleOpen ? (
+                    <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </div>
+              </div>
+            </CardHeader>
+            {scheduleOpen && (
+              <CardContent className="pt-0">
+                {(() => {
+                  const isReleased = hasServerLoanData;
+                  const hasScb = scheduleHasScb;
+                  // In place of the rows on both tabs when there are none to draw.
+                  const scheduleNotice =
+                    storedSchedule.length > 0 ? null : (
+                      <ScheduleNotice load={scheduleLoad} loan={loan} onRetry={retrySchedule} />
+                    );
+
+                  // A restructured loan with rows left (paid ones) still shows
+                  // the two write-off figures above them.
+                  const scheduleTable = scheduleNotice ?? (
+                    <div className="space-y-3">
+                      <RestructuredBalanceFigures loan={loan} />
+                      {/* Its own box at fit, so the headings and totals stay in view. */}
+                      <ScrollBox className="fit:max-h-[min(32rem,calc(100dvh-23rem))]">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-12 text-center">#</TableHead>
+                              <TableHead>Due Date</TableHead>
+                              <TableHead className="text-right">Principal Due</TableHead>
+                              <TableHead className="text-right">Interest</TableHead>
+                              {hasScb && <TableHead className="text-right">Share Capital Build-Up</TableHead>}
+                              <TableHead className="text-right">Total Payment</TableHead>
+                              <TableHead className="text-right">Balance</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {storedSchedule.map((row) => (
+                              <TableRow key={row.period}>
+                                <TableCell className="text-center">{row.periodNumber ?? row.period}</TableCell>
+                                <TableCell>
+                                  {formatDateObj(row.dueDate)}
+                                  <PenaltyMonthsNote note={row.penaltyNote} />
+                                </TableCell>
+                                <TableCell className="text-right">{currencyOrDash(row.principal)}</TableCell>
+                                <TableCell className="text-right">{currencyOrDash(row.interest)}</TableCell>
+                                {hasScb && (
+                                  <TableCell className="text-right text-brand-orange">
+                                    {currencyOrDash(row.shareCapitalBuildUp)}
+                                  </TableCell>
+                                )}
+                                <TableCell className="text-right font-medium">{currencyOrDash(row.totalPayment)}</TableCell>
+                                <TableCell className="text-right">{formatCurrency(row.balance)}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                          <TableFooter>
+                            <TableRow>
+                              <TableCell colSpan={2} className="font-semibold">Total</TableCell>
+                              <TableCell className="text-right font-semibold">{currencyOrDash(storedScheduleTotals.principal)}</TableCell>
+                              <TableCell className="text-right font-semibold">{currencyOrDash(storedScheduleTotals.interest)}</TableCell>
+                              {hasScb && (
+                                <TableCell className="text-right font-semibold text-brand-orange">
+                                  {currencyOrDash(storedScheduleTotals.shareCapitalBuildUp)}
+                                </TableCell>
+                              )}
+                              <TableCell className="text-right font-bold">{currencyOrDash(storedScheduleTotals.totalPayment)}</TableCell>
+                              <TableCell />
+                            </TableRow>
+                          </TableFooter>
+                        </Table>
+                      </ScrollBox>
+                    </div>
+                  );
+
+                  const balancesTable = (
+                    <div className="space-y-3">
+                      {loanSummary && (
+                        <div className="flex flex-wrap gap-4 px-1">
+                          <div>
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Current Outstanding</p>
+                            <p className="text-base font-bold text-brand-orange tabular-nums">
+                              {currencyOrDash(loanTotalOutstanding)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Total Paid</p>
+                            <p className="text-base font-bold tabular-nums">{currencyOrDash(loanSummary.total_repaid)}</p>
+                          </div>
+                          {(loanSummary.overdue_amount ?? 0) > 0 && (
+                            <div>
+                              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Overdue</p>
+                              <p className="text-base font-bold text-destructive tabular-nums">
+                                {currencyOrDash(loanSummary.overdue_amount)}
+                              </p>
+                              <PenaltyMonthsNote note={summaryPenaltyNote} />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      <RestructuredBalanceFigures loan={loan} />
+                      <AmortizationBalanceTable loan={loan} refreshKey={loanSummary} />
+                    </div>
+                  );
+
+                  if (!isReleased) return scheduleTable;
+
+                  return (
+                    <Tabs defaultValue="schedule" className="gap-3">
+                      <TabsList>
+                        <TabsTrigger value="schedule">Schedule</TabsTrigger>
+                        <TabsTrigger value="balances">Amortization Balance</TabsTrigger>
+                      </TabsList>
+                      <TabsContent value="schedule">{scheduleTable}</TabsContent>
+                      <TabsContent value="balances">{balancesTable}</TabsContent>
+                    </Tabs>
+                  );
+                })()}
+              </CardContent>
             )}
-        </CollapsibleCard>
-      )}
+          </Card>
+        )}
+
+        {/* Loan Documents — only for approved+ loans */}
+        {loan.status !== "draft" && loan.status !== "for_review" && (
+          <CollapsibleCard
+            title="Generated Documents"
+            icon={<FileText className="h-4 w-4 text-muted-foreground" />}
+          >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-muted-foreground">
+                  Open a document on your cooperative&apos;s letterhead, ready to
+                  print.
+                </p>
+                <PrintableMenu
+                  subjectId={loan.id}
+                  unavailable={printUnavailable}
+                  ids={[
+                    "disclosure_statement",
+                    "promissory_note",
+                    "release_voucher",
+                    "amortization_schedule",
+                    "demand_letter",
+                  ]}
+                />
+              </div>
+          </CollapsibleCard>
+        )}
+
+        {/* Attached documents — available for every loan, including drafts so
+            the policy exception letter is reachable from the very first save. */}
+        <LoanDocumentsCard loanId={loan.id} canUpload={canUpdateLoan} canDelete={canDeleteDocuments} />
+        <CreditAssessmentCard loanId={loan.id} status={loan.status} />
+
+        {/* Reminders need a schedule, so only released loans have any. */}
+        {hasServerLoanData && <LoanRemindersCard loanId={loan.id} />}
+
+        {/* Ledger — shown for every status that has server-side repayment data
+            (incl. current / past_due), matching the Adjustments & History card. */}
+        {hasServerLoanData && (
+          <CollapsibleCard
+            title="Ledger"
+            icon={<BookOpen className="h-4 w-4 text-muted-foreground" />}
+            contentClassName="p-0"
+            headerExtra={
+              <>
+                  {["released", "ongoing"].includes(loan.status) && (
+                    <PermissionButton
+                      permission={LOAN_ADJUSTMENT_CREATE_GATE.permission}
+                      tooltip={LOAN_ADJUSTMENT_CREATE_GATE.tooltip}
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        // Start every adjustment from a clean form, however many
+                        // have already been raised on this loan.
+                        resetAdjustmentForm();
+                        setCreateAdjustmentOpen(true);
+                      }}
+                    >
+                      <Plus className="mr-1 h-3 w-3" />
+                      New Adjustment
+                    </PermissionButton>
+                  )}
+                  {canRecordPaymentOn(loan.status) && (
+                    // Recording needs payments:create; an upon-maturity payment
+                    // is also checked against the server's payment preview,
+                    // which needs payments:view. A defaulted loan takes recovery
+                    // payments too.
+                    <PermissionButton
+                      permission={recordPayment.permission}
+                      tooltip={recordPayment.tooltip}
+                      size="sm"
+                      className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                      onClick={() => setRecordPaymentOpen(true)}
+                    >
+                      <Plus className="mr-1 h-3 w-3" />
+                      Record Payment
+                    </PermissionButton>
+                  )}
+              </>
+            }
+          >
+              {repaymentsShortfall && !repaymentsLoading && (
+                <IncompleteListNotice
+                  className="m-4"
+                  shown={repaymentsShortfall.shown}
+                  total={repaymentsShortfall.total}
+                  noun="payments"
+                  consequence="Ledger rows for the payments not loaded show no receipt number or amount paid and can't be voided here. The figures and balances are the server's and are complete."
+                />
+              )}
+              <LedgerTable
+                ledger={ledger}
+                loading={ledgerLoading}
+                failed={ledgerFailed}
+                onRetry={() => void fetchLedger(loan.id)}
+                hasScb={ledgerShowsScb(scheduleHasScb, ledger)}
+                loanStatus={loan.status}
+                repaymentsById={repaymentsById}
+                onVoid={handleVoidRepayment}
+                actionLoading={actionLoading}
+              />
+          </CollapsibleCard>
+        )}
+
+        {/* Adjustments & Extension History — shown for every status that has
+            server-side loan data (incl. current / past_due), matching the set
+            fetchAdjustments loads for. */}
+        {hasServerLoanData && (
+          <CollapsibleCard
+            title={<>Adjustments &amp; History</>}
+            icon={<FileText className="h-4 w-4 text-muted-foreground" />}
+            contentClassName="p-0"
+          >
+              {adjustmentsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Spinner className="size-5 text-muted-foreground" />
+                </div>
+              ) : adjustments.length === 0 ? (
+                <p className="px-4 py-6 text-center text-sm text-muted-foreground">
+                  No adjustments recorded for this loan yet.
+                </p>
+              ) : (
+                <div className="divide-y">
+                  {adjustments.map((adj) => (
+                    <div key={adj.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="outline" className="text-xs">
+                            {ADJUSTMENT_TYPE_LABELS[adj.adjustment_type] ?? adj.adjustment_type}
+                          </Badge>
+                          <Badge
+                            variant="outline"
+                            className={cn("text-xs", adjustmentStatusColors[adj.status])}
+                          >
+                            {ADJUSTMENT_STATUS_LABELS[adj.status] ?? adj.status}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {formatDate(adj.created_at)}
+                          </span>
+                        </div>
+                        {(adj.description || adj.remarks) && (
+                          <p
+                            className="mt-1 text-sm text-muted-foreground truncate"
+                            title={adj.description || adj.remarks}
+                          >
+                            {adj.description || adj.remarks}
+                          </p>
+                        )}
+                      </div>
+                      {adj.adjustment_type !== "extension" && adj.status === "pending" && (
+                        <div className="flex shrink-0 items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={actionLoading}
+                            onClick={() => handleAdjustmentAction(adj.id, "approve")}
+                          >
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-destructive hover:text-destructive"
+                            disabled={actionLoading}
+                            onClick={() => handleAdjustmentAction(adj.id, "reject")}
+                          >
+                            Reject
+                          </Button>
+                        </div>
+                      )}
+                      {adj.adjustment_type !== "extension" && adj.status === "approved" && (
+                        <div className="flex shrink-0 items-center gap-2">
+                          <Button
+                            size="sm"
+                            className="bg-brand-blue text-brand-blue-foreground hover:bg-brand-blue-dark"
+                            disabled={actionLoading}
+                            onClick={() => handleAdjustmentAction(adj.id, "apply")}
+                          >
+                            Apply
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+          </CollapsibleCard>
+        )}
+      </ScrollBox>
 
       {/* ── Dialogs ── */}
 
@@ -4263,7 +4264,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
               {storedSchedule.length === 0 ? (
                 <ScheduleNotice load={scheduleLoad} loan={loan} onRetry={retrySchedule} />
               ) : (
-                <div className="overflow-x-auto max-h-60 overflow-y-auto rounded-md border">
+                // The table's own wrapper would hold the pinned headings; this box scrolls them instead.
+                <div className="overflow-x-auto max-h-60 overflow-y-auto rounded-md border [&_[data-slot=table-container]]:overflow-visible">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -5694,6 +5696,6 @@ function LoanDetail({ loanId }: { loanId: number }) {
           }}
         />
       )}
-    </div>
+    </PageFill>
   );
 }

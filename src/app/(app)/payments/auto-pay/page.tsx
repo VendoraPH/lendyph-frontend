@@ -4,9 +4,11 @@ import { useState, useCallback } from "react";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
 import { RouteGuard } from "@/components/common";
+import { PageFill } from "@/components/common/page-fill";
 import { autoPayService } from "@/services/auto-pay.service";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { FIT_CLASSES, scrollBoxClass } from "@/lib/page-fill";
 import { FiltersStep } from "./_components/filters-step";
 import { ReviewStep } from "./_components/review-step";
 import { LoanIssuesList } from "./_components/loan-issues-list";
@@ -80,7 +82,7 @@ export default function AutoPayPage() {
 
   return (
     <RouteGuard permission="auto_pay:view">
-      <div className="space-y-6">
+      <PageFill>
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Auto-Pay</h1>
           <p className="mt-1 text-muted-foreground">
@@ -111,55 +113,62 @@ export default function AutoPayPage() {
           </span>
         </div>
 
-        {step === 1 && lastRun && (
-          <Card className="max-w-2xl">
+        {/* Filters: the last run and the filters scroll together. Review: its
+            card fills the rest, and its run buttons stay at the foot. */}
+        <div
+          data-slot={step === 1 ? "scroll-box" : "fill-section"}
+          className={step === 1 ? cn(scrollBoxClass(), "space-y-6 p-px") : FIT_CLASSES.section}
+        >
+          {step === 1 && lastRun && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Last run</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm">
+                  {lastRun.processed} processed · {lastRun.skipped} skipped ·{" "}
+                  {lastRun.failed} failed
+                </p>
+                <LoanIssuesList
+                  title="Failed loans"
+                  description="No payment was posted for these loans."
+                  issues={lastRun.failures}
+                  tone="red"
+                />
+                <LoanIssuesList
+                  title="Skipped loans"
+                  description="Left out of the run."
+                  issues={lastRun.skips}
+                  tone="amber"
+                />
+              </CardContent>
+            </Card>
+          )}
+
+          <Card className={cn(step === 2 && FIT_CLASSES.section)}>
             <CardHeader>
-              <CardTitle className="text-base">Last run</CardTitle>
+              <CardTitle className="text-base">
+                {step === 1 ? "Set Filters" : "Review & Confirm"}
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm">
-                {lastRun.processed} processed · {lastRun.skipped} skipped ·{" "}
-                {lastRun.failed} failed
-              </p>
-              <LoanIssuesList
-                title="Failed loans"
-                description="No payment was posted for these loans."
-                issues={lastRun.failures}
-                tone="red"
-              />
-              <LoanIssuesList
-                title="Skipped loans"
-                description="Left out of the run."
-                issues={lastRun.skips}
-                tone="amber"
-              />
+            <CardContent className={cn(step === 2 && FIT_CLASSES.section)}>
+              {step === 1 ? (
+                <FiltersStep onPreview={handlePreview} loading={previewing} />
+              ) : preview && filter ? (
+                <ReviewStep
+                  filter={filter}
+                  preview={preview}
+                  includedPartialIds={includedPartialIds}
+                  onTogglePartial={handleTogglePartial}
+                  onBack={() => setStep(1)}
+                  onConfirm={handleConfirm}
+                  processing={processing}
+                />
+              ) : null}
             </CardContent>
           </Card>
-        )}
-
-        <Card className="max-w-2xl">
-          <CardHeader>
-            <CardTitle className="text-base">
-              {step === 1 ? "Set Filters" : "Review & Confirm"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {step === 1 ? (
-              <FiltersStep onPreview={handlePreview} loading={previewing} />
-            ) : preview && filter ? (
-              <ReviewStep
-                filter={filter}
-                preview={preview}
-                includedPartialIds={includedPartialIds}
-                onTogglePartial={handleTogglePartial}
-                onBack={() => setStep(1)}
-                onConfirm={handleConfirm}
-                processing={processing}
-              />
-            ) : null}
-          </CardContent>
-        </Card>
-      </div>
+        </div>
+      </PageFill>
     </RouteGuard>
   );
 }

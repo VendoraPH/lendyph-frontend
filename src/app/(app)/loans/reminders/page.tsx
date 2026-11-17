@@ -16,10 +16,13 @@ import {
 } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { DataState } from "@/components/common/data-state";
+import { ScrollBox } from "@/components/common/page-fill";
 import { TestModeBanner, useReminderTestModeContext } from "@/components/reminders/test-mode";
 import { Card, CardContent } from "@/components/ui/card";
 import { useApiResource, useIsClient } from "@/hooks";
 import { formatCurrencyExact, formatDate, todayISO } from "@/lib/format";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 import {
   chartSeriesLabel,
   combineTestMode,
@@ -76,7 +79,7 @@ function SmsCreditsCard({ sms, mode }: { sms: ReminderDashboard["sms"]; mode: Se
     sms.credits_remaining <= sms.low_credit_threshold;
   return (
     <Card>
-      <CardContent className="space-y-3 pt-6">
+      <CardContent className="space-y-3">
         <p className="text-sm font-medium">SMS usage this month</p>
         <dl className="grid grid-cols-2 gap-y-2 text-sm">
           <dt className="text-muted-foreground">{smsMonthLabel(sms, mode)}</dt>
@@ -108,7 +111,7 @@ function DeliveryChart({ daily, mode }: { daily: ReminderDashboard["daily"]; mod
   const hasLogged = daily.some((d) => typeof d.logged === "number");
   return (
     <Card className="lg:col-span-2">
-      <CardContent className="pt-6">
+      <CardContent>
         <p className="mb-2 text-sm font-medium">Reminders, last 7 days</p>
         {daily.length === 0 ? (
           <p className="py-10 text-center text-sm text-muted-foreground">
@@ -203,7 +206,7 @@ export default function RemindersDashboardPage() {
   const mode = combineTestMode(testMode, reminderTestMode(resource.data));
 
   return (
-    <div className="space-y-4">
+    <div className={cn(FIT_CLASSES.section, "gap-4")}>
       <ReminderFilters value={filters} onChange={setFilters} dates="day">
         <StatusSelect
           value={filters.status}
@@ -211,13 +214,16 @@ export default function RemindersDashboardPage() {
           onChange={(status) => setFilters((f) => ({ ...f, status }))}
         />
       </ReminderFilters>
-      <DataState
-        resource={resource}
-        summary="The reminders dashboard will show today's reminders, delivery results and SMS usage once the reminder service is connected."
-        endpoints={["GET /reminders/dashboard", "GET /reminders/pauses"]}
-      >
-        {(data) => <DashboardBody data={data} mode={mode} settingsMode={testMode} />}
-      </DataState>
+      {/* The filters stay put; the figures, chart and table scroll under them. */}
+      <ScrollBox className="p-px">
+        <DataState
+          resource={resource}
+          summary="The reminders dashboard will show today's reminders, delivery results and SMS usage once the reminder service is connected."
+          endpoints={["GET /reminders/dashboard", "GET /reminders/pauses"]}
+        >
+          {(data) => <DashboardBody data={data} mode={mode} settingsMode={testMode} />}
+        </DataState>
+      </ScrollBox>
     </div>
   );
 }

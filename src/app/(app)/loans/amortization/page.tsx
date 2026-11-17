@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -128,7 +129,7 @@ export default function AmortizationPage() {
   const hasScb = (result?.totals.share_capital_build_up ?? 0) > 0;
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">
@@ -139,282 +140,286 @@ export default function AmortizationPage() {
         </p>
       </div>
 
-      {/* Card 1: Loan Parameters */}
-      <Card>
-        <CardHeader className="flex flex-row items-center gap-2 pb-2">
-          <Calculator className="h-5 w-5 text-brand-orange" />
-          <CardTitle>Loan Parameters</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {/* Principal */}
-            <div className="space-y-1.5">
-              <Label htmlFor="principal">Principal Amount (₱) *</Label>
-              <Input
-                id="principal"
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="e.g. 50000"
-                value={principal}
-                onChange={(e) => setPrincipal(e.target.value)}
-              />
-            </div>
-
-            {/* Interest Rate */}
-            <div className="space-y-1.5">
-              <Label htmlFor="interestRate">Interest Rate (%) *</Label>
-              <Input
-                id="interestRate"
-                type="number"
-                min="0"
-                step="0.0001"
-                placeholder="e.g. 3"
-                value={interestRate}
-                onChange={(e) => setInterestRate(e.target.value)}
-              />
-            </div>
-
-            {/* Rate Frequency */}
-            <div className="space-y-1.5">
-              <Label htmlFor="rateFrequency">Rate Per *</Label>
-              <Select value={rateFrequency} onValueChange={(val) => setRateFrequency(String(val))}>
-                <SelectTrigger id="rateFrequency" className="w-full">
-                  <SelectValue>
-                    {(value: string | null) => optionLabel(INTEREST_RATE_FREQUENCY_OPTIONS, value)}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {INTEREST_RATE_FREQUENCY_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Term */}
-            <div className="space-y-1.5">
-              <Label htmlFor="term">Term *</Label>
-              <Input
-                id="term"
-                type="number"
-                min="1"
-                step="1"
-                placeholder="e.g. 12"
-                value={term}
-                onChange={(e) => setTerm(e.target.value)}
-              />
-            </div>
-
-            {/* Term Unit */}
-            <div className="space-y-1.5">
-              <Label htmlFor="termUnit">Term Unit *</Label>
-              <Select value={termUnit} onValueChange={(val) => setTermUnit(String(val))}>
-                <SelectTrigger id="termUnit" className="w-full">
-                  <SelectValue>
-                    {(value: string | null) => optionLabel(TERM_UNIT_OPTIONS, value)}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {TERM_UNIT_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Payment Frequency */}
-            <div className="space-y-1.5">
-              <Label htmlFor="frequency">Payment Frequency *</Label>
-              <Select value={frequency} onValueChange={(val) => setFrequency(String(val))}>
-                <SelectTrigger id="frequency" className="w-full">
-                  <SelectValue>
-                    {(value: string | null) => optionLabel(PAYMENT_FREQUENCY_OPTIONS, value)}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {PAYMENT_FREQUENCY_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {frequency === "upon_maturity" && (
-                <p className="text-xs text-muted-foreground">
-                  Single payment at maturity
-                </p>
-              )}
-            </div>
-
-            {/* Start Date */}
-            <div className="space-y-1.5">
-              <Label htmlFor="startDate">Start Date *</Label>
-              <div className="relative">
-                <CalendarIcon className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      {/* The parameters and the generated schedule scroll together under the header. */}
+      <ScrollBox className="space-y-6 p-px">
+        {/* Card 1: Loan Parameters */}
+        <Card>
+          <CardHeader className="flex flex-row items-center gap-2 pb-2">
+            <Calculator className="h-5 w-5 text-brand-orange" />
+            <CardTitle>Loan Parameters</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              {/* Principal */}
+              <div className="space-y-1.5">
+                <Label htmlFor="principal">Principal Amount (₱) *</Label>
                 <Input
-                  id="startDate"
-                  type="date"
-                  className="pl-9"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
+                  id="principal"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="e.g. 50000"
+                  value={principal}
+                  onChange={(e) => setPrincipal(e.target.value)}
                 />
+              </div>
+
+              {/* Interest Rate */}
+              <div className="space-y-1.5">
+                <Label htmlFor="interestRate">Interest Rate (%) *</Label>
+                <Input
+                  id="interestRate"
+                  type="number"
+                  min="0"
+                  step="0.0001"
+                  placeholder="e.g. 3"
+                  value={interestRate}
+                  onChange={(e) => setInterestRate(e.target.value)}
+                />
+              </div>
+
+              {/* Rate Frequency */}
+              <div className="space-y-1.5">
+                <Label htmlFor="rateFrequency">Rate Per *</Label>
+                <Select value={rateFrequency} onValueChange={(val) => setRateFrequency(String(val))}>
+                  <SelectTrigger id="rateFrequency" className="w-full">
+                    <SelectValue>
+                      {(value: string | null) => optionLabel(INTEREST_RATE_FREQUENCY_OPTIONS, value)}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {INTEREST_RATE_FREQUENCY_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Term */}
+              <div className="space-y-1.5">
+                <Label htmlFor="term">Term *</Label>
+                <Input
+                  id="term"
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="e.g. 12"
+                  value={term}
+                  onChange={(e) => setTerm(e.target.value)}
+                />
+              </div>
+
+              {/* Term Unit */}
+              <div className="space-y-1.5">
+                <Label htmlFor="termUnit">Term Unit *</Label>
+                <Select value={termUnit} onValueChange={(val) => setTermUnit(String(val))}>
+                  <SelectTrigger id="termUnit" className="w-full">
+                    <SelectValue>
+                      {(value: string | null) => optionLabel(TERM_UNIT_OPTIONS, value)}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TERM_UNIT_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Payment Frequency */}
+              <div className="space-y-1.5">
+                <Label htmlFor="frequency">Payment Frequency *</Label>
+                <Select value={frequency} onValueChange={(val) => setFrequency(String(val))}>
+                  <SelectTrigger id="frequency" className="w-full">
+                    <SelectValue>
+                      {(value: string | null) => optionLabel(PAYMENT_FREQUENCY_OPTIONS, value)}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAYMENT_FREQUENCY_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {frequency === "upon_maturity" && (
+                  <p className="text-xs text-muted-foreground">
+                    Single payment at maturity
+                  </p>
+                )}
+              </div>
+
+              {/* Start Date */}
+              <div className="space-y-1.5">
+                <Label htmlFor="startDate">Start Date *</Label>
+                <div className="relative">
+                  <CalendarIcon className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="startDate"
+                    type="date"
+                    className="pl-9"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Share Capital Build-Up */}
+              <div className="space-y-1.5">
+                <Label htmlFor="scbAmount">Share Capital Build-Up per Period (₱)</Label>
+                <Input
+                  id="scbAmount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Optional"
+                  value={scbAmount}
+                  onChange={(e) => setScbAmount(e.target.value)}
+                />
+              </div>
+
+              {/* Interest Method */}
+              <div className="space-y-1.5">
+                <Label id="interest-method-label">Interest Method *</Label>
+                <RadioGroup
+                  aria-labelledby="interest-method-label"
+                  value={interestMethod}
+                  onValueChange={(val) => setInterestMethod(val as AmortizationMethod)}
+                  className="flex flex-wrap gap-4 pt-1"
+                >
+                  {METHODS.map((method) => (
+                    <label
+                      key={method}
+                      className="flex cursor-pointer items-center gap-2 text-sm"
+                    >
+                      <RadioGroupItem value={method} />
+                      {INTEREST_METHOD_LABELS[method]}
+                    </label>
+                  ))}
+                </RadioGroup>
               </div>
             </div>
 
-            {/* Share Capital Build-Up */}
-            <div className="space-y-1.5">
-              <Label htmlFor="scbAmount">Share Capital Build-Up per Period (₱)</Label>
-              <Input
-                id="scbAmount"
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="Optional"
-                value={scbAmount}
-                onChange={(e) => setScbAmount(e.target.value)}
-              />
-            </div>
-
-            {/* Interest Method */}
-            <div className="space-y-1.5">
-              <Label id="interest-method-label">Interest Method *</Label>
-              <RadioGroup
-                aria-labelledby="interest-method-label"
-                value={interestMethod}
-                onValueChange={(val) => setInterestMethod(val as AmortizationMethod)}
-                className="flex flex-wrap gap-4 pt-1"
+            <div className="mt-5">
+              <Button
+                className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                disabled={!isFormValid || calculating}
+                onClick={handleGenerate}
               >
-                {METHODS.map((method) => (
-                  <label
-                    key={method}
-                    className="flex cursor-pointer items-center gap-2 text-sm"
-                  >
-                    <RadioGroupItem value={method} />
-                    {INTEREST_METHOD_LABELS[method]}
-                  </label>
-                ))}
-              </RadioGroup>
-            </div>
-          </div>
-
-          <div className="mt-5">
-            <Button
-              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-              disabled={!isFormValid || calculating}
-              onClick={handleGenerate}
-            >
-              {calculating ? (
-                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-              ) : (
-                <Calculator className="mr-1.5 h-4 w-4" />
-              )}
-              Generate Schedule
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Card 2: Schedule Summary */}
-      {result && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2">
-              Schedule Summary
-              <Badge className="bg-brand-orange text-brand-orange-foreground">
-                {INTEREST_METHOD_LABELS[result.interest_method] ?? result.interest_method}
-              </Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
-              <SummaryItem label="Total Principal" value={formatCurrency(result.totals.principal_due)} />
-              <SummaryItem label="Total Interest" value={formatCurrency(result.totals.interest_due)} />
-              <SummaryItem label="Total Payable" value={formatCurrency(result.totals.total_payment)} highlight />
-              <SummaryItem label="Per-period Payment" value={paymentLabel(result)} />
-              <SummaryItem label="No. of Payments" value={result.rows.length.toString()} />
-              <SummaryItem label="Maturity Date" value={formatDate(result.maturity_date)} />
+                {calculating ? (
+                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                ) : (
+                  <Calculator className="mr-1.5 h-4 w-4" />
+                )}
+                Generate Schedule
+              </Button>
             </div>
           </CardContent>
         </Card>
-      )}
 
-      {/* Card 3: Amortization Table */}
-      {result && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle>Amortization Table</CardTitle>
-          </CardHeader>
-          <CardContent className="px-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12 text-center">#</TableHead>
-                    <TableHead>Due Date</TableHead>
-                    <TableHead className="text-right">Principal</TableHead>
-                    <TableHead className="text-right">Interest</TableHead>
-                    {hasScb && <TableHead className="text-right">Share Capital</TableHead>}
-                    <TableHead className="text-right">Total Payment</TableHead>
-                    <TableHead className="text-right">Remaining Balance</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {result.rows.map((row) => (
-                    <TableRow key={row.period_number}>
-                      <TableCell className="text-center font-medium">{row.period_number}</TableCell>
-                      <TableCell className="whitespace-nowrap">{formatDate(row.due_date)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(row.principal_due)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(row.interest_due)}</TableCell>
-                      {hasScb && (
-                        <TableCell className="text-right">{formatCurrency(row.share_capital_build_up)}</TableCell>
-                      )}
-                      <TableCell className="text-right font-medium">{formatCurrency(row.total_payment)}</TableCell>
-                      <TableCell className="text-right font-medium">{formatCurrency(row.remaining_balance)}</TableCell>
+        {/* Card 2: Schedule Summary */}
+        {result && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2">
+                Schedule Summary
+                <Badge className="bg-brand-orange text-brand-orange-foreground">
+                  {INTEREST_METHOD_LABELS[result.interest_method] ?? result.interest_method}
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
+                <SummaryItem label="Total Principal" value={formatCurrency(result.totals.principal_due)} />
+                <SummaryItem label="Total Interest" value={formatCurrency(result.totals.interest_due)} />
+                <SummaryItem label="Total Payable" value={formatCurrency(result.totals.total_payment)} highlight />
+                <SummaryItem label="Per-period Payment" value={paymentLabel(result)} />
+                <SummaryItem label="No. of Payments" value={result.rows.length.toString()} />
+                <SummaryItem label="Maturity Date" value={formatDate(result.maturity_date)} />
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Card 3: Amortization Table */}
+        {result && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle>Amortization Table</CardTitle>
+            </CardHeader>
+            <CardContent className="px-0">
+              {/* Its own box at fit, so the headings and the totals stay in view. */}
+              <ScrollBox className="fit:max-h-[min(32rem,60dvh)]">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12 text-center">#</TableHead>
+                      <TableHead>Due Date</TableHead>
+                      <TableHead className="text-right">Principal</TableHead>
+                      <TableHead className="text-right">Interest</TableHead>
+                      {hasScb && <TableHead className="text-right">Share Capital</TableHead>}
+                      <TableHead className="text-right">Total Payment</TableHead>
+                      <TableHead className="text-right">Remaining Balance</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-                <TableFooter>
-                  <TableRow>
-                    <TableCell colSpan={2} className="font-semibold">Totals</TableCell>
-                    <TableCell className="text-right font-semibold">{formatCurrency(result.totals.principal_due)}</TableCell>
-                    <TableCell className="text-right font-semibold">{formatCurrency(result.totals.interest_due)}</TableCell>
-                    {hasScb && (
-                      <TableCell className="text-right font-semibold">
-                        {formatCurrency(result.totals.share_capital_build_up)}
-                      </TableCell>
-                    )}
-                    <TableCell className="text-right font-semibold">{formatCurrency(result.totals.total_payment)}</TableCell>
-                    <TableCell />
-                  </TableRow>
-                </TableFooter>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                  </TableHeader>
+                  <TableBody>
+                    {result.rows.map((row) => (
+                      <TableRow key={row.period_number}>
+                        <TableCell className="text-center font-medium">{row.period_number}</TableCell>
+                        <TableCell className="whitespace-nowrap">{formatDate(row.due_date)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(row.principal_due)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(row.interest_due)}</TableCell>
+                        {hasScb && (
+                          <TableCell className="text-right">{formatCurrency(row.share_capital_build_up)}</TableCell>
+                        )}
+                        <TableCell className="text-right font-medium">{formatCurrency(row.total_payment)}</TableCell>
+                        <TableCell className="text-right font-medium">{formatCurrency(row.remaining_balance)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                  <TableFooter>
+                    <TableRow>
+                      <TableCell colSpan={2} className="font-semibold">Totals</TableCell>
+                      <TableCell className="text-right font-semibold">{formatCurrency(result.totals.principal_due)}</TableCell>
+                      <TableCell className="text-right font-semibold">{formatCurrency(result.totals.interest_due)}</TableCell>
+                      {hasScb && (
+                        <TableCell className="text-right font-semibold">
+                          {formatCurrency(result.totals.share_capital_build_up)}
+                        </TableCell>
+                      )}
+                      <TableCell className="text-right font-semibold">{formatCurrency(result.totals.total_payment)}</TableCell>
+                      <TableCell />
+                    </TableRow>
+                  </TableFooter>
+                </Table>
+              </ScrollBox>
+            </CardContent>
+          </Card>
+        )}
 
-      {/* Card 4: Method Comparison */}
-      {result?.comparison && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2">
-              Method Comparison
-              <Badge variant="outline">
-                Straight vs Diminishing vs Upon Maturity
-              </Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <MethodComparison comparison={result.comparison} />
-          </CardContent>
-        </Card>
-      )}
-    </div>
+        {/* Card 4: Method Comparison */}
+        {result?.comparison && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2">
+                Method Comparison
+                <Badge variant="outline">
+                  Straight vs Diminishing vs Upon Maturity
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <MethodComparison comparison={result.comparison} />
+            </CardContent>
+          </Card>
+        )}
+      </ScrollBox>
+    </PageFill>
   );
 }
 
