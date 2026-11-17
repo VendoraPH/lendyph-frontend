@@ -177,9 +177,9 @@ function EditProfileCard() {
       <Separator />
       <CardContent className="pt-6">
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {/* Full Name */}
-            <div className="space-y-2 sm:col-span-2">
+            <div className="space-y-2 md:col-span-2">
               <Label htmlFor="profile-name">Full Name *</Label>
               <Input
                 id="profile-name"
@@ -309,11 +309,11 @@ export default function ProfileSettingsPage() {
         {/* Profile summary card */}
         <ProfileCard />
 
-        {/* Edit profile form */}
-        <EditProfileCard />
-
-        {/* Change password form */}
-        <ChangePasswordCard />
+        {/* Edit profile and change password: side by side from xl */}
+        <div className="grid items-start gap-6 xl:grid-cols-2">
+          <EditProfileCard />
+          <ChangePasswordCard />
+        </div>
       </ScrollBox>
     </PageFill>
     </RouteGuard>

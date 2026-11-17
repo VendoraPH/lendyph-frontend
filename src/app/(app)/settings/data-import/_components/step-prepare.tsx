@@ -310,23 +310,26 @@ export function StepPrepare({
             </p>
           </div>
 
-          <FileSlot
-            label="Members file"
-            description="One row per member of the existing book."
-            hint="Exported as CSV from your spreadsheet: File → Save As (or Download) → CSV."
-            file={files.customers}
-            onSelect={(file) => onFilesChange({ ...files, customers: file })}
-            optional
-          />
+          {/* The two files side by side from md */}
+          <div className="grid gap-3 md:grid-cols-2">
+            <FileSlot
+              label="Members file"
+              description="One row per member of the existing book."
+              hint="Exported as CSV from your spreadsheet: File → Save As (or Download) → CSV."
+              file={files.customers}
+              onSelect={(file) => onFilesChange({ ...files, customers: file })}
+              optional
+            />
 
-          <FileSlot
-            label="Loans file"
-            description="One row per loan, referencing members by their account number."
-            hint="Loans are matched to members by account number, so both files must use the same one."
-            file={files.loans}
-            onSelect={(file) => onFilesChange({ ...files, loans: file })}
-            optional
-          />
+            <FileSlot
+              label="Loans file"
+              description="One row per loan, referencing members by their account number."
+              hint="Loans are matched to members by account number, so both files must use the same one."
+              file={files.loans}
+              onSelect={(file) => onFilesChange({ ...files, loans: file })}
+              optional
+            />
+          </div>
 
           {loansOnly ? (
             <Alert className={CAUTION}>

@@ -61,12 +61,15 @@ export function TermsCard({ current, onPublished }: { current: PortalTermsSummar
             <Input id="tc-title" maxLength={150} value={form.title} onChange={(e) => set("title", e.target.value)} />
           </FormField>
         </div>
-        <FormField id="tc-terms" label="Terms of use">
-          <Textarea id="tc-terms" rows={6} value={form.terms_body} onChange={(e) => set("terms_body", e.target.value)} />
-        </FormField>
-        <FormField id="tc-privacy" label="Privacy notice">
-          <Textarea id="tc-privacy" rows={6} value={form.privacy_body} onChange={(e) => set("privacy_body", e.target.value)} />
-        </FormField>
+        {/* The two long texts side by side from md */}
+        <div className="grid gap-4 md:grid-cols-2">
+          <FormField id="tc-terms" label="Terms of use">
+            <Textarea id="tc-terms" rows={6} value={form.terms_body} onChange={(e) => set("terms_body", e.target.value)} />
+          </FormField>
+          <FormField id="tc-privacy" label="Privacy notice">
+            <Textarea id="tc-privacy" rows={6} value={form.privacy_body} onChange={(e) => set("privacy_body", e.target.value)} />
+          </FormField>
+        </div>
         <FormField id="tc-consent" label="Consent to electronic communication (optional)" hint="Members may tick it when they activate.">
           <Textarea id="tc-consent" rows={3} maxLength={20000} value={form.consent_body} onChange={(e) => set("consent_body", e.target.value)} />
         </FormField>

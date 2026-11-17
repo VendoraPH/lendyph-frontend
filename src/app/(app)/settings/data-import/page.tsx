@@ -63,7 +63,7 @@ function WizardFallback() {
 export default function DataImportPage() {
   return (
     <RouteGuard permission="imports:process" pageName="Data Import">
-      <PageFill className="mx-auto max-w-4xl gap-4">
+      <PageFill className="gap-4">
         <header className="shrink-0">
           <h1 className="text-2xl font-semibold">Data Import</h1>
           <p className="mt-1 text-sm text-muted-foreground">
