@@ -52,7 +52,7 @@ test("inside a scroll box the table wrapper stops clipping and the headings and 
   for (const t of [
     "[&>[data-slot=table-container]]:overflow-visible",
     "[&_thead_th:not([data-unpinned]_*)]:sticky",
-    "[&_thead_th:not([data-unpinned]_*)]:top-0",
+    "[&_thead_th:not([data-unpinned]_*)]:-top-px",
     "[&_thead_th:not([data-unpinned]_*)]:z-10",
     "[&_thead_th:not([data-unpinned]_*)]:bg-card",
     "[&_tfoot_td:not([data-unpinned]_*)]:sticky",
@@ -86,7 +86,7 @@ test("a pinned heading covers the sliver of the row scrolled away above it", () 
   for (const always of [false, true]) {
     const th = tokens(scrollBoxClass({ always })).find((t) => t.startsWith("[&_thead_th:not([data-unpinned]_*)]:shadow-"));
     assert.ok(th, "headings carry a shadow");
-    assert.match(th!, /0_-[0-9]+px_0_var\(--card\)/, th);
+    assert.match(th!, /0_-[4-9]px_0_var\(--card\)/, th);
     assert.match(th!, /inset_0_-1px_0_var\(--border\)/, "the line under the headings stays");
   }
 });
@@ -101,3 +101,14 @@ test("pinning skips tables inside [data-unpinned], so a table that styles its ow
     for (const t of pinning) assert.ok(t.includes(":not([data-unpinned]_*)"), t);
   }
 });
+
+test("a pinned heading sticks 1px above the box top, so a box at a fractional y never shows a line of the row behind", () => {
+  // Audit Trail's box started at y 378.28 and the heading painted from 379,
+  // leaving one pixel row of the scrolled row visible above it (check R3).
+  for (const always of [false, true]) {
+    const c = scrollBoxClass({ always });
+    assert.ok(has(c, "[&_thead_th:not([data-unpinned]_*)]:-top-px"), c);
+    assert.ok(!has(c, "[&_thead_th:not([data-unpinned]_*)]:top-0"), c);
+  }
+});
+

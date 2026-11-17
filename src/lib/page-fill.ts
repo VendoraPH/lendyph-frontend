@@ -24,14 +24,16 @@ const STICKY_TABLE = [
   // overflow, so un-clipping it there would cut a wide table off.
   "[&>[data-slot=table-container]]:overflow-visible",
   "[&_thead_th:not([data-unpinned]_*)]:sticky",
-  "[&_thead_th:not([data-unpinned]_*)]:top-0",
+  // 1px above the box top: a box that starts at a fractional y would
+  // otherwise show one pixel row of the scrolled row above the heading.
+  "[&_thead_th:not([data-unpinned]_*)]:-top-px",
   "[&_thead_th:not([data-unpinned]_*)]:z-10",
   "[&_thead_th:not([data-unpinned]_*)]:bg-card",
   // Row borders don't travel with sticky cells, so the line under the
   // headings is drawn on the cells themselves. The upward shadow in the card
   // colour covers the sliver of the scrolled-away row that shows above the
-  // headings when the box starts at a fractional y.
-  "[&_thead_th:not([data-unpinned]_*)]:shadow-[inset_0_-1px_0_var(--border),0_-2px_0_var(--card)]",
+  // headings when the box starts at a fractional y (up to about 4px).
+  "[&_thead_th:not([data-unpinned]_*)]:shadow-[inset_0_-1px_0_var(--border),0_-4px_0_var(--card)]",
   "[&_tfoot_td:not([data-unpinned]_*)]:sticky",
   "[&_tfoot_td:not([data-unpinned]_*)]:bottom-0",
   "[&_tfoot_td:not([data-unpinned]_*)]:z-10",
