@@ -11,8 +11,11 @@
  *   stepper only knows which step is open.
  * - Every step stays mounted and inactive ones are `hidden`, so uncontrolled
  *   inputs, file pickers and autofill keep what was typed.
- * - Next validates the open step (`validateStep`). `create`: a step opens only
- *   once the steps before it pass, and Save shows on the last step. `edit`: any
+ * - Next validates the open step: the browser's own constraints first
+ *   (required, min, pattern…, reported with the browser's message), then
+ *   `validateStep`. A `noValidate` form skips the browser's checks entirely,
+ *   so it accepts exactly what it did before. `create`: a step opens only once
+ *   the steps before it pass, and Save shows on the last step. `edit`: any
  *   step opens (on phones through a step menu), and Save shows on every step.
  * - Save is the form's own `type="submit"`, so the parent's `onSubmit` runs;
  *   the stepper never submits by itself. Before it does, every step is
@@ -54,7 +57,6 @@ import {
   type ReactNode,
 } from "react";
 import { ScrollBox } from "@/components/common/page-fill";
-import { nativeInvalidStepId } from "@/components/common/form-stepper-focus";
 import { StepFooter } from "@/components/common/form-stepper-footer";
 import { useStepperNav } from "@/components/common/form-stepper-nav";
 import { StepRail } from "@/components/common/form-stepper-rail";
@@ -93,6 +95,8 @@ export function FormStepper({
   submittingLabel,
   submitting = false,
   submitDisabled = false,
+  nextDisabled = false,
+  submitDescribedBy,
   actions,
   initialStepId,
   onStepChange,
@@ -102,23 +106,19 @@ export function FormStepper({
 }: FormStepperProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const baseId = useId();
-  const nav = useStepperNav({ steps, mode, validateStep, onInvalid, initialStepId, onStepChange, rootRef });
+  const nav = useStepperNav({ steps, mode, nextDisabled, validateStep, onInvalid, initialStepId, onStepChange, rootRef });
   const { index, isLast, passedList, open, markPassed } = nav;
   const count = steps.length;
   const step = steps[index];
   const classes = stepperLayoutClasses(layout);
 
+  /** Every step is checked again, in order; the first failing one opens and the submit stops. */
   function handleSubmitClick(event: MouseEvent<HTMLButtonElement>) {
     for (let i = 0; i < count; i++) {
-      if (!nav.check(i)) {
+      if (!nav.check(i, event.currentTarget)) {
         event.preventDefault();
         return;
       }
-    }
-    const nativeIndex = steps.findIndex((s) => s.id === nativeInvalidStepId(rootRef.current));
-    if (nativeIndex !== -1 && nativeIndex !== index) {
-      event.preventDefault();
-      open(nativeIndex, null, true);
     }
   }
 
@@ -165,7 +165,7 @@ export function FormStepper({
           steps={steps}
           index={index}
           passed={passedList}
-          reachable={(i) => !submitting && canGoToStep(i, { mode, current: index, passed: passedList })}
+          reachable={(i) => !submitting && canGoToStep(i, { mode, current: index, passed: passedList, nextDisabled })}
           onSelect={nav.goTo}
         />
         <p role="status" aria-live="polite" className="sr-only">
@@ -183,6 +183,8 @@ export function FormStepper({
           submittingLabel={submittingLabel}
           submitting={submitting}
           submitDisabled={submitDisabled}
+          nextDisabled={nextDisabled}
+          describedBy={submitDescribedBy}
           onBack={() => open(previousStepIndex(index, count))}
           onNext={nav.goNext}
           onSubmitClick={handleSubmitClick}

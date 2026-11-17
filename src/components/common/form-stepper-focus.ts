@@ -40,13 +40,13 @@ function focusField(panel: HTMLElement, key: string): boolean {
 }
 
 /**
- * The step holding the stepper's first natively invalid control, if any: a
- * `required` control on a hidden step would block the submit with no message
- * the user can see.
+ * Whether a step holds a control the browser marks invalid. Hidden steps
+ * count too: a `required` control there would otherwise block the submit with
+ * no message the user can see. Disabled controls never count.
  */
-export function nativeInvalidStepId(root: HTMLElement | null): string | undefined {
-  const invalid = root?.querySelector(NATIVE_INVALID);
-  return invalid?.closest<HTMLElement>("[data-step-panel]")?.dataset.stepPanel;
+export function stepHasNativeInvalid(root: HTMLElement | null, stepId: string): boolean {
+  const panel = root?.querySelector(`[data-step-panel="${CSS.escape(stepId)}"]`);
+  return !!panel?.querySelector(NATIVE_INVALID);
 }
 
 /**
