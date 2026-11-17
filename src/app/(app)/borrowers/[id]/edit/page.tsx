@@ -521,12 +521,12 @@ function EditBorrowerContent() {
             <div className="grid gap-6 xl:grid-cols-[20rem_minmax(0,1fr)]">
               {/* Profile Photo */}
               <Card>
-                <CardContent className="pt-6 space-y-4">
+                <CardContent className="pt-6 space-y-4 lg:max-xl:flex lg:max-xl:items-center lg:max-xl:gap-4 lg:max-xl:space-y-0">
                   <h3 className="text-base font-semibold">Profile Photo</h3>
-                  <div className="flex flex-wrap items-center gap-6">
-                    <div className="relative">
+                  <div className="flex flex-wrap items-center gap-6 lg:max-xl:contents">
+                    <div className="relative lg:max-xl:order-first">
                       {photoPreview ? (
-                        <div className="relative h-24 w-24 rounded-full overflow-hidden border-2 border-border">
+                        <div className="relative h-24 w-24 lg:max-xl:size-12 rounded-full overflow-hidden border-2 border-border">
                           {/* eslint-disable-next-line @next/next/no-img-element -- signed /api/files photo URL or local data: preview; CLAUDE.md "Images" rule requires plain <img> */}
                           <img
                             src={photoPreview}
@@ -542,7 +542,7 @@ function EditBorrowerContent() {
                           </button>
                         </div>
                       ) : (
-                        <div className="h-24 w-24 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center">
+                        <div className="h-24 w-24 lg:max-xl:size-12 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center">
                           <Camera className="h-6 w-6 text-muted-foreground/50" />
                         </div>
                       )}
@@ -554,12 +554,14 @@ function EditBorrowerContent() {
                         className="hidden"
                       />
                     </div>
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">
-                        Upload a profile photo of the member.
-                      </p>
-                      <p className="text-xs text-muted-foreground">JPG, PNG up to 5MB</p>
-                      <div className="flex items-center gap-2 pt-1">
+                    <div className="space-y-2 lg:max-xl:flex lg:max-xl:min-w-0 lg:max-xl:flex-1 lg:max-xl:items-center lg:max-xl:justify-between lg:max-xl:gap-4 lg:max-xl:space-y-0">
+                      <div className="space-y-2">
+                        <p className="text-sm text-muted-foreground">
+                          Upload a profile photo of the member.
+                        </p>
+                        <p className="text-xs text-muted-foreground">JPG, PNG up to 5MB</p>
+                      </div>
+                      <div className="flex items-center gap-2 pt-1 lg:max-xl:pt-0">
                         <Button
                           type="button"
                           variant="outline"
@@ -589,7 +591,7 @@ function EditBorrowerContent() {
               {/* Personal Information */}
               <Card>
                 <CardContent className="pt-6">
-                  <div className={FORM_STEP_GRID.grid}>
+                  <div className={`${FORM_STEP_GRID.grid} lg:grid-cols-4`}>
                     <div className="space-y-2">
                       <Label htmlFor="first_name">
                         First Name <span className="text-destructive">*</span>
