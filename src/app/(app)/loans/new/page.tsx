@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, useMemo, useEffect, Suspense } from "react";
+import { useState, useMemo, useEffect, useRef, Suspense, type FormEvent } from "react";
 import { RouteGuard } from "@/components/common";
 import { PageFill, PageLoader, ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { FormStep, FormStepper, type FormStepperHandle } from "@/components/common/form-stepper";
+import { FORM_STEP_GRID, errorMessages, stepErrorsOf, type StepErrors } from "@/lib/form-stepper";
 import { MissingAccessNotice } from "./_components/missing-access-notice";
 import { missingLoanFormAccess } from "./_lib/missing-access";
 import { StaffPicker } from "@/components/common/staff-picker";
@@ -43,7 +46,6 @@ import type {
   StaffMember,
 } from "@/types";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -64,7 +66,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -144,6 +145,7 @@ import {
 } from "./_lib/loan-preview";
 import { SHARE_CAPITAL_VALUE_HIDDEN } from "@/app/(app)/loans/[id]/_lib/collateral-display";
 import { useLoanPreview } from "./_hooks/use-loan-preview";
+import { useSubmitPressed } from "./_hooks/use-submit-pressed";
 import { saveLoanEdit } from "./_lib/save-loan-edit";
 import {
   amountInputValue,
@@ -157,6 +159,7 @@ import {
 } from "./_lib/restructure-edit";
 import { COLLECTED_BEFORE_INSURANCE, proceedsFigures } from "@/lib/restructure-proceeds";
 import { formatProductRangeMessage } from "./_lib/product-range-message";
+import { loanFormMissing, loanFormSteps, serverFieldErrors } from "./_lib/loan-form-steps";
 
 // ── Helpers ──
 
@@ -760,23 +763,45 @@ function NewLoanApplicationInner() {
     setCoMakerIds((prev) => prev.map((v, i) => (i === index ? (picked?.id ?? null) : v)));
   }
 
+  // ── Steps ──
+  // The form's cards as steps; the Collaterals step only for a role that can
+  // view collaterals, as the card was.
+  const steps = useMemo(
+    () => loanFormSteps({ showCollaterals: canListCollaterals, isRestructureEdit }),
+    [canListCollaterals, isRestructureEdit],
+  );
+  const stepperRef = useRef<FormStepperHandle>(null);
+  // Every field the user still needs to fix, by field. Next checks the open
+  // step and lists its fields; Save lists them all in one pop-up, as before
+  // (`onInvalid` below), and the stepper opens the first step holding one.
+  const missingFields = loanFormMissing({
+    hasMember: borrowerId !== null,
+    hasProduct: productId !== null,
+    principalOk: principal > 0 && !principalError,
+    termOk: term > 0 && !termError,
+    hasFrequency: paymentFrequency !== null,
+    rateOk: rate > 0,
+    hasReleaseDate: releaseDate !== undefined,
+    scbInvalid: scbError !== null,
+    processingFeeInvalid: processingFeePercentError !== null,
+    serviceFeeInvalid: serviceFeePercentError !== null,
+    remarksMissing: isRestructureEdit && remarksNeeded && !restructureRemarks.trim(),
+  });
+  function validateStep(stepId: string): StepErrors | true {
+    const step = steps.find((s) => s.id === stepId);
+    return step ? stepErrorsOf(missingFields, step) : true;
+  }
+  // Next shows the open step's missing fields. Save (the stepper checks every
+  // step and opens the first that fails) shows every missing field at once.
+  const submitPressed = useSubmitPressed();
+  function onInvalid(errors: StepErrors) {
+    notifyValidation(submitPressed.pressed.current ? Object.values(missingFields) : errorMessages(errors));
+  }
+
   // ── Submit ──
   const handleSubmit = async () => {
     if (collateralBlock) return;
-    // Collect every field the user still needs to fix and surface them in a
-    // single consolidated pop-up instead of inline red messages.
-    const missing: string[] = [];
-    if (borrowerId === null) missing.push("Member");
-    if (productId === null) missing.push("Loan product");
-    if (!(principal > 0) || principalError) missing.push("Principal amount");
-    if (!(term > 0) || termError) missing.push("Term");
-    if (paymentFrequency === null) missing.push("Payment frequency");
-    if (!(rate > 0)) missing.push("Interest rate");
-    if (releaseDate === undefined) missing.push("Release date");
-    if (scbError) missing.push("Share Capital Build-Up");
-    if (processingFeePercentError) missing.push("Processing fee");
-    if (serviceFeePercentError) missing.push("Service fee");
-    if (isRestructureEdit && remarksNeeded && !restructureRemarks.trim()) missing.push("Remarks");
+    const missing = Object.values(missingFields);
     if (missing.length > 0) {
       notifyValidation(missing);
       return;
@@ -791,6 +816,8 @@ function NewLoanApplicationInner() {
       return;
     try {
       setSubmitting(true);
+      // Keep LOAN_FORM_SENT_FIELDS (./_lib/loan-form-steps) in step with the
+      // keys sent here and in saveLoanEdit (`collaterals`).
       const payload = {
         borrower_id: borrowerId,
         co_maker_ids: coMakerIds.filter((id): id is number => id !== null),
@@ -913,6 +940,8 @@ function NewLoanApplicationInner() {
       // The server asks for a restructure's remarks: the field turns required.
       const remarksAsked = remarksRefusal(err);
       if (remarksAsked !== null) setRemarksRequiredMessage(remarksAsked);
+      // A 422 opens the first step holding one of its fields.
+      stepperRef.current?.showErrors(serverFieldErrors(err));
       toast.error(
         formatProductRangeMessage(
           getErrorMessage(
@@ -927,6 +956,11 @@ function NewLoanApplicationInner() {
       setSubmitting(false);
     }
   };
+
+  function onFormSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void handleSubmit();
+  }
 
   if (loadingData) {
     return <PageLoader />;
@@ -955,22 +989,35 @@ function NewLoanApplicationInner() {
         </div>
       </div>
 
-      {/* The form scrolls under the header; the submit bar stays at the foot. */}
-      <ScrollBox className="space-y-6 p-px">
-        <MissingAccessNotice missing={missingAccess} />
+      <MissingAccessNotice missing={missingAccess} className="shrink-0" />
 
-        {/* Full width: from xl the shorter cards sit in pairs; the collaterals
-            and the schedule preview take the whole row. */}
-        <div className="grid items-start gap-6 xl:grid-cols-2">
-          {/* ── Card 1: Borrower & Co-Maker ── */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Member & Co-Maker</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      {/* One step per card. At fit the open step scrolls under the rail and
+          Back, Next and the submit stay at the foot. */}
+      <form noValidate onSubmit={onFormSubmit} className={FIT_CLASSES.section} {...submitPressed.formProps}>
+        <FormStepper
+          ref={stepperRef}
+          steps={steps}
+          mode={isEditMode ? "edit" : "create"}
+          validateStep={validateStep}
+          onInvalid={onInvalid}
+          submitLabel={isEditMode ? "Save Changes" : "Submit Loan Application"}
+          submittingLabel={isEditMode ? "Saving..." : "Submitting..."}
+          submitting={submitting}
+          submitDisabled={collateralBlock !== null}
+          submitDescribedBy={collateralBlock ? "save-blocked-reason" : undefined}
+          actions={
+            collateralBlock ? (
+              <p id="save-blocked-reason" className="text-sm text-muted-foreground">
+                {collateralBlock}
+              </p>
+            ) : undefined
+          }
+        >
+          {/* ── Step 1: Borrower & Co-Maker ── */}
+          <FormStep id="member">
+              <div className={FORM_STEP_GRID.grid}>
                 {/* Borrower */}
-                <div className="space-y-2">
+                <div className="flex flex-col gap-2" data-field="borrower_id">
                   <div className="flex h-6 items-center">
                     <Label htmlFor={member.locked ? "loan-member" : undefined}>
                       Member <span className="text-destructive">*</span>
@@ -1001,8 +1048,8 @@ function NewLoanApplicationInner() {
                   )}
                 </div>
 
-                {/* Co-Makers */}
-                <div className="space-y-2">
+                {/* Co-Makers: the list grows and scrolls with the step */}
+                <div className="flex flex-col gap-2" data-field="co_maker_ids">
                   <div className="flex h-6 items-center justify-between">
                     <Label>Co-Maker{coMakerIds.length > 1 ? "s" : ""}</Label>
                     <Button
@@ -1052,8 +1099,10 @@ function NewLoanApplicationInner() {
                 </div>
 
                 {/* Account Officer */}
-                <div className="space-y-2">
-                  <Label htmlFor="account-officer">Account Officer (AO)</Label>
+                <div className="flex flex-col gap-2" data-field="account_officer_id">
+                  <div className="flex h-6 items-center">
+                    <Label htmlFor="account-officer">Account Officer (AO)</Label>
+                  </div>
                   <StaffPicker
                     id="account-officer"
                     value={accountOfficer}
@@ -1063,10 +1112,13 @@ function NewLoanApplicationInner() {
                 </div>
               </div>
 
+              {/* Purpose beside the policy exception from xl */}
+              <div className="grid items-start gap-6 xl:grid-cols-2">
               {/* Purpose */}
               <div className="space-y-2">
                 <Label>Purpose</Label>
                 <Textarea
+                  name="purpose"
                   placeholder="Briefly describe the purpose of this loan"
                   value={purpose}
                   onChange={(e) => setPurpose(e.target.value)}
@@ -1074,11 +1126,9 @@ function NewLoanApplicationInner() {
                 />
               </div>
 
-              <Separator />
-
               {/* Policy Exception */}
               <div className="space-y-4">
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-3" data-field="policy_exception">
                   <Checkbox
                     id="policy-exception"
                     checked={policyException}
@@ -1101,12 +1151,13 @@ function NewLoanApplicationInner() {
                 </div>
 
                 {policyException && (
-                  <div className="space-y-4 rounded-lg border border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-900/10 p-4">
+                  <div className="grid gap-4 rounded-lg border border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-900/10 p-4 md:grid-cols-2">
                     {/* Policy Exception Details */}
                     <div className="space-y-2">
                       <Label htmlFor="pe-details">Policy Exception Details</Label>
                       <Textarea
                         id="pe-details"
+                        name="policy_exception_details"
                         placeholder="Describe why this loan requires a policy exception..."
                         value={policyExceptionDetails}
                         onChange={(e) => setPolicyExceptionDetails(e.target.value)}
@@ -1153,17 +1204,14 @@ function NewLoanApplicationInner() {
                   </div>
                 )}
               </div>
-            </CardContent>
-          </Card>
+              </div>
+          </FormStep>
 
-          {/* ── Card 2: Loan Product & Terms ── */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Loan Product & Terms</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          {/* ── Step 2: Loan Product & Terms ── */}
+          <FormStep id="terms">
+              <div className={FORM_STEP_GRID.grid}>
               {/* Product */}
-              <div className="space-y-2">
+              <div className="space-y-2" data-field="loan_product_id">
                 <Label>
                   Loan Product <span className="text-destructive">*</span>
                 </Label>
@@ -1202,13 +1250,13 @@ function NewLoanApplicationInner() {
                 )}
               </div>
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 {/* Principal Amount */}
                 <div className="space-y-2">
                   <Label>
                     Loan Amount <span className="text-destructive">*</span>
                   </Label>
                   <Input
+                    name="principal_amount"
                     type="number"
                     placeholder="0.00"
                     step="0.01"
@@ -1235,6 +1283,7 @@ function NewLoanApplicationInner() {
                     Term ({termUnit}) <span className="text-destructive">*</span>
                   </Label>
                   <Input
+                    name="term"
                     type="number"
                     placeholder="0"
                     step="1"
@@ -1244,11 +1293,9 @@ function NewLoanApplicationInner() {
                     max={selectedProduct?.max_term}
                   />
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 {/* Payment Frequency */}
-                <div className="space-y-2">
+                <div className="space-y-2" data-field="frequency">
                   <Label>Payment Frequency</Label>
                   <Select
                     value={paymentFrequency ?? null}
@@ -1282,6 +1329,7 @@ function NewLoanApplicationInner() {
                 <div className="space-y-2">
                   <Label>Interest Rate (% per {ratePeriodWord(rateFrequency)})</Label>
                   <Input
+                    name="interest_rate"
                     inputMode="decimal"
                     placeholder="0"
                     value={interestRate}
@@ -1311,8 +1359,10 @@ function NewLoanApplicationInner() {
                   selected. Required when product has scb_required; optional
                   otherwise. This ensures the tester / user can always enter an
                   SCB amount regardless of backend product config. */}
+              {/* The build-up beside a restructure's remarks from xl */}
+              <div className="grid items-start gap-4 xl:grid-cols-2">
               {selectedProduct && (
-                <div className="mt-4 rounded-lg border border-brand-orange/30 bg-brand-orange/5 p-4 space-y-3">
+                <div className="rounded-lg border border-brand-orange/30 bg-brand-orange/5 p-4 space-y-3">
                   <div className="space-y-0.5">
                     <Label htmlFor="scb-amount" className="text-sm font-medium">
                       Share Capital Build-Up{" "}
@@ -1336,6 +1386,7 @@ function NewLoanApplicationInner() {
                     <div className="space-y-1.5">
                       <Input
                         id="scb-amount"
+                        name="scb_amount"
                         type="number"
                         min={isRestructureEdit ? 0 : (selectedProduct.min_scb ?? 0)}
                         max={isRestructureEdit ? undefined : (selectedProduct.max_scb ?? undefined)}
@@ -1362,7 +1413,7 @@ function NewLoanApplicationInner() {
                   principal is below the outstanding balance (it writes the
                   difference off), and sent only with a changed principal. */}
               {isRestructureEdit && (
-                <div className="mt-4 space-y-1.5">
+                <div className="space-y-1.5">
                   <Label htmlFor="restructure-remarks">
                     Remarks{" "}
                     {remarksNeeded ? (
@@ -1373,6 +1424,7 @@ function NewLoanApplicationInner() {
                   </Label>
                   <Textarea
                     id="restructure-remarks"
+                    name="remarks"
                     value={restructureRemarks}
                     onChange={(e) => setRestructureRemarks(e.target.value)}
                     maxLength={1000}
@@ -1392,27 +1444,27 @@ function NewLoanApplicationInner() {
                   )}
                 </div>
               )}
-            </CardContent>
-          </Card>
+              </div>
+          </FormStep>
 
-          {/* ── Card 3: Collaterals ──
+          {/* ── Step 3: Collaterals ──
               Only for a role that can view collaterals. Without `collaterals:view`
               the member's collaterals are never read, so the card could only say
               "no registered collaterals" and offer a register link the role can't
               use; the missing-access notice above says what is skipped instead. */}
           {canListCollaterals && (
-            <Card className="col-span-full">
-              <CardHeader>
+            <FormStep id="collaterals">
+              {/* The attached list grows and scrolls with the step. */}
+              <div className="space-y-4" data-field="collaterals">
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <ShieldCheck className="size-5 text-brand-blue" />
-                      Collaterals
-                    </CardTitle>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Attach the member&rsquo;s registered collaterals to secure
-                      this loan. Only collaterals not currently locked to another
-                      active loan can be selected.
+                    <p className="flex items-start gap-2 text-sm text-muted-foreground">
+                      <ShieldCheck className="size-5 shrink-0 text-brand-blue" aria-hidden="true" />
+                      <span>
+                        Attach the member&rsquo;s registered collaterals to secure
+                        this loan. Only collaterals not currently locked to another
+                        active loan can be selected.
+                      </span>
                     </p>
                     {isEditMode && !canUpdateCollaterals && (
                       <p className="mt-1 text-sm text-muted-foreground">
@@ -1433,8 +1485,6 @@ function NewLoanApplicationInner() {
                     </Button>
                   )}
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
                 {collateralLoad === "loading" ? (
                   <div
                     role="status"
@@ -1601,19 +1651,21 @@ function NewLoanApplicationInner() {
                     </div>
                   </div>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </FormStep>
           )}
 
-          {/* ── Card 4: Dates ── */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Dates</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {/* ── Step 4: Deductions & Net Proceeds, with the dates ── */}
+          <FormStep id="deductions">
+            <div className="space-y-4">
+              {/* The dates, under their heading, beside the fees from xl; the
+                  fee grid widens with its own width. */}
+              <div className="grid items-start gap-x-6 gap-y-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+              <section className="space-y-3" aria-labelledby="loan-dates-title">
+                <h3 id="loan-dates-title" className="text-sm font-semibold">Dates</h3>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 {/* Release Date */}
-                <div className="space-y-2">
+                <div className="space-y-2" data-field="start_date">
                   <Label>
                     Release Date <span className="text-destructive">*</span>
                   </Label>
@@ -1655,19 +1707,14 @@ function NewLoanApplicationInner() {
                       : "—"}
                   </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+                </div>
+              </section>
 
-          {/* ── Card 4: Deductions & Net Proceeds ── */}
-          <Card>
-            <CardHeader>
-              <CardTitle>{isRestructureEdit ? "Deductions" : "Deductions & Net Proceeds"}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              {/* Level with the dates' fields: the heading's line and gap. */}
+              <div className="@container xl:pt-8">
+              <div className="grid grid-cols-1 gap-4 @md:grid-cols-2 @xl:grid-cols-3 @4xl:grid-cols-4">
                 {/* Processing Fee */}
-                <div className="space-y-2">
+                <div className="space-y-2" data-field="deductions.processing_fee">
                   <Label className="flex items-center gap-0.5">
                     Processing Fee
                     <span className="text-muted-foreground font-normal text-xs ml-0.5">(</span>
@@ -1679,7 +1726,8 @@ function NewLoanApplicationInner() {
                         value={processingFeeRate}
                         onChange={(e) => setProcessingFeeRate(sanitizeDecimalInput(e.target.value))}
                         onBlur={() => setEditingFeeRate(null)}
-                        onKeyDown={(e) => { if (e.key === "Enter") setEditingFeeRate(null); }}
+                        // Enter only closes the rate, as before, never Next.
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setEditingFeeRate(null); } }}
                       />
                     ) : (
                       <span
@@ -1708,7 +1756,7 @@ function NewLoanApplicationInner() {
                 </div>
 
                 {/* Service Fee */}
-                <div className="space-y-2">
+                <div className="space-y-2" data-field="deductions.service_fee">
                   <Label className="flex items-center gap-0.5">
                     Service Fee
                     <span className="text-muted-foreground font-normal text-xs ml-0.5">(</span>
@@ -1720,7 +1768,7 @@ function NewLoanApplicationInner() {
                         value={serviceFeeRate}
                         onChange={(e) => setServiceFeeRate(sanitizeDecimalInput(e.target.value))}
                         onBlur={() => setEditingFeeRate(null)}
-                        onKeyDown={(e) => { if (e.key === "Enter") setEditingFeeRate(null); }}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setEditingFeeRate(null); } }}
                       />
                     ) : (
                       <span
@@ -1767,7 +1815,13 @@ function NewLoanApplicationInner() {
                   </div>
                 ))}
               </div>
+              </div>
+              </div>
 
+              {/* The deductions list beside the server's totals from xl; the
+                  list grows and scrolls with the step. */}
+              <div className="grid items-start gap-6 xl:grid-cols-2" data-field="deductions">
+              <div className="space-y-4">
                 {/* Configured fees the release would add for this loan, from the server */}
                 {previewDeductions && previewDeductions.configured_fees.length > 0 && (
                   <div className="space-y-2">
@@ -1835,12 +1889,12 @@ function NewLoanApplicationInner() {
                     </div>
                   )}
                 </div>
+              </div>
 
-              <Separator />
-
+              <div className="space-y-4">
               {/* Summary — the server's totals; a dash until it has sent them */}
               <div
-                className="grid grid-cols-1 gap-3 md:grid-cols-2"
+                className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-1"
                 aria-live="polite"
                 aria-busy={preview.status === "loading"}
               >
@@ -1887,15 +1941,15 @@ function NewLoanApplicationInner() {
                   </Button>
                 </div>
               )}
-            </CardContent>
-          </Card>
+              </div>
+              </div>
+            </div>
+          </FormStep>
 
-          {/* ── Card 5: Amortization Schedule Preview ── */}
-          <Card className="col-span-full">
-            <CardHeader>
-              <CardTitle>Amortization Schedule Preview</CardTitle>
-            </CardHeader>
-            <CardContent>
+          {/* ── Step 5: Amortization Schedule Preview, the server's ──
+              At fit the schedule fills the step and scrolls in its own box,
+              its headings and Total row pinned; below fit the box is capped. */}
+          <FormStep id="review" className="fit:flex fit:h-full fit:flex-col">
               {canShowAmortization && preview.status === "loading" ? (
                 <div
                   role="status"
@@ -1925,13 +1979,13 @@ function NewLoanApplicationInner() {
                   </div>
                 </div>
               ) : canShowAmortization && amortization ? (
-                <div className="space-y-3">
+                <div className="flex flex-col gap-3 fit:min-h-0 fit:flex-1">
                   <p className="text-xs text-muted-foreground">
                     Built with the product&rsquo;s{" "}
                     {interestMethodLabel(amortization.interest_method)} interest
                     method, as the loan&rsquo;s schedule will be at release.
                   </p>
-                  <div className="overflow-x-auto">
+                  <ScrollBox always className="max-h-[60vh] rounded-md border fit:max-h-none">
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -1967,9 +2021,12 @@ function NewLoanApplicationInner() {
                       </TableBody>
                       <TableFooter>
                         <TableRow>
-                          <TableCell colSpan={2} className="font-semibold">
+                          {/* Two cells, not one spanning both: a pinned cell
+                              spanning columns can sit off its columns. */}
+                          <TableCell className="font-semibold">
                             Total
                           </TableCell>
+                          <TableCell />
                           <TableCell className="text-right font-semibold">
                             {formatCurrency(amortization.totals.principal_due)}
                           </TableCell>
@@ -1985,7 +2042,7 @@ function NewLoanApplicationInner() {
                         </TableRow>
                       </TableFooter>
                     </Table>
-                  </div>
+                  </ScrollBox>
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-10 text-center text-muted-foreground">
@@ -2000,33 +2057,9 @@ function NewLoanApplicationInner() {
                   </p>
                 </div>
               )}
-            </CardContent>
-          </Card>
-        </div>
-      </ScrollBox>
-
-      {/* ── Submit ── */}
-      <div data-fab-clear className="flex shrink-0 flex-col gap-2 border-t pt-4 sm:items-end">
-        {collateralBlock && (
-          <p
-            id="save-blocked-reason"
-            className="text-sm text-muted-foreground sm:text-right"
-          >
-            {collateralBlock}
-          </p>
-        )}
-        <Button
-          size="lg"
-          className="w-full bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark sm:w-auto"
-          disabled={submitting || collateralBlock !== null}
-          aria-describedby={collateralBlock ? "save-blocked-reason" : undefined}
-          onClick={handleSubmit}
-        >
-          {submitting
-            ? isEditMode ? "Saving..." : "Submitting..."
-            : isEditMode ? "Save Changes" : "Submit Loan Application"}
-        </Button>
-      </div>
+          </FormStep>
+        </FormStepper>
+      </form>
 
       {/* ── Collateral Picker Dialog ── */}
       <Dialog
