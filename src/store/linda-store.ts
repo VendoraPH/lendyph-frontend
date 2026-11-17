@@ -9,7 +9,6 @@ import {
 } from "@/lib/linda";
 import type { LindaChatRequest, LindaReply } from "@/types/linda";
 import { useAuthStore } from "./auth-store";
-import { useUIStore } from "./ui-store";
 
 /** Sends one question. `lindaService.chat`; tests pass their own. */
 export type LindaChat = (request: LindaChatRequest, signal?: AbortSignal) => Promise<LindaReply>;
@@ -88,18 +87,10 @@ function failureText(err: unknown): string | null {
 
 export const useLindaStore = create<LindaState>()((set, get) => {
   /**
-   * Shows the panel, the dialog or neither. The panel makes room by narrowing
-   * the sidebar rather than the page, so the cards and tables keep their
-   * width. The collapse is temporary: the user's own collapse choice is
-   * neither read nor written, so it is intact after Linda closes, after a
-   * reload and in other tabs. On phones the desktop sidebar is hidden, so
-   * this changes nothing there. The dialog covers the page, so the sidebar
-   * comes back while it shows.
+   * Shows the panel, the dialog or neither. The panel is a side pop-up over the
+   * page's right edge, so neither the page nor the sidebar moves.
    */
-  const show = (open: boolean, expanded: boolean) => {
-    if (open !== get().open) useUIStore.getState().setSidebarAutoCollapsed(open);
-    set({ open, expanded });
-  };
+  const show = (open: boolean, expanded: boolean) => set({ open, expanded });
 
   const append = (message: Omit<LindaMessage, "id">) =>
     set((s) => ({ messages: [...s.messages, { ...message, id: nextId++ }] }));

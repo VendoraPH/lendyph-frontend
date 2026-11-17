@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { Maximize2, X } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { lindaPanelClass } from "@/lib/linda-panel";
 import { isImeComposing } from "@/lib/linda";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useLindaStore } from "@/store";
@@ -14,9 +14,9 @@ import { LindaNewChatButton } from "./linda-new-chat-button";
 import { useLindaPanelFocus } from "./use-linda-panel-focus";
 
 /**
- * Linda's side panel. On desktop it sits beside the page and the page narrows
- * to make room (about 25% wide on large screens, wider on smaller ones so the
- * answers stay readable); on phones it covers the screen as a modal dialog.
+ * Linda's side panel. On desktop it's a side pop-up that slides in over the
+ * page's right edge, so the page and the sidebar never move; on phones it
+ * covers the screen as a modal dialog.
  * On desktop its expand button opens the same conversation in a large dialog
  * (`LindaModal`).
  *
@@ -66,16 +66,7 @@ function LindaSidePanel() {
         if (e.key === "Escape" && !isImeComposing(e.nativeEvent)) close();
         onTab(e);
       }}
-      // Positioned in every state (fixed on phones, relative beside the page),
-      // so absolutely positioned content such as the sr-only "Close Linda"
-      // label is clipped by overflow-hidden instead of widening the page while
-      // the panel is closed. `inset-0` moves a relative box by nothing.
-      className={cn(
-        "flex-col overflow-hidden bg-background outline-none md:shrink-0 md:transition-[width] md:duration-300 md:ease-in-out",
-        open
-          ? "fixed inset-0 z-50 flex md:relative md:z-auto md:w-[40%] md:min-w-80 md:border-l md:border-border lg:w-[32%] xl:w-[25%]"
-          : "relative hidden md:flex md:w-0",
-      )}
+      className={lindaPanelClass(open)}
     >
       <div className="flex h-full w-full flex-col md:min-w-80">
         <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border px-4">
