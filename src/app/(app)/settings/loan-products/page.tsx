@@ -1232,7 +1232,9 @@ function LoanProductsContent() {
               <TableBody>
                 {products.map((product) => (
                   <TableRow key={product.id}>
-                    <TableCell>
+                    {/* Table cells don't wrap by default; the long text ones do here, so the
+                        table fits the card at 1366 px. Short cells and the actions stay on one line. */}
+                    <TableCell className="min-w-36 whitespace-normal">
                       <div>
                         <p className="font-medium">{product.name}</p>
                         {product.description && (
@@ -1242,7 +1244,7 @@ function LoanProductsContent() {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="whitespace-normal">
                       <div className="text-sm">
                         <span className="font-medium">
                           {getInterestRateDisplay(product)}
@@ -1255,11 +1257,11 @@ function LoanProductsContent() {
                     <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                       {getTermDisplay(product)}
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                    <TableCell className="text-sm text-muted-foreground whitespace-normal">
                       {formatCurrency(product.min_amount)} —{" "}
                       {formatCurrency(product.max_amount)}
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
+                    <TableCell className="text-sm text-muted-foreground whitespace-normal">
                       {getProductFrequencies(product)}
                     </TableCell>
                     <TableCell>
