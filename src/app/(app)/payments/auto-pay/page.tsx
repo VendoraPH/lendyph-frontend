@@ -120,7 +120,7 @@ export default function AutoPayPage() {
           className={step === 1 ? cn(scrollBoxClass(), "space-y-6 p-px") : FIT_CLASSES.section}
         >
           {step === 1 && lastRun && (
-            <Card className="max-w-2xl">
+            <Card>
               <CardHeader>
                 <CardTitle className="text-base">Last run</CardTitle>
               </CardHeader>
@@ -145,7 +145,7 @@ export default function AutoPayPage() {
             </Card>
           )}
 
-          <Card className={cn("max-w-2xl", step === 2 && FIT_CLASSES.section)}>
+          <Card className={cn(step === 2 && FIT_CLASSES.section)}>
             <CardHeader>
               <CardTitle className="text-base">
                 {step === 1 ? "Set Filters" : "Review & Confirm"}

@@ -52,7 +52,7 @@ export function ReviewStep({
         {/* Summary Cards: the server's totals for the loans with full dues */}
         <div
           aria-busy={updating}
-          className={cn("grid grid-cols-2 gap-3 sm:grid-cols-3", updating && "opacity-60")}
+          className={cn("grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6", updating && "opacity-60")}
         >
           <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-center dark:border-green-800 dark:bg-green-950/20">
             <p className="text-xl font-bold text-green-700 dark:text-green-300">

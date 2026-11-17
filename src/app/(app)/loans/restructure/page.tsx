@@ -792,7 +792,7 @@ function RestructureLoanInner() {
 
   return (
     <>
-      <PageFill className="mx-auto w-full max-w-4xl pb-10 fit:pb-0">
+      <PageFill className="pb-10 fit:pb-0">
 
         {/* Header */}
         <div className="flex items-center gap-4">
@@ -823,7 +823,7 @@ function RestructureLoanInner() {
             <CardHeader>
               <CardTitle className="text-base">Source Loan</CardTitle>
             </CardHeader>
-            <CardContent className="grid gap-4 sm:grid-cols-2">
+            <CardContent className="grid gap-4 md:grid-cols-2">
               {/* Borrower combobox */}
               <div className="space-y-1.5">
                 <Label>Member</Label>
@@ -912,13 +912,15 @@ function RestructureLoanInner() {
 
           {/* ── Form (shown after loan is selected + loaded) ── */}
           {formVisible && (
-            <>
+            // Full width: from xl the shorter cards sit in pairs; the
+            // collaterals, remarks and schedule take the whole row.
+            <div className="grid items-start gap-6 xl:grid-cols-2">
               {/* Member & Co-Maker */}
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Member & Co-Maker</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="grid gap-4 md:grid-cols-2">
                   {/* Borrower (locked) */}
                   <div className="space-y-1.5">
                     <Label>Member</Label>
@@ -986,7 +988,7 @@ function RestructureLoanInner() {
                   </div>
 
                   {/* Purpose */}
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5 md:col-span-2">
                     <Label>Purpose <span className="text-muted-foreground">(optional)</span></Label>
                     <Textarea
                       placeholder="Loan purpose…"
@@ -1004,7 +1006,7 @@ function RestructureLoanInner() {
                   <CardTitle className="text-base">Loan Product & Terms</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-4 md:grid-cols-2">
                     {/* Product */}
                     <div className="space-y-1.5">
                       <Label>Loan Product</Label>
@@ -1150,7 +1152,7 @@ function RestructureLoanInner() {
               </Card>
 
               {/* Collaterals */}
-              <Card>
+              <Card className="col-span-full">
                 <CardHeader className="flex flex-row items-start justify-between">
                   <div className="space-y-1">
                     <CardTitle className="text-base">
@@ -1326,7 +1328,7 @@ function RestructureLoanInner() {
                 <CardHeader>
                   <CardTitle className="text-base">Restructure Date</CardTitle>
                 </CardHeader>
-                <CardContent className="grid gap-4 sm:grid-cols-2">
+                <CardContent className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label>Date Restructured (new release date)</Label>
                     <Popover open={restructureDateOpen} onOpenChange={setRestructureDateOpen}>
@@ -1368,7 +1370,7 @@ function RestructureLoanInner() {
                   <CardTitle className="text-base">Deductions</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-4 md:grid-cols-2">
                     {/* Processing Fee */}
                     <div className="space-y-1.5">
                       <Label>Processing Fee (%)</Label>
@@ -1530,7 +1532,7 @@ function RestructureLoanInner() {
               </Card>
 
               {/* Remarks & Policy Exception */}
-              <Card>
+              <Card className="col-span-full">
                 <CardHeader>
                   <CardTitle className="text-base">Remarks & Policy Exception</CardTitle>
                 </CardHeader>
@@ -1619,7 +1621,7 @@ function RestructureLoanInner() {
 
               {/* Amortization Preview — the server's schedule for these terms */}
               {amortization && amortization.rows.length > 0 && (
-                <Card>
+                <Card className="col-span-full">
                   <CardHeader>
                     <CardTitle className="text-base">
                       Amortization Preview
@@ -1667,7 +1669,7 @@ function RestructureLoanInner() {
                   </CardContent>
                 </Card>
               )}
-            </>
+            </div>
           )}
         </ScrollBox>
 

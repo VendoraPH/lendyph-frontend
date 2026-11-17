@@ -188,10 +188,11 @@ export function SettingsForm({ settings, onSaved }: { settings: ReminderSettings
       )}
       {/* The fields scroll; the save bar stays at the foot. */}
       <ScrollBox className="space-y-4 p-px">
+        {/* Full width: from xl the settings sections sit in pairs. */}
         <fieldset
           disabled={locked}
           aria-describedby={locked ? "company-wide-lock" : undefined}
-          className="min-w-0 space-y-4"
+          className="grid min-w-0 items-start gap-4 xl:grid-cols-2"
         >
           <legend className="sr-only">Company-wide settings</legend>
           <Section title="General">
@@ -205,7 +206,7 @@ export function SettingsForm({ settings, onSaved }: { settings: ReminderSettings
                 is sent to members, whatever this switch says.
               </p>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2">
               <Field id="set-tz" label="Timezone">
                 <NativeSelect id="set-tz" className="w-full" value={form.timezone} onChange={(e) => patch({ timezone: e.target.value })}>
                   {TIMEZONES.map((tz) => (
@@ -235,7 +236,7 @@ export function SettingsForm({ settings, onSaved }: { settings: ReminderSettings
             title="Contact hours"
             description={`Reminders only go out inside this window, and never before ${formatSendTime(CONTACT_HOURS_LIMIT.start)} or after ${formatSendTime(CONTACT_HOURS_LIMIT.end)}. One queued outside it waits for the next opening.`}
           >
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2">
               <Field id="set-start" label="From">
                 <Input
                   id="set-start"
@@ -260,7 +261,7 @@ export function SettingsForm({ settings, onSaved }: { settings: ReminderSettings
           </Section>
 
           <Section title="Retries" description="Failed sends are retried; an invalid number or a bounced address is not.">
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2">
               <Field id="set-attempts" label={`Retry attempts (max ${MAX_RETRY_ATTEMPTS})`}>
                 <Input
                   id="set-attempts"
@@ -284,7 +285,7 @@ export function SettingsForm({ settings, onSaved }: { settings: ReminderSettings
           </Section>
 
           <Section title="SMS provider" description="The API credentials are stored encrypted and never shown again.">
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2">
               <Field id="sms-provider" label="Provider">
                 <NativeSelect
                   id="sms-provider"
@@ -335,7 +336,7 @@ export function SettingsForm({ settings, onSaved }: { settings: ReminderSettings
           </Section>
 
           <Section title="Email provider">
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2">
               <Field id="email-provider" label="Provider">
                 <NativeSelect
                   id="email-provider"

@@ -149,7 +149,7 @@ export default function AmortizationPage() {
             <CardTitle>Loan Parameters</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {/* Principal */}
               <div className="space-y-1.5">
                 <Label htmlFor="principal">Principal Amount (₱) *</Label>

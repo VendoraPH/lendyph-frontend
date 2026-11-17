@@ -19,7 +19,7 @@ export function BinhsInputForm({ value, onChange }: Props) {
       <CardHeader>
         <CardTitle>Loan Inputs</CardTitle>
       </CardHeader>
-      <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         <div className="space-y-1">
           <Label htmlFor="binhs-principal">Principal (₱)</Label>
           <Input
