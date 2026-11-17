@@ -21,6 +21,7 @@ import { DOCUMENT_CATEGORY_LABELS, labelOf, reportName } from "../../_lib/labels
 import { signedUrl } from "../../_lib/safe-url";
 import { linkedDocumentSubject, subjectDocumentsParams } from "../../_lib/register-documents";
 import { VERSION_FIELDS, reportOptions, toUpload, uploadCategories, uploadFields } from "../_lib/document-form";
+import { UPLOAD_FILE_KEY, UPLOAD_STEPS } from "../_lib/upload-steps";
 import { DocumentVersionsDialog } from "./document-versions-dialog";
 
 const COLUMNS: RegisterColumn<CdaDocument>[] = [
@@ -143,7 +144,8 @@ export function Documents({ year }: { year: number }) {
         columns={COLUMNS}
         fields={fields}
         permission="cda:upload"
-        file={{ label: "File", required: true, accept: CDA_FILE_ACCEPT }}
+        file={{ label: "File", required: true, accept: CDA_FILE_ACCEPT, key: UPLOAD_FILE_KEY }}
+        steps={UPLOAD_STEPS}
         onCreate={(v, file) => (file ? cdaService.uploadDocument(year, toUpload(v), file) : Promise.reject(new Error("No file")))}
         rowActions={(r) => {
           const url = signedUrl(r.current_version?.url);

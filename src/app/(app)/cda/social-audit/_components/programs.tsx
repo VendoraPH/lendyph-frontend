@@ -10,43 +10,14 @@ import type { CdaSocialProgram, CdaSocialTotals } from "@/types/cda";
 import { AttachButton, useAttachDocument } from "../../_components/attach-document";
 import { RegisterDocumentsLink } from "../../_components/register-documents-link";
 import { RegisterTable, type RegisterColumn } from "../../_components/register-table";
-import { FUNDING_SOURCE_LABELS, SOCIAL_CATEGORY_LABELS, SOCIAL_STATUS_LABELS, labelOf, toOptions } from "../../_lib/labels";
+import { FUNDING_SOURCE_LABELS, SOCIAL_CATEGORY_LABELS, SOCIAL_STATUS_LABELS, labelOf } from "../../_lib/labels";
 import { cdaCount, cdaMoney } from "../../_lib/money";
-import type { RecordField, RecordValues } from "../../_lib/record-form";
+import type { RecordValues } from "../../_lib/record-form";
 import { officerIdOf, officerOptions } from "../../_lib/screen-gaps";
+import { PROGRAM_OFFICER_FIELD, PROGRAM_STEPS, programFields } from "../_lib/program-steps";
 
 /** A program as the form reads it: the server's responsible officer, by id. */
 type ProgramRow = CdaSocialProgram & { responsible_officer_id: number | null };
-
-const FIELDS: RecordField[] = [
-  { key: "name", label: "Program", type: "text", required: true },
-  { key: "category", label: "Category", type: "select", required: true, options: toOptions(SOCIAL_CATEGORY_LABELS) },
-  { key: "status", label: "Status", type: "select", required: true, options: toOptions(SOCIAL_STATUS_LABELS) },
-  { key: "held_on", label: "Held on", type: "date" },
-  { key: "ended_on", label: "Ended on", type: "date" },
-  { key: "location", label: "Location", type: "text" },
-  { key: "target_beneficiaries", label: "Target beneficiaries", type: "number" },
-  { key: "actual_beneficiaries", label: "Actual beneficiaries", type: "number" },
-  { key: "budget", label: "Budget (₱)", type: "money" },
-  { key: "actual_expense", label: "Actual expense (₱)", type: "money" },
-  { key: "funding_source", label: "Funding source", type: "select", options: toOptions(FUNDING_SOURCE_LABELS) },
-  {
-    key: "cdf_amount",
-    label: "From the Community Development Fund (₱)",
-    type: "money",
-    help: "Can't be more than the actual expense.",
-  },
-  { key: "objective", label: "Objective", type: "textarea" },
-  { key: "description", label: "Description", type: "textarea" },
-  { key: "remarks", label: "Remarks", type: "textarea" },
-];
-
-const OFFICER_FIELD: RecordField = {
-  key: "responsible_officer_id",
-  label: "Responsible officer",
-  type: "select",
-  help: "From CDA › Officers, serving this year.",
-};
 
 const COLUMNS: RegisterColumn<ProgramRow>[] = [
   {
@@ -125,10 +96,9 @@ export function SocialPrograms({ year, onChanged }: { year: number; onChanged: (
   const attach = useAttachDocument(year, resource.refetch);
 
   const fields = useMemo(() => {
-    if (!officers.data) return FIELDS;
+    if (!officers.data) return programFields(null);
     const chosen = (resource.data?.rows ?? []).flatMap((r) => (r.responsible_officer ? [r.responsible_officer] : []));
-    const officerField = { ...OFFICER_FIELD, options: officerOptions(officers.data.rows, chosen) };
-    return [...FIELDS.slice(0, -1), officerField, ...FIELDS.slice(-1)];
+    return programFields({ ...PROGRAM_OFFICER_FIELD, options: officerOptions(officers.data.rows, chosen) });
   }, [officers.data, resource.data]);
 
   return (
@@ -142,6 +112,7 @@ export function SocialPrograms({ year, onChanged }: { year: number; onChanged: (
         endpoints={[`GET ${API_ENDPOINTS.CDA.SOCIAL_PROGRAMS(year)}`]}
         columns={COLUMNS}
         fields={fields}
+        steps={PROGRAM_STEPS}
         defaults={{ status: "completed" }}
         permission="cda:manage_social"
         onCreate={(v) => cdaService.createSocialProgram(year, asProgram(v)).then(changed)}

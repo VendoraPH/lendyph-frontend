@@ -88,7 +88,7 @@ export function RecordFields({
   return (
     <>
       {fields.map((field) => (
-        <div key={field.key} className={fieldSpan(field)}>
+        <div key={field.key} data-field={field.key} className={fieldSpan(field)}>
           <Label htmlFor={`rec-${field.key}`}>
             {field.label} {field.required && <span className="text-destructive">*</span>}
           </Label>

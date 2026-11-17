@@ -18,6 +18,7 @@ import {
   uploadFields,
   type DocumentSubject,
 } from "../documents/_lib/document-form";
+import { UPLOAD_FILE_KEY, UPLOAD_STEPS } from "../documents/_lib/upload-steps";
 import { CDA_FILE_ACCEPT, RecordFormDialog } from "./record-form-dialog";
 
 /** What the server asks on top of `cda:upload` for a register's document (`DocumentRepository::writePermissionFor`). */
@@ -83,7 +84,8 @@ function AttachForm({
       description={subject.name}
       fields={fields}
       defaults={attachDefaults(subject.type)}
-      file={{ label: "File", required: true, accept: CDA_FILE_ACCEPT }}
+      file={{ label: "File", required: true, accept: CDA_FILE_ACCEPT, key: UPLOAD_FILE_KEY }}
+      steps={UPLOAD_STEPS}
       onSubmit={upload}
     />
   );

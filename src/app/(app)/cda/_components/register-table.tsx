@@ -26,6 +26,7 @@ import type { DrainResult } from "@/lib/paginate";
 import type { Permission } from "@/types/rbac";
 import { RecordFormDialog, type FileSlot } from "./record-form-dialog";
 import type { RecordDraft, RecordField, RecordValues } from "../_lib/record-form";
+import type { RecordStepGroup } from "../_lib/record-steps";
 
 export interface RegisterColumn<T> {
   header: string;
@@ -62,6 +63,8 @@ interface RegisterTableProps<T extends { id: number }> {
   fill?: boolean;
   /** The empty list's picture: "noResults" while the list is filtered. */
   emptyIllustration?: "empty" | "noResults" | "allCaughtUp";
+  /** A long form's steps (`RecordFormDialog`); without them the form is one page. */
+  steps?: readonly RecordStepGroup[];
   /** Fields for editing, when they differ from the new row's. */
   editFields?: RecordField[];
   /**
@@ -231,6 +234,7 @@ export function RegisterTable<T extends { id: number }>(props: RegisterTableProp
           record={editing}
           defaults={props.defaults}
           file={file}
+          steps={props.steps}
           onSubmit={save}
         />
       )}

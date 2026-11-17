@@ -10,28 +10,9 @@ import { AttachButton, useAttachDocument } from "../../_components/attach-docume
 import { RegisterDocumentsLink } from "../../_components/register-documents-link";
 import { RegisterTable, type RegisterColumn } from "../../_components/register-table";
 import { ToneBadge } from "../../_components/tone-badge";
-import { HALF_LABELS, MEDIATION_STATUS_META, labelOf, toOptions } from "../../_lib/labels";
-import type { RecordField, RecordValues } from "../../_lib/record-form";
-
-const FIELDS: RecordField[] = [
-  { key: "filed_on", label: "Filed on", type: "date", required: true },
-  { key: "status", label: "Status", type: "select", required: true, options: toOptions(MEDIATION_STATUS_META) },
-  { key: "complainant", label: "Complainant", type: "text" },
-  { key: "respondent", label: "Respondent", type: "text" },
-  { key: "nature", label: "Nature of the dispute", type: "text" },
-  { key: "mediator", label: "Mediator or conciliator", type: "text" },
-  { key: "mediation_started_on", label: "Mediation started", type: "date" },
-  { key: "meetings_count", label: "Meetings held", type: "number" },
-  {
-    key: "resolved_on",
-    label: "Closed on",
-    type: "date",
-    help: "Needed once the case is resolved, escalated or withdrawn.",
-  },
-  { key: "resolution", label: "Resolution", type: "textarea" },
-  { key: "description", label: "Description", type: "textarea" },
-  { key: "remarks", label: "Remarks", type: "textarea" },
-];
+import { HALF_LABELS, MEDIATION_STATUS_META, labelOf } from "../../_lib/labels";
+import type { RecordValues } from "../../_lib/record-form";
+import { CASE_FIELDS, CASE_STEPS } from "../_lib/case-steps";
 
 const COLUMNS: RegisterColumn<CdaMediationCase>[] = [
   { header: "Case", cell: (r) => <span className="font-medium">{r.case_number}</span> },
@@ -78,7 +59,8 @@ export function MediationCases({ year, onChanged }: { year: number; onChanged: (
         resource={resource}
         endpoints={[`GET ${API_ENDPOINTS.CDA.MEDIATION_CASES(year)}`]}
         columns={COLUMNS}
-        fields={FIELDS}
+        fields={CASE_FIELDS}
+        steps={CASE_STEPS}
         defaults={{ status: "pending", meetings_count: "0" }}
         permission="cda:manage_mediation"
         onCreate={(v) => cdaService.createMediationCase(year, asCase(v)).then(onChanged)}
