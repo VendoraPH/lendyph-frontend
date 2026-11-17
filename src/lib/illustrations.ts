@@ -46,9 +46,10 @@ export const ILLUSTRATIONS: Readonly<Record<IllustrationName, string | null>> = 
 };
 
 /**
- * The slots whose pictures are objects on a plain white background. In dark
- * mode they sit on a light rounded tile, so the white reads as intended; the
- * sign-in scenes fill their own space and need no tile.
+ * The slots whose pictures are objects on a plain white background. They sit
+ * on a rounded white tile in both modes: on a white card it's invisible, on
+ * the grey page or a dark card it reads as a soft tile instead of a hard white
+ * square. The sign-in scenes fill their own space and need no tile.
  */
 export const ON_WHITE: ReadonlySet<IllustrationName> = new Set<IllustrationName>([
   "empty",
@@ -60,6 +61,11 @@ export const ON_WHITE: ReadonlySet<IllustrationName> = new Set<IllustrationName>
   "notFound",
   "pickReport",
 ]);
+
+/** The tile classes for a slot's picture: a rounded white tile for ON_WHITE slots, none otherwise. */
+export function illustrationTileClass(name: IllustrationName): string {
+  return ON_WHITE.has(name) ? "rounded-2xl bg-white p-1.5" : "";
+}
 
 /** The picture for a slot, or null when the slot is empty. */
 export function illustrationSrc(name: IllustrationName): string | null {

@@ -60,10 +60,17 @@ test("nothing readable is an empty list", () => {
 });
 
 test("the dashboard renders the rows as built, with no sort of its own", () => {
-  const page = readFileSync(join(process.cwd(), "src/app/(app)/dashboard/page.tsx"), "utf8");
+  const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
+  // The page fetches and maps; its table component draws the rows.
+  const page = read("src/app/(app)/dashboard/page.tsx");
+  const table = read("src/app/(app)/dashboard/_components/dashboard-tables.tsx");
   assert.ok(page.includes("recentTransactionRows(res)"));
-  assert.ok(page.includes("<TableRow key={tx.key}"));
-  assert.ok(page.includes("currencyOrDash(tx.amount)"));
-  assert.doesNotMatch(page, /transactions\s*\.\s*(sort|toSorted|reverse)\(/);
-  assert.doesNotMatch(page, /recentTransactions\s*\.\s*(sort|toSorted|reverse)\(/);
+  assert.ok(page.includes("<TransactionsTable rows={transactions}"));
+  assert.ok(table.includes("<TableRow key={tx.key}"));
+  assert.ok(table.includes("currencyOrDash(tx.amount)"));
+  for (const text of [page, table]) {
+    assert.doesNotMatch(text, /transactions\s*\.\s*(sort|toSorted|reverse)\(/);
+    assert.doesNotMatch(text, /recentTransactions\s*\.\s*(sort|toSorted|reverse)\(/);
+    assert.doesNotMatch(text, /rows\s*\.\s*(sort|toSorted|reverse)\(/);
+  }
 });

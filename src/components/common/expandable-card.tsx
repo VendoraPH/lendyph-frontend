@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useId, useLayoutEffect, useState, type ReactNode } from "react";
+import { useCallback, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Maximize2 } from "lucide-react";
+import { Maximize2, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -51,8 +52,10 @@ function createBodyHost(): HTMLDivElement | null {
  * between the card and the dialog, so it stays mounted: its state is kept and
  * nothing it fetched is fetched again. While the dialog is open the card's
  * body is empty. The dialog's body is a `ScrollBox`, so table headings stay
- * pinned there too. Esc and the close button close it, and focus returns to
- * the expand button (Base UI's trigger).
+ * pinned there too. The dialog opens with focus on its close button (never on
+ * something inside the body, such as a chart, whose tooltip would cover it).
+ * Esc and the close button close it, and focus returns to the expand button
+ * (Base UI's trigger).
  *
  * The body sits outside the dialog in React's tree: a popup inside it (a
  * select, a menu, another dialog) works on the card but isn't nested in the
@@ -76,6 +79,7 @@ export function ExpandableCard({
   const isClient = useIsClient();
   const titleId = useId();
   const [open, setOpen] = useState(false);
+  const closeRef = useRef<HTMLButtonElement>(null);
   const [host] = useState(createBodyHost);
   const [cardSlot, setCardSlot] = useState<HTMLDivElement | null>(null);
   const [dialogSlot, setDialogSlot] = useState<HTMLDivElement | null>(null);
@@ -124,7 +128,13 @@ export function ExpandableCard({
             >
               <Maximize2 aria-hidden="true" />
             </DialogTrigger>
-            <DialogContent size="full" className="overflow-hidden">
+            <DialogContent size="full" className="overflow-hidden" showCloseButton={false} initialFocus={closeRef}>
+              <DialogClose
+                ref={closeRef}
+                render={<Button variant="ghost" size="icon-sm" className="absolute top-2 right-2" aria-label="Close" />}
+              >
+                <XIcon aria-hidden="true" />
+              </DialogClose>
               <DialogHeader className="pr-10">
                 <DialogTitle>{title}</DialogTitle>
                 {description ? <DialogDescription>{description}</DialogDescription> : null}

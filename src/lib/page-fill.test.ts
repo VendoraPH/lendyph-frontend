@@ -70,3 +70,14 @@ test("the page loader fills its page at fit and keeps a sensible height below it
   for (const t of ["flex", "items-center", "justify-center", "fit:flex-1", "fit:min-h-0"]) assert.ok(has(c, t), t);
   assert.ok(!c.includes("100vh"), "no viewport arithmetic");
 });
+
+test("a pinned heading covers the sliver of the row scrolled away above it", () => {
+  // The box can start at a fractional y, which leaves about 1px of the row
+  // above showing; an upward shadow in the card colour paints over it.
+  for (const always of [false, true]) {
+    const th = tokens(scrollBoxClass({ always })).find((t) => t.startsWith("[&_thead_th]:shadow-"));
+    assert.ok(th, "headings carry a shadow");
+    assert.match(th!, /0_-[0-9]+px_0_var\(--card\)/, th);
+    assert.match(th!, /inset_0_-1px_0_var\(--border\)/, "the line under the headings stays");
+  }
+});

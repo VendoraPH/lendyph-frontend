@@ -5,39 +5,23 @@ import Link from "next/link";
 import { RouteGuard } from "@/components/common";
 import { ExpandableCard } from "@/components/common/expandable-card";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { NoBranchBanner } from "@/components/common/no-branch-banner";
 import { useIsClient, usePermission } from "@/hooks";
-import {
-  AreaChart,
-  Area,
-  PieChart,
-  Pie,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-} from "recharts";
+import { AreaChart, Area } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Wallet, FileText, PhilippinePeso, AlertTriangle, TrendingUp, Landmark } from "lucide-react";
-import { getInitials } from "@/lib/initials";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatDateFull } from "@/lib/format";
-import { currencyOrDash } from "@/lib/report-format";
 import { shareCapitalService } from "@/services";
 import { dashboardService } from "@/services/dashboard.service";
-import { useLindaStore } from "@/store";
-import { useLindaAvailable } from "@/components/linda/linda-gate";
 import type { DailyDuesSummary } from "@/types";
 import { shareCapitalBookBalance } from "./_lib/share-capital-kpi";
 import { collectionPieSlices, collectionRateTone, shownCollectionRate } from "./_lib/collection-pie";
+import { DuesDonut } from "./_components/dues-donut";
+import { DuesTable, TransactionsTable, type DueItemView, type LoadState } from "./_components/dashboard-tables";
 import { DASHBOARD_PAGE_CLASS, dashboardKpiClasses } from "./_lib/kpi-layout";
 import { insuranceCollected } from "./_lib/insurance-collected";
 import { recentTransactionRows, type RecentTransactionRow } from "./_lib/recent-transactions";
@@ -84,22 +68,6 @@ interface DailyDueItem {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// View models — what the UI renders, after mapping the API response
-// ---------------------------------------------------------------------------
-
-/** Request lifecycle for a section, so empty data and a failed fetch render differently. */
-type LoadState = "loading" | "ready" | "error";
-
-type DueItemView = {
-  id: number;
-  borrower: string;
-  loanId: string;
-  amountDue: number;
-  amountPaid: number;
-  status: "collected" | "partial" | "pending";
-};
 
 // ---------------------------------------------------------------------------
 // KPI Card structure (values and sparklines populated from state)
@@ -155,32 +123,6 @@ function Sparkline({ data, color }: { data: SparklinePoint[]; color: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Placeholder row for a table with nothing to show
-// ---------------------------------------------------------------------------
-
-function TableEmptyRow({
-  colSpan,
-  state,
-  emptyText,
-}: {
-  colSpan: number;
-  state: LoadState;
-  emptyText: string;
-}) {
-  return (
-    <TableRow className="hover:bg-transparent">
-      <TableCell colSpan={colSpan} className="py-10 text-center text-sm text-muted-foreground">
-        {state === "loading"
-          ? "Loading…"
-          : state === "error"
-            ? "Couldn't load this data. Please refresh the page."
-            : emptyText}
-      </TableCell>
-    </TableRow>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
@@ -194,10 +136,7 @@ function formatCompactCurrency(amount: number): string {
 
 function DashboardContent() {
   const mounted = useIsClient();
-  // Make room for Linda's side panel only while it is open.
-  const lindaOpen = useLindaStore((s) => s.open);
-  const lindaEnabled = useLindaAvailable();
-  const kpiClasses = dashboardKpiClasses({ lindaEnabled, lindaOpen });
+  const kpiClasses = dashboardKpiClasses();
   const canViewShareCapital = usePermission().can("share_capital:view");
   const [shareCapitalTotal, setShareCapitalTotal] = useState<string>("—");
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -319,219 +258,95 @@ function DashboardContent() {
       {/* Row 1: KPI Cards (compact, natural height)                        */}
       {/* ----------------------------------------------------------------- */}
       <div className={kpiClasses.grid}>
-        {KPI_CARD_STRUCTURE.map((kpi) => (
-          <Link key={kpi.label} href={kpi.href} className="group">
-            <Card
-              size="sm"
-              className="h-full rounded-xl border border-border shadow-sm transition-all duration-200 group-hover:shadow-md group-hover:border-brand-orange/30 group-hover:scale-[1.02] cursor-pointer"
-            >
-              <CardContent className="flex h-full items-center">
-                <div className="flex w-full items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div
-                      className="h-7 w-7 rounded-full flex items-center justify-center shrink-0"
-                      style={{ backgroundColor: kpi.color }}
-                    >
-                      <kpi.icon className="h-3.5 w-3.5 text-white" />
-                    </div>
-                    <div>
-                      <p className="text-lg font-bold leading-tight">{kpiValues[kpi.key]}</p>
-                      <p className="text-[11px] text-muted-foreground">{kpi.label}</p>
-                      {kpi.key === "collected" && (
-                        <p className="text-[10px] text-muted-foreground tabular-nums">
-                          Insurance premium collected: {insuranceCollectedLabel}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  {(() => {
-                    // Only draw a trend line when the backend actually sent that
-                    // series — no decorative curve next to a real figure.
-                    const series = sparklinePoints(kpi.sparkKey ? stats?.sparklines?.[kpi.sparkKey] : undefined);
-                    return hasSparklineData(series) ? <Sparkline data={series} color={kpi.color} /> : null;
-                  })()}
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
-      </div>
-
-      {/* ----------------------------------------------------------------- */}
-      {/* Row 2: daily dues (left) and Recent Transactions (right). At fit   */}
-      {/* they share the height left and their tables scroll inside.        */}
-      {/* ----------------------------------------------------------------- */}
-      <div className={kpiClasses.columns}>
-        <ExpandableCard
-          title="Expected Daily Collection vs Actual Collection"
-          description={formatDateFull(new Date())}
-          className="rounded-xl border border-border shadow-sm"
-          contentClassName="px-0"
-          actions={
-            <Badge variant="outline" className={rateBadgeClass}>
-              <TrendingUp className="h-3 w-3 mr-1" />
-              {collectionRateLabel} collected
-            </Badge>
-          }
-        >
-          {/* The chart beside the table on a wide card, above it on a narrow one. */}
-          <div className="flex flex-col gap-4 @xl:flex-row fit:flex-1 fit:min-h-0">
-            <div className="flex shrink-0 flex-col items-center justify-center px-4">
-              <div className="relative" style={{ width: 160, height: 160 }}>
-                {collectionRate === null ? (
-                  // Nothing due (or no summary yet): an empty ring, since a pie of zeros draws nothing.
-                  <div aria-hidden="true" className="absolute inset-[8px] rounded-full border-[24px] border-muted" />
-                ) : mounted ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={pieData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={48}
-                        outerRadius={72}
-                        paddingAngle={3}
-                        dataKey="value"
-                        strokeWidth={0}
-                        isAnimationActive={false}
-                      >
-                        {pieData.map((entry) => (
-                          <Cell key={entry.name} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        formatter={(value) => formatCurrency(Number(value))}
-                        contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid var(--border)" }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : null}
-                {/* Center label */}
-                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <p className="text-xl font-bold">{collectionRateLabel}</p>
-                  <p className="text-[11px] text-muted-foreground">Collected</p>
-                </div>
-              </div>
-              {/* Legend */}
-              <div className="flex items-center gap-4 mt-2">
-                {pieData.map((entry) => (
-                  <div key={entry.name} className="flex items-center gap-1.5">
-                    <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
-                    <span className="text-[11px] text-muted-foreground">{entry.name}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Breakdown table */}
-            <ScrollBox className="@xl:flex-1">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="pl-4 text-muted-foreground">Member</TableHead>
-                    <TableHead className="text-muted-foreground">Loan ID</TableHead>
-                    <TableHead className="text-right text-muted-foreground">Amount Due</TableHead>
-                    <TableHead className="text-right text-muted-foreground">Paid</TableHead>
-                    <TableHead className="pr-4 text-right text-muted-foreground">Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {dueItems.length === 0 && (
-                    <TableEmptyRow
-                      colSpan={5}
-                      state={duesStatus}
-                      emptyText="Nothing due today."
-                    />
-                  )}
-                  {dueItems.map((item) => (
-                    <TableRow key={item.id} className="hover:bg-muted/40 transition-colors">
-                      <TableCell className="pl-4">
-                        <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-full bg-purple-500/15 flex items-center justify-center text-xs font-semibold text-purple-700 dark:text-purple-300 shrink-0">
-                            {getInitials(item.borrower)}
-                          </div>
-                          <span className="font-medium text-sm whitespace-nowrap">{item.borrower}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{item.loanId}</TableCell>
-                      <TableCell className="text-right text-sm font-medium">{formatCurrency(item.amountDue)}</TableCell>
-                      <TableCell className="text-right text-sm font-medium">
-                        {item.amountPaid > 0 ? formatCurrency(item.amountPaid) : "—"}
-                      </TableCell>
-                      <TableCell className="pr-4 text-right">
-                        <Badge
-                          variant="outline"
-                          className={
-                            item.status === "collected"
-                              ? "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/30"
-                              : item.status === "partial"
-                                ? "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/30"
-                                : "bg-muted text-muted-foreground border-border"
-                          }
-                        >
-                          {item.status === "collected" ? "Paid" : item.status === "partial" ? "Partial" : "Pending"}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </ScrollBox>
-          </div>
-        </ExpandableCard>
-
-        <ExpandableCard
-          title="Recent Transactions"
-          className="rounded-xl border border-border shadow-sm"
-          contentClassName="px-0"
-        >
-          <ScrollBox>
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="pl-4 text-muted-foreground">Name</TableHead>
-                  <TableHead className="text-muted-foreground">Description</TableHead>
-                  <TableHead className="text-right text-muted-foreground">Amount</TableHead>
-                  <TableHead className="pr-4 text-right text-muted-foreground">Date</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {transactions.length === 0 && (
-                  <TableEmptyRow
-                    colSpan={4}
-                    state={txStatus}
-                    emptyText="No transactions yet. Payments and loan releases will appear here."
-                  />
+        {KPI_CARD_STRUCTURE.map((kpi) => {
+          // Only draw a trend line when the backend actually sent that
+          // series — no decorative curve next to a real figure.
+          const series = sparklinePoints(kpi.sparkKey ? stats?.sparklines?.[kpi.sparkKey] : undefined);
+          return (
+            <Link key={kpi.label} href={kpi.href} className="group">
+              <Card
+                size="sm"
+                className={cn(
+                  kpiClasses.card,
+                  "h-full rounded-xl border border-border shadow-sm transition-all duration-200 group-hover:shadow-md group-hover:border-brand-orange/30 group-hover:scale-[1.02] cursor-pointer",
                 )}
-                {transactions.map((tx) => {
-                  const initials = getInitials(tx.name);
-                  return (
-                    <TableRow key={tx.key} className="hover:bg-muted/40 transition-colors">
-                      <TableCell className="pl-4">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-semibold text-white shrink-0 ${tx.color}`}
-                          >
-                            {initials}
-                          </div>
-                          <span className="font-medium text-sm whitespace-nowrap">{tx.name}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{tx.desc}</TableCell>
-                      <TableCell className="text-right text-sm font-medium">
-                        {currencyOrDash(tx.amount)}
-                      </TableCell>
-                      <TableCell className="text-right text-sm text-muted-foreground pr-4">
-                        {tx.date}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </ScrollBox>
-        </ExpandableCard>
+              >
+                <CardContent className="flex h-full flex-col justify-center gap-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <div
+                        className="h-7 w-7 rounded-full flex items-center justify-center shrink-0"
+                        style={{ backgroundColor: kpi.color }}
+                      >
+                        <kpi.icon className="h-3.5 w-3.5 text-white" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-lg font-bold leading-tight">{kpiValues[kpi.key]}</p>
+                        <p className="text-[11px] leading-tight text-muted-foreground">{kpi.label}</p>
+                      </div>
+                    </div>
+                    {hasSparklineData(series) ? (
+                      <div className={kpiClasses.sparkline}>
+                        <Sparkline data={series} color={kpi.color} />
+                      </div>
+                    ) : null}
+                  </div>
+                  {kpi.key === "collected" && (
+                    <p className="text-[10px] leading-tight text-muted-foreground tabular-nums">
+                      Insurance premium collected: {insuranceCollectedLabel}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </Link>
+          );
+        })}
       </div>
+
+      {/* ----------------------------------------------------------------- */}
+      {/* Row 2: one full-width card, a tab per table. At fit it takes the  */}
+      {/* height left and each table scrolls inside with every column shown. */}
+      {/* ----------------------------------------------------------------- */}
+      <ExpandableCard
+        title="Collections and Transactions"
+        description={formatDateFull(new Date())}
+        className="rounded-xl border border-border shadow-sm"
+        contentClassName="px-0"
+        actions={
+          <Badge variant="outline" className={rateBadgeClass}>
+            <TrendingUp className="h-3 w-3 mr-1" />
+            {collectionRateLabel} collected
+          </Badge>
+        }
+      >
+        <Tabs defaultValue="dues" className={cn(FIT_CLASSES.section, "gap-3")}>
+          <TabsList className="mx-4">
+            <TabsTrigger value="dues">Daily dues</TabsTrigger>
+            <TabsTrigger value="transactions">Recent transactions</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="dues" className={FIT_CLASSES.section}>
+            {/* The donut beside the table on a wide card, above it on a narrow one. */}
+            <div className="flex flex-col gap-4 @xl:flex-row fit:flex-1 fit:min-h-0">
+              <DuesDonut
+                rate={collectionRate}
+                rateLabel={collectionRateLabel}
+                slices={pieData}
+                mounted={mounted}
+              />
+              <ScrollBox className="@xl:flex-1">
+                <DuesTable items={dueItems} state={duesStatus} />
+              </ScrollBox>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="transactions" className={FIT_CLASSES.section}>
+            <ScrollBox>
+              <TransactionsTable rows={transactions} state={txStatus} />
+            </ScrollBox>
+          </TabsContent>
+        </Tabs>
+      </ExpandableCard>
     </>
   );
 }

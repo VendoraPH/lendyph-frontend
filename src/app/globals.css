@@ -248,14 +248,27 @@
 }
 
 /*
- * Printing a page shows all of it: the shell and every scroll box give up
- * their fixed height and inner scrolling, so nothing is cut at the window's
- * edge. Printables opened in their own tab are unaffected.
+ * Printing a page shows all of it, on the full page width: the side menu,
+ * the header and Linda's panel are left out, and the shell and every scroll
+ * box give up their fixed height and inner scrolling, so nothing is cut at
+ * the window's edge. Printables opened in their own tab are unaffected.
  */
 @media print {
+  [data-app-shell] > aside,
+  [data-app-column] > header {
+    display: none !important;
+  }
   [data-app-shell] {
+    display: block !important;
     height: auto !important;
     overflow: visible !important;
+  }
+  [data-app-shell] [data-app-column] {
+    display: block !important;
+    width: 100% !important;
+  }
+  [data-app-main] {
+    padding: 0 !important;
   }
   [data-app-shell] [data-app-column],
   [data-app-main],

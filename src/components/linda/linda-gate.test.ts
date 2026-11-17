@@ -22,13 +22,19 @@ test("the gate checks the build flag before any hook, then linda:use", () => {
   assert.match(gate, /lindaAvailable\(env\.features\.linda, can\)/);
 });
 
-test("the dashboard and the credit scoring card ask the same gate", () => {
-  for (const file of [
-    "src/app/(app)/dashboard/page.tsx",
-    "src/app/(app)/credit-scoring/borrowers/[id]/page.tsx",
-  ]) {
-    const text = read(file);
-    assert.match(text, /useLindaAvailable\(\)/, file);
-    assert.doesNotMatch(text, /env\.features\.linda/, file);
-  }
+test("the credit scoring card asks the same gate", () => {
+  const file = "src/app/(app)/credit-scoring/borrowers/[id]/page.tsx";
+  const text = read(file);
+  assert.match(text, /useLindaAvailable\(\)/, file);
+  assert.doesNotMatch(text, /env\.features\.linda/, file);
+});
+
+// The dashboard's layout follows its own width (a size container) since the
+// UI round, so it no longer reads Linda at all; it must never check the flag
+// directly, and if it reads Linda again it asks the gate.
+test("the dashboard never checks the Linda flag on its own", () => {
+  const file = "src/app/(app)/dashboard/page.tsx";
+  const text = read(file);
+  assert.doesNotMatch(text, /env\.features\.linda/, file);
+  if (/useLindaStore|linda/i.test(text)) assert.match(text, /useLindaAvailable\(\)/, file);
 });
