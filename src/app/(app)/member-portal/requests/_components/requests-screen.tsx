@@ -107,7 +107,7 @@ export function RequestsScreen() {
         />
       </div>
 
-      <div className="shrink-0 overflow-x-auto">
+      <div className="shrink-0">
         <Tabs
           value={status}
           onValueChange={(v) => {
@@ -115,9 +115,10 @@ export function RequestsScreen() {
             reset();
           }}
         >
-          <TabsList>
+          {/* Wraps onto a second row rather than hiding the last statuses off the edge. */}
+          <TabsList className="h-auto flex-wrap justify-start">
             {REQUEST_STATUSES.map((s) => (
-              <TabsTrigger key={s} value={s}>
+              <TabsTrigger key={s} value={s} className="h-7 flex-none">
                 {REQUEST_STATUS_LABELS[s]}
                 {counts && <span className="ml-1 text-xs text-muted-foreground tabular-nums">{counts[s] ?? 0}</span>}
               </TabsTrigger>

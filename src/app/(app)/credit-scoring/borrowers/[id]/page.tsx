@@ -81,7 +81,7 @@ function BorrowerCreditProfileContent({
               <ScrollBox className="space-y-6 p-px">
                 {summaryOnly ? null : flagsResource.unavailable || flagsResource.error ? (
                   <Card>
-                    <CardContent className="pt-6 text-sm text-muted-foreground">
+                    <CardContent className="pt-6 fit:pt-0 text-sm text-muted-foreground">
                       Policy flags unavailable — this member&apos;s hard-flag status
                       could not be loaded. Treat this member as unscreened for hard
                       flags until this is resolved.
@@ -96,7 +96,7 @@ function BorrowerCreditProfileContent({
 
                 {!summaryOnly && profile.status !== "not_scored" && (
                   <Card>
-                    <CardContent className="pt-6">
+                    <CardContent className="pt-6 fit:pt-0">
                       <CapacitySection capacity={profile.capacity ?? null} financialsHidden={profile.financials_hidden} />
                     </CardContent>
                   </Card>

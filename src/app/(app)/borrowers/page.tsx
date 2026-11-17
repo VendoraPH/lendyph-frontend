@@ -67,16 +67,18 @@ function StatCard({
   iconBg: string;
 }) {
   return (
-    <Card>
-      <CardContent className="py-4">
+    // At fit the card is one compact line (label beside the figure), so the
+    // members list below keeps most of the screen.
+    <Card className="fit:py-2.5">
+      <CardContent className="py-4 fit:py-0">
         <div className="flex items-center justify-between">
-          <div>
+          <div className="fit:flex fit:items-baseline fit:gap-2">
             <p className="text-xs font-medium text-muted-foreground">{label}</p>
-            <p className={cn("text-2xl font-bold", valueClassName)}>
+            <p className={cn("text-2xl font-bold fit:text-xl", valueClassName)}>
               {value ?? "—"}
             </p>
           </div>
-          <div className={cn("rounded-full p-2.5", iconBg)}>{icon}</div>
+          <div className={cn("rounded-full p-2.5 fit:p-1.5", iconBg)}>{icon}</div>
         </div>
       </CardContent>
     </Card>
@@ -345,7 +347,7 @@ function BorrowersContent() {
   ];
 
   return (
-    <PageFill>
+    <PageFill className="fit:gap-4">
       <NoBranchBanner className="shrink-0" />
       {/* Header */}
       <div className="flex shrink-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -415,7 +417,7 @@ function BorrowersContent() {
               aria-controls={`${tab.value}-panel`}
               onClick={() => setMainTab(tab.value)}
               className={cn(
-                "flex items-center gap-2 px-5 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange/40",
+                "flex items-center gap-2 px-5 py-2.5 fit:py-1.5 text-sm font-semibold border-b-2 -mb-px transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange/40",
                 selected
                   ? "border-brand-orange text-brand-orange"
                   : "border-transparent text-muted-foreground hover:text-foreground"
@@ -444,8 +446,8 @@ function BorrowersContent() {
 
       {/* Filters + Table */}
       {mainTab === "members" && (
-      <Card id="members-panel" role="region" aria-labelledby="members-tab" className={FIT_CLASSES.section}>
-        <div className="shrink-0 p-6 pb-0">
+      <Card id="members-panel" role="region" aria-labelledby="members-tab" className={cn(FIT_CLASSES.section, "fit:gap-3 fit:py-3")}>
+        <div className="shrink-0 p-6 pb-0 fit:px-4 fit:pt-0">
           <BorrowerFilters
             search={search}
             onSearchChange={handleSearchChange}
@@ -460,7 +462,7 @@ function BorrowersContent() {
             }}
           />
         </div>
-        <CardContent className={cn("pt-4", FIT_CLASSES.section)}>
+        <CardContent className={cn("pt-4 fit:pt-0", FIT_CLASSES.section)}>
           {loading ? (
             <div className="flex items-center justify-center py-12 fit:flex-1">
               <Spinner className="size-6 text-muted-foreground" />

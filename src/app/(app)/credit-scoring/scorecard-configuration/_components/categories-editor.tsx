@@ -30,7 +30,7 @@ export function CategoriesEditor({
         const inputId = `weight-${cat.key}`;
         return (
           <Card key={cat.key}>
-            <CardContent className="flex items-center justify-between gap-4 pt-6">
+            <CardContent className="flex items-center justify-between gap-4 pt-6 fit:pt-0">
               <div>
                 <label htmlFor={inputId} className="text-sm font-medium">
                   {cat.label}

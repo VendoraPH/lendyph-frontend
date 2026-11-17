@@ -72,7 +72,7 @@ function RiskMonitoringContent() {
               </div>
 
               <Card>
-                <CardContent className="space-y-3 pt-6">
+                <CardContent className="space-y-3 pt-6 fit:pt-0">
                   <p className="text-sm font-medium">Alerts (last 30 days)</p>
                   {data.alerts.length === 0 && (
                     <p className="text-sm text-muted-foreground">No active alerts.</p>

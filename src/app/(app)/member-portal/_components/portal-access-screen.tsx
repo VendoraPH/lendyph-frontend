@@ -9,6 +9,12 @@ import { Kpi } from "../../savings/_components/kpi";
 import { usePortalResource } from "../_hooks/use-portal-resource";
 import { PortalAccountsTable } from "./portal-accounts-table";
 import { PageFill } from "@/components/common/page-fill";
+import { cn } from "@/lib/utils";
+
+// At fit the counts' cards drop their extra padding, so the members list
+// below keeps most of the screen. Every count stays.
+const COMPACT_KPIS =
+  "fit:gap-2 fit:[&_[data-slot=card]]:py-2.5 fit:[&_[data-slot=card-content]]:py-0 fit:[&_[data-slot=card-content]>p+p]:mt-0";
 
 const STAT_CARDS: { key: keyof PortalStats; label: string }[] = [
   { key: "eligible", label: "Active members" },
@@ -33,7 +39,7 @@ export function PortalAccessScreen() {
   const stats = usePortalResource(fetchStats);
 
   return (
-    <PageFill>
+    <PageFill className="fit:gap-4">
       <div className="flex shrink-0 flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Portal Access</h1>
@@ -45,7 +51,7 @@ export function PortalAccessScreen() {
       </div>
       <DataState resource={stats} endpoints={[]} summary="The Member Portal counts for your branches.">
         {(s) => (
-          <div className="grid shrink-0 grid-cols-2 gap-3 md:grid-cols-4">
+          <div className={cn("grid shrink-0 grid-cols-2 gap-3 md:grid-cols-4", COMPACT_KPIS)}>
             {STAT_CARDS.map((c) => (
               <Kpi key={c.key} label={c.label} value={String(s[c.key] ?? 0)} />
             ))}

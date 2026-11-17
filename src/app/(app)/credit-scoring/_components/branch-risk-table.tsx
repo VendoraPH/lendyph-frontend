@@ -11,7 +11,7 @@ const TITLE_ID = "branch-risk-title";
 export function BranchRiskTable({ rows }: { rows: BranchRiskRow[] }) {
   return (
     <Card>
-      <CardContent className="pt-6">
+      <CardContent className="pt-6 fit:pt-0">
         <p id={TITLE_ID} className="mb-3 text-sm font-medium">
           Portfolio Risk by Branch
         </p>

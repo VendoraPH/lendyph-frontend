@@ -214,7 +214,7 @@ function BorrowerDetailContent() {
   }
 
   return (
-    <PageFill>
+    <PageFill className="fit:gap-4">
       <BorrowerHeader
         borrower={borrower}
         onEdit={() => router.push(`/borrowers/${borrowerId}/edit`)}

@@ -302,7 +302,7 @@ function RegistrationReviewContent() {
               />
 
               <Card>
-                <CardContent className="pt-5">
+                <CardContent className="pt-5 fit:pt-0">
                   <h3 className="text-xs font-bold uppercase tracking-widest text-brand-orange mb-3 pb-2 border-b border-brand-orange/20">
                     Valid IDs
                   </h3>

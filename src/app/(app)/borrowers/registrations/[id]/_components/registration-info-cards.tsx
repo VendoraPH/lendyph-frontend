@@ -52,7 +52,7 @@ export function RegistrationInfoCards({ registration: r, editMode, draft, onDraf
   return (
     <div className="space-y-4">
       <Card>
-        <CardContent className="pt-5 space-y-0">
+        <CardContent className="pt-5 fit:pt-0 space-y-0">
           <h3 className="text-xs font-bold uppercase tracking-widest text-brand-orange mb-3 pb-2 border-b border-brand-orange/20">
             Personal Information
           </h3>
@@ -162,7 +162,7 @@ export function RegistrationInfoCards({ registration: r, editMode, draft, onDraf
       </Card>
 
       <Card>
-        <CardContent className="pt-5 space-y-0">
+        <CardContent className="pt-5 fit:pt-0 space-y-0">
           <h3 className="text-xs font-bold uppercase tracking-widest text-brand-orange mb-3 pb-2 border-b border-brand-orange/20">
             Contact &amp; Address
           </h3>
@@ -212,7 +212,7 @@ export function RegistrationInfoCards({ registration: r, editMode, draft, onDraf
 
       {isMarried && (
         <Card>
-          <CardContent className="pt-5 space-y-0">
+          <CardContent className="pt-5 fit:pt-0 space-y-0">
             <h3 className="text-xs font-bold uppercase tracking-widest text-brand-orange mb-3 pb-2 border-b border-brand-orange/20">
               Spouse Information
             </h3>
@@ -229,7 +229,7 @@ export function RegistrationInfoCards({ registration: r, editMode, draft, onDraf
 
       {hasEmploymentInfo && (
         <Card>
-          <CardContent className="pt-5 space-y-0">
+          <CardContent className="pt-5 fit:pt-0 space-y-0">
             <h3 className="text-xs font-bold uppercase tracking-widest text-brand-orange mb-3 pb-2 border-b border-brand-orange/20">
               Employment &amp; Membership
             </h3>

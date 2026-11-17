@@ -61,7 +61,7 @@ export function ReviewActionPanel({
 
   return (
     <Card className="sticky top-0 self-start">
-      <CardContent className="pt-5 space-y-4">
+      <CardContent className="pt-5 fit:pt-0 space-y-4">
         <h3 className="text-sm font-bold text-foreground">Admin Decision</h3>
 
         <div className="space-y-2 pb-4 border-b border-border text-sm">

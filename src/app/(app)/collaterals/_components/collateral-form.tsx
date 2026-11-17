@@ -307,7 +307,7 @@ export function CollateralForm({ initial, mode }: Props) {
           </div>
         )}
 
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {/* ── Section: Member ─────────────────────────────────────── */}
           <div className="space-y-2">
             <Label htmlFor="collateral-member">
@@ -332,7 +332,7 @@ export function CollateralForm({ initial, mode }: Props) {
               value={typeId ? String(typeId) : ""}
               onValueChange={(v) => setTypeId(Number(v))}
             >
-              <SelectTrigger id="collateral-type" className="h-10">
+              <SelectTrigger id="collateral-type" className="h-10 w-full">
                 {/* Base UI's <Select.Value> renders the raw selected `value`
                     (the id) by default — pass a children render fn so we
                     display the human-readable type name instead of "3". */}
@@ -362,8 +362,8 @@ export function CollateralForm({ initial, mode }: Props) {
 
         {/* ── Section: Type-specific details ──────────────────────── */}
         {selectedType && (
-          <div className="grid gap-6 rounded-lg border border-dashed border-border/70 bg-muted/20 p-4 md:grid-cols-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground md:col-span-2">
+          <div className="grid gap-4 rounded-lg border border-dashed border-border/70 bg-muted/20 p-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            <p className="col-span-full text-xs font-medium uppercase tracking-wide text-muted-foreground">
               {selectedType.name} details
             </p>
 
