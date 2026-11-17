@@ -7,25 +7,36 @@
  */
 
 import { useState, type RefObject } from "react";
-import { useStepFocus } from "@/components/common/form-stepper-focus";
+import { stepHasNativeInvalid, useStepFocus } from "@/components/common/form-stepper-focus";
 import type { FormStepperProps } from "@/components/common/form-stepper-types";
 import { notifyValidation } from "@/lib/notify";
 import {
   canGoToStep,
   errorMessages,
   firstErrorField,
-  hasStepErrors,
+  nativeValidityApplies,
   nextStepIndex,
+  stepCheckFailure,
   stepProgressText,
   type FormStepperMode,
 } from "@/lib/form-stepper";
 
 type NavOptions = Pick<FormStepperProps, "steps" | "validateStep" | "onInvalid" | "initialStepId" | "onStepChange"> & {
   mode: FormStepperMode;
+  nextDisabled: boolean;
   rootRef: RefObject<HTMLElement | null>;
 };
 
-export function useStepperNav({ steps, mode, validateStep, onInvalid, initialStepId, onStepChange, rootRef }: NavOptions) {
+export function useStepperNav({
+  steps,
+  mode,
+  nextDisabled,
+  validateStep,
+  onInvalid,
+  initialStepId,
+  onStepChange,
+  rootRef,
+}: NavOptions) {
   const requestFocus = useStepFocus(rootRef);
   const [currentId, setCurrentId] = useState(() =>
     initialStepId && steps.some((s) => s.id === initialStepId) ? initialStepId : (steps[0]?.id ?? "")
@@ -54,28 +65,39 @@ export function useStepperNav({ steps, mode, validateStep, onInvalid, initialSte
     setPassed((p) => ({ ...p, [id]: ok }));
   }
 
-  /** Validates one step; on errors marks it, shows them and opens it. */
-  function check(i: number): boolean {
+  /**
+   * Validates one step: the browser's own constraints first (unless the form
+   * is `noValidate`), then `validateStep`. On a failure marks it, opens it and
+   * shows the browser's message or the form's errors.
+   */
+  function check(i: number, submitter?: { formNoValidate: boolean }): boolean {
     const target = steps[i];
+    const root = rootRef.current;
     const result = validateStep ? validateStep(target.id) : true;
-    if (result === true || !hasStepErrors(result)) {
-      markPassed(target.id, true);
-      return true;
+    const failure = stepCheckFailure({
+      nativeApplies: nativeValidityApplies(root?.closest("form"), submitter),
+      nativeInvalid: stepHasNativeInvalid(root, target.id),
+      result,
+    });
+    markPassed(target.id, failure === null);
+    if (failure === null) return true;
+    if (failure === "custom" && result !== true) {
+      if (onInvalid) onInvalid(result, target.id);
+      else notifyValidation(errorMessages(result));
+      open(i, firstErrorField(result, target.fields));
+    } else {
+      open(i, null, true);
     }
-    markPassed(target.id, false);
-    if (onInvalid) onInvalid(result, target.id);
-    else notifyValidation(errorMessages(result));
-    open(i, firstErrorField(result, target.fields));
     return false;
   }
 
   function goNext() {
-    if (!isLast && check(index)) open(nextStepIndex(index, count));
+    if (!isLast && !nextDisabled && check(index)) open(nextStepIndex(index, count));
   }
 
   /** From the rail or the phone menu; `create` validates the open step before moving on. */
   function goTo(target: number) {
-    if (target === index || !canGoToStep(target, { mode, current: index, passed: passedList })) return;
+    if (target === index || !canGoToStep(target, { mode, current: index, passed: passedList, nextDisabled })) return;
     if (target > index && mode === "create" && !check(index)) return;
     open(target);
   }

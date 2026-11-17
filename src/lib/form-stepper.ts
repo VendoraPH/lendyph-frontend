@@ -97,7 +97,10 @@ const LAYOUTS: Record<FormStepperLayout, StepperLayoutClasses> = {
   dialog: {
     // A dialog is narrower than the screen, so the rail follows the dialog's
     // own width (container query) rather than the viewport's.
-    root: "@container flex min-h-0 flex-1 flex-col gap-4",
+    // From sm the body keeps a steady minimum height, so the dialog doesn't
+    // resize (and the footer doesn't jump) between steps of different
+    // lengths. A form can override it through `className`.
+    root: "@container flex min-h-0 flex-1 flex-col gap-4 sm:min-h-[min(26rem,60dvh)]",
     scrollAlways: true,
     // DialogFooter's own look, so a stepper dialog matches the others.
     footer:
@@ -168,13 +171,22 @@ export function previousStepIndex(current: number, count: number): number {
  *   every step before it has passed. The current step counts as passable,
  *   because moving forward validates it on the way (the component does that),
  *   so the step right after the current one is always offered.
+ * - `nextDisabled` (the form's own "not yet", e.g. a source loan still
+ *   loading): in `create` no later step opens, from Next or the rail; earlier
+ *   steps still do. `edit` keeps every step open.
  */
 export function canGoToStep(
   target: number,
-  { mode, current, passed }: { mode: FormStepperMode; current: number; passed: readonly boolean[] }
+  {
+    mode,
+    current,
+    passed,
+    nextDisabled = false,
+  }: { mode: FormStepperMode; current: number; passed: readonly boolean[]; nextDisabled?: boolean }
 ): boolean {
   if (target < 0 || target >= passed.length) return false;
   if (mode === "edit" || target <= current) return true;
+  if (nextDisabled) return false;
   for (let i = 0; i < target; i++) {
     if (i !== current && !passed[i]) return false;
   }
@@ -230,6 +242,40 @@ export function stepErrorsOf(errors: StepErrors, step: FormStepDef): Record<stri
 /** Whether a `validateStep` result holds any error (`true` and `{}` hold none). */
 export function hasStepErrors(result: StepErrors | true): boolean {
   return result !== true && Object.values(result).some(hasMessage);
+}
+
+/**
+ * Whether the browser's own constraints (required, min, max, step, pattern…)
+ * count, for Next and for submit. A form with `noValidate` opted out, so it
+ * accepts exactly what it accepted before it was a stepper (the loan form's
+ * whole-peso Build-Up input takes ₱50.50); so does a submit button with
+ * `formNoValidate`. Outside a form there is nothing to check.
+ */
+export function nativeValidityApplies(
+  form: { noValidate: boolean } | null | undefined,
+  submitter?: { formNoValidate: boolean }
+): boolean {
+  if (!form || form.noValidate) return false;
+  return !submitter?.formNoValidate;
+}
+
+/**
+ * Why a step doesn't pass, if it doesn't: `native` (a control the browser
+ * marks invalid, reported with the browser's own message) comes first, as on
+ * a real multi-page form, then `custom` (`validateStep`'s errors). `null`
+ * when it passes. Native checks count only where `nativeValidityApplies`.
+ */
+export function stepCheckFailure({
+  nativeApplies,
+  nativeInvalid,
+  result,
+}: {
+  nativeApplies: boolean;
+  nativeInvalid: boolean;
+  result: StepErrors | true;
+}): "native" | "custom" | null {
+  if (nativeApplies && nativeInvalid) return "native";
+  return hasStepErrors(result) ? "custom" : null;
 }
 
 /**

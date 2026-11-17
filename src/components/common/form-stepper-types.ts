@@ -46,6 +46,17 @@ export interface FormStepperProps {
   submitting?: boolean;
   /** Disables the submit button, e.g. while a duplicate check runs. */
   submitDisabled?: boolean;
+  /**
+   * Disables Next (and, in `create` mode, moving forward from the rail and
+   * Enter), e.g. while a restructure's source loan is still loading. Back and
+   * earlier steps stay usable.
+   */
+  nextDisabled?: boolean;
+  /**
+   * An element id passed as `aria-describedby` to the submit button, and to
+   * Next while it shows, so a disabled button is tied to its reason text.
+   */
+  submitDescribedBy?: string;
   /** Left of the footer, e.g. the Cancel link. */
   actions?: ReactNode;
   initialStepId?: string;

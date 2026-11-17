@@ -8,8 +8,10 @@ import {
   firstErrorField,
   firstStepWithError,
   hasStepErrors,
+  nativeValidityApplies,
   nextStepIndex,
   previousStepIndex,
+  stepCheckFailure,
   stepErrorsOf,
   stepFooterButtons,
   stepMenuOptions,
@@ -249,4 +251,57 @@ test("phones: create mode keeps the plain compact line, with no menu", () => {
 
 test("phones: a single step needs no menu in either mode", () => {
   assert.equal(stepMenuOptions(steps.slice(0, 1), "edit"), null);
+});
+
+test("noValidate: a form that opts out of browser validation is never checked natively", () => {
+  // The loan form's Share Capital Build-Up steps by whole pesos, so ₱50.50 is
+  // :invalid to the browser, yet the form (noValidate) and the server accept it.
+  assert.equal(nativeValidityApplies({ noValidate: true }), false);
+  assert.equal(nativeValidityApplies({ noValidate: true }, { formNoValidate: false }), false);
+});
+
+test("a form that validates natively keeps the native check, unless the button opts out", () => {
+  assert.equal(nativeValidityApplies({ noValidate: false }), true);
+  assert.equal(nativeValidityApplies({ noValidate: false }, { formNoValidate: false }), true);
+  assert.equal(nativeValidityApplies({ noValidate: false }, { formNoValidate: true }), false);
+});
+
+test("outside a form there is nothing to check natively", () => {
+  assert.equal(nativeValidityApplies(null), false);
+  assert.equal(nativeValidityApplies(undefined), false);
+});
+
+test("nextDisabled: create mode can't move forward from the rail either, but can go back", () => {
+  const passed = [true, true, false, false];
+  const blocked = { mode: "create" as const, current: 1, passed, nextDisabled: true };
+  assert.equal(canGoToStep(0, blocked), true);
+  assert.equal(canGoToStep(1, blocked), true);
+  assert.equal(canGoToStep(2, blocked), false);
+});
+
+test("nextDisabled: edit mode keeps every step reachable from the rail", () => {
+  const passed = [false, false, false, false];
+  for (let i = 0; i < 4; i++) {
+    assert.equal(canGoToStep(i, { mode: "edit", current: 1, passed, nextDisabled: true }), true);
+  }
+});
+
+test("a step's check: the browser's own constraints first, then validateStep", () => {
+  // Like a real multi-page form: required, min, max and pattern report with
+  // the browser's message before the form's own rules run.
+  assert.equal(stepCheckFailure({ nativeApplies: true, nativeInvalid: true, result: { email: "Email" } }), "native");
+  assert.equal(stepCheckFailure({ nativeApplies: true, nativeInvalid: true, result: true }), "native");
+  assert.equal(stepCheckFailure({ nativeApplies: true, nativeInvalid: false, result: { email: "Email" } }), "custom");
+  assert.equal(stepCheckFailure({ nativeApplies: true, nativeInvalid: false, result: true }), null);
+  assert.equal(stepCheckFailure({ nativeApplies: true, nativeInvalid: false, result: {} }), null);
+});
+
+test("a step's check in a noValidate form ignores the browser and uses validateStep only", () => {
+  assert.equal(stepCheckFailure({ nativeApplies: false, nativeInvalid: true, result: true }), null);
+  assert.equal(stepCheckFailure({ nativeApplies: false, nativeInvalid: true, result: { a: "A" } }), "custom");
+});
+
+test("dialog layout keeps a steady minimum height from sm, so the footer stays still", () => {
+  assert.match(stepperLayoutClasses("dialog").root, /sm:min-h-\[min\(26rem,60dvh\)\]/);
+  assert.doesNotMatch(stepperLayoutClasses("page").root, /min-h-\[/);
 });

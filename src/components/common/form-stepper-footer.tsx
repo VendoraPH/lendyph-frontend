@@ -23,6 +23,8 @@ export function StepFooter({
   submittingLabel,
   submitting,
   submitDisabled,
+  nextDisabled,
+  describedBy,
   onBack,
   onNext,
   onSubmitClick,
@@ -36,6 +38,9 @@ export function StepFooter({
   submittingLabel?: ReactNode;
   submitting: boolean;
   submitDisabled: boolean;
+  nextDisabled: boolean;
+  /** `aria-describedby` for Next and the submit button: the reason one is disabled. */
+  describedBy?: string;
   onBack: () => void;
   onNext: () => void;
   onSubmitClick: (event: MouseEvent<HTMLButtonElement>) => void;
@@ -57,7 +62,8 @@ export function StepFooter({
           type="button"
           variant={nextIsPrimary ? "default" : "outline"}
           onClick={onNext}
-          disabled={submitting}
+          disabled={submitting || nextDisabled}
+          aria-describedby={describedBy}
           className={nextIsPrimary ? PRIMARY : undefined}
         >
           Next
@@ -70,6 +76,7 @@ export function StepFooter({
           type="submit"
           onClick={onSubmitClick}
           disabled={submitting || submitDisabled}
+          aria-describedby={describedBy}
           className={PRIMARY}
         >
           {submitting ? (
