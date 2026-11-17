@@ -9,7 +9,13 @@
  * did before, so phones and short windows are unaffected.
  */
 
-/** The table pieces a scroll box pins: headings to the top, totals to the bottom. */
+/**
+ * The table pieces a scroll box pins: headings to the top, totals to the bottom.
+ * Tables inside an element marked `data-unpinned` are left alone: a table that
+ * styles its own heading band and totals and scrolls itself (the report
+ * preview) keeps its look, in the page and in the expanded dialog. Each class
+ * is written out in full so Tailwind finds it in this file.
+ */
 const STICKY_TABLE = [
   // The table's own wrapper scrolls sideways and would become the sticky
   // headings' scroll container; for the box's own table (its direct child, the
@@ -17,29 +23,29 @@ const STICKY_TABLE = [
   // card in a stacked box, keeps its wrapper's sideways scroll: a card hides
   // overflow, so un-clipping it there would cut a wide table off.
   "[&>[data-slot=table-container]]:overflow-visible",
-  "[&_thead_th]:sticky",
-  "[&_thead_th]:top-0",
-  "[&_thead_th]:z-10",
-  "[&_thead_th]:bg-card",
+  "[&_thead_th:not([data-unpinned]_*)]:sticky",
+  "[&_thead_th:not([data-unpinned]_*)]:top-0",
+  "[&_thead_th:not([data-unpinned]_*)]:z-10",
+  "[&_thead_th:not([data-unpinned]_*)]:bg-card",
   // Row borders don't travel with sticky cells, so the line under the
   // headings is drawn on the cells themselves. The upward shadow in the card
   // colour covers the sliver of the scrolled-away row that shows above the
   // headings when the box starts at a fractional y.
-  "[&_thead_th]:shadow-[inset_0_-1px_0_var(--border),0_-2px_0_var(--card)]",
-  "[&_tfoot_td]:sticky",
-  "[&_tfoot_td]:bottom-0",
-  "[&_tfoot_td]:z-10",
-  "[&_tfoot_td]:bg-card",
-  "[&_tfoot_td]:shadow-[inset_0_1px_0_var(--border),0_2px_0_var(--card)]",
-  "[&_tfoot_th]:sticky",
-  "[&_tfoot_th]:bottom-0",
-  "[&_tfoot_th]:z-10",
-  "[&_tfoot_th]:bg-card",
+  "[&_thead_th:not([data-unpinned]_*)]:shadow-[inset_0_-1px_0_var(--border),0_-2px_0_var(--card)]",
+  "[&_tfoot_td:not([data-unpinned]_*)]:sticky",
+  "[&_tfoot_td:not([data-unpinned]_*)]:bottom-0",
+  "[&_tfoot_td:not([data-unpinned]_*)]:z-10",
+  "[&_tfoot_td:not([data-unpinned]_*)]:bg-card",
+  "[&_tfoot_td:not([data-unpinned]_*)]:shadow-[inset_0_1px_0_var(--border),0_2px_0_var(--card)]",
+  "[&_tfoot_th:not([data-unpinned]_*)]:sticky",
+  "[&_tfoot_th:not([data-unpinned]_*)]:bottom-0",
+  "[&_tfoot_th:not([data-unpinned]_*)]:z-10",
+  "[&_tfoot_th:not([data-unpinned]_*)]:bg-card",
   // A totals row kept in the body: <TableRow data-total>.
-  "[&_tr[data-total]>*]:sticky",
-  "[&_tr[data-total]>*]:bottom-0",
-  "[&_tr[data-total]>*]:z-10",
-  "[&_tr[data-total]>*]:bg-card",
+  "[&_tr[data-total]:not([data-unpinned]_*)>*]:sticky",
+  "[&_tr[data-total]:not([data-unpinned]_*)>*]:bottom-0",
+  "[&_tr[data-total]:not([data-unpinned]_*)>*]:z-10",
+  "[&_tr[data-total]:not([data-unpinned]_*)>*]:bg-card",
 ].join(" ");
 
 export const FIT_CLASSES = {
