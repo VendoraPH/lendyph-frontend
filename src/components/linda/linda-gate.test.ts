@@ -8,8 +8,12 @@ const read = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8"
 // Every place Linda appears decides through one gate: the build flag and
 // `linda:use` (`lindaAvailable`). Revoking the permission in the role editor
 // is the instant off switch, so no entry may check the flag alone.
-test("the header trigger and the side panel render only through the Linda gate", () => {
-  for (const file of ["src/components/linda/linda-trigger.tsx", "src/components/linda/linda-panel.tsx"]) {
+test("the floating button, the side panel and the expanded chat render only through the Linda gate", () => {
+  for (const file of [
+    "src/components/linda/linda-fab.tsx",
+    "src/components/linda/linda-panel.tsx",
+    "src/components/linda/linda-modal.tsx",
+  ]) {
     const text = read(file);
     assert.match(text, /<LindaGate>/, file);
     assert.doesNotMatch(text, /env\.features\.linda/, file);

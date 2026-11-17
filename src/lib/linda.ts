@@ -63,7 +63,37 @@ export function lindaAvailable(enabled: boolean, can: (permission: Permission) =
   return enabled && can("linda:use");
 }
 
-/** A message in the open panel. Lives in component state only, never stored. */
+/** Linda's own page. The floating button hides there: it is Linda already. */
+export const LINDA_PAGE_PATH = "/linda";
+
+export function isLindaPage(pathname: string | null | undefined): boolean {
+  return pathname === LINDA_PAGE_PATH || (pathname ?? "").startsWith(`${LINDA_PAGE_PATH}/`);
+}
+
+/**
+ * Whether the floating "Ask Linda" button shows: Linda is available to this
+ * user (`lindaAvailable`: the flag and `linda:use`), the page isn't /linda,
+ * and neither the panel nor the expanded chat is open (each has its own close
+ * button).
+ */
+export function lindaFabVisible(state: {
+  available: boolean;
+  pathname: string | null | undefined;
+  open: boolean;
+  expanded: boolean;
+}): boolean {
+  return (
+    state.available &&
+    !isLindaPage(state.pathname) &&
+    !state.open &&
+    !state.expanded
+  );
+}
+
+/**
+ * A message in Linda's conversation. Held in memory only (`useLindaStore`),
+ * never saved to localStorage or sessionStorage.
+ */
 export interface LindaMessage {
   id: number;
   role: "user" | "assistant";

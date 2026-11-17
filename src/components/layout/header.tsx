@@ -46,7 +46,6 @@ import type { Permission } from "@/types";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { LindaTrigger } from "@/components/linda/linda-trigger";
 import { NotificationBell } from "./notification-bell";
 import { accountMenuLabel } from "./account-menu-label";
 
@@ -187,9 +186,6 @@ export function Header({ onMenuClick }: HeaderProps) {
 
         {/* Right side: notifications + avatar */}
         <div className="flex items-center gap-2">
-          {/* Linda, the AI lending assistant (hidden unless enabled) */}
-          <LindaTrigger />
-
           {/* Theme toggle */}
           <ThemeToggle />
 
