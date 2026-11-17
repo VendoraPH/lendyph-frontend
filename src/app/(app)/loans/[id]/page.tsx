@@ -3710,7 +3710,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                     <div className="space-y-3">
                       <RestructuredBalanceFigures loan={loan} />
                       {/* Its own box at fit, so the headings and totals stay in view. */}
-                      <ScrollBox className="fit:max-h-[min(32rem,60dvh)]">
+                      <ScrollBox className="fit:max-h-[min(32rem,calc(100dvh-23rem))]">
                         <Table>
                           <TableHeader>
                             <TableRow>

@@ -182,7 +182,7 @@ export function LedgerTable({
   const closing: LedgerBalancesView = ledger.closing;
   return (
     // Its own box at fit, so the headings and the closing balance stay in view.
-    <ScrollBox className="fit:max-h-[min(32rem,60dvh)]">
+    <ScrollBox className="fit:max-h-[min(32rem,calc(100dvh-23rem))]">
       {failed && (
         <div role="alert" className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2 text-xs text-destructive">
           <span className="flex items-center gap-1.5">

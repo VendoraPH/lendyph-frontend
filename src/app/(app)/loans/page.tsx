@@ -465,8 +465,8 @@ function LoansContent() {
         />
       </div>
 
-      {/* Status Filter Tabs */}
-      <div className="flex flex-wrap gap-2">
+      {/* Status Filter Tabs: one row at fit, scrolling sideways if it must. */}
+      <div className="flex flex-wrap gap-2 fit:shrink-0 fit:flex-nowrap fit:overflow-x-auto fit:p-px">
         {FILTER_TABS.map((t) => (
           <button
             key={t.value}
