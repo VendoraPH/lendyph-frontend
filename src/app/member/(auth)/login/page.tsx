@@ -60,7 +60,6 @@ function LoginForm() {
   return (
     <AuthCard
       title="Sign in"
-      illustration="portalSignIn"
       description={config?.welcome_message || "Use your member number and your portal password."}
       footer={config?.support_contact ? <>Need help? {config.support_contact}</> : undefined}
     >

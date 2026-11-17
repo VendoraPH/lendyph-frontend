@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { BrandLogo, PoweredByLendy } from "@/components/common";
-import { Illustration } from "@/components/common/illustration";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks";
 import { authService } from "@/services";
@@ -117,50 +116,42 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-dvh">
-      {/* Left Column — Linda's picture as the hero, the logo above it and the
-          tagline below. It is one screen tall and everything in it scales with
-          the window's height, so the page never scrolls because of it. */}
-      <div className="hidden lg:sticky lg:top-0 lg:flex lg:h-dvh lg:w-1/2 relative bg-brand-orange overflow-hidden">
+    <div className="flex min-h-screen">
+      {/* Left Column — Image */}
+      <div className="hidden lg:flex lg:w-1/2 relative bg-brand-orange overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-brand-orange-dark via-brand-orange to-brand-orange-light opacity-90" />
 
         {/* Decorative circles */}
         <div className="absolute -top-20 -left-20 h-80 w-80 rounded-full bg-white/5" />
         <div className="absolute -bottom-32 -right-32 h-96 w-96 rounded-full bg-white/5" />
-        <div className="absolute top-1/3 right-10 h-48 w-48 rounded-full bg-white/10" />
+        <div className="absolute top-1/3 right-10 h-48 w-48 rounded-full bg-brand-blue/20" />
 
-        <div className="relative z-10 flex h-full w-full flex-col items-center gap-[clamp(0.75rem,2.5dvh,1.5rem)] px-10 py-[clamp(1.5rem,4dvh,3rem)] text-center text-white">
-          <div className="flex shrink-0 flex-col items-center">
+        <div className="relative z-10 flex flex-col justify-between p-12 text-white">
+          <div>
             {/* Organization logo — <BrandLogo> resolves the admin-configured
                 logo, so this is the tenant's mark, not the Lendy one. The
-                Lendy attribution lives in the footer below. Its height
-                follows the window's, its width follows its own shape. */}
-            <div className="inline-flex max-w-full items-center rounded-2xl bg-white px-5 py-3 shadow-lg shadow-black/10">
-              <BrandLogo className="h-[clamp(2.75rem,8dvh,5rem)] w-auto max-w-full object-contain drop-shadow-sm" />
+                Lendy attribution lives in the footer below. */}
+            <div className="inline-flex items-center rounded-2xl bg-white px-6 py-4 shadow-lg shadow-black/10">
+              <BrandLogo className="h-40 w-auto drop-shadow-sm" />
             </div>
-            <p className="mt-2 text-sm font-medium text-white/90 tracking-wide">
+            <p className="mt-3 text-sm font-medium text-white/80 tracking-wide">
               Lending Management Platform
             </p>
           </div>
 
-          {/* Renders nothing until the sign-in picture is set (lib/illustrations). */}
-          <div className="flex min-h-0 w-full flex-1 items-center justify-center">
-            <Illustration name="signIn" className="h-full max-h-[60dvh] w-auto max-w-full drop-shadow-xl" />
-          </div>
-
-          <div className="max-w-md shrink-0">
-            <h2 className="text-[clamp(1.5rem,3.6dvh,2.25rem)] font-bold leading-tight">
+          <div className="max-w-md">
+            <h2 className="text-4xl font-bold leading-tight">
               Manage your lending business with confidence
             </h2>
-            <p className="mt-2 text-base text-white/90 leading-relaxed">
+            <p className="mt-4 text-lg text-white/80 leading-relaxed">
               Track members, process loans, collect payments, and monitor your
               portfolio — all in one place.
             </p>
+
           </div>
 
-          <div className="flex shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-2">
-            {/* Dark text on the orange: white or faded white can't reach 4.5:1 there. */}
-            <p className="text-xs font-medium text-orange-950" suppressHydrationWarning>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <p className="text-xs text-white/50" suppressHydrationWarning>
               &copy; {new Date().getFullYear()} Lendy.PH. All rights reserved.
             </p>
             <PoweredByLendy onColor />
@@ -173,7 +164,7 @@ export default function LoginPage() {
         <div className="w-full max-w-md space-y-8">
           {/* Mobile logo */}
           <div className="flex flex-col items-center lg:hidden">
-            <BrandLogo className="h-24 w-auto max-w-full object-contain" />
+            <BrandLogo className="h-24 w-auto" />
             <p className="text-sm text-muted-foreground mt-1">
               Lending Management Platform
             </p>

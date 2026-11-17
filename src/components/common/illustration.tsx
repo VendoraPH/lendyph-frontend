@@ -31,7 +31,7 @@ export function Illustration({ name, className }: { name: IllustrationName; clas
         "h-auto max-h-[min(10rem,20dvh)] w-auto max-w-full select-none object-contain",
         // Object pictures sit on plain white: a rounded white tile, in both
         // modes, so their corners never show as a hard square.
-        illustrationTileClass(name),
+        illustrationTileClass(),
         className,
       )}
     />

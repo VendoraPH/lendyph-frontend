@@ -1,33 +1,23 @@
 /**
- * The illustration slots the empty, error and sign-in screens read.
+ * The illustration slots the empty, error and no-access screens read.
  *
  * WHAT THIS PROVES: every slot the screens ask for is in the map, nothing else
  * is, each value is either null (the screen renders as it always has) or a
  * path under /illustrations/ that the app serves itself, every filled slot's
- * file is really in public/, and only the object pictures (white backgrounds)
- * get the rounded white tile, in light and dark mode alike.
+ * file is really in public/, and every picture sits on the rounded white tile
+ * in light and dark mode alike. The sign-in pages have no pictures (Arvin,
+ * 2026-11-17: the login page stays as it is).
  * WHAT IT DOES NOT PROVE: how a screen draws the picture (browser check).
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { ILLUSTRATION_NAMES, ILLUSTRATIONS, ON_WHITE, illustrationTileClass } from "./illustrations";
+import { ILLUSTRATION_NAMES, ILLUSTRATIONS, illustrationTileClass } from "./illustrations";
 
-const EXPECTED = [
-  "signIn",
-  "portalSignIn",
-  "empty",
-  "noResults",
-  "allCaughtUp",
-  "error",
-  "notConnected",
-  "noAccess",
-  "notFound",
-  "pickReport",
-];
+const EXPECTED = ["empty", "noResults", "allCaughtUp", "error", "notConnected", "noAccess", "notFound", "pickReport"];
 
-test("the map holds exactly the named slots", () => {
+test("the map holds exactly the named slots, and none for the sign-in pages", () => {
   assert.deepEqual([...ILLUSTRATION_NAMES].sort(), [...EXPECTED].sort());
   assert.deepEqual(Object.keys(ILLUSTRATIONS).sort(), [...EXPECTED].sort());
 });
@@ -48,23 +38,8 @@ test("every filled slot's picture is in public/", () => {
   }
 });
 
-test("only the object pictures get the dark-mode tile; the sign-in scenes don't", () => {
-  assert.equal(ON_WHITE.has("signIn"), false);
-  assert.equal(ON_WHITE.has("portalSignIn"), false);
-  for (const name of ["empty", "noResults", "allCaughtUp", "error", "notConnected", "noAccess", "notFound", "pickReport"] as const) {
-    assert.equal(ON_WHITE.has(name), true, name);
-  }
-});
-
-test("an object picture sits on a rounded white tile in both modes, so its white corners never show", () => {
-  for (const name of ON_WHITE) {
-    const classes = illustrationTileClass(name).split(/\s+/);
-    for (const t of ["rounded-2xl", "bg-white", "p-1.5"]) assert.ok(classes.includes(t), `${name}: ${t}`);
-    assert.ok(!classes.some((c) => c.startsWith("dark:")), `${name}: the tile isn't dark-mode only`);
-  }
-});
-
-test("the sign-in scenes get no tile", () => {
-  assert.equal(illustrationTileClass("signIn"), "");
-  assert.equal(illustrationTileClass("portalSignIn"), "");
+test("every picture sits on a rounded white tile in both modes, so its white corners never show", () => {
+  const classes = illustrationTileClass().split(/\s+/);
+  for (const t of ["rounded-2xl", "bg-white", "p-1.5"]) assert.ok(classes.includes(t), t);
+  assert.ok(!classes.some((c) => c.startsWith("dark:")), "the tile isn't dark-mode only");
 });
