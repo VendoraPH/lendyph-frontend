@@ -12,8 +12,11 @@
 /** The table pieces a scroll box pins: headings to the top, totals to the bottom. */
 const STICKY_TABLE = [
   // The table's own wrapper scrolls sideways and would become the sticky
-  // headings' scroll container; inside a scroll box the box does that job.
-  "[&_[data-slot=table-container]]:overflow-visible",
+  // headings' scroll container; for the box's own table (its direct child, the
+  // list pattern) the box does that job. A table nested deeper, e.g. inside a
+  // card in a stacked box, keeps its wrapper's sideways scroll: a card hides
+  // overflow, so un-clipping it there would cut a wide table off.
+  "[&>[data-slot=table-container]]:overflow-visible",
   "[&_thead_th]:sticky",
   "[&_thead_th]:top-0",
   "[&_thead_th]:z-10",

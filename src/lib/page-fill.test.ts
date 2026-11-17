@@ -38,10 +38,19 @@ test("a scroll box scrolls both ways at fit and only sideways below it", () => {
   assert.ok(!tokens(c).some((t) => UNPREFIXED_HEIGHT.test(t)), c);
 });
 
+test("a scroll box un-clips only its own table, never a table nested in a card", () => {
+  const c = scrollBoxClass();
+  // Its direct child: the list pattern (<ScrollBox><Table/></ScrollBox>).
+  assert.ok(has(c, "[&>[data-slot=table-container]]:overflow-visible"), c);
+  // Never at any depth: a card hides overflow, so a wide table inside a card
+  // in a stacked box would be cut off instead of scrolling sideways.
+  assert.ok(!has(c, "[&_[data-slot=table-container]]:overflow-visible"), c);
+});
+
 test("inside a scroll box the table wrapper stops clipping and the headings and totals stick", () => {
   const c = scrollBoxClass();
   for (const t of [
-    "[&_[data-slot=table-container]]:overflow-visible",
+    "[&>[data-slot=table-container]]:overflow-visible",
     "[&_thead_th]:sticky",
     "[&_thead_th]:top-0",
     "[&_thead_th]:z-10",
