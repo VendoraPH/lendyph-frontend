@@ -491,6 +491,10 @@ function ReportDetailContent({
                       key={p.id}
                       type="button"
                       onClick={() => applyPreset(p.id)}
+                      // Chrome leaves a focused, partly visible preset under the
+                      // row's fade; with the row's scroll padding this brings it
+                      // fully into view.
+                      onFocus={(e) => e.currentTarget.scrollIntoView({ block: "nearest", inline: "nearest" })}
                       className={cn(
                         "h-8 shrink-0 whitespace-nowrap px-3 text-xs rounded-md border transition-colors",
                         preset === p.id
