@@ -75,7 +75,7 @@ import { OptionSelect } from "../../savings/_components/option-select";
 import { ALL_PRODUCTS, productIdParam } from "../../savings/_lib/product-filter";
 import { ExpandableCard } from "@/components/common/expandable-card";
 import { hasIllustration, Illustration } from "@/components/common/illustration";
-import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { PageFill } from "@/components/common/page-fill";
 
 type BackendExporter = (params?: Record<string, unknown>) => Promise<Blob>;
 
@@ -678,12 +678,14 @@ function ReportDetailContent({
           </div>
         </div>
       )}
-      {/* The preview scrolls in its own card at fit, and opens full size. */}
+      {/* The preview scrolls in its own card at fit, and opens full size. A
+          plain scroller, not a ScrollBox: the preview keeps its own header band
+          and totals tint (shared with print), so its tables are left unpinned. */}
       {doc && !generating && (
-        <ExpandableCard title={report.title}>
-          <ScrollBox className="p-px">
+        <ExpandableCard title="Preview">
+          <div data-unpinned className="min-w-0 overflow-x-auto fit:flex-1 fit:min-h-0 fit:overflow-auto p-px">
             <ReportPreview doc={doc} />
-          </ScrollBox>
+          </div>
         </ExpandableCard>
       )}
       {doc && !generating && <ReportPrintSheet doc={doc} />}
