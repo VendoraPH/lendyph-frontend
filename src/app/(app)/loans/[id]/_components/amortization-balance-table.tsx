@@ -97,8 +97,10 @@ export function AmortizationBalanceTable({ loan, refreshKey }: AmortizationBalan
   const insuranceOwed = insuranceOwedLine(totals.insurance_owed);
 
   return (
-    // Its own box at fit, so the headings and the totals stay in view.
-    <ScrollBox className="fit:max-h-[min(32rem,calc(100dvh-23rem))]">
+    // Its own box at fit, so the headings and the totals stay in view. Capped
+    // lower than the schedule's: the tab adds the summary figures above it, and
+    // the whole card has to fit the page's scroll area.
+    <ScrollBox className="fit:max-h-[min(32rem,calc(100dvh-26rem))]">
       <Table>
         <TableHeader>
           <TableRow>
