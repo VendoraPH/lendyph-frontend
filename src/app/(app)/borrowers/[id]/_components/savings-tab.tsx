@@ -42,8 +42,10 @@ export function SavingsTab({ borrowerId }: { borrowerId: number }) {
   const deposits = useApiResource(fetchDeposits);
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+    // At fit the tab is compact (smaller figures' cards, empty states and
+    // pictures), so it reads in its box without the pictures being cut.
+    <div className="space-y-6 fit:space-y-4 fit:[&_.py-12]:py-6 fit:[&_img]:max-h-24">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 fit:[&_[data-slot=card]]:py-2.5 fit:[&_[data-slot=card-content]]:py-0">
         {savingsTabCards(accounts.data?.meta, deposits.data?.meta).map((card) => (
           <Kpi key={card.label} label={card.label} value={card.value} />
         ))}

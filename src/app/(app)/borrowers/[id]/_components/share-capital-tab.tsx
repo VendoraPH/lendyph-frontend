@@ -13,6 +13,9 @@ import { usePermission } from "@/hooks";
 import { formatCurrency, formatDate } from "@/lib/format";
 import type { ShareCapitalLedgerEntry, ShareCapitalMemberPeriod } from "@/types";
 import { shareCapitalTabView } from "../_lib/share-capital-tab-view";
+import { ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 
 /** "—" when the server sent no figure, never a browser stand-in. */
 function money(amount: number | null): string {
@@ -114,18 +117,19 @@ export function ShareCapitalTab({ borrowerId }: ShareCapitalTabProps) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className={cn("gap-4", FIT_CLASSES.section)}>
       {shortfall && (
         <IncompleteListNotice
           shown={shortfall.shown}
           total={shortfall.total}
           noun="share capital entries"
+          className="shrink-0"
           consequence="The totals and the Balance column are the server's figures over every entry; only the list of entries below is incomplete."
         />
       )}
 
       {/* Summary Cards */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+      <div className="grid shrink-0 gap-4 grid-cols-1 sm:grid-cols-3">
         <Card>
           <CardContent className="py-4">
             <p className="text-xs text-muted-foreground mb-1">Total Credits</p>
@@ -149,64 +153,66 @@ export function ShareCapitalTab({ borrowerId }: ShareCapitalTabProps) {
       </div>
 
       {/* Entries Table */}
-      <Card>
+      <Card className={FIT_CLASSES.section}>
         <CardHeader>
           <CardTitle className="text-sm font-medium flex items-center gap-2">
             <Landmark className="h-4 w-4 text-muted-foreground" />
             Share Capital Ledger
           </CardTitle>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className={cn("p-0", FIT_CLASSES.section)}>
           {entriesWithBalance.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-2 py-12 text-muted-foreground">
               <Landmark className="h-8 w-8 opacity-40" />
               <p className="text-sm">No share capital entries found</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead className="text-right">Debit</TableHead>
-                  <TableHead className="text-right">Credit</TableHead>
-                  <TableHead className="text-right">Balance</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {entriesWithBalance.map((entry) => (
-                  <TableRow key={entry.id}>
-                    <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                      {formatDate(entry.date)}
+            <ScrollBox>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead className="text-right">Debit</TableHead>
+                    <TableHead className="text-right">Credit</TableHead>
+                    <TableHead className="text-right">Balance</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {entriesWithBalance.map((entry) => (
+                    <TableRow key={entry.id}>
+                      <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                        {formatDate(entry.date)}
+                      </TableCell>
+                      <TableCell className="text-sm">{entry.description}</TableCell>
+                      <TableCell className="text-right text-sm tabular-nums text-red-600">
+                        {entry.debit > 0 ? formatCurrency(entry.debit) : ""}
+                      </TableCell>
+                      <TableCell className="text-right text-sm tabular-nums text-green-600">
+                        {entry.credit > 0 ? formatCurrency(entry.credit) : ""}
+                      </TableCell>
+                      <TableCell className="text-right text-sm tabular-nums font-semibold">
+                        {money(entry.runningBalance)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+                <TableFooter>
+                  <TableRow className="bg-muted/50 font-semibold">
+                    <TableCell colSpan={2} className="text-sm">Total</TableCell>
+                    <TableCell className="text-right text-sm text-red-600 tabular-nums">
+                      {totalDebits !== null && totalDebits > 0 ? formatCurrency(totalDebits) : ""}
                     </TableCell>
-                    <TableCell className="text-sm">{entry.description}</TableCell>
-                    <TableCell className="text-right text-sm tabular-nums text-red-600">
-                      {entry.debit > 0 ? formatCurrency(entry.debit) : ""}
+                    <TableCell className="text-right text-sm text-green-600 tabular-nums">
+                      {money(totalCredits)}
                     </TableCell>
-                    <TableCell className="text-right text-sm tabular-nums text-green-600">
-                      {entry.credit > 0 ? formatCurrency(entry.credit) : ""}
-                    </TableCell>
-                    <TableCell className="text-right text-sm tabular-nums font-semibold">
-                      {money(entry.runningBalance)}
+                    <TableCell className="text-right text-sm tabular-nums">
+                      {money(balance)}
                     </TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-              <TableFooter>
-                <TableRow className="bg-muted/50 font-semibold">
-                  <TableCell colSpan={2} className="text-sm">Total</TableCell>
-                  <TableCell className="text-right text-sm text-red-600 tabular-nums">
-                    {totalDebits !== null && totalDebits > 0 ? formatCurrency(totalDebits) : ""}
-                  </TableCell>
-                  <TableCell className="text-right text-sm text-green-600 tabular-nums">
-                    {money(totalCredits)}
-                  </TableCell>
-                  <TableCell className="text-right text-sm tabular-nums">
-                    {money(balance)}
-                  </TableCell>
-                </TableRow>
-              </TableFooter>
-            </Table>
+                </TableFooter>
+              </Table>
+            </ScrollBox>
           )}
         </CardContent>
       </Card>

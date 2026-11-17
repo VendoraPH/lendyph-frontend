@@ -77,7 +77,7 @@ function FactorCard({
 
   return (
     <Card>
-      <CardContent className="space-y-3 pt-6">
+      <CardContent className="space-y-3 pt-6 fit:pt-0">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <h3 className="text-sm font-medium">{rule.label}</h3>

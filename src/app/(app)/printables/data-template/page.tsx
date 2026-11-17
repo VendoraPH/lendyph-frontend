@@ -16,6 +16,8 @@ import {
   DataDictionaryPanel,
   GuidelinesPanel,
 } from "./_components/reference-panels";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
 
 /**
  * The bulk data-import template: preview it, edit it, take it away.
@@ -37,8 +39,8 @@ export default function DataTemplatePage() {
 
   return (
     <RouteGuard permission="reports:view" pageName="Documents">
-      <div className="space-y-6">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <PageFill>
+        <div className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
           <Link
             href="/printables"
             className="transition-colors hover:text-foreground"
@@ -49,7 +51,7 @@ export default function DataTemplatePage() {
           <span className="text-foreground">Data Import Template</span>
         </div>
 
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex shrink-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex min-w-0 items-start gap-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-teal-50 ring-1 ring-teal-200">
               <Table2 className="h-6 w-6 text-teal-600" />
@@ -74,8 +76,8 @@ export default function DataTemplatePage() {
           </div>
         </div>
 
-        <Tabs value={tab} onValueChange={setTab}>
-          <div className="flex flex-wrap items-center justify-between gap-3">
+        <Tabs value={tab} onValueChange={setTab} className={FIT_CLASSES.section}>
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
             <TabsList>
               {draft.sheets.map((sheet) => {
                 const count = issuesForSheet(issues, sheet.id).length;
@@ -111,27 +113,33 @@ export default function DataTemplatePage() {
           </div>
 
           {draft.sheets.map((sheet) => (
-            <TabsContent key={sheet.id} value={sheet.id} className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                {sheet.description}
-              </p>
-              <SheetEditor
-                sheet={sheet}
-                issues={issuesForSheet(issues, sheet.id)}
-                onChange={(fn) => update(sheet.id, fn)}
-              />
-              <IssueList issues={issuesForSheet(issues, sheet.id)} />
+            <TabsContent key={sheet.id} value={sheet.id} className={FIT_CLASSES.section}>
+              <ScrollBox className="space-y-4 p-px">
+                <p className="text-sm text-muted-foreground">
+                  {sheet.description}
+                </p>
+                <SheetEditor
+                  sheet={sheet}
+                  issues={issuesForSheet(issues, sheet.id)}
+                  onChange={(fn) => update(sheet.id, fn)}
+                />
+                <IssueList issues={issuesForSheet(issues, sheet.id)} />
+              </ScrollBox>
             </TabsContent>
           ))}
 
-          <TabsContent value="dictionary">
-            <DataDictionaryPanel />
+          <TabsContent value="dictionary" className={FIT_CLASSES.section}>
+            <ScrollBox className="p-px">
+              <DataDictionaryPanel />
+            </ScrollBox>
           </TabsContent>
-          <TabsContent value="guidelines">
-            <GuidelinesPanel />
+          <TabsContent value="guidelines" className={FIT_CLASSES.section}>
+            <ScrollBox className="p-px">
+              <GuidelinesPanel />
+            </ScrollBox>
           </TabsContent>
         </Tabs>
-      </div>
+      </PageFill>
     </RouteGuard>
   );
 }

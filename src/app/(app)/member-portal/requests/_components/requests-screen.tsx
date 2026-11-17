@@ -24,6 +24,9 @@ import {
   toneOf,
 } from "../../_lib/labels";
 import { StateBadge } from "../../_components/state-badge";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 
 const TYPE_OPTIONS = [{ value: "all", label: "Every request type" }, ...optionsOf(REQUEST_TYPE_LABELS)];
 const PER_PAGE = 25;
@@ -57,8 +60,8 @@ export function RequestsScreen() {
   const reset = () => setPage(1);
 
   return (
-    <div className="space-y-6">
-      <div>
+    <PageFill>
+      <div className="shrink-0">
         <h1 className="text-2xl font-semibold tracking-tight">Portal Requests</h1>
         <p className="text-sm text-muted-foreground">
           Profile changes, savings withdrawals and new savings accounts members asked for in the portal. Nothing changes
@@ -66,7 +69,7 @@ export function RequestsScreen() {
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex shrink-0 flex-wrap items-end gap-2">
         <form
           className="relative min-w-56 flex-1"
           role="search"
@@ -94,17 +97,22 @@ export function RequestsScreen() {
           options={TYPE_OPTIONS}
           className="w-56"
         />
-        <BranchFilter
-          value={branch}
-          onChange={(v) => {
-            setBranch(v);
-            reset();
-          }}
-          className="w-56"
-        />
+        {/* The shared BranchFilter spaces its field with space-y, so the
+            select's hidden input (its last child) leaves a 6px margin under
+            the trigger; dropping it lines Branch up with search and type. */}
+        <div className="[&_[data-slot=select-trigger]]:mb-0">
+          <BranchFilter
+            value={branch}
+            onChange={(v) => {
+              setBranch(v);
+              reset();
+            }}
+            className="w-56"
+          />
+        </div>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="shrink-0">
         <Tabs
           value={status}
           onValueChange={(v) => {
@@ -112,9 +120,10 @@ export function RequestsScreen() {
             reset();
           }}
         >
-          <TabsList>
+          {/* Wraps onto a second row rather than hiding the last statuses off the edge. */}
+          <TabsList className="flex-wrap justify-start group-data-horizontal/tabs:h-auto">
             {REQUEST_STATUSES.map((s) => (
-              <TabsTrigger key={s} value={s}>
+              <TabsTrigger key={s} value={s} className="h-7 flex-none">
                 {REQUEST_STATUS_LABELS[s]}
                 {counts && <span className="ml-1 text-xs text-muted-foreground tabular-nums">{counts[s] ?? 0}</span>}
               </TabsTrigger>
@@ -129,10 +138,11 @@ export function RequestsScreen() {
         summary="Members' portal requests."
         isEmpty={(res) => res.data.length === 0}
         emptyMessage={status === "submitted" ? "No new requests." : "No requests here."}
+        emptyIllustration={status === "submitted" ? "allCaughtUp" : "empty"}
       >
         {(res) => (
-          <div className="space-y-3">
-            <div className="overflow-x-auto rounded-lg border">
+          <div className={cn("gap-3", FIT_CLASSES.section)}>
+            <ScrollBox className="rounded-lg border">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -184,7 +194,7 @@ export function RequestsScreen() {
                   ))}
                 </TableBody>
               </Table>
-            </div>
+            </ScrollBox>
             <TablePagination
               page={page}
               perPage={PER_PAGE}
@@ -196,6 +206,6 @@ export function RequestsScreen() {
           </div>
         )}
       </DataState>
-    </div>
+    </PageFill>
   );
 }

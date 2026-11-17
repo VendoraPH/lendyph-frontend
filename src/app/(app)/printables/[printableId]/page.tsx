@@ -24,6 +24,7 @@ import { PrintableRefusedError, visiblePrintables } from "@/lib/printables/catal
 import { SUBJECT_ACCENT, SUBJECT_META } from "@/lib/printables/types";
 import { applyPrintChrome, resolvePrintableOrg } from "@/lib/printables/print-chrome";
 import { openPrintable } from "@/lib/printables/print-open";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 
 /**
  * Pick a subject, open the document. There is no on-screen preview on purpose —
@@ -116,9 +117,9 @@ export default function PrintableDetailPage() {
 
   return (
     <RouteGuard permission="reports:view" pageName="Documents">
-      <div className="space-y-6">
+      <PageFill>
         {/* Breadcrumb */}
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
           <Link href="/printables" className="hover:text-foreground transition-colors">
             Documents
           </Link>
@@ -127,7 +128,7 @@ export default function PrintableDetailPage() {
         </div>
 
         {/* Header */}
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex shrink-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex items-start gap-4 min-w-0">
             <div
               className={cn(
@@ -176,55 +177,57 @@ export default function PrintableDetailPage() {
           </div>
         </div>
 
-        {/* Subject picker */}
-        <Card>
-          <CardContent className="p-4 sm:p-5">
-            {printable.subject === "loan" ? (
-              // Two steps, not one: the member by name, then their loan off a
-              // table. See `LoanSubjectPicker`.
-              <LoanSubjectPicker
-                borrowerId={borrowerId}
-                onBorrowerChange={setBorrowerId}
-                value={subjectId}
-                onChange={setSubjectId}
-              />
-            ) : (
-              <div className="flex flex-wrap items-end gap-4">
-                {printable.subject === "repayment" ? (
-                  <RepaymentPicker value={subjectId} onChange={setSubjectId} />
-                ) : printable.subject === "savings_account" ||
-                  printable.subject === "savings_withdrawal" ||
-                  printable.subject === "time_deposit" ? (
-                  <SavingsSubjectPicker
-                    key={printable.subject}
-                    subject={printable.subject}
-                    value={subjectId}
-                    onChange={setSubjectId}
-                  />
-                ) : (
-                  <SubjectPicker
-                    subject={printable.subject}
-                    value={subjectId}
-                    onChange={setSubjectId}
-                  />
-                )}
+        <ScrollBox className="space-y-6 p-px">
+          {/* Subject picker */}
+          <Card>
+            <CardContent className="p-4 sm:p-5">
+              {printable.subject === "loan" ? (
+                // Two steps, not one: the member by name, then their loan off a
+                // table. See `LoanSubjectPicker`.
+                <LoanSubjectPicker
+                  borrowerId={borrowerId}
+                  onBorrowerChange={setBorrowerId}
+                  value={subjectId}
+                  onChange={setSubjectId}
+                />
+              ) : (
+                <div className="flex flex-wrap items-end gap-4">
+                  {printable.subject === "repayment" ? (
+                    <RepaymentPicker value={subjectId} onChange={setSubjectId} />
+                  ) : printable.subject === "savings_account" ||
+                    printable.subject === "savings_withdrawal" ||
+                    printable.subject === "time_deposit" ? (
+                    <SavingsSubjectPicker
+                      key={printable.subject}
+                      subject={printable.subject}
+                      value={subjectId}
+                      onChange={setSubjectId}
+                    />
+                  ) : (
+                    <SubjectPicker
+                      subject={printable.subject}
+                      value={subjectId}
+                      onChange={setSubjectId}
+                    />
+                  )}
 
-                {!subjectId && (
-                  <p className="text-xs text-muted-foreground pb-2">
-                    Select a {subjectLabel.toLowerCase()} to open this document.
-                  </p>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  {!subjectId && (
+                    <p className="text-xs text-muted-foreground pb-2">
+                      Select a {subjectLabel.toLowerCase()} to open this document.
+                    </p>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-        {/* The loan table is the guidance once a member is chosen — repeating
-            "choose a loan above" under it would only push it off the fold. */}
-        {!(printable.subject === "loan" && borrowerId) && (
-          <EmptyState title={printable.title} subjectLabel={subjectLabel} count={catalog.length} />
-        )}
-      </div>
+          {/* The loan table is the guidance once a member is chosen — repeating
+              "choose a loan above" under it would only push it off the fold. */}
+          {!(printable.subject === "loan" && borrowerId) && (
+            <EmptyState title={printable.title} subjectLabel={subjectLabel} count={catalog.length} />
+          )}
+        </ScrollBox>
+      </PageFill>
     </RouteGuard>
   );
 }

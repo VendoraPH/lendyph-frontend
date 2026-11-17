@@ -167,16 +167,16 @@ export function CollateralsTab({ borrowerId }: CollateralsTabProps) {
       />
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Card>
-          <CardContent className="py-4">
+        <Card className="fit:py-2.5">
+          <CardContent className="py-4 fit:py-0">
             <p className="text-xs font-medium text-muted-foreground">
               Total Collaterals
             </p>
             <p className="text-2xl font-bold">{rows.length}</p>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="py-4">
+        <Card className="fit:py-2.5">
+          <CardContent className="py-4 fit:py-0">
             <p className="text-xs font-medium text-muted-foreground">
               Total Effective Value
             </p>
@@ -196,7 +196,7 @@ export function CollateralsTab({ borrowerId }: CollateralsTabProps) {
       <Card>
         <CardContent className="pt-4">
           {rows.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
+            <div className="flex flex-col items-center justify-center py-12 text-center fit:py-6">
               <ShieldCheck className="h-10 w-10 text-muted-foreground/50 mb-3" />
               <p className="text-sm font-medium text-muted-foreground">
                 No collaterals registered yet

@@ -14,7 +14,7 @@ import { excludedValueNote } from "../_lib/register";
 export function RegisterSummary({ totals }: { totals: CollateralRegisterTotals | null }) {
   const note = totals ? excludedValueNote(totals.unknown_count) : null;
   return (
-    <div className="grid gap-4 sm:grid-cols-3">
+    <div className="grid shrink-0 gap-4 sm:grid-cols-3">
       <Card>
         <CardContent className="py-4">
           <div className="flex items-center justify-between">

@@ -86,7 +86,7 @@ export function BorrowerHeader({ borrower, onEdit, onPhotoUpdate }: BorrowerHead
     .join(" · ");
 
   return (
-    <div className="space-y-4">
+    <div className="shrink-0 space-y-4 fit:space-y-2">
       <Link
         href="/borrowers"
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -104,7 +104,7 @@ export function BorrowerHeader({ borrower, onEdit, onPhotoUpdate }: BorrowerHead
               onClick={() => (borrower.photo ? setViewerOpen(true) : photoInputRef.current?.click())}
               className="group relative block rounded-full"
             >
-              <Avatar className="size-24 sm:size-28">
+              <Avatar className="size-24 sm:size-28 fit:size-16">
                 {borrower.photo ? (
                   <AvatarImage src={borrower.photo} alt={borrower.full_name} />
                 ) : null}

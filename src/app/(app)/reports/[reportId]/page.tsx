@@ -73,6 +73,9 @@ import { savingsCsvReport } from "../_lib/savings-csv";
 import { ProductFilter } from "../../savings/_components/product-filter";
 import { OptionSelect } from "../../savings/_components/option-select";
 import { ALL_PRODUCTS, productIdParam } from "../../savings/_lib/product-filter";
+import { ExpandableCard } from "@/components/common/expandable-card";
+import { hasIllustration, Illustration } from "@/components/common/illustration";
+import { PageFill } from "@/components/common/page-fill";
 
 type BackendExporter = (params?: Record<string, unknown>) => Promise<Blob>;
 
@@ -412,9 +415,9 @@ function ReportDetailContent({
   const Icon = report.icon;
 
   return (
-    <div className="space-y-6">
+    <PageFill className="fit:gap-3">
       {/* Breadcrumb + back */}
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <div className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
         <Link
           href="/reports"
           className="hover:text-foreground transition-colors"
@@ -426,7 +429,7 @@ function ReportDetailContent({
       </div>
 
       {/* Header */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex shrink-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex items-start gap-4 min-w-0">
           <div
             className={cn(
@@ -465,26 +468,35 @@ function ReportDetailContent({
       </div>
 
       {/* Controls card */}
-      <Card>
-        <CardContent className="p-4 sm:p-5">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      {/* At fit the card is compact: the date presets stay on one row that
+          scrolls sideways, so the preview below keeps most of the screen. */}
+      <Card className="shrink-0 fit:py-0">
+        <CardContent className="p-4 sm:p-5 fit:p-3">
+          <div className="flex flex-col gap-4 fit:gap-3 lg:flex-row lg:items-end lg:justify-between">
             {report.noDateRange ? (
               <p className="text-sm text-muted-foreground min-w-0 flex-1">
                 {noDateRangeScope(report.subject)}
               </p>
             ) : (
-              <div className="space-y-2 min-w-0 flex-1">
+              <div className="space-y-2 fit:space-y-1 min-w-0 flex-1">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Date Range
                 </p>
-                <div className="flex flex-wrap gap-1.5">
+                {/* At fit one row that scrolls sideways. Its right edge fades
+                    while more presets lie beyond it; the trailing padding lets
+                    the last one scroll clear of the fade. */}
+                <div className="flex flex-wrap gap-1.5 fit:flex-nowrap fit:overflow-x-auto fit:pb-0.5 fit:pr-8 fit:scroll-pe-8 fit:[mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)]">
                   {PRESETS.map((p) => (
                     <button
                       key={p.id}
                       type="button"
                       onClick={() => applyPreset(p.id)}
+                      // Chrome leaves a focused, partly visible preset under the
+                      // row's fade; with the row's scroll padding this brings it
+                      // fully into view.
+                      onFocus={(e) => e.currentTarget.scrollIntoView({ block: "nearest", inline: "nearest" })}
                       className={cn(
-                        "h-8 px-3 text-xs rounded-md border transition-colors",
+                        "h-8 shrink-0 whitespace-nowrap px-3 text-xs rounded-md border transition-colors",
                         preset === p.id
                           ? "bg-brand-orange text-brand-orange-foreground border-brand-orange"
                           : "bg-background hover:bg-muted border-border text-muted-foreground hover:text-foreground"
@@ -567,7 +579,7 @@ function ReportDetailContent({
             report.groupBy ||
             report.subject ||
             report.accountParam) && (
-            <div className="mt-4 flex flex-wrap items-end gap-4 border-t pt-4">
+            <div className="mt-4 flex flex-wrap items-end gap-4 border-t pt-4 fit:mt-3 fit:gap-3 fit:pt-3">
               {report.supportsBranch && (
                 <div className="space-y-1">
                   <Label className="text-xs">Branch</Label>
@@ -668,16 +680,25 @@ function ReportDetailContent({
         />
       )}
       {generating && (
-        <div className="rounded-xl border bg-muted/30 py-24 flex items-center justify-center">
+        <div className="rounded-xl border bg-muted/30 py-24 flex items-center justify-center fit:flex-1 fit:min-h-0 fit:py-0">
           <div className="flex flex-col items-center gap-3 text-muted-foreground">
             <Loader2 className="h-6 w-6 animate-spin" />
             <p className="text-sm">Fetching data &amp; building preview…</p>
           </div>
         </div>
       )}
-      {doc && !generating && <ReportPreview doc={doc} />}
+      {/* The preview scrolls in its own card at fit, and opens full size. A
+          plain scroller, not a ScrollBox: the preview keeps its own header band
+          and totals tint (shared with print), so its tables are left unpinned. */}
+      {doc && !generating && (
+        <ExpandableCard title="Preview">
+          <div data-unpinned className="min-w-0 overflow-x-auto fit:flex-1 fit:min-h-0 fit:overflow-auto p-px">
+            <ReportPreview doc={doc} />
+          </div>
+        </ExpandableCard>
+      )}
       {doc && !generating && <ReportPrintSheet doc={doc} />}
-    </div>
+    </PageFill>
   );
 }
 
@@ -796,11 +817,17 @@ function ExportMenu({ doc, noCsv = false, exportingFormat, onExport }: ExportMen
 
 function EmptyPreview({ reportTitle, pick }: { reportTitle: string; pick: string }) {
   return (
-    <div className="rounded-xl border border-dashed bg-muted/20 py-16 px-6">
-      <div className="max-w-md mx-auto text-center space-y-3">
-        <div className="mx-auto h-12 w-12 rounded-full bg-brand-orange/10 flex items-center justify-center">
-          <FileSpreadsheet className="h-6 w-6 text-brand-orange" />
-        </div>
+    // At fit it fills the space left and centres in it (my-auto, not
+    // justify-center, so a short space scrolls instead of cutting the top).
+    <div className="flex flex-col rounded-xl border border-dashed bg-muted/20 py-16 px-6 fit:flex-1 fit:min-h-0 fit:overflow-auto fit:py-0">
+      <div className="max-w-md mx-auto my-auto text-center space-y-3 fit:space-y-2">
+        {hasIllustration("pickReport") ? (
+          <Illustration name="pickReport" className="mx-auto fit:max-h-[min(8rem,14dvh)]" />
+        ) : (
+          <div className="mx-auto h-12 w-12 rounded-full bg-brand-orange/10 flex items-center justify-center">
+            <FileSpreadsheet className="h-6 w-6 text-brand-orange" />
+          </div>
+        )}
         <h3 className="text-base font-semibold">
           Ready to generate {reportTitle}
         </h3>

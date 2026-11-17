@@ -13,6 +13,8 @@ import { visiblePrintables } from "@/lib/printables/catalog";
 import { usePermission } from "@/hooks";
 import { SUBJECT_ACCENT, SUBJECT_META } from "@/lib/printables/types";
 import type { PrintableDefinition, PrintableSubject } from "@/lib/printables/types";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { hasIllustration, Illustration } from "@/components/common/illustration";
 
 /**
  * Documents catalog. Grouped by what you have to pick before the document can
@@ -93,9 +95,9 @@ export default function PrintablesPage() {
 
   return (
     <RouteGuard permission="reports:view" pageName="Documents">
-      <div className="space-y-6">
+      <PageFill>
         {/* Hero / header */}
-        <div className="rounded-xl border bg-gradient-to-br from-brand-orange/10 via-background to-background p-6 sm:p-8">
+        <div className="shrink-0 rounded-xl border bg-gradient-to-br from-brand-orange/10 via-background to-background p-6 sm:p-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex items-start gap-4">
               <div className="hidden sm:flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-brand-orange/15 text-brand-orange">
@@ -139,12 +141,15 @@ export default function PrintablesPage() {
 
         {/* Catalog */}
         {!hasResults ? (
-          <div className="rounded-lg border border-dashed py-16 text-center text-sm text-muted-foreground">
-            No documents match{" "}
-            <span className="font-medium">&ldquo;{query}&rdquo;</span>.
+          <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-16 text-center text-sm text-muted-foreground">
+            {hasIllustration("noResults") && <Illustration name="noResults" />}
+            <p>
+              No documents match{" "}
+              <span className="font-medium">&ldquo;{query}&rdquo;</span>.
+            </p>
           </div>
         ) : (
-          <div className="space-y-8">
+          <ScrollBox className="space-y-8 p-px">
             {ORDERED_SUBJECTS.map((subject) => {
               const items = grouped.get(subject) ?? [];
               if (items.length === 0) return null;
@@ -201,9 +206,9 @@ export default function PrintablesPage() {
                 </div>
               </section>
             )}
-          </div>
+          </ScrollBox>
         )}
-      </div>
+      </PageFill>
     </RouteGuard>
   );
 }

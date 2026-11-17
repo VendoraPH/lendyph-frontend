@@ -10,6 +10,9 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import type { BorrowerLoanSummary, Payment, Loan } from "@/types";
 import { memberPaymentFigures } from "../_lib/member-payment-figures";
 import { paymentReferenceCell, statusInWords } from "@/app/(app)/borrowers/_components/utils";
+import { ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 
 const paymentMethodLabels: Record<string, string> = {
   cash: "Cash",
@@ -53,8 +56,8 @@ export function PaymentsTab({ payments, loans, summary }: PaymentsTabProps) {
   ]));
 
   return (
-    <div className="space-y-4">
-      <div className="grid gap-4 md:grid-cols-4">
+    <div className={cn("gap-4", FIT_CLASSES.section)}>
+      <div className="grid shrink-0 gap-4 md:grid-cols-4">
         <Card>
           <CardContent className="py-4">
             <div className="flex items-center justify-between">
@@ -103,12 +106,12 @@ export function PaymentsTab({ payments, loans, summary }: PaymentsTabProps) {
         </Card>
       </div>
 
-      <Card>
+      <Card className={FIT_CLASSES.section}>
         <CardHeader>
           <CardTitle className="text-sm font-medium">Payment History ({payments.length})</CardTitle>
         </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
+        <CardContent className={cn("p-0", FIT_CLASSES.section)}>
+          <ScrollBox>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -155,7 +158,7 @@ export function PaymentsTab({ payments, loans, summary }: PaymentsTabProps) {
                 )}
               </TableBody>
             </Table>
-          </div>
+          </ScrollBox>
         </CardContent>
       </Card>
     </div>

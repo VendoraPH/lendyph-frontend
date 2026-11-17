@@ -32,6 +32,9 @@ import { PaidButton } from "./paid-button";
 import { PartyCell } from "./party-cell";
 import { gcashCanMarkPendingPaid } from "../_lib/row-actions";
 import { gcashRowBranchLabel } from "../_lib/walk-in-branch";
+import { ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 
 // First and last day of the current month. Both bounds are built at LOCAL
 // midnight, which toISOString() then rolled back a day in Manila (UTC+8) — the
@@ -104,8 +107,8 @@ export function ReportsTab() {
   }, [reloadToken]);
 
   return (
-    <div className="space-y-6">
-      <Card>
+    <div className={cn("gap-6", FIT_CLASSES.section)}>
+      <Card className="shrink-0">
         <CardHeader>
           <CardTitle>Total Income</CardTitle>
           <CardDescription>
@@ -177,7 +180,7 @@ export function ReportsTab() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className={FIT_CLASSES.section}>
         <CardHeader>
           <CardTitle>Pending Payments</CardTitle>
           <CardDescription>
@@ -185,16 +188,17 @@ export function ReportsTab() {
             {canMarkPaid && " Click Paid once the customer settles."}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className={cn("gap-4", FIT_CLASSES.section)}>
           {pendingShortfall && (
             <IncompleteListNotice
               shown={pendingShortfall.shown}
               total={pendingShortfall.total}
               noun="pending payments"
+              className="shrink-0"
               consequence="A pending Cash In that is not listed here cannot be marked paid from this screen."
             />
           )}
-          <div className="rounded-md border">
+          <ScrollBox className="rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -265,7 +269,7 @@ export function ReportsTab() {
                 )}
               </TableBody>
             </Table>
-          </div>
+          </ScrollBox>
         </CardContent>
       </Card>
     </div>

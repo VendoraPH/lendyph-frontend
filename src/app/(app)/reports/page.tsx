@@ -12,6 +12,8 @@ import { cn } from "@/lib/utils";
 import { visibleReports } from "./_lib/report-catalog";
 import { CATEGORY_META } from "./_lib/types";
 import type { ReportCategory, ReportDefinition } from "./_lib/types";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { hasIllustration, Illustration } from "@/components/common/illustration";
 
 export default function ReportsPage() {
   const [query, setQuery] = useState("");
@@ -49,9 +51,9 @@ export default function ReportsPage() {
 
   return (
     <RouteGuard permission="reports:view" pageName="Reports">
-      <div className="space-y-6">
+      <PageFill>
         {/* Hero / header */}
-        <div className="rounded-xl border bg-gradient-to-br from-brand-orange/10 via-background to-background p-6 sm:p-8">
+        <div className="shrink-0 rounded-xl border bg-gradient-to-br from-brand-orange/10 via-background to-background p-6 sm:p-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex items-start gap-4">
               <div className="hidden sm:flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-brand-orange/15 text-brand-orange">
@@ -95,11 +97,14 @@ export default function ReportsPage() {
 
         {/* Catalog */}
         {!hasResults ? (
-          <div className="rounded-lg border border-dashed py-16 text-center text-sm text-muted-foreground">
-            No reports match <span className="font-medium">&ldquo;{query}&rdquo;</span>.
+          <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-16 text-center text-sm text-muted-foreground">
+            {hasIllustration("noResults") && <Illustration name="noResults" />}
+            <p>
+              No reports match <span className="font-medium">&ldquo;{query}&rdquo;</span>.
+            </p>
           </div>
         ) : (
-          <div className="space-y-8">
+          <ScrollBox className="space-y-8 p-px">
             {orderedCategories.map((cat) => {
               const items = grouped.get(cat) ?? [];
               if (items.length === 0) return null;
@@ -128,9 +133,9 @@ export default function ReportsPage() {
                 </section>
               );
             })}
-          </div>
+          </ScrollBox>
         )}
-      </div>
+      </PageFill>
     </RouteGuard>
   );
 }

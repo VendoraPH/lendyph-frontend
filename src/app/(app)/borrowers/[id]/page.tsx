@@ -3,9 +3,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Spinner } from "@/components/ui/spinner";
 import { PrintableMenu, RouteGuard } from "@/components/common";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
+import { PageFill, PageLoader, ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { Borrower, CoMaker, Loan, Payment, Repayment } from "@/types";
 import { borrowerService, loanService, coMakerService, repaymentService } from "@/services";
@@ -200,23 +202,19 @@ function BorrowerDetailContent() {
   };
 
   if (loading) {
-    return (
-      <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
-        <Spinner className="size-6 text-muted-foreground" />
-      </div>
-    );
+    return <PageLoader />;
   }
 
   if (!borrower) {
     return (
-      <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
+      <div className={FIT_CLASSES.loader}>
         <p className="text-muted-foreground">Member not found.</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <PageFill className="fit:gap-4">
       <BorrowerHeader
         borrower={borrower}
         onEdit={() => router.push(`/borrowers/${borrowerId}/edit`)}
@@ -225,7 +223,7 @@ function BorrowerDetailContent() {
 
       {/* Member documents — the same catalog `/printables` serves, opened for
           the member already on screen instead of re-picking them there. */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">
           Open a member document on your cooperative&apos;s letterhead, ready to
           print.
@@ -242,6 +240,7 @@ function BorrowerDetailContent() {
           shown={loanShortfall.shown}
           total={loanShortfall.total}
           noun="loans"
+          className="shrink-0"
           consequence="The Loans tab, the Overview and the balances on the Payments tab cover only the loans that loaded."
         />
       )}
@@ -251,12 +250,13 @@ function BorrowerDetailContent() {
           shown={paymentShortfall.shown}
           total={paymentShortfall.total}
           noun="payments"
+          className="shrink-0"
           consequence="The Payments tab's list and count cover only the payments that loaded."
         />
       )}
 
-      <Tabs defaultValue="overview">
-        <TabsList variant="line">
+      <Tabs defaultValue="overview" className={FIT_CLASSES.section}>
+        <TabsList variant="line" className="shrink-0">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="loans">Loans ({loans.length})</TabsTrigger>
           <TabsTrigger value="payments">Payments ({payments.length})</TabsTrigger>
@@ -268,51 +268,61 @@ function BorrowerDetailContent() {
           {env.features.savings && can("savings:view") && <TabsTrigger value="savings">Savings</TabsTrigger>}
         </TabsList>
 
-        <TabsContent value="overview" className="pt-4">
-          <OverviewTab borrower={borrower} loans={loans} coMakers={coMakers} summary={loanSummary} />
+        <TabsContent value="overview" className={cn("pt-4", FIT_CLASSES.section)}>
+          <ScrollBox className="p-px">
+            <OverviewTab borrower={borrower} loans={loans} coMakers={coMakers} summary={loanSummary} />
+          </ScrollBox>
         </TabsContent>
 
-        <TabsContent value="loans" className="pt-4">
+        <TabsContent value="loans" className={cn("pt-4", FIT_CLASSES.section)}>
           <LoansTab loans={loans} />
         </TabsContent>
 
-        <TabsContent value="payments" className="pt-4">
+        <TabsContent value="payments" className={cn("pt-4", FIT_CLASSES.section)}>
           <PaymentsTab payments={payments} loans={loans} summary={loanSummary} />
         </TabsContent>
 
-        <TabsContent value="co-makers" className="pt-4">
-          <CoMakersTab
-            coMakers={coMakers}
-            onAdd={handleAddCoMaker}
-            onAddId={handleAddCoMakerId}
-            onEdit={handleEditCoMaker}
-            onDelete={handleDeleteCoMaker}
-          />
+        <TabsContent value="co-makers" className={cn("pt-4", FIT_CLASSES.section)}>
+          <ScrollBox className="p-px">
+            <CoMakersTab
+              coMakers={coMakers}
+              onAdd={handleAddCoMaker}
+              onAddId={handleAddCoMakerId}
+              onEdit={handleEditCoMaker}
+              onDelete={handleDeleteCoMaker}
+            />
+          </ScrollBox>
         </TabsContent>
 
-        <TabsContent value="documents" className="pt-4">
-          <DocumentsTab borrowerId={borrower.id} />
+        <TabsContent value="documents" className={cn("pt-4", FIT_CLASSES.section)}>
+          <ScrollBox className="p-px">
+            <DocumentsTab borrowerId={borrower.id} />
+          </ScrollBox>
         </TabsContent>
 
-        <TabsContent value="ledger" className="pt-4">
+        <TabsContent value="ledger" className={cn("pt-4", FIT_CLASSES.section)}>
           <LedgerTab borrowerId={borrower.id} />
         </TabsContent>
 
-        <TabsContent value="share-capital" className="pt-4">
+        <TabsContent value="share-capital" className={cn("pt-4", FIT_CLASSES.section)}>
           <ShareCapitalTab borrowerId={borrower.id} />
         </TabsContent>
 
-        <TabsContent value="collaterals" className="pt-4">
-          <CollateralsTab borrowerId={borrower.id} />
+        <TabsContent value="collaterals" className={cn("pt-4", FIT_CLASSES.section)}>
+          <ScrollBox className="p-px">
+            <CollateralsTab borrowerId={borrower.id} />
+          </ScrollBox>
         </TabsContent>
 
         {env.features.savings && can("savings:view") && (
-          <TabsContent value="savings" className="pt-4">
-            <SavingsTab borrowerId={borrower.id} />
+          <TabsContent value="savings" className={cn("pt-4", FIT_CLASSES.section)}>
+            <ScrollBox className="p-px">
+              <SavingsTab borrowerId={borrower.id} />
+            </ScrollBox>
           </TabsContent>
         )}
       </Tabs>
-    </div>
+    </PageFill>
   );
 }
 

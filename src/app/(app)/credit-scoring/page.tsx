@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import type { CreditScoringDashboardSummary, RiskLevel } from "@/types/credit-scoring";
 import type { LucideIcon } from "lucide-react";
 import { Users, TrendingUp, ShieldAlert, History } from "lucide-react";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 
 const CHART_HEX: Record<RiskLevel, string> = {
   very_low: "#10b981",
@@ -42,7 +43,7 @@ function DashboardBody({ data }: { data: CreditScoringDashboardSummary }) {
   const mounted = useIsClient();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 fit:space-y-4">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <FigureCard label="Scored Members" value={String(data.total_scored_borrowers)} />
         <FigureCard label="Average Score" value={averageScoreText(data.average_score)} />
@@ -56,9 +57,9 @@ function DashboardBody({ data }: { data: CreditScoringDashboardSummary }) {
       </div>
 
       <Card>
-        <CardContent className="pt-6">
+        <CardContent className="pt-6 fit:pt-0">
           <p className="mb-2 text-sm font-medium">Risk Distribution</p>
-          <div className="relative h-64">
+          <div className="relative h-64 fit:h-48">
             {mounted && (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -83,7 +84,7 @@ function DashboardBody({ data }: { data: CreditScoringDashboardSummary }) {
               </ResponsiveContainer>
             )}
           </div>
-          <ul aria-label="Risk distribution legend" className="mt-4 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
+          <ul aria-label="Risk distribution legend" className="mt-4 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3 fit:mt-3">
             {riskLegend(data.risk_distribution).map((item) => (
               <li key={item.level} className="flex items-center justify-between gap-3 rounded-md border px-3 py-1.5">
                 <span className="flex items-center gap-2">
@@ -104,7 +105,7 @@ function DashboardBody({ data }: { data: CreditScoringDashboardSummary }) {
       <BranchRiskTable rows={data.branch_risk} />
 
       <Card>
-        <CardContent className="pt-6">
+        <CardContent className="pt-6 fit:pt-0">
           <p className="mb-3 text-sm font-medium">Recent Score Changes</p>
           <div className="space-y-2">
             {data.recent_score_changes.length === 0 && (
@@ -140,21 +141,23 @@ function CreditScoringDashboardContent() {
   const resource = useApiResource<CreditScoringDashboardSummary>(fetcher);
 
   return (
-    <div className="space-y-6">
+    <PageFill className="fit:gap-4">
       <CreditScoringPageHeader
         title="Credit Scoring"
         description="Portfolio-wide view of member credit scores and risk distribution."
       />
 
-      <DataState
-        resource={resource}
-        summary="The credit scoring dashboard summarizes scored members, the average score, the risk distribution, risk by branch and the high risk members' outstanding balance."
-        endpoints={["GET /credit-scoring/dashboard"]}
-      >
-        {(data) => <DashboardBody data={data} />}
-      </DataState>
+      <ScrollBox className="p-px">
+        <DataState
+          resource={resource}
+          summary="The credit scoring dashboard summarizes scored members, the average score, the risk distribution, risk by branch and the high risk members' outstanding balance."
+          endpoints={["GET /credit-scoring/dashboard"]}
+        >
+          {(data) => <DashboardBody data={data} />}
+        </DataState>
+      </ScrollBox>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div data-fab-clear className="grid shrink-0 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {SHORTCUTS.map((s) => (
           <Button key={s.href} variant="outline" className="h-auto justify-start gap-2 p-4" nativeButton={false} render={<Link href={s.href} />}>
             <s.icon className="h-4 w-4" />
@@ -162,7 +165,7 @@ function CreditScoringDashboardContent() {
           </Button>
         ))}
       </div>
-    </div>
+    </PageFill>
   );
 }
 

@@ -45,6 +45,8 @@ import {
 import { formatCurrency } from "@/utils/format";
 import type { Collateral, CollateralType } from "@/types";
 import { knownMemberId, memberPlaceholderOption } from "../_lib/member-option";
+import { FIT_CLASSES, scrollBoxClass } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 
 interface Props {
   initial?: Collateral;
@@ -262,7 +264,7 @@ export function CollateralForm({ initial, mode }: Props) {
   }
 
   return (
-    <Card>
+    <Card className={FIT_CLASSES.section}>
       <CardHeader className="border-b border-border/60">
         <div className="flex items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-orange/10 text-brand-orange">
@@ -280,7 +282,7 @@ export function CollateralForm({ initial, mode }: Props) {
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-6 pt-6">
+      <CardContent className={cn("space-y-6 pt-6", scrollBoxClass())}>
         {initialLock && isLocked(initialLock) && (
           <div
             role="status"
@@ -305,61 +307,63 @@ export function CollateralForm({ initial, mode }: Props) {
           </div>
         )}
 
-        {/* ── Section: Member ─────────────────────────────────────── */}
-        <div className="space-y-2">
-          <Label htmlFor="collateral-member">
-            Member <span className="text-destructive">*</span>
-          </Label>
-          <MemberSearchPicker
-            id="collateral-member"
-            value={member}
-            onChange={setMember}
-            canSearch={canListMembers}
-            placeholder="Search member…"
-            className="h-10"
-          />
-        </div>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+          {/* ── Section: Member ─────────────────────────────────────── */}
+          <div className="space-y-2">
+            <Label htmlFor="collateral-member">
+              Member <span className="text-destructive">*</span>
+            </Label>
+            <MemberSearchPicker
+              id="collateral-member"
+              value={member}
+              onChange={setMember}
+              canSearch={canListMembers}
+              placeholder="Search member…"
+              className="h-10"
+            />
+          </div>
 
-        {/* ── Section: Type ───────────────────────────────────────── */}
-        <div className="space-y-2">
-          <Label htmlFor="collateral-type">
-            Collateral Type <span className="text-destructive">*</span>
-          </Label>
-          <Select
-            value={typeId ? String(typeId) : ""}
-            onValueChange={(v) => setTypeId(Number(v))}
-          >
-            <SelectTrigger id="collateral-type" className="h-10">
-              {/* Base UI's <Select.Value> renders the raw selected `value`
-                  (the id) by default — pass a children render fn so we
-                  display the human-readable type name instead of "3". */}
-              <SelectValue placeholder="Select a type">
-                {(value) => {
-                  if (!value) return "Select a type";
-                  const t = types.find((x) => String(x.id) === String(value));
-                  return t?.name ?? String(value);
-                }}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {types.map((t) => (
-                <SelectItem key={t.id} value={String(t.id)}>
-                  {t.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {!selectedType && (
-            <p className="text-xs text-muted-foreground">
-              Choose a type to see the relevant fields.
-            </p>
-          )}
+          {/* ── Section: Type ───────────────────────────────────────── */}
+          <div className="space-y-2">
+            <Label htmlFor="collateral-type">
+              Collateral Type <span className="text-destructive">*</span>
+            </Label>
+            <Select
+              value={typeId ? String(typeId) : ""}
+              onValueChange={(v) => setTypeId(Number(v))}
+            >
+              <SelectTrigger id="collateral-type" className="h-10 w-full">
+                {/* Base UI's <Select.Value> renders the raw selected `value`
+                    (the id) by default — pass a children render fn so we
+                    display the human-readable type name instead of "3". */}
+                <SelectValue placeholder="Select a type">
+                  {(value) => {
+                    if (!value) return "Select a type";
+                    const t = types.find((x) => String(x.id) === String(value));
+                    return t?.name ?? String(value);
+                  }}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {types.map((t) => (
+                  <SelectItem key={t.id} value={String(t.id)}>
+                    {t.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {!selectedType && (
+              <p className="text-xs text-muted-foreground">
+                Choose a type to see the relevant fields.
+              </p>
+            )}
+          </div>
         </div>
 
         {/* ── Section: Type-specific details ──────────────────────── */}
         {selectedType && (
-          <div className="space-y-6 rounded-lg border border-dashed border-border/70 bg-muted/20 p-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <div className="grid gap-4 rounded-lg border border-dashed border-border/70 bg-muted/20 p-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            <p className="col-span-full text-xs font-medium uppercase tracking-wide text-muted-foreground">
               {selectedType.name} details
             </p>
 
@@ -436,7 +440,7 @@ export function CollateralForm({ initial, mode }: Props) {
         )}
       </CardContent>
 
-      <CardFooter className="justify-end gap-2 border-t border-border/60 bg-muted/20 px-6 py-4">
+      <CardFooter data-fab-clear className="shrink-0 justify-end gap-2 border-t border-border/60 bg-muted/20 px-6 py-4">
         <Button
           variant="outline"
           nativeButton={false}

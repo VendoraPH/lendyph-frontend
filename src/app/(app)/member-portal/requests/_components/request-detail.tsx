@@ -24,6 +24,7 @@ import { DECISION_LABELS, TYPE_PERMISSION, decisionsFor } from "../../_lib/reque
 import { StateBadge } from "../../_components/state-badge";
 import { DecisionDialog } from "./decision-dialog";
 import { RequestTimeline } from "./request-timeline";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 
 /**
  * One member request: what was asked, the savings records it touches (hold,
@@ -38,21 +39,23 @@ export function RequestDetail({ id }: { id: number }) {
   const [deciding, setDeciding] = useState<PortalRequestDecision | null>(null);
 
   return (
-    <div className="space-y-6">
-      <Button variant="ghost" size="sm" className="-ml-2" nativeButton={false} render={<Link href="/member-portal/requests" />}>
+    <PageFill>
+      <Button variant="ghost" size="sm" className="-ml-2 self-start" nativeButton={false} render={<Link href="/member-portal/requests" />}>
         <ArrowLeft className="h-4 w-4" aria-hidden /> Portal Requests
       </Button>
       <DataState resource={resource} endpoints={[]} summary="This member request.">
         {(r) => (
           <>
             <Header request={r} onDecide={setDeciding} />
-            <div className="grid gap-4 lg:grid-cols-3">
-              <div className="space-y-4 lg:col-span-2">
-                <Details request={r} />
-                <SavingsRecords request={r} />
+            <ScrollBox className="p-px">
+              <div className="grid gap-4 lg:grid-cols-3">
+                <div className="space-y-4 lg:col-span-2">
+                  <Details request={r} />
+                  <SavingsRecords request={r} />
+                </div>
+                <RequestTimeline events={r.timeline} />
               </div>
-              <RequestTimeline events={r.timeline} />
-            </div>
+            </ScrollBox>
             <DecisionDialog
               request={r}
               decision={deciding}
@@ -62,14 +65,14 @@ export function RequestDetail({ id }: { id: number }) {
           </>
         )}
       </DataState>
-    </div>
+    </PageFill>
   );
 }
 
 function Header({ request: r, onDecide }: { request: PortalRequestDetail; onDecide: (d: PortalRequestDecision) => void }) {
   const decisions = decisionsFor(r.status);
   return (
-    <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="flex shrink-0 flex-wrap items-start justify-between gap-4">
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">{labelOf(REQUEST_TYPE_LABELS, r.type)}</h1>
         <p className="font-mono text-sm text-muted-foreground">{r.reference}</p>

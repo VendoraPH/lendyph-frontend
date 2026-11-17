@@ -23,6 +23,9 @@ import { CashInDialog } from "./cash-in-dialog";
 import { CashOutDialog } from "./cash-out-dialog";
 import { NewTransactionDialog } from "./new-transaction-dialog";
 import { gcashRowActions } from "../_lib/row-actions";
+import { ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 
 type DialogState =
   | { type: "cash_in" | "cash_out"; party: GCashParty }
@@ -90,8 +93,8 @@ export function MembersTab() {
   }, [debounced, page, perPage, canListMembers]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
+    <div className={cn("gap-4", FIT_CLASSES.section)}>
+      <div className="flex shrink-0 items-center justify-between gap-2">
         <div className="relative max-w-sm w-full">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -108,7 +111,7 @@ export function MembersTab() {
         )}
       </div>
 
-      <div className="rounded-md border">
+      <ScrollBox className="rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -172,7 +175,7 @@ export function MembersTab() {
             )}
           </TableBody>
         </Table>
-      </div>
+      </ScrollBox>
 
       <TablePagination
         page={page}

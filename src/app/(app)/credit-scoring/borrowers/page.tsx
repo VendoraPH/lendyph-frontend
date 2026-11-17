@@ -50,6 +50,9 @@ import type {
   MemberType,
   ScoreTrend,
 } from "@/types/credit-scoring";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 
 function TrendIcon({ trend }: { trend: BorrowerScoreRow["score_trend"] }) {
   if (trend === null) return <span className="text-muted-foreground">—</span>;
@@ -96,7 +99,7 @@ function BorrowerScoresContent() {
   const resource = useApiResource<CreditScoringPage<BorrowerScoreRow>>(fetcher);
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       <CreditScoringPageHeader
         title="Member Scores"
         description="Every member's current Lendy Credit Score and risk level. Scores are advisory only and never change a loan."
@@ -165,42 +168,45 @@ function BorrowerScoresContent() {
         endpoints={["GET /credit-scoring/borrowers"]}
         isEmpty={(res) => res.total === 0}
         emptyMessage="No members match this search or filter."
+        emptyIllustration="noResults"
       >
         {(res) => (
-          <div className="rounded-lg border p-2">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Member</TableHead>
-                  <TableHead>Branch</TableHead>
-                  <TableHead>Score</TableHead>
-                  <TableHead>Risk Level</TableHead>
-                  <TableHead>Trend</TableHead>
-                  <TableHead>Active Loan</TableHead>
-                  <TableHead>Past Due</TableHead>
-                  <TableHead className="text-right">Outstanding</TableHead>
-                  <TableHead>Calculated</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {res.data.map((row) => (
-                  <TableRow key={row.borrower_id}>
-                    <TableCell>
-                      <MemberCell row={row} />
-                    </TableCell>
-                    <TableCell>{row.branch_name ?? "—"}</TableCell>
-                    <ScoreCells row={row} />
-                    <TableCell>
-                      <TrendIcon trend={row.score_trend} />
-                    </TableCell>
-                    <TableCell>{yesNoOrDash(row.has_active_loan)}</TableCell>
-                    <TableCell>{yesNoOrDash(row.past_due)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{pesosOrDash(row.outstanding)}</TableCell>
-                    <TableCell>{row.calculated_at ? formatDate(row.calculated_at) : "—"}</TableCell>
+          <div className={cn("rounded-lg border p-2", FIT_CLASSES.section)}>
+            <ScrollBox>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Member</TableHead>
+                    <TableHead>Branch</TableHead>
+                    <TableHead>Score</TableHead>
+                    <TableHead>Risk Level</TableHead>
+                    <TableHead>Trend</TableHead>
+                    <TableHead>Active Loan</TableHead>
+                    <TableHead>Past Due</TableHead>
+                    <TableHead className="text-right">Outstanding</TableHead>
+                    <TableHead>Calculated</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {res.data.map((row) => (
+                    <TableRow key={row.borrower_id}>
+                      <TableCell>
+                        <MemberCell row={row} />
+                      </TableCell>
+                      <TableCell>{row.branch_name ?? "—"}</TableCell>
+                      <ScoreCells row={row} />
+                      <TableCell>
+                        <TrendIcon trend={row.score_trend} />
+                      </TableCell>
+                      <TableCell>{yesNoOrDash(row.has_active_loan)}</TableCell>
+                      <TableCell>{yesNoOrDash(row.past_due)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{pesosOrDash(row.outstanding)}</TableCell>
+                      <TableCell>{row.calculated_at ? formatDate(row.calculated_at) : "—"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ScrollBox>
             <TablePagination
               page={res.current_page}
               perPage={res.per_page}
@@ -215,7 +221,7 @@ function BorrowerScoresContent() {
           </div>
         )}
       </DataState>
-    </div>
+    </PageFill>
   );
 }
 

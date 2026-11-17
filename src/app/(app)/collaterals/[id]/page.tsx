@@ -10,6 +10,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { collateralService } from "@/services";
 import type { Collateral } from "@/types";
 import { CollateralForm } from "../_components/collateral-form";
+import { PageFill } from "@/components/common/page-fill";
 
 function EditCollateralContent() {
   const params = useParams<{ id: string }>();
@@ -37,18 +38,18 @@ function EditCollateralContent() {
   }, [id]);
 
   return (
-    <div className="mx-auto w-full max-w-2xl space-y-6 py-2">
+    <PageFill className="py-2">
       {/* Breadcrumb */}
       <Link
         href="/collaterals"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        className="inline-flex items-center gap-1.5 self-start text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />
         Back to Collaterals
       </Link>
 
       {/* Page header */}
-      <header className="space-y-1.5">
+      <header className="shrink-0 space-y-1.5">
         <h1 className="text-2xl font-semibold tracking-tight">
           Edit Collateral
         </h1>
@@ -59,7 +60,7 @@ function EditCollateralContent() {
       </header>
 
       {loading ? (
-        <Card>
+        <Card className="shrink-0">
           <CardContent className="flex items-center justify-center py-16">
             <div className="flex flex-col items-center gap-3 text-muted-foreground">
               <Spinner className="size-6" />
@@ -70,7 +71,7 @@ function EditCollateralContent() {
       ) : collateral ? (
         <CollateralForm mode="edit" initial={collateral} />
       ) : (
-        <Card>
+        <Card className="shrink-0">
           <CardContent className="flex flex-col items-center justify-center gap-3 py-16 text-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
               <FileQuestion className="h-6 w-6" />
@@ -85,7 +86,7 @@ function EditCollateralContent() {
           </CardContent>
         </Card>
       )}
-    </div>
+    </PageFill>
   );
 }
 

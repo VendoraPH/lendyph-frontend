@@ -18,12 +18,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { ScorecardConfig } from "@/types/credit-scoring";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 
 interface SaveErrors {
   categories: string[];
   bands: string[];
   factors: FactorRangeErrors;
 }
+
+// At fit the tabs (already a column) take the height left, so each tab's body
+// scrolls in its own box under the pinned tab list.
+const TABS_FILL = "fit:[&>[data-slot=tabs]]:flex-1 fit:[&>[data-slot=tabs]]:min-h-0";
 
 const NO_ERRORS: SaveErrors = { categories: [], bands: [], factors: { general: [], byFactor: {} } };
 
@@ -69,7 +76,7 @@ function ScorecardConfigurationContent() {
   const loaded = resource.data;
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       <CreditScoringPageHeader
         title="Scorecard Configuration"
         description="Category weights, risk bands and factor ranges used to work out scores. Each save makes a new scorecard version."
@@ -90,61 +97,69 @@ function ScorecardConfigurationContent() {
         {(config) => {
           const current = draft ?? scorecardDraftFrom(config);
           return (
-            <div className="space-y-6">
-              <div className="flex flex-wrap items-center gap-2 text-sm">
+            <div className={cn("gap-6", FIT_CLASSES.section, TABS_FILL)}>
+              <div className="flex shrink-0 flex-wrap items-center gap-2 text-sm">
                 <span>Scorecard v{config.version}</span>
                 {!config.validated && <Badge variant="outline">Unvalidated</Badge>}
               </div>
 
               {note && (
-                <p role="status" className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                <p role="status" className="shrink-0 rounded-md border bg-muted/40 px-3 py-2 text-sm">
                   {note}
                 </p>
               )}
 
               <Tabs value={tab} onValueChange={(next) => setTab(String(next))}>
-                <TabsList>
+                <TabsList className="shrink-0">
                   <TabsTrigger value="categories">Categories</TabsTrigger>
                   <TabsTrigger value="bands">Risk Bands</TabsTrigger>
                   <TabsTrigger value="factors">Factor Ranges</TabsTrigger>
                   <TabsTrigger value="policy">Policy Rules</TabsTrigger>
                 </TabsList>
-                <TabsContent value="categories">
-                  <CategoriesEditor
-                    categories={config.categories}
-                    weights={current.weights}
-                    errors={errors.categories}
-                    onChange={(key, value) =>
-                      setDraft({ ...current, weights: { ...current.weights, [key]: value } })
-                    }
-                  />
+                <TabsContent value="categories" className={FIT_CLASSES.section}>
+                  <ScrollBox className="p-px">
+                    <CategoriesEditor
+                      categories={config.categories}
+                      weights={current.weights}
+                      errors={errors.categories}
+                      onChange={(key, value) =>
+                        setDraft({ ...current, weights: { ...current.weights, [key]: value } })
+                      }
+                    />
+                  </ScrollBox>
                 </TabsContent>
-                <TabsContent value="bands">
-                  <RiskBandsEditor
-                    bands={config.risk_bands}
-                    minimums={current.bands}
-                    errors={errors.bands}
-                    onChange={(key, value) => setDraft({ ...current, bands: { ...current.bands, [key]: value } })}
-                  />
+                <TabsContent value="bands" className={FIT_CLASSES.section}>
+                  <ScrollBox className="p-px">
+                    <RiskBandsEditor
+                      bands={config.risk_bands}
+                      minimums={current.bands}
+                      errors={errors.bands}
+                      onChange={(key, value) => setDraft({ ...current, bands: { ...current.bands, [key]: value } })}
+                    />
+                  </ScrollBox>
                 </TabsContent>
-                <TabsContent value="factors">
-                  <FactorRangesEditor
-                    rules={config.factor_rules}
-                    categories={config.categories}
-                    drafts={current.factors}
-                    errors={errors.factors}
-                    onChange={(id, next) => setDraft({ ...current, factors: { ...current.factors, [id]: next } })}
-                  />
+                <TabsContent value="factors" className={FIT_CLASSES.section}>
+                  <ScrollBox className="p-px">
+                    <FactorRangesEditor
+                      rules={config.factor_rules}
+                      categories={config.categories}
+                      drafts={current.factors}
+                      errors={errors.factors}
+                      onChange={(id, next) => setDraft({ ...current, factors: { ...current.factors, [id]: next } })}
+                    />
+                  </ScrollBox>
                 </TabsContent>
-                <TabsContent value="policy">
-                  <PolicyRulesList rules={config.policy_rules} />
+                <TabsContent value="policy" className={FIT_CLASSES.section}>
+                  <ScrollBox className="p-px">
+                    <PolicyRulesList rules={config.policy_rules} />
+                  </ScrollBox>
                 </TabsContent>
               </Tabs>
             </div>
           );
         }}
       </DataState>
-    </div>
+    </PageFill>
   );
 }
 

@@ -37,6 +37,10 @@ import { PaidButton } from "./paid-button";
 import { PartyCell } from "./party-cell";
 import { gcashCanMarkPaid } from "../_lib/row-actions";
 import { gcashRowBranchLabel } from "../_lib/walk-in-branch";
+import { DataState } from "@/components/common/data-state";
+import { ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 
 // Passed to <Select items>: Base UI resolves the trigger label from `items`,
 // not from the mounted <SelectItem> children — without it the trigger shows
@@ -84,6 +88,9 @@ export function TransactionsTab() {
   const [reloadToken, setReloadToken] = useState(0);
 
   const refresh = useCallback(() => setReloadToken((n) => n + 1), []);
+  // Whether the empty list is down to the filters (a "no results" picture) or there is nothing yet.
+  const filtersActive =
+    filters.type !== "all" || filters.status !== "all" || filters.start_date !== "" || filters.end_date !== "";
 
   useEffect(() => {
     let cancelled = false;
@@ -112,8 +119,8 @@ export function TransactionsTab() {
   }, [filters, page, reloadToken]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-2 items-end">
+    <div className={cn("gap-4", FIT_CLASSES.section)}>
+      <div className="flex shrink-0 flex-wrap gap-2 items-end">
         <div className="space-y-1">
           <label className="text-xs text-muted-foreground">Type</label>
           <Select
@@ -190,81 +197,85 @@ export function TransactionsTab() {
         </Button>
       </div>
 
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead>Reference</TableHead>
-              <TableHead>Customer</TableHead>
-              <TableHead>Branch</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead className="text-right">Amount</TableHead>
-              <TableHead className="text-right">Charge</TableHead>
-              <TableHead className="text-right">Total</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Transactor</TableHead>
-              <TableHead></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
+      {!loading && rows.length === 0 ? (
+        <DataState
+          resource={{ data: rows, loading: false, unavailable: false, error: null, refetch: refresh }}
+          endpoints={["GET /gcash/transactions"]}
+          summary="GCash Cash In and Cash Out transactions."
+          isEmpty={(list) => list.length === 0}
+          emptyMessage="No transactions found."
+          emptyIllustration={filtersActive ? "noResults" : "empty"}
+        >
+          {() => null}
+        </DataState>
+      ) : (
+        <ScrollBox className="rounded-md border">
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={11} className="text-center py-8">
-                  <Loader2 className="inline h-5 w-5 animate-spin" />
-                </TableCell>
+                <TableHead>Date</TableHead>
+                <TableHead>Reference</TableHead>
+                <TableHead>Customer</TableHead>
+                <TableHead>Branch</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
+                <TableHead className="text-right">Charge</TableHead>
+                <TableHead className="text-right">Total</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Transactor</TableHead>
+                <TableHead></TableHead>
               </TableRow>
-            ) : rows.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={11}
-                  className="text-center text-muted-foreground py-8"
-                >
-                  No transactions found.
-                </TableCell>
-              </TableRow>
-            ) : (
-              rows.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell>{formatDate(r.transaction_date)}</TableCell>
-                  <TableCell className="font-mono text-xs">
-                    {r.reference_no}
-                  </TableCell>
-                  <TableCell>
-                    <PartyCell borrower={r.borrower} nonMember={r.non_member} />
-                  </TableCell>
-                  <TableCell>{gcashRowBranchLabel(r, branches)}</TableCell>
-                  <TableCell>
-                    {r.type === "cash_in" ? "Cash In" : "Cash Out"}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {formatCurrencyExact(r.amount)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {formatCurrencyExact(r.charge_amount)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {formatCurrencyExact(r.total_amount)}
-                  </TableCell>
-                  <TableCell>{statusBadge(r.status)}</TableCell>
-                  <TableCell>{r.transactor_user?.full_name ?? "—"}</TableCell>
-                  <TableCell className="text-right">
-                    {gcashCanMarkPaid(can, r) && (
-                      <PaidButton
-                        transactionId={r.id}
-                        referenceNo={r.reference_no}
-                        onPaid={refresh}
-                      />
-                    )}
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={11} className="text-center py-8">
+                    <Loader2 className="inline h-5 w-5 animate-spin" />
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+              ) : (
+                rows.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell>{formatDate(r.transaction_date)}</TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {r.reference_no}
+                    </TableCell>
+                    <TableCell>
+                      <PartyCell borrower={r.borrower} nonMember={r.non_member} />
+                    </TableCell>
+                    <TableCell>{gcashRowBranchLabel(r, branches)}</TableCell>
+                    <TableCell>
+                      {r.type === "cash_in" ? "Cash In" : "Cash Out"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatCurrencyExact(r.amount)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatCurrencyExact(r.charge_amount)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatCurrencyExact(r.total_amount)}
+                    </TableCell>
+                    <TableCell>{statusBadge(r.status)}</TableCell>
+                    <TableCell>{r.transactor_user?.full_name ?? "—"}</TableCell>
+                    <TableCell className="text-right">
+                      {gcashCanMarkPaid(can, r) && (
+                        <PaidButton
+                          transactionId={r.id}
+                          referenceNo={r.reference_no}
+                          onPaid={refresh}
+                        />
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </ScrollBox>
+      )}
 
-      <div className="flex justify-end gap-2 items-center text-sm">
+      <div data-fab-clear className="flex shrink-0 justify-end gap-2 items-center text-sm">
         <span className="text-muted-foreground">
           Page {page} of {totalPages}
         </span>

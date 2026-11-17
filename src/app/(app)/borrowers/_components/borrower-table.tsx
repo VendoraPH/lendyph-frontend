@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   Table,
@@ -44,6 +45,9 @@ import {
 import type { Borrower } from "@/types";
 import { memberStatusLabel, statusBadgeColor } from "./utils";
 import { getInitials } from "@/lib/initials";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
+import { ScrollBox } from "@/components/common/page-fill";
 import { BorrowerActionsCell } from "./borrower-actions";
 
 interface BorrowerTableProps {
@@ -54,6 +58,11 @@ interface BorrowerTableProps {
   onBulkDelete: (ids: number[]) => void;
   /** Resolves a branch name when the list payload omits the nested relation. */
   branchNameById?: Map<number, string>;
+  /**
+   * Where the Columns menu goes when the page has room for it beside its
+   * filters. Without it the menu sits on the table's own toolbar row.
+   */
+  columnsSlot?: HTMLElement | null;
 }
 
 type SortKey =
@@ -89,6 +98,7 @@ export function BorrowerTable({
   onBulkDeactivate,
   onBulkDelete,
   branchNameById,
+  columnsSlot = null,
 }: BorrowerTableProps) {
   const router = useRouter();
 
@@ -197,8 +207,35 @@ export function BorrowerTable({
     (visibleColumns.email ? 1 : 0) +
     2; // status + actions (always visible)
 
+  const columnsMenu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        className="inline-flex items-center gap-1.5 rounded-lg border border-input bg-background px-2.5 py-1.5 text-sm font-medium transition-colors hover:bg-muted dark:border-input dark:bg-input/30 dark:hover:bg-input/50"
+      >
+        <Columns3 className="h-4 w-4" />
+        Columns
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {TOGGLEABLE_COLUMNS.map((col) => (
+            <DropdownMenuCheckboxItem
+              key={col.key}
+              checked={visibleColumns[col.key]}
+              onCheckedChange={() => toggleColumn(col.key)}
+              closeOnClick={false}
+            >
+              {col.label}
+            </DropdownMenuCheckboxItem>
+          ))}
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
   return (
-    <div className="space-y-2">
+    <div className={cn("gap-2", FIT_CLASSES.section)}>
       <AlertDialog open={confirmBulkDelete} onOpenChange={setConfirmBulkDelete}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -227,64 +264,46 @@ export function BorrowerTable({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Toolbar: column visibility + bulk actions */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          {selectedCount > 0 && (
-            <>
-              <span className="text-sm text-muted-foreground">
-                {selectedCount} selected
-              </span>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => {
-                  onBulkDeactivate(selectedArray);
-                  setSelectedIds(new Set());
-                }}
-              >
-                <UserX data-icon="inline-start" />
-                Deactivate Selected
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => setConfirmBulkDelete(true)}
-              >
-                <Trash2 data-icon="inline-start" />
-                Delete Selected
-              </Button>
-            </>
-          )}
-        </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            className="inline-flex items-center gap-1.5 rounded-lg border border-input bg-background px-2.5 py-1.5 text-sm font-medium transition-colors hover:bg-muted dark:border-input dark:bg-input/30 dark:hover:bg-input/50"
-          >
-            <Columns3 className="h-4 w-4" />
-            Columns
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuGroup>
-              <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {TOGGLEABLE_COLUMNS.map((col) => (
-                <DropdownMenuCheckboxItem
-                  key={col.key}
-                  checked={visibleColumns[col.key]}
-                  onCheckedChange={() => toggleColumn(col.key)}
-                  closeOnClick={false}
+      {columnsSlot ? createPortal(columnsMenu, columnsSlot) : null}
+
+      {/* Toolbar: bulk actions, and the Columns menu when the page has no slot
+          for it. With a slot it shows only while rows are selected. */}
+      {(selectedCount > 0 || !columnsSlot) && (
+        <div className="flex shrink-0 items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            {selectedCount > 0 && (
+              <>
+                <span className="text-sm text-muted-foreground">
+                  {selectedCount} selected
+                </span>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => {
+                    onBulkDeactivate(selectedArray);
+                    setSelectedIds(new Set());
+                  }}
                 >
-                  {col.label}
-                </DropdownMenuCheckboxItem>
-              ))}
-            </DropdownMenuGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+                  <UserX data-icon="inline-start" />
+                  Deactivate Selected
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setConfirmBulkDelete(true)}
+                >
+                  <Trash2 data-icon="inline-start" />
+                  Delete Selected
+                </Button>
+              </>
+            )}
+          </div>
+          {columnsSlot ? null : columnsMenu}
+        </div>
+      )}
 
       {/* Table */}
-      <div className="overflow-x-auto">
+      <ScrollBox>
         <Table>
           <TableHeader>
             <TableRow>
@@ -404,7 +423,7 @@ export function BorrowerTable({
             )}
           </TableBody>
         </Table>
-      </div>
+      </ScrollBox>
     </div>
   );
 }

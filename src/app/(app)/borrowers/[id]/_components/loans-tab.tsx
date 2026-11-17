@@ -22,6 +22,9 @@ import { statusInWords } from "@/app/(app)/borrowers/_components/utils";
 import { loanNeedsCoMaker } from "../_lib/co-maker-recommendation";
 import { loanOutstandingCell } from "../_lib/loan-outstanding-cell";
 import { scheduleToRead } from "../_lib/schedule-to-read";
+import { ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 
 const scheduleStatusColor: Record<string, string> = {
   paid: "bg-green-100 text-green-700 border-green-200",
@@ -101,9 +104,9 @@ export function LoansTab({ loans }: LoansTabProps) {
   });
 
   return (
-    <Card>
-      <CardContent className="p-0">
-        <div className="overflow-x-auto">
+    <Card className={FIT_CLASSES.section}>
+      <CardContent className={cn("p-0", FIT_CLASSES.section)}>
+        <ScrollBox>
           <Table>
             <TableHeader>
               <TableRow>
@@ -243,7 +246,7 @@ export function LoansTab({ loans }: LoansTabProps) {
               )}
             </TableBody>
           </Table>
-        </div>
+        </ScrollBox>
       </CardContent>
     </Card>
   );
