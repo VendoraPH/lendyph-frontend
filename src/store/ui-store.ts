@@ -7,22 +7,12 @@ interface UIState {
   setSidebarOpen: (open: boolean) => void;
   /** The user's own collapse choice. Persisted. */
   sidebarCollapsed: boolean;
-  /**
-   * A temporary collapse that something on screen asks for, e.g. Linda's
-   * panel making room. Never persisted, so it cannot outlive the page or leak
-   * into another tab, and it never overwrites the user's own choice.
-   */
-  sidebarAutoCollapsed: boolean;
-  setSidebarAutoCollapsed: (collapsed: boolean) => void;
-  /**
-   * Flips what the user sees, and that becomes their choice: expanding a
-   * temporarily collapsed sidebar ends the temporary collapse.
-   */
+  /** Flips the sidebar between full and icons only. */
   toggleSidebarCollapsed: () => void;
 }
 
-/** Whether the sidebar shows as icons only, whoever asked for it. */
-export const selectSidebarCollapsed = (s: UIState) => s.sidebarCollapsed || s.sidebarAutoCollapsed;
+/** Whether the sidebar shows as icons only. */
+export const selectSidebarCollapsed = (s: UIState) => s.sidebarCollapsed;
 
 export const useUIStore = create<UIState>()(
   persist(
@@ -31,13 +21,7 @@ export const useUIStore = create<UIState>()(
       toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
       sidebarCollapsed: false,
-      sidebarAutoCollapsed: false,
-      setSidebarAutoCollapsed: (collapsed) => set({ sidebarAutoCollapsed: collapsed }),
-      toggleSidebarCollapsed: () =>
-        set((state) => ({
-          sidebarCollapsed: !selectSidebarCollapsed(state),
-          sidebarAutoCollapsed: false,
-        })),
+      toggleSidebarCollapsed: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
     }),
     {
       name: "lendy-ui",

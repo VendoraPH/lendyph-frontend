@@ -1,8 +1,8 @@
 /**
  * Linda's store: where the panel, the expanded dialog and the /linda page are
- * open, and the one conversation all three show. Opening Linda narrows the
- * sidebar without touching the user's own collapse choice or what the
- * `lendy-ui` store saves, and the conversation lives in memory only.
+ * open, and the one conversation all three show. Opening Linda leaves the
+ * sidebar exactly as the user set it (the panel floats over the page), and the
+ * conversation lives in memory only.
  */
 import { test, before, beforeEach } from "node:test";
 import assert from "node:assert/strict";
@@ -63,48 +63,41 @@ const answered = (answer: string) => () => Promise.resolve(reply(answer));
 
 beforeEach(() => {
   linda().reset();
-  ui.useUIStore.setState({ sidebarCollapsed: false, sidebarAutoCollapsed: false });
+  ui.useUIStore.setState({ sidebarCollapsed: false });
 });
 
 // ---------------------------------------------------------------------------
 // The sidebar
 // ---------------------------------------------------------------------------
 
-test("opening Linda collapses the sidebar and closing gives it back", () => {
+test("opening and closing Linda leaves an expanded sidebar expanded", () => {
   linda().openPanel();
-  assert.equal(collapsed(), true);
+  assert.equal(collapsed(), false, "the panel floats over the page; the sidebar keeps its width");
   linda().close();
   assert.equal(collapsed(), false);
 });
 
-test("Linda's collapse is never saved, so a reload or another tab is unaffected", () => {
+test("opening and closing Linda leaves a collapsed sidebar collapsed", () => {
+  ui.useUIStore.setState({ sidebarCollapsed: true });
   linda().openPanel();
   assert.equal(collapsed(), true);
+  linda().close();
+  assert.equal(collapsed(), true);
+});
+
+test("Linda never writes the sidebar setting the app saves", () => {
+  linda().openPanel();
+  linda().close();
   assert.deepEqual(saved(), { sidebarOpen: true, sidebarCollapsed: false });
 });
 
-test("a sidebar the user had collapsed stays collapsed after Linda closes", () => {
-  ui.useUIStore.setState({ sidebarCollapsed: true });
+test("toggling the sidebar while Linda is open is the user's choice and is kept", () => {
   linda().openPanel();
-  linda().close();
+  ui.useUIStore.getState().toggleSidebarCollapsed();
   assert.equal(collapsed(), true);
-});
-
-test("expanding then collapsing the sidebar while Linda is open is the user's choice and is kept", () => {
-  linda().openPanel();
-  ui.useUIStore.getState().toggleSidebarCollapsed();
-  assert.equal(collapsed(), false, "the first toggle expands what the user sees");
-  ui.useUIStore.getState().toggleSidebarCollapsed();
   linda().close();
   assert.equal(collapsed(), true);
   assert.equal(saved()?.sidebarCollapsed, true);
-});
-
-test("expanding the sidebar while Linda is open keeps it expanded after close", () => {
-  linda().openPanel();
-  ui.useUIStore.getState().toggleSidebarCollapsed();
-  linda().close();
-  assert.equal(collapsed(), false);
 });
 
 test("the floating button opens and closes the panel", () => {
@@ -115,7 +108,7 @@ test("the floating button opens and closes the panel", () => {
   assert.equal(collapsed(), false);
 });
 
-test("the expanded dialog replaces the panel, so the sidebar comes back while it shows", () => {
+test("the expanded dialog replaces the panel, and the sidebar never moves", () => {
   linda().openPanel();
   linda().expand();
   assert.equal(linda().open, false);
@@ -124,7 +117,7 @@ test("the expanded dialog replaces the panel, so the sidebar comes back while it
   linda().collapse();
   assert.equal(linda().open, true);
   assert.equal(linda().expanded, false);
-  assert.equal(collapsed(), true);
+  assert.equal(collapsed(), false);
 });
 
 // ---------------------------------------------------------------------------
