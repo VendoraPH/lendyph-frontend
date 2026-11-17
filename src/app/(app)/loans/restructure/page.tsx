@@ -838,6 +838,8 @@ function RestructureLoanInner() {
           validateStep={validateStep}
           submitLabel="Submit Restructure Application"
           submitting={submitting}
+          // No Next while the picked source loan is still loading.
+          nextDisabled={loadingLoanDetail}
           actions={
             formVisible ? (
               <Button variant="outline" onClick={() => router.back()}>

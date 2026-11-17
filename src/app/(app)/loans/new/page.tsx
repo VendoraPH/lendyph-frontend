@@ -993,6 +993,7 @@ function NewLoanApplicationInner() {
           submittingLabel={isEditMode ? "Saving..." : "Submitting..."}
           submitting={submitting}
           submitDisabled={collateralBlock !== null}
+          submitDescribedBy={collateralBlock ? "save-blocked-reason" : undefined}
           actions={
             collateralBlock ? (
               <p id="save-blocked-reason" className="text-sm text-muted-foreground">
@@ -1249,10 +1250,7 @@ function NewLoanApplicationInner() {
                     inputMode="decimal"
                     value={principalAmount}
                     onChange={(e) => setPrincipalAmount(amountInputValue(e.target.value))}
-                    // A restructure has no product minimum (principalRangeError),
-                    // so its field states none either: the stepper refuses a
-                    // submit while any field is natively invalid.
-                    min={isRestructureEdit ? undefined : selectedProduct?.min_amount}
+                    min={selectedProduct?.min_amount}
                     max={selectedProduct?.max_amount}
                     aria-describedby={restructureBalanceHint !== null ? "restructure-balance-hint" : undefined}
                   />
