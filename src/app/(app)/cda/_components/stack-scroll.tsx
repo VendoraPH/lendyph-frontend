@@ -1,6 +1,7 @@
 import type { ComponentProps } from "react";
 import { ScrollBox } from "@/components/common/page-fill";
 import { cn } from "@/lib/utils";
+import { STACK_SCROLL_CLASSES } from "../_lib/stack-scroll";
 
 /**
  * A CDA page's stack of cards (a report, its registers, a long form) in one
@@ -11,5 +12,5 @@ import { cn } from "@/lib/utils";
  * edge without moving anything.
  */
 export function StackScroll({ className, ...props }: ComponentProps<typeof ScrollBox>) {
-  return <ScrollBox className={cn("space-y-6 overflow-x-visible fit:-m-1 fit:p-1", className)} {...props} />;
+  return <ScrollBox className={cn(STACK_SCROLL_CLASSES, className)} {...props} />;
 }
