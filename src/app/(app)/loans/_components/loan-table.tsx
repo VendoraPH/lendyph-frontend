@@ -12,6 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowDown, ArrowUp, ArrowUpDown, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PermissionButton } from "@/components/common";
+import { hasIllustration, Illustration } from "@/components/common/illustration";
+import type { EmptyIllustrationName } from "@/lib/illustrations";
 import { AUTO_PAY_TOGGLE_GATE } from "@/lib/lending-write-gates";
 import { formatCurrency, formatDate } from "@/lib/format";
 import {
@@ -35,6 +37,8 @@ export interface LoanTableProps {
   onSortChange: (key: LoanSortKey) => void;
   onRowClick: (id: number) => void;
   onAutoPayClick: (loan: Loan) => void;
+  /** The picture over the "nothing found" row: the module's while unfiltered. */
+  emptyIllustration?: EmptyIllustrationName;
 }
 
 interface ColumnDef {
@@ -59,6 +63,7 @@ export function LoanTable({
   onSortChange,
   onRowClick,
   onAutoPayClick,
+  emptyIllustration,
 }: LoanTableProps) {
   // The page puts the table in a ScrollBox, which scrolls it and pins its headings.
   return (
@@ -173,6 +178,9 @@ export function LoanTable({
               colSpan={COLUMNS.length + 1}
               className="h-24 text-center text-muted-foreground"
             >
+              {emptyIllustration && hasIllustration(emptyIllustration) && (
+                <Illustration name={emptyIllustration} className="mx-auto mb-3 block" />
+              )}
               No loan applications found.
             </TableCell>
           </TableRow>

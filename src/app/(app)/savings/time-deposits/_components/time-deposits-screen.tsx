@@ -121,7 +121,7 @@ export function TimeDepositsScreen() {
         summary="Time deposit placements will be listed here, with their maturity dates, once the savings service is connected."
         isEmpty={(res) => res.data.length === 0}
         emptyMessage={search ? "No placement matches this search." : "No time deposits yet."}
-        emptyIllustration={filtered ? "noResults" : "empty"}
+        emptyIllustration={filtered ? "noResults" : "emptySavings"}
       >
         {(res) => (
           <div className={FIT_CLASSES.section}>

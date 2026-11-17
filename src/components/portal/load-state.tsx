@@ -5,7 +5,7 @@ import { AlertCircle, Inbox, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Illustration, hasIllustration } from "@/components/common/illustration";
-import type { IllustrationName } from "@/lib/illustrations";
+import type { EmptyIllustrationName } from "@/lib/illustrations";
 
 interface LoadStateProps {
   loading: boolean;
@@ -16,10 +16,12 @@ interface LoadStateProps {
   emptyText?: string;
   /**
    * A picture for an empty page (its whole content), in place of the icon:
+   * the module's picture (`emptyLoans`, `emptySavings`, …) for "nothing yet",
    * `noResults` when a filter is on, `allCaughtUp` for "nothing waiting".
-   * Sections inside a page keep the icon.
+   * Sections keep the icon unless they sit in the page's scroll box, where a
+   * picture can't push the page past the screen.
    */
-  emptyIllustration?: IllustrationName;
+  emptyIllustration?: EmptyIllustrationName;
   children: ReactNode;
 }
 

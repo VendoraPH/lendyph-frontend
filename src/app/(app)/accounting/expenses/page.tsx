@@ -40,6 +40,7 @@ import {
   expenseStatusCounts,
 } from "./_lib/expense-list";
 import { ExpenseTable } from "./_components/expense-table";
+import { emptyArt } from "@/lib/illustrations";
 
 function ExpensesContent() {
   const [status, setStatus] = useState(ANY_STATUS);
@@ -272,7 +273,7 @@ export default function ExpensesPage() {
  * the card rather than replacing the page.
  */
 function EmptyExpenses({ filtered }: { filtered: boolean }) {
-  const name = filtered ? "noResults" : "empty";
+  const name = emptyArt("emptyLedger", filtered);
   return (
     <div className="flex flex-col items-center gap-4 py-12 text-center">
       {hasIllustration(name) ? (

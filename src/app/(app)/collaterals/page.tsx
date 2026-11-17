@@ -50,6 +50,7 @@ import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { hasIllustration, Illustration } from "@/components/common/illustration";
 import { FIT_CLASSES } from "@/lib/page-fill";
 import { cn } from "@/lib/utils";
+import { emptyArt } from "@/lib/illustrations";
 
 function CollateralListingContent() {
   const register = useCollateralRegister();
@@ -214,8 +215,8 @@ function CollateralListingContent() {
             </div>
           ) : groups.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center fit:flex-1">
-              {hasIllustration(register.filtered ? "noResults" : "empty") ? (
-                <Illustration name={register.filtered ? "noResults" : "empty"} className="mb-3" />
+              {hasIllustration(emptyArt("emptyCollaterals", register.filtered)) ? (
+                <Illustration name={emptyArt("emptyCollaterals", register.filtered)} className="mb-3" />
               ) : (
                 <ShieldCheck className="h-10 w-10 text-muted-foreground/50 mb-3" aria-hidden="true" />
               )}

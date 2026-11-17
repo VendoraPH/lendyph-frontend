@@ -2,6 +2,7 @@
 
 import { useCallback } from "react";
 import { FileText } from "lucide-react";
+import { Illustration } from "@/components/common/illustration";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { DownloadButton } from "@/components/portal/download-button";
 import { LoadState } from "@/components/portal/load-state";
@@ -52,7 +53,10 @@ export default function DocumentsPage() {
           <div className="grid gap-4 lg:grid-cols-2 fit:min-h-0 fit:flex-1 fit:grid-rows-[minmax(0,1fr)]">
             <SectionCard title="Statements and certificates" fill>
               {data.generated.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nothing to generate yet.</p>
+                <div className="flex flex-col items-center gap-2 py-4 text-center">
+                  <Illustration name="emptyDocuments" className="fit:max-h-[min(8rem,14dvh)]" />
+                  <p className="text-sm text-muted-foreground">Nothing to generate yet.</p>
+                </div>
               ) : (
                 <ScrollBox className="-mx-1 px-1">
                   <ul className="divide-y">
@@ -79,7 +83,10 @@ export default function DocumentsPage() {
             </SectionCard>
             <SectionCard title="Shared by your branch" fill>
               {data.files.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Your branch hasn&apos;t shared any files with you.</p>
+                <div className="flex flex-col items-center gap-2 py-4 text-center">
+                  <Illustration name="emptyDocuments" className="fit:max-h-[min(8rem,14dvh)]" />
+                  <p className="text-sm text-muted-foreground">Your branch hasn&apos;t shared any files with you.</p>
+                </div>
               ) : (
                 <ScrollBox className="-mx-1 px-1">
                   <ul className="divide-y">

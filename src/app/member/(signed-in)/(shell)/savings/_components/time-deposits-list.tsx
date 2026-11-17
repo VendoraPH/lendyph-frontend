@@ -22,7 +22,7 @@ export function TimeDepositsList() {
       <h2 id="time-deposits-heading" className="mb-3 text-base font-semibold">
         Time deposits
       </h2>
-      <LoadState loading={loading} error={error} onRetry={reload} empty={data?.length === 0} emptyText="You have no time deposits.">
+      <LoadState loading={loading} error={error} onRetry={reload} empty={data?.length === 0} emptyText="You have no time deposits." emptyIllustration="emptySavings">
         <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {data?.map((td) => (
             <li key={td.id}>

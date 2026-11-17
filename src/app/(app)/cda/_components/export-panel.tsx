@@ -104,6 +104,7 @@ export function ExportPanel({ reportId }: { reportId: number }) {
           summary="This report's exports"
           isEmpty={(d) => d.length === 0}
           emptyMessage="No exports yet."
+          emptyIllustration="emptyDocuments"
         >
           {(items) => (
             <ul className="divide-y">

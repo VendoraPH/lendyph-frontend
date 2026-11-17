@@ -138,7 +138,7 @@ export function RunsList({ productOptions }: { productOptions: readonly Option[]
         isEmpty={(res) => res.data.length === 0}
         emptyMessage="No interest runs match these filters."
         emptyIllustration={
-          status !== "all" || product !== ALL_PRODUCTS || branch !== ALL_BRANCHES ? "noResults" : "empty"
+          status !== "all" || product !== ALL_PRODUCTS || branch !== ALL_BRANCHES ? "noResults" : "emptySavings"
         }
       >
         {(res) => (

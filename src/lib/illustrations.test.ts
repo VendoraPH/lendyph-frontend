@@ -13,9 +13,44 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { ILLUSTRATION_NAMES, ILLUSTRATIONS, illustrationTileClass } from "./illustrations";
+import {
+  ILLUSTRATION_NAMES,
+  ILLUSTRATIONS,
+  MODULE_ILLUSTRATION_NAMES,
+  emptyArt,
+  filtersActive,
+  illustrationTileClass,
+} from "./illustrations";
 
-const EXPECTED = ["empty", "noResults", "allCaughtUp", "error", "notConnected", "noAccess", "notFound", "pickReport"];
+const MODULES = [
+  "emptyLoans",
+  "emptyMembers",
+  "emptyPayments",
+  "emptySavings",
+  "emptyShareCapital",
+  "emptyCollaterals",
+  "emptyWallet",
+  "emptyLedger",
+  "emptyCompliance",
+  "emptyReminders",
+  "emptyDocuments",
+];
+
+const EXPECTED = [
+  "empty",
+  "noResults",
+  "allCaughtUp",
+  "error",
+  "notConnected",
+  "noAccess",
+  "notFound",
+  "pickReport",
+  ...MODULES,
+  "portalWelcome",
+];
+
+/** emptyShareCapital -> empty-share-capital */
+const kebab = (name: string) => name.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
 
 test("the map holds exactly the named slots, and none for the sign-in pages", () => {
   assert.deepEqual([...ILLUSTRATION_NAMES].sort(), [...EXPECTED].sort());
@@ -36,6 +71,32 @@ test("every filled slot's picture is in public/", () => {
     if (src === null) continue;
     assert.ok(existsSync(join(process.cwd(), "public", src)), `${name}: public${src} is missing`);
   }
+});
+
+test("the module pictures are exactly the eleven module slots", () => {
+  assert.deepEqual([...MODULE_ILLUSTRATION_NAMES].sort(), [...MODULES].sort());
+});
+
+test("the module pictures and the portal welcome are filled, each under its own kebab-case file name", () => {
+  for (const name of [...MODULES, "portalWelcome"] as const) {
+    const src = ILLUSTRATIONS[name as keyof typeof ILLUSTRATIONS];
+    assert.equal(src, `/illustrations/${kebab(name)}.webp`, name);
+  }
+});
+
+test("an empty list shows its module's picture, and a search or filter that matched nothing shows noResults", () => {
+  for (const name of MODULE_ILLUSTRATION_NAMES) {
+    assert.equal(emptyArt(name, false), name);
+    assert.equal(emptyArt(name, true), "noResults");
+  }
+});
+
+test("a filter object counts as filtered only when a key other than paging holds a value", () => {
+  assert.equal(filtersActive({ page: 1, per_page: 20 }), false);
+  assert.equal(filtersActive({ page: 3, per_page: 50, status: undefined, date_from: "", loan_id: null }), false);
+  assert.equal(filtersActive({ page: 1, per_page: 20, status: "sent" }), true);
+  assert.equal(filtersActive({ page: 1, branch_id: 4 }), true);
+  assert.equal(filtersActive({ page: 1, date_to: "2026-11-17" }), true);
 });
 
 test("every picture sits on a rounded white tile in both modes, so its white corners never show", () => {

@@ -116,6 +116,7 @@ export function Submissions({ year }: { year: number }) {
           summary={`The ${year} filings with CDA`}
           isEmpty={(rows) => rows.length === 0}
           emptyMessage="Nothing filed for this year yet."
+          emptyIllustration="emptyCompliance"
         >
           {(rows) => (
             <ScrollBox>

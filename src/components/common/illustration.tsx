@@ -3,7 +3,8 @@ import { illustrationSrc, illustrationTileClass, type IllustrationName } from "@
 import { cn } from "@/lib/utils";
 
 /**
- * A decorative picture for an empty, error or sign-in screen, read from
+ * A decorative picture for an empty, error or no-access screen, a catalog
+ * heading or the member portal's greeting, read from
  * `@/lib/illustrations`. Renders nothing while the slot is empty, so callers
  * keep their own icon as the fallback:
  *

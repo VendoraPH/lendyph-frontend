@@ -28,6 +28,7 @@ import { useRegistrations } from "@/hooks/use-registrations";
 import { cn } from "@/lib/utils";
 import { FIT_CLASSES } from "@/lib/page-fill";
 import { usePublicBranches } from "@/hooks/use-public-branches";
+import { emptyArt } from "@/lib/illustrations";
 
 /**
  * Global member counts, read from the list response's `meta.stats`.
@@ -487,8 +488,8 @@ function BorrowersContent() {
             </div>
           ) : borrowers.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center fit:flex-1">
-              {hasIllustration(hasFilters ? "noResults" : "empty") ? (
-                <Illustration name={hasFilters ? "noResults" : "empty"} className="mb-3" />
+              {hasIllustration(emptyArt("emptyMembers", hasFilters)) ? (
+                <Illustration name={emptyArt("emptyMembers", hasFilters)} className="mb-3" />
               ) : (
                 <Users className="h-10 w-10 text-muted-foreground/50 mb-3" />
               )}

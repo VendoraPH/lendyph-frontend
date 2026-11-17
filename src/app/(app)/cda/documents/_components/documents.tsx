@@ -23,6 +23,7 @@ import { linkedDocumentSubject, subjectDocumentsParams } from "../../_lib/regist
 import { VERSION_FIELDS, reportOptions, toUpload, uploadCategories, uploadFields } from "../_lib/document-form";
 import { UPLOAD_FILE_KEY, UPLOAD_STEPS } from "../_lib/upload-steps";
 import { DocumentVersionsDialog } from "./document-versions-dialog";
+import { emptyArt } from "@/lib/illustrations";
 
 const COLUMNS: RegisterColumn<CdaDocument>[] = [
   {
@@ -138,7 +139,7 @@ export function Documents({ year }: { year: number }) {
         description="Signed reports, audit reports, minutes and certificates. Each upload is kept as a version."
         noun={["document", "documents"]}
         fill
-        emptyIllustration={subject ? "noResults" : "empty"}
+        emptyIllustration={emptyArt("emptyDocuments", Boolean(subject))}
         resource={resource}
         endpoints={[`GET ${API_ENDPOINTS.CDA.DOCUMENTS(year)}`]}
         columns={COLUMNS}

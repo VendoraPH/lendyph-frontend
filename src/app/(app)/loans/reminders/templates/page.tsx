@@ -89,6 +89,7 @@ export default function ReminderTemplatesPage() {
         endpoints={["GET /reminders/templates", "POST /reminders/templates", "PUT /reminders/templates/{id}", "POST /reminders/templates/preview"]}
         isEmpty={(rows) => rows.length === 0}
         emptyMessage="No templates yet. Create one for each reminder type you send."
+        emptyIllustration="emptyReminders"
       >
         {(rows) => (
           <ScrollBox className="space-y-4 p-px">

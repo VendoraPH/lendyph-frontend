@@ -49,7 +49,7 @@ export default function AnnouncementsPage() {
         onRetry={reload}
         empty={data?.data.length === 0}
         emptyText="No announcements right now."
-        emptyIllustration="empty"
+        emptyIllustration="emptyReminders"
       >
         {data && (
           <>

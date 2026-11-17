@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import type { SubjectKind } from "@/components/common/subject-picker";
 import { DASH, type FormattableColumn } from "@/lib/report-format";
 import type { Permission } from "@/types";
+import type { ModuleIllustrationName } from "@/lib/illustrations";
 
 export type ReportId =
   | "daily_collection"
@@ -375,4 +376,18 @@ export const CATEGORY_META: Record<
     label: "Savings & Deposits",
     description: "Members' savings, time deposits, interest and the GL control",
   },
+};
+
+/**
+ * The small picture beside each category's heading on `/reports`, one of the
+ * module pictures, chosen so no two neighbouring sections repeat.
+ */
+export const CATEGORY_ILLUSTRATION: Record<ReportCategory, ModuleIllustrationName> = {
+  operations: "emptyPayments",
+  portfolio: "emptyCollaterals",
+  member: "emptyMembers",
+  disbursement: "emptyLoans",
+  financial: "emptyLedger",
+  performance: "emptyShareCapital",
+  savings: "emptySavings",
 };

@@ -204,7 +204,7 @@ export function TransactionsTab() {
           summary="GCash Cash In and Cash Out transactions."
           isEmpty={(list) => list.length === 0}
           emptyMessage="No transactions found."
-          emptyIllustration={filtersActive ? "noResults" : "empty"}
+          emptyIllustration={filtersActive ? "noResults" : "emptyWallet"}
         >
           {() => null}
         </DataState>

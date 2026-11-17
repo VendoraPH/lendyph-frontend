@@ -27,7 +27,7 @@ export function SavingsAccounts() {
       <h2 id="savings-accounts" className="mb-3 text-base font-semibold">
         Savings accounts
       </h2>
-      <LoadState loading={loading} error={error} onRetry={reload} empty={data?.length === 0} emptyText="You have no savings accounts.">
+      <LoadState loading={loading} error={error} onRetry={reload} empty={data?.length === 0} emptyText="You have no savings accounts." emptyIllustration="emptySavings">
         <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {data?.map((account) => (
             <li key={account.id}>

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import type { ApiResource } from "@/hooks";
-import type { IllustrationName } from "@/lib/illustrations";
+import type { EmptyIllustrationName, IllustrationName } from "@/lib/illustrations";
 import { hasIllustration, Illustration } from "./illustration";
 
 interface DataStateProps<T> {
@@ -21,9 +21,11 @@ interface DataStateProps<T> {
   /**
    * The picture for the empty state, when one is set in `@/lib/illustrations`:
    * "empty" (default), "noResults" for a search or filter that matched
-   * nothing, or "allCaughtUp" for nothing overdue or waiting.
+   * nothing, "allCaughtUp" for nothing overdue or waiting, or the module's
+   * own picture ("emptyLoans", "emptySavings", …) for a list with nothing in
+   * it yet.
    */
-  emptyIllustration?: Extract<IllustrationName, "empty" | "noResults" | "allCaughtUp">;
+  emptyIllustration?: EmptyIllustrationName;
   children: (data: T) => ReactNode;
 }
 

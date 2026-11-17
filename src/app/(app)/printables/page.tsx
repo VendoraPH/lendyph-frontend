@@ -11,7 +11,7 @@ import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { visiblePrintables } from "@/lib/printables/catalog";
 import { usePermission } from "@/hooks";
-import { SUBJECT_ACCENT, SUBJECT_META } from "@/lib/printables/types";
+import { SUBJECT_ACCENT, SUBJECT_ILLUSTRATION, SUBJECT_META } from "@/lib/printables/types";
 import type { PrintableDefinition, PrintableSubject } from "@/lib/printables/types";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { hasIllustration, Illustration } from "@/components/common/illustration";
@@ -155,14 +155,20 @@ export default function PrintablesPage() {
               if (items.length === 0) return null;
               return (
                 <section key={subject}>
-                  <div className="mb-3 flex items-baseline justify-between">
-                    <div>
-                      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                        By {SUBJECT_META[subject].label}
-                      </h2>
-                      <p className="text-xs text-muted-foreground/80">
-                        {SUBJECT_DESCRIPTION[subject]}
-                      </p>
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <Illustration
+                        name={SUBJECT_ILLUSTRATION[subject]}
+                        className="h-14 max-h-14 w-14 shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                          By {SUBJECT_META[subject].label}
+                        </h2>
+                        <p className="text-xs text-muted-foreground/80">
+                          {SUBJECT_DESCRIPTION[subject]}
+                        </p>
+                      </div>
                     </div>
                     <span className="text-xs text-muted-foreground">
                       {items.length}{" "}
@@ -180,13 +186,16 @@ export default function PrintablesPage() {
 
             {templateMatches && (
               <section>
-                <div className="mb-3">
-                  <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                    Bulk import
-                  </h2>
-                  <p className="text-xs text-muted-foreground/80">
-                    Bringing records in from another system
-                  </p>
+                <div className="mb-3 flex min-w-0 items-center gap-3">
+                  <Illustration name="emptyDocuments" className="h-14 max-h-14 w-14 shrink-0" />
+                  <div className="min-w-0">
+                    <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                      Bulk import
+                    </h2>
+                    <p className="text-xs text-muted-foreground/80">
+                      Bringing records in from another system
+                    </p>
+                  </div>
                 </div>
                 <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   <CatalogCard

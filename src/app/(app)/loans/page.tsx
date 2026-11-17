@@ -44,6 +44,7 @@ import {
   type LoanStats,
   type SortDir,
 } from "./_components/utils";
+import { emptyArt } from "@/lib/illustrations";
 
 const PER_PAGE_OPTIONS = [10, 20, 50] as const;
 const SORT_KEYS: LoanSortKey[] = [
@@ -549,6 +550,10 @@ function LoansContent() {
                   sort={{ key: sortKey, dir: sortDir }}
                   onSortChange={handleSortChange}
                   onRowClick={(id) => router.push(`/loans/${id}`)}
+                  emptyIllustration={emptyArt(
+                    "emptyLoans",
+                    Boolean(search) || tab !== "all" || productId != null || dateFrom != null || dateTo != null,
+                  )}
                   onAutoPayClick={(loan) =>
                     setAutoPayTarget({
                       loanId: loan.id,
