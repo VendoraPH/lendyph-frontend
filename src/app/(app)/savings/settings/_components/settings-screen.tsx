@@ -2,6 +2,7 @@
 
 import { useCallback } from "react";
 import { DataState } from "@/components/common/data-state";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { useApiResource } from "@/hooks";
 import { savingsService } from "@/services";
 import { ApprovalSettingsCard } from "./approval-settings-card";
@@ -18,8 +19,8 @@ export function SettingsScreen() {
   const resource = useApiResource(fetcher);
 
   return (
-    <div className="space-y-6">
-      <div>
+    <PageFill>
+      <div className="shrink-0">
         <h1 className="text-2xl font-semibold tracking-tight">Savings Settings</h1>
         <p className="text-sm text-muted-foreground">
           When a withdrawal or payout needs approval, when an account turns dormant, and the tax on deposit interest.
@@ -31,13 +32,15 @@ export function SettingsScreen() {
         summary="The savings settings will show here once the savings service is connected."
       >
         {(settings) => (
-          <div className="grid gap-6 lg:grid-cols-2">
-            <BooksCard settings={settings} onPrepared={() => resource.refetch()} />
-            <ApprovalSettingsCard settings={settings} onSaved={() => resource.refetch()} />
-            <TaxRulesCard settings={settings} onAdded={() => resource.refetch()} />
-          </div>
+          <ScrollBox className="p-px">
+            <div className="grid gap-6 lg:grid-cols-2">
+              <BooksCard settings={settings} onPrepared={() => resource.refetch()} />
+              <ApprovalSettingsCard settings={settings} onSaved={() => resource.refetch()} />
+              <TaxRulesCard settings={settings} onAdded={() => resource.refetch()} />
+            </div>
+          </ScrollBox>
         )}
       </DataState>
-    </div>
+    </PageFill>
   );
 }

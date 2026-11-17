@@ -2,6 +2,7 @@
 
 import { Input } from "@/components/ui/input";
 import { StaffPicker } from "@/components/common/staff-picker";
+import { FORM_STEP_GRID } from "@/lib/form-stepper";
 import { SOURCE_OF_FUNDS_OPTIONS, type OpeningDetailsDraft } from "../_lib/opening-draft";
 import { FormField } from "./field";
 import { OptionSelect } from "./option-select";
@@ -20,8 +21,8 @@ const SOURCE_OPTIONS = [{ value: NO_SOURCE, label: "Not given" }, ...SOURCE_OF_F
 export function OpeningDetailsFields({ value, onChange, sourceError }: OpeningDetailsFieldsProps) {
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <FormField id="sv-officer" label="Account officer (optional)">
+      <div className={FORM_STEP_GRID.roomy}>
+        <FormField id="sv-officer" field="account_officer_id" label="Account officer (optional)">
           <StaffPicker
             id="sv-officer"
             value={value.officer}
@@ -30,7 +31,7 @@ export function OpeningDetailsFields({ value, onChange, sourceError }: OpeningDe
             clearable
           />
         </FormField>
-        <FormField id="sv-source" label="Source of funds (optional)">
+        <FormField id="sv-source" field="source_of_funds" label="Source of funds (optional)">
           <OptionSelect
             id="sv-source"
             value={value.source || NO_SOURCE}
@@ -38,21 +39,26 @@ export function OpeningDetailsFields({ value, onChange, sourceError }: OpeningDe
             options={SOURCE_OPTIONS}
           />
         </FormField>
-      </div>
-      {value.source === "other" && (
-        <FormField id="sv-source-other" label="Where the money comes from" error={sourceError}>
-          <Input
+        {value.source === "other" && (
+          <FormField
             id="sv-source-other"
-            maxLength={120}
-            value={value.sourceOther}
-            onChange={(e) => onChange("sourceOther", e.target.value)}
-            placeholder="Rental income"
-          />
-        </FormField>
-      )}
-      <fieldset className="space-y-2">
+            field="source_of_funds_other"
+            label="Where the money comes from"
+            error={sourceError}
+          >
+            <Input
+              id="sv-source-other"
+              maxLength={120}
+              value={value.sourceOther}
+              onChange={(e) => onChange("sourceOther", e.target.value)}
+              placeholder="Rental income"
+            />
+          </FormField>
+        )}
+      </div>
+      <fieldset data-field="beneficiary" className="space-y-2">
         <legend className="text-sm font-medium">Beneficiary (optional)</legend>
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className={FORM_STEP_GRID.roomy}>
           <FormField id="sv-ben-name" label="Name">
             <Input
               id="sv-ben-name"

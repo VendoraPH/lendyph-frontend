@@ -6,9 +6,12 @@ import { useParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { RouteGuard } from "@/components/common";
 import { DataState } from "@/components/common/data-state";
+import { PageFill } from "@/components/common/page-fill";
 import { Card, CardContent } from "@/components/ui/card";
 import { useApiResource } from "@/hooks";
 import { formatDate, formatDateTime } from "@/lib/format";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 import { savingsInterestService } from "@/services";
 import type { InterestRun } from "@/types";
 import { actorName } from "../../_lib/savings-rules";
@@ -28,8 +31,8 @@ function Detail({ label, children }: { label: string; children: ReactNode }) {
 
 function RunDetail({ run, onChanged }: { run: InterestRun; onChanged: () => void }) {
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className={cn(FIT_CLASSES.section, "gap-4")}>
+      <div className="flex shrink-0 flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-semibold tracking-tight">Interest run</h1>
@@ -41,8 +44,8 @@ function RunDetail({ run, onChanged }: { run: InterestRun; onChanged: () => void
         </div>
         <RunActions run={run} onChanged={onChanged} />
       </div>
-      <Card>
-        <CardContent className="pt-6">
+      <Card className="shrink-0">
+        <CardContent className="pt-6 fit:pt-0">
           <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
             <Detail label="Product">{run.product_name ?? run.product?.name ?? "—"}</Detail>
             <Detail label="Branch">{run.branch_name ?? run.branch?.name ?? "—"}</Detail>
@@ -85,7 +88,9 @@ function RunDetail({ run, onChanged }: { run: InterestRun; onChanged: () => void
           </dl>
         </CardContent>
       </Card>
-      <RunTotals figures={run} />
+      <div className="shrink-0">
+        <RunTotals figures={run} />
+      </div>
       <RunLines lines={run.lines ?? []} />
     </div>
   );
@@ -95,10 +100,10 @@ function RunContent({ id }: { id: number }) {
   const fetcher = useCallback(() => savingsInterestService.get(id), [id]);
   const resource = useApiResource(fetcher);
   return (
-    <div className="min-w-0 space-y-6">
+    <PageFill className="min-w-0 gap-4">
       <Link
         href="/savings/interest"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        className="inline-flex shrink-0 items-center gap-1 self-start text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />
         Savings Interest
@@ -110,7 +115,7 @@ function RunContent({ id }: { id: number }) {
       >
         {(run) => <RunDetail run={run} onChanged={resource.refetch} />}
       </DataState>
-    </div>
+    </PageFill>
   );
 }
 

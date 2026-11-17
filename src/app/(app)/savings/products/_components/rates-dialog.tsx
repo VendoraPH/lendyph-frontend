@@ -18,6 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { DataState } from "@/components/common/data-state";
+import { ScrollBox } from "@/components/common/page-fill";
 import { PermissionButton } from "@/components/common/permission-button";
 import { useApiResource, useDialogOpening } from "@/hooks";
 import { useSubmitGuard } from "@/hooks/use-submit-guard";
@@ -85,135 +86,138 @@ export function RatesDialog({ product, onOpenChange, onAdded }: RatesDialogProps
           </DialogDescription>
         </DialogHeader>
 
-        <section aria-labelledby="rates-today" className="space-y-2">
-          <h3 id="rates-today" className="text-sm font-medium">
-            In force today
-          </h3>
-          <div className="overflow-x-auto rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {td ? (
-                    <>
-                      <TableHead>Term</TableHead>
-                      <TableHead className="text-right">Annual rate</TableHead>
-                    </>
-                  ) : (
-                    <TableHead colSpan={2}>Balance and annual rate</TableHead>
-                  )}
-                  <TableHead>Since</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(product?.current_rates ?? []).length === 0 ? (
+        {/* The three parts scroll together under the title on a short screen. */}
+        <ScrollBox always className="gap-4 p-px">
+          <section aria-labelledby="rates-today" className="space-y-2">
+            <h3 id="rates-today" className="text-sm font-medium">
+              In force today
+            </h3>
+            <div className="overflow-x-auto rounded-lg border">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={3} className="text-center text-muted-foreground">
-                      No rate is in force yet.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  product?.current_rates.map((r) =>
-                    td ? (
-                      <TableRow key={`${r.term_days ?? "all"}-${r.effective_from}`}>
-                        <TableCell>{rateTermLabel(r.term_days)}</TableCell>
-                        <TableCell className="text-right tabular-nums">{formatRate(r.annual_rate)}%</TableCell>
-                        <TableCell>{formatDate(r.effective_from)}</TableCell>
-                      </TableRow>
+                    {td ? (
+                      <>
+                        <TableHead>Term</TableHead>
+                        <TableHead className="text-right">Annual rate</TableHead>
+                      </>
                     ) : (
-                      ladderLines(r.tiers?.length ? r.tiers : [{ min_balance: null, annual_rate: r.annual_rate }]).map((line, i) => (
-                        <TableRow key={`${r.effective_from}-${i}`}>
-                          <TableCell colSpan={2}>{line}</TableCell>
+                      <TableHead colSpan={2}>Balance and annual rate</TableHead>
+                    )}
+                    <TableHead>Since</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(product?.current_rates ?? []).length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center text-muted-foreground">
+                        No rate is in force yet.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    product?.current_rates.map((r) =>
+                      td ? (
+                        <TableRow key={`${r.term_days ?? "all"}-${r.effective_from}`}>
+                          <TableCell>{rateTermLabel(r.term_days)}</TableCell>
+                          <TableCell className="text-right tabular-nums">{formatRate(r.annual_rate)}%</TableCell>
                           <TableCell>{formatDate(r.effective_from)}</TableCell>
                         </TableRow>
-                      ))
-                    ),
-                  )
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </section>
+                      ) : (
+                        ladderLines(r.tiers?.length ? r.tiers : [{ min_balance: null, annual_rate: r.annual_rate }]).map((line, i) => (
+                          <TableRow key={`${r.effective_from}-${i}`}>
+                            <TableCell colSpan={2}>{line}</TableCell>
+                            <TableCell>{formatDate(r.effective_from)}</TableCell>
+                          </TableRow>
+                        ))
+                      ),
+                    )
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </section>
 
-        <section aria-labelledby="rates-add" className="space-y-2">
-          <h3 id="rates-add" className="text-sm font-medium">
-            {td ? "Add rate" : "Add rates"}
-          </h3>
-          {product && !td ? (
-            <TierRateForm key={product.id} product={product} today={today} onAdded={added} />
-          ) : (
-            <div className="grid items-end gap-3 sm:grid-cols-4">
-              {td && (
-                <FormField id="rt-term" label="Term">
-                  <OptionSelect
-                    id="rt-term"
-                    value={draft.termDays}
-                    onChange={(v) => setDraft((d) => ({ ...d, termDays: v }))}
-                    options={(product?.term_options_days ?? []).map((t) => ({ value: String(t), label: rateTermLabel(t) }))}
+          <section aria-labelledby="rates-add" className="space-y-2">
+            <h3 id="rates-add" className="text-sm font-medium">
+              {td ? "Add rate" : "Add rates"}
+            </h3>
+            {product && !td ? (
+              <TierRateForm key={product.id} product={product} today={today} onAdded={added} />
+            ) : (
+              <div className="grid items-end gap-3 sm:grid-cols-4">
+                {td && (
+                  <FormField id="rt-term" label="Term">
+                    <OptionSelect
+                      id="rt-term"
+                      value={draft.termDays}
+                      onChange={(v) => setDraft((d) => ({ ...d, termDays: v }))}
+                      options={(product?.term_options_days ?? []).map((t) => ({ value: String(t), label: rateTermLabel(t) }))}
+                    />
+                  </FormField>
+                )}
+                <FormField id="rt-rate" label="Annual rate (%)">
+                  <Input
+                    id="rt-rate"
+                    inputMode="decimal"
+                    value={draft.rate}
+                    onChange={(e) => setDraft((d) => ({ ...d, rate: e.target.value }))}
+                    placeholder="1.2500"
                   />
                 </FormField>
-              )}
-              <FormField id="rt-rate" label="Annual rate (%)">
-                <Input
-                  id="rt-rate"
-                  inputMode="decimal"
-                  value={draft.rate}
-                  onChange={(e) => setDraft((d) => ({ ...d, rate: e.target.value }))}
-                  placeholder="1.2500"
-                />
-              </FormField>
-              <FormField id="rt-from" label="Effective from">
-                <Input
-                  id="rt-from"
-                  type="date"
-                  min={today}
-                  value={draft.effectiveFrom}
-                  onChange={(e) => setDraft((d) => ({ ...d, effectiveFrom: e.target.value }))}
-                />
-              </FormField>
-              <PermissionButton permission="savings:settings" onClick={add} disabled={submitting}>
-                {submitting ? "Adding…" : "Add rate"}
-              </PermissionButton>
-            </div>
-          )}
-        </section>
-
-        <section aria-labelledby="rates-history" className="space-y-2">
-          <h3 id="rates-history" className="text-sm font-medium">
-            History
-          </h3>
-          <DataState
-            resource={history}
-            endpoints={["GET /savings/products/{id}/rates"]}
-            summary="Every rate this product has had will be listed here."
-            isEmpty={(rows) => rows.length === 0}
-            emptyMessage="No rates yet."
-          >
-            {(rows) => (
-              <div className="max-h-64 overflow-auto rounded-lg border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Effective from</TableHead>
-                      <TableHead>{td ? "Term" : "Balance"}</TableHead>
-                      <TableHead className="text-right">Annual rate</TableHead>
-                      <TableHead>Added by</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {rows.map((r, i) => (
-                      <TableRow key={r.id ?? `${r.term_days ?? "all"}-${r.effective_from}-${i}`}>
-                        <TableCell>{formatDate(r.effective_from)}</TableCell>
-                        <TableCell>{td ? rateTermLabel(r.term_days) : tierLabel(r.min_balance)}</TableCell>
-                        <TableCell className="text-right tabular-nums">{formatRate(r.annual_rate)}%</TableCell>
-                        <TableCell>{actorName(r.created_by)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <FormField id="rt-from" label="Effective from">
+                  <Input
+                    id="rt-from"
+                    type="date"
+                    min={today}
+                    value={draft.effectiveFrom}
+                    onChange={(e) => setDraft((d) => ({ ...d, effectiveFrom: e.target.value }))}
+                  />
+                </FormField>
+                <PermissionButton permission="savings:settings" onClick={add} disabled={submitting}>
+                  {submitting ? "Adding…" : "Add rate"}
+                </PermissionButton>
               </div>
             )}
-          </DataState>
-        </section>
+          </section>
+
+          <section aria-labelledby="rates-history" className="space-y-2">
+            <h3 id="rates-history" className="text-sm font-medium">
+              History
+            </h3>
+            <DataState
+              resource={history}
+              endpoints={["GET /savings/products/{id}/rates"]}
+              summary="Every rate this product has had will be listed here."
+              isEmpty={(rows) => rows.length === 0}
+              emptyMessage="No rates yet."
+            >
+              {(rows) => (
+                <div className="max-h-64 overflow-auto rounded-lg border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Effective from</TableHead>
+                        <TableHead>{td ? "Term" : "Balance"}</TableHead>
+                        <TableHead className="text-right">Annual rate</TableHead>
+                        <TableHead>Added by</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {rows.map((r, i) => (
+                        <TableRow key={r.id ?? `${r.term_days ?? "all"}-${r.effective_from}-${i}`}>
+                          <TableCell>{formatDate(r.effective_from)}</TableCell>
+                          <TableCell>{td ? rateTermLabel(r.term_days) : tierLabel(r.min_balance)}</TableCell>
+                          <TableCell className="text-right tabular-nums">{formatRate(r.annual_rate)}%</TableCell>
+                          <TableCell>{actorName(r.created_by)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </DataState>
+          </section>
+        </ScrollBox>
       </DialogContent>
     </Dialog>
   );

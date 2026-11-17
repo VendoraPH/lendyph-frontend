@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 export function Kpi({ label, value }: { label: string; value: string }) {
   return (
     <Card>
-      <CardContent className="py-4">
+      <CardContent className="py-4 fit:py-0">
         <p className="text-xs text-muted-foreground">{label}</p>
         <p className="mt-1 text-xl font-semibold tabular-nums">{value}</p>
       </CardContent>

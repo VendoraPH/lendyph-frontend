@@ -1,20 +1,21 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState, type FormEvent } from "react";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FormStep, FormStepper, type FormStepperHandle } from "@/components/common/form-stepper";
 import { MemberSearchPicker } from "@/components/common/member-search-picker";
 import { useApiResource, useDialogOpening, usePermission } from "@/hooks";
 import type { MemberOption } from "@/hooks/use-member-search";
 import { useSubmitGuard } from "@/hooks/use-submit-guard";
+import { FORM_STEP_GRID } from "@/lib/form-stepper";
 import { formatCurrency, todayISO } from "@/lib/format";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { savingsService, timeDepositService } from "@/services";
@@ -26,7 +27,9 @@ import { useBooksReady } from "../../_hooks/use-books-ready";
 import { productChoice, productPlaceholder, termChoice } from "@/lib/savings/product-choice";
 import { METHOD_LABELS, PAYMENT_METHOD_OPTIONS } from "../../_lib/savings-rules";
 import { MATURITY_INSTRUCTION_OPTIONS, termsOfferedText } from "../../_lib/time-deposit-rules";
+import { errorsForStep, serverStepErrors } from "../../_lib/step-errors";
 import { checkPlacement, type PlacementForm } from "../_lib/placement-form";
+import { PLACEMENT_STEPS, placementErrors } from "../_lib/placement-steps";
 import { PlacementPreview } from "./placement-preview";
 
 interface PlaceTimeDepositDialogProps {
@@ -59,10 +62,14 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
   const { can } = usePermission();
   const [form, setForm] = useState<Form>(EMPTY);
   const [submitted, setSubmitted] = useState(false);
+  // Steps whose errors show: one that failed Next shows its own, before any save.
+  const [checkedSteps, setCheckedSteps] = useState<ReadonlySet<string>>(new Set());
+  const stepperRef = useRef<FormStepperHandle>(null);
   const { submitting, run } = useSubmitGuard();
   if (useDialogOpening(open, null)) {
     setForm({ ...EMPTY, placementDate: todayISO() });
     setSubmitted(false);
+    setCheckedSteps(new Set());
   }
 
   const fetchProducts = useCallback(() => savingsService.products(), []);
@@ -97,7 +104,8 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
     }));
 
   const { errors, quote, body } = checkPlacement({ ...form, memberId }, product);
-  const show = (error: string | null) => (submitted ? error : null);
+  const keyedErrors = placementErrors(errors);
+  const show = (stepId: string, error: string | null) => (submitted || checkedSteps.has(stepId) ? error : null);
 
   const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((f) => ({ ...f, [key]: value }));
 
@@ -110,131 +118,188 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
         onOpenChange(false);
         onPlaced(td);
       })
-      .catch((err: unknown) => notifyError(err, "Couldn't place the time deposit."));
+      .catch((err: unknown) => {
+        stepperRef.current?.showErrors(serverStepErrors(err));
+        notifyError(err, "Couldn't place the time deposit.");
+      });
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    submit();
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>Place a time deposit</DialogTitle>
           <DialogDescription>The rate is fixed for the term. The certificate can be printed once it is placed.</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <FormField id="td-member" label="Member" error={show(errors.member)}>
-            <MemberSearchPicker
-              id="td-member"
-              value={form.member}
-              onChange={(m) => setForm((f) => ({ ...f, member: m, fundingAccountId: "", payoutAccountId: "" }))}
-              canSearch={can("borrowers:view")}
-              placeholder="Search members"
-              showCode
-            />
-          </FormField>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField
-              id="td-product"
-              label="Product"
-              error={show(errors.product)}
-              hint={
-                products.unavailable
-                  ? "Savings products aren't available yet."
-                  : products.error
-                    ? "Couldn't load the savings products. Close this and try again."
-                    : product
-                      ? `At least ${formatCurrency(product.minimum_opening_balance)}. The rate depends on the term.`
-                      : undefined
-              }
-            >
-              <OptionSelect
-                id="td-product"
-                value={form.productId}
-                onChange={(v) => setForm((f) => ({ ...f, productId: v, term: "" }))}
-                options={choice.options}
-                placeholder={productPlaceholder({ choosing, selectable: choice.selectable })}
-                disabled={choosing || choice.options.length === 0}
-              />
-            </FormField>
-            <FormField id="td-term" label="Term" error={show(errors.term)} hint={termsOfferedText(terms)}>
-              <OptionSelect
-                id="td-term"
-                value={form.term}
-                onChange={(v) => set("term", v)}
-                options={term.options}
-                placeholder={term.placeholder}
-                disabled={term.options.length === 0}
-              />
-            </FormField>
-          </div>
-          {!choosing && choice.empty && <ProductChoiceNotice empty={choice.empty} />}
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField id="td-amount" label="Amount placed" error={show(errors.amount)}>
-              <Input id="td-amount" inputMode="decimal" placeholder="0.00" value={form.amount} onChange={(e) => set("amount", e.target.value)} />
-            </FormField>
-            <FormField id="td-date" label="Placement date" error={show(errors.date)}>
-              <Input id="td-date" type="date" value={form.placementDate} max={todayISO()} onChange={(e) => set("placementDate", e.target.value)} />
-            </FormField>
-          </div>
-
-          <FormField id="td-instruction" label="At maturity">
-            <OptionSelect id="td-instruction" value={form.instruction} onChange={(v) => set("instruction", v as MaturityInstruction)} options={MATURITY_INSTRUCTION_OPTIONS} />
-          </FormField>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField id="td-method" label="Paid by">
-              <OptionSelect
-                id="td-method"
-                value={form.method}
-                onChange={(v) => set("method", v as SavingsMethod)}
-                options={FUNDING_OPTIONS}
-              />
-            </FormField>
-            {form.method === "savings" ? (
-              <FormField id="td-funding" label="From account" error={show(errors.funding)}>
-                <OptionSelect
-                  id="td-funding"
-                  value={form.fundingAccountId}
-                  onChange={(v) => set("fundingAccountId", v)}
-                  options={accountOptions}
-                  placeholder={form.member ? "Choose an account" : "Choose the member first"}
-                  disabled={accountOptions.length === 0}
+        <form noValidate onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <FormStepper
+            ref={stepperRef}
+            layout="dialog"
+            steps={PLACEMENT_STEPS}
+            validateStep={(id) => errorsForStep(keyedErrors, PLACEMENT_STEPS, id)}
+            onInvalid={(_, id) => setCheckedSteps((steps) => new Set(steps).add(id))}
+            submitLabel="Place time deposit"
+            submittingLabel="Placing…"
+            submitting={submitting}
+            actions={
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+                Cancel
+              </Button>
+            }
+          >
+            <FormStep id="member" className="space-y-4">
+              <FormField id="td-member" field="borrower_id" label="Member" error={show("member", errors.member)}>
+                <MemberSearchPicker
+                  id="td-member"
+                  value={form.member}
+                  onChange={(m) => setForm((f) => ({ ...f, member: m, fundingAccountId: "", payoutAccountId: "" }))}
+                  canSearch={can("borrowers:view")}
+                  placeholder="Search members"
+                  showCode
                 />
               </FormField>
-            ) : (
-              <FormField id="td-ref" label="Reference (optional)">
-                <Input id="td-ref" value={form.reference} onChange={(e) => set("reference", e.target.value)} placeholder="OR / transfer no." />
-              </FormField>
-            )}
-          </div>
 
-          <FormField
-            id="td-payout"
-            label="Pay the maturity into (optional)"
-            hint="A savings account of the member. Left blank, staff pay it out at maturity."
-          >
-            <OptionSelect
-              id="td-payout"
-              value={form.payoutAccountId}
-              onChange={(v) => set("payoutAccountId", v)}
-              options={[{ value: "", label: "No account: pay out at maturity" }, ...accountOptions]}
-              disabled={!form.member}
-            />
-          </FormField>
+              <div className={FORM_STEP_GRID.roomy}>
+                <FormField
+                  id="td-product"
+                  field="product_id"
+                  label="Product"
+                  error={show("member", errors.product)}
+                  hint={
+                    products.unavailable
+                      ? "Savings products aren't available yet."
+                      : products.error
+                        ? "Couldn't load the savings products. Close this and try again."
+                        : product
+                          ? `At least ${formatCurrency(product.minimum_opening_balance)}. The rate depends on the term.`
+                          : undefined
+                  }
+                >
+                  <OptionSelect
+                    id="td-product"
+                    value={form.productId}
+                    onChange={(v) => setForm((f) => ({ ...f, productId: v, term: "" }))}
+                    options={choice.options}
+                    placeholder={productPlaceholder({ choosing, selectable: choice.selectable })}
+                    disabled={choosing || choice.options.length === 0}
+                  />
+                </FormField>
+                <FormField
+                  id="td-term"
+                  field="term_days"
+                  label="Term"
+                  error={show("member", errors.term)}
+                  hint={termsOfferedText(terms)}
+                >
+                  <OptionSelect
+                    id="td-term"
+                    value={form.term}
+                    onChange={(v) => set("term", v)}
+                    options={term.options}
+                    placeholder={term.placeholder}
+                    disabled={term.options.length === 0}
+                  />
+                </FormField>
+              </div>
+              {!choosing && choice.empty && <ProductChoiceNotice empty={choice.empty} />}
+            </FormStep>
 
-          <PlacementPreview input={quote} />
-        </div>
+            <FormStep id="payment">
+              <div className={FORM_STEP_GRID.roomy}>
+                <FormField id="td-amount" field="principal" label="Amount placed" error={show("payment", errors.amount)}>
+                  <Input
+                    id="td-amount"
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    value={form.amount}
+                    onChange={(e) => set("amount", e.target.value)}
+                  />
+                </FormField>
+                <FormField
+                  id="td-date"
+                  field="placement_date"
+                  label="Placement date"
+                  error={show("payment", errors.date)}
+                >
+                  <Input
+                    id="td-date"
+                    type="date"
+                    value={form.placementDate}
+                    max={todayISO()}
+                    onChange={(e) => set("placementDate", e.target.value)}
+                  />
+                </FormField>
+                <FormField id="td-instruction" field="maturity_instruction" label="At maturity">
+                  <OptionSelect
+                    id="td-instruction"
+                    value={form.instruction}
+                    onChange={(v) => set("instruction", v as MaturityInstruction)}
+                    options={MATURITY_INSTRUCTION_OPTIONS}
+                  />
+                </FormField>
+                <FormField id="td-method" field="payment_method" label="Paid by">
+                  <OptionSelect
+                    id="td-method"
+                    value={form.method}
+                    onChange={(v) => set("method", v as SavingsMethod)}
+                    options={FUNDING_OPTIONS}
+                  />
+                </FormField>
+                {form.method === "savings" ? (
+                  <FormField
+                    id="td-funding"
+                    field="funding_account_id"
+                    label="From account"
+                    error={show("payment", errors.funding)}
+                  >
+                    <OptionSelect
+                      id="td-funding"
+                      value={form.fundingAccountId}
+                      onChange={(v) => set("fundingAccountId", v)}
+                      options={accountOptions}
+                      placeholder={form.member ? "Choose an account" : "Choose the member first"}
+                      disabled={accountOptions.length === 0}
+                    />
+                  </FormField>
+                ) : (
+                  <FormField id="td-ref" field="reference" label="Reference (optional)">
+                    <Input
+                      id="td-ref"
+                      value={form.reference}
+                      onChange={(e) => set("reference", e.target.value)}
+                      placeholder="OR / transfer no."
+                    />
+                  </FormField>
+                )}
+                <FormField
+                  id="td-payout"
+                  field="payout_account_id"
+                  label="Pay the maturity into (optional)"
+                  hint="A savings account of the member. Left blank, staff pay it out at maturity."
+                  className={FORM_STEP_GRID.full}
+                >
+                  <OptionSelect
+                    id="td-payout"
+                    value={form.payoutAccountId}
+                    onChange={(v) => set("payoutAccountId", v)}
+                    options={[{ value: "", label: "No account: pay out at maturity" }, ...accountOptions]}
+                    disabled={!form.member}
+                  />
+                </FormField>
+              </div>
+            </FormStep>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
-            Cancel
-          </Button>
-          <Button onClick={submit} disabled={submitting}>
-            {submitting ? "Placing…" : "Place time deposit"}
-          </Button>
-        </DialogFooter>
+            <FormStep id="review">
+              <PlacementPreview input={quote} />
+            </FormStep>
+          </FormStepper>
+        </form>
       </DialogContent>
     </Dialog>
   );

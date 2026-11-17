@@ -4,6 +4,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import { AlertTriangle } from "lucide-react";
 import { RouteGuard } from "@/components/common";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,7 @@ import { startOfMonth, endOfMonth, subMonths, startOfYear } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { shareCapitalService } from "@/services";
 import { formatCurrency, formatDate, formatDateISO, formatDateObj, todayDate } from "@/lib/format";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { ledgerAmounts } from "@/utils/share-capital";
 import type {
   ShareCapitalBookTotals,
@@ -299,11 +301,11 @@ function SubsidiaryLedgerContent() {
   // ══════════════════════════════════════════════════════════
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       {failed && (
         <div
           role="alert"
-          className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4"
+          className="flex shrink-0 items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4"
         >
           <AlertTriangle
             className="mt-0.5 size-5 shrink-0 text-amber-600"
@@ -328,11 +330,12 @@ function SubsidiaryLedgerContent() {
           total={shortfall.total}
           noun="ledger entries"
           consequence="Some of this member's entries are missing from the table below. The balances and totals shown are the server's and still cover every entry."
+          className="shrink-0"
         />
       )}
 
       {/* ── Header ── */}
-      <div className="flex items-center gap-3">
+      <div className="flex shrink-0 items-center gap-3">
         {selectedMember && (
           <Button
             variant="ghost"
@@ -374,10 +377,10 @@ function SubsidiaryLedgerContent() {
           LOADING STATE
           ════════════════════════════════════════════ */}
       {(selectedMember ? detailLoading : loading) ? (
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-4">
+        <div className="grid shrink-0 gap-4 grid-cols-1 sm:grid-cols-4">
           {[...Array(4)].map((_, i) => (
             <Card key={i}>
-              <CardContent className="py-4">
+              <CardContent className="py-4 fit:py-0">
                 <div className="flex items-center justify-between">
                   <div className="h-4 w-24 bg-muted animate-pulse rounded" />
                   <div className="h-7 w-16 bg-muted animate-pulse rounded" />
@@ -413,9 +416,9 @@ function SubsidiaryLedgerContent() {
       !selectedMember ? (
         <>
           {/* Summary Cards */}
-          <div className="grid gap-4 grid-cols-1 sm:grid-cols-4">
+          <div className="grid shrink-0 gap-4 grid-cols-1 sm:grid-cols-4">
             <Card>
-              <CardContent className="py-4">
+              <CardContent className="py-4 fit:py-0">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Landmark className="h-4 w-4" />
@@ -426,7 +429,7 @@ function SubsidiaryLedgerContent() {
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="py-4">
+              <CardContent className="py-4 fit:py-0">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-muted-foreground">Total Credits</span>
                   <span className="text-2xl font-bold text-green-600">{money(bookTotals?.total_credits)}</span>
@@ -434,7 +437,7 @@ function SubsidiaryLedgerContent() {
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="py-4">
+              <CardContent className="py-4 fit:py-0">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-muted-foreground">Total Debits</span>
                   <span className="text-2xl font-bold text-red-600">{money(bookTotals?.total_debits)}</span>
@@ -442,7 +445,7 @@ function SubsidiaryLedgerContent() {
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="py-4">
+              <CardContent className="py-4 fit:py-0">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-muted-foreground">Total Share Capital</span>
                   <span className="text-2xl font-bold text-brand-orange">{money(bookTotals?.balance)}</span>
@@ -452,8 +455,8 @@ function SubsidiaryLedgerContent() {
           </div>
 
           {/* Members Table */}
-          <Card>
-            <CardHeader>
+          <Card className={FIT_CLASSES.section}>
+            <CardHeader className="shrink-0">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <CardTitle className="text-sm font-medium">
                   Members
@@ -470,8 +473,8 @@ function SubsidiaryLedgerContent() {
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
+            <CardContent className={FIT_CLASSES.section}>
+              <ScrollBox>
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -547,10 +550,10 @@ function SubsidiaryLedgerContent() {
                     </TableFooter>
                   )}
                 </Table>
-              </div>
+              </ScrollBox>
 
               {/* Pagination */}
-              <div className="flex items-center justify-between pt-4">
+              <div className="flex shrink-0 items-center justify-between pt-4">
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground">Rows per page</span>
                   <Select
@@ -591,21 +594,21 @@ function SubsidiaryLedgerContent() {
         <>
           {/* Member Summary Cards */}
           {period && (
-            <div className="grid gap-4 grid-cols-1 sm:grid-cols-4">
+            <div className="grid shrink-0 gap-4 grid-cols-1 sm:grid-cols-4">
               <Card>
-                <CardContent className="py-4">
+                <CardContent className="py-4 fit:py-0">
                   <p className="text-xs text-muted-foreground mb-1">Opening Balance</p>
                   <p className="text-2xl font-bold tabular-nums">{money(openingBalance)}</p>
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="py-4">
+                <CardContent className="py-4 fit:py-0">
                   <p className="text-xs text-muted-foreground mb-1">Total Credits</p>
                   <p className="text-2xl font-bold text-green-600 tabular-nums">{money(detailTotalCredits)}</p>
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="py-4">
+                <CardContent className="py-4 fit:py-0">
                   <p className="text-xs text-muted-foreground mb-1">Total Debits</p>
                   <p className="text-2xl font-bold text-red-600 tabular-nums">
                     {money(detailTotalDebits)}
@@ -613,7 +616,7 @@ function SubsidiaryLedgerContent() {
                 </CardContent>
               </Card>
               <Card className="border-brand-orange/30">
-                <CardContent className="py-4">
+                <CardContent className="py-4 fit:py-0">
                   <p className="text-xs text-muted-foreground mb-1">Ending Balance</p>
                   <p className="text-2xl font-bold text-brand-orange tabular-nums">{money(endingBalance)}</p>
                 </CardContent>
@@ -622,8 +625,8 @@ function SubsidiaryLedgerContent() {
           )}
 
           {/* Ledger Entries Table */}
-          <Card>
-            <CardHeader>
+          <Card className={FIT_CLASSES.section}>
+            <CardHeader className="shrink-0">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <CardTitle className="text-sm font-medium">
                   Ledger Entries
@@ -688,8 +691,8 @@ function SubsidiaryLedgerContent() {
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
+            <CardContent className={FIT_CLASSES.section}>
+              <ScrollBox>
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -776,12 +779,12 @@ function SubsidiaryLedgerContent() {
                     </TableFooter>
                   )}
                 </Table>
-              </div>
+              </ScrollBox>
             </CardContent>
           </Card>
         </>
       ) : null}
-    </div>
+    </PageFill>
   );
 }
 

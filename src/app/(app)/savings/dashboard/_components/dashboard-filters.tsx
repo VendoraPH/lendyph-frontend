@@ -30,7 +30,7 @@ export function DashboardFilters({
   onProduct,
 }: DashboardFiltersProps) {
   return (
-    <div className="flex flex-wrap items-end gap-4 rounded-lg border bg-card p-4">
+    <div className="flex shrink-0 flex-wrap items-end gap-4 rounded-lg border bg-card p-4">
       <fieldset className="space-y-1.5">
         <legend className="text-xs text-muted-foreground">Period</legend>
         <div className="flex flex-wrap gap-1.5">

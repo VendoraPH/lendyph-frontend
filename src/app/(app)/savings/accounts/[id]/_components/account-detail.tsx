@@ -15,6 +15,7 @@ import {
   Snowflake,
 } from "lucide-react";
 import { DataState } from "@/components/common/data-state";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { PermissionGate } from "@/components/common/permission-gate";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -71,8 +72,14 @@ export function AccountDetail({ accountId }: { accountId: number }) {
   };
 
   return (
-    <div className="space-y-6">
-      <Button variant="ghost" size="sm" nativeButton={false} render={<Link href="/savings" />}>
+    <PageFill>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="shrink-0 self-start"
+        nativeButton={false}
+        render={<Link href="/savings" />}
+      >
         <ArrowLeft className="h-4 w-4" /> Savings accounts
       </Button>
 
@@ -94,26 +101,28 @@ export function AccountDetail({ accountId }: { accountId: number }) {
               onStatus={setStatusOffer}
               onClose={() => setClosing(true)}
             />
-            <OutflowHoldNotice account={account} />
-            <Balances account={account} />
-            <OpeningDetails account={account} />
-            <HoldsCard account={account} onChanged={() => resource.refetch()} />
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Transactions</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <TransactionsTable key={ledgerKey} account={account} onChanged={() => resource.refetch()} />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Notes</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <AccountNotesPanel accountId={account.id} />
-              </CardContent>
-            </Card>
+            <ScrollBox className="space-y-6 p-px">
+              <OutflowHoldNotice account={account} />
+              <Balances account={account} />
+              <OpeningDetails account={account} />
+              <HoldsCard account={account} onChanged={() => resource.refetch()} />
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Transactions</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <TransactionsTable key={ledgerKey} account={account} onChanged={() => resource.refetch()} />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Notes</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <AccountNotesPanel accountId={account.id} />
+                </CardContent>
+              </Card>
+            </ScrollBox>
             <TransactionDialog
               mode={mode}
               account={account}
@@ -137,7 +146,7 @@ export function AccountDetail({ accountId }: { accountId: number }) {
           </>
         )}
       </DataState>
-    </div>
+    </PageFill>
   );
 }
 
@@ -167,7 +176,7 @@ function Header({
   const canEnterShareCapital = usePermission().can("share_capital:create");
   const notActive = canWithdraw(account) ? null : "Only an active account can be withdrawn from or transferred out of.";
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="flex shrink-0 flex-wrap items-start justify-between gap-3">
       <div className="space-y-1">
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-semibold tracking-tight">{account.account_number}</h1>
