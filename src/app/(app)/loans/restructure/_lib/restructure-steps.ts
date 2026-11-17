@@ -10,7 +10,10 @@
 
 import type { FormStepDef } from "@/lib/form-stepper";
 
-/** Every key the form sends on `POST /loans/{loan}/restructure`. */
+/**
+ * Every key the form sends on `POST /loans/{loan}/restructure`. Typed by hand:
+ * keep it in step with the page's payload.
+ */
 export const RESTRUCTURE_SENT_FIELDS = [
   "borrower_id",
   "co_maker_ids",
@@ -65,8 +68,8 @@ export interface RestructureCheck {
 }
 
 /**
- * The form's submit check, keyed by field so each step validates its own: the
- * same labels in the same order as the one "Please complete" message.
+ * The form's submit check, keyed by field: Next lists the open step's labels,
+ * and Submit lists them all, in this order, in one "Please complete" message.
  */
 export function restructureMissing(c: RestructureCheck): Record<string, string> {
   const missing: Record<string, string> = {};

@@ -5,7 +5,7 @@ import { RouteGuard } from "@/components/common";
 import { PageFill, PageLoader, ScrollBox } from "@/components/common/page-fill";
 import { FIT_CLASSES } from "@/lib/page-fill";
 import { FormStep, FormStepper, type FormStepperHandle } from "@/components/common/form-stepper";
-import { FORM_STEP_GRID, stepErrorsOf, type StepErrors } from "@/lib/form-stepper";
+import { FORM_STEP_GRID, errorMessages, stepErrorsOf, type StepErrors } from "@/lib/form-stepper";
 import { MissingAccessNotice } from "./_components/missing-access-notice";
 import { missingLoanFormAccess } from "./_lib/missing-access";
 import { StaffPicker } from "@/components/common/staff-picker";
@@ -145,6 +145,7 @@ import {
 } from "./_lib/loan-preview";
 import { SHARE_CAPITAL_VALUE_HIDDEN } from "@/app/(app)/loans/[id]/_lib/collateral-display";
 import { useLoanPreview } from "./_hooks/use-loan-preview";
+import { useSubmitPressed } from "./_hooks/use-submit-pressed";
 import { saveLoanEdit } from "./_lib/save-loan-edit";
 import {
   amountInputValue,
@@ -770,8 +771,9 @@ function NewLoanApplicationInner() {
     [canListCollaterals, isRestructureEdit],
   );
   const stepperRef = useRef<FormStepperHandle>(null);
-  // Every field the user still needs to fix, by field: each step checks its
-  // own, and the submit lists them all in one pop-up, as before.
+  // Every field the user still needs to fix, by field. Next checks the open
+  // step and lists its fields; Save lists them all in one pop-up, as before
+  // (`onInvalid` below), and the stepper opens the first step holding one.
   const missingFields = loanFormMissing({
     hasMember: borrowerId !== null,
     hasProduct: productId !== null,
@@ -788,6 +790,12 @@ function NewLoanApplicationInner() {
   function validateStep(stepId: string): StepErrors | true {
     const step = steps.find((s) => s.id === stepId);
     return step ? stepErrorsOf(missingFields, step) : true;
+  }
+  // Next shows the open step's missing fields. Save (the stepper checks every
+  // step and opens the first that fails) shows every missing field at once.
+  const submitPressed = useSubmitPressed();
+  function onInvalid(errors: StepErrors) {
+    notifyValidation(submitPressed.pressed.current ? Object.values(missingFields) : errorMessages(errors));
   }
 
   // ── Submit ──
@@ -808,6 +816,8 @@ function NewLoanApplicationInner() {
       return;
     try {
       setSubmitting(true);
+      // Keep LOAN_FORM_SENT_FIELDS (./_lib/loan-form-steps) in step with the
+      // keys sent here and in saveLoanEdit (`collaterals`).
       const payload = {
         borrower_id: borrowerId,
         co_maker_ids: coMakerIds.filter((id): id is number => id !== null),
@@ -983,12 +993,13 @@ function NewLoanApplicationInner() {
 
       {/* One step per card. At fit the open step scrolls under the rail and
           Back, Next and the submit stay at the foot. */}
-      <form noValidate onSubmit={onFormSubmit} className={FIT_CLASSES.section}>
+      <form noValidate onSubmit={onFormSubmit} className={FIT_CLASSES.section} {...submitPressed.formProps}>
         <FormStepper
           ref={stepperRef}
           steps={steps}
           mode={isEditMode ? "edit" : "create"}
           validateStep={validateStep}
+          onInvalid={onInvalid}
           submitLabel={isEditMode ? "Save Changes" : "Submit Loan Application"}
           submittingLabel={isEditMode ? "Saving..." : "Submitting..."}
           submitting={submitting}
@@ -1647,8 +1658,12 @@ function NewLoanApplicationInner() {
           {/* ── Step 4: Deductions & Net Proceeds, with the dates ── */}
           <FormStep id="deductions">
             <div className="space-y-4">
-              {/* The dates and the fees share one widening grid. */}
-              <div className={FORM_STEP_GRID.grid}>
+              {/* The dates, under their heading, beside the fees from xl; the
+                  fee grid widens with its own width. */}
+              <div className="grid items-start gap-x-6 gap-y-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+              <section className="space-y-3" aria-labelledby="loan-dates-title">
+                <h3 id="loan-dates-title" className="text-sm font-semibold">Dates</h3>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 {/* Release Date */}
                 <div className="space-y-2" data-field="start_date">
                   <Label>
@@ -1692,7 +1707,12 @@ function NewLoanApplicationInner() {
                       : "—"}
                   </div>
                 </div>
+                </div>
+              </section>
 
+              {/* Level with the dates' fields: the heading's line and gap. */}
+              <div className="@container xl:pt-8">
+              <div className="grid grid-cols-1 gap-4 @md:grid-cols-2 @xl:grid-cols-3 @4xl:grid-cols-4">
                 {/* Processing Fee */}
                 <div className="space-y-2" data-field="deductions.processing_fee">
                   <Label className="flex items-center gap-0.5">
@@ -1794,6 +1814,8 @@ function NewLoanApplicationInner() {
                     <p className="text-[10px] text-muted-foreground">Set by loan product</p>
                   </div>
                 ))}
+              </div>
+              </div>
               </div>
 
               {/* The deductions list beside the server's totals from xl; the

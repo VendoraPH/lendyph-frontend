@@ -10,7 +10,11 @@
 
 import type { FormStepDef } from "@/lib/form-stepper";
 
-/** Every key the form sends on `POST /loans` or `PUT /loans/{id}`. */
+/**
+ * Every key the form sends on `POST /loans` or `PUT /loans/{id}`. Typed by
+ * hand: keep it in step with the page's payload and `saveLoanEdit`
+ * (`collaterals`).
+ */
 export const LOAN_FORM_SENT_FIELDS = [
   "borrower_id",
   "co_maker_ids",
@@ -92,8 +96,8 @@ export interface LoanFormCheck {
 }
 
 /**
- * The form's submit check, keyed by field so each step validates its own: the
- * same labels in the same order as the one "Please complete" message.
+ * The form's submit check, keyed by field: Next lists the open step's labels,
+ * and Save lists them all, in this order, in one "Please complete" message.
  */
 export function loanFormMissing(c: LoanFormCheck): Record<string, string> {
   const missing: Record<string, string> = {};

@@ -19,7 +19,7 @@ import {
 import { RouteGuard } from "@/components/common";
 import { PageFill, PageLoader, ScrollBox } from "@/components/common/page-fill";
 import { FormStep, FormStepper, type FormStepperHandle } from "@/components/common/form-stepper";
-import { FORM_STEP_GRID, stepErrorsOf, type StepErrors } from "@/lib/form-stepper";
+import { FORM_STEP_GRID, errorMessages, stepErrorsOf, type StepErrors } from "@/lib/form-stepper";
 import { FIT_CLASSES } from "@/lib/page-fill";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { StaffPicker } from "@/components/common/staff-picker";
@@ -115,6 +115,7 @@ import {
   shownSecurityStatus,
 } from "@/app/(app)/loans/new/_lib/loan-preview";
 import { useLoanPreview } from "@/app/(app)/loans/new/_hooks/use-loan-preview";
+import { useSubmitPressed } from "@/app/(app)/loans/new/_hooks/use-submit-pressed";
 import {
   PAYMENT_FREQUENCY_LABELS,
   PAYMENT_FREQUENCY_OPTIONS,
@@ -691,9 +692,10 @@ function RestructureLoanInner() {
     canWriteOff,
     summaryBalance: sourceOutstanding,
   });
-  // Every field the user still needs to fix, by field: each step checks its
-  // own, and the submit lists them all in one pop-up, as before. The source
-  // loan counts once its details have loaded and the form shows.
+  // Every field the user still needs to fix, by field. Next checks the open
+  // step and lists its fields; Submit lists them all in one pop-up, as before
+  // (`onInvalid` below), and the stepper opens the first step holding one.
+  // The source loan counts once its details have loaded and the form shows.
   const missingFields = restructureMissing({
     hasMember: borrowerId !== null,
     hasSourceLoan: sourceLoanId !== null && formVisible,
@@ -709,6 +711,12 @@ function RestructureLoanInner() {
   function validateStep(stepId: string): StepErrors | true {
     const step = RESTRUCTURE_STEPS.find((s) => s.id === stepId);
     return step ? stepErrorsOf(missingFields, step) : true;
+  }
+  // Next shows the open step's missing fields. Submit (the stepper checks
+  // every step and opens the first that fails) shows every missing field.
+  const submitPressed = useSubmitPressed();
+  function onInvalid(errors: StepErrors) {
+    notifyValidation(submitPressed.pressed.current ? Object.values(missingFields) : errorMessages(errors));
   }
 
   const handleSubmit = async () => {
@@ -730,7 +738,8 @@ function RestructureLoanInner() {
     try {
       // Contract: POST /loans/{loan}/restructure. The frequency field is
       // `frequency` (not `payment_frequency`), and `interest_method` is not
-      // accepted — the API snapshots it from the loan product.
+      // accepted — the API snapshots it from the loan product. Keep
+      // RESTRUCTURE_SENT_FIELDS (./_lib/restructure-steps) in step with these keys.
       const payload: Record<string, unknown> = {
         borrower_id: borrowerId,
         co_maker_ids: coMakerIds.filter((id): id is number => id !== null),
@@ -830,12 +839,13 @@ function RestructureLoanInner() {
 
         {/* One step per card. At fit the open step scrolls under the rail;
             Cancel, Back, Next and Submit stay at the foot. */}
-        <form noValidate onSubmit={onFormSubmit} className={FIT_CLASSES.section}>
+        <form noValidate onSubmit={onFormSubmit} className={FIT_CLASSES.section} {...submitPressed.formProps}>
         <FormStepper
           ref={stepperRef}
           steps={RESTRUCTURE_STEPS}
           mode="create"
           validateStep={validateStep}
+          onInvalid={onInvalid}
           submitLabel="Submit Restructure Application"
           submitting={submitting}
           // No Next while the picked source loan is still loading.
@@ -1418,6 +1428,8 @@ function RestructureLoanInner() {
                             setProcessingFeeRate(sanitizeDecimalInput(e.target.value));
                           }}
                           onBlur={() => setEditingFeeRate(null)}
+                          // Enter does nothing here, as before, never Next.
+                          onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
                           className="w-24"
                         />
                         <div className="flex h-8 flex-1 items-center rounded-lg border border-input bg-muted/40 px-2.5 text-sm text-muted-foreground">
@@ -1440,6 +1452,7 @@ function RestructureLoanInner() {
                             setServiceFeeRate(sanitizeDecimalInput(e.target.value));
                           }}
                           onBlur={() => setEditingFeeRate(null)}
+                          onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
                           className="w-24"
                         />
                         <div className="flex h-8 flex-1 items-center rounded-lg border border-input bg-muted/40 px-2.5 text-sm text-muted-foreground">
