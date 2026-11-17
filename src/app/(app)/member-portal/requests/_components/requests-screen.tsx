@@ -97,14 +97,19 @@ export function RequestsScreen() {
           options={TYPE_OPTIONS}
           className="w-56"
         />
-        <BranchFilter
-          value={branch}
-          onChange={(v) => {
-            setBranch(v);
-            reset();
-          }}
-          className="w-56"
-        />
+        {/* The shared BranchFilter spaces its field with space-y, so the
+            select's hidden input (its last child) leaves a 6px margin under
+            the trigger; dropping it lines Branch up with search and type. */}
+        <div className="[&_[data-slot=select-trigger]]:mb-0">
+          <BranchFilter
+            value={branch}
+            onChange={(v) => {
+              setBranch(v);
+              reset();
+            }}
+            className="w-56"
+          />
+        </div>
       </div>
 
       <div className="shrink-0">
