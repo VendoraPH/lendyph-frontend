@@ -12,7 +12,8 @@ import { useIsClient, usePermission } from "@/hooks";
 import { AreaChart, Area } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Wallet, FileText, PhilippinePeso, AlertTriangle, TrendingUp, Landmark } from "lucide-react";
+import { TrendingUp } from "lucide-react";
+import { Icon3D } from "@/components/common/icon-3d";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatDateFull } from "@/lib/format";
 import { shareCapitalService } from "@/services";
@@ -22,7 +23,7 @@ import { shareCapitalBookBalance } from "./_lib/share-capital-kpi";
 import { collectionPieSlices, collectionRateTone, shownCollectionRate } from "./_lib/collection-pie";
 import { DuesDonut } from "./_components/dues-donut";
 import { DuesTable, TransactionsTable, type DueItemView, type LoadState } from "./_components/dashboard-tables";
-import { DASHBOARD_PAGE_CLASS, dashboardKpiClasses } from "./_lib/kpi-layout";
+import { DASHBOARD_PAGE_CLASS, KPI_ICONS_3D, dashboardKpiClasses } from "./_lib/kpi-layout";
 import { insuranceCollected } from "./_lib/insurance-collected";
 import { recentTransactionRows, type RecentTransactionRow } from "./_lib/recent-transactions";
 import {
@@ -77,14 +78,14 @@ interface DailyDueItem {
 // decorative one.
 
 const KPI_CARD_STRUCTURE = [
-  { key: "portfolio" as const, sparkKey: "portfolio" as const, icon: Wallet, label: "Total Portfolio", color: "#7c3aed", href: "/loans" },
-  { key: "active_loans" as const, sparkKey: "active_loans" as const, icon: FileText, label: "Active Loans", color: "#e879f9", href: "/loans" },
-  { key: "collected" as const, sparkKey: "collected" as const, icon: PhilippinePeso, label: "Collected", color: "#10b981", href: "/payments" },
+  { key: "portfolio" as const, sparkKey: "portfolio" as const, label: "Total Portfolio", color: "#7c3aed", href: "/loans" },
+  { key: "active_loans" as const, sparkKey: "active_loans" as const, label: "Active Loans", color: "#e879f9", href: "/loans" },
+  { key: "collected" as const, sparkKey: "collected" as const, label: "Collected", color: "#10b981", href: "/payments" },
   // `/collections` is not a route — it never existed, so this card 404'd on
   // click and on Next's prefetch. `/loans/past-due` is the purpose-built Past
   // Due Loans report, which is exactly what this card counts.
-  { key: "overdue" as const, sparkKey: "overdue" as const, icon: AlertTriangle, label: "Overdue", color: "#f87171", href: "/loans/past-due" },
-  { key: "share_capital" as const, sparkKey: null, icon: Landmark, label: "Share Capital", color: "#14b8a6", href: "/share-capital/ledger" },
+  { key: "overdue" as const, sparkKey: "overdue" as const, label: "Overdue", color: "#f87171", href: "/loans/past-due" },
+  { key: "share_capital" as const, sparkKey: null, label: "Share Capital", color: "#14b8a6", href: "/share-capital/ledger" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -274,12 +275,7 @@ function DashboardContent() {
                 <CardContent className={kpiClasses.content}>
                   <div className={kpiClasses.row}>
                     <div className="flex min-w-0 items-center gap-2.5">
-                      <div
-                        className="h-7 w-7 rounded-full flex items-center justify-center shrink-0"
-                        style={{ backgroundColor: kpi.color }}
-                      >
-                        <kpi.icon className="h-3.5 w-3.5 text-white" />
-                      </div>
+                      <Icon3D name={KPI_ICONS_3D[kpi.key]} size={28} eager />
                       <div className="min-w-0">
                         <p className="text-lg font-bold leading-tight">{kpiValues[kpi.key]}</p>
                         <p className="text-[11px] leading-tight text-muted-foreground">{kpi.label}</p>

@@ -61,6 +61,8 @@ import {
 } from "lucide-react";
 import { borrowerService, reportService } from "@/services";
 import { visibleReports } from "../_lib/report-catalog";
+import { reportIcon3D } from "../_lib/report-icons-3d";
+import { Icon3D } from "@/components/common/icon-3d";
 import { csvFileName } from "../_lib/export-file-name";
 import { PRESETS, presetRange, type Preset } from "../_lib/report-period";
 import { CATEGORY_META, MAX_REPORT_SPAN_YEARS, exceedsReportSpanCap } from "../_lib/types";
@@ -412,7 +414,6 @@ function ReportDetailContent({
   }
 
   const categoryLabel = CATEGORY_META[report.category].label;
-  const Icon = report.icon;
 
   return (
     <PageFill className="fit:gap-3">
@@ -438,7 +439,7 @@ function ReportDetailContent({
               report.accent.ring
             )}
           >
-            <Icon className={cn("h-6 w-6", report.accent.text)} />
+            <Icon3D name={reportIcon3D(report.icon)} size={36} />
           </div>
           <div className="min-w-0">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">

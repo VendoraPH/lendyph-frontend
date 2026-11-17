@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { BellRing, PauseCircle, PlayCircle } from "lucide-react";
+import { PauseCircle, PlayCircle } from "lucide-react";
+import { Icon3D } from "@/components/common/icon-3d";
 import { PermissionButton } from "@/components/common/permission-button";
 import { PermissionGate } from "@/components/common/permission-gate";
 import { FillSection, PageFill } from "@/components/common/page-fill";
@@ -57,7 +58,7 @@ export function RemindersShell({ children }: { children: React.ReactNode }) {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-              <BellRing className="h-6 w-6 text-brand-orange" />
+              <Icon3D name="empty-reminders" size={28} />
               Reminders
             </h1>
             <p className="text-sm text-muted-foreground">

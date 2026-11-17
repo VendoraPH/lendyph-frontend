@@ -26,6 +26,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { BrandLogo } from "@/components/common";
+import { Icon3D } from "@/components/common/icon-3d";
+import { ICON_3D_TILE_CLASS } from "@/lib/icons-3d";
 import { selectSidebarCollapsed, useUIStore } from "@/store/ui-store";
 import { systemService } from "@/services";
 import { collapsedNavLabel, countLabel } from "./sidebar-labels";
@@ -39,19 +41,38 @@ const MIN_WIDTH = 64;
 const DEFAULT_WIDTH = 260;
 const MAX_WIDTH = 600;
 
-const iconColors: Record<string, string> = {
-  "/dashboard": "bg-gradient-to-br from-orange-400 to-orange-500 text-white shadow-orange-200 dark:shadow-orange-900/30",
-  "/users": "bg-gradient-to-br from-purple-400 to-purple-500 text-white shadow-purple-200 dark:shadow-purple-900/30",
-  "/share-capital": "bg-gradient-to-br from-indigo-400 to-indigo-500 text-white shadow-indigo-200 dark:shadow-indigo-900/30",
-  "/borrowers": "bg-gradient-to-br from-blue-400 to-blue-500 text-white shadow-blue-200 dark:shadow-blue-900/30",
-  "/loans": "bg-gradient-to-br from-emerald-400 to-emerald-500 text-white shadow-emerald-200 dark:shadow-emerald-900/30",
-  "/payments": "bg-gradient-to-br from-cyan-400 to-cyan-500 text-white shadow-cyan-200 dark:shadow-cyan-900/30",
-  "/reports": "bg-gradient-to-br from-pink-400 to-pink-500 text-white shadow-pink-200 dark:shadow-pink-900/30",
-  "/printables": "bg-gradient-to-br from-rose-400 to-rose-500 text-white shadow-rose-200 dark:shadow-rose-900/30",
-  "/audit-trail": "bg-gradient-to-br from-gray-400 to-gray-500 text-white shadow-gray-200 dark:shadow-gray-900/30",
-  "/settings": "bg-gradient-to-br from-slate-400 to-slate-500 text-white shadow-slate-200 dark:shadow-slate-900/30",
-  "/credit-scoring": "bg-gradient-to-br from-violet-400 to-violet-500 text-white",
-};
+/** Linda and GCash, which keep their own icon, still sit on today's grey tile. */
+const LINE_ICON_TILE = "bg-gradient-to-br from-gray-400 to-gray-500 text-white";
+
+/**
+ * An item's icon on its tile: the 3D icon on the soft neutral tile, or, for
+ * Linda and GCash, their own icon on the grey tile. The tile keeps today's size
+ * (36px collapsed, 32px open), so nothing in the menu moves.
+ */
+function NavItemIcon({ item, collapsed, className, children }: {
+  item: NavItem;
+  collapsed?: boolean;
+  className?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <span
+      className={cn(
+        "relative flex shrink-0 items-center justify-center rounded-xl shadow-sm",
+        collapsed ? "h-9 w-9" : "h-8 w-8",
+        item.icon3d ? ICON_3D_TILE_CLASS : LINE_ICON_TILE,
+        className
+      )}
+    >
+      {item.icon3d ? (
+        <Icon3D name={item.icon3d} size={collapsed ? 28 : 24} eager />
+      ) : (
+        <item.icon className={collapsed ? "h-4 w-4" : "h-3.5 w-3.5"} />
+      )}
+      {children}
+    </span>
+  );
+}
 
 function CountPill({
   count,
@@ -133,7 +154,6 @@ function NavLink({
   useEffect(() => {
     if (isOpen) setExpanded(true);
   }, [isOpen]);
-  const iconClass = iconColors[item.href] || "bg-gradient-to-br from-gray-400 to-gray-500 text-white";
 
   // ── Collapsed ──
   if (collapsed) {
@@ -155,15 +175,14 @@ function NavLink({
             />
           }
         >
-          <span className={cn("relative flex items-center justify-center rounded-xl h-9 w-9 shadow-sm", iconClass)}>
-            <item.icon className="h-4 w-4" />
+          <NavItemIcon item={item} collapsed>
             {badge && badge > 0 ? (
               <span
                 aria-hidden="true"
                 className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-brand-orange ring-2 ring-background"
               />
             ) : null}
-          </span>
+          </NavItemIcon>
         </TooltipTrigger>
         <TooltipContent side="right" className={hasChildren ? "flex flex-col gap-1 p-2.5 min-w-[140px]" : undefined}>
           {hasChildren ? (
@@ -204,9 +223,7 @@ function NavLink({
             : "text-muted-foreground hover:bg-muted hover:text-foreground"
         )}
       >
-        <span className={cn("flex items-center justify-center rounded-xl h-8 w-8 shadow-sm transition-transform duration-200 group-hover:scale-110", iconClass)}>
-          <item.icon className="h-3.5 w-3.5" />
-        </span>
+        <NavItemIcon item={item} className="transition-transform duration-200 group-hover:scale-110" />
         <span className="truncate">{item.title}</span>
         {badge && badge > 0 ? (
           <span className="ml-auto inline-flex items-center justify-center rounded-full bg-brand-orange px-1.5 py-0.5 text-[10px] font-bold text-white leading-none">
@@ -231,9 +248,7 @@ function NavLink({
             : "text-muted-foreground hover:bg-muted hover:text-foreground"
         )}
       >
-        <span className={cn("flex items-center justify-center rounded-xl h-8 w-8 shadow-sm transition-transform duration-200 group-hover:scale-110", iconClass)}>
-          <item.icon className="h-3.5 w-3.5" />
-        </span>
+        <NavItemIcon item={item} className="transition-transform duration-200 group-hover:scale-110" />
         <span className="flex-1 text-left truncate">{item.title}</span>
         {/* Visible while the menu is closed; the child link carries it once open. */}
         {!expanded && <CountPill count={badge} label={badgeLabel} />}

@@ -6,7 +6,8 @@ import { RouteGuard } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronRight, RotateCcw, Table2 } from "lucide-react";
+import { ChevronRight, RotateCcw } from "lucide-react";
+import { Icon3D } from "@/components/common/icon-3d";
 import { issuesForSheet } from "@/lib/data-template/validate";
 import { useTemplateDraft } from "./_hooks/use-template-draft";
 import { ExportActions } from "./_components/export-actions";
@@ -54,7 +55,7 @@ export default function DataTemplatePage() {
         <div className="flex shrink-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex min-w-0 items-start gap-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-teal-50 ring-1 ring-teal-200">
-              <Table2 className="h-6 w-6 text-teal-600" />
+              <Icon3D name="icon-layers" size={36} />
             </div>
             <div className="min-w-0">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
