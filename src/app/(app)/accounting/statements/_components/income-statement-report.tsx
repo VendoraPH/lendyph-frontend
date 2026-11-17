@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback } from "react";
+import { ExpandableCard } from "@/components/common/expandable-card";
+import { FillSection, ScrollBox } from "@/components/common/page-fill";
 import { Card, CardContent } from "@/components/ui/card";
 import { accountingService } from "@/services";
 import { formatDate } from "@/lib/format";
@@ -52,9 +54,9 @@ function Statement({ statement }: { statement: IncomeStatement }) {
   const loss = statement.net_income < 0;
 
   return (
-    <div className="space-y-4">
-      <Card className="border-2">
-        <CardContent className="flex items-center justify-between gap-3 py-4">
+    <FillSection className="gap-4">
+      <Card className="shrink-0 border-2">
+        <CardContent className="flex items-center justify-between gap-3 py-4 fit:py-0">
           <div>
             <p className="font-medium">{loss ? "Net loss" : "Net income"}</p>
             <p className="text-sm text-muted-foreground">
@@ -66,20 +68,24 @@ function Statement({ statement }: { statement: IncomeStatement }) {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <ReportSection
-          title="Income"
-          lines={incomeStatementLines(statement.income)}
-          total={statement.total_income}
-          emptyMessage="No income recorded in this period."
-        />
-        <ReportSection
-          title="Expenses"
-          lines={incomeStatementLines(statement.expenses)}
-          total={statement.total_expenses}
-          emptyMessage="No expense recorded in this period."
-        />
-      </div>
-    </div>
+      <ExpandableCard title="Income Statement">
+        <ScrollBox className="p-px">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <ReportSection
+            title="Income"
+            lines={incomeStatementLines(statement.income)}
+            total={statement.total_income}
+            emptyMessage="No income recorded in this period."
+          />
+          <ReportSection
+            title="Expenses"
+            lines={incomeStatementLines(statement.expenses)}
+            total={statement.total_expenses}
+            emptyMessage="No expense recorded in this period."
+          />
+        </div>
+        </ScrollBox>
+      </ExpandableCard>
+    </FillSection>
   );
 }

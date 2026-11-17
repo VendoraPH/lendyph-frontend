@@ -48,7 +48,7 @@ export function AllowanceHistory() {
       >
         {(result) => (
           <Card>
-            <CardContent className="pt-6">
+            <CardContent className="pt-6 fit:pt-0">
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>

@@ -10,6 +10,8 @@ interface FigureCardProps {
   tone?: "default" | "warning" | "muted";
   /** Shown beside the label, such as a "Needs review" badge. */
   badge?: ReactNode;
+  /** Gives the label two lines' height, so a row of cards keeps its figures level. */
+  evenLabels?: boolean;
 }
 
 const TONES = {
@@ -19,11 +21,11 @@ const TONES = {
 } as const;
 
 /** One server figure with its label: the screen's card primitive. */
-export function FigureCard({ label, value, hint, tone = "default", badge }: FigureCardProps) {
+export function FigureCard({ label, value, hint, tone = "default", badge, evenLabels = false }: FigureCardProps) {
   return (
     <Card>
-      <CardContent className="space-y-1 pt-6">
-        <div className="flex items-center justify-between gap-2">
+      <CardContent className="space-y-1 pt-6 fit:pt-0">
+        <div className={cn("flex items-center justify-between gap-2", evenLabels && "min-h-10 items-start")}>
           <p className="text-sm text-muted-foreground">{label}</p>
           {badge}
         </div>

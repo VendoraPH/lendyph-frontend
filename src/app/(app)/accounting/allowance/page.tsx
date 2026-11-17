@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { Building2 } from "lucide-react";
 import { RouteGuard } from "@/components/common";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAccountingResource, usePermission } from "@/hooks";
 import { todayISO } from "@/lib/format";
@@ -59,11 +60,11 @@ function AllowanceContent() {
   };
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       <AccountingPageHeader title="Allowance for Credit Losses" description={DESCRIPTION} />
 
       {notice ? (
-        <Card>
+        <Card className="shrink-0">
           <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
             <Building2 className="h-6 w-6 text-muted-foreground" aria-hidden />
             <p className="max-w-lg text-sm text-muted-foreground">{notice}</p>
@@ -83,41 +84,47 @@ function AllowanceContent() {
           {conflict && (
             <div
               role="alert"
-              className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm"
+              className="shrink-0 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm"
             >
               {CONFLICT_MESSAGE}
             </div>
           )}
 
-          <DataState
-            resource={preview}
-            summary="The required allowance by branch and aging bucket, each branch's current balance, and the adjustment to post."
-            endpoints={["GET /accounting/allowance/preview", "POST /accounting/allowance/postings"]}
-          >
-            {(data) => (
-              <div className="space-y-6">
-                <Card>
-                  <CardContent className="space-y-6 pt-6">
-                    <AllowanceSummary preview={data} />
-                    <PostAllowancePanel
-                      preview={data}
-                      onPosted={posted}
-                      onConflict={figuresChanged}
-                      onDateRefused={dateRefused}
-                    />
-                  </CardContent>
-                </Card>
-                {branchViews(data).map((branch) => (
-                  <BranchAllowanceCard key={branch.id} branch={branch} />
-                ))}
-              </div>
-            )}
-          </DataState>
+          {/* The date and any refusal stay put; the figures, branches and history scroll under them. */}
+          <ScrollBox className="space-y-6 p-px">
+            <DataState
+              resource={preview}
+              summary="The required allowance by branch and aging bucket, each branch's current balance, and the adjustment to post."
+              endpoints={["GET /accounting/allowance/preview", "POST /accounting/allowance/postings"]}
+            >
+              {(data) => (
+                <div className="space-y-6">
+                  <Card>
+                    <CardContent className="space-y-6 pt-6 fit:pt-0">
+                      <AllowanceSummary preview={data} />
+                      <PostAllowancePanel
+                        preview={data}
+                        onPosted={posted}
+                        onConflict={figuresChanged}
+                        onDateRefused={dateRefused}
+                      />
+                    </CardContent>
+                  </Card>
+                  {/* Branches side by side on a wide screen. */}
+                  <div className="grid grid-cols-[repeat(auto-fit,minmax(min(24rem,100%),1fr))] gap-6">
+                    {branchViews(data).map((branch) => (
+                      <BranchAllowanceCard key={branch.id} branch={branch} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </DataState>
 
-          <AllowanceHistory key={postings} />
+            <AllowanceHistory key={postings} />
+          </ScrollBox>
         </>
       )}
-    </div>
+    </PageFill>
   );
 }
 

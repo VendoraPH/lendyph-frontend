@@ -134,15 +134,16 @@ export function TrendCharts({ months }: { months: readonly DashboardMonth[] | un
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <Card>
+    // At fit the two charts take the tab's height rather than a fixed 260 px.
+    <div className="grid gap-4 lg:grid-cols-2 fit:min-h-0 fit:flex-1">
+      <Card className="fit:min-h-0">
         <CardHeader>
           <CardTitle className="text-base">Income and expenses, last 12 months</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="fit:flex fit:min-h-0 fit:flex-1 fit:flex-col">
           <ChartContainer
             config={RESULT_CONFIG}
-            className="aspect-auto h-[260px] w-full"
+            className="aspect-auto h-[260px] w-full fit:h-auto fit:min-h-0 fit:flex-1"
             aria-hidden="true"
           >
             <ComposedChart data={rows} margin={{ left: 4, right: 8 }}>
@@ -168,14 +169,14 @@ export function TrendCharts({ months }: { months: readonly DashboardMonth[] | un
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="fit:min-h-0">
         <CardHeader>
           <CardTitle className="text-base">Cash at month end</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="fit:flex fit:min-h-0 fit:flex-1 fit:flex-col">
           <ChartContainer
             config={CASH_CONFIG}
-            className="aspect-auto h-[260px] w-full"
+            className="aspect-auto h-[260px] w-full fit:h-auto fit:min-h-0 fit:flex-1"
             aria-hidden="true"
           >
             <LineChart data={rows} margin={{ left: 4, right: 8 }}>

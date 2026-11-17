@@ -17,7 +17,7 @@ type StatementStateProps<T> = ComponentProps<typeof DataState<T>> & {
 export function StatementState<T>({ refusal, ...props }: StatementStateProps<T>) {
   if (refusal !== null) {
     return (
-      <Card>
+      <Card className="shrink-0">
         <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
           <div className="rounded-full bg-amber-500/10 p-3">
             <AlertTriangle aria-hidden="true" className="h-6 w-6 text-amber-600 dark:text-amber-400" />

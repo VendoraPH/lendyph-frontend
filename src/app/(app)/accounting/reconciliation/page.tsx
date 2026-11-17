@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { RouteGuard } from "@/components/common";
+import { FillSection, PageFill, ScrollBox } from "@/components/common/page-fill";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -88,7 +89,7 @@ function ReconciliationContent() {
   };
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       <AccountingPageHeader
         title="Reconciliation"
         description={DESCRIPTION}
@@ -106,7 +107,7 @@ function ReconciliationContent() {
         the ledger is missing something real or the statement is — and the
         only way to know which is to look line by line.
       */}
-      <div className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
+      <div className="shrink-0 rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
         A difference between your books and the statement is a real
         discrepancy, not a rounding artefact. Find the missing line rather
         than adjusting the balance.
@@ -167,12 +168,15 @@ function ReconciliationContent() {
           }
 
           return (
-            <div className="space-y-4">
+            <FillSection className="gap-4">
               {notice}
-              {shown.map((item) => (
-                <ReconciliationCard key={item.id} reconciliation={item} />
-              ))}
-            </div>
+              {/* The reconciliations scroll under the filters. */}
+              <ScrollBox className="space-y-4 p-px">
+                {shown.map((item) => (
+                  <ReconciliationCard key={item.id} reconciliation={item} />
+                ))}
+              </ScrollBox>
+            </FillSection>
           );
         }}
       </DataState>
@@ -184,7 +188,7 @@ function ReconciliationContent() {
         onOpenChange={setCreating}
         onCreated={created}
       />
-    </div>
+    </PageFill>
   );
 }
 
@@ -207,7 +211,7 @@ function ReconciliationCard({
 
   return (
     <Card className={cn("border-2", clean ? "border-emerald-500/40" : "border-amber-500/50")}>
-      <CardContent className="space-y-4 pt-6">
+      <CardContent className="space-y-4 pt-6 fit:pt-0">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-0.5">
             <Link href={href} className="font-medium underline-offset-2 hover:underline">

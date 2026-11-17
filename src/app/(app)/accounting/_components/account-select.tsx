@@ -33,7 +33,7 @@ export function AccountSelect({
   className = "w-[300px]",
 }: AccountSelectProps) {
   return (
-    <div className="space-y-1.5">
+    <div className="flex flex-col gap-1.5">
       {label && <Label className="text-xs text-muted-foreground">{label}</Label>}
       <Select
         value={value === null ? null : String(value)}

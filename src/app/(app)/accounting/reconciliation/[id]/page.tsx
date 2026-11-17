@@ -4,6 +4,7 @@ import { use } from "react";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import { RouteGuard } from "@/components/common";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
@@ -40,14 +41,14 @@ function WorksheetContent({ id }: { id: number }) {
 
   if (reconciliation === null) {
     return (
-      <div className="space-y-6">
+      <PageFill>
         <AccountingPageHeader
           title="Reconciliation"
           description="One account's statement, line by line."
           actions={worksheet.error && worksheet.recovery === "back" ? undefined : <BackLink />}
         />
         {worksheet.error ? (
-          <Card>
+          <Card className="shrink-0">
             <CardContent className="space-y-3 py-8 text-sm">
               <p className="text-muted-foreground">{worksheet.error}</p>
               {worksheet.recovery === "back" ? (
@@ -64,12 +65,12 @@ function WorksheetContent({ id }: { id: number }) {
             <Spinner className="h-6 w-6" />
           </div>
         )}
-      </div>
+      </PageFill>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       <AccountingPageHeader
         title="Reconciliation"
         description="Match each statement line to the books, or record the entry that is missing."
@@ -92,7 +93,7 @@ function WorksheetContent({ id }: { id: number }) {
       {notice && (
         <div
           role="status"
-          className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-800"
+          className="flex shrink-0 flex-wrap items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-800"
         >
           <CheckCircle2 className="size-4" />
           <span>{notice.text}</span>
@@ -104,13 +105,16 @@ function WorksheetContent({ id }: { id: number }) {
 
       <WorksheetHeader reconciliation={reconciliation} />
 
-      <WorksheetTable
-        reconciliation={reconciliation}
-        busy={actions.busy || worksheet.loading}
-        onConfirm={actions.confirm}
-        onUnmatch={actions.unmatch}
-        onResolve={actions.setResolving}
-      />
+      {/* The figures above stay put; the statement and book lines scroll under them. */}
+      <ScrollBox className="p-px">
+        <WorksheetTable
+          reconciliation={reconciliation}
+          busy={actions.busy || worksheet.loading}
+          onConfirm={actions.confirm}
+          onUnmatch={actions.unmatch}
+          onResolve={actions.setResolving}
+        />
+      </ScrollBox>
 
       <ResolveLineDialog
         row={actions.resolving}
@@ -122,7 +126,7 @@ function WorksheetContent({ id }: { id: number }) {
         onRecord={actions.onRecord}
         onMatchInstead={actions.matchInstead}
       />
-    </div>
+    </PageFill>
   );
 }
 
@@ -133,10 +137,10 @@ function WorksheetContent({ id }: { id: number }) {
 function WorksheetGate({ id }: { id: number }) {
   if (!Number.isInteger(id) || id < 1) {
     return (
-      <div className="space-y-6">
+      <PageFill>
         <AccountingPageHeader title="Reconciliation" description="One account's statement, line by line." actions={<BackLink />} />
         <BranchAccessNotice message="This reconciliation doesn't exist, or it was removed." />
-      </div>
+      </PageFill>
     );
   }
 

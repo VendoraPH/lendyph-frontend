@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import Link from "next/link";
 import { ArrowLeftRight, Banknote, Building2, History, Smartphone, Wallet } from "lucide-react";
 import { PermissionGate, RouteGuard } from "@/components/common";
+import { FillSection, PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAccountingResource } from "@/hooks";
@@ -55,7 +56,7 @@ function CashAndBankContent() {
   };
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       <AccountingPageHeader
         title="Cash & Bank"
         description="Cash on hand, bank accounts, GCash and Maya."
@@ -75,7 +76,7 @@ function CashAndBankContent() {
         own accounts is not income, and recording it as such inflates the
         income statement by the full amount moved.
       */}
-      <div className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
+      <div className="shrink-0 rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
         Moving money between your own accounts is a transfer, never income.
         Only a charge on the transfer is an expense.
       </div>
@@ -91,7 +92,7 @@ function CashAndBankContent() {
         emptyMessage="No cash or bank account has been set up."
       >
         {(page) => (
-          <div className="space-y-4">
+          <FillSection className="gap-4">
             <CashAccounts page={page} />
             <TransferDialog
               open={transferring}
@@ -99,10 +100,10 @@ function CashAndBankContent() {
               onOpenChange={setTransferring}
               onSubmit={transfer}
             />
-          </div>
+          </FillSection>
         )}
       </DataState>
-    </div>
+    </PageFill>
   );
 }
 
@@ -130,37 +131,43 @@ function CashAccounts({ page }: { page: CashAccountPage }) {
         />
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {accounts.map((account) => {
-          const Icon = account.cash_kind ? KIND_ICON[account.cash_kind] : Wallet;
-          return (
-            <Card key={account.id}>
-              <CardContent className="space-y-2 pt-6">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Icon className="h-4 w-4" aria-hidden />
-                  <span className="text-sm">{account.name}</span>
-                </div>
-                <p className="font-mono text-2xl font-semibold">
-                  {centavosOrDash(account.balance)}
-                </p>
-                <div className="flex items-center justify-between gap-2">
-                  <p className="font-mono text-xs text-muted-foreground">{account.code}</p>
-                  <Link
-                    href={accountHistoryHref(account.id)}
-                    className="inline-flex items-center gap-1 rounded-sm text-xs font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    aria-label={`History of ${account.name}`}
-                  >
-                    <History className="h-3.5 w-3.5" aria-hidden />
-                    History
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+      {/*
+        The account cards scroll inside once they outgrow the page; the totals
+        follow them and stay on screen.
+      */}
+      <ScrollBox className="p-px fit:flex-initial">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {accounts.map((account) => {
+            const Icon = account.cash_kind ? KIND_ICON[account.cash_kind] : Wallet;
+            return (
+              <Card key={account.id}>
+                <CardContent className="space-y-2 pt-6 fit:pt-0">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Icon className="h-4 w-4" aria-hidden />
+                    <span className="text-sm">{account.name}</span>
+                  </div>
+                  <p className="font-mono text-2xl font-semibold">
+                    {centavosOrDash(account.balance)}
+                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-mono text-xs text-muted-foreground">{account.code}</p>
+                    <Link
+                      href={accountHistoryHref(account.id)}
+                      className="inline-flex items-center gap-1 rounded-sm text-xs font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      aria-label={`History of ${account.name}`}
+                    >
+                      <History className="h-3.5 w-3.5" aria-hidden />
+                      History
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      </ScrollBox>
 
-      <Card>
+      <Card className="shrink-0">
         <CardContent className="space-y-3 py-4">
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">Total across all money accounts</span>

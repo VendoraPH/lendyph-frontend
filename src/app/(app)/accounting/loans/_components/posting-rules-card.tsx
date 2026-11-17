@@ -27,7 +27,7 @@ function Side({ label, name, accounts, className }: SideProps) {
 export function PostingRulesCard() {
   return (
     <Card>
-      <CardContent className="pt-6">
+      <CardContent className="pt-6 fit:pt-0">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           What Lendy posts for you
         </h2>

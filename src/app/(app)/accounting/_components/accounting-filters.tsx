@@ -31,7 +31,7 @@ export function BranchFilter({ value, onChange }: BranchFilterProps) {
   const picker = branchPicker(branches, caller, viewAll);
 
   return (
-    <div className="space-y-1.5">
+    <div className="flex flex-col gap-1.5">
       <Label className="text-xs text-muted-foreground">Branch</Label>
       {/* This Select hands back `string | null`; there is no null option here. */}
       <Select
@@ -63,7 +63,7 @@ interface DateFilterProps {
 
 export function DateFilter({ label, value, onChange }: DateFilterProps) {
   return (
-    <div className="space-y-1.5">
+    <div className="flex flex-col gap-1.5">
       <Label className="text-xs text-muted-foreground">{label}</Label>
       <Input
         type="date"
@@ -82,7 +82,7 @@ export function branchParam(value: string): number | undefined {
 
 export function FilterBar({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-card p-4">
+    <div className="flex shrink-0 flex-wrap items-end gap-3 rounded-lg border bg-card p-4 fit:p-3">
       {children}
     </div>
   );

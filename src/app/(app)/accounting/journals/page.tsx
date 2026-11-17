@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Search } from "lucide-react";
 import { PermissionGate, RouteGuard, TablePagination } from "@/components/common";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -31,6 +32,8 @@ import { accountingService } from "@/services";
 import { getErrorMessage } from "@/lib/api-error";
 import { formatCentavos } from "@/lib/accounting/money";
 import { formatDate, todayISO } from "@/lib/format";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 import type { JournalPage } from "@/types";
 import { AccountingPageHeader } from "../_components/page-header";
 import {
@@ -136,7 +139,7 @@ function JournalEntriesContent() {
     };
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       <AccountingPageHeader
         title="Journal Entries"
         description="Every entry in the books, automatic and manual."
@@ -154,7 +157,7 @@ function JournalEntriesContent() {
         <DateFilter label="From" value={from} onChange={changeFilter(setFrom)} />
         <DateFilter label="To" value={to} onChange={changeFilter(setTo)} />
         <BranchFilter value={branch} onChange={changeFilter(setBranch)} />
-        <div className="space-y-1.5">
+        <div className="flex flex-col gap-1.5">
           <Label className="text-xs text-muted-foreground">Status</Label>
           <Select
             value={status}
@@ -173,7 +176,7 @@ function JournalEntriesContent() {
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-1.5">
+        <div className="flex flex-col gap-1.5">
           <Label className="text-xs text-muted-foreground">Source</Label>
           <Select
             value={source}
@@ -192,7 +195,7 @@ function JournalEntriesContent() {
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-1.5">
+        <div className="flex flex-col gap-1.5">
           <Label htmlFor="journal-search" className="text-xs text-muted-foreground">
             Search
           </Label>
@@ -208,19 +211,23 @@ function JournalEntriesContent() {
               onChange={(e) => changeFilter(setSearch)(e.target.value)}
               placeholder="Number, reference or description"
               maxLength={100}
-              className="w-[260px] pl-8"
+              className="w-[280px] pl-8"
             />
           </div>
         </div>
       </FilterBar>
 
-      <Card>
-        <CardContent className="space-y-4 pt-6">
+      <Card className={FIT_CLASSES.section}>
+        <CardContent className={cn(FIT_CLASSES.section, "space-y-4 pt-6 fit:pt-0")}>
           <p className="text-sm text-muted-foreground" aria-live="polite">
             {meta ? journalStatusCounts(meta.stats) : "Loading…"}
           </p>
 
-          <div className={settled && !failed ? undefined : "opacity-60"} aria-busy={!settled}>
+          {/* With no rows the box keeps its natural height, so the message sits under the headings. */}
+          <ScrollBox
+            className={cn(!(settled && !failed) && "opacity-60", rows.length === 0 && "fit:flex-initial")}
+            aria-busy={!settled}
+          >
             <Table>
               <TableHeader>
                 <TableRow>
@@ -285,7 +292,7 @@ function JournalEntriesContent() {
                 </TableRow>
               </TableFooter>
             </Table>
-          </div>
+          </ScrollBox>
 
           {settled && rows.length === 0 && (
             <div className="space-y-3 py-12 text-center text-sm text-muted-foreground">
@@ -321,7 +328,7 @@ function JournalEntriesContent() {
           )}
         </CardContent>
       </Card>
-    </div>
+    </PageFill>
   );
 }
 

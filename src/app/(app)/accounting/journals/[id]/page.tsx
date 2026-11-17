@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { RouteGuard } from "@/components/common";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { usePermission } from "@/hooks";
@@ -44,7 +45,7 @@ function BackButton() {
 
 function NotAvailable() {
   return (
-    <Card>
+    <Card className="shrink-0">
       <CardContent className="space-y-3 py-12 text-center">
         <p className="font-medium">This journal entry isn&apos;t available</p>
         <p className="text-sm text-muted-foreground">
@@ -149,7 +150,7 @@ function JournalContent({ id }: { id: number }) {
 
   if (!entry) {
     return (
-      <div className="space-y-6">
+      <PageFill>
         <AccountingPageHeader
           title="Journal Entry"
           description="One entry in the books, with every line."
@@ -162,7 +163,7 @@ function JournalContent({ id }: { id: number }) {
         ) : answer?.missing ? (
           <NotAvailable />
         ) : (
-          <Card>
+          <Card className="shrink-0">
             <CardContent className="space-y-3 py-12 text-center">
               <p className="text-sm text-destructive">{answer?.error}</p>
               <Button variant="outline" onClick={() => setReload((n) => n + 1)}>
@@ -171,12 +172,12 @@ function JournalContent({ id }: { id: number }) {
             </CardContent>
           </Card>
         )}
-      </div>
+      </PageFill>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       <AccountingPageHeader
         title={journalTitle(entry)}
         description={journalPageDescription(entry)}
@@ -210,24 +211,31 @@ function JournalContent({ id }: { id: number }) {
         }
       />
 
-      {editing ? (
-        <JournalEntryForm
-          initial={draftFromEntry(entry)}
-          onSave={saveDraft}
-          saveLabel="Save changes"
-          cancel={
-            <Button variant="outline" onClick={() => setEditing(false)}>
-              Cancel
-            </Button>
-          }
-        />
-      ) : (
-        <div className={loading ? "opacity-60" : undefined} aria-busy={loading}>
-          <JournalDetails entry={entry} />
-        </div>
-      )}
+      {/*
+        The entry (or the draft's form) and its attachments scroll together
+        under the header. The attachments keep their place in the tree, so
+        switching to Edit doesn't reload them.
+      */}
+      <ScrollBox className="space-y-6 p-px">
+        {editing ? (
+          <JournalEntryForm
+            initial={draftFromEntry(entry)}
+            onSave={saveDraft}
+            saveLabel="Save changes"
+            cancel={
+              <Button variant="outline" onClick={() => setEditing(false)}>
+                Cancel
+              </Button>
+            }
+          />
+        ) : (
+          <div className={loading ? "opacity-60" : undefined} aria-busy={loading}>
+            <JournalDetails entry={entry} />
+          </div>
+        )}
 
-      <AttachmentsPanel owner={{ kind: "journal", id: entry.id, status: entry.status }} />
+        <AttachmentsPanel owner={{ kind: "journal", id: entry.id, status: entry.status }} />
+      </ScrollBox>
 
       <PostJournalDialog
         open={posting}
@@ -243,7 +251,7 @@ function JournalContent({ id }: { id: number }) {
         onConfirm={reverse}
         onRefused={reloadJournal}
       />
-    </div>
+    </PageFill>
   );
 }
 
@@ -257,14 +265,14 @@ export default function JournalEntryPage() {
       {id > 0 ? (
         <JournalContent key={id} id={id} />
       ) : (
-        <div className="space-y-6">
+        <PageFill>
           <AccountingPageHeader
             title="Journal Entry"
             description="One entry in the books, with every line."
             actions={<BackButton />}
           />
           <NotAvailable />
-        </div>
+        </PageFill>
       )}
     </RouteGuard>
   );

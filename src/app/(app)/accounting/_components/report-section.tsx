@@ -42,7 +42,7 @@ export function ReportSection({
 }: ReportSectionProps) {
   return (
     <Card>
-      <CardContent className="pt-6">
+      <CardContent className="pt-6 fit:pt-0">
         <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           {title}
         </h3>
