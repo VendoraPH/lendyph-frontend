@@ -301,7 +301,16 @@ test("a step's check in a noValidate form ignores the browser and uses validateS
   assert.equal(stepCheckFailure({ nativeApplies: false, nativeInvalid: true, result: { a: "A" } }), "custom");
 });
 
-test("dialog layout keeps a steady minimum height from sm, so the footer stays still", () => {
-  assert.match(stepperLayoutClasses("dialog").root, /sm:min-h-\[min\(26rem,60dvh\)\]/);
-  assert.doesNotMatch(stepperLayoutClasses("page").root, /min-h-\[/);
+test("dialog layout has one fixed height from sm, so the footer never moves between steps", () => {
+  const dialog = stepperLayoutClasses("dialog").root;
+  // A fixed height, not a minimum: hidden steps take no room, so a minimum
+  // below the tallest step let the dialog (and its footer) jump.
+  assert.match(dialog, /(^| )sm:h-\[min\(36rem,70dvh\)\]( |$)/);
+  assert.doesNotMatch(dialog, /min-h-\[/);
+  // flex-1's zero basis would ignore the height; from sm the root sizes by
+  // it and can still shrink inside a short screen's dialog.
+  assert.match(dialog, /(^| )sm:flex-initial( |$)/);
+  // Phones keep the content-sized dialog.
+  assert.doesNotMatch(dialog, /(^| )h-\[/);
+  assert.doesNotMatch(stepperLayoutClasses("page").root, /h-\[/);
 });
