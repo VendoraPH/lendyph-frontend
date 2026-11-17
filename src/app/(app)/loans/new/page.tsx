@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef, Suspense, type FormEvent } from "react";
 import { RouteGuard } from "@/components/common";
-import { PageFill, PageLoader } from "@/components/common/page-fill";
+import { PageFill, PageLoader, ScrollBox } from "@/components/common/page-fill";
 import { FIT_CLASSES } from "@/lib/page-fill";
 import { FormStep, FormStepper, type FormStepperHandle } from "@/components/common/form-stepper";
 import { FORM_STEP_GRID, stepErrorsOf, type StepErrors } from "@/lib/form-stepper";
@@ -1006,7 +1006,7 @@ function NewLoanApplicationInner() {
           <FormStep id="member">
               <div className={FORM_STEP_GRID.grid}>
                 {/* Borrower */}
-                <div className="space-y-2" data-field="borrower_id">
+                <div className="flex flex-col gap-2" data-field="borrower_id">
                   <div className="flex h-6 items-center">
                     <Label htmlFor={member.locked ? "loan-member" : undefined}>
                       Member <span className="text-destructive">*</span>
@@ -1038,7 +1038,7 @@ function NewLoanApplicationInner() {
                 </div>
 
                 {/* Co-Makers: the list grows and scrolls with the step */}
-                <div className="space-y-2" data-field="co_maker_ids">
+                <div className="flex flex-col gap-2" data-field="co_maker_ids">
                   <div className="flex h-6 items-center justify-between">
                     <Label>Co-Maker{coMakerIds.length > 1 ? "s" : ""}</Label>
                     <Button
@@ -1088,8 +1088,10 @@ function NewLoanApplicationInner() {
                 </div>
 
                 {/* Account Officer */}
-                <div className="space-y-2" data-field="account_officer_id">
-                  <Label htmlFor="account-officer">Account Officer (AO)</Label>
+                <div className="flex flex-col gap-2" data-field="account_officer_id">
+                  <div className="flex h-6 items-center">
+                    <Label htmlFor="account-officer">Account Officer (AO)</Label>
+                  </div>
                   <StaffPicker
                     id="account-officer"
                     value={accountOfficer}
@@ -1642,10 +1644,10 @@ function NewLoanApplicationInner() {
             </FormStep>
           )}
 
-          {/* ── Step 4: Dates, then Deductions & Net Proceeds ── */}
+          {/* ── Step 4: Deductions & Net Proceeds, with the dates ── */}
           <FormStep id="deductions">
-            <section className="space-y-3" aria-labelledby="loan-dates-title">
-              <h3 id="loan-dates-title" className="text-sm font-semibold">Dates</h3>
+            <div className="space-y-4">
+              {/* The dates and the fees share one widening grid. */}
               <div className={FORM_STEP_GRID.grid}>
                 {/* Release Date */}
                 <div className="space-y-2" data-field="start_date">
@@ -1690,11 +1692,7 @@ function NewLoanApplicationInner() {
                       : "—"}
                   </div>
                 </div>
-              </div>
-            </section>
 
-            <div className="space-y-4" data-field="deductions">
-              <div className={FORM_STEP_GRID.grid}>
                 {/* Processing Fee */}
                 <div className="space-y-2" data-field="deductions.processing_fee">
                   <Label className="flex items-center gap-0.5">
@@ -1800,7 +1798,7 @@ function NewLoanApplicationInner() {
 
               {/* The deductions list beside the server's totals from xl; the
                   list grows and scrolls with the step. */}
-              <div className="grid items-start gap-6 xl:grid-cols-2">
+              <div className="grid items-start gap-6 xl:grid-cols-2" data-field="deductions">
               <div className="space-y-4">
                 {/* Configured fees the release would add for this loan, from the server */}
                 {previewDeductions && previewDeductions.configured_fees.length > 0 && (
@@ -1927,8 +1925,9 @@ function NewLoanApplicationInner() {
           </FormStep>
 
           {/* ── Step 5: Amortization Schedule Preview, the server's ──
-              The schedule scrolls with the step, its header and totals pinned. */}
-          <FormStep id="review">
+              At fit the schedule fills the step and scrolls in its own box,
+              its headings and Total row pinned; below fit the box is capped. */}
+          <FormStep id="review" className="fit:flex fit:h-full fit:flex-col">
               {canShowAmortization && preview.status === "loading" ? (
                 <div
                   role="status"
@@ -1958,12 +1957,13 @@ function NewLoanApplicationInner() {
                   </div>
                 </div>
               ) : canShowAmortization && amortization ? (
-                <div className="space-y-3">
+                <div className="flex flex-col gap-3 fit:min-h-0 fit:flex-1">
                   <p className="text-xs text-muted-foreground">
                     Built with the product&rsquo;s{" "}
                     {interestMethodLabel(amortization.interest_method)} interest
                     method, as the loan&rsquo;s schedule will be at release.
                   </p>
+                  <ScrollBox always className="max-h-[60vh] rounded-md border fit:max-h-none">
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -2020,6 +2020,7 @@ function NewLoanApplicationInner() {
                         </TableRow>
                       </TableFooter>
                     </Table>
+                  </ScrollBox>
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-10 text-center text-muted-foreground">

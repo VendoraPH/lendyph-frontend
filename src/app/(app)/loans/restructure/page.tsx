@@ -1066,7 +1066,7 @@ function RestructureLoanInner() {
                     <div className="space-y-1.5">
                       <Label>
                         Loan Amount
-                        <span className="ml-1 text-xs text-muted-foreground">(restructurable balance)</span>
+                        <span className="ml-1 text-xs leading-none text-muted-foreground">(restructurable balance)</span>
                       </Label>
                       <Input
                         name="principal_amount"
@@ -1165,7 +1165,7 @@ function RestructureLoanInner() {
                         <Label>
                           Share Capital Build-Up
                           {selectedProduct.min_scb != null && selectedProduct.max_scb != null && (
-                            <span className="ml-1 text-xs text-muted-foreground">
+                            <span className="ml-1 text-xs leading-none text-muted-foreground">
                               ({formatCurrency(selectedProduct.min_scb)} – {formatCurrency(selectedProduct.max_scb)})
                             </span>
                           )}
@@ -1568,11 +1568,12 @@ function RestructureLoanInner() {
         </FormStep>
 
         {/* ── Step 5: Remarks & Policy Exception, then the server's schedule ── */}
-        <FormStep id="remarks">
+        <FormStep id="remarks" className="fit:flex fit:h-full fit:flex-col">
           {formVisible && (
-            // The remarks beside the schedule from xl, so the step fits.
-            <div className="grid items-start gap-6 xl:grid-cols-2">
-              <div className="space-y-4">
+            // The remarks beside the schedule from xl, so the step fits. At
+            // fit the schedule takes the step's remaining height.
+            <div className="grid items-start gap-6 xl:grid-cols-2 fit:min-h-0 fit:flex-1 fit:grid-rows-[auto_minmax(0,1fr)] xl:fit:grid-rows-[minmax(0,1fr)]">
+              <div className="space-y-4 xl:fit:max-h-full xl:fit:overflow-y-auto xl:fit:p-px">
                   {shortfallState.showsShortfall && (
                     <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50/50 p-3 text-sm dark:border-amber-700 dark:bg-amber-900/10">
                       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
@@ -1659,14 +1660,14 @@ function RestructureLoanInner() {
               {/* Amortization Preview — the server's schedule for these terms;
                   it scrolls inside its own box, as before. */}
               {amortization && amortization.rows.length > 0 && (
-                <section className="space-y-3" aria-labelledby="restructure-schedule-title">
+                <section className="flex flex-col gap-3 fit:h-full fit:min-h-0" aria-labelledby="restructure-schedule-title">
                   <h3 id="restructure-schedule-title" className="text-sm font-semibold">
                       Amortization Preview
                       <span className="ml-2 text-sm font-normal text-muted-foreground">
                         ({amortization.rows.length} periods)
                       </span>
                   </h3>
-                    <ScrollBox always className="max-h-64 rounded-md border">
+                    <ScrollBox always className="max-h-64 rounded-md border fit:max-h-none">
                       <Table>
                         <TableHeader>
                           <TableRow>
