@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { illustrationSrc, type IllustrationName } from "@/lib/illustrations";
+import { illustrationSrc, ON_WHITE, type IllustrationName } from "@/lib/illustrations";
 import { cn } from "@/lib/utils";
 
 /**
@@ -27,7 +27,13 @@ export function Illustration({ name, className }: { name: IllustrationName; clas
       height={360}
       unoptimized
       draggable={false}
-      className={cn("h-auto max-h-[min(10rem,20dvh)] w-auto max-w-full select-none object-contain", className)}
+      className={cn(
+        "h-auto max-h-[min(10rem,20dvh)] w-auto max-w-full select-none object-contain",
+        // Object pictures sit on plain white; in dark mode a light rounded
+        // tile makes that white read as intended.
+        ON_WHITE.has(name) && "dark:rounded-2xl dark:bg-white dark:p-1.5",
+        className,
+      )}
     />
   );
 }

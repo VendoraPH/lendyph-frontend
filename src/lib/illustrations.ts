@@ -24,26 +24,42 @@ export type IllustrationName = (typeof ILLUSTRATION_NAMES)[number];
 
 export const ILLUSTRATIONS: Readonly<Record<IllustrationName, string | null>> = {
   /** Staff sign-in, the gradient half. */
-  signIn: null,
+  signIn: "/illustrations/sign-in.webp",
   /** Member-portal sign-in, above the card on wide screens. */
-  portalSignIn: null,
+  portalSignIn: "/illustrations/portal-sign-in.webp",
   /** "Nothing yet": a list or report with no rows. */
-  empty: null,
+  empty: "/illustrations/empty.webp",
   /** A search or filter that matched nothing. */
-  noResults: null,
+  noResults: "/illustrations/no-results.webp",
   /** Nothing overdue or waiting. */
-  allCaughtUp: null,
+  allCaughtUp: "/illustrations/all-caught-up.webp",
   /** Something went wrong (DataState error, app error page). */
-  error: null,
+  error: "/illustrations/error.webp",
   /** A module whose backend isn't connected yet. */
-  notConnected: null,
+  notConnected: "/illustrations/not-connected.webp",
   /** AccessDenied. */
-  noAccess: null,
+  noAccess: "/illustrations/no-access.webp",
   /** The app-level not-found page. */
-  notFound: null,
+  notFound: "/illustrations/not-found.webp",
   /** The reports page before a report is picked. */
-  pickReport: null,
+  pickReport: "/illustrations/pick-report.webp",
 };
+
+/**
+ * The slots whose pictures are objects on a plain white background. In dark
+ * mode they sit on a light rounded tile, so the white reads as intended; the
+ * sign-in scenes fill their own space and need no tile.
+ */
+export const ON_WHITE: ReadonlySet<IllustrationName> = new Set<IllustrationName>([
+  "empty",
+  "noResults",
+  "allCaughtUp",
+  "error",
+  "notConnected",
+  "noAccess",
+  "notFound",
+  "pickReport",
+]);
 
 /** The picture for a slot, or null when the slot is empty. */
 export function illustrationSrc(name: IllustrationName): string | null {
