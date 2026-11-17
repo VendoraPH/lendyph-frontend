@@ -40,7 +40,7 @@ import type { CdaReport, CdaReportPart, CdaReportType } from "@/types/cda";
 function Summary({ report, onChange }: { report: CdaReport; onChange: (r: CdaReport) => void }) {
   return (
     <Card>
-      <CardContent className="flex flex-wrap items-center justify-between gap-4 pt-6">
+      <CardContent className="flex flex-wrap items-center justify-between gap-4 pt-6 fit:pt-0">
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <ReportStatusBadge status={report.display_status} />

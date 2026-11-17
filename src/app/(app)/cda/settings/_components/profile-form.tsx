@@ -131,8 +131,8 @@ function ProfileEditor({ profile }: { profile: CdaRegulatoryProfile }) {
 
   return (
     <div className={cn(FIT_CLASSES.section, "gap-4")}>
-      {/* At fit the fields scroll inside the card and Save stays pinned at its foot. */}
-      <StackScroll className="space-y-4">
+      {/* At fit the fields scroll inside the card and Save stays pinned at its foot; dropdowns fill their cell like the other fields. */}
+      <StackScroll className="space-y-4 [&_[data-slot=native-select-wrapper]]:w-full">
         <Pulled profile={profile} />
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           <RecordFields fields={PROFILE_FIELDS} draft={draft} onChange={setDraft} disabled={busy || !editable} />

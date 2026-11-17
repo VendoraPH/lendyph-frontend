@@ -98,7 +98,7 @@ export function TemplatesPanel() {
                           {t.effective_until ? ` to ${formatDate(t.effective_until)}` : " onward"}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">{appliesTo(t)}</TableCell>
-                        <TableCell>
+                        <TableCell className="min-w-40 whitespace-normal">
                           <ToneBadge tone={status.tone} label={status.label} />
                           {t.reason && <p className="mt-1 text-xs text-muted-foreground">{t.reason}</p>}
                         </TableCell>
