@@ -6,6 +6,7 @@ import { PAYOUT_METHOD, labelOf } from "@/lib/portal/labels";
 import type { FormErrors, WithdrawalForm } from "@/lib/portal/request-forms";
 import type { RequestOptions } from "@/lib/portal/types";
 import { plural } from "@/lib/portal/words";
+import { REQUEST_FIELD_FULL, REQUEST_FIELD_GRID } from "./field-grid";
 
 /** A withdrawal: which account, how much (up to the server's withdrawable), and how to receive it. */
 export function WithdrawalFields({
@@ -27,7 +28,7 @@ export function WithdrawalFields({
   }
 
   return (
-    <div className="space-y-4">
+    <div className={REQUEST_FIELD_GRID}>
       <FormField
         id="wd-account"
         label="From account"
@@ -111,7 +112,7 @@ export function WithdrawalFields({
           />
         </FormField>
       )}
-      <p className="text-xs text-muted-foreground">
+      <p className={`${REQUEST_FIELD_FULL} text-xs text-muted-foreground`}>
         The amount is set aside as soon as you send this, for up to {plural(options.hold_days, "day")}, while your branch reviews it. Your branch pays it out.
       </p>
     </div>

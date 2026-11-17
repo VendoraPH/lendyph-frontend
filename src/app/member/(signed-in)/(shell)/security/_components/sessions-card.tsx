@@ -4,6 +4,7 @@ import { useCallback } from "react";
 import { MonitorSmartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { ScrollBox } from "@/components/common/page-fill";
 import { LoadState } from "@/components/portal/load-state";
 import { SectionCard } from "@/components/portal/section-card";
 import { formatDateTime } from "@/lib/format";
@@ -39,6 +40,7 @@ export function SessionsCard() {
   return (
     <SectionCard
       title="Where you're signed in"
+      fill
       action={
         others > 0 ? (
           <Button variant="outline" size="sm" onClick={endOthers} disabled={submitting}>
@@ -49,31 +51,33 @@ export function SessionsCard() {
       }
     >
       <LoadState loading={loading} error={error} onRetry={reload}>
-        <ul className="divide-y">
-          {data?.map((session) => (
-            <li key={session.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
-              <div className="flex min-w-0 items-start gap-2">
-                <MonitorSmartphone className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium break-words">
-                    {session.device}
-                    {session.current && <span className="ml-2 text-xs font-normal text-emerald-700 dark:text-emerald-400">This device</span>}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Last active {formatDateTime(session.last_active_at)}
-                    {session.ip_address ? ` · ${session.ip_address}` : ""}
-                  </p>
+        <ScrollBox className="-mx-1 px-1">
+          <ul className="divide-y">
+            {data?.map((session) => (
+              <li key={session.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+                <div className="flex min-w-0 items-start gap-2">
+                  <MonitorSmartphone className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium break-words">
+                      {session.device}
+                      {session.current && <span className="ml-2 text-xs font-normal text-emerald-700 dark:text-emerald-400">This device</span>}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Last active {formatDateTime(session.last_active_at)}
+                      {session.ip_address ? ` · ${session.ip_address}` : ""}
+                    </p>
+                  </div>
                 </div>
-              </div>
-              {!session.current && (
-                <Button variant="ghost" size="sm" onClick={() => endOne(session.id)} disabled={submitting}>
-                  Sign out
-                  <span className="sr-only"> {session.device}</span>
-                </Button>
-              )}
-            </li>
-          ))}
-        </ul>
+                {!session.current && (
+                  <Button variant="ghost" size="sm" onClick={() => endOne(session.id)} disabled={submitting}>
+                    Sign out
+                    <span className="sr-only"> {session.device}</span>
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </ScrollBox>
       </LoadState>
     </SectionCard>
   );

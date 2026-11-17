@@ -7,12 +7,14 @@ import { plural } from "@/lib/portal/words";
 /**
  * The dashboard's figure cards. Each block is the server's, and a block the
  * cooperative switched off arrives as null and isn't shown. Wording follows
- * round fz: "Outstanding" is everything still owed.
+ * round fz: "Outstanding" is everything still owed. From `lg` the cards share
+ * one row across the full width (wrapping only when there's no room), so the
+ * lists below keep most of the screen.
  */
 export function DashboardCards({ data }: { data: Dashboard }) {
   const { loans, next_payment, savings, time_deposits, share_capital } = data;
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid shrink-0 gap-3 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(13rem,1fr))]">
       {loans && (
         <StatCard
           title="Loans: Outstanding"

@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { LoadState } from "@/components/portal/load-state";
 import { PortalPageHeader } from "@/components/portal/page-header";
 import { SectionCard } from "@/components/portal/section-card";
@@ -23,7 +24,7 @@ export default function ProfilePage() {
   const canRequest = (data?.editable_fields.length ?? 0) > 0;
 
   return (
-    <>
+    <PageFill className="gap-5">
       <PortalPageHeader
         title="Profile"
         description="Some details are partly hidden to keep them safe."
@@ -31,24 +32,26 @@ export default function ProfilePage() {
       />
       <LoadState loading={loading} error={error} onRetry={reload}>
         {data && (
-          <SectionCard title="Your details">
-            <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
-              {data.fields.map((field, index) => (
-                <div key={`${field.key}-${index}`} className="border-b border-dashed pb-2">
-                  <dt className="text-xs text-muted-foreground">{field.label}</dt>
-                  <dd className="flex items-center gap-1.5 text-sm break-words">
-                    {field.value ?? NONE}
-                    {field.masked && field.value && (
-                      <Lock className="h-3 w-3 text-muted-foreground" aria-label="Partly hidden for your security" />
-                    )}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          </SectionCard>
+          <ScrollBox className="p-px">
+            <SectionCard title="Your details">
+              <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {data.fields.map((field, index) => (
+                  <div key={`${field.key}-${index}`} className="border-b border-dashed pb-2">
+                    <dt className="text-xs text-muted-foreground">{field.label}</dt>
+                    <dd className="flex items-center gap-1.5 text-sm break-words">
+                      {field.value ?? NONE}
+                      {field.masked && field.value && (
+                        <Lock className="h-3 w-3 text-muted-foreground" aria-label="Partly hidden for your security" />
+                      )}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </SectionCard>
+          </ScrollBox>
         )}
       </LoadState>
       {canRequest && <NewRequestDialog open={open} onOpenChange={setOpen} initialType="profile_update" />}
-    </>
+    </PageFill>
   );
 }

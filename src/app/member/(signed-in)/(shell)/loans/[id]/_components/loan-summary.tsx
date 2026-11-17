@@ -16,7 +16,7 @@ const date = (value: string | null) => (value ? formatDate(value) : NONE);
 export function LoanSummary({ loan }: { loan: LoanDetail }) {
   const penaltyNote = penaltyMonthsText(loan.penalty_months);
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
       <SectionCard title="What you owe">
         <DetailList
           items={[

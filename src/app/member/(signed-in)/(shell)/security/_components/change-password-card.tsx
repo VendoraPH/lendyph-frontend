@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Spinner } from "@/components/ui/spinner";
+import { ScrollBox } from "@/components/common/page-fill";
 import { PasswordFields } from "@/components/portal/password-fields";
 import { usePasswordRules } from "@/components/portal/portal-config";
 import { SectionCard } from "@/components/portal/section-card";
@@ -45,45 +46,47 @@ export function ChangePasswordCard({ urgent, onChanged }: { urgent: boolean; onC
   };
 
   return (
-    <SectionCard title="Change password">
-      {urgent && (
-        <p role="alert" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-          You reported a sign-in you don&apos;t recognise. Please choose a new password now.
-        </p>
-      )}
-      <form onSubmit={onSubmit} className="grid max-w-xl gap-4" noValidate>
-        <div className="space-y-2">
-          <Label htmlFor="pw-current">Current password</Label>
-          <PasswordInput
-            id="pw-current"
-            autoComplete="current-password"
-            value={current}
-            onChange={(e) => setCurrent(e.target.value)}
-            aria-invalid={!!fieldErrors.current_password}
-            aria-describedby={fieldErrors.current_password ? "pw-current-error" : undefined}
+    <SectionCard title="Change password" fill>
+      <ScrollBox className="-m-1 p-1">
+        {urgent && (
+          <p role="alert" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+            You reported a sign-in you don&apos;t recognise. Please choose a new password now.
+          </p>
+        )}
+        <form onSubmit={onSubmit} className="grid gap-4" noValidate>
+          <div className="space-y-2">
+            <Label htmlFor="pw-current">Current password</Label>
+            <PasswordInput
+              id="pw-current"
+              autoComplete="current-password"
+              value={current}
+              onChange={(e) => setCurrent(e.target.value)}
+              aria-invalid={!!fieldErrors.current_password}
+              aria-describedby={fieldErrors.current_password ? "pw-current-error" : undefined}
+            />
+            {fieldErrors.current_password && (
+              <p id="pw-current-error" className="text-xs text-destructive">
+                {fieldErrors.current_password}
+              </p>
+            )}
+          </div>
+          <PasswordFields
+            idPrefix="pw"
+            password={password}
+            confirmation={confirmation}
+            onPassword={setPassword}
+            onConfirmation={setConfirmation}
+            rules={rules}
+            error={fieldErrors.password}
           />
-          {fieldErrors.current_password && (
-            <p id="pw-current-error" className="text-xs text-destructive">
-              {fieldErrors.current_password}
-            </p>
-          )}
-        </div>
-        <PasswordFields
-          idPrefix="pw"
-          password={password}
-          confirmation={confirmation}
-          onPassword={setPassword}
-          onConfirmation={setConfirmation}
-          rules={rules}
-          error={fieldErrors.password}
-        />
-        <div>
-          <Button type="submit" disabled={submitting}>
-            {submitting && <Spinner className="h-4 w-4" />}
-            Change password
-          </Button>
-        </div>
-      </form>
+          <div>
+            <Button type="submit" disabled={submitting}>
+              {submitting && <Spinner className="h-4 w-4" />}
+              Change password
+            </Button>
+          </div>
+        </form>
+      </ScrollBox>
     </SectionCard>
   );
 }

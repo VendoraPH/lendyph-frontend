@@ -4,6 +4,7 @@ import { FormField, fieldAria } from "@/components/portal/form-field";
 import { CIVIL_STATUS, NONE } from "@/lib/portal/labels";
 import type { FormErrors, ProfileForm } from "@/lib/portal/request-forms";
 import type { RequestOptions } from "@/lib/portal/types";
+import { REQUEST_FIELD_FULL, REQUEST_FIELD_GRID } from "./field-grid";
 
 /** A profile change: only the fields the member fills in are sent; the current values show masked. */
 export function ProfileFields({
@@ -21,8 +22,8 @@ export function ProfileFields({
     return <p className="text-sm text-muted-foreground">Profile changes can&apos;t be requested here right now. Please visit your branch.</p>;
   }
   return (
-    <div className="space-y-4">
-      <p className="text-xs text-muted-foreground">Fill in only what changed. Your branch checks each change before it&apos;s saved.</p>
+    <div className={REQUEST_FIELD_GRID}>
+      <p className={`${REQUEST_FIELD_FULL} text-xs text-muted-foreground`}>Fill in only what changed. Your branch checks each change before it&apos;s saved.</p>
       {options.profile_fields.map((field) => {
         const id = `pf-${field.field}`;
         const value = form[field.field] ?? "";
@@ -51,7 +52,7 @@ export function ProfileFields({
           </FormField>
         );
       })}
-      {errors.form && <p className="text-xs text-destructive">{errors.form}</p>}
+      {errors.form && <p className={`${REQUEST_FIELD_FULL} text-xs text-destructive`}>{errors.form}</p>}
     </div>
   );
 }

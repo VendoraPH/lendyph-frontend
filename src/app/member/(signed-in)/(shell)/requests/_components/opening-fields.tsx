@@ -6,6 +6,7 @@ import { FormField, fieldAria } from "@/components/portal/form-field";
 import { Money } from "@/components/portal/money";
 import type { FormErrors, OpeningForm } from "@/lib/portal/request-forms";
 import type { RequestOptions } from "@/lib/portal/types";
+import { REQUEST_FIELD_FULL, REQUEST_FIELD_GRID } from "./field-grid";
 
 /** A new savings account: the product and the opening deposit the member brings to the branch. */
 export function OpeningFields({
@@ -27,7 +28,7 @@ export function OpeningFields({
   }
 
   return (
-    <div className="space-y-4">
+    <div className={REQUEST_FIELD_GRID}>
       <FormField
         id="op-product"
         label="Savings product"
@@ -60,7 +61,7 @@ export function OpeningFields({
           {...fieldAria("op-deposit", errors.initial_deposit)}
         />
       </FormField>
-      <div className="space-y-1">
+      <div className={`${REQUEST_FIELD_FULL} space-y-1`}>
         <div className="flex items-start gap-3">
           <Checkbox id="op-terms" checked={form.terms_accepted} onCheckedChange={(v) => set({ terms_accepted: v === true })} />
           <Label htmlFor="op-terms" className="leading-snug font-normal">

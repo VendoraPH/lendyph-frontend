@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { LoadState } from "@/components/portal/load-state";
 import { PortalPageHeader } from "@/components/portal/page-header";
 import { Pager } from "@/components/portal/pager";
@@ -15,16 +16,18 @@ export default function PaymentsPage() {
   const { data, loading, error, reload } = usePortalResource(fetcher, "We couldn't load your payments. Please try again.");
 
   return (
-    <>
+    <PageFill className="gap-5">
       <PortalPageHeader title="Payments" description="Payments received on your loans. Pay at your branch as usual." />
-      <LoadState loading={loading} error={error} onRetry={reload} empty={data?.data.length === 0} emptyText="No payments yet.">
+      <LoadState loading={loading} error={error} onRetry={reload} empty={data?.data.length === 0} emptyText="No payments yet." emptyIllustration="empty">
         {data && (
           <>
-            <PaymentsList payments={data.data} showLoan />
+            <ScrollBox className="p-px">
+              <PaymentsList payments={data.data} showLoan />
+            </ScrollBox>
             <Pager meta={data.meta} onPage={setPage} />
           </>
         )}
       </LoadState>
-    </>
+    </PageFill>
   );
 }
