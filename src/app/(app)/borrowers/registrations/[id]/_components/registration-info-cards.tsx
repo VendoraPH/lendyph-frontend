@@ -58,7 +58,7 @@ export function RegistrationInfoCards({ registration: r, editMode, draft, onDraf
           </h3>
           {editMode ? (
             <div className="space-y-3 pt-1">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                 <div className="space-y-1">
                   <Label htmlFor="e_first_name">First Name</Label>
                   <Input id="e_first_name" value={d.first_name ?? ""} onChange={(e) => onDraftChange("first_name", e.target.value)} />
@@ -148,7 +148,7 @@ export function RegistrationInfoCards({ registration: r, editMode, draft, onDraf
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-3 pt-1">
+            <div className="grid grid-cols-2 md:grid-cols-3 2xl:grid-cols-4 gap-x-4 gap-y-3 pt-1">
               <ReadField label="First Name" value={r.first_name} />
               <ReadField label="Middle Name" value={r.middle_name} />
               <ReadField label="Last Name" value={r.last_name} />
@@ -182,7 +182,7 @@ export function RegistrationInfoCards({ registration: r, editMode, draft, onDraf
                 <Label htmlFor="e_address">Street Address</Label>
                 <Input id="e_address" value={d.address ?? ""} onChange={(e) => onDraftChange("address", e.target.value)} />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                 <div className="space-y-1">
                   <Label htmlFor="e_barangay">Barangay</Label>
                   <Input id="e_barangay" value={d.barangay ?? ""} onChange={(e) => onDraftChange("barangay", e.target.value)} />
@@ -198,7 +198,7 @@ export function RegistrationInfoCards({ registration: r, editMode, draft, onDraf
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-3 pt-1">
+            <div className="grid grid-cols-2 md:grid-cols-3 2xl:grid-cols-4 gap-x-4 gap-y-3 pt-1">
               <ReadField label="Contact Number" value={r.contact_number} />
               <ReadField label="Email" value={r.email} />
               <ReadField label="Street Address" value={r.address} />
@@ -216,7 +216,7 @@ export function RegistrationInfoCards({ registration: r, editMode, draft, onDraf
             <h3 className="text-xs font-bold uppercase tracking-widest text-brand-orange mb-3 pb-2 border-b border-brand-orange/20">
               Spouse Information
             </h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-3 pt-1">
+            <div className="grid grid-cols-2 md:grid-cols-3 2xl:grid-cols-4 gap-x-4 gap-y-3 pt-1">
               <ReadField label="First Name" value={r.spouse_first_name} />
               <ReadField label="Middle Name" value={r.spouse_middle_name} />
               <ReadField label="Last Name" value={r.spouse_last_name} />
@@ -233,7 +233,7 @@ export function RegistrationInfoCards({ registration: r, editMode, draft, onDraf
             <h3 className="text-xs font-bold uppercase tracking-widest text-brand-orange mb-3 pb-2 border-b border-brand-orange/20">
               Employment &amp; Membership
             </h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-3 pt-1">
+            <div className="grid grid-cols-2 md:grid-cols-3 2xl:grid-cols-4 gap-x-4 gap-y-3 pt-1">
               <ReadField label="Preferred Branch" value={branchName} />
               <ReadField label="Employer / Business" value={r.employer_or_business} />
               <ReadField

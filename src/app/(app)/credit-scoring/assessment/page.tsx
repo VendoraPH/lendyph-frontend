@@ -28,15 +28,17 @@ function CreditAssessmentContent() {
         takes the application&apos;s details and scores that application.
       </p>
 
-      <div className="max-w-sm shrink-0 space-y-1.5">
-        <Label>Member</Label>
-        <MemberSearchPicker
-          value={member}
-          onChange={setMember}
-          canSearch={canListMembers}
-          placeholder="Select a member"
-          aria-label="Member"
-        />
+      <div className="grid shrink-0 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+        <div className="space-y-1.5">
+          <Label>Member</Label>
+          <MemberSearchPicker
+            value={member}
+            onChange={setMember}
+            canSearch={canListMembers}
+            placeholder="Select a member"
+            aria-label="Member"
+          />
+        </div>
       </div>
 
       {member && (

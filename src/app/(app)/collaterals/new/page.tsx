@@ -9,7 +9,7 @@ import { PageFill } from "@/components/common/page-fill";
 export default function NewCollateralPage() {
   return (
     <RouteGuard permission="collaterals:create" pageName="Collateral Entry">
-      <PageFill className="mx-auto w-full max-w-2xl py-2">
+      <PageFill className="py-2">
         {/* Breadcrumb */}
         <Link
           href="/collaterals"

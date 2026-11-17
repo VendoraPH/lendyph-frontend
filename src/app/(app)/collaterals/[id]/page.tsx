@@ -38,7 +38,7 @@ function EditCollateralContent() {
   }, [id]);
 
   return (
-    <PageFill className="mx-auto w-full max-w-2xl py-2">
+    <PageFill className="py-2">
       {/* Breadcrumb */}
       <Link
         href="/collaterals"

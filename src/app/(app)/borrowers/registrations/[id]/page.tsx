@@ -247,7 +247,7 @@ function RegistrationReviewContent() {
 
   return (
     <>
-      <PageFill className="mx-auto w-full max-w-7xl gap-4">
+      <PageFill className="gap-4">
         {/* Header */}
         <Link
           href="/borrowers"
@@ -316,7 +316,7 @@ function RegistrationReviewContent() {
                       No valid IDs were uploaded with this application.
                     </p>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-4 pt-1">
                       {validIds.map((item) => {
                         const label =
                           item.custom_type_name?.trim() ||

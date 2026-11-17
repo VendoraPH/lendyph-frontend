@@ -307,61 +307,63 @@ export function CollateralForm({ initial, mode }: Props) {
           </div>
         )}
 
-        {/* ── Section: Member ─────────────────────────────────────── */}
-        <div className="space-y-2">
-          <Label htmlFor="collateral-member">
-            Member <span className="text-destructive">*</span>
-          </Label>
-          <MemberSearchPicker
-            id="collateral-member"
-            value={member}
-            onChange={setMember}
-            canSearch={canListMembers}
-            placeholder="Search member…"
-            className="h-10"
-          />
-        </div>
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* ── Section: Member ─────────────────────────────────────── */}
+          <div className="space-y-2">
+            <Label htmlFor="collateral-member">
+              Member <span className="text-destructive">*</span>
+            </Label>
+            <MemberSearchPicker
+              id="collateral-member"
+              value={member}
+              onChange={setMember}
+              canSearch={canListMembers}
+              placeholder="Search member…"
+              className="h-10"
+            />
+          </div>
 
-        {/* ── Section: Type ───────────────────────────────────────── */}
-        <div className="space-y-2">
-          <Label htmlFor="collateral-type">
-            Collateral Type <span className="text-destructive">*</span>
-          </Label>
-          <Select
-            value={typeId ? String(typeId) : ""}
-            onValueChange={(v) => setTypeId(Number(v))}
-          >
-            <SelectTrigger id="collateral-type" className="h-10">
-              {/* Base UI's <Select.Value> renders the raw selected `value`
-                  (the id) by default — pass a children render fn so we
-                  display the human-readable type name instead of "3". */}
-              <SelectValue placeholder="Select a type">
-                {(value) => {
-                  if (!value) return "Select a type";
-                  const t = types.find((x) => String(x.id) === String(value));
-                  return t?.name ?? String(value);
-                }}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {types.map((t) => (
-                <SelectItem key={t.id} value={String(t.id)}>
-                  {t.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {!selectedType && (
-            <p className="text-xs text-muted-foreground">
-              Choose a type to see the relevant fields.
-            </p>
-          )}
+          {/* ── Section: Type ───────────────────────────────────────── */}
+          <div className="space-y-2">
+            <Label htmlFor="collateral-type">
+              Collateral Type <span className="text-destructive">*</span>
+            </Label>
+            <Select
+              value={typeId ? String(typeId) : ""}
+              onValueChange={(v) => setTypeId(Number(v))}
+            >
+              <SelectTrigger id="collateral-type" className="h-10">
+                {/* Base UI's <Select.Value> renders the raw selected `value`
+                    (the id) by default — pass a children render fn so we
+                    display the human-readable type name instead of "3". */}
+                <SelectValue placeholder="Select a type">
+                  {(value) => {
+                    if (!value) return "Select a type";
+                    const t = types.find((x) => String(x.id) === String(value));
+                    return t?.name ?? String(value);
+                  }}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {types.map((t) => (
+                  <SelectItem key={t.id} value={String(t.id)}>
+                    {t.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {!selectedType && (
+              <p className="text-xs text-muted-foreground">
+                Choose a type to see the relevant fields.
+              </p>
+            )}
+          </div>
         </div>
 
         {/* ── Section: Type-specific details ──────────────────────── */}
         {selectedType && (
-          <div className="space-y-6 rounded-lg border border-dashed border-border/70 bg-muted/20 p-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <div className="grid gap-6 rounded-lg border border-dashed border-border/70 bg-muted/20 p-4 md:grid-cols-2">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground md:col-span-2">
               {selectedType.name} details
             </p>
 

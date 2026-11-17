@@ -514,7 +514,7 @@ function EditBorrowerContent() {
   }
 
   return (
-    <PageFill className="mx-auto w-full max-w-3xl">
+    <PageFill>
       {/* Header */}
       <div className="shrink-0">
         <Link
@@ -533,72 +533,125 @@ function EditBorrowerContent() {
 
       <form onSubmit={handleSubmit} className={FIT_CLASSES.section}>
         <ScrollBox className="space-y-6 p-px">
-          {/* Profile Photo */}
-          <Card>
-            <CardContent className="pt-6 space-y-4">
-              <h2 className="text-base font-semibold">Profile Photo</h2>
-              <div className="flex items-center gap-6">
-                <div className="relative">
-                  {photoPreview ? (
-                    <div className="relative h-24 w-24 rounded-full overflow-hidden border-2 border-border">
-                      {/* eslint-disable-next-line @next/next/no-img-element -- signed /api/files photo URL or local data: preview; CLAUDE.md "Images" rule requires plain <img> */}
-                      <img
-                        src={photoPreview}
-                        alt="Profile preview"
-                        className="h-full w-full object-cover"
-                      />
-                      <button
+          <div className="grid gap-6 xl:grid-cols-2">
+            {/* Profile Photo */}
+            <Card>
+              <CardContent className="pt-6 space-y-4">
+                <h2 className="text-base font-semibold">Profile Photo</h2>
+                <div className="flex items-center gap-6">
+                  <div className="relative">
+                    {photoPreview ? (
+                      <div className="relative h-24 w-24 rounded-full overflow-hidden border-2 border-border">
+                        {/* eslint-disable-next-line @next/next/no-img-element -- signed /api/files photo URL or local data: preview; CLAUDE.md "Images" rule requires plain <img> */}
+                        <img
+                          src={photoPreview}
+                          alt="Profile preview"
+                          className="h-full w-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={removePhoto}
+                          className="absolute top-0 right-0 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center hover:bg-destructive/90"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="h-24 w-24 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center">
+                        <Camera className="h-6 w-6 text-muted-foreground/50" />
+                      </div>
+                    )}
+                    <input
+                      ref={photoInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePhotoChange}
+                      className="hidden"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      Upload a profile photo of the member.
+                    </p>
+                    <p className="text-xs text-muted-foreground">JPG, PNG up to 5MB</p>
+                    <div className="flex items-center gap-2 pt-1">
+                      <Button
                         type="button"
-                        onClick={removePhoto}
-                        className="absolute top-0 right-0 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center hover:bg-destructive/90"
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5"
+                        onClick={openCamera}
                       >
-                        <X className="h-3 w-3" />
-                      </button>
+                        <Camera className="h-3.5 w-3.5" />
+                        Camera
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5"
+                        onClick={() => photoInputRef.current?.click()}
+                      >
+                        <ImageIcon className="h-3.5 w-3.5" />
+                        Gallery
+                      </Button>
                     </div>
-                  ) : (
-                    <div className="h-24 w-24 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center">
-                      <Camera className="h-6 w-6 text-muted-foreground/50" />
-                    </div>
-                  )}
-                  <input
-                    ref={photoInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handlePhotoChange}
-                    className="hidden"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">
-                    Upload a profile photo of the member.
-                  </p>
-                  <p className="text-xs text-muted-foreground">JPG, PNG up to 5MB</p>
-                  <div className="flex items-center gap-2 pt-1">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5"
-                      onClick={openCamera}
-                    >
-                      <Camera className="h-3.5 w-3.5" />
-                      Camera
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5"
-                      onClick={() => photoInputRef.current?.click()}
-                    >
-                      <ImageIcon className="h-3.5 w-3.5" />
-                      Gallery
-                    </Button>
                   </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+
+            {/* Branch Assignment */}
+            <Card>
+              <CardContent className="pt-6 space-y-4">
+                <h2 className="text-base font-semibold">Branch Assignment</h2>
+                <p className="text-sm text-muted-foreground">
+                  Currently assigned to:{" "}
+                  <span className="font-medium text-foreground">
+                    {borrower.branch?.name ?? "Not assigned"}
+                    {borrower.branch?.code ? ` (${borrower.branch.code})` : ""}
+                  </span>
+                </p>
+                <div className="space-y-2">
+                  <Label htmlFor="member-branch">
+                    Assigned Branch <span className="text-destructive">*</span>
+                  </Label>
+                  <Select
+                    value={form.branch_id || null}
+                    onValueChange={(v) => update("branch_id", v ?? "")}
+                  >
+                    <SelectTrigger id="member-branch" className="w-full sm:w-2/3">
+                      <SelectValue placeholder="Select branch">
+                        {(value: string | null) => {
+                          if (!value) return "Select branch";
+                          const match = branches.find((b) => String(b.id) === value);
+                          if (match) return `${match.name}${match.code ? ` (${match.code})` : ""}`;
+                          return borrower?.branch?.name ?? value;
+                        }}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {branches.length === 0 && borrower?.branch ? (
+                        <SelectItem value={String(borrower.branch.id)}>
+                          {borrower.branch.name}
+                        </SelectItem>
+                      ) : (
+                        branches.map((b) => (
+                          <SelectItem key={b.id} value={String(b.id)}>
+                            {b.name}
+                            {b.code ? ` (${b.code})` : ""}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Change the branch this member is assigned to.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
           {/* Camera Capture Dialog */}
           <Dialog open={cameraOpen} onOpenChange={handleCameraDialogChange}>
@@ -649,63 +702,11 @@ function EditBorrowerContent() {
             </DialogContent>
           </Dialog>
 
-          {/* Branch Assignment */}
-          <Card>
-            <CardContent className="pt-6 space-y-4">
-              <h2 className="text-base font-semibold">Branch Assignment</h2>
-              <p className="text-sm text-muted-foreground">
-                Currently assigned to:{" "}
-                <span className="font-medium text-foreground">
-                  {borrower.branch?.name ?? "Not assigned"}
-                  {borrower.branch?.code ? ` (${borrower.branch.code})` : ""}
-                </span>
-              </p>
-              <div className="space-y-2">
-                <Label htmlFor="member-branch">
-                  Assigned Branch <span className="text-destructive">*</span>
-                </Label>
-                <Select
-                  value={form.branch_id || null}
-                  onValueChange={(v) => update("branch_id", v ?? "")}
-                >
-                  <SelectTrigger id="member-branch" className="w-full sm:w-2/3">
-                    <SelectValue placeholder="Select branch">
-                      {(value: string | null) => {
-                        if (!value) return "Select branch";
-                        const match = branches.find((b) => String(b.id) === value);
-                        if (match) return `${match.name}${match.code ? ` (${match.code})` : ""}`;
-                        return borrower?.branch?.name ?? value;
-                      }}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {branches.length === 0 && borrower?.branch ? (
-                      <SelectItem value={String(borrower.branch.id)}>
-                        {borrower.branch.name}
-                      </SelectItem>
-                    ) : (
-                      branches.map((b) => (
-                        <SelectItem key={b.id} value={String(b.id)}>
-                          {b.name}
-                          {b.code ? ` (${b.code})` : ""}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Change the branch this member is assigned to.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
           {/* Personal Information */}
           <Card>
             <CardContent className="pt-6 space-y-4">
               <h2 className="text-base font-semibold">Personal Information</h2>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                 <div className="space-y-2">
                   <Label htmlFor="first_name">
                     First Name <span className="text-destructive">*</span>
@@ -728,9 +729,6 @@ function EditBorrowerContent() {
                     onChange={(e) => update("last_name", e.target.value)}
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="middle_name">Middle Name</Label>
                   <Input
@@ -764,9 +762,6 @@ function EditBorrowerContent() {
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="birthdate">
                     Birthdate <span className="text-destructive">*</span>
@@ -798,34 +793,33 @@ function EditBorrowerContent() {
                     </label>
                   </RadioGroup>
                 </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="civil_status">
-                  Civil Status <span className="text-destructive">*</span>
-                </Label>
-                <Select
-                  items={CIVIL_STATUS_OPTIONS}
-                  value={form.civil_status || null}
-                  onValueChange={(v) => update("civil_status", v ?? "")}
-                >
-                  <SelectTrigger id="civil_status" className="w-full sm:w-1/2">
-                    <SelectValue placeholder="Select civil status">
-                      {(value: string | null) =>
-                        value
-                          ? (CIVIL_STATUS_OPTIONS.find((o) => o.value === value)?.label ?? value)
-                          : "Select civil status"
-                      }
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CIVIL_STATUS_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="space-y-2">
+                  <Label htmlFor="civil_status">
+                    Civil Status <span className="text-destructive">*</span>
+                  </Label>
+                  <Select
+                    items={CIVIL_STATUS_OPTIONS}
+                    value={form.civil_status || null}
+                    onValueChange={(v) => update("civil_status", v ?? "")}
+                  >
+                    <SelectTrigger id="civil_status" className="w-full">
+                      <SelectValue placeholder="Select civil status">
+                        {(value: string | null) =>
+                          value
+                            ? (CIVIL_STATUS_OPTIONS.find((o) => o.value === value)?.label ?? value)
+                            : "Select civil status"
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CIVIL_STATUS_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -835,8 +829,7 @@ function EditBorrowerContent() {
             <Card>
               <CardContent className="pt-6 space-y-4">
                 <h2 className="text-base font-semibold">Spouse Information</h2>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                   <div className="space-y-2">
                     <Label htmlFor="spouse_first_name">First Name</Label>
                     <Input
@@ -864,9 +857,6 @@ function EditBorrowerContent() {
                       onChange={(e) => update("spouse_last_name", e.target.value)}
                     />
                   </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="spouse_contact_number">Contact Number</Label>
                     <Input
@@ -895,8 +885,7 @@ function EditBorrowerContent() {
           <Card>
             <CardContent className="pt-6 space-y-4">
               <h2 className="text-base font-semibold">Contact Information</h2>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                 <div className="space-y-2">
                   <Label htmlFor="contact_number">
                     Contact Number <span className="text-destructive">*</span>
@@ -919,21 +908,17 @@ function EditBorrowerContent() {
                     onChange={(e) => update("email", e.target.value)}
                   />
                 </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="address">
-                  Street Address <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="address"
-                  placeholder="House/Lot/Block number, Street name"
-                  value={form.address}
-                  onChange={(e) => update("address", e.target.value)}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2 md:col-span-2 xl:col-span-1 2xl:col-span-2">
+                  <Label htmlFor="address">
+                    Street Address <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="address"
+                    placeholder="House/Lot/Block number, Street name"
+                    value={form.address}
+                    onChange={(e) => update("address", e.target.value)}
+                  />
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="barangay">Barangay</Label>
                   <Input
@@ -954,18 +939,17 @@ function EditBorrowerContent() {
                     onChange={(e) => update("city", e.target.value)}
                   />
                 </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="province">
-                  Province <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="province"
-                  placeholder="Province"
-                  value={form.province}
-                  onChange={(e) => update("province", e.target.value)}
-                />
+                <div className="space-y-2">
+                  <Label htmlFor="province">
+                    Province <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="province"
+                    placeholder="Province"
+                    value={form.province}
+                    onChange={(e) => update("province", e.target.value)}
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -989,7 +973,7 @@ function EditBorrowerContent() {
                   tab.
                 </p>
               ) : (
-                <div className="space-y-4">
+                <div className="grid gap-4 xl:grid-cols-2">
                   {validIds.map((entry, index) => (
                     <div
                       key={index}
@@ -1170,28 +1154,28 @@ function EditBorrowerContent() {
           <Card>
             <CardContent className="pt-6 space-y-4">
               <h2 className="text-base font-semibold">Employment & Income</h2>
-
-              <div className="space-y-2">
-                <Label htmlFor="employer_or_business">Employer / Business Name</Label>
-                <Input
-                  id="employer_or_business"
-                  placeholder="Company or business name"
-                  value={form.employer_or_business}
-                  onChange={(e) => update("employer_or_business", e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="monthly_income">Monthly Income (₱)</Label>
-                <Input
-                  id="monthly_income"
-                  type="number"
-                  min={0}
-                  step={100}
-                  placeholder="0"
-                  value={form.monthly_income}
-                  onChange={(e) => update("monthly_income", e.target.value)}
-                />
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                <div className="space-y-2">
+                  <Label htmlFor="employer_or_business">Employer / Business Name</Label>
+                  <Input
+                    id="employer_or_business"
+                    placeholder="Company or business name"
+                    value={form.employer_or_business}
+                    onChange={(e) => update("employer_or_business", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="monthly_income">Monthly Income (₱)</Label>
+                  <Input
+                    id="monthly_income"
+                    type="number"
+                    min={0}
+                    step={100}
+                    placeholder="0"
+                    value={form.monthly_income}
+                    onChange={(e) => update("monthly_income", e.target.value)}
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>

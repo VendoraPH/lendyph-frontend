@@ -89,7 +89,7 @@ function SettingsBody({
         <CardHeader>
           <CardTitle className="text-base">Policy Figures</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
+        <CardContent className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {POLICY_FIGURES.map((f) => {
             const id = `policy-${f.key}`;
             const errorId = `${id}-error`;
@@ -133,33 +133,35 @@ function SettingsBody({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Confidence Definitions</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {settings.confidence_definitions.map((def) => (
-            <div key={def.level} className="text-sm">
-              <span className="font-medium">{def.label}</span>
-              <p className="text-muted-foreground">{def.description}</p>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Confidence Definitions</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {settings.confidence_definitions.map((def) => (
+              <div key={def.level} className="text-sm">
+                <span className="font-medium">{def.label}</span>
+                <p className="text-muted-foreground">{def.description}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Flag Definitions</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {settings.hard_flag_definitions.map((def) => (
-            <div key={def.type} className="text-sm">
-              <span className="font-medium">{def.label}</span>
-              <p className="text-muted-foreground">{def.description}</p>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Flag Definitions</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {settings.hard_flag_definitions.map((def) => (
+              <div key={def.type} className="text-sm">
+                <span className="font-medium">{def.label}</span>
+                <p className="text-muted-foreground">{def.description}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
