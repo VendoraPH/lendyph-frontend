@@ -143,7 +143,8 @@ export function SeedChartCard({ notBuiltYet, onSeeded }: SeedChartCardProps) {
   return (
     <PermissionGate permission="chart_of_accounts:create">
       <Card className="shrink-0 border-primary/30 bg-primary/5">
-        <CardContent className="space-y-4 pt-6">
+        {/* At fit the explanation and the picker sit side by side, so the accounts below keep the height. */}
+        <CardContent className="space-y-4 pt-6 fit:grid fit:grid-cols-2 fit:items-end fit:gap-x-6 fit:gap-y-2 fit:space-y-0 fit:pt-0">
           <div className="space-y-1">
             <p className="font-medium">Your chart of accounts is not set up</p>
             <p className="max-w-xl text-sm text-muted-foreground">
@@ -152,7 +153,7 @@ export function SeedChartCard({ notBuiltYet, onSeeded }: SeedChartCardProps) {
             </p>
           </div>
           <div className="flex flex-wrap items-end gap-3">
-            <div className="w-full space-y-1.5 md:w-auto md:flex-1">
+            <div className="flex w-full flex-col gap-1.5 md:w-auto md:flex-1">
               <Label htmlFor="seed-chart-template">
                 Which chart fits this organisation?
               </Label>
@@ -185,7 +186,7 @@ export function SeedChartCard({ notBuiltYet, onSeeded }: SeedChartCardProps) {
             </Button>
           </div>
           {templateError && (
-            <p role="alert" className="text-sm text-destructive">
+            <p role="alert" className="text-sm text-destructive fit:col-span-2">
               {templateError}
             </p>
           )}

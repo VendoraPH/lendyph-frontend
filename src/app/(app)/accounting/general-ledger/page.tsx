@@ -151,7 +151,7 @@ function GeneralLedgerContent() {
           onChange={(id) => updateQuery({ accountId: id })}
         />
         <DateFilter label="From" value={from} onChange={(value) => updateQuery({ from: value })} />
-        <div className="space-y-1.5">
+        <div className="flex flex-col gap-1.5">
           <Label htmlFor="ledger-to" className="text-xs text-muted-foreground">
             To
           </Label>
@@ -170,7 +170,7 @@ function GeneralLedgerContent() {
             </p>
           )}
         </div>
-        <div className="space-y-1.5">
+        <div className="flex flex-col gap-1.5">
           <Label className="text-xs text-muted-foreground">Source</Label>
           <Select
             value={source}
@@ -218,7 +218,7 @@ function GeneralLedgerContent() {
         >
           {({ data: rows, meta }) => (
             <Card className={FIT_CLASSES.section}>
-              <CardContent className={cn(FIT_CLASSES.section, "space-y-4 pt-6")}>
+              <CardContent className={cn(FIT_CLASSES.section, "space-y-4 pt-6 fit:pt-0")}>
                 {account && (
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono text-sm text-muted-foreground">

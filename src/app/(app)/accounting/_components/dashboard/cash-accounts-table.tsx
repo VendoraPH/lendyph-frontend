@@ -15,7 +15,7 @@ import { centavosOrDash } from "../../_lib/dashboard-figures";
 export function CashAccountsTable({ accounts }: { accounts: readonly DashboardCashAccount[] | undefined }) {
   return (
     <Card>
-      <CardContent className="pt-6">
+      <CardContent className="pt-6 fit:pt-0">
         {!accounts || accounts.length === 0 ? (
           <p className="py-4 text-center text-sm text-muted-foreground">
             No money accounts in this selection.

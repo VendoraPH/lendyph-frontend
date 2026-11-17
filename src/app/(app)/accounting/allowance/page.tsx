@@ -100,7 +100,7 @@ function AllowanceContent() {
               {(data) => (
                 <div className="space-y-6">
                   <Card>
-                    <CardContent className="space-y-6 pt-6">
+                    <CardContent className="space-y-6 pt-6 fit:pt-0">
                       <AllowanceSummary preview={data} />
                       <PostAllowancePanel
                         preview={data}
@@ -111,7 +111,7 @@ function AllowanceContent() {
                     </CardContent>
                   </Card>
                   {/* Branches side by side on a wide screen. */}
-                  <div className="grid gap-6 xl:grid-cols-2">
+                  <div className="grid grid-cols-[repeat(auto-fit,minmax(min(24rem,100%),1fr))] gap-6">
                     {branchViews(data).map((branch) => (
                       <BranchAllowanceCard key={branch.id} branch={branch} />
                     ))}

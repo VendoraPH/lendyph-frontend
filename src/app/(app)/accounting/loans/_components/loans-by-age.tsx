@@ -101,7 +101,7 @@ export function LoansByAge({ asOf, branchId }: LoansByAgeProps) {
 
   return (
     <Card>
-      <CardContent className="space-y-4 pt-6">
+      <CardContent className="space-y-4 pt-6 fit:pt-0">
         <div>
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Loans past due
@@ -115,7 +115,7 @@ export function LoansByAge({ asOf, branchId }: LoansByAgeProps) {
         </div>
 
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
-          <div className="flex-1 space-y-1.5">
+          <div className="flex flex-1 flex-col gap-1.5">
             <Label htmlFor="loan-accounting-search" className="text-xs text-muted-foreground">
               Search
             </Label>
@@ -135,7 +135,7 @@ export function LoansByAge({ asOf, branchId }: LoansByAgeProps) {
             </div>
           </div>
 
-          <div className="space-y-1.5">
+          <div className="flex flex-col gap-1.5">
             <Label className="text-xs text-muted-foreground">Bucket</Label>
             <Select
               value={bucket}
@@ -155,7 +155,7 @@ export function LoansByAge({ asOf, branchId }: LoansByAgeProps) {
             </Select>
           </div>
 
-          <div className="space-y-1.5">
+          <div className="flex flex-col gap-1.5">
             <Label className="text-xs text-muted-foreground">Show</Label>
             <Select
               value={group}

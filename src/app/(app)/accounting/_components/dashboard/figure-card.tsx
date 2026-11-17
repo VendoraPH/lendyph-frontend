@@ -21,7 +21,7 @@ export function FigureCard({ label, value, icon: Icon, signed, caption, badge }:
   const centavos = centavosOrNull(value);
   return (
     <Card>
-      <CardContent className="space-y-2 pt-6">
+      <CardContent className="space-y-2 pt-6 fit:pt-0">
         <div className="flex items-center gap-2 text-muted-foreground">
           <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
           <span className="text-sm">{label}</span>

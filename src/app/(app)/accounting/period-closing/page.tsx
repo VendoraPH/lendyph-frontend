@@ -126,7 +126,7 @@ function PeriodClosingContent() {
         >
           {({ rows: periods, truncated, total }) => (
             <Card>
-              <CardContent className="space-y-4 pt-6">
+              <CardContent className="space-y-4 pt-6 fit:pt-0">
                 {truncated && (
                   <IncompleteListNotice
                     shown={periods.length}

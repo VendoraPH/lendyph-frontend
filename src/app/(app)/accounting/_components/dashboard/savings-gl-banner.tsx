@@ -19,7 +19,7 @@ export function SavingsGlBannerCard({ data }: { data: AccountingDashboard }) {
 
   return (
     <Card className="shrink-0 border-2 border-amber-500/60" role="alert">
-      <CardContent className="flex flex-wrap items-center gap-3 py-4">
+      <CardContent className="flex flex-wrap items-center gap-3 py-4 fit:py-0">
         <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" aria-hidden="true" />
         <div className="min-w-0 flex-1">
           <p className="font-medium">{banner.message}</p>

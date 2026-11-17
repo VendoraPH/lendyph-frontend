@@ -75,7 +75,7 @@ function TrialBalanceContent() {
                 tb.is_balanced ? "border-emerald-500/30" : "border-destructive/40",
               )}
             >
-              <CardContent className="flex items-center gap-3 py-4">
+              <CardContent className="flex items-center gap-3 py-4 fit:py-0">
                 {tb.is_balanced ? (
                   <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
                 ) : (

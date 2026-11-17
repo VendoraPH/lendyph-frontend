@@ -49,7 +49,7 @@ export function JournalDetails({ entry }: { entry: JournalEntry }) {
   return (
     <div className="space-y-6">
       <Card>
-        <CardContent className="pt-6">
+        <CardContent className="pt-6 fit:pt-0">
           <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Detail label="Date">{formatDate(entry.date)}</Detail>
             <Detail label="Status">
@@ -101,7 +101,7 @@ export function JournalDetails({ entry }: { entry: JournalEntry }) {
       </Card>
 
       <Card>
-        <CardContent className="overflow-x-auto pt-6">
+        <CardContent className="overflow-x-auto pt-6 fit:pt-0">
           <Table>
             <TableHeader>
               <TableRow>

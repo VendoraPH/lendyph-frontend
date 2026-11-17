@@ -211,7 +211,7 @@ function ReconciliationCard({
 
   return (
     <Card className={cn("border-2", clean ? "border-emerald-500/40" : "border-amber-500/50")}>
-      <CardContent className="space-y-4 pt-6">
+      <CardContent className="space-y-4 pt-6 fit:pt-0">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-0.5">
             <Link href={href} className="font-medium underline-offset-2 hover:underline">

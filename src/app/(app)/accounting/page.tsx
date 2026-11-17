@@ -122,7 +122,7 @@ function AccountingDashboardContent() {
       )}
 
       {/* One compact row at the page's foot, so the figures above keep the height. */}
-      <div className="flex shrink-0 flex-wrap items-center gap-2">
+      <div data-fab-clear className="flex shrink-0 flex-wrap items-center gap-2">
         <p className="mr-1 text-sm font-medium text-muted-foreground">Go to</p>
         {SHORTCUTS.map(({ href, label, icon: Icon }) => (
           <Link
@@ -177,7 +177,7 @@ function DashboardBody({
           data.is_balanced ? "border-emerald-500/40" : "border-red-500/60",
         )}
       >
-        <CardContent className="flex flex-wrap items-center gap-3 py-4">
+        <CardContent className="flex flex-wrap items-center gap-3 py-4 fit:py-0">
           {data.is_balanced ? (
             <CheckCircle2 className="h-5 w-5 text-emerald-600" />
           ) : (
@@ -256,9 +256,7 @@ function DashboardBody({
         </TabsContent>
 
         <TabsContent value="trends" className={FIT_CLASSES.section}>
-          <ScrollBox className="p-px">
-            <TrendCharts months={data.months} />
-          </ScrollBox>
+          <TrendCharts months={data.months} />
         </TabsContent>
 
         <TabsContent value="journals" className={FIT_CLASSES.section}>

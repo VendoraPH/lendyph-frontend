@@ -42,7 +42,7 @@ function RangeRefused({ message }: { message: string }) {
 }
 
 /** A statement's tab: at fit it takes the height left, and the statement scrolls inside. */
-const TAB_PANEL = cn("mt-4", FIT_CLASSES.section);
+const TAB_PANEL = cn("mt-2", FIT_CLASSES.section);
 
 /**
  * The four statements, as tabs rather than as four sidebar entries (plus Notes, below).
@@ -77,7 +77,7 @@ export default function FinancialStatementsPage() {
 
   return (
     <RouteGuard permission="accounting:view" pageName="Financial Statements">
-      <PageFill>
+      <PageFill className="gap-4">
         <AccountingPageHeader
           title="Financial Statements"
           description={
@@ -105,7 +105,8 @@ export default function FinancialStatementsPage() {
         </FilterBar>
 
         <Tabs value={tab} onValueChange={(v) => setTab(String(v))} className={FIT_CLASSES.section}>
-          <TabsList className="shrink-0">
+          {/* On a phone the strip scrolls inside itself, never the page. */}
+          <TabsList className="max-w-full shrink-0 justify-start overflow-x-auto">
             <TabsTrigger value="balance-sheet">Balance Sheet</TabsTrigger>
             <TabsTrigger value="income-statement">Income Statement</TabsTrigger>
             <TabsTrigger value="cash-flow">Cash Flow</TabsTrigger>

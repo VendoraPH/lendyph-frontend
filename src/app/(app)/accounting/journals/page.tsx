@@ -157,7 +157,7 @@ function JournalEntriesContent() {
         <DateFilter label="From" value={from} onChange={changeFilter(setFrom)} />
         <DateFilter label="To" value={to} onChange={changeFilter(setTo)} />
         <BranchFilter value={branch} onChange={changeFilter(setBranch)} />
-        <div className="space-y-1.5">
+        <div className="flex flex-col gap-1.5">
           <Label className="text-xs text-muted-foreground">Status</Label>
           <Select
             value={status}
@@ -176,7 +176,7 @@ function JournalEntriesContent() {
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-1.5">
+        <div className="flex flex-col gap-1.5">
           <Label className="text-xs text-muted-foreground">Source</Label>
           <Select
             value={source}
@@ -195,7 +195,7 @@ function JournalEntriesContent() {
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-1.5">
+        <div className="flex flex-col gap-1.5">
           <Label htmlFor="journal-search" className="text-xs text-muted-foreground">
             Search
           </Label>
@@ -211,14 +211,14 @@ function JournalEntriesContent() {
               onChange={(e) => changeFilter(setSearch)(e.target.value)}
               placeholder="Number, reference or description"
               maxLength={100}
-              className="w-[260px] pl-8"
+              className="w-[280px] pl-8"
             />
           </div>
         </div>
       </FilterBar>
 
       <Card className={FIT_CLASSES.section}>
-        <CardContent className={cn(FIT_CLASSES.section, "space-y-4 pt-6")}>
+        <CardContent className={cn(FIT_CLASSES.section, "space-y-4 pt-6 fit:pt-0")}>
           <p className="text-sm text-muted-foreground" aria-live="polite">
             {meta ? journalStatusCounts(meta.stats) : "Loading…"}
           </p>

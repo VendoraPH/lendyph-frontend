@@ -141,7 +141,7 @@ function CashAccounts({ page }: { page: CashAccountPage }) {
             const Icon = account.cash_kind ? KIND_ICON[account.cash_kind] : Wallet;
             return (
               <Card key={account.id}>
-                <CardContent className="space-y-2 pt-6">
+                <CardContent className="space-y-2 pt-6 fit:pt-0">
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Icon className="h-4 w-4" aria-hidden />
                     <span className="text-sm">{account.name}</span>

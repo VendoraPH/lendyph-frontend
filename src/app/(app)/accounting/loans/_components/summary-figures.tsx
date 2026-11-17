@@ -40,6 +40,7 @@ export function BooksFigures({ summary }: { summary: LoanAccountingSummary }) {
             value={figure.value}
             hint={figure.hint}
             tone={figure.needsReview ? "warning" : "default"}
+            evenLabels
             badge={
               figure.needsReview ? (
                 <Badge variant="outline" className="border-amber-300 text-amber-700">
@@ -94,7 +95,7 @@ export function BooksVsRecords({ summary }: { summary: LoanAccountingSummary }) 
   const Icon = STATUS_ICONS[view.status];
   return (
     <Card>
-      <CardContent className="space-y-4 pt-6">
+      <CardContent className="space-y-4 pt-6 fit:pt-0">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <SectionHeading
             title="Books against loan records"

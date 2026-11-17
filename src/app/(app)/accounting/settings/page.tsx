@@ -79,7 +79,7 @@ function AccountingSettingsContent() {
           <ScrollBox className="space-y-4 p-px">
             {GROUPS.map((group) => (
               <Card key={group.title}>
-                <CardContent className="space-y-4 pt-6">
+                <CardContent className="space-y-4 pt-6 fit:pt-0">
                   <div>
                     <h2 className="text-sm font-semibold">{group.title}</h2>
                     <p className="text-sm text-muted-foreground">

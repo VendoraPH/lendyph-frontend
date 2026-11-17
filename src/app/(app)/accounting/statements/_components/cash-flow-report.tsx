@@ -45,16 +45,20 @@ export function CashFlowReport({ from, to, branchId }: CashFlowReportProps) {
       {(report) => (
         <FillSection className="gap-4">
           <Card className="shrink-0 border-2">
-            <CardContent className="grid gap-4 py-4 sm:grid-cols-3">
+            {/* At fit the three figures and the period sit on one line, so the statement keeps the height. */}
+            <CardContent className="grid gap-4 py-4 sm:grid-cols-3 fit:flex fit:flex-wrap fit:items-baseline fit:gap-x-8 fit:gap-y-1 fit:py-0">
               <Line label="Cash at start" value={report.opening_cash} />
               <Line label="Net change" value={report.net_change} />
               <Line label="Cash at end" value={report.closing_cash} strong />
+              <p className="text-sm text-muted-foreground sm:col-span-3 fit:ml-auto">
+                {formatDate(report.from)} to {formatDate(report.to)}
+              </p>
             </CardContent>
           </Card>
 
           {report.is_reconciled === false && (
             <Card role="alert" className="shrink-0 border-2 border-amber-500/60">
-              <CardContent className="flex items-center gap-3 py-4">
+              <CardContent className="flex items-center gap-3 py-4 fit:py-0">
                 <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" aria-hidden />
                 <div className="flex-1">
                   <p className="font-medium">
@@ -71,10 +75,7 @@ export function CashFlowReport({ from, to, branchId }: CashFlowReportProps) {
             </Card>
           )}
 
-          <ExpandableCard
-            title="Cash Flow"
-            description={`${formatDate(report.from)} to ${formatDate(report.to)}`}
-          >
+          <ExpandableCard title="Cash Flow">
             <ScrollBox className="space-y-4 p-px">
             <ReportSection
               title="Operating activities"
@@ -125,7 +126,7 @@ function Line({
   strong?: boolean;
 }) {
   return (
-    <div className="space-y-1">
+    <div className="space-y-1 fit:flex fit:items-baseline fit:gap-2 fit:space-y-0">
       <p className="text-sm text-muted-foreground">{label}</p>
       <Amount value={value} className={strong ? "text-lg font-semibold" : "text-lg"} />
     </div>

@@ -101,7 +101,7 @@ export function JournalEntryForm({ initial, onSave, saveLabel, cancel }: Journal
   // at the foot. Inside another scroll box it is a plain stack.
   return (
     <div className={cn(FIT_CLASSES.section, "gap-4")}>
-      <ScrollBox className="space-y-6 p-px">
+      <ScrollBox className="space-y-6 p-px fit:space-y-4">
         {/*
           A picker missing rows reads as "that account does not exist", and an
           account the chart drain never reached cannot be posted to at all.
@@ -127,7 +127,7 @@ export function JournalEntryForm({ initial, onSave, saveLabel, cancel }: Journal
         )}
 
         <Card>
-          <CardContent className="grid gap-4 pt-6 sm:grid-cols-3">
+          <CardContent className="grid gap-4 pt-6 fit:pt-0 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label htmlFor="journal-date">Date</Label>
               <Input
@@ -181,7 +181,7 @@ export function JournalEntryForm({ initial, onSave, saveLabel, cancel }: Journal
         </Card>
 
         <Card>
-          <CardContent className="space-y-4 pt-6">
+          <CardContent className="space-y-4 pt-6 fit:pt-0">
             <JournalLineRows
               lines={draft.lines}
               accounts={postable}
@@ -198,10 +198,16 @@ export function JournalEntryForm({ initial, onSave, saveLabel, cancel }: Journal
         </Card>
       </ScrollBox>
 
-      <div data-fab-clear className="flex shrink-0 flex-col gap-4 border-t pt-4">
-        <JournalBalancePanel preview={preview} failed={failed} onRetry={retry} />
+      {/* At fit the totals and the buttons share one row, so the lines keep the height. */}
+      <div
+        data-fab-clear
+        className="flex shrink-0 flex-col gap-4 border-t pt-4 fit:flex-row fit:items-center fit:gap-6"
+      >
+        <div className="min-w-0 fit:flex-1">
+          <JournalBalancePanel preview={preview} failed={failed} onRetry={retry} />
+        </div>
 
-        <div className="flex justify-end gap-2">
+        <div className="flex shrink-0 justify-end gap-2">
           {cancel}
           {saving ? (
             <Button disabled>Saving…</Button>

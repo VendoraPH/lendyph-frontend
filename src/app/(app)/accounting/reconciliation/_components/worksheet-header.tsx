@@ -13,7 +13,7 @@ export function WorksheetHeader({ reconciliation }: { reconciliation: Reconcilia
 
   return (
     <Card className={cn("shrink-0 border-2", reconciled ? "border-emerald-500/40" : "border-amber-500/50")}>
-      <CardContent className="space-y-4 pt-6">
+      <CardContent className="space-y-4 pt-6 fit:pt-0">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-0.5">
             <p className="font-medium">{accountLabel(reconciliation)}</p>

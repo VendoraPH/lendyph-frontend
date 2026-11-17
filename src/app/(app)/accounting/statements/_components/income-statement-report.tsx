@@ -56,7 +56,7 @@ function Statement({ statement }: { statement: IncomeStatement }) {
   return (
     <FillSection className="gap-4">
       <Card className="shrink-0 border-2">
-        <CardContent className="flex items-center justify-between gap-3 py-4">
+        <CardContent className="flex items-center justify-between gap-3 py-4 fit:py-0">
           <div>
             <p className="font-medium">{loss ? "Net loss" : "Net income"}</p>
             <p className="text-sm text-muted-foreground">

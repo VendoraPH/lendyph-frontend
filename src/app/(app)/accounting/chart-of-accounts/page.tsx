@@ -63,7 +63,7 @@ function ChartOfAccountsContent() {
   };
 
   return (
-    <PageFill>
+    <PageFill className="gap-4">
       <AccountingPageHeader
         title="Chart of Accounts"
         description="The account tree every journal entry posts into."
@@ -101,7 +101,7 @@ function ChartOfAccountsContent() {
           )}
 
           <Card className={FIT_CLASSES.section}>
-            <CardContent className={cn(FIT_CLASSES.section, "space-y-4 pt-6")}>
+            <CardContent className={cn(FIT_CLASSES.section, "space-y-4 pt-6 fit:pt-0")}>
               {isTemplate && (
                 <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
                   <span className="font-medium">Lending company template.</span>{" "}

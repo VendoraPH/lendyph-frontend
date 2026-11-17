@@ -62,7 +62,7 @@ function Sheet({ sheet }: { sheet: BalanceSheet }) {
           sheet.is_balanced ? "border-emerald-500/40" : "border-red-500/60",
         )}
       >
-        <CardContent className="flex items-center gap-3 py-4">
+        <CardContent className="flex items-center gap-3 py-4 fit:py-0">
           {sheet.is_balanced ? (
             <CheckCircle2 className="h-5 w-5 text-emerald-600" aria-hidden />
           ) : (

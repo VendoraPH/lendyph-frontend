@@ -138,7 +138,7 @@ export default function AccountingBooksPage() {
         </FilterBar>
 
         <Tabs value={tab} onValueChange={(v) => setTab(String(v))} className={FIT_CLASSES.section}>
-          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 shrink-0 flex-wrap items-center justify-between gap-2">
             <TabsList className="max-w-full justify-start overflow-x-auto">
               {BOOKS.map((book) => (
                 <TabsTrigger key={book.kind} value={book.kind}>

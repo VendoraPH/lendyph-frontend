@@ -136,7 +136,7 @@ function ExpensesContent() {
       />
 
       <FilterBar>
-        <div className="space-y-1.5">
+        <div className="flex flex-col gap-1.5">
           <Label htmlFor="expense-search" className="text-xs text-muted-foreground">
             Search
           </Label>
@@ -153,7 +153,7 @@ function ExpensesContent() {
             />
           </div>
         </div>
-        <div className="space-y-1.5">
+        <div className="flex flex-col gap-1.5">
           <Label className="text-xs text-muted-foreground">Status</Label>
           <Select
             value={status}
@@ -208,7 +208,7 @@ function ExpensesContent() {
 
               <Card aria-busy={loading} className={FIT_CLASSES.section}>
                 <CardContent
-                  className={cn(FIT_CLASSES.section, "pt-6 transition-opacity", loading && "opacity-60")}
+                  className={cn(FIT_CLASSES.section, "pt-6 transition-opacity fit:pt-0", loading && "opacity-60")}
                 >
                   {rows.length === 0 ? (
                     <EmptyExpenses filtered={filtered} />

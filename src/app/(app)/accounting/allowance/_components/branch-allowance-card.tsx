@@ -28,7 +28,7 @@ export function BranchAllowanceCard({ branch }: { branch: BranchView }) {
 
   return (
     <Card>
-      <CardContent className="space-y-4 pt-6">
+      <CardContent className="space-y-4 pt-6 fit:pt-0">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-semibold">{branch.name}</h2>
           <Badge

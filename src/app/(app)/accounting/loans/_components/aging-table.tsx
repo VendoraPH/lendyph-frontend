@@ -23,7 +23,7 @@ import {
 export function AgingTable({ aging }: { aging: Aging }) {
   return (
     <Card>
-      <CardContent className="space-y-4 pt-6">
+      <CardContent className="space-y-4 pt-6 fit:pt-0">
         <div>
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Receivable aging
