@@ -34,7 +34,9 @@ function Art({ name, icon }: { name: IllustrationName; icon: ReactNode }) {
 
 function Panel({ children }: { children: ReactNode }) {
   return (
-    <Card>
+    // `shrink-0`: in a page that fits the screen, a status card under tall
+    // fixed parts keeps its own height instead of shrinking and clipping.
+    <Card className="shrink-0">
       <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
         {children}
       </CardContent>
