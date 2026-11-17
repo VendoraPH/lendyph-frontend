@@ -27,7 +27,8 @@ export default function MemberDashboardPage() {
         From `lg` the greeting is a compact welcome area: the greeting on the
         left, the picture on the right at about 112 px, so the home still fits
         at 1366x768. At `md` the picture keeps the row's height; phones skip it.
-        The picture's white background sits on the card's white, with no tile.
+        It sits on the same rounded white tile as every picture: invisible on the
+        white card in light mode, a neat rounded panel in dark mode.
       */}
       <div className="flex shrink-0 items-center justify-between gap-4 lg:rounded-xl lg:border lg:bg-card lg:py-2 lg:pl-6 lg:pr-4">
         <div className="min-w-0 flex-1">
@@ -45,7 +46,7 @@ export default function MemberDashboardPage() {
         </div>
         <Illustration
           name="portalWelcome"
-          className="hidden aspect-video h-14 max-h-14 shrink-0 rounded-xl bg-transparent p-0 md:block lg:h-28 lg:max-h-28"
+          className="hidden aspect-video h-14 max-h-14 shrink-0 md:block lg:h-28 lg:max-h-28"
         />
       </div>
       <LoadState loading={loading} error={error} onRetry={reload}>
