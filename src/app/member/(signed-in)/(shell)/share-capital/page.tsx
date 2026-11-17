@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
+import { PageFill } from "@/components/common/page-fill";
 import { DetailList } from "@/components/portal/detail-list";
 import { LoadState } from "@/components/portal/load-state";
 import { Money } from "@/components/portal/money";
@@ -15,16 +16,20 @@ import { usePortalSession } from "@/lib/portal/portal-session";
 import { ShareCapitalDocuments } from "./_components/share-capital-documents";
 import { ShareCapitalHistory } from "./_components/share-capital-history";
 
-/** Share capital: the paid-up figure, the pledge, the entries with the server's running balance, and the PDFs. */
+/**
+ * Share capital: the paid-up figure, the pledge, the entries with the
+ * server's running balance, and the PDFs. The figures and the PDFs sit side by
+ * side; at the `fit:` size the history takes the rest and scrolls in its card.
+ */
 export default function ShareCapitalPage() {
   const features = usePortalSession((s) => s.features);
   const fetcher = useCallback(() => portalService.shareCapital(), []);
   const { data, loading, error, reload } = usePortalResource(fetcher, "We couldn't load your share capital. Please try again.");
 
   return (
-    <>
+    <PageFill className="gap-5">
       <PortalPageHeader title="Share Capital" />
-      <div className="space-y-4">
+      <div className="grid shrink-0 gap-4 lg:grid-cols-[repeat(auto-fit,minmax(20rem,1fr))]">
         <LoadState loading={loading} error={error} onRetry={reload}>
           {data && (
             <SectionCard title="Your share capital">
@@ -50,8 +55,8 @@ export default function ShareCapitalPage() {
           )}
         </LoadState>
         {featureOn(features, "statements") && <ShareCapitalDocuments />}
-        <ShareCapitalHistory />
       </div>
-    </>
+      <ShareCapitalHistory />
+    </PageFill>
   );
 }

@@ -4,6 +4,7 @@ import { useCallback } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { DetailList } from "@/components/portal/detail-list";
 import { DownloadButton } from "@/components/portal/download-button";
 import { LoadState } from "@/components/portal/load-state";
@@ -28,8 +29,11 @@ export default function TimeDepositPage() {
   const { data, loading, error, reload } = usePortalResource(fetcher, "We couldn't load this time deposit. Please try again.");
 
   return (
-    <>
-      <Link href="/member/savings#time-deposits" className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+    <PageFill className="gap-4">
+      <Link
+        href="/member/savings#time-deposits"
+        className="inline-flex shrink-0 items-center gap-1 self-start text-sm text-muted-foreground hover:text-foreground"
+      >
         <ChevronLeft className="h-4 w-4" aria-hidden />
         Savings
       </Link>
@@ -52,27 +56,30 @@ export default function TimeDepositPage() {
                 ) : undefined
               }
             />
-            <SectionCard title="Placement">
-              <DetailList
-                items={[
-                  { label: "Amount placed", value: <Money value={data.principal} />, strong: true },
-                  { label: "Amount at maturity", value: <Money value={data.maturity_amount} />, strong: true },
-                  { label: "Interest rate", value: `${rateText(data.annual_rate)} a year` },
-                  { label: "Term", value: plural(data.term_days, "day") },
-                  { label: "Placed on", value: formatDate(data.placement_date) },
-                  { label: "Matures on", value: formatDate(data.maturity_date) },
-                  { label: "Days left", value: data.days_remaining === null ? NONE : plural(data.days_remaining, "day") },
-                  { label: "Gross interest", value: <Money value={data.gross_interest} /> },
-                  { label: "Withholding tax", value: <Money value={data.withholding_tax} /> },
-                  { label: "Net interest", value: <Money value={data.net_interest} /> },
-                  { label: "At maturity", value: labelOf(MATURITY_INSTRUCTION, data.maturity_instruction) },
-                ]}
-              />
-              {data.maturing_soon && <p className="mt-3 text-sm text-amber-800 dark:text-amber-300">This time deposit matures within 30 days.</p>}
-            </SectionCard>
+            <ScrollBox className="p-px">
+              <SectionCard title="Placement">
+                <DetailList
+                  className="lg:grid-cols-3 xl:grid-cols-4"
+                  items={[
+                    { label: "Amount placed", value: <Money value={data.principal} />, strong: true },
+                    { label: "Amount at maturity", value: <Money value={data.maturity_amount} />, strong: true },
+                    { label: "Interest rate", value: `${rateText(data.annual_rate)} a year` },
+                    { label: "Term", value: plural(data.term_days, "day") },
+                    { label: "Placed on", value: formatDate(data.placement_date) },
+                    { label: "Matures on", value: formatDate(data.maturity_date) },
+                    { label: "Days left", value: data.days_remaining === null ? NONE : plural(data.days_remaining, "day") },
+                    { label: "Gross interest", value: <Money value={data.gross_interest} /> },
+                    { label: "Withholding tax", value: <Money value={data.withholding_tax} /> },
+                    { label: "Net interest", value: <Money value={data.net_interest} /> },
+                    { label: "At maturity", value: labelOf(MATURITY_INSTRUCTION, data.maturity_instruction) },
+                  ]}
+                />
+                {data.maturing_soon && <p className="mt-3 text-sm text-amber-800 dark:text-amber-300">This time deposit matures within 30 days.</p>}
+              </SectionCard>
+            </ScrollBox>
           </>
         )}
       </LoadState>
-    </>
+    </PageFill>
   );
 }

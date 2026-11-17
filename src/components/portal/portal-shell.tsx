@@ -50,6 +50,11 @@ const ICONS: Record<PortalNavIcon, LucideIcon> = {
  * The signed-in member frame (carried over from #511 by Augustin): a top bar,
  * and on a phone a bottom tab bar with four tabs and "More". From `lg` up the
  * pages sit in the top bar. Works at 390 px.
+ *
+ * Like the staff shell, the frame is the window's height (`h-dvh`): the top
+ * bar stays put and only `<main>` scrolls, so a page built with `PageFill`
+ * fits the screen at the `fit:` size and keeps its own long parts scrolling
+ * inside their boxes. Pages span the full width.
  */
 export function PortalShell({ member, children }: { member: PortalMember; children: React.ReactNode }) {
   const pathname = usePathname();
@@ -70,15 +75,15 @@ export function PortalShell({ member, children }: { member: PortalMember; childr
   };
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex h-dvh flex-col overflow-hidden">
       <a
         href="#member-main"
         className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2"
       >
         Skip to content
       </a>
-      <header className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4">
+      <header className="z-20 shrink-0 border-b bg-background/95 backdrop-blur">
+        <div className="flex h-14 items-center gap-3 px-4 lg:px-6">
           <Link href="/member" className="flex min-w-0 items-center gap-2">
             <PortalLogo />
             <span className="hidden truncate text-sm font-semibold sm:inline">{name}</span>
@@ -112,7 +117,7 @@ export function PortalShell({ member, children }: { member: PortalMember; childr
         </div>
       </header>
 
-      <main id="member-main" className="mx-auto w-full max-w-6xl flex-1 px-4 pt-6 pb-24 lg:pb-10">
+      <main id="member-main" className="min-h-0 w-full flex-1 overflow-y-auto px-4 pt-6 pb-24 lg:px-6 lg:pb-6">
         {children}
       </main>
 

@@ -43,12 +43,13 @@ interface NewRequestDialogProps {
 /**
  * A new request (carried over from #513 by Augustin, cut to the three v1
  * types). The choices come from `/portal/requests/options`; the form opens
- * fresh each time.
+ * fresh each time. The dialog is wide so each type's fields sit side by side
+ * (`REQUEST_FIELD_GRID`) and the whole form fits on a laptop screen.
  */
 export function NewRequestDialog({ open, onOpenChange, initialType }: NewRequestDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="md" className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
+      <DialogContent size="xl" className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>New request</DialogTitle>
           <DialogDescription>Your branch reviews every request. Nothing changes until they decide.</DialogDescription>
@@ -103,7 +104,7 @@ function RequestFormBody({ options, initialType, onDone }: { options: RequestOpt
   };
 
   return (
-    <form onSubmit={onSubmit} className="space-y-5" noValidate>
+    <form onSubmit={onSubmit} className="@container space-y-5" noValidate>
       {types.length > 1 && (
         <fieldset className="space-y-2">
           <legend className="mb-2 text-sm font-medium">What do you need?</legend>

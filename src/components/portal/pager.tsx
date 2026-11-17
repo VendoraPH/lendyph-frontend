@@ -8,7 +8,7 @@ import type { PageMeta } from "@/lib/portal/types";
 export function Pager({ meta, onPage }: { meta: PageMeta | null | undefined; onPage: (page: number) => void }) {
   if (!meta || meta.last_page <= 1) return null;
   return (
-    <nav aria-label="Pages" className="mt-4 flex items-center justify-between gap-2">
+    <nav aria-label="Pages" className="mt-4 flex shrink-0 items-center justify-between gap-2">
       <Button variant="outline" size="sm" disabled={meta.current_page <= 1} onClick={() => onPage(meta.current_page - 1)}>
         <ChevronLeft className="h-4 w-4" aria-hidden />
         Previous

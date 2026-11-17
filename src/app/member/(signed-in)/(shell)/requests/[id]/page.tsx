@@ -4,6 +4,7 @@ import { useCallback } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { LoadState } from "@/components/portal/load-state";
 import { PortalPageHeader } from "@/components/portal/page-header";
 import { SectionCard } from "@/components/portal/section-card";
@@ -23,8 +24,8 @@ export default function RequestPage() {
   const { data, loading, error, reload } = usePortalResource(fetcher, "We couldn't load this request. Please try again.");
 
   return (
-    <>
-      <Link href="/member/requests" className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+    <PageFill className="gap-4">
+      <Link href="/member/requests" className="inline-flex shrink-0 items-center gap-1 self-start text-sm text-muted-foreground hover:text-foreground">
         <ChevronLeft className="h-4 w-4" aria-hidden />
         Requests
       </Link>
@@ -40,22 +41,24 @@ export default function RequestPage() {
                 </span>
               }
             />
-            <div className="grid gap-4 lg:grid-cols-2">
-              <SectionCard title="What you asked for">
-                <RequestDetails request={data} />
-              </SectionCard>
-              <SectionCard title="Timeline">
-                <RequestTimeline events={data.timeline} />
-              </SectionCard>
-              {(data.can_cancel || data.can_reply) && (
-                <div className="lg:col-span-2">
-                  <RequestActions request={data} onChanged={reload} />
-                </div>
-              )}
-            </div>
+            <ScrollBox className="p-px">
+              <div className="grid gap-4 lg:grid-cols-2">
+                <SectionCard title="What you asked for">
+                  <RequestDetails request={data} />
+                </SectionCard>
+                <SectionCard title="Timeline">
+                  <RequestTimeline events={data.timeline} />
+                </SectionCard>
+                {(data.can_cancel || data.can_reply) && (
+                  <div className="lg:col-span-2">
+                    <RequestActions request={data} onChanged={reload} />
+                  </div>
+                )}
+              </div>
+            </ScrollBox>
           </>
         )}
       </LoadState>
-    </>
+    </PageFill>
   );
 }

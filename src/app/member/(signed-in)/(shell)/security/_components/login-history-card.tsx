@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
+import { ScrollBox } from "@/components/common/page-fill";
 import { LoadState } from "@/components/portal/load-state";
 import { SectionCard } from "@/components/portal/section-card";
 import { StatusPill } from "@/components/portal/status-pill";
@@ -47,30 +48,32 @@ export function LoginHistoryCard({ onReported }: { onReported: () => void }) {
   };
 
   return (
-    <SectionCard title="Recent sign-ins">
+    <SectionCard title="Recent sign-ins" fill>
       <LoadState loading={loading} error={error} onRetry={reload} empty={data?.length === 0} emptyText="No sign-ins yet.">
-        <ul className="divide-y">
-          {data?.map((event) => (
-            <li key={event.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
-              <div className="min-w-0">
-                <p className="flex flex-wrap items-center gap-2 text-sm">
-                  <StatusPill value={event.outcome} labels={LOGIN_OUTCOME} tones={LOGIN_OUTCOME_TONE} />
-                  <span className="break-words">{event.device ?? NONE}</span>
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {formatDateTime(event.created_at)}
-                  {event.ip_address ? ` · ${event.ip_address}` : ""}
-                  {event.reported_at ? " · Reported" : ""}
-                </p>
-              </div>
-              {!event.reported_at && (
-                <Button variant="ghost" size="sm" onClick={() => setReporting(event)}>
-                  This wasn&apos;t me
-                </Button>
-              )}
-            </li>
-          ))}
-        </ul>
+        <ScrollBox className="-mx-1 px-1">
+          <ul className="divide-y">
+            {data?.map((event) => (
+              <li key={event.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+                <div className="min-w-0">
+                  <p className="flex flex-wrap items-center gap-2 text-sm">
+                    <StatusPill value={event.outcome} labels={LOGIN_OUTCOME} tones={LOGIN_OUTCOME_TONE} />
+                    <span className="break-words">{event.device ?? NONE}</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatDateTime(event.created_at)}
+                    {event.ip_address ? ` · ${event.ip_address}` : ""}
+                    {event.reported_at ? " · Reported" : ""}
+                  </p>
+                </div>
+                {!event.reported_at && (
+                  <Button variant="ghost" size="sm" onClick={() => setReporting(event)}>
+                    This wasn&apos;t me
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </ScrollBox>
       </LoadState>
       <Dialog open={reporting !== null} onOpenChange={(open) => !open && !submitting && setReporting(null)}>
         <DialogContent>

@@ -18,12 +18,12 @@ export function TimeDepositsList() {
   const { data, loading, error, reload } = usePortalResource(fetcher, "We couldn't load your time deposits. Please try again.");
 
   return (
-    <section aria-labelledby="time-deposits-heading" id="time-deposits" className="scroll-mt-20">
+    <section aria-labelledby="time-deposits-heading" id="time-deposits" className="scroll-mt-4">
       <h2 id="time-deposits-heading" className="mb-3 text-base font-semibold">
         Time deposits
       </h2>
       <LoadState loading={loading} error={error} onRetry={reload} empty={data?.length === 0} emptyText="You have no time deposits.">
-        <ul className="grid gap-3 md:grid-cols-2">
+        <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {data?.map((td) => (
             <li key={td.id}>
               <Card size="sm">

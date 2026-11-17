@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 import { AlertCircle, Inbox, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Illustration, hasIllustration } from "@/components/common/illustration";
+import type { IllustrationName } from "@/lib/illustrations";
 
 interface LoadStateProps {
   loading: boolean;
@@ -12,11 +14,17 @@ interface LoadStateProps {
   /** True when the answer came back with nothing in it. */
   empty?: boolean;
   emptyText?: string;
+  /**
+   * A picture for an empty page (its whole content), in place of the icon:
+   * `noResults` when a filter is on, `allCaughtUp` for "nothing waiting".
+   * Sections inside a page keep the icon.
+   */
+  emptyIllustration?: IllustrationName;
   children: ReactNode;
 }
 
 /** Loading, refused, empty or the content: the four states of every member read. */
-export function LoadState({ loading, error, onRetry, empty, emptyText = "Nothing to show yet.", children }: LoadStateProps) {
+export function LoadState({ loading, error, onRetry, empty, emptyText = "Nothing to show yet.", emptyIllustration, children }: LoadStateProps) {
   if (loading) {
     return (
       <div className="space-y-3" role="status" aria-live="polite">
@@ -43,7 +51,11 @@ export function LoadState({ loading, error, onRetry, empty, emptyText = "Nothing
   if (empty) {
     return (
       <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed px-4 py-10 text-center text-muted-foreground">
-        <Inbox className="h-6 w-6" aria-hidden />
+        {emptyIllustration && hasIllustration(emptyIllustration) ? (
+          <Illustration name={emptyIllustration} />
+        ) : (
+          <Inbox className="h-6 w-6" aria-hidden />
+        )}
         <p className="text-sm">{emptyText}</p>
       </div>
     );

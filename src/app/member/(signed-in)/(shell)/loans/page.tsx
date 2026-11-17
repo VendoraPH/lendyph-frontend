@@ -4,6 +4,7 @@ import { useCallback } from "react";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { LoadState } from "@/components/portal/load-state";
 import { Money } from "@/components/portal/money";
 import { PortalPageHeader } from "@/components/portal/page-header";
@@ -21,18 +22,27 @@ export default function LoansPage() {
   const { data, loading, error, reload } = usePortalResource(fetcher, "We couldn't load your loans. Please try again.");
 
   return (
-    <>
+    <PageFill className="gap-5">
       <PortalPageHeader title="Loans" description="Outstanding is everything still owed: principal, interest, penalty and any insurance premium." />
-      <LoadState loading={loading} error={error} onRetry={reload} empty={data?.length === 0} emptyText="You have no released loans.">
-        <ul className="grid gap-3 md:grid-cols-2">
-          {data?.map((loan) => (
-            <li key={loan.id}>
-              <LoanCard loan={loan} />
-            </li>
-          ))}
-        </ul>
+      <LoadState
+        loading={loading}
+        error={error}
+        onRetry={reload}
+        empty={data?.length === 0}
+        emptyText="You have no released loans."
+        emptyIllustration="empty"
+      >
+        <ScrollBox className="p-px">
+          <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {data?.map((loan) => (
+              <li key={loan.id}>
+                <LoanCard loan={loan} />
+              </li>
+            ))}
+          </ul>
+        </ScrollBox>
       </LoadState>
-    </>
+    </PageFill>
   );
 }
 

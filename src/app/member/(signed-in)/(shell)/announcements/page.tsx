@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Pin } from "lucide-react";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { LoadState } from "@/components/portal/load-state";
 import { PortalPageHeader } from "@/components/portal/page-header";
 import { Pager } from "@/components/portal/pager";
@@ -40,41 +41,50 @@ export default function AnnouncementsPage() {
 
   const notYetRead = unread ?? data?.meta.unread ?? 0;
   return (
-    <>
+    <PageFill className="gap-5">
       <PortalPageHeader title="Announcements" description={notYetRead > 0 ? `${notYetRead} not yet read` : undefined} />
-      <LoadState loading={loading} error={error} onRetry={reload} empty={data?.data.length === 0} emptyText="No announcements right now.">
+      <LoadState
+        loading={loading}
+        error={error}
+        onRetry={reload}
+        empty={data?.data.length === 0}
+        emptyText="No announcements right now."
+        emptyIllustration="empty"
+      >
         {data && (
           <>
-            <ul className="space-y-3">
-              {data.data.map((item) => {
-                const isUnread = !item.read_at && !readNow.has(item.id);
-                return (
-                  <li key={item.id}>
-                    <details
-                      className={cn("group rounded-lg border bg-card", isUnread && "border-l-4 border-l-brand-orange")}
-                      onToggle={(e) => (e.currentTarget as HTMLDetailsElement).open && markRead(item)}
-                    >
-                      <summary className="flex cursor-pointer list-none items-start gap-2 p-3 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-                        {item.pinned && <Pin className="mt-0.5 h-4 w-4 shrink-0 text-brand-orange" aria-label="Pinned" />}
-                        <span className="min-w-0 flex-1">
-                          <span className="block text-sm font-medium break-words">
-                            {item.title}
-                            {isUnread && <span className="sr-only"> (unread)</span>}
+            <ScrollBox className="p-1">
+              <ul className="space-y-3">
+                {data.data.map((item) => {
+                  const isUnread = !item.read_at && !readNow.has(item.id);
+                  return (
+                    <li key={item.id}>
+                      <details
+                        className={cn("group rounded-lg border bg-card", isUnread && "border-l-4 border-l-brand-orange")}
+                        onToggle={(e) => (e.currentTarget as HTMLDetailsElement).open && markRead(item)}
+                      >
+                        <summary className="flex cursor-pointer list-none items-start gap-2 p-3 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+                          {item.pinned && <Pin className="mt-0.5 h-4 w-4 shrink-0 text-brand-orange" aria-label="Pinned" />}
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm font-medium break-words">
+                              {item.title}
+                              {isUnread && <span className="sr-only"> (unread)</span>}
+                            </span>
+                            {item.publish_at && <span className="block text-xs text-muted-foreground">{formatDate(item.publish_at)}</span>}
                           </span>
-                          {item.publish_at && <span className="block text-xs text-muted-foreground">{formatDate(item.publish_at)}</span>}
-                        </span>
-                        <span className="text-xs text-primary group-open:hidden">Read</span>
-                      </summary>
-                      <p className="px-3 pb-3 text-sm whitespace-pre-line break-words">{item.body}</p>
-                    </details>
-                  </li>
-                );
-              })}
-            </ul>
+                          <span className="text-xs text-primary group-open:hidden">Read</span>
+                        </summary>
+                        <p className="px-3 pb-3 text-sm whitespace-pre-line break-words">{item.body}</p>
+                      </details>
+                    </li>
+                  );
+                })}
+              </ul>
+            </ScrollBox>
             <Pager meta={data.meta} onPage={setPage} />
           </>
         )}
       </LoadState>
-    </>
+    </PageFill>
   );
 }

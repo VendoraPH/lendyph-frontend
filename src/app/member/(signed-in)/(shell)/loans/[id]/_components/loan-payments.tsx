@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { ScrollBox } from "@/components/common/page-fill";
 import { LoadState } from "@/components/portal/load-state";
 import { Pager } from "@/components/portal/pager";
 import { PaymentsList } from "@/components/portal/payments-list";
@@ -17,7 +18,9 @@ export function LoanPayments({ loanId }: { loanId: number }) {
     <LoadState loading={loading} error={error} onRetry={reload} empty={data?.data.length === 0} emptyText="No payments yet.">
       {data && (
         <>
-          <PaymentsList payments={data.data} />
+          <ScrollBox className="p-px">
+            <PaymentsList payments={data.data} />
+          </ScrollBox>
           <Pager meta={data.meta} onPage={setPage} />
         </>
       )}

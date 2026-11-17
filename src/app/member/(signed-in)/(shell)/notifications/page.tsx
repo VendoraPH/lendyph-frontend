@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { LoadState } from "@/components/portal/load-state";
 import { PortalPageHeader } from "@/components/portal/page-header";
 import { Pager } from "@/components/portal/pager";
@@ -62,7 +63,7 @@ export default function NotificationsPage() {
   };
 
   return (
-    <>
+    <PageFill className="gap-5">
       <PortalPageHeader
         title="Notifications"
         actions={
@@ -72,7 +73,7 @@ export default function NotificationsPage() {
           </Button>
         }
       />
-      <div className="mb-4 flex gap-2" role="group" aria-label="Show">
+      <div className="flex shrink-0 gap-2" role="group" aria-label="Show">
         <Button size="sm" variant={unreadOnly ? "outline" : "secondary"} aria-pressed={!unreadOnly} onClick={() => show(false)}>
           All
         </Button>
@@ -80,44 +81,53 @@ export default function NotificationsPage() {
           Unread
         </Button>
       </div>
-      <LoadState loading={loading} error={error} onRetry={reload} empty={data?.data.length === 0} emptyText="No notifications.">
+      <LoadState
+        loading={loading}
+        error={error}
+        onRetry={reload}
+        empty={data?.data.length === 0}
+        emptyText="No notifications."
+        emptyIllustration={unreadOnly ? "allCaughtUp" : "empty"}
+      >
         {data && (
           <>
-            <ul className="space-y-2">
-              {data.data.map((notice) => (
-                <li key={notice.id}>
-                  <button
-                    type="button"
-                    onClick={() => open(notice)}
-                    className={cn(
-                      "w-full rounded-lg border bg-card p-3 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-                      !notice.read_at && "border-l-4 border-l-brand-orange",
-                    )}
-                  >
-                    <span className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-sm font-medium">
-                        {notice.title}
-                        {!notice.read_at && <span className="sr-only"> (unread)</span>}
+            <ScrollBox className="p-1">
+              <ul className="space-y-2">
+                {data.data.map((notice) => (
+                  <li key={notice.id}>
+                    <button
+                      type="button"
+                      onClick={() => open(notice)}
+                      className={cn(
+                        "w-full rounded-lg border bg-card p-3 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                        !notice.read_at && "border-l-4 border-l-brand-orange",
+                      )}
+                    >
+                      <span className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-sm font-medium">
+                          {notice.title}
+                          {!notice.read_at && <span className="sr-only"> (unread)</span>}
+                        </span>
+                        <StatusPill value={notice.category} labels={NOTIFICATION_CATEGORY} />
                       </span>
-                      <StatusPill value={notice.category} labels={NOTIFICATION_CATEGORY} />
-                    </span>
-                    {notice.body && <span className="mt-1 block text-sm text-muted-foreground">{notice.body}</span>}
-                    <span className="mt-1 block text-xs text-muted-foreground">{formatDateTime(notice.created_at)}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+                      {notice.body && <span className="mt-1 block text-sm text-muted-foreground">{notice.body}</span>}
+                      <span className="mt-1 block text-xs text-muted-foreground">{formatDateTime(notice.created_at)}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </ScrollBox>
             <Pager meta={data.meta} onPage={setPage} />
           </>
         )}
       </LoadState>
-      <p className="mt-6 text-xs text-muted-foreground">
+      <p className="shrink-0 text-xs text-muted-foreground">
         Announcements from your cooperative are on the{" "}
         <Link href="/member/announcements" className="underline">
           Announcements
         </Link>{" "}
         page.
       </p>
-    </>
+    </PageFill>
   );
 }
