@@ -164,7 +164,8 @@ function Editor({ chain, roles, onSaved }: EditorProps) {
           </div>
         </CardHeader>
         <CardContent className={FIT_CLASSES.section}>
-          <ScrollBox className="space-y-2 p-px">
+          {/* data-fab-clear keeps the rows' actions clear of Linda's button at fit. */}
+          <ScrollBox data-fab-clear className="space-y-2 p-px">
             {steps.length === 0 && (
               <div className="py-12 text-center text-sm text-muted-foreground">
                 No review steps: each report has a single review. Click <strong>Add Step</strong> to set up a chain.

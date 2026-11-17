@@ -1148,8 +1148,8 @@ function UsersContent() {
         />
       )}
 
-      {/* Role Summary Cards: one row at fit, scrolling sideways when the roles don't all fit */}
-      <div className="grid shrink-0 gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-6 fit:grid-flow-col fit:grid-cols-none fit:auto-cols-[minmax(10rem,1fr)] fit:overflow-x-auto fit:p-px fit:pb-2">
+      {/* Role Summary Cards: one row at every size, scrolling sideways when the roles don't all fit */}
+      <div className="grid shrink-0 grid-flow-col auto-cols-[minmax(10rem,1fr)] gap-4 overflow-x-auto p-px pb-2">
         <Card>
           <CardContent className="py-4">
             <div className="flex items-center justify-between">

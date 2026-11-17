@@ -674,7 +674,11 @@ function ApprovalWorkflowContent() {
               </div>
             </CardHeader>
             <CardContent className={FIT_CLASSES.section}>
-              <ScrollBox className="space-y-2 p-px">
+              {/*
+                Keyed by tab so each tab's list opens at its top; data-fab-clear
+                keeps the rows' actions clear of Linda's button at fit.
+              */}
+              <ScrollBox key={activeTab} data-fab-clear className="space-y-2 p-px">
                 {steps.length === 0 && (
                   <div className="text-center py-12 text-muted-foreground text-sm">
                     No steps configured. Click <strong>Add Step</strong> to start.

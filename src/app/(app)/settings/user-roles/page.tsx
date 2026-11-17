@@ -1023,8 +1023,12 @@ function UserRolesContent() {
         />
       </div>
 
-      {/* Roles table and, beside it at fit, the module reference */}
-      <FillSection className="gap-6 fit:grid fit:grid-cols-[minmax(0,1fr)_20rem] fit:grid-rows-[minmax(0,1fr)]">
+      {/*
+        Roles table, with the module reference beside it from 2xl, where both
+        fit. Below 2xl the reference is a collapsed section under the table, so
+        the table keeps the width for its columns and actions.
+      */}
+      <FillSection className="gap-6 2xl:grid 2xl:grid-cols-[minmax(0,1fr)_20rem] fit:2xl:grid-rows-[minmax(0,1fr)]">
         {/* Roles Table */}
         <Card className={FIT_CLASSES.section}>
           <CardContent className={cn(FIT_CLASSES.section, "p-0")}>
@@ -1082,7 +1086,7 @@ function UserRolesContent() {
                               )}
                             </div>
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="min-w-56 whitespace-normal">
                             <span className="text-sm text-muted-foreground">
                               {r.description || "—"}
                             </span>
@@ -1174,8 +1178,8 @@ function UserRolesContent() {
           </CardContent>
         </Card>
 
-        {/* Module reference */}
-        <Card className={FIT_CLASSES.section}>
+        {/* Module reference: beside the table from 2xl */}
+        <Card className={cn(FIT_CLASSES.section, "hidden 2xl:flex")}>
           <CardHeader>
             <CardTitle className="text-sm font-medium">Module Reference</CardTitle>
             <p className="text-xs text-muted-foreground">
@@ -1184,26 +1188,23 @@ function UserRolesContent() {
           </CardHeader>
           <CardContent className={FIT_CLASSES.section}>
             <ScrollBox className="p-px">
-              <div className="grid gap-3 sm:grid-cols-2 fit:grid-cols-1">
-                {(Object.keys(MODULE_META) as UIModule[]).map((mod) => {
-                  const meta = MODULE_META[mod];
-                  const Icon = meta.icon;
-                  return (
-                    <div key={mod} className="flex items-start gap-3 rounded-lg border p-3">
-                      <div className="h-8 w-8 rounded-md bg-brand-orange/10 text-brand-orange flex items-center justify-center shrink-0">
-                        <Icon className="h-4 w-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold">{meta.label}</p>
-                        <p className="text-xs text-muted-foreground">{meta.description}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              <ModuleReferenceList className="grid gap-3" />
             </ScrollBox>
           </CardContent>
         </Card>
+
+        {/* Module reference: a collapsed section under the table below 2xl */}
+        <details className="shrink-0 rounded-xl bg-card text-sm ring-1 ring-foreground/10 2xl:hidden">
+          <summary className="cursor-pointer px-4 py-3">
+            <span className="font-medium">Module Reference</span>
+            <span className="ml-2 text-xs text-muted-foreground">
+              Every feature area protected by access control
+            </span>
+          </summary>
+          <div className="border-t p-4 fit:max-h-[40dvh] fit:overflow-y-auto">
+            <ModuleReferenceList className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" />
+          </div>
+        </details>
       </FillSection>
 
       <RoleFormDialog
@@ -1249,6 +1250,29 @@ function UserRolesContent() {
         </DialogContent>
       </Dialog>
     </PageFill>
+  );
+}
+
+/** Every feature area protected by access control, for the Module Reference. */
+function ModuleReferenceList({ className }: { className: string }) {
+  return (
+    <div className={className}>
+      {(Object.keys(MODULE_META) as UIModule[]).map((mod) => {
+        const meta = MODULE_META[mod];
+        const Icon = meta.icon;
+        return (
+          <div key={mod} className="flex items-start gap-3 rounded-lg border p-3">
+            <div className="h-8 w-8 rounded-md bg-brand-orange/10 text-brand-orange flex items-center justify-center shrink-0">
+              <Icon className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">{meta.label}</p>
+              <p className="text-xs text-muted-foreground">{meta.description}</p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

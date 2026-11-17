@@ -201,7 +201,13 @@ export function PortalSettingsForm({ settings, onSaved }: { settings: PortalSett
         </Card>
       </div>
 
-      <div className="flex justify-end">
+      {/*
+        Pinned to the foot of the page's scroll box while these settings are in
+        view; it scrolls away with them when the terms card below comes up. The
+        terms card stays a sibling of this form (not inside it), so saving these
+        settings never resets an unpublished terms draft.
+      */}
+      <div data-fab-clear className="sticky bottom-0 z-10 flex justify-end gap-2 border-t bg-background py-3">
         <Button onClick={save} disabled={submitting}>
           {submitting ? "Saving…" : "Save settings"}
         </Button>
