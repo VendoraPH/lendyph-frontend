@@ -3,8 +3,8 @@
 import { useEffect, useRef, type KeyboardEvent, type RefObject } from "react";
 import { isTabbable, nextTabIndex } from "@/lib/focus-wrap";
 
-/** The header button that opens Linda; focus returns to it on close. */
-export const LINDA_TRIGGER_ID = "linda-trigger";
+/** The floating "Ask Linda" button; focus returns to it when Linda closes. */
+export const LINDA_FAB_ID = "linda-fab";
 
 /** Everything that might take focus; `isTabbable` then drops what can't. */
 const FOCUS_CANDIDATES = "a[href], button, input, select, textarea, [tabindex]";
@@ -43,8 +43,11 @@ function wrapTab(e: KeyboardEvent<HTMLElement>, container: HTMLElement) {
  * - `modal` (phones, where the panel covers the screen): focus moves into the
  *   panel, Tab stays inside it, and everything beside it in the app shell is
  *   inert, so nothing hidden behind it can be reached.
- * - Closing hands focus back to the header button when it was in the panel.
- *   Otherwise it would drop to the page as the panel turns inert.
+ * - Closing hands focus back to the floating button when it was in the panel.
+ *   Otherwise it would drop to the page as the panel turns inert. The button
+ *   shows again in the same render that closes the panel, so it is there by
+ *   the time this runs. Expanding to the dialog moves focus into the dialog
+ *   first, so nothing here takes it back.
  *
  * Returns the panel's keydown handler for the Tab wrap.
  */
@@ -71,7 +74,7 @@ export function useLindaPanelFocus(
     if (wasOpen.current && !open) {
       const active = document.activeElement;
       if (!active || active === document.body || panelRef.current?.contains(active)) {
-        document.getElementById(LINDA_TRIGGER_ID)?.focus();
+        document.getElementById(LINDA_FAB_ID)?.focus();
       }
     }
     wasOpen.current = open;
