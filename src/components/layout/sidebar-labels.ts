@@ -11,3 +11,9 @@ export function countLabel(count: number | undefined, noun: string, state: strin
 export function collapsedNavLabel(title: string, badgeLabel?: string): string {
   return badgeLabel ? `${title}, ${badgeLabel}` : title;
 }
+
+/** "1 new notification" / "4 new notifications": a section's unviewed notifications. */
+export function newLabel(count: number | undefined): string | undefined {
+  if (!count || count <= 0) return undefined;
+  return `${count} new notification${count === 1 ? "" : "s"}`;
+}
