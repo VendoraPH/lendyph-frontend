@@ -1,5 +1,6 @@
 import type { CreateFeeData, FeeConditions, FeeFormulaCheckRequest, FeeType } from "@/types/fee";
 import type { FeeFormulaInputs } from "@/types/loan";
+import { validationErrors } from "@/lib/api-error";
 import { formatCurrency, formatRate } from "@/lib/format";
 import { PERIOD_DAYS, ratePeriodWord, type RateFrequency } from "@/lib/loan-terms";
 
@@ -265,16 +266,6 @@ export function buildFeeFormulaCheckRequest(
       max_amount: bound(bounds.maxAmount),
     },
   };
-}
-
-type ValidationReply = { response?: { status?: number; data?: { errors?: Record<string, unknown> } } };
-
-/** The server's 422 field messages, or null for any other failure. */
-function validationErrors(err: unknown): Record<string, unknown> | null {
-  if (!err || typeof err !== "object" || !("response" in err)) return null;
-  const response = (err as ValidationReply).response;
-  if (response?.status !== 422) return null;
-  return response.data?.errors ?? null;
 }
 
 function firstMessage(messages: unknown): string | null {
