@@ -220,6 +220,7 @@ test("AMLA is off when the flag isn't set: no Settings link, and its routes answ
   assert.equal(settings?.children?.some((c) => c.href === "/settings/amla"), false);
   assert.equal(SIDEBAR_NAV.some((item) => item.href.startsWith("/amla")), false);
   assert.match(read("src/constants/navigation.ts"), /env\.features\.amla \? \[AMLA_SETTINGS_NAV\]/);
+  assert.match(read("src/constants/navigation.ts"), /env\.features\.amla \? \[AMLA_NAV\]/);
   for (const path of ["src/app/(app)/amla/layout.tsx", "src/app/(app)/settings/amla/layout.tsx"]) {
     const layout = read(path);
     assert.match(layout, /if \(!env\.features\.amla\) notFound\(\);/, path);

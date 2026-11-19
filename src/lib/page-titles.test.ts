@@ -10,6 +10,7 @@ import {
   humanizeSegment,
   menuTitles,
   nestedPageTitle,
+  nestedSegment,
   rootPageTitle,
   subPageTitle,
 } from "./page-titles";
@@ -227,7 +228,8 @@ describe("nestedPageTitle (a page a level further down)", () => {
 
   test("the header adds the nested part under a page, never under a record", () => {
     const header = readFileSync(join(process.cwd(), "src/components/layout/header.tsx"), "utf8");
-    assert.ok(header.includes("nestedPageTitle(firstSegment, subSegment, segments[2], menuTitle)"));
+    // The third part, or a typed record's own (nestedSegment).
+    assert.ok(header.includes("nestedPageTitle(firstSegment, subSegment, nestedSegment(segments), menuTitle)"));
     assert.ok(header.includes("!isId && segments.length > 2"));
   });
 });
@@ -267,4 +269,18 @@ test("/savings reads its menu title under the section, since the section also ho
   assert.equal(rootPageTitle("loans"), undefined);
   assert.equal(rootPageTitle("dashboard"), undefined);
   assert.equal(rootPageTitle("constructor"), undefined);
+});
+
+describe("nestedSegment (which part a page further down reads its title from)", () => {
+  test("a record under a type part reads its own part, so it ends \"Detail\"", () => {
+    assert.equal(nestedSegment(["amla", "customers", "members", "7"]), "7");
+    assert.equal(nestedSegment(["amla", "customers", "walk-ins", "12"]), "12");
+  });
+
+  test("every other page reads its third part, as before", () => {
+    assert.equal(nestedSegment(["accounting", "journals", "new"]), "new");
+    assert.equal(nestedSegment(["loans", "origination", "applications", "5"]), "applications");
+    assert.equal(nestedSegment(["amla", "customers", "members"]), "members");
+    assert.equal(nestedSegment(["amla", "customers", "members", "x"]), "members");
+  });
 });

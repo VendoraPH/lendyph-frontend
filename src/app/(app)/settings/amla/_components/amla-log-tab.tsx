@@ -12,7 +12,7 @@ import { useApiResource } from "@/hooks";
 import { amlaApi, type AmlaLogFilters } from "@/lib/amla/api";
 import { once } from "@/lib/amla/once";
 import { AMLA_LOG_ACTION_OPTIONS, amlaLogRow } from "@/lib/amla/settings-view";
-import { AmlaPager } from "./amla-pager";
+import { AmlaPager } from "@/components/amla/amla-pager";
 
 const NO_FILTERS: AmlaLogFilters = { action: "", from: "", to: "", page: 1 };
 
