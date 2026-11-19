@@ -9,6 +9,8 @@ import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 const requests: URL[] = [];
 let server: Server;
@@ -214,4 +216,23 @@ test("a report the user can't read says No access; an unknown or switched-off on
   // revealed, whatever the user holds.
   assert.equal(reportAccess("savings_balances", () => true), "not_found");
   assert.equal(reportAccess("savings_balances", () => false), "not_found");
+});
+
+// A user who can't open the Share Capital report doesn't see it listed, so the
+// Financial section's subtitle doesn't name it either.
+test("the Financial subtitle names share capital only for users who can open its report", async () => {
+  const { categoryDescription, visibleReports } = await import("./report-catalog");
+  const without = visibleReports((p) => p !== "share_capital:view");
+  const withIt = visibleReports(() => true);
+
+  assert.equal(categoryDescription("financial", without), "Cash position and loan loss provisioning");
+  assert.doesNotMatch(categoryDescription("financial", without), /share capital/i);
+  assert.equal(categoryDescription("financial", withIt), "Cash position, share capital, and loan loss provisioning");
+  assert.equal(categoryDescription("performance", without), "Collection efficiency and account officer productivity");
+});
+
+test("the Reports page reads each section's subtitle for the signed-in user", () => {
+  const page = readFileSync(resolve(process.cwd(), "src/app/(app)/reports/page.tsx"), "utf8");
+  assert.match(page, /\{categoryDescription\(cat, catalog\)\}/);
+  assert.doesNotMatch(page, /\{meta\.description\}/);
 });

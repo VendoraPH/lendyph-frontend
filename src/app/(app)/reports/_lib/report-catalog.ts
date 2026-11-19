@@ -75,8 +75,10 @@ import {
   buildSavingsWithdrawalsDoc,
 } from "./savings-insight-report-builders";
 import type { Permission } from "@/types";
+import { CATEGORY_META } from "./types";
 import type {
   DateRange,
+  ReportCategory,
   ReportContext,
   ReportDefinition,
   ReportDocument,
@@ -674,6 +676,17 @@ export function visibleReports(can: (permission: Permission) => boolean): Report
   return REPORT_CATALOG.filter(
     (r) => r.available !== false && (!r.permission || can(r.permission)),
   );
+}
+
+/**
+ * A section's subtitle for this user, naming only reports they can open:
+ * without the Share Capital report, the Financial section doesn't mention it.
+ */
+export function categoryDescription(category: ReportCategory, visible: readonly ReportDefinition[]): string {
+  if (category === "financial" && !visible.some((r) => r.id === "share_capital")) {
+    return "Cash position and loan loss provisioning";
+  }
+  return CATEGORY_META[category].description;
 }
 
 /**
