@@ -185,6 +185,10 @@ export const env = {
     // While on, the loan product form shows the product's penalty source
     // instead of its Penalty Rate input. Literal reference, as above.
     penaltyConfigs: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_PENALTY_CONFIGS),
+    // The Executive Dashboard (/dashboard/executive and its link on the
+    // Dashboard). Off by default; turned on for staging builds only. Literal
+    // reference, as above.
+    executiveDashboard: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_EXECUTIVE_DASHBOARD),
   },
   debug: {
     enabled: getBoolEnvVar("NEXT_PUBLIC_DEBUG", false),

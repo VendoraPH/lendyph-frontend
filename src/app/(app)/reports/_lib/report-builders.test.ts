@@ -28,7 +28,7 @@ import {
   reportScope,
   reportScopeLine,
 } from "./types";
-import type { DateRange, FieldItem, KpiItem, ReportDocument, ReportId } from "./types";
+import type { DateRange, DocumentId, FieldItem, KpiItem, ReportDocument } from "./types";
 
 /**
  * Contract tests: every payload below mirrors what the API actually returns
@@ -2425,11 +2425,11 @@ test("a configured organization name wins over the fallback", () => {
 });
 
 /**
- * Exhaustive by construction: `Record<ReportId, true>` fails `npm run
+ * Exhaustive by construction: `Record<DocumentId, true>` fails `npm run
  * typecheck` the moment a report is added without being listed here, which is
  * what makes the runtime assertion below meaningful.
  */
-const ALL_REPORT_IDS: Record<ReportId, true> = {
+const ALL_REPORT_IDS: Record<DocumentId, true> = {
   daily_collection: true,
   portfolio_summary: true,
   income_report: true,
@@ -2463,13 +2463,14 @@ const ALL_REPORT_IDS: Record<ReportId, true> = {
   savings_interest_accrual: true,
   savings_account_activity: true,
   savings_member_statement: true,
+  executive_dashboard: true,
 };
 
 test("every report id has its own reference prefix", () => {
   const at = new Date("2026-08-06T01:15:00Z");
   const seen = new Map<string, string>();
 
-  for (const id of Object.keys(ALL_REPORT_IDS) as ReportId[]) {
+  for (const id of Object.keys(ALL_REPORT_IDS) as DocumentId[]) {
     const reference = buildReference(id, at);
     // A missing entry would stamp "undefined-20260806-0915" on the document.
     assert.match(reference, /^[A-Z]{3}-20260806-0915$/, `${id} has no reference prefix`);
