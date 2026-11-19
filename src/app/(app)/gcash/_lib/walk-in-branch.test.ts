@@ -121,9 +121,17 @@ describe("a GCash row's branch in words", () => {
 });
 
 describe("a GCash row's branch on the lists", () => {
-  test("a member's row posts in the member's branch, so it says so instead of a dash", () => {
+  test("an older member's row with no branch of its own still says the member's branch, not a dash", () => {
     assert.equal(gcashRowBranchLabel({ borrower: { id: 4 }, branch_id: null }, listed), "Member's branch");
     assert.equal(gcashRowBranchLabel({ borrower: { id: 4 } }, listed), "Member's branch");
+  });
+
+  test("a member's row that carries the branch it posted in names that branch, as a walk-in's does", () => {
+    // Phase 6 (backend #334): the row keeps the branch it was written in, so a
+    // member who moved still reads their old branch on their earlier rows.
+    assert.equal(gcashRowBranchLabel({ borrower: { id: 4 }, branch_id: 2 }, listed), "North");
+    assert.equal(gcashRowBranchLabel({ borrower: { id: 4 }, branch_id: 3, branch_name: "South" }, listed), "South");
+    assert.equal(gcashRowBranchLabel({ borrower: { id: 4 }, branch_id: 9 }, listed), "Another branch");
   });
 
   test("a walk-in row with no branch is head office's", () => {
@@ -144,8 +152,11 @@ describe("a GCash row's branch on the lists", () => {
     assert.equal(gcashRowBranchLabel({ ...walkIn, branch_name: "P3FU North Branch" }, own), gcashRowBranchLabel(walkIn, own));
     assert.equal(gcashRowBranchLabel({ non_member: { id: 5 }, branch_id: 1, branch_name: "Main" }, own), "Main");
     assert.equal(gcashRowBranchLabel({ non_member: { id: 5 }, branch_id: null, branch_name: "Head office" }, own), "Head office");
-    // A member's row reads the member's branch on both tabs, whatever the report names.
-    assert.equal(gcashRowBranchLabel({ borrower: { id: 4 }, branch_id: 2, branch_name: "P3FU North Branch" }, own), "Member's branch");
+    // A member's row follows the same rule on both tabs, whatever the report names.
+    const member = { borrower: { id: 4 }, branch_id: 2 };
+    assert.equal(gcashRowBranchLabel({ ...member, branch_name: "P3FU North Branch" }, own), "Another branch");
+    assert.equal(gcashRowBranchLabel({ ...member, branch_name: "P3FU North Branch" }, own), gcashRowBranchLabel(member, own));
+    assert.equal(gcashRowBranchLabel({ borrower: { id: 4 }, branch_id: 1, branch_name: "Main" }, own), "Main");
   });
 
   test("an older answer that leaves the branch out entirely shows a dash for a walk-in", () => {

@@ -2806,9 +2806,11 @@ const CASH_FLOW_WITH_SHARE_BY_BRANCH = {
   },
 };
 
+// Unfiltered (`organisation`), the answer doesn't say which rule placed the
+// rows, so the sentence holds under both.
 const CASH_FLOW_BRANCH_NOTE =
-  "Share capital paid in and out is in the row of the branch each member belongs to; " +
-  "members with no branch are under Unassigned.";
+  "Share capital paid in and out is in its branch's row; " +
+  "entries with no branch are under Unassigned.";
 
 test("cash flow breaks down by branch, members' share capital included, in plain words", () => {
   const doc = buildCashFlowDoc(CASH_FLOW_WITH_SHARE_BY_BRANCH, RANGE);
@@ -2873,6 +2875,35 @@ test("the branch note is the same plain sentence whether or not the server sends
 
   assert.equal(noteText(without), CASH_FLOW_BRANCH_NOTE);
   assert.equal(noteText(buildCashFlowDoc(CASH_FLOW_WITH_SHARE_BY_BRANCH, RANGE)), CASH_FLOW_BRANCH_NOTE);
+});
+
+test("the cash flow branch note follows the rule the server says placed share capital", () => {
+  const noteFor = (scope: string) =>
+    noteText(
+      buildCashFlowDoc(
+        { ...CASH_FLOW_WITH_SHARE_BY_BRANCH, share_capital: { ...CASH_FLOW_WITH_SHARE_BY_BRANCH.share_capital, branch_scope: scope } },
+        RANGE
+      )
+    );
+
+  // Both scopes mean a branch filter was applied, so no Unassigned row is
+  // listed and the sentence doesn't mention one.
+  // Since backend #334: the branch each entry was posted in.
+  assert.equal(
+    noteFor("posted_branch"),
+    "Share capital paid in and out is in the row of the branch where each entry was posted; " +
+      "a member who moved keeps their earlier entries in their old branch."
+  );
+  // An older backend: the member's branch.
+  assert.equal(
+    noteFor("borrower_branch"),
+    "Share capital paid in and out is in the row of the branch each member belongs to."
+  );
+  assert.doesNotMatch(noteFor("posted_branch")!, /Unassigned/);
+  assert.doesNotMatch(noteFor("borrower_branch")!, /Unassigned/);
+  // No branch filter: the Unassigned row can be listed, so it is named.
+  assert.equal(noteFor("organisation"), CASH_FLOW_BRANCH_NOTE);
+  assert.match(noteFor("organisation")!, /Unassigned/);
 });
 
 test("cash flow says where payments' share capital build-up is counted, without moving a total", () => {
@@ -3565,6 +3596,25 @@ test("share capital states when it was scoped to one branch", () => {
   // the report says so rather than reading as organisation-wide.
   assert.equal(scopeNote(branchScoped), true);
   assert.equal(scopeNote(orgWide), false);
+});
+
+test("share capital scoped by the branch each entry posted in says so, in words", () => {
+  const notes = (scope: string) =>
+    buildShareCapitalDoc({ ...SHARE_CAPITAL_PAYLOAD, branch_scope: scope }, RANGE)
+      .sections.filter((sec) => sec.kind === "note")
+      .map((sec) => (sec as { text: string }).text);
+
+  const posted = notes("posted_branch");
+  const scopeNote = posted.find((text) => /Scoped to the selected branch/.test(text));
+  assert.ok(scopeNote, "a posted-branch scope note is shown");
+  assert.match(scopeNote!, /branch where each entry was posted/);
+  assert.match(scopeNote!, /moved .* keeps .* earlier entries in their old branch/);
+  assert.doesNotMatch(scopeNote!, /posted_branch|branch_id|ledger has no branch column/);
+
+  // The older backend's scope keeps its own note; the two never show together.
+  assert.equal(posted.some((text) => /no branch column/.test(text)), false);
+  assert.equal(notes("borrower_branch").some((text) => /branch where each entry was posted/.test(text)), false);
+  assert.equal(notes("organisation").some((text) => /Scoped to the selected branch/.test(text)), false);
 });
 
 // What a `collector` or `viewer` receives: identical aggregates, no roster.
