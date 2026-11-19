@@ -57,6 +57,8 @@ export const PROFILE_FIELDS: RecordField[] = [
 export const PROFILE_REP_FIELD: RecordField = {
   key: "authorized_rep_officer_id",
   label: "Authorised representative",
+  // The profile's section title already reads it.
+  labelHidden: true,
   type: "select",
   options: [],
   help: "Pick from CDA › Officers. The name and position come from the officer's record.",
