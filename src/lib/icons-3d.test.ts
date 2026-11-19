@@ -56,8 +56,14 @@ let nav: typeof import("@/constants/navigation");
 before(async () => {
   // Every module on, so the menu holds every item it can show. The flags are
   // read when `@/config/env` loads; this file runs in its own process.
-  for (const flag of ["LINDA", "SAVINGS", "CDA", "MEMBER_PORTAL", "CREDIT_SCORING"]) {
-    process.env[`NEXT_PUBLIC_ENABLE_${flag}`] = "true";
+  for (const name of [
+    "NEXT_PUBLIC_ENABLE_LINDA",
+    "NEXT_PUBLIC_ENABLE_SAVINGS",
+    "NEXT_PUBLIC_ENABLE_CDA",
+    "NEXT_PUBLIC_ENABLE_MEMBER_PORTAL",
+    "NEXT_PUBLIC_ENABLE_CREDIT_SCORING",
+  ]) {
+    process.env[name] = "true";
   }
   nav = await import("@/constants/navigation");
 });
