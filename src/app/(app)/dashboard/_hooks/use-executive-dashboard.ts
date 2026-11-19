@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { usePermission } from "@/hooks";
 import { accountingService, loanService, reportService } from "@/services";
 import type { Permission } from "@/types";
-import type { PastDueTotals } from "@/types/dashboard-reports";
+import type { ExecutiveFilters as ExecutivePageFilters } from "@/types/executive-dashboard";
 import { LOADING, SOURCE_PERMISSIONS, sourcePermitted, type ExecutiveData, type Source, type SourceKey } from "../_lib/executive-data";
 
 /** A date range the server worked out (`DashboardPeriod`), as YYYY-MM-DD in Manila. */
@@ -16,10 +16,13 @@ export interface ExecutiveFilters {
   period: ServerRange | null;
   /** `undefined` for every branch the user may see. */
   branchId?: number;
+  /** The page filters (product, officer, collector): the reports take them through EB-A's loan scope. */
+  pageFilters?: PageFilters;
 }
 
 
 type Load = () => Promise<unknown>;
+type PageFilters = ExecutivePageFilters;
 
 /**
  * Every read the dashboard makes, by source; each needs the permissions in
@@ -29,8 +32,18 @@ type Load = () => Promise<unknown>;
  * period the sections show "No snapshot for this date" instead. The rest cover
  * the period.
  */
-function requests({ period, branchId }: { period: ServerRange; branchId?: number }): Partial<Record<SourceKey, Load>> {
-  const branch = branchId ? { branch_id: branchId } : {};
+function requests({
+  period,
+  branchId,
+  pageFilters = {},
+}: {
+  period: ServerRange;
+  branchId?: number;
+  pageFilters?: PageFilters;
+}): Partial<Record<SourceKey, Load>> {
+  // The reports follow the branch and the page filters; the accounting
+  // dashboard and the loan counts take the branch only.
+  const branch = { ...(branchId ? { branch_id: branchId } : {}), ...pageFilters };
   const range = { ...branch, date_from: period.from, date_to: period.to };
 
   return {
@@ -41,26 +54,16 @@ function requests({ period, branchId }: { period: ServerRange; branchId?: number
     products: () => reportService.portfolioByProduct(branch),
     performance: () => reportService.performance(range),
     shareCapital: () => reportService.shareCapital(range),
-    income: () => reportService.income(range),
     borrowers: () => reportService.borrowers(range),
     disbursements: () => reportService.disbursements(range),
     accounting: () => accountingService.dashboard(period.to, branchId, period.from),
     // One row asked for: only `meta.stats` (counts per status) is read.
     loanStats: () =>
-      loanService.list({ ...branch, per_page: 1 }).then((res) => {
+      loanService.list({ ...(branchId ? { branch_id: branchId } : {}), per_page: 1 }).then((res) => {
         const stats = res?.meta?.stats;
         if (!stats) throw new Error("no stats");
         return stats;
       }),
-    // The Past Due Loans page's cards: past grace, each loan once. One row asked for: only `totals` is read.
-    pastDue: () =>
-      reportService
-        .duePastDue({ ...branch, past_due_only: 1, per_page: 1 })
-        .then((res) => {
-          const totals = (res as { totals?: PastDueTotals } | null)?.totals;
-          if (!totals) throw new Error("no totals");
-          return totals;
-        }),
   };
 }
 
@@ -72,12 +75,10 @@ const SOURCE_KEYS: SourceKey[] = [
   "products",
   "performance",
   "shareCapital",
-  "income",
   "borrowers",
   "disbursements",
   "accounting",
   "loanStats",
-  "pastDue",
 ];
 
 const PERMISSIONS: Permission[] = [...new Set(Object.values(SOURCE_PERMISSIONS).flat())];
@@ -99,13 +100,14 @@ export function useExecutiveDashboard(filters: ExecutiveFilters, reloadCount: nu
   const from = filters.period?.from ?? "";
   const to = filters.period?.to ?? "";
   const branchId = filters.branchId;
-  const key = [from, to, branchId ?? "all", reloadCount, granted].join("|");
+  const pageFilters = JSON.stringify(filters.pageFilters ?? {});
+  const key = [from, to, branchId ?? "all", pageFilters, reloadCount, granted].join("|");
   const [stored, setStored] = useState<{ key: string; data: Partial<ExecutiveData> }>({ key: "", data: {} });
 
   useEffect(() => {
     if (!from || !to) return;
     const allowed = new Set(granted.split(","));
-    const table = requests({ period: { from, to }, branchId });
+    const table = requests({ period: { from, to }, branchId, pageFilters: JSON.parse(pageFilters) });
     const settle = (name: SourceKey, source: Source<unknown>) =>
       setStored((prev) => ({ key, data: { ...(prev.key === key ? prev.data : {}), [name]: source } }));
 
@@ -116,7 +118,7 @@ export function useExecutiveDashboard(filters: ExecutiveFilters, reloadCount: nu
         .then((data) => settle(name, data && typeof data === "object" ? { state: "ready", data } : { state: "error" }))
         .catch(() => settle(name, { state: "error" }));
     }
-  }, [key, from, to, branchId, granted]);
+  }, [key, from, to, branchId, pageFilters, granted]);
 
   if (!from || !to) {
     const waiting = periodFailed ? ({ state: "error" } as const) : LOADING;
@@ -124,7 +126,7 @@ export function useExecutiveDashboard(filters: ExecutiveFilters, reloadCount: nu
   }
   const loaded = stored.key === key ? stored.data : {};
   const allowed = new Set(granted.split(","));
-  const table = requests({ period: { from, to }, branchId });
+  const table = requests({ period: { from, to }, branchId, pageFilters: filters.pageFilters });
   const result = {} as Record<SourceKey, Source<unknown>>;
   for (const name of SOURCE_KEYS) {
     result[name] =

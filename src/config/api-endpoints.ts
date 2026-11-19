@@ -254,6 +254,13 @@ export const API_ENDPOINTS = {
     EXECUTIVE_OVERVIEW: "/dashboard/executive/overview",
     EXECUTIVE_BRANCHES: "/dashboard/executive/branches",
     EXECUTIVE_PAR_LOANS: "/dashboard/executive/par-loans",
+    // EB-D2: trends and turnaround need reports:view; the share capital
+    // control needs accounting:view and share_capital:view. These take a
+    // custom range as `from` and `to`.
+    EXECUTIVE_TRENDS: "/dashboard/executive/trends",
+    EXECUTIVE_ATTENTION: "/dashboard/executive/attention",
+    EXECUTIVE_TURNAROUND: "/dashboard/executive/turnaround",
+    EXECUTIVE_SHARE_CAPITAL_CONTROL: "/dashboard/executive/share-capital-control",
   },
   USERS: {
     LIST: "/users",

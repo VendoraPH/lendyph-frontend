@@ -7,8 +7,8 @@
 import type { ReportDocument, ReportSection } from "@/app/(app)/reports/_lib/types";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { formatDateRange, formatGeneratedAt } from "@/lib/report-format";
-import { attentionItems } from "./attention";
-import type { ExecutiveBranches, ExecutiveOverview, ExecutivePeriod } from "@/types/executive-dashboard";
+import { attentionView } from "./attention";
+import type { ExecutiveAttention, ExecutiveBranches, ExecutiveFilterKey, ExecutiveOverview, ExecutivePeriod } from "@/types/executive-dashboard";
 import { readyData, type ExecutiveData } from "./executive-data";
 import { branchTable, cardViews } from "./executive-overview";
 import { agingPoints, productRows } from "./executive-sections";
@@ -22,12 +22,15 @@ export interface ExecutiveExportInput {
   /** The dashboard's own figures; null when they could not be read. */
   overview: ExecutiveOverview | null;
   branches: ExecutiveBranches | null;
+  attention: ExecutiveAttention | null;
+  /** The page filters sent, for the notes on figures that ignore them. */
+  sentFilters: ExecutiveFilterKey[];
   /** The server's period. */
   period: ExecutivePeriod;
 }
 
 export function executiveDocument(
-  { data, overview, branches, period }: ExecutiveExportInput,
+  { data, overview, branches, attention, sentFilters, period }: ExecutiveExportInput,
   generatedAt: Date = new Date(),
 ): ReportDocument {
   // The server's cards, as the screen shows them; a card the user may not see is left out.
@@ -36,7 +39,7 @@ export function executiveDocument(
     value: card.valueText,
     hint: [card.asOfText, card.changeText && `${card.changeText} ${card.changeBasis}`].filter(Boolean).join(" · "),
   }));
-  const sent = overview?.filters_applied ?? [];
+  const sent = sentFilters;
   const table = branches ? branchTable(branches, sent) : null;
 
   const sections: ReportSection[] = [
@@ -45,12 +48,17 @@ export function executiveDocument(
       kind: "table",
       title: "Requires Attention",
       columns: [
-        { key: "tone", header: "Priority", width: 14 },
-        { key: "title", header: "Item", width: 40 },
+        { key: "state", header: "State", width: 18 },
+        { key: "title", header: "Check", width: 50 },
         { key: "detail", header: "Detail", width: 60 },
       ],
-      rows: attentionItems(data).map((a) => ({ tone: a.tone === "critical" ? "Critical" : "Warning", title: a.title, detail: a.detail })),
-      emptyText: "Nothing needs attention.",
+      // The server's rules, in its words; none means the checks couldn't be read, never "all clear".
+      rows: (attention ? attentionView(attention, sentFilters).rows : []).map((r) => ({
+        state: r.stateText,
+        title: `${r.label}: ${r.title}`,
+        detail: `${r.detail} ${r.basis}`,
+      })),
+      emptyText: attention ? "No checks are set up." : "Not available: the checks couldn't be read.",
     },
     {
       kind: "table",

@@ -28,7 +28,10 @@ export function PortfolioSection({ data, pastPeriod }: { data: ExecutiveData; pa
     color: s.other ? REST_COLOR : SLICE_COLORS[i % SLICE_COLORS.length],
   }));
   const config = Object.fromEntries(pie.map((s, i) => [`s${i}`, { label: s.name, color: s.color }])) satisfies ChartConfig;
-  const out = readyData(data.balance)?.outstanding;
+  // The server's named fields: Principal Balance and Outstanding are the loan
+  // pages' figures; interest, penalty and the premium are its components.
+  const balance = readyData(data.balance);
+  const components = balance?.outstanding;
   const stages = pipelineStages(readyData(data.loanStats));
 
   return (
@@ -98,10 +101,11 @@ export function PortfolioSection({ data, pastPeriod }: { data: ExecutiveData; pa
           <h3 className="mb-2 text-sm font-medium">{balanceHeading("Outstanding by component", pastPeriod)}</h3>
           <SourceGate source={data.balance} height="h-24" notice={notice}>
             <div className={L.tiles}>
-              <Figure label="Principal" value={money(toNumber(out?.principal))} />
-              <Figure label="Interest" value={money(toNumber(out?.interest))} />
-              <Figure label="Penalty" value={money(toNumber(out?.penalty))} />
-              <Figure label="Insurance" value={money(toNumber(out?.insurance))} />
+              <Figure label="Principal Balance" value={money(toNumber(balance?.outstanding_principal))} />
+              <Figure label="Interest" value={money(toNumber(components?.interest))} />
+              <Figure label="Penalty" value={money(toNumber(components?.penalty))} />
+              <Figure label="Insurance premium" value={money(toNumber(components?.insurance))} />
+              <Figure label="Outstanding" value={money(toNumber(balance?.total_outstanding))} hint="Everything owed" />
             </div>
           </SourceGate>
         </div>

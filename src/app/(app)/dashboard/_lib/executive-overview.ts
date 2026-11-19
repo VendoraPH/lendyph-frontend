@@ -11,6 +11,7 @@ import type {
   ExecutiveBranches,
   ExecutiveCard,
   ExecutiveFilterKey,
+  ExecutiveFilters,
   ExecutiveOverview,
   ExecutivePeriod,
   ExecutivePreset,
@@ -44,15 +45,29 @@ export interface PeriodChoice {
   to?: string;
 }
 
-/** The query: a preset sends only its name; only a custom range sends dates. */
-export function executiveQuery(choice: PeriodChoice, branchId: number | undefined): ExecutiveQuery {
+/**
+ * The query every endpoint gets: a preset sends only its name, only a custom
+ * range sends dates, then the branch and the page filters (product, officer,
+ * collector) that are set.
+ */
+export function executiveQuery(choice: PeriodChoice, branchId: number | undefined, filters: ExecutiveFilters = {}): ExecutiveQuery {
   const query: ExecutiveQuery = { preset: choice.preset };
   if (choice.preset === "custom") {
     if (choice.from) query.date_from = choice.from;
     if (choice.to) query.date_to = choice.to;
   }
   if (branchId !== undefined) query.branch_id = branchId;
+  for (const key of FILTER_KEYS) {
+    if (filters[key] !== undefined) query[key] = filters[key];
+  }
   return query;
+}
+
+const FILTER_KEYS: ExecutiveFilterKey[] = ["product_id", "officer_id", "collector_id"];
+
+/** The page filters a query sends, for the notes on figures that ignore them. */
+export function sentFilters(query: ExecutiveQuery): ExecutiveFilterKey[] {
+  return FILTER_KEYS.filter((key) => query[key] !== undefined);
 }
 
 const range = (from: string, to: string) => (from === to ? formatDate(from) : `${formatDate(from)} – ${formatDate(to)}`);
@@ -83,12 +98,6 @@ export function rangeProblem(choice: PeriodChoice): string | null {
   if (!choice.from) return "Choose a start date";
   if (!choice.to) return "Choose an end date";
   return null;
-}
-
-/** The books' state from the overview's book cards: the ledger sections follow it. */
-export function booksState(overview: ExecutiveOverview | null): "ready" | "requires_configuration" {
-  const books = ["interest_income", "net_income"].map((key) => overview?.cards[key]?.state);
-  return books.includes("requires_configuration") ? "requires_configuration" : "ready";
 }
 
 /** The server's cache time, in Manila. */

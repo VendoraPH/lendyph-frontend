@@ -13,13 +13,13 @@ import { useExecutiveDashboard } from "../_hooks/use-executive-dashboard";
 import { useExecutiveEndpoints } from "../_hooks/use-executive-endpoints";
 import { todayISO } from "@/lib/format";
 import {
-  booksState,
   captionText,
   cardFigureText,
   cardViews,
   executiveQuery,
   isPastPeriod,
   rangeProblem,
+  sentFilters,
   updatedText,
   type PeriodChoice,
 } from "../_lib/executive-overview";
@@ -32,7 +32,11 @@ import { FilterBar } from "./_components/filter-bar";
 import { FinancialSection } from "./_components/financial-section";
 import { KpiCard, KpiCardSkeleton } from "./_components/kpi-card";
 import { OperationsSection } from "./_components/operations-section";
+import { NO_PAGE_FILTERS, PageFilters, pageFilterIds, type PageFilterChoice } from "./_components/page-filters";
 import { ParLoansDialog } from "./_components/par-loans-dialog";
+import { ShareCapitalControlSection } from "./_components/share-capital-control-section";
+import { TrendsSection } from "./_components/trends-section";
+import { TurnaroundSection } from "./_components/turnaround-section";
 import { PortfolioSection } from "./_components/portfolio-section";
 import { useBranchFilter } from "@/hooks/use-working-branch";
 
@@ -50,6 +54,7 @@ function ExecutiveDashboard() {
   const [branch, setBranch] = useBranchFilter();
   const [reloadCount, setReloadCount] = useState(0);
   const [parOpen, setParOpen] = useState(false);
+  const [pageFilters, setPageFilters] = useState<PageFilterChoice>(NO_PAGE_FILTERS);
 
   const { branches } = useBranches();
   const user = useAuthStore((s) => s.user);
@@ -60,7 +65,9 @@ function ExecutiveDashboard() {
   const branchLabel = branchOptions.items.find((i) => i.value === branch)?.label ?? null;
 
   const branchId = branchIdParam(branch);
-  const query = useMemo(() => executiveQuery(sent, branchId), [sent, branchId]);
+  const filterIds = useMemo(() => pageFilterIds(pageFilters), [pageFilters]);
+  const query = useMemo(() => executiveQuery(sent, branchId, filterIds), [sent, branchId, filterIds]);
+  const sentFilterKeys = sentFilters(query);
   const endpoints = useExecutiveEndpoints(query, reloadCount);
   const overview = endpoints.overview.state === "ready" ? endpoints.overview.data : null;
   const branchesData = endpoints.branches.state === "ready" ? endpoints.branches.data : null;
@@ -73,10 +80,9 @@ function ExecutiveDashboard() {
         ? endpoints.branches.message
         : null;
   const periodRefused = period === null ? refusal : null;
-  const data = useExecutiveDashboard({ period, branchId }, reloadCount, periodRefused !== null);
+  const data = useExecutiveDashboard({ period, branchId, pageFilters: filterIds }, reloadCount, periodRefused !== null);
   // The server's today (the branch table's balances date): balances follow the cards' as-of rule.
   const pastPeriod = period !== null && isPastPeriod(period, branchesData?.balances_as_of ?? todayISO());
-  const booksReady = booksState(overview) === "ready";
   const cards = overview ? cardViews(overview) : [];
   const loading =
     endpoints.overview.state === "loading" ||
@@ -124,9 +130,21 @@ function ExecutiveDashboard() {
         onBranch={setBranch}
         onRefresh={() => setReloadCount((n) => n + 1)}
         refreshing={loading}
+        filtersSlot={<PageFilters value={pageFilters} onChange={setPageFilters} />}
         exportSlot={
           <ExportMenu
-            input={period ? { data, overview, branches: branchesData, period } : null}
+            input={
+              period
+                ? {
+                    data,
+                    overview,
+                    branches: branchesData,
+                    attention: endpoints.attention.state === "ready" ? endpoints.attention.data : null,
+                    sentFilters: sentFilterKeys,
+                    period,
+                  }
+                : null
+            }
             branchLabel={branchLabel}
             disabled={loading}
           />
@@ -168,12 +186,15 @@ function ExecutiveDashboard() {
             <div className="flex min-w-0 flex-col gap-4">
               <PortfolioSection data={data} pastPeriod={pastPeriod} />
               <CollectionSection data={data} pastPeriod={pastPeriod} />
-              <FinancialSection data={data} booksReady={booksReady} allowance={cardFigureText(overview, "required_allowance")} />
+              <FinancialSection data={data} allowance={cardFigureText(overview, "required_allowance")} />
+              <TrendsSection source={endpoints.trends} sentFilters={sentFilterKeys} />
+              <TurnaroundSection source={endpoints.turnaround} sentFilters={sentFilterKeys} />
               <OperationsSection data={data} />
-              <BranchSection source={endpoints.branches} sentFilters={overview?.filters_applied ?? []} />
+              <BranchSection source={endpoints.branches} sentFilters={sentFilterKeys} />
+              <ShareCapitalControlSection source={endpoints.shareCapitalControl} />
             </div>
             <aside className={`${L.cell} xl:sticky xl:top-0 xl:self-start`}>
-              <AttentionPanel data={data} />
+              <AttentionPanel source={endpoints.attention} sentFilters={sentFilterKeys} />
             </aside>
           </div>
         </div>

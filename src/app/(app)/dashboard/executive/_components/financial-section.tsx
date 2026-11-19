@@ -3,12 +3,12 @@
 import { Bar, CartesianGrid, ComposedChart, Line, XAxis, YAxis } from "recharts";
 import { Landmark } from "lucide-react";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
-import { formatCurrency, formatDate } from "@/lib/format";
-import { cashBalance, fromCentavos, readyData, type ExecutiveData } from "../../_lib/executive-data";
+import { formatCurrency } from "@/lib/format";
+import { readyData, type ExecutiveData } from "../../_lib/executive-data";
+import { financialBooks } from "../../_lib/executive-books";
 import { hasActivity, incomeExpenseSeries, monthLabel } from "../../_lib/executive-sections";
 import { EXECUTIVE_LAYOUT as L } from "../../_lib/executive-layout";
-import { compactPeso, formatMetric, toNumber } from "../../_lib/metrics";
-import { CARD_STATE_TEXT } from "../../_lib/executive-overview";
+import { compactPeso, toNumber } from "../../_lib/metrics";
 import { Figure, SectionShell, SourceGate, figureText } from "./section-shell";
 
 const config = {
@@ -17,43 +17,35 @@ const config = {
   net: { label: "Net income", color: "var(--chart-2)" },
 } satisfies ChartConfig;
 
-const money = (v: number | null) => formatMetric(v, "currency");
-
 /**
- * `booksReady` is the overview's book cards' state: while the books aren't set
- * up, the ledger figures read "Requires configuration", as the cards do, never
- * ₱0.00. Required Allowance is the overview card's own figure (and state).
+ * Financial Performance, from `/accounting/dashboard`: its period lines (cash
+ * basis), `cash_total`, assets and equity. While its `books_state` isn't
+ * ready, the server's label and reason show instead, never ₱0.00. Required
+ * Allowance is the overview card's own figure (and state).
  */
 export function FinancialSection({
   data,
-  booksReady,
   allowance,
 }: {
   data: ExecutiveData;
-  booksReady: boolean;
   /** The overview's Required Allowance card in words: the figure the allowance posting books. */
   allowance: string;
 }) {
-  const books = booksReady ? null : CARD_STATE_TEXT.requires_configuration;
   const acc = readyData(data.accounting);
+  const books = acc ? financialBooks(acc) : null;
+  const notice = books?.notice ?? null;
   const series = incomeExpenseSeries(acc).map((p) => ({ ...p, label: monthLabel(p.month) }));
-  const income = readyData(data.income);
   const share = readyData(data.shareCapital);
 
   return (
     <SectionShell
       title="Financial Performance"
       icon={<Landmark className="size-4" />}
-      note="Ledger figures come from posted journals. Cash-basis income is what was collected in the period, not what was recognized."
+      note="Ledger figures come from posted journals. Interest, penalty and fee income are counted when the money is received (cash basis)."
     >
-      <SourceGate source={data.accounting} height="h-24" notice={books}>
+      <SourceGate source={data.accounting} height="h-24" notice={notice}>
         <div className={L.tiles}>
-          <Figure label="Income (period)" value={money(fromCentavos(acc?.period.income))} />
-          <Figure label="Expenses (period)" value={money(fromCentavos(acc?.period.expenses))} />
-          <Figure label="Net income (period)" value={money(fromCentavos(acc?.period.net_income))} />
-          <Figure label="Cash balance" value={money(cashBalance(acc))} hint={acc ? `All money accounts, as of ${formatDate(acc.as_of)}` : undefined} />
-          <Figure label="Total assets" value={money(fromCentavos(acc?.total_assets))} />
-          <Figure label="Total equity" value={money(fromCentavos(acc?.total_equity))} />
+          {books?.figures.map((f) => <Figure key={f.label} label={f.label} value={f.value} hint={f.hint} />)}
         </div>
       </SourceGate>
 
@@ -61,7 +53,7 @@ export function FinancialSection({
         <div className={L.cell}>
           <h3 className="mb-2 text-sm font-medium">Income vs expenses, last 12 months</h3>
           <SourceGate
-            notice={books}
+            notice={notice}
             source={data.accounting}
             empty={!hasActivity(series, ["income", "expenses", "net"])}
             emptyText="No income or expenses posted in these 12 months."
@@ -98,17 +90,7 @@ export function FinancialSection({
         </div>
 
         <div className={`${L.cell} space-y-2`}>
-          <h3 className="text-sm font-medium">Collected income (cash basis)</h3>
-          <SourceGate source={data.income} height="h-40">
-            <div className={L.tiles}>
-              <Figure label="Interest" value={money(toNumber(income?.interest_income))} />
-              <Figure label="Processing fees" value={money(toNumber(income?.processing_fees))} />
-              <Figure label="Service fees" value={money(toNumber(income?.service_fee))} />
-              <Figure label="Other fees" value={money(toNumber(income?.other_fees))} />
-              <Figure label="Penalties" value={money(toNumber(income?.penalty_income))} />
-              <Figure label="Total" value={money(toNumber(income?.total))} />
-            </div>
-          </SourceGate>
+          <h3 className="text-sm font-medium">Capital and allowance</h3>
           <div className={L.tiles}>
             <Figure label="Share capital" value={figureText(data.shareCapital, toNumber(share?.closing_balance), "currency")} hint="Closing balance" />
             <Figure

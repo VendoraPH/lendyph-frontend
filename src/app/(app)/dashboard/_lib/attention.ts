@@ -1,155 +1,74 @@
 /**
- * "Requires Attention": the conditions an executive should act on, read from
- * what the dashboard already loaded. A source that did not arrive raises
- * nothing: an alert is never inferred from a missing figure.
+ * "Requires Attention", from `GET /dashboard/executive/attention` (EB-D2).
+ * The server evaluates each rule against the thresholds in the dashboard
+ * settings and words it; this only orders the rules and puts their state, and
+ * the period or day they read, in words. No threshold lives in the browser.
  */
 
-import { formatCurrency } from "@/lib/format";
-import { readyData, type ExecutiveData } from "./executive-data";
-import { formatMetric, toNumber } from "./metrics";
+import { formatDate } from "@/lib/format";
+import type { AttentionState, ExecutiveAttention, ExecutiveFilterKey } from "@/types/executive-dashboard";
+import { figureFilterNote } from "./executive-books";
 
-export type AlertTone = "critical" | "warning";
+export const ATTENTION_STATE_TEXT: Record<AttentionState, string> = {
+  needs_attention: "Needs attention",
+  clear: "Clear",
+  no_access: "Not available",
+  no_data: "No data",
+  no_snapshot: "No snapshot for this date",
+  requires_configuration: "Requires configuration",
+};
 
-export interface AttentionItem {
-  id: string;
-  tone: AlertTone;
+export type AttentionTone = "attention" | "clear" | "neutral";
+
+const TONE: Record<AttentionState, AttentionTone> = {
+  needs_attention: "attention",
+  clear: "clear",
+  no_access: "neutral",
+  no_data: "neutral",
+  no_snapshot: "neutral",
+  requires_configuration: "neutral",
+};
+
+/** Rules read over the selected period; every other rule reads one day (`as_of`). */
+const PERIOD_RULES = new Set(["collection_efficiency"]);
+
+export interface AttentionRow {
+  key: string;
+  label: string;
+  stateText: string;
+  tone: AttentionTone;
   title: string;
   detail: string;
-  href: string;
+  /** Where to look into it; none for a rule the caller can't read. */
+  href: string | null;
+  /** "For <the period>" or "As of <day>". */
+  basis: string;
+  filterNote: string | null;
 }
 
-/** Thresholds, in percent. Kept here so the rule and its wording cannot drift apart. */
-export const ATTENTION_THRESHOLDS = {
-  parWarning: 5,
-  parCritical: 10,
-  collectionWarning: 90,
-  collectionCritical: 80,
-} as const;
-
-const plural = (n: number, one: string, many = `${one}s`) => `${formatMetric(n, "count")} ${n === 1 ? one : many}`;
-
-/** A server amount, or a dash when it wasn't sent: never ₱0.00 for a missing figure. */
-const money = (v: number | null) => (v === null ? "—" : formatCurrency(v));
-
-/** The sources the checks read. */
-const ATTENTION_SOURCES = ["accounting", "balance", "efficiency", "aging", "loanStats", "disbursements", "pastDue"] as const;
-
-/**
- * Whether the checks could run: `failed` when any source they read failed,
- * so the panel never says "nothing needs attention" about data it doesn't
- * have. A source the user may not read is left out, not a failure.
- */
-export function attentionStatus(d: ExecutiveData): "loading" | "failed" | "ready" {
-  const states = ATTENTION_SOURCES.map((name) => d[name].state);
-  if (states.includes("error")) return "failed";
-  if (states.includes("loading")) return "loading";
-  return "ready";
+export interface AttentionView {
+  /** How many rules need attention. */
+  count: number;
+  rows: AttentionRow[];
 }
 
-export function attentionItems(d: ExecutiveData): AttentionItem[] {
-  const items: AttentionItem[] = [];
-  const t = ATTENTION_THRESHOLDS;
+const range = (from: string, to: string) => (from === to ? formatDate(from) : `${formatDate(from)} – ${formatDate(to)}`);
 
-  const accounting = readyData(d.accounting);
-  if (accounting && accounting.is_balanced === false) {
-    items.push({
-      id: "books-unbalanced",
-      tone: "critical",
-      title: "The books do not balance",
-      detail: "Total debits and credits differ. Accounting figures here are not reliable until this is fixed.",
-      href: "/accounting/trial-balance",
-    });
-  }
-
-  const balance = readyData(d.balance);
-  const par = toNumber(balance?.par_ratio);
-  if (par !== null && par >= t.parWarning) {
-    items.push({
-      id: "par",
-      tone: par >= t.parCritical ? "critical" : "warning",
-      title: `Portfolio at risk is ${par.toFixed(2)}%`,
-      detail: `Above the ${par >= t.parCritical ? t.parCritical : t.parWarning}% threshold. ${money(toNumber(balance?.at_risk_amount))} of principal is more than 30 days past due.`,
-      href: "/loans/past-due",
-    });
-  }
-
-  const efficiency = readyData(d.efficiency);
-  const rate = toNumber(efficiency?.collection_rate);
-  const due = toNumber(efficiency?.total_due);
-  if (rate !== null && due !== null && due > 0 && rate < t.collectionWarning) {
-    items.push({
-      id: "collection",
-      tone: rate < t.collectionCritical ? "critical" : "warning",
-      title: `Collection efficiency is ${rate.toFixed(2)}%`,
-      detail: `${money(toNumber(efficiency?.uncollected))} of the amount due in the period is uncollected.`,
-      href: "/reports/collection_efficiency",
-    });
-  }
-
-  const aging = readyData(d.aging);
-  const over90 = toNumber(aging?.buckets?.over_90?.amount);
-  if (over90 !== null && over90 > 0) {
-    const count = toNumber(aging?.buckets?.over_90?.count) ?? 0;
-    items.push({
-      id: "over-90",
-      tone: "critical",
-      title: "Accounts more than 90 days past due",
-      detail: `${formatCurrency(over90)} across ${plural(count, "loan")}.`,
-      href: "/reports/aging_report",
-    });
-  }
-
-  const stats = readyData(d.loanStats);
-  const forReview = toNumber(stats?.for_review) ?? 0;
-  if (forReview > 0) {
-    items.push({
-      id: "for-review",
-      tone: "warning",
-      title: `${plural(forReview, "application")} waiting for approval`,
-      detail: "Submitted loan applications that have not been approved or rejected yet.",
-      href: "/loans",
-    });
-  }
-  const approved = toNumber(stats?.approved) ?? toNumber(readyData(d.disbursements)?.pending_release) ?? 0;
-  if (approved > 0) {
-    items.push({
-      id: "awaiting-release",
-      tone: "warning",
-      title: `${plural(approved, "approved loan")} not yet released`,
-      detail: "Approved applications whose proceeds have not been released to the member.",
-      href: "/loans",
-    });
-  }
-
-  if (accounting && accounting.unposted_journals > 0) {
-    items.push({
-      id: "unposted",
-      tone: "warning",
-      title: `${plural(accounting.unposted_journals, "journal entry", "journal entries")} not posted`,
-      detail: "Draft entries are left out of every balance until someone posts them.",
-      href: "/accounting/journals",
-    });
-  }
-  if (accounting?.adjustments_clearing_needs_review) {
-    items.push({
-      id: "clearing",
-      tone: "warning",
-      title: "Loan adjustments clearing is not zero",
-      detail: "Account 1180 should be cleared after every adjustment. Review the open balance.",
-      href: "/accounting/general-ledger",
-    });
-  }
-
-  const pastDue = toNumber(readyData(d.pastDue)?.past_due_amount);
-  if (pastDue !== null && pastDue > 0 && !items.some((i) => i.id === "par")) {
-    items.push({
-      id: "past-due",
-      tone: "warning",
-      title: "Loans with past due installments",
-      detail: `${formatCurrency(pastDue)} past due after the grace period.`,
-      href: "/loans/past-due",
-    });
-  }
-
-  return items.sort((a, b) => (a.tone === b.tone ? 0 : a.tone === "critical" ? -1 : 1));
+/** Every rule, those needing attention first, in the server's order otherwise. */
+export function attentionView(response: ExecutiveAttention, sent: readonly ExecutiveFilterKey[]): AttentionView {
+  const rows = response.rules.map((rule) => ({
+    key: rule.key,
+    label: rule.label,
+    stateText: ATTENTION_STATE_TEXT[rule.state] ?? rule.state,
+    tone: TONE[rule.state] ?? "neutral",
+    title: rule.title,
+    detail: rule.detail,
+    href: rule.state === "no_access" ? null : rule.link,
+    basis: PERIOD_RULES.has(rule.key)
+      ? `For ${range(response.period.from, response.period.to)}`
+      : `As of ${formatDate(rule.as_of ?? response.as_of)}`,
+    filterNote: figureFilterNote(sent, response, rule.key),
+  }));
+  const first = rows.filter((r) => r.tone === "attention");
+  return { count: first.length, rows: [...first, ...rows.filter((r) => r.tone !== "attention")] };
 }

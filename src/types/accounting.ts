@@ -609,8 +609,19 @@ export interface AccountingBook {
  * the browser would mean pulling the whole ledger down to add it up, and the
  * numbers would drift the moment the page was open while someone posted.
  */
+/** `BooksState::current()`: whether the books can be read as positions. */
+export interface BooksStateInfo {
+  state: "ready" | "requires_configuration" | "books_not_set_up";
+  label: string;
+  reason: string | null;
+}
+
 export interface AccountingDashboard {
   as_of: string;
+  /** EB-D2; absent from older servers. */
+  books_state?: BooksStateInfo;
+  /** Cash on hand, in banks and in e-wallets, at `as_of`; null until the books are ready. Centavos. */
+  cash_total?: number | null;
   /** Centavos. */
   cash_on_hand: number;
   cash_in_bank: number;
@@ -648,6 +659,13 @@ export interface AccountingDashboard {
     income: number;
     expenses: number;
     net_income: number;
+    /** The income statement's lines for the accounts set for each role (EB-D2), cash basis. Centavos. */
+    interest_income?: number;
+    penalty_income?: number;
+    fee_income?: number;
+    income_basis?: "cash";
+    interest_income_label?: string;
+    fee_income_label?: string;
   };
   /** Each money account's balance at `as_of`. */
   cash_accounts: DashboardCashAccount[];
