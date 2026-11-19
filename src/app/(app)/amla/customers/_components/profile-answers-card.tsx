@@ -4,13 +4,14 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { AmlaSubjectRef } from "@/lib/amla/cdd-access";
-import { formatDateTime } from "@/lib/format";
-import type { AmlaCddProfile } from "@/types/amla-cdd";
+import { amlaAnswersChangedText, amlaOccupationAnswer } from "@/lib/amla/cdd-view";
+import type { AmlaCddView } from "@/types/amla-cdd";
 import { ProfileEditDialog } from "./profile-edit-dialog";
 
 /** The KYC answers on the AMLA profile, in the server's words. They live only on the AMLA profile, never on the member form. */
-export function ProfileAnswersCard({ profile, subject, onSaved }: { profile: AmlaCddProfile; subject: AmlaSubjectRef; onSaved: () => void }) {
+export function ProfileAnswersCard({ view, subject, onSaved }: { view: AmlaCddView; subject: AmlaSubjectRef; onSaved: () => void }) {
   const [editing, setEditing] = useState(false);
+  const profile = view.profile;
   const answer = (value: string | number | null | undefined) => (value === null || value === undefined || value === "" ? "Not answered" : String(value));
   const source =
     profile.source_of_funds === "other" && profile.source_of_funds_other
@@ -18,7 +19,7 @@ export function ProfileAnswersCard({ profile, subject, onSaved }: { profile: Aml
       : answer(profile.source_of_funds_words);
   const rows: [string, string][] = [
     ["Nationality", answer(profile.nationality)],
-    ["Occupation or business", answer(profile.occupation)],
+    ["Occupation or business", amlaOccupationAnswer(subject.type, profile, view.completeness.missing)],
     ["Source of funds", source],
     ["Purpose of the relationship", answer(profile.purpose)],
     ["Expected monthly amount", answer(profile.expected_monthly_amount_words)],
@@ -34,13 +35,7 @@ export function ProfileAnswersCard({ profile, subject, onSaved }: { profile: Aml
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2">
         <div className="space-y-1">
           <CardTitle className="text-base">Due diligence answers</CardTitle>
-          <CardDescription>
-            {profile.exists
-              ? profile.updated_at
-                ? `Last changed ${formatDateTime(profile.updated_at)}.`
-                : "Started."
-              : "Not started. The first save starts the profile."}
-          </CardDescription>
+          <CardDescription>{amlaAnswersChangedText(profile, view.changes)}</CardDescription>
         </div>
         <Button size="sm" onClick={() => setEditing(true)}>
           {profile.exists ? "Edit answers" : "Start profile"}

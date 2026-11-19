@@ -232,6 +232,23 @@ export function rootPageTitle(section: string): string | undefined {
  * own title (`/accounting/journals/new` reads "New Journal Entry"), the menu's,
  * or its words.
  */
+/**
+ * Pages whose third part names a record type, followed by the record
+ * (`/amla/customers/members/7`): the breadcrumb reads the record's part, so
+ * the page ends "Detail" as other record pages do.
+ */
+const RECORD_TYPE_PARTS: Readonly<Record<string, readonly string[]>> = {
+  "amla/customers": ["members", "walk-ins"],
+};
+
+/** The part a page further down reads its breadcrumb title from: the third, or a typed record's own. */
+export function nestedSegment(segments: readonly string[]): string {
+  const [section, page, type, record] = segments;
+  const types = own(RECORD_TYPE_PARTS, `${section}/${page}`);
+  if (types?.includes(type) && segments.length === 4 && /^\d+$/.test(record)) return record;
+  return type;
+}
+
 export function nestedPageTitle(
   section: string,
   page: string,

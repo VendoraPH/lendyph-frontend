@@ -6,13 +6,13 @@ import type { AmlaProfileChange } from "@/types/amla-cdd";
 
 /** The last 20 changes to the answers: which fields, who and when. Old and new values stay on the server's record. */
 export function ChangesCard({ changes }: { changes: AmlaProfileChange[] }) {
-  if (changes.length === 0) return null;
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Changes to the answers</CardTitle>
       </CardHeader>
       <CardContent>
+        {changes.length === 0 && <p className="text-sm text-muted-foreground">No answers saved yet.</p>}
         <ul className="space-y-1 text-sm">
           {changes.map(amlaProfileChangeRow).map((row) => (
             <li key={row.id}>

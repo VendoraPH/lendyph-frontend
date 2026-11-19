@@ -5,12 +5,14 @@ import type { AmlaCddProfile, AmlaCddRow, AmlaProfileChange, AmlaRiskAssessment 
 import {
   AMLA_CDD_STATUS_OPTIONS,
   AMLA_RISK_LEVEL_OPTIONS,
+  amlaAnswersChangedText,
   amlaAssessBody,
   amlaCddStatusTone,
   amlaCompletenessLines,
   amlaFactorRows,
   amlaIdDocumentOptions,
   amlaIdVerificationBody,
+  amlaOccupationAnswer,
   amlaProfileBody,
   amlaProfileChangeRow,
   amlaProfileDraft,
@@ -80,12 +82,12 @@ test("a walk-in, a subject not yet assessed or reviewed, and a complete one read
   assert.equal(walkIn.href, "/amla/customers/walk-ins/4");
   assert.equal(walkIn.type, "Walk-in");
   assert.equal(walkIn.code, "—");
-  assert.equal(walkIn.branch, "Head office");
+  assert.equal(walkIn.branch, "Organisation-wide");
   assert.equal(walkIn.risk, "Not assessed yet");
   assert.equal(walkIn.nextReview, "Not set");
   assert.equal(walkIn.missing, "1 item missing");
   assert.equal(amlaWorklistRow({ ...ROW, missing_count: 0 }).missing, "Complete");
-  assert.equal(amlaWorklistRow({ ...ROW, branch: null }).branch, "No branch");
+  assert.equal(amlaWorklistRow({ ...ROW, branch: null }).branch, "Organisation-wide");
 });
 
 test("the completeness check lists what is missing, expired and expiring, in the server's words", () => {
@@ -342,4 +344,32 @@ test("a profile change lists the fields it changed, in words, never their values
     when: formatDateTime("2026-11-20T02:00:00Z"),
   });
   assert.doesNotMatch(JSON.stringify(row), /Mayor/);
+});
+
+test("an occupation the member's record supplies says so, on the factor and on the answer, so the two never disagree", () => {
+  const profile = { ...PROFILE, occupation: null };
+  const occupation = { key: "occupation", label: "Occupation or business", value: "provided", value_words: "Provided", points: 0 };
+  const rows = amlaFactorRows({ ...ASSESSMENT, factors: [occupation] }, { type: "member", profile });
+  assert.equal(rows[0].value, "Provided, from the member's record");
+  assert.equal(amlaOccupationAnswer("member", profile, []), "Not answered here. The member's record names an employer or business.");
+});
+
+test("an occupation answered on the AMLA profile, a missing one, and a walk-in's read as they are", () => {
+  const occupation = { key: "occupation", label: "Occupation or business", value: "provided", value_words: "Provided", points: 0 };
+  assert.equal(amlaFactorRows({ ...ASSESSMENT, factors: [occupation] }, { type: "member", profile: PROFILE })[0].value, "Provided");
+  assert.equal(amlaFactorRows({ ...ASSESSMENT, factors: [occupation] })[0].value, "Provided");
+  assert.equal(amlaOccupationAnswer("member", PROFILE, []), "Teacher");
+  const missing = [{ key: "occupation", words: "The occupation or business is missing" }];
+  assert.equal(amlaOccupationAnswer("member", { ...PROFILE, occupation: null }, missing), "Not answered");
+  assert.equal(amlaOccupationAnswer("walk_in", { ...PROFILE, occupation: null }, []), "Not answered");
+});
+
+test("the answers' last change is the latest change to an answer, never a review or an override", () => {
+  const change: AmlaProfileChange = { id: 2, fields: ["occupation"], changes: {}, changed_by: ana, changed_at: "2026-11-20T03:00:00Z" };
+  assert.equal(
+    amlaAnswersChangedText({ ...PROFILE, updated_at: "2026-11-21T09:00:00Z" }, [change, { ...change, id: 1, changed_at: "2026-11-19T01:00:00Z" }]),
+    `Answers last changed ${formatDateTime("2026-11-20T03:00:00Z")} by Ana Cruz.`,
+  );
+  assert.equal(amlaAnswersChangedText(PROFILE, []), "No answers saved yet.");
+  assert.equal(amlaAnswersChangedText({ ...PROFILE, exists: false }, []), "Not started. The first save starts the profile.");
 });

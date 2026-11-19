@@ -31,6 +31,9 @@ interface Applied extends Draft {
   page: number;
 }
 
+/** The shared branch filter's label style, so every filter label matches it. */
+const FILTER_LABEL = "text-xs text-muted-foreground";
+
 const START: Draft = { type: "", status: "", search: "" };
 
 function toApi(applied: Applied): AmlaCddFilters {
@@ -72,8 +75,8 @@ export function CustomersWorklist() {
         }}
       >
         {access.walkIns && (
-          <div className="space-y-1">
-            <Label htmlFor="amla-cdd-type">Customers</Label>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="amla-cdd-type" className={FILTER_LABEL}>Customers</Label>
             <NativeSelect id="amla-cdd-type" value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value })}>
               <NativeSelectOption value="">Members and walk-ins</NativeSelectOption>
               <NativeSelectOption value="member">Members</NativeSelectOption>
@@ -81,8 +84,8 @@ export function CustomersWorklist() {
             </NativeSelect>
           </div>
         )}
-        <div className="space-y-1">
-          <Label htmlFor="amla-cdd-status">CDD status</Label>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="amla-cdd-status" className={FILTER_LABEL}>CDD status</Label>
           <NativeSelect id="amla-cdd-status" value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value })}>
             <NativeSelectOption value="">Every status</NativeSelectOption>
             {AMLA_CDD_STATUS_OPTIONS.map((o) => (
@@ -92,8 +95,8 @@ export function CustomersWorklist() {
             ))}
           </NativeSelect>
         </div>
-        <div className="space-y-1">
-          <Label htmlFor="amla-cdd-search">Search</Label>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="amla-cdd-search" className={FILTER_LABEL}>Search</Label>
           <Input
             id="amla-cdd-search"
             type="search"
@@ -121,8 +124,9 @@ export function CustomersWorklist() {
         >
           {(page) => (
             <>
+              {/* A set minimum width, so at 1024 the table scrolls sideways inside its box instead of squeezing. */}
               <ScrollBox className="min-h-0 flex-1">
-                <Table>
+                <Table className="min-w-[48rem]">
                   <TableHeader className="sticky top-0 z-10 bg-background">
                     <TableRow>
                       <TableHead>Customer</TableHead>
@@ -141,7 +145,9 @@ export function CustomersWorklist() {
                             {row.name}
                           </Link>
                           <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-                            {row.type} · {row.code}
+                            <span className="whitespace-nowrap">
+                              {row.type} · {row.code}
+                            </span>
                             {row.imported && <Badge variant="outline">Imported</Badge>}
                           </div>
                         </TableCell>

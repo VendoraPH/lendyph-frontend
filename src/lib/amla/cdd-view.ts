@@ -6,6 +6,7 @@ import type {
   AmlaCddProfile,
   AmlaCddRow,
   AmlaCompleteness,
+  AmlaCompletenessItem,
   AmlaIdVerificationBody,
   AmlaMemberIdDocument,
   AmlaProfileBody,
@@ -115,6 +116,9 @@ export interface AmlaWorklistRow {
   missing: string;
 }
 
+/** Multi-branch decision 6: no branch reads "Organisation-wide" (walk-ins carry none). */
+export const NO_BRANCH = "Organisation-wide";
+
 export function amlaWorklistRow(row: AmlaCddRow): AmlaWorklistRow {
   const walkIn = row.type === "walk_in";
   return {
@@ -123,7 +127,7 @@ export function amlaWorklistRow(row: AmlaCddRow): AmlaWorklistRow {
     name: row.name,
     code: row.code ?? "—",
     type: walkIn ? "Walk-in" : "Member",
-    branch: row.branch?.name ?? (walkIn ? "Head office" : "No branch"),
+    branch: row.branch?.name ?? NO_BRANCH,
     imported: row.is_imported,
     status: row.cdd_status_words,
     tone: amlaCddStatusTone(row.cdd_status),
@@ -149,13 +153,28 @@ export interface AmlaFactorRow {
   notAvailable: boolean;
 }
 
-export function amlaFactorRows(assessment: AmlaRiskAssessment): AmlaFactorRow[] {
+/** The subject a factor list is read for, so a value the server took from elsewhere can say where from. */
+export interface AmlaFactorContext {
+  type: AmlaSubjectType;
+  profile: Pick<AmlaCddProfile, "occupation">;
+}
+
+/**
+ * The scorer counts a member's occupation as provided when the AMLA profile
+ * has none but the member's record names an employer or business
+ * (`RiskScorer`, `CddState`), so the factor says where it came from.
+ */
+function fromMemberRecord(factor: { key: string; value: string }, context: AmlaFactorContext | undefined): boolean {
+  return factor.key === "occupation" && factor.value === "provided" && context?.type === "member" && !context.profile.occupation;
+}
+
+export function amlaFactorRows(assessment: AmlaRiskAssessment, context?: AmlaFactorContext): AmlaFactorRow[] {
   return assessment.factors.map((factor) => {
     const notAvailable = factor.value === "not_available";
     return {
       key: factor.key,
       label: factor.label,
-      value: factor.value_words,
+      value: fromMemberRecord(factor, context) ? `${factor.value_words}, from the member's record` : factor.value_words,
       points: notAvailable ? "—" : `${factor.points} ${factor.points === 1 ? "point" : "points"}`,
       notAvailable,
     };
@@ -331,6 +350,36 @@ export function amlaReviewBody(form: { kind: string; outcome: string; notes: str
   const notes = form.notes.trim();
   if (form.kind === "edd" && notes === "") return { error: "An enhanced due diligence review needs notes." };
   return { body: { kind: form.kind, outcome: form.outcome, ...(notes !== "" ? { notes } : {}) } };
+}
+
+/**
+ * The occupation answer. When the AMLA profile has none but the completeness
+ * check doesn't list it as missing, a member's record names an employer or
+ * business (the server's rule), so the answer says so instead of reading
+ * "Not answered" beside a factor that reads "Provided".
+ */
+export function amlaOccupationAnswer(
+  type: AmlaSubjectType,
+  profile: Pick<AmlaCddProfile, "occupation">,
+  missing: AmlaCompletenessItem[],
+): string {
+  if (profile.occupation) return profile.occupation;
+  if (type === "member" && !missing.some((item) => item.key === "occupation")) {
+    return "Not answered here. The member's record names an employer or business.";
+  }
+  return "Not answered";
+}
+
+/**
+ * When the answers last changed: the newest change to an answer (the history
+ * comes newest first). The profile's own `updated_at` also moves on reviews and
+ * overrides, so it isn't used.
+ */
+export function amlaAnswersChangedText(profile: AmlaCddProfile, changes: AmlaProfileChange[]): string {
+  if (!profile.exists) return "Not started. The first save starts the profile.";
+  const latest = changes[0];
+  if (!latest) return "No answers saved yet.";
+  return `Answers last changed ${formatDateTime(latest.changed_at)} by ${latest.changed_by?.name ?? "the system"}.`;
 }
 
 export function amlaReviewLines(profile: AmlaCddProfile): { next: string; last: string; edd: string | null } {

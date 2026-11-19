@@ -53,7 +53,7 @@ export function RiskCard({ view, subject, onAssessed }: { view: AmlaCddView; sub
               </TableRow>
             </TableHeader>
             <TableBody>
-              {amlaFactorRows(risk).map((factor) => (
+              {amlaFactorRows(risk, { type: subject.type, profile: view.profile }).map((factor) => (
                 <TableRow key={factor.key}>
                   <TableCell className="whitespace-normal">{factor.label}</TableCell>
                   <TableCell className={factor.notAvailable ? "whitespace-normal text-muted-foreground" : "whitespace-normal"}>
