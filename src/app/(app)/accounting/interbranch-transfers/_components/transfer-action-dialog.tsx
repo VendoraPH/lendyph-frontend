@@ -18,13 +18,14 @@ import { mintIdempotencyKey } from "@/lib/idempotency-key";
 import { notifySuccess, notifyWarning } from "@/lib/notify";
 import { interbranchTransferService } from "@/services";
 import type { InterbranchTransfer } from "@/types/interbranch-transfer";
-import { transferFailure, type TransferActionButton } from "../_lib/transfers";
+import { transferFailure, type TransferActionButton, type TransferActionKind } from "../_lib/transfers";
 
 interface TransferActionDialogProps {
   /** The transfer and the step being taken; null when closed. */
   pending: { transfer: InterbranchTransfer; action: TransferActionButton } | null;
   onClose: () => void;
-  onDone: () => void;
+  /** After a successful step, named so the page reloads what it changed. */
+  onDone: (step: TransferActionKind) => void;
 }
 
 /**
@@ -70,7 +71,7 @@ export function TransferActionDialog({ pending, onClose, onDone }: TransferActio
       notifySuccess(`${result.transfer.transfer_number}: ${result.transfer.status_label}.`);
       for (const warning of result.warnings) notifyWarning(warning);
       onClose();
-      onDone();
+      onDone(action.kind);
     } catch (err) {
       setError(transferFailure(err).general);
     } finally {

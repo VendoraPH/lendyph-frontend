@@ -155,6 +155,7 @@ export function TransferFormDialog({ open, initial, onOpenChange, onCreated }: T
             <>
               <div className="space-y-1.5">
                 <AccountSelect
+                  id="ibt-from-account"
                   label="From account"
                   accounts={moneyAccounts}
                   value={form.fromAccountId}
@@ -165,6 +166,7 @@ export function TransferFormDialog({ open, initial, onOpenChange, onCreated }: T
               </div>
               <div className="space-y-1.5">
                 <AccountSelect
+                  id="ibt-to-account"
                   label="To account"
                   accounts={moneyAccounts}
                   value={form.toAccountId}

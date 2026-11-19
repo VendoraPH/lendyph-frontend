@@ -14,7 +14,7 @@ interface BranchPickerProps {
   onChange: (id: number | null) => void;
 }
 
-/** One branch, by name; a suspended one reads "(Suspended)". */
+/** One branch, by name and code; a suspended one adds "· Suspended". */
 export function BranchPicker({ id, label, branches, value, loading, disabled, onChange }: BranchPickerProps) {
   const selected = branches.find((b) => b.id === value) ?? null;
   return (
@@ -36,7 +36,6 @@ export function BranchPicker({ id, label, branches, value, loading, disabled, on
           {branches.map((b) => (
             <SelectItem key={b.id} value={String(b.id)}>
               {b.label}
-              {b.code ? ` (${b.code})` : ""}
             </SelectItem>
           ))}
         </SelectContent>

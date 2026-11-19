@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback } from "react";
-import { Card, CardContent } from "@/components/ui/card";
 import { useApiResource } from "@/hooks/use-api-resource";
 import { branchCountCards } from "@/lib/branch-counts";
 import { cn } from "@/lib/utils";
@@ -10,19 +9,27 @@ import { useAuthStore } from "@/store";
 
 interface BranchCountsCardsProps {
   className?: string;
+  /** Change it to reload the counts, after a step that changes them. */
+  refreshKey?: number;
 }
 
 /**
  * The branch dashboard counts (`GET /branch-counts`): transfers waiting for
  * approval and in transit, suspended branches and branches not yet
- * reconciled, each in the caller's branches. Self-contained, so any page can
- * place it. The endpoint needs `dashboard:analytics`; without it nothing is
- * requested and nothing renders. A figure the caller can't see reads
- * "Not available", never 0.
+ * reconciled, each in the caller's branches. One compact row, so the lists
+ * below keep their height. Self-contained, so any page can place it. The
+ * endpoint needs `dashboard:analytics`; without it nothing is requested and
+ * nothing renders. A figure the caller can't see reads "Not available",
+ * never 0. Each card's hint is its tooltip and its accessible description.
  */
-export function BranchCountsCards({ className }: BranchCountsCardsProps) {
+export function BranchCountsCards({ className, refreshKey = 0 }: BranchCountsCardsProps) {
   const allowed = useAuthStore((s) => s.hasPermission("dashboard:analytics"));
-  const fetcher = useCallback(() => interbranchTransferService.counts(), []);
+  // A new fetcher for each key: the resource requests again and keeps the last
+  // figures on screen meanwhile.
+  const fetcher = useCallback(() => {
+    void refreshKey;
+    return interbranchTransferService.counts();
+  }, [refreshKey]);
   const resource = useApiResource(fetcher, allowed);
 
   if (!allowed || resource.unavailable) return null;
@@ -42,22 +49,31 @@ export function BranchCountsCards({ className }: BranchCountsCardsProps) {
     <section
       aria-label="Branch counts"
       aria-busy={loading || undefined}
-      className={cn("grid shrink-0 gap-3 sm:grid-cols-2 xl:grid-cols-4", className)}
+      className={cn("grid shrink-0 grid-cols-2 gap-2 lg:grid-cols-4", className)}
     >
       {cards.map((card) => (
-        <Card key={card.key}>
-          <CardContent className="space-y-1 py-3">
-            <p className="text-sm text-muted-foreground">{card.label}</p>
-            {loading ? (
-              <div className="h-7 w-12 animate-pulse rounded bg-muted" aria-hidden />
-            ) : (
-              <p className={cn("text-2xl font-semibold tabular-nums", !card.available && "text-base text-muted-foreground")}>
-                {card.value}
-              </p>
-            )}
-            <p className="text-[11px] text-muted-foreground">{card.hint}</p>
-          </CardContent>
-        </Card>
+        <div
+          key={card.key}
+          title={card.hint}
+          className="flex items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2"
+        >
+          <span className="text-xs text-muted-foreground">
+            {card.label}
+            <span className="sr-only">. {card.hint}</span>
+          </span>
+          {loading ? (
+            <span className="h-5 w-8 animate-pulse rounded bg-muted" aria-hidden />
+          ) : (
+            <span
+              className={cn(
+                "shrink-0 font-semibold tabular-nums",
+                card.available ? "text-lg" : "text-xs text-muted-foreground",
+              )}
+            >
+              {card.value}
+            </span>
+          )}
+        </div>
       ))}
     </section>
   );

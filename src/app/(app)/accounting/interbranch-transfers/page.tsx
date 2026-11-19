@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { ArrowLeftRight, ChevronLeft, ChevronRight } from "lucide-react";
-import { PermissionGate, RouteGuard } from "@/components/common";
+import { ArrowLeftRight } from "lucide-react";
+import { PermissionGate, RouteGuard, TablePagination } from "@/components/common";
 import { FillSection, PageFill, ScrollBox } from "@/components/common/page-fill";
 import { BranchCountsCards } from "@/components/branches/branch-counts-cards";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,13 @@ import { InTransitReport } from "./_components/in-transit-report";
 import { TransferActionDialog } from "./_components/transfer-action-dialog";
 import { TransferFormDialog } from "./_components/transfer-form-dialog";
 import { TransfersTable } from "./_components/transfers-table";
-import { sendBackForm, type TransferActionButton, type TransferForm } from "./_lib/transfers";
+import {
+  sendBackForm,
+  stepRefreshes,
+  type TransferActionButton,
+  type TransferForm,
+  type TransferStep,
+} from "./_lib/transfers";
 
 const PER_PAGE = 25;
 
@@ -42,6 +48,7 @@ function InterbranchTransfersContent() {
   const [page, setPage] = useState(1);
   const [form, setForm] = useState<{ open: boolean; initial: TransferForm | null }>({ open: false, initial: null });
   const [pending, setPending] = useState<{ transfer: InterbranchTransfer; action: TransferActionButton } | null>(null);
+  const [countsKey, setCountsKey] = useState(0);
 
   const listFetcher = useCallback(
     () =>
@@ -56,17 +63,17 @@ function InterbranchTransfersContent() {
   const reportFetcher = useCallback(() => interbranchTransferService.inTransit(), []);
   const report = useApiResource(reportFetcher, tab === "in-transit");
 
-  const refresh = () => {
-    list.refetch();
-    if (tab === "in-transit") report.refetch();
+  const afterStep = (step: TransferStep) => {
+    const reload = stepRefreshes(step);
+    if (reload.list) list.refetch();
+    if (reload.inTransit && tab === "in-transit") report.refetch();
+    if (reload.counts) setCountsKey((k) => k + 1);
   };
   const onAction = (transfer: InterbranchTransfer, action: TransferActionButton) => setPending({ transfer, action });
   const onSendBack = (transfer: InterbranchTransfer) => setForm({ open: true, initial: sendBackForm(transfer) });
 
-  const lastPage = list.data?.meta?.last_page ?? 1;
-
   return (
-    <PageFill>
+    <PageFill className="fit:gap-4">
       <AccountingPageHeader
         title="Interbranch Transfers"
         description="Money moved from one branch to another through Interbranch Clearing (1190)."
@@ -80,20 +87,20 @@ function InterbranchTransfersContent() {
         }
       />
 
-      <BranchCountsCards />
+      <BranchCountsCards refreshKey={countsKey} />
 
       <Tabs
         value={tab}
         onValueChange={(value) => setTab(value === "in-transit" ? "in-transit" : "transfers")}
         className={FIT_CLASSES.section}
       >
-        <TabsList className="shrink-0">
-          <TabsTrigger value="transfers">Transfers</TabsTrigger>
-          <TabsTrigger value="in-transit">In transit</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="transfers" className={FIT_CLASSES.section}>
-          <div className="flex shrink-0 items-center gap-2">
+        {/* The tabs and the list's filter share one line, so the list keeps its height. */}
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
+          <TabsList>
+            <TabsTrigger value="transfers">Transfers</TabsTrigger>
+            <TabsTrigger value="in-transit">In transit</TabsTrigger>
+          </TabsList>
+          {tab === "transfers" && (
             <Select
               value={status}
               onValueChange={(next: string | null) => {
@@ -112,7 +119,10 @@ function InterbranchTransfersContent() {
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          )}
+        </div>
+
+        <TabsContent value="transfers" className={FIT_CLASSES.section}>
           <DataState
             resource={list}
             summary="Transfers between your branches, newest first."
@@ -121,25 +131,22 @@ function InterbranchTransfersContent() {
             emptyMessage="No interbranch transfer matches."
           >
             {(data) => (
-              <FillSection className="gap-3">
+              <FillSection>
                 <Card className={FIT_CLASSES.section}>
                   <CardContent className={FIT_CLASSES.section}>
                     <ScrollBox>
                       <TransfersTable rows={data.data} canCreate={canCreate} onAction={onAction} onSendBack={onSendBack} />
                     </ScrollBox>
+                    <TablePagination
+                      page={page}
+                      perPage={PER_PAGE}
+                      total={data.meta.total}
+                      perPageOptions={[PER_PAGE]}
+                      onPageChange={setPage}
+                      onPerPageChange={() => setPage(1)}
+                    />
                   </CardContent>
                 </Card>
-                <div className="flex shrink-0 items-center justify-end gap-2 text-sm text-muted-foreground">
-                  <span>
-                    Page {data.meta.current_page} of {lastPage} ({data.meta.total})
-                  </span>
-                  <Button variant="outline" size="icon" aria-label="Previous page" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <Button variant="outline" size="icon" aria-label="Next page" disabled={page >= lastPage} onClick={() => setPage((p) => p + 1)}>
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
               </FillSection>
             )}
           </DataState>
@@ -160,9 +167,9 @@ function InterbranchTransfersContent() {
         open={form.open}
         initial={form.initial}
         onOpenChange={(open) => setForm((f) => ({ ...f, open }))}
-        onCreated={refresh}
+        onCreated={() => afterStep("create")}
       />
-      <TransferActionDialog pending={pending} onClose={() => setPending(null)} onDone={refresh} />
+      <TransferActionDialog pending={pending} onClose={() => setPending(null)} onDone={afterStep} />
     </PageFill>
   );
 }

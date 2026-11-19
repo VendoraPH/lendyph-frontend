@@ -7,6 +7,7 @@ import {
   buildTransferInput,
   canSendBack,
   sendBackForm,
+  stepRefreshes,
   transferBranchOptions,
   transferActionButtons,
   transferFailure,
@@ -217,13 +218,15 @@ test("a transfer can use active and suspended branches, never closed ones; a sus
     { id: 5, name: "West", code: "WST", is_active: false },
   ];
   const all = transferBranchOptions(listed, { viewAll: true, own: [] });
+  // One set of brackets: the code; a suspended branch adds "· Suspended".
   assert.deepEqual(all.sources.map((b) => [b.id, b.label]), [
-    [1, "Main"],
-    [2, "North (Suspended)"],
-    [4, "East"],
+    [1, "Main (MAIN)"],
+    [2, "North (NTH) · Suspended"],
+    [4, "East (EST)"],
     // An older answer with no status: inactive reads as suspended (branchStatusOf).
-    [5, "West (Suspended)"],
+    [5, "West (WST) · Suspended"],
   ]);
+  for (const b of all.sources) assert.equal((b.label.match(/\(/g) ?? []).length, 1, b.label);
   assert.deepEqual(all.destinations.map((b) => b.id), [1, 2, 4, 5]);
 
   // A branch user sends only from their own branches (still never a closed
@@ -233,6 +236,22 @@ test("a transfer can use active and suspended branches, never closed ones; a sus
     { id: 3, name: "South", code: "STH" },
   ];
   const branchUser = transferBranchOptions(listed, { viewAll: false, own });
-  assert.deepEqual(branchUser.sources.map((b) => [b.id, b.label]), [[2, "North (Suspended)"]]);
+  assert.deepEqual(branchUser.sources.map((b) => [b.id, b.label]), [[2, "North (NTH) · Suspended"]]);
   assert.deepEqual(branchUser.destinations.map((b) => b.id), [1, 2, 4, 5]);
+});
+
+test("a label without a code has no brackets at all", () => {
+  const { sources } = transferBranchOptions([{ id: 9, name: "Kiosk", code: "", is_active: false, status: "suspended" }], {
+    viewAll: true,
+    own: [],
+  });
+  assert.equal(sources[0].label, "Kiosk · Suspended");
+});
+
+// ── What a step refreshes ──
+
+test("every successful step reloads the list, the in-transit report and the branch counts", () => {
+  for (const step of ["create", "approve", "receive", "reject", "cancel", "reverse"] as const) {
+    assert.deepEqual(stepRefreshes(step), { list: true, inTransit: true, counts: true }, step);
+  }
 });
