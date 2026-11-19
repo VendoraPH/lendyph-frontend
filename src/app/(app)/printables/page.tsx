@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Printer, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { visiblePrintables } from "@/lib/printables/catalog";
+import { documentsAvailableLabel, visiblePrintables } from "@/lib/printables/catalog";
 import { printableIcon3D } from "@/lib/printables/icons-3d";
 import type { Icon3DName } from "@/lib/icons-3d";
 import { Icon3D } from "@/components/common/icon-3d";
@@ -123,7 +123,7 @@ export default function PrintablesPage() {
                     Print-ready
                   </Badge>
                   <span className="text-muted-foreground">
-                    {catalog.length} documents available
+                    {documentsAvailableLabel(catalog.length)}
                   </span>
                 </div>
               </div>

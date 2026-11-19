@@ -320,3 +320,12 @@ export function visiblePrintables(can: (permission: Permission) => boolean): Pri
 export function findPrintable(id: string | undefined): PrintableDefinition | undefined {
   return PRINTABLE_CATALOG.find((p) => p.id === id);
 }
+
+/**
+ * The Documents page's count: the printables shown plus the Data Import
+ * Template, which has its own card but isn't a printable.
+ */
+export function documentsAvailableLabel(printableCount: number): string {
+  const count = printableCount + 1;
+  return `${count} ${count === 1 ? "document" : "documents"} available`;
+}

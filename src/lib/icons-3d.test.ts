@@ -255,6 +255,27 @@ test("each module header shows its module's 3D icon", () => {
   }
 });
 
+test("module headers draw their icon at 40px beside the title, Reminders included", () => {
+  // Reminders drew its bell at 28px inside the <h1>; the other headers draw 40px beside it.
+  for (const path of [
+    "src/app/(app)/accounting/_components/page-header.tsx",
+    "src/app/(app)/credit-scoring/_components/page-header.tsx",
+    "src/app/(app)/cda/_components/cda-page.tsx",
+    "src/app/(app)/loans/reminders/_components/reminders-shell.tsx",
+  ]) {
+    const src = read(path);
+    assert.match(src, /<Icon3D name="[a-z0-9-]+" size=\{40\} className="hidden sm:block[^"]*" \/>/, path);
+    assert.doesNotMatch(src, /<h1[^>]*>\s*<Icon3D/, path);
+  }
+});
+
+test("the white reminders bell carries a soft shadow, so it reads on the light page", () => {
+  assert.match(
+    read("src/app/(app)/loans/reminders/_components/reminders-shell.tsx"),
+    /<Icon3D name="empty-reminders" size=\{40\} className="hidden sm:block drop-shadow-\[0_1px_3px_rgb\(0_0_0\/0\.25\)\]" \/>/,
+  );
+});
+
 test("the sign-in pages have no 3D icons", () => {
   for (const path of ["src/app/(auth)/login/page.tsx", "src/app/member/(auth)/login/page.tsx"]) {
     assert.doesNotMatch(read(path), /icon-3d|Icon3D/, path);

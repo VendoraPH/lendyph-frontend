@@ -31,7 +31,7 @@ import { ICON_3D_TILE_CLASS } from "@/lib/icons-3d";
 import { LindaAvatar } from "@/components/linda/linda-avatar";
 import { selectSidebarCollapsed, useUIStore } from "@/store/ui-store";
 import { systemService } from "@/services";
-import { collapsedNavLabel, countLabel, newLabel } from "./sidebar-labels";
+import { collapsedNavLabel, countLabel, newLabel, sidebarToggleLabel } from "./sidebar-labels";
 import { useUnseenNavBadges } from "./use-unseen-nav-badges";
 
 interface SidebarProps {
@@ -422,10 +422,13 @@ function SidebarContent({
         )}>
           {collapsed ? (
             <button
+              type="button"
               onClick={onToggle}
               className="rounded-xl p-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-all"
+              aria-label={sidebarToggleLabel(collapsed)}
+              title={sidebarToggleLabel(collapsed)}
             >
-              <ChevronsRight className="h-4 w-4" />
+              <ChevronsRight className="h-4 w-4" aria-hidden="true" />
             </button>
           ) : (
             <>
@@ -434,11 +437,13 @@ function SidebarContent({
               </div>
               {onToggle && (
                 <button
+                  type="button"
                   onClick={onToggle}
                   className="rounded-xl p-1.5 text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted transition-all"
-                  title="Collapse sidebar"
+                  aria-label={sidebarToggleLabel(collapsed)}
+                  title={sidebarToggleLabel(collapsed)}
                 >
-                  <ChevronsLeft className="h-4 w-4" />
+                  <ChevronsLeft className="h-4 w-4" aria-hidden="true" />
                 </button>
               )}
             </>

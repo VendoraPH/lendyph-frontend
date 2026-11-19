@@ -121,3 +121,10 @@ test("the edit form's Civil Status names its options, so it reads Single, not si
   const page = readFileSync(join(process.cwd(), "src/app/(app)/borrowers/[id]/edit/page.tsx"), "utf8");
   assert.match(page, /items=\{CIVIL_STATUS_OPTIONS\}/);
 });
+
+test("each member row's ⋯ menu is named for its member", async () => {
+  const { memberActionsLabel } = await import("./utils");
+  assert.equal(memberActionsLabel("Ana Cruz"), "Actions for Ana Cruz");
+  const actions = readFileSync(join(import.meta.dirname, "borrower-actions.tsx"), "utf8");
+  assert.match(actions, /<DropdownMenuTrigger className="outline-none" aria-label=\{memberActionsLabel\(borrower\.full_name\)\}>/);
+});
