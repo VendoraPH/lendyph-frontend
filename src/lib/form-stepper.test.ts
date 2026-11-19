@@ -254,8 +254,8 @@ test("phones: a single step needs no menu in either mode", () => {
 });
 
 test("noValidate: a form that opts out of browser validation is never checked natively", () => {
-  // The loan form's Share Capital Build-Up steps by whole pesos, so ₱50.50 is
-  // :invalid to the browser, yet the form (noValidate) and the server accept it.
+  // A loan amount below the product's minimum is :invalid to the browser, yet
+  // the loan form (noValidate) reports it with its own message.
   assert.equal(nativeValidityApplies({ noValidate: true }), false);
   assert.equal(nativeValidityApplies({ noValidate: true }, { formNoValidate: false }), false);
 });

@@ -252,9 +252,9 @@ export function hasStepErrors(result: StepErrors | true): boolean {
 /**
  * Whether the browser's own constraints (required, min, max, step, pattern…)
  * count, for Next and for submit. A form with `noValidate` opted out, so it
- * accepts exactly what it accepted before it was a stepper (the loan form's
- * whole-peso Build-Up input takes ₱50.50); so does a submit button with
- * `formNoValidate`. Outside a form there is nothing to check.
+ * accepts exactly what it accepted before it was a stepper (the loan forms
+ * leave range checks such as a product's minimum amount to their own
+ * messages); so does a submit button with `formNoValidate`. Outside a form there is nothing to check.
  */
 export function nativeValidityApplies(
   form: { noValidate: boolean } | null | undefined,

@@ -1212,7 +1212,7 @@ function NewLoanApplicationInner() {
               <div className={FORM_STEP_GRID.grid}>
               {/* Product */}
               <div className="space-y-2" data-field="loan_product_id">
-                <Label>
+                <Label htmlFor="loan-product">
                   Loan Product <span className="text-destructive">*</span>
                 </Label>
                 <Select
@@ -1220,7 +1220,7 @@ function NewLoanApplicationInner() {
                   onValueChange={(value) => handleProductChange(value)}
                   items={products.map((p) => ({ value: String(p.id), label: p.name }))}
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger id="loan-product" className="w-full">
                     <SelectValue placeholder="Select a loan product" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1252,10 +1252,11 @@ function NewLoanApplicationInner() {
 
                 {/* Principal Amount */}
                 <div className="space-y-2">
-                  <Label>
+                  <Label htmlFor="principal-amount">
                     Loan Amount <span className="text-destructive">*</span>
                   </Label>
                   <Input
+                    id="principal-amount"
                     name="principal_amount"
                     type="number"
                     placeholder="0.00"
@@ -1279,10 +1280,11 @@ function NewLoanApplicationInner() {
 
                 {/* Term */}
                 <div className="space-y-2">
-                  <Label>
+                  <Label htmlFor="loan-term">
                     Term ({termUnit}) <span className="text-destructive">*</span>
                   </Label>
                   <Input
+                    id="loan-term"
                     name="term"
                     type="number"
                     placeholder="0"
@@ -1296,13 +1298,13 @@ function NewLoanApplicationInner() {
 
                 {/* Payment Frequency */}
                 <div className="space-y-2" data-field="frequency">
-                  <Label>Payment Frequency</Label>
+                  <Label htmlFor="payment-frequency">Payment Frequency</Label>
                   <Select
                     value={paymentFrequency ?? null}
                     onValueChange={(value) => setPaymentFrequency(value ?? null)}
                     disabled={productFrequencies.length === 1}
                   >
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger id="payment-frequency" className="w-full">
                       <SelectValue placeholder="Select frequency">
                         {(value: string | null) =>
                           value ? (PAYMENT_FREQUENCY_LABELS[value] ?? value) : "Select frequency"
@@ -1327,8 +1329,9 @@ function NewLoanApplicationInner() {
 
                 {/* Interest Rate */}
                 <div className="space-y-2">
-                  <Label>Interest Rate (% per {ratePeriodWord(rateFrequency)})</Label>
+                  <Label htmlFor="interest-rate">Interest Rate (% per {ratePeriodWord(rateFrequency)})</Label>
                   <Input
+                    id="interest-rate"
                     name="interest_rate"
                     inputMode="decimal"
                     placeholder="0"
@@ -1390,8 +1393,8 @@ function NewLoanApplicationInner() {
                         type="number"
                         min={isRestructureEdit ? 0 : (selectedProduct.min_scb ?? 0)}
                         max={isRestructureEdit ? undefined : (selectedProduct.max_scb ?? undefined)}
-                        step="1"
-                        placeholder="0"
+                        step="0.01"
+                        placeholder="0.00"
                         value={scbAmount}
                         onChange={(e) => setScbAmount(e.target.value)}
                       />

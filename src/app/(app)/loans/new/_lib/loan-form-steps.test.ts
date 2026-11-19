@@ -77,7 +77,7 @@ test("the checks keep the form's labels and their order", () => {
   assert.deepEqual(Object.values(loanFormMissing(NOTHING_OK)), [
     "Member",
     "Loan product",
-    "Principal amount",
+    "Loan amount",
     "Term",
     "Payment frequency",
     "Interest rate",
@@ -96,7 +96,7 @@ test("each step validates only its own checks", () => {
   assert.deepEqual(byStep.member, ["Member"]);
   assert.deepEqual(byStep.terms, [
     "Loan product",
-    "Principal amount",
+    "Loan amount",
     "Term",
     "Payment frequency",
     "Interest rate",

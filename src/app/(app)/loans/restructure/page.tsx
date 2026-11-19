@@ -826,8 +826,8 @@ function RestructureLoanInner() {
 
         {/* Header */}
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon-sm" onClick={() => router.back()}>
-            <ArrowLeft className="h-4 w-4" />
+          <Button variant="ghost" size="icon-sm" aria-label="Go back" onClick={() => router.back()}>
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           </Button>
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Restructure Loan</h1>
@@ -885,7 +885,7 @@ function RestructureLoanInner() {
 
               {/* Active loan combobox */}
               <div className="space-y-1.5" data-field="source_loan_id">
-                <Label>Active Loan to Restructure</Label>
+                <Label id="source-loan-label">Active Loan to Restructure</Label>
                 {loadingLoans ? (
                   <div className="flex h-8 items-center gap-2 rounded-lg border border-input px-2.5 text-sm text-muted-foreground">
                     <Spinner className="size-4" /> Loading loans…
@@ -893,7 +893,16 @@ function RestructureLoanInner() {
                 ) : (
                   <Popover open={loanOpen} onOpenChange={setLoanOpen}>
                     <PopoverTrigger
-                      render={<Button variant="outline" role="combobox" disabled={!borrowerId} className="w-full justify-between font-normal" />}
+                      render={
+                        <Button
+                          id="source-loan"
+                          variant="outline"
+                          role="combobox"
+                          aria-labelledby="source-loan-label source-loan"
+                          disabled={!borrowerId}
+                          className="w-full justify-between font-normal"
+                        />
+                      }
                     >
                       {selectedSourceLoan
                         ? `${selectedSourceLoan.loan_account_number ?? selectedSourceLoan.application_number} — Principal Balance ${currencyOrDash((selectedSourceLoan as LoanWithPrincipalBalance).outstanding_principal)}`
@@ -1050,13 +1059,13 @@ function RestructureLoanInner() {
                   <div className={FORM_STEP_GRID.grid}>
                     {/* Product */}
                     <div className="space-y-1.5" data-field="loan_product_id">
-                      <Label>Loan Product</Label>
+                      <Label htmlFor="loan-product">Loan Product</Label>
                       <Select
                         value={productId ?? null}
                         onValueChange={(v) => handleProductChange(v)}
                         items={productItems}
                       >
-                        <SelectTrigger className="w-full">
+                        <SelectTrigger id="loan-product" className="w-full">
                           <SelectValue placeholder="Select product…" />
                         </SelectTrigger>
                         <SelectContent>
@@ -1074,11 +1083,12 @@ function RestructureLoanInner() {
 
                     {/* Loan Amount */}
                     <div className="space-y-1.5">
-                      <Label>
+                      <Label htmlFor="principal-amount">
                         Loan Amount
                         <span className="ml-1 text-xs leading-none text-muted-foreground">(restructurable balance)</span>
                       </Label>
                       <Input
+                        id="principal-amount"
                         name="principal_amount"
                         type="number"
                         min="0"
@@ -1105,8 +1115,9 @@ function RestructureLoanInner() {
 
                     {/* Term */}
                     <div className="space-y-1.5">
-                      <Label>Term ({termUnit})</Label>
+                      <Label htmlFor="loan-term">Term ({termUnit})</Label>
                       <Input
+                        id="loan-term"
                         name="term"
                         type="number"
                         min="1"
@@ -1118,12 +1129,12 @@ function RestructureLoanInner() {
 
                     {/* Payment Frequency */}
                     <div className="space-y-1.5" data-field="frequency">
-                      <Label>Payment Frequency</Label>
+                      <Label htmlFor="payment-frequency">Payment Frequency</Label>
                       <Select
                         value={paymentFrequency ?? null}
                         onValueChange={(v) => setPaymentFrequency(v ?? null)}
                       >
-                        <SelectTrigger className="w-full">
+                        <SelectTrigger id="payment-frequency" className="w-full">
                           <SelectValue placeholder="Select frequency…">
                             {(value: string | null) =>
                               value ? PAYMENT_FREQUENCY_LABELS[value] ?? value : "Select frequency…"
@@ -1144,8 +1155,9 @@ function RestructureLoanInner() {
 
                     {/* Interest Rate */}
                     <div className="space-y-1.5">
-                      <Label>Interest Rate (% per {ratePeriodWord(rateFrequency)})</Label>
+                      <Label htmlFor="interest-rate">Interest Rate (% per {ratePeriodWord(rateFrequency)})</Label>
                       <Input
+                        id="interest-rate"
                         name="interest_rate"
                         inputMode="decimal"
                         placeholder="e.g. 2"
@@ -1172,7 +1184,7 @@ function RestructureLoanInner() {
                     {/* SCB Amount */}
                     {selectedProduct?.scb_required && (
                       <div className={cn("space-y-1.5", FORM_STEP_GRID.wide)}>
-                        <Label>
+                        <Label htmlFor="scb-amount">
                           Share Capital Build-Up
                           {selectedProduct.min_scb != null && selectedProduct.max_scb != null && (
                             <span className="ml-1 text-xs leading-none text-muted-foreground">
@@ -1181,12 +1193,13 @@ function RestructureLoanInner() {
                           )}
                         </Label>
                         <Input
+                          id="scb-amount"
                           name="scb_amount"
                           type="number"
                           min={selectedProduct.min_scb ?? 0}
                           max={selectedProduct.max_scb ?? undefined}
-                          step="1"
-                          placeholder="0"
+                          step="0.01"
+                          placeholder="0.00"
                           value={scbAmount}
                           onChange={(e) => setScbAmount(e.target.value)}
                         />
