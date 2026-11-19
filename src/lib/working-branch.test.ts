@@ -4,6 +4,7 @@ import { ALL_BRANCHES } from "./branch-filter";
 import { branchViewer } from "./user-branches";
 import {
   branchFilterDefault,
+  followWorkingBranch,
   forgetWorkingBranch,
   initialBranchFilters,
   nextBranchFilters,
@@ -193,11 +194,12 @@ describe("workingBranchSelector: what the header shows", () => {
     });
   });
 
-  test("a branch user with several branches: only theirs, and no All branches", () => {
+  test("a branch user with several branches: All my branches first, then only theirs", () => {
     const s = workingBranchSelector({ viewAll: false, own: [NORTH, SOUTH], listed: LISTED });
     assert.deepEqual(s, {
       kind: "select",
       items: [
+        { value: ALL_BRANCHES, label: "All my branches" },
         { value: "1", label: "North" },
         { value: "2", label: "South" },
       ],
@@ -207,12 +209,12 @@ describe("workingBranchSelector: what the header shows", () => {
   test("a branch user's own branches stand in while the list loads", () => {
     const s = workingBranchSelector({ viewAll: false, own: [NORTH, SOUTH], listed: [] });
     assert.equal(s.kind, "select");
-    assert.deepEqual(s.kind === "select" && s.items.map((i) => i.value), ["1", "2"]);
+    assert.deepEqual(s.kind === "select" && s.items.map((i) => i.value), [ALL_BRANCHES, "1", "2"]);
   });
 
   test("a deactivated own branch is not offered once the list loads", () => {
     const s = workingBranchSelector({ viewAll: false, own: [NORTH, SOUTH, EAST], listed: [NORTH, SOUTH] });
-    assert.deepEqual(s.kind === "select" && s.items.map((i) => i.value), ["1", "2"]);
+    assert.deepEqual(s.kind === "select" && s.items.map((i) => i.value), [ALL_BRANCHES, "1", "2"]);
   });
 
   test("one branch: plain text", () => {
@@ -226,11 +228,9 @@ describe("workingBranchSelector: what the header shows", () => {
     assert.deepEqual(workingBranchSelector({ viewAll: false, own: [], listed: LISTED }), { kind: "none" });
   });
 
-  test("the select's value: the working branch, else All branches (view_all) or nothing picked", () => {
-    assert.equal(workingBranchSelectorValue(2, true), "2");
-    assert.equal(workingBranchSelectorValue(null, true), ALL_BRANCHES);
-    assert.equal(workingBranchSelectorValue(2, false), "2");
-    assert.equal(workingBranchSelectorValue(null, false), null);
+  test("the select's value: the working branch, else the All option (All branches or All my branches)", () => {
+    assert.equal(workingBranchSelectorValue(2), "2");
+    assert.equal(workingBranchSelectorValue(null), ALL_BRANCHES);
   });
 
   test("viewers used above are what the auth store would build", () => {
@@ -274,5 +274,58 @@ describe("branch-scoped filter objects (Reminders, Applications)", () => {
     assert.deepEqual(shownBranchFilters(s, null), { status: "pending", branch_id: 1 });
     const cleared = nextBranchFilters(s, { status: "pending" }, null);
     assert.deepEqual(shownBranchFilters(cleared, null), { status: "pending" });
+  });
+});
+
+describe("followWorkingBranch: a page's pick holds until the header switches", () => {
+  test("never picked: the preset", () => {
+    assert.equal(followWorkingBranch(null, 2, 1), 1);
+  });
+
+  test("picked under the current working branch: the pick", () => {
+    assert.equal(followWorkingBranch({ value: 4, working: 2 }, 2, 1), 4);
+  });
+
+  test("a header switch sends a paged list back to page 1", () => {
+    assert.equal(followWorkingBranch({ value: 4, working: 2 }, 3, 1), 1);
+    assert.equal(followWorkingBranch({ value: 4, working: null }, 2, 1), 1);
+    assert.equal(followWorkingBranch({ value: 4, working: 2 }, null, 1), 1);
+  });
+
+  test("flag off (working stays null): a pick always holds", () => {
+    assert.equal(followWorkingBranch({ value: 4, working: null }, null, 1), 4);
+  });
+});
+
+describe("branch-scoped filter objects: paging after a header switch", () => {
+  type P = { page?: number; status?: string; branch_id?: number };
+  const start = initialBranchFilters<P>({ page: 1 });
+
+  test("following: a header switch goes back to page 1, other filters kept", () => {
+    const s = nextBranchFilters(start, { page: 3, status: "sent", branch_id: 2 }, 2);
+    assert.deepEqual(shownBranchFilters(s, 2), { page: 3, status: "sent", branch_id: 2 });
+    assert.deepEqual(shownBranchFilters(s, 3), { page: 1, status: "sent", branch_id: 3 });
+  });
+
+  test("paging after the switch holds", () => {
+    const s = nextBranchFilters(start, { page: 3, branch_id: 2 }, 2);
+    const after = nextBranchFilters(s, { page: 2, branch_id: 3 }, 3);
+    assert.deepEqual(shownBranchFilters(after, 3), { page: 2, branch_id: 3 });
+  });
+
+  test("a branch picked on the page overridden by a switch also goes back to page 1", () => {
+    const s = nextBranchFilters(start, { page: 4, branch_id: 1 }, 2);
+    assert.deepEqual(shownBranchFilters(s, 2), { page: 4, branch_id: 1 });
+    assert.deepEqual(shownBranchFilters(s, 3), { page: 1, branch_id: 3 });
+  });
+
+  test("filters with no paging are left without a page", () => {
+    const s = nextBranchFilters(initialBranchFilters<P>({ status: "x" }), { status: "y", branch_id: 2 }, 2);
+    assert.deepEqual(shownBranchFilters(s, 3), { status: "y", branch_id: 3 });
+  });
+
+  test("flag off: paging is exactly today's", () => {
+    const s = nextBranchFilters(start, { page: 3 }, null);
+    assert.deepEqual(shownBranchFilters(s, null), { page: 3 });
   });
 });

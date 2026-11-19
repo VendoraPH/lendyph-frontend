@@ -17,13 +17,13 @@ import type { CreditScoreHistoryEntry, CreditScoringPage, ScoreHistoryFilters } 
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { FIT_CLASSES } from "@/lib/page-fill";
 import { cn } from "@/lib/utils";
-import { useBranchFilter } from "@/hooks/use-working-branch";
+import { useBranchFilter, useBranchFollowingPage } from "@/hooks/use-working-branch";
 
 function ScoreHistoryContent() {
   const [branch, setBranch] = useBranchFilter();
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useBranchFollowingPage();
   const [perPage, setPerPage] = useState<number>(CREDIT_SCORING_PER_PAGE);
 
   const fetcher = useCallback((): Promise<CreditScoringPage<CreditScoreHistoryEntry>> => {

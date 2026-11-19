@@ -19,7 +19,7 @@ import type { ApproachingDormancyRow, DormancyList, DormantAccountRow } from "@/
 import { Kpi } from "../../_components/kpi";
 import { DORMANCY_TABS, approachingNote, daysLeftText, dormancyCards } from "../_lib/dormant-view";
 import { DormantActions } from "./dormant-actions";
-import { useBranchFilter } from "@/hooks/use-working-branch";
+import { useBranchFilter, useBranchFollowingPage } from "@/hooks/use-working-branch";
 
 type Row = DormantAccountRow | ApproachingDormancyRow;
 
@@ -34,7 +34,7 @@ function isApproaching(row: Row): row is ApproachingDormancyRow {
 export function DormantScreen() {
   const [list, setList] = useState<DormancyList>("dormant");
   const [branch, setBranch] = useBranchFilter();
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useBranchFollowingPage();
   const [perPage, setPerPage] = useState(20);
 
   const fetcher = useCallback(

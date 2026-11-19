@@ -27,7 +27,7 @@ import { StateBadge } from "../../_components/state-badge";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { FIT_CLASSES } from "@/lib/page-fill";
 import { cn } from "@/lib/utils";
-import { useBranchFilter } from "@/hooks/use-working-branch";
+import { useBranchFilter, useBranchFollowingPage } from "@/hooks/use-working-branch";
 
 const TYPE_OPTIONS = [{ value: "all", label: "Every request type" }, ...optionsOf(REQUEST_TYPE_LABELS)];
 const PER_PAGE = 25;
@@ -43,7 +43,7 @@ export function RequestsScreen() {
   const [branch, setBranch] = useBranchFilter();
   const [draft, setDraft] = useState("");
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useBranchFollowingPage();
 
   const fetcher = useCallback(
     () =>

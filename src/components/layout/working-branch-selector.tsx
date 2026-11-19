@@ -22,8 +22,8 @@ import { useAuthStore } from "@/store";
 
 /**
  * The header's working-branch selector (behind NEXT_PUBLIC_ENABLE_MULTI_BRANCH).
- * It offers only the caller's branches (`GET /branches` is scoped), and "All
- * branches" with view_all; one branch reads as plain text. It only presets
+ * It offers only the caller's branches (`GET /branches` is scoped), after "All
+ * branches" (view_all) or "All my branches"; one branch reads as plain text. It only presets
  * the pages' filters and pickers: the server never trusts it.
  */
 export function WorkingBranchSelector() {
@@ -57,7 +57,7 @@ export function WorkingBranchSelector() {
 
   return (
     <Select
-      value={workingBranchSelectorValue(working, viewAll)}
+      value={workingBranchSelectorValue(working)}
       onValueChange={(v) => setBranchId(v === null ? null : (branchIdParam(v) ?? null))}
       items={selector.items}
     >
@@ -69,7 +69,7 @@ export function WorkingBranchSelector() {
       >
         <Building2 className="text-muted-foreground" aria-hidden="true" />
         <span className="min-w-0 truncate">
-          <SelectValue placeholder="All my branches" />
+          <SelectValue />
         </span>
       </SelectTrigger>
       <SelectContent>

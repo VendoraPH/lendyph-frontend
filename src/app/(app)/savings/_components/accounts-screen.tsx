@@ -31,7 +31,7 @@ import { statusTabs } from "../_lib/savings-rules";
 import { AccountStatusBadge } from "./account-status-badge";
 import { Kpi } from "./kpi";
 import { OpenAccountDialog } from "./open-account-dialog";
-import { useBranchFilter } from "@/hooks/use-working-branch";
+import { useBranchFilter, useBranchFollowingPage } from "@/hooks/use-working-branch";
 
 export function AccountsScreen() {
   const router = useRouter();
@@ -39,7 +39,7 @@ export function AccountsScreen() {
   const [branch, setBranch] = useBranchFilter();
   const [searchDraft, setSearchDraft] = useState("");
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useBranchFollowingPage();
   const [perPage, setPerPage] = useState(20);
   const [opening, setOpening] = useState(false);
 

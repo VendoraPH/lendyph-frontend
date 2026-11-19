@@ -4,7 +4,9 @@ import { ALL_BRANCHES } from "@/lib/branch-filter";
 import { branchViewer } from "@/lib/user-branches";
 import {
   type BranchScopedFilters,
+  type PickedUnder,
   branchFilterDefault,
+  followWorkingBranch,
   forgetWorkingBranch,
   initialBranchFilters,
   nextBranchFilters,
@@ -84,8 +86,8 @@ export function useWorkingBranchPreset<T>(
   toValue: (working: number | null) => T,
 ): [T, (value: T) => void, () => void] {
   const { branchId } = useWorkingBranch();
-  const [picked, setPicked] = useState<{ value: T; working: number | null } | null>(null);
-  const value = picked !== null && picked.working === branchId ? picked.value : toValue(branchId);
+  const [picked, setPicked] = useState<PickedUnder<T> | null>(null);
+  const value = followWorkingBranch(picked, branchId, toValue(branchId));
   const setValue = useCallback((next: T) => setPicked({ value: next, working: branchId }), [branchId]);
   // Back to the preset, e.g. when a dialog opens afresh.
   const reset = useCallback(() => setPicked(null), []);
@@ -106,11 +108,20 @@ export function useBranchFilter(options: { url?: string | null; fallback?: strin
 }
 
 /**
+ * A paged list's page, for a list whose branch filter follows the working
+ * branch: a header switch sends it back to page 1.
+ */
+export function useBranchFollowingPage(): [number, (page: number) => void] {
+  const [page, setPage] = useWorkingBranchPreset(() => 1);
+  return [page, setPage];
+}
+
+/**
  * A filter object's state whose `branch_id` follows the working branch until
  * it is picked on the page (`shownBranchFilters`). Same shape as `useState`,
  * functional updates included.
  */
-export function useBranchScopedFilters<T extends { branch_id?: number }>(
+export function useBranchScopedFilters<T extends { branch_id?: number; page?: number }>(
   initial: () => T,
 ): [T, Dispatch<SetStateAction<T>>] {
   const { branchId } = useWorkingBranch();

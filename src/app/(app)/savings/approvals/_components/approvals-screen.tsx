@@ -38,7 +38,7 @@ import {
   approvalSubject,
 } from "../_lib/approval-rules";
 import { DecideDialog, type Decision } from "./decide-dialog";
-import { useBranchFilter } from "@/hooks/use-working-branch";
+import { useBranchFilter, useBranchFollowingPage } from "@/hooks/use-working-branch";
 
 const STATUSES: SavingsApprovalStatus[] = ["pending", "approved", "rejected", "cancelled", "expired"];
 const KIND_OPTIONS = [
@@ -57,7 +57,7 @@ export function ApprovalsScreen() {
   const [status, setStatus] = useState<SavingsApprovalStatus>("pending");
   const [kind, setKind] = useState("all");
   const [branch, setBranch] = useBranchFilter();
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useBranchFollowingPage();
   const [perPage, setPerPage] = useState(20);
   const [deciding, setDeciding] = useState<{ approval: SavingsApproval; decision: Decision } | null>(null);
 

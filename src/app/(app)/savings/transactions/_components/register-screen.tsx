@@ -35,7 +35,7 @@ import {
   labelOf,
   reversalBlocker,
 } from "../../_lib/savings-rules";
-import { useBranchFilter } from "@/hooks/use-working-branch";
+import { useBranchFilter, useBranchFollowingPage } from "@/hooks/use-working-branch";
 
 const TYPE_OPTIONS = [
   { value: "all", label: "All types" },
@@ -53,7 +53,7 @@ export function RegisterScreen() {
   const [dateTo, setDateTo] = useState("");
   const [searchDraft, setSearchDraft] = useState("");
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useBranchFollowingPage();
   const [perPage, setPerPage] = useState(20);
   const [reversing, setReversing] = useState<SavingsTransaction | null>(null);
 

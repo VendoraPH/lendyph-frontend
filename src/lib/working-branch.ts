@@ -116,9 +116,11 @@ export type WorkingBranchSelector =
   | { kind: "select"; items: BranchSelectItem[] };
 
 /**
- * What the header's selector offers: only the caller's branches, and with
- * view_all "All branches" first. A branch user's own branches stand in while
- * the list loads; once loaded, only the ones it lists (active) are offered.
+ * What the header's selector offers: only the caller's branches, after an
+ * "All" option meaning no working branch: "All branches" with view_all, "All
+ * my branches" for a branch user with several (the filters' own default). A
+ * branch user's own branches stand in while the list loads; once loaded, only
+ * the ones it lists (active) are offered.
  */
 export function workingBranchSelector<T extends NamedBranch>(source: {
   viewAll: boolean;
@@ -135,50 +137,73 @@ export function workingBranchSelector<T extends NamedBranch>(source: {
     source.listed.length > 0 ? source.own.filter((b) => listedIds.has(b.id)) : [...source.own];
   if (branches.length === 0) return { kind: "none" };
   if (branches.length === 1) return { kind: "single", branch: branches[0] };
-  return { kind: "select", items: branches.map(toItem) };
+  return { kind: "select", items: [{ value: ALL_BRANCHES, label: "All my branches" }, ...branches.map(toItem)] };
 }
 
-/** The selector's value: the working branch, else All branches for view_all, else nothing picked. */
-export function workingBranchSelectorValue(working: number | null, viewAll: boolean): string | null {
-  if (working !== null) return String(working);
-  return viewAll ? ALL_BRANCHES : null;
+/** The selector's value: the working branch, else the "All" option. */
+export function workingBranchSelectorValue(working: number | null): string {
+  return working === null ? ALL_BRANCHES : String(working);
+}
+
+/** A value picked on a page, with the working branch it was picked under. */
+export interface PickedUnder<T> {
+  value: T;
+  working: number | null;
+}
+
+/**
+ * A page's value that follows the working branch: its pick while the working
+ * branch is the one it was picked under, else the preset. So a header switch
+ * puts a branch filter back on the working branch and a paged list on page 1.
+ */
+export function followWorkingBranch<T>(picked: PickedUnder<T> | null, working: number | null, preset: T): T {
+  return picked !== null && picked.working === working ? picked.value : preset;
 }
 
 /**
  * A filter object that carries the branch as `branch_id` (Reminders,
- * Applications), and the working branch it was last picked under: `undefined`
- * while it was never picked on the page.
+ * Applications), the working branch its branch was last picked under, and the
+ * one it was last set under (`undefined`: never, on the page).
  */
-export interface BranchScopedFilters<T extends { branch_id?: number }> {
+export interface BranchScopedFilters<T extends { branch_id?: number; page?: number }> {
   filters: T;
   pickedUnder: number | null | undefined;
+  setUnder: number | null | undefined;
 }
 
-export function initialBranchFilters<T extends { branch_id?: number }>(filters: T): BranchScopedFilters<T> {
-  return { filters, pickedUnder: undefined };
+export function initialBranchFilters<T extends { branch_id?: number; page?: number }>(
+  filters: T,
+): BranchScopedFilters<T> {
+  return { filters, pickedUnder: undefined, setUnder: undefined };
 }
 
 /**
  * The filters the page shows: as stored once its branch was picked under the
  * current working branch, otherwise with the branch following the working
- * branch (none: every branch, today's default). Other filters always stay.
+ * branch (none: every branch, today's default). A paged list set under another
+ * working branch goes back to page 1. Other filters always stay.
  */
-export function shownBranchFilters<T extends { branch_id?: number }>(
+export function shownBranchFilters<T extends { branch_id?: number; page?: number }>(
   state: BranchScopedFilters<T>,
   working: number | null,
 ): T {
   if (state.pickedUnder !== undefined && state.pickedUnder === working) return state.filters;
   const rest = { ...state.filters };
   delete rest.branch_id;
+  if (rest.page !== undefined && state.setUnder !== undefined && state.setUnder !== working) rest.page = 1;
   return working === null ? rest : { ...rest, branch_id: working };
 }
 
 /** Stores the page's next filters; a changed `branch_id` counts as a pick under `working`. */
-export function nextBranchFilters<T extends { branch_id?: number }>(
+export function nextBranchFilters<T extends { branch_id?: number; page?: number }>(
   prev: BranchScopedFilters<T>,
   next: T,
   working: number | null,
 ): BranchScopedFilters<T> {
   const shown = shownBranchFilters(prev, working);
-  return { filters: next, pickedUnder: next.branch_id !== shown.branch_id ? working : prev.pickedUnder };
+  return {
+    filters: next,
+    pickedUnder: next.branch_id !== shown.branch_id ? working : prev.pickedUnder,
+    setUnder: working,
+  };
 }
