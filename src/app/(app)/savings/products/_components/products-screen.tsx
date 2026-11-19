@@ -35,6 +35,7 @@ import { savingsService } from "@/services";
 import type { SavingsProduct } from "@/types";
 import { INTEREST_CREDITING_LABELS, PRODUCT_KIND_LABELS, labelOf } from "../../_lib/savings-rules";
 import { termLabel } from "../../_lib/time-deposit-rules";
+import { ACCOUNT_STATUS_TONE } from "../../_components/account-status-badge";
 import { ladderLines, rateTermLabel } from "../_lib/rate-draft";
 import { ProductDialog } from "./product-dialog";
 import { RatesDialog } from "./rates-dialog";
@@ -154,7 +155,13 @@ export function ProductsScreen() {
                       </TableCell>
                       <TableCell className="text-right tabular-nums">{p.account_count}</TableCell>
                       <TableCell>
-                        <Badge variant={p.is_active ? "secondary" : "outline"}>{p.is_active ? "Active" : "Inactive"}</Badge>
+                        {/* The accounts' colours: Active green, Inactive grey like a closed account. */}
+                        <Badge
+                          variant="secondary"
+                          className={cn("border-0", ACCOUNT_STATUS_TONE[p.is_active ? "active" : "closed"])}
+                        >
+                          {p.is_active ? "Active" : "Inactive"}
+                        </Badge>
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-1">

@@ -198,6 +198,67 @@ export function canGoToStep(
   return true;
 }
 
+/**
+ * Whether a rail step can be clicked. Every step can, so a click on a later
+ * step in `create` mode that isn't open yet (`canGoToStep`) checks the way
+ * there and shows what's missing, as Next does, instead of doing nothing.
+ * Only `nextDisabled` (the form's own "not yet", with its reason beside the
+ * buttons) closes later steps in `create`.
+ */
+export function railStepClickable(
+  target: number,
+  {
+    mode,
+    current,
+    count,
+    nextDisabled = false,
+  }: { mode: FormStepperMode; current: number; count: number; nextDisabled?: boolean }
+): boolean {
+  if (target < 0 || target >= count) return false;
+  if (mode === "edit" || target <= current) return true;
+  return !nextDisabled;
+}
+
+/**
+ * The steps checked, in order, before a later step opens in `create` mode:
+ * the open step, then each step between it and the target that hasn't passed.
+ * The first that fails opens with its message. Empty when going back.
+ */
+export function stepsToCheckBefore(
+  target: number,
+  { current, passed }: { current: number; passed: readonly boolean[] }
+): number[] {
+  if (target <= current) return [];
+  const out = [current];
+  for (let i = current + 1; i < target; i++) {
+    if (!passed[i]) out.push(i);
+  }
+  return out;
+}
+
+/** What started a step check: Save (the form's submit button) or Next (Next, Enter, the rail). */
+export type StepCheckTrigger = "next" | "save";
+
+/**
+ * Shows a failed step's errors: the form's own `onInvalid`, told what
+ * triggered the check, or else the default message list (`notify`).
+ */
+export function reportInvalidStep(
+  errors: StepErrors,
+  stepId: string,
+  trigger: StepCheckTrigger,
+  {
+    onInvalid,
+    notify,
+  }: {
+    onInvalid?: (errors: StepErrors, stepId: string, trigger: StepCheckTrigger) => void;
+    notify: (messages: string[]) => void;
+  }
+): void {
+  if (onInvalid) onInvalid(errors, stepId, trigger);
+  else notify(errorMessages(errors));
+}
+
 /** `valid_ids.0.number` belongs to `valid_ids`; `email_2` doesn't belong to `email`. */
 function belongsTo(key: string, field: string): boolean {
   return key === field || key.startsWith(`${field}.`);
@@ -252,9 +313,9 @@ export function hasStepErrors(result: StepErrors | true): boolean {
 /**
  * Whether the browser's own constraints (required, min, max, step, pattern…)
  * count, for Next and for submit. A form with `noValidate` opted out, so it
- * accepts exactly what it accepted before it was a stepper (the loan form's
- * whole-peso Build-Up input takes ₱50.50); so does a submit button with
- * `formNoValidate`. Outside a form there is nothing to check.
+ * accepts exactly what it accepted before it was a stepper (the loan forms
+ * leave range checks such as a product's minimum amount to their own
+ * messages); so does a submit button with `formNoValidate`. Outside a form there is nothing to check.
  */
 export function nativeValidityApplies(
   form: { noValidate: boolean } | null | undefined,

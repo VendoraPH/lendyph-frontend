@@ -59,6 +59,13 @@ test("the floating button is mounted in the app shell beside the panel, inside t
   assert.match(fab, /\/linda\/linda-face-128\.webp/);
 });
 
+test("the button's tooltip shows above it, right-aligned, clear of a list's pagination bar", () => {
+  // Beside the button (side="left") it sat level with the pagination bar and
+  // covered its next-page button after Esc returned focus to Linda's button.
+  const fab = read("src/components/linda/linda-fab.tsx");
+  assert.match(fab, /<TooltipContent side="top" align="end">Ask Linda<\/TooltipContent>/);
+});
+
 test("focus returns to the floating button when Linda closes", () => {
   const focus = read("src/components/linda/use-linda-panel-focus.ts");
   assert.match(focus, /LINDA_FAB_ID = "linda-fab"/);

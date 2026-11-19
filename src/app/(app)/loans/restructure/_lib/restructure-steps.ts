@@ -76,7 +76,7 @@ export function restructureMissing(c: RestructureCheck): Record<string, string> 
   if (!c.hasMember) missing.borrower_id = "Member";
   if (!c.hasSourceLoan) missing.source_loan_id = "Source loan";
   if (!c.hasProduct) missing.loan_product_id = "Loan product";
-  if (!c.principalOk) missing.principal_amount = "Principal amount";
+  if (!c.principalOk) missing.principal_amount = "Loan amount";
   if (!c.termOk) missing.term = "Term";
   if (!c.hasFrequency) missing.frequency = "Payment frequency";
   if (!c.rateOk) missing.interest_rate = "Interest rate";

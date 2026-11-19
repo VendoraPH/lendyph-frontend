@@ -149,6 +149,15 @@ const NESTED_PAGE_TITLES: Readonly<Record<string, Readonly<Record<string, string
   "loans/reminders": { history: "Message History" },
 };
 
+/**
+ * A section's own page that reads its menu title after the section's
+ * (`/savings` reads "Savings › Savings Accounts"): the section also holds a
+ * dashboard, so the section's title alone doesn't say which page is open.
+ */
+const ROOT_PAGE_TITLES: Readonly<Record<string, string>> = {
+  savings: "Savings Accounts",
+};
+
 /** A record's sub-pages (`/borrowers/{id}/edit`), by section, as each page titles itself. */
 const RECORD_PAGE_TITLES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   borrowers: { edit: "Edit Member" },
@@ -210,6 +219,11 @@ export function subPageTitle(
     query.menuTitle?.(`/${section}/${segment}`) ??
     humanizeSegment(segment)
   );
+}
+
+/** The menu title a section's own page (`/savings`) shows after the section's; undefined for the rest. */
+export function rootPageTitle(section: string): string | undefined {
+  return own(ROOT_PAGE_TITLES, section);
 }
 
 /**
