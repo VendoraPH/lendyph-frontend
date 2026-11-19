@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DASHBOARD_PAGE_CLASS, dashboardKpiClasses } from "./kpi-layout";
+import { DASHBOARD_PAGE_CLASS, DUES_DONUT_COLUMN_CLASS, dashboardKpiClasses } from "./kpi-layout";
 
 const tokens = (classes: string) => classes.split(/\s+/).filter(Boolean);
 
@@ -40,4 +40,17 @@ test("every card's figure row is as tall as a sparkline, so a card without one k
   // figure sat about 2px higher than the others at 1920 wide.
   const { row } = dashboardKpiClasses();
   for (const t of ["flex", "items-center", "justify-between", "min-h-10"]) assert.ok(tokens(row).includes(t), t);
+});
+
+test("the collections ring sits in its own bordered panel at the top, level with the table's headings", () => {
+  // Centred in a column as tall as the card, the ring floated below the
+  // table's headings whenever the list was short ("Nothing due today"), with
+  // nothing around it to show where its section ends.
+  const c = tokens(DUES_DONUT_COLUMN_CLASS);
+  for (const t of ["rounded-lg", "border", "p-4", "@xl:self-start"]) assert.ok(c.includes(t), t);
+  for (const t of ["justify-center", "@xl:self-stretch"]) assert.ok(!c.includes(t), t);
+  // Its left edge lines up with the tabs above it (mx-4); beside the table, the row's gap spaces it.
+  for (const t of ["mx-4", "@xl:mr-0"]) assert.ok(c.includes(t), t);
+  // Still its own fixed-width column beside the table on a wide card.
+  for (const t of ["flex", "flex-col", "items-center", "shrink-0", "@xl:w-60"]) assert.ok(c.includes(t), t);
 });
