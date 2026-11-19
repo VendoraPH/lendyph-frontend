@@ -1,5 +1,21 @@
 import { PAYMENT_METHOD_OPTIONS } from "@/constants/payment-methods";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
+import {
+  AMLA_PRIORITY_WORDS,
+  AMLA_RISK_FACTOR_VALUES,
+  AMLA_RISK_FACTOR_WORDS,
+  AMLA_RISK_VALUE_WORDS,
+  amlaParamKind,
+  amlaParamLabel,
+  amlaParamLine,
+  amlaParamValueWords,
+  amlaPoints,
+  amlaRuleTitle,
+  amlaSortedList,
+  amlaStableKeys,
+  amlaThresholdsLine,
+} from "@/lib/amla/rule-words";
+import type { AmlaDetectionRulesVersion, AmlaRiskRulesDefinition } from "@/types/amla-monitoring";
 import type {
   AmlaCalendar,
   AmlaChangeRequest,
@@ -162,9 +178,32 @@ function storedValueWords(unit: string, value: unknown): string {
  * confirmed (and by what) or marked to verify again. Calendar requests add
  * nothing, since their summary says it all. Stored keys never show.
  */
-export function amlaChangeRequestChanges(request: Pick<AmlaChangeRequest, "type" | "payload">): string[] {
+/**
+ * The rule versions a rule change is compared with: every detection rules
+ * version (`GET /amla/detection-rules/versions`) and every risk rules version
+ * (`GET /amla/risk-rules`), newest first. Absent, a change lists its proposal.
+ */
+export interface AmlaRuleBaselines {
+  detection?: Pick<AmlaDetectionRulesVersion, "version" | "rules">[];
+  risk?: { version: number; definition: AmlaRiskRulesDefinition }[];
+}
+
+/** The version a change was asked from, else the one in force now (the newest), marked so its side reads "(now)". */
+function baseOf<T extends { version: number }>(versions: T[] | undefined, baseVersion: unknown): { base: T; now: boolean } | null {
+  if (!versions || versions.length === 0) return null;
+  const asked = versions.find((v) => v.version === Number(baseVersion));
+  return asked ? { base: asked, now: false } : { base: versions[0], now: true };
+}
+
+export function amlaChangeRequestChanges(
+  request: Pick<AmlaChangeRequest, "type" | "payload">,
+  baselines: AmlaRuleBaselines = {},
+): string[] {
   const payload = request.payload;
-  if (request.type !== "settings" || !isRecord(payload)) return [];
+  if (!isRecord(payload)) return [];
+  if (request.type === "detection_rules") return detectionRuleChanges(payload, baseOf(baselines.detection, payload.base_version));
+  if (request.type === "risk_rules") return riskRuleChanges(payload, baseOf(baselines.risk, payload.base_version));
+  if (request.type !== "settings") return [];
   const changed = isRecord(payload.changed) ? payload.changed : {};
   const sourcesChanged = isRecord(payload.sources_changed) ? payload.sources_changed : {};
   const verified = Array.isArray(payload.verified) ? payload.verified : [];
@@ -186,6 +225,125 @@ export function amlaChangeRequestChanges(request: Pick<AmlaChangeRequest, "type"
 
   const known = new Set(SETTING_WORDS.map((s) => s.key));
   if (Object.keys(changed).some((key) => !known.has(key))) lines.push("Another setting: changed");
+  return lines;
+}
+
+function sameValue(a: unknown, b: unknown): boolean {
+  const norm = (v: unknown) => (Array.isArray(v) ? [...v].map(String).sort() : v === undefined || v === null ? null : String(v));
+  return JSON.stringify(norm(a)) === JSON.stringify(norm(b));
+}
+
+/**
+ * A detection rules change, line by line. Compared with the version it was
+ * asked from, it lists only what changed, current → proposed; without one, each
+ * changed rule as proposed (`changed_rules`, `definition`).
+ */
+function detectionRuleChanges(
+  payload: Record<string, unknown>,
+  compare: { base: Pick<AmlaDetectionRulesVersion, "rules">; now: boolean } | null,
+): string[] {
+  const definition = isRecord(payload.definition) ? payload.definition : {};
+  const changed = Array.isArray(payload.changed_rules) ? payload.changed_rules.map(String) : [];
+  const now = compare?.now ? " (now)" : "";
+  const onOff = (active: unknown) => (active ? "on" : "off");
+  const priorityWords = (priority: unknown) => AMLA_PRIORITY_WORDS[String(priority)] ?? "Another";
+
+  return changed.flatMap((code) => {
+    const entry = definition[code];
+    if (!isRecord(entry)) return [];
+    const title = amlaRuleTitle(code);
+    const before = compare?.base.rules.find((rule) => rule.code === code);
+    const params = isRecord(entry.params) ? entry.params : {};
+
+    if (!before) {
+      const head = `${title}: ${onOff(entry.active)}, ${priorityWords(entry.priority)} priority.`;
+      const lines = Object.entries(params).map(([name, value]) => amlaParamLine(name, value));
+      return [lines.length > 0 ? `${head} ${lines.join("; ")}` : head];
+    }
+
+    const lines: string[] = [];
+    if (Boolean(before.active) !== Boolean(entry.active)) lines.push(`${title}: ${onOff(before.active)}${now} → ${onOff(entry.active)}`);
+    if (before.priority !== entry.priority) {
+      lines.push(`${title}, priority: ${priorityWords(before.priority)}${now} → ${priorityWords(entry.priority)}`);
+    }
+    for (const [name, value] of Object.entries(params)) {
+      const old = before.params[name];
+      if (sameValue(old, value)) continue;
+      const kind = amlaParamKind(name, value);
+      const from = old === undefined ? "—" : amlaParamValueWords(kind, old);
+      lines.push(`${title}, ${amlaParamLabel(name)}: ${from}${now} → ${amlaParamValueWords(kind, value)}`);
+    }
+    return lines;
+  });
+}
+
+function factorWords(factor: string): string {
+  return Object.hasOwn(AMLA_RISK_FACTOR_WORDS, factor) ? AMLA_RISK_FACTOR_WORDS[factor] : "Another factor";
+}
+
+function riskValueWords(value: string): string {
+  return Object.hasOwn(AMLA_RISK_VALUE_WORDS, value) ? AMLA_RISK_VALUE_WORDS[value] : "Another value";
+}
+
+/**
+ * A risk rules change, line by line, in the server's factor order (the stored
+ * definition comes back in any key order). Compared with the version it was
+ * asked from, only the changed points, thresholds and countries, current →
+ * proposed; without one, each changed section as proposed.
+ */
+function riskRuleChanges(
+  payload: Record<string, unknown>,
+  compare: { base: { definition: AmlaRiskRulesDefinition }; now: boolean } | null,
+): string[] {
+  const definition = isRecord(payload.definition) ? payload.definition : {};
+  const sections = Array.isArray(payload.changed_sections) ? payload.changed_sections.map(String) : [];
+  const factors = isRecord(definition.factors) ? definition.factors : {};
+  const thresholds = isRecord(definition.thresholds) ? definition.thresholds : {};
+  const countries = Array.isArray(definition.high_risk_countries) ? definition.high_risk_countries.map(String) : [];
+  const countryWords = (list: string[]) => (list.length > 0 ? list.join(", ") : "none");
+  const order = Object.keys(AMLA_RISK_FACTOR_VALUES);
+  const lines: string[] = [];
+
+  if (!compare) {
+    if (sections.includes("factors")) {
+      for (const factor of amlaStableKeys(Object.keys(factors), order)) {
+        const values = factors[factor];
+        if (!isRecord(values)) continue;
+        const points = amlaStableKeys(Object.keys(values), AMLA_RISK_FACTOR_VALUES[factor] ?? []).map(
+          (value) => `${riskValueWords(value)} ${amlaPoints(Number(values[value]))}`,
+        );
+        lines.push(`${factorWords(factor)}: ${points.join(", ")}`);
+      }
+    }
+    if (sections.includes("thresholds")) {
+      lines.push(`Thresholds: ${amlaThresholdsLine({ medium: thresholds.medium, high: thresholds.high })}`);
+    }
+    if (sections.includes("high_risk_countries")) lines.push(`High-risk countries: ${countryWords(countries)}`);
+    return lines;
+  }
+
+  const now = compare.now ? " (now)" : "";
+  const base = compare.base.definition;
+  for (const factor of amlaStableKeys(Object.keys(factors), order)) {
+    const values = factors[factor];
+    if (!isRecord(values)) continue;
+    for (const value of amlaStableKeys(Object.keys(values), AMLA_RISK_FACTOR_VALUES[factor] ?? [])) {
+      const old = base.factors[factor]?.[value];
+      const next = Number(values[value]);
+      if (old === next) continue;
+      lines.push(`${factorWords(factor)}, ${riskValueWords(value)}: ${old === undefined ? "—" : old}${now} → ${amlaPoints(next)}`);
+    }
+  }
+  for (const [key, words] of [["medium", "Medium"], ["high", "High"]] as const) {
+    const next = Number(thresholds[key]);
+    if (base.thresholds[key] !== next) lines.push(`${words} threshold: ${base.thresholds[key]}${now} → ${amlaPoints(next)}`);
+  }
+  // Countries are a set: the server may store them in another order, which is no change.
+  const before = amlaSortedList(base.high_risk_countries);
+  const after = amlaSortedList(countries);
+  if (before.join(",") !== after.join(",")) {
+    lines.push(`High-risk countries: ${countryWords(before)}${now} → ${countryWords(after)}`);
+  }
   return lines;
 }
 

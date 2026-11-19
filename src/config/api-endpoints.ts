@@ -672,6 +672,14 @@ export const API_ENDPOINTS = {
     CDD_ID_VERIFICATIONS: (segment: string, id: number) => `/amla/cdd/${segment}/${id}/id-verifications`,
     CDD_RISK_ASSESSMENTS: (segment: string, id: number) => `/amla/cdd/${segment}/${id}/risk-assessments`,
     CDD_REVIEWS: (segment: string, id: number) => `/amla/cdd/${segment}/${id}/reviews`,
+    RISK_RULES: "/amla/risk-rules",
+    /** AMLA-B3: alerts need `amla:alerts`, candidates `amla:ctr`; both branch-scoped. Rules are head office. */
+    ALERTS: "/amla/alerts",
+    ALERT: (id: number) => `/amla/alerts/${id}`,
+    CTR_CANDIDATES: "/amla/ctr-candidates",
+    CTR_CANDIDATE: (id: number) => `/amla/ctr-candidates/${id}`,
+    DETECTION_RULES: "/amla/detection-rules",
+    DETECTION_RULE_VERSIONS: "/amla/detection-rules/versions",
   },
   /**
    * CDA Compliance (CDA design §3). Every route needs `branches:view_all` plus
