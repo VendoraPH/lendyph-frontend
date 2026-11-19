@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useDialogOpening } from "@/hooks/use-dialog-opening";
 import { useSubmitGuard } from "@/hooks/use-submit-guard";
 import { amlaApi } from "@/lib/amla/api";
-import { AMLA_PRIORITY_OPTIONS, amlaDetectionChangeBody, amlaDetectionDraft, type AmlaDetectionDraft } from "@/lib/amla/monitoring-view";
+import { AMLA_PRIORITY_OPTIONS, amlaDetectionChangeBody, amlaDetectionDraft, amlaPublicText, type AmlaDetectionDraft } from "@/lib/amla/monitoring-view";
 import { amlaParamKind, amlaParamLabel, amlaRuleTitle } from "@/lib/amla/rule-words";
 import { AMLA_CHANNEL_OPTIONS } from "@/lib/amla/settings-view";
 import { notifyError, notifySuccess } from "@/lib/notify";
@@ -74,7 +74,7 @@ export function DetectionRulesChangeDialog({ open, version, onClose, onAsked }: 
             return (
               <fieldset key={rule.code} className="space-y-2 rounded-md border p-3">
                 <legend className="px-1 text-sm font-medium">{amlaRuleTitle(rule.code, rule.rule)}</legend>
-                {rule.availability !== "Available" && <p className="text-xs text-muted-foreground">{rule.availability}</p>}
+                {rule.availability !== "Available" && <p className="text-xs text-muted-foreground">{amlaPublicText(rule.availability)}</p>}
                 <div className="flex flex-wrap items-end gap-4">
                   <label className="flex items-center gap-2 text-sm">
                     <Checkbox checked={entry.active} disabled={submitting} onCheckedChange={(on) => update(rule.code, { active: on === true })} />

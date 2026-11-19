@@ -12,7 +12,7 @@ import {
   amlaThresholdsLine,
 } from "@/lib/amla/rule-words";
 import { AMLA_CHANNEL_OPTIONS, amlaReasonError, type AmlaOption } from "@/lib/amla/settings-view";
-import type { AmlaChangeRequestBody } from "@/types/amla";
+import type { AmlaChangeRequestBody, AmlaPage } from "@/types/amla";
 import type {
   AmlaAlertDetail,
   AmlaAlertRow,
@@ -148,16 +148,39 @@ export function amlaCtrRow(row: AmlaCtrRow) {
   };
 }
 
+/** "1 open alert.", "12 open alerts in all; the latest 10 are shown." from the server's total, never the rows received. */
+export function amlaListTotalText(total: number, one: string, many: string, shown: number): string {
+  if (total === 0) return `No ${many}.`;
+  const noun = total === 1 ? one : many;
+  return total > shown ? `${total} ${noun} in all; the latest ${shown} are shown.` : `${total} ${noun}.`;
+}
+
+/**
+ * A server note as users read it: the internal build codes some notes carry
+ * ("(AMLA-B5)") are dropped, and a bare one reads "a later release".
+ */
+export function amlaPublicText(text: string): string {
+  const CODE = "[A-Z]{2,5}-[A-Z]{0,3}\\d+[a-z]?";
+  return text
+    .replace(new RegExp(`\\s*\\(${CODE}\\)`, "g"), "")
+    .replace(new RegExp(`\\b${CODE}\\b`, "g"), "a later release");
+}
+
+/** The waiting change of one type: the first pending request the server lists for it, or none. */
+export function amlaPendingRequestId(page: AmlaPage<{ id: number }>): number | null {
+  return page.data[0]?.id ?? null;
+}
+
 export function amlaDetectionRuleRows(version: AmlaDetectionRulesVersion) {
   return version.rules.map((rule) => {
     const params = Object.entries(rule.params).map(([name, value]) => amlaParamLine(name, value));
     return {
       code: rule.code,
       rule: amlaRuleTitle(rule.code, rule.rule),
-      description: rule.description,
+      description: amlaPublicText(rule.description),
       active: rule.active ? "On" : "Off",
       priority: rule.priority_words,
-      availability: rule.availability === "Available" ? null : rule.availability,
+      availability: rule.availability === "Available" ? null : amlaPublicText(rule.availability),
       params: params.length > 0 ? params : ["No parameters"],
     };
   });

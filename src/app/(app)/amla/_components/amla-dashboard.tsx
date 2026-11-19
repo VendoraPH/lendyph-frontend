@@ -10,7 +10,7 @@ import { useApiResource, usePermission } from "@/hooks";
 import { amlaApi } from "@/lib/amla/api";
 import { amlaMonitoringAccess } from "@/lib/amla/monitoring-access";
 import { amlaMonitoringApi } from "@/lib/amla/monitoring-api";
-import { amlaAlertRow, amlaCtrRow } from "@/lib/amla/monitoring-view";
+import { amlaAlertRow, amlaCtrRow, amlaListTotalText } from "@/lib/amla/monitoring-view";
 import { once } from "@/lib/amla/once";
 import { amlaStatusLines } from "@/lib/amla/settings-view";
 import type { AmlaPageMeta } from "@/types/amla";
@@ -46,9 +46,9 @@ export function AmlaDashboard() {
   );
 }
 
-/** "12 in all" from the server's page meta, never from the rows received. */
-function totalText(meta: AmlaPageMeta, noun: string): string {
-  return meta.total === 0 ? `No ${noun}.` : `${meta.total} ${noun} in all; the latest ${SHORT} at most are shown.`;
+/** The total from the server's page meta, never from the rows received. */
+function totalText(meta: AmlaPageMeta, one: string, many: string): string {
+  return amlaListTotalText(meta.total, one, many, SHORT);
 }
 
 function StatusCard() {
@@ -89,7 +89,7 @@ function OpenAlertsCard() {
           <CardHeader className="flex flex-row items-start justify-between gap-2">
             <div className="space-y-1">
               <CardTitle className="text-base">Open alerts</CardTitle>
-              <CardDescription>{totalText(page.meta, "open alerts")}</CardDescription>
+              <CardDescription>{totalText(page.meta, "open alert", "open alerts")}</CardDescription>
             </div>
             <Link href="/amla/alerts" className="text-sm whitespace-nowrap underline-offset-4 hover:underline">
               All alerts
@@ -128,7 +128,7 @@ function CtrCard() {
           <CardHeader className="flex flex-row items-start justify-between gap-2">
             <div className="space-y-1">
               <CardTitle className="text-base">CTR candidates</CardTitle>
-              <CardDescription>{totalText(page.meta, "CTR candidates")}</CardDescription>
+              <CardDescription>{totalText(page.meta, "CTR candidate", "CTR candidates")}</CardDescription>
             </div>
             <Link href="/amla/ctr-candidates" className="text-sm whitespace-nowrap underline-offset-4 hover:underline">
               All candidates

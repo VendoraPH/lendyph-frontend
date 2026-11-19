@@ -142,3 +142,23 @@ export function amlaPoints(points: number): string {
 export function amlaThresholdsLine(thresholds: { medium: unknown; high: unknown }): string {
   return `Medium from ${amlaPoints(Number(thresholds.medium))}, High from ${amlaPoints(Number(thresholds.high))}`;
 }
+
+/** `RiskRules::FACTOR_VALUES`: each factor's values, in the server's order, so change lines read in a stable order. */
+export const AMLA_RISK_FACTOR_VALUES: Readonly<Record<string, readonly string[]>> = {
+  customer_type: ["member", "walk_in"],
+  id_verification: ["verified", "not_verified", "expired", "failed"],
+  occupation: ["provided", "missing"],
+  source_of_funds: ["salary", "pension", "savings", "business", "remittance", "other", "missing"],
+  expected_activity: ["provided", "missing"],
+  geography: ["domestic", "foreign", "high_risk_country", "missing"],
+  channel: ["no_gcash", "gcash"],
+  pep: ["not_pep", "pep", "pep_family", "pep_associate", "missing"],
+  adverse_info: ["none", "flagged"],
+};
+
+/** Keys in the server's order first, then any others in name order. */
+export function amlaStableKeys(keys: readonly string[], order: readonly string[]): string[] {
+  const known = order.filter((key) => keys.includes(key));
+  const rest = keys.filter((key) => !order.includes(key)).sort();
+  return [...known, ...rest];
+}

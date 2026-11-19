@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { AmlaFilterField } from "@/components/amla/amla-filter-field";
 import { AmlaPager } from "@/components/amla/amla-pager";
+import { VISIBLE_SCROLLBAR } from "@/components/amla/visible-scrollbar";
 import { BranchFilter, branchIdParam } from "@/components/common/branch-filter";
 import { DataState } from "@/components/common/data-state";
 import { FillSection, PageFill, ScrollBox } from "@/components/common/page-fill";
@@ -74,7 +75,7 @@ export function CtrList() {
         >
           {(page) => (
             <>
-              <ScrollBox className="min-h-0 flex-1">
+              <ScrollBox className={`min-h-0 flex-1 ${VISIBLE_SCROLLBAR}`} tabIndex={0} role="region" aria-label="CTR candidates, scrolls sideways">
                 <Table className="min-w-[52rem]">
                   <TableHeader>
                     <TableRow>

@@ -19,6 +19,9 @@ import {
   amlaDetectionChangeBody,
   amlaDetectionDraft,
   amlaDetectionRuleRows,
+  amlaListTotalText,
+  amlaPendingRequestId,
+  amlaPublicText,
   amlaPriorityTone,
   amlaRiskChangeBody,
   amlaRiskDraft,
@@ -355,4 +358,25 @@ test("the risk rules form says what is wrong, in words", () => {
   const twice = draft();
   twice.countries = "KP, kp";
   assert.deepEqual(amlaRiskChangeBody(RISK.current.definition, twice, "Review"), { error: "List each high-risk country once." });
+});
+
+test("a list's total reads in words, singular or plural, from the server's figure", () => {
+  assert.equal(amlaListTotalText(0, "open alert", "open alerts", 10), "No open alerts.");
+  assert.equal(amlaListTotalText(1, "open alert", "open alerts", 10), "1 open alert.");
+  assert.equal(amlaListTotalText(7, "open alert", "open alerts", 10), "7 open alerts.");
+  assert.equal(amlaListTotalText(12, "open alert", "open alerts", 10), "12 open alerts in all; the latest 10 are shown.");
+});
+
+test("server notes never show internal build codes", () => {
+  assert.equal(
+    amlaPublicText("Not available yet: watchlist screening (AMLA-B5) isn't built, so there is nothing to match."),
+    "Not available yet: watchlist screening isn't built, so there is nothing to match.",
+  );
+  assert.equal(amlaPublicText("Comes with AMLA-B7 and EB-D1."), "Comes with a later release and a later release.");
+  assert.equal(amlaPublicText("Not available: Lendy records no payer or counterparty."), "Not available: Lendy records no payer or counterparty.");
+});
+
+test("a waiting rule change is the first pending request the server lists, if any", () => {
+  assert.equal(amlaPendingRequestId({ data: [{ id: 12 }, { id: 11 }], meta: { current_page: 1, per_page: 25, total: 2, last_page: 1 } }), 12);
+  assert.equal(amlaPendingRequestId({ data: [], meta: { current_page: 1, per_page: 25, total: 0, last_page: 1 } }), null);
 });

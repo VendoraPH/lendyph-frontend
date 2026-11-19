@@ -1,4 +1,5 @@
 import { test } from "node:test";
+import type { AmlaDetectionRulesVersion, AmlaRiskRulesDefinition } from "@/types/amla-monitoring";
 import assert from "node:assert/strict";
 import { formatDate, formatDateTime } from "@/lib/format";
 import type { AmlaCalendar, AmlaChangeRequest, AmlaDeadlinePreview, AmlaLogEntry, AmlaSetting, AmlaSettingsVersion } from "@/types/amla";
@@ -347,39 +348,88 @@ test("a setting this screen doesn't know yet never shows its stored key", () => 
   assert.deepEqual(lines, ["Another setting: changed"]);
 });
 
-test("a detection rules change shows each changed rule as proposed, in words", () => {
-  const payload = {
-    base_version: 1,
-    definition: {
-      A: { active: true, priority: "high", params: { min_transactions: 2 } },
-      E: { active: true, priority: "critical", params: { min_in_amount: "120000.00", out_share_pct: 90, within_days: 3 } },
-      G: { active: false, priority: "low", params: {} },
-    },
-    changed_rules: ["E", "G"],
-  };
-  assert.deepEqual(amlaChangeRequestChanges({ ...REQUEST, type: "detection_rules", payload }), [
-    "E · Rapid movement of funds: on, Critical priority. Smallest amount received: ₱120,000.00; Share that leaves again: 90%; Within: 3 days",
-    "G · Third party transactions: off, Low priority.",
+const DETECTION_BASE: AmlaDetectionRulesVersion = {
+  version: 1,
+  to_verify: true,
+  effective_at: null,
+  note: "",
+  rules: [
+    { code: "A", rule: "Transaction structuring", description: "", active: true, priority: "high", priority_words: "High", params: { min_transactions: 2 }, availability: "Available" },
+    { code: "E", rule: "Rapid movement of funds", description: "", active: true, priority: "high", priority_words: "High", params: { min_in_amount: "100000.00", out_share_pct: 80, within_days: 2 }, availability: "Available" },
+    { code: "G", rule: "Third party transactions", description: "", active: false, priority: "low", priority_words: "Low", params: {}, availability: "Not available" },
+  ],
+};
+
+const DETECTION_PAYLOAD = {
+  base_version: 1,
+  definition: {
+    A: { active: true, priority: "high", params: { min_transactions: 2 } },
+    E: { active: true, priority: "critical", params: { min_in_amount: "100000.00", out_share_pct: 90, within_days: 2 } },
+    G: { active: true, priority: "low", params: {} },
+  },
+  changed_rules: ["E", "G"],
+};
+
+test("a detection rules change shows only what changed, from the version it was asked from to the proposal", () => {
+  assert.deepEqual(amlaChangeRequestChanges({ ...REQUEST, type: "detection_rules", payload: DETECTION_PAYLOAD }, { detection: [DETECTION_BASE] }), [
+    "E · Rapid movement of funds, priority: High → Critical",
+    "E · Rapid movement of funds, Share that leaves again: 80% → 90%",
+    "G · Third party transactions: off → on",
   ]);
 });
 
-test("a risk rules change shows each changed section as proposed, in words", () => {
-  const payload = {
-    base_version: 1,
-    definition: {
-      factors: { customer_type: { member: 0, walk_in: 15 }, mystery: { x: 1 } },
-      thresholds: { medium: 25, high: 45 },
-      high_risk_countries: [],
-    },
-    changed_sections: ["factors", "thresholds", "high_risk_countries"],
-  };
-  assert.deepEqual(amlaChangeRequestChanges({ ...REQUEST, type: "risk_rules", payload }), [
-    "Customer type: Member 0 points, Walk-in 15 points",
-    "Another factor: Another value 1 point",
-    "Thresholds: Medium from 25 points, High from 45 points",
-    "High-risk countries: none",
+test("when the version it was asked from isn't listed, the current side is the version in force now, labelled so", () => {
+  const newer = { ...DETECTION_BASE, version: 3 };
+  assert.deepEqual(amlaChangeRequestChanges({ ...REQUEST, type: "detection_rules", payload: DETECTION_PAYLOAD }, { detection: [newer] }), [
+    "E · Rapid movement of funds, priority: High (now) → Critical",
+    "E · Rapid movement of funds, Share that leaves again: 80% (now) → 90%",
+    "G · Third party transactions: off (now) → on",
   ]);
-  assert.deepEqual(amlaChangeRequestChanges({ ...REQUEST, type: "risk_rules", payload: { ...payload, changed_sections: ["thresholds"] } }), [
-    "Thresholds: Medium from 25 points, High from 45 points",
+});
+
+test("without the rules to compare with, a detection change still lists each changed rule as proposed", () => {
+  assert.deepEqual(amlaChangeRequestChanges({ ...REQUEST, type: "detection_rules", payload: DETECTION_PAYLOAD }), [
+    "E · Rapid movement of funds: on, Critical priority. Smallest amount received: ₱100,000.00; Share that leaves again: 90%; Within: 2 days",
+    "G · Third party transactions: on, Low priority.",
+  ]);
+});
+
+const RISK_BASE: { version: number; definition: AmlaRiskRulesDefinition } = {
+  version: 1,
+  definition: {
+    factors: { customer_type: { member: 0, walk_in: 10 }, pep: { not_pep: 0, pep: 30, pep_family: 20 } },
+    thresholds: { medium: 20, high: 40 },
+    high_risk_countries: ["KP", "IR"],
+  },
+};
+
+const RISK_PAYLOAD = {
+  base_version: 1,
+  // As MySQL JSON hands it back: keys out of order.
+  definition: {
+    thresholds: { high: 45, medium: 20 },
+    high_risk_countries: ["KP", "IR", "MM"],
+    factors: { pep: { pep_family: 20, pep: 35, not_pep: 0 }, customer_type: { walk_in: 10, member: 0 } },
+  },
+  changed_sections: ["factors", "thresholds", "high_risk_countries"],
+};
+
+test("a risk rules change shows only the changed points, thresholds and countries, in a stable order", () => {
+  assert.deepEqual(amlaChangeRequestChanges({ ...REQUEST, type: "risk_rules", payload: RISK_PAYLOAD }, { risk: [RISK_BASE] }), [
+    "Politically exposed person, PEP: 30 → 35 points",
+    "High threshold: 40 → 45 points",
+    "High-risk countries: KP, IR → KP, IR, MM",
+  ]);
+  assert.deepEqual(
+    amlaChangeRequestChanges({ ...REQUEST, type: "risk_rules", payload: RISK_PAYLOAD }, { risk: [{ ...RISK_BASE, version: 2 }] })[0],
+    "Politically exposed person, PEP: 30 (now) → 35 points",
+  );
+});
+
+test("without the rules to compare with, a risk change lists its changed sections as proposed, in a stable order", () => {
+  assert.deepEqual(amlaChangeRequestChanges({ ...REQUEST, type: "risk_rules", payload: { ...RISK_PAYLOAD, changed_sections: ["factors", "high_risk_countries"] } }), [
+    "Customer type: Member 0 points, Walk-in 10 points",
+    "Politically exposed person: Not a PEP 0 points, PEP 35 points, Family member of a PEP 20 points",
+    "High-risk countries: KP, IR, MM",
   ]);
 });

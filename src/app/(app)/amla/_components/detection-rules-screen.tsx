@@ -7,9 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useApiResource, usePermission } from "@/hooks";
+import { amlaApi } from "@/lib/amla/api";
 import { amlaMonitoringAccess } from "@/lib/amla/monitoring-access";
 import { amlaMonitoringApi } from "@/lib/amla/monitoring-api";
-import { amlaDetectionRuleRows } from "@/lib/amla/monitoring-view";
+import { amlaDetectionRuleRows, amlaPendingRequestId } from "@/lib/amla/monitoring-view";
 import { once } from "@/lib/amla/once";
 import { formatDateTime } from "@/lib/format";
 import type { AmlaDetectionRulesVersion } from "@/types/amla-monitoring";
@@ -28,6 +29,12 @@ export function DetectionRulesScreen() {
   const resource = useApiResource(fetcher);
   const [asking, setAsking] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  // The rules endpoint sends no waiting request, so settings holders read it from the change requests.
+  const [pendingFetcher, setPendingFetcher] = useState(() => once(() => readPending()));
+  const pending = useApiResource(pendingFetcher, access.askRuleChange);
+  const pendingId = pending.data ?? null;
+  // Ask is offered only once the server says nothing is waiting.
+  const canAsk = access.askRuleChange && !pending.loading && pending.error === null && pendingId === null;
 
   return (
     <PageFill>
@@ -48,7 +55,13 @@ export function DetectionRulesScreen() {
         <DataState resource={resource} summary="The detection rules in force." endpoints={["GET /amla/detection-rules"]}>
           {(version) => (
             <>
-              <RulesCard version={version} canAsk={access.askRuleChange} onAsk={() => setAsking(true)} />
+              {pendingId !== null && (
+                <p className="rounded-md border bg-muted/40 p-3 text-sm">
+                  A detection rules change (request #{pendingId}) is waiting for approval in Settings, AMLA. Only one can
+                  wait at a time.
+                </p>
+              )}
+              <RulesCard version={version} canAsk={canAsk} onAsk={() => setAsking(true)} />
               {access.askRuleChange && (
                 <DetectionRulesChangeDialog
                   open={asking}
@@ -57,6 +70,7 @@ export function DetectionRulesScreen() {
                   onAsked={() => {
                     setAsking(false);
                     setFetcher(() => once(() => amlaMonitoringApi.detectionRules()));
+                    setPendingFetcher(() => once(() => readPending()));
                   }}
                 />
               )}
@@ -74,6 +88,11 @@ export function DetectionRulesScreen() {
       </ScrollBox>
     </PageFill>
   );
+}
+
+/** The waiting detection rules change's id, or null. */
+function readPending(): Promise<number | null> {
+  return amlaApi.changeRequests({ status: "pending", type: "detection_rules", page: 1 }).then(amlaPendingRequestId);
 }
 
 function RulesCard({ version, canAsk, onAsk }: { version: AmlaDetectionRulesVersion; canAsk: boolean; onAsk?: () => void }) {

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { AmlaFilterField } from "@/components/amla/amla-filter-field";
 import { AmlaPager } from "@/components/amla/amla-pager";
+import { VISIBLE_SCROLLBAR } from "@/components/amla/visible-scrollbar";
 import { BranchFilter, branchIdParam } from "@/components/common/branch-filter";
 import { DataState } from "@/components/common/data-state";
 import { FillSection, PageFill, ScrollBox } from "@/components/common/page-fill";
@@ -95,17 +96,16 @@ export function AlertsList() {
         >
           {(page) => (
             <>
-              <ScrollBox className="min-h-0 flex-1">
-                <Table className="min-w-[56rem]">
+              <ScrollBox className={`min-h-0 flex-1 ${VISIBLE_SCROLLBAR}`} tabIndex={0} role="region" aria-label="Alerts, scrolls sideways">
+                <Table className="min-w-[48rem]">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Alert</TableHead>
-                      <TableHead>Priority</TableHead>
+                      <TableHead>Priority and status</TableHead>
                       <TableHead>Subject</TableHead>
                       <TableHead>Branch</TableHead>
                       <TableHead>Window</TableHead>
                       <TableHead className="text-right">Amount</TableHead>
-                      <TableHead>Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -122,6 +122,7 @@ export function AlertsList() {
                         </TableCell>
                         <TableCell>
                           <Badge variant={row.tone}>{row.priority}</Badge>
+                          <div className="text-xs text-muted-foreground">{row.status}</div>
                         </TableCell>
                         <TableCell className="whitespace-normal">
                           {row.subject}
@@ -133,7 +134,6 @@ export function AlertsList() {
                           <div className="text-xs text-muted-foreground">{row.transactions}</div>
                         </TableCell>
                         <TableCell className="text-right whitespace-nowrap">{row.amount}</TableCell>
-                        <TableCell>{row.status}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
