@@ -122,9 +122,12 @@ test("the edit form's Civil Status names its options, so it reads Single, not si
   assert.match(page, /items=\{CIVIL_STATUS_OPTIONS\}/);
 });
 
-test("each member row's ⋯ menu is named for its member", async () => {
+test("each member row's ⋯ menu is named for its member and shows a focus ring", async () => {
   const { memberActionsLabel } = await import("./utils");
   assert.equal(memberActionsLabel("Ana Cruz"), "Actions for Ana Cruz");
   const actions = readFileSync(join(import.meta.dirname, "borrower-actions.tsx"), "utf8");
-  assert.match(actions, /<DropdownMenuTrigger className="outline-none" aria-label=\{memberActionsLabel\(borrower\.full_name\)\}>/);
+  assert.match(
+    actions,
+    /<DropdownMenuTrigger\s+className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring\/50"\s+aria-label=\{memberActionsLabel\(borrower\.full_name\)\}\s*>/,
+  );
 });

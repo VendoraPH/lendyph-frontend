@@ -143,7 +143,10 @@ export function BorrowerActionsCell({
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger className="outline-none" aria-label={memberActionsLabel(borrower.full_name)}>
+        <DropdownMenuTrigger
+          className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          aria-label={memberActionsLabel(borrower.full_name)}
+        >
           <MoreHorizontal className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">

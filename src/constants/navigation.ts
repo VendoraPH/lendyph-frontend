@@ -21,11 +21,13 @@ import {
   ClipboardCheck,
   MonitorSmartphone,
   Sparkles,
+  TrendingUp,
 } from "lucide-react";
 import { GCashIcon } from "@/components/icons/gcash-icon";
 import { env } from "@/config/env";
 import { MODULE_ALSO_REQUIRES } from "@/lib/permission-module-names";
 import { meetsPermission } from "@/lib/permission-requirement";
+import { EXECUTIVE_DASHBOARD_PERMISSION } from "@/app/(app)/dashboard/_lib/executive-access";
 
 export interface NavSubItem {
   title: string;
@@ -97,6 +99,21 @@ export function navChildAllowed(child: NavSubItem, can: (permission: Permission)
  * goes to the first page the user can open, so a cashier who only decides
  * Member Portal requests lands on the queue, not on a page they can't open.
  */
+/**
+ * Whether a top-level menu link is the current page's: its own path or a page
+ * under it, unless another menu link matches the page more closely. On
+ * /dashboard/executive only Executive Dashboard is highlighted, not Dashboard.
+ */
+export function navItemMatches(
+  pathname: string,
+  href: string,
+  menu: readonly { href: string }[] = SIDEBAR_NAV,
+): boolean {
+  const matches = (h: string) => pathname === h || pathname.startsWith(`${h}/`);
+  if (!matches(href)) return false;
+  return !menu.some((other) => other.href !== href && other.href.startsWith(`${href}/`) && matches(other.href));
+}
+
 export function navItemHref(item: NavItem, can: (permission: Permission) => boolean): string {
   if (!item.anyOf) return item.href;
   return (item.children ?? []).find((child) => navChildAllowed(child, can))?.href ?? item.href;
@@ -225,6 +242,19 @@ export const LINDA_NAV: NavItem = {
   permission: "linda:use",
 };
 
+/**
+ * The Executive Dashboard, right below Dashboard. Shown only with
+ * NEXT_PUBLIC_ENABLE_EXECUTIVE_DASHBOARD on and to holders of
+ * `dashboard:analytics`, the same gate as its page (dashboard/executive/layout.tsx).
+ */
+export const EXECUTIVE_DASHBOARD_NAV: NavItem = {
+  title: "Executive Dashboard",
+  href: "/dashboard/executive",
+  icon: TrendingUp,
+  icon3d: "icon-trend",
+  permission: EXECUTIVE_DASHBOARD_PERMISSION,
+};
+
 export const SIDEBAR_NAV: NavItem[] = [
   {
     title: "Dashboard",
@@ -233,6 +263,7 @@ export const SIDEBAR_NAV: NavItem[] = [
     icon3d: "icon-dashboard",
     permission: "dashboard:view",
   },
+  ...(env.features.executiveDashboard ? [EXECUTIVE_DASHBOARD_NAV] : []),
   ...(env.features.linda ? [LINDA_NAV] : []),
   {
     title: "Members",

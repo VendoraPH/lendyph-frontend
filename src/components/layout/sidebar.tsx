@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SIDEBAR_NAV } from "@/constants";
-import { LINDA_NAV, navChildAllowed, navItemAllowed, navItemHref, type NavItem } from "@/constants/navigation";
+import { LINDA_NAV, navChildAllowed, navItemAllowed, navItemHref, navItemMatches, type NavItem } from "@/constants/navigation";
 import { usePermission } from "@/hooks";
 import { useRegistrations } from "@/hooks/use-registrations";
 import {
@@ -165,15 +165,16 @@ function NavLink({
   // child is hidden must render as a plain link, not as an expander that opens
   // onto nothing.
   const hasChildren = visibleChildren.length > 0;
-  const isExactMatch = pathname === item.href;
-  const isPrefixMatch = pathname.startsWith(item.href + "/");
+  // Its own page or one under it, unless another menu link matches more
+  // closely (on /dashboard/executive, Executive Dashboard rather than Dashboard).
+  const isMatch = navItemMatches(pathname, item.href);
   // For items without children, active on exact or prefix match
   // For items with children, only used to expand — dot shown on child only
-  const isActive = hasChildren ? false : (isExactMatch || isPrefixMatch);
+  const isActive = hasChildren ? false : isMatch;
   const isChildActive = hasChildren
     ? visibleChildren.some((c) => pathname === c.href)
     : false;
-  const isOpen = isExactMatch || isPrefixMatch || isChildActive;
+  const isOpen = isMatch || isChildActive;
   const [expanded, setExpanded] = useState(isOpen);
 
   // Auto-expand when navigating to a child route
