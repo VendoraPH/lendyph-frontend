@@ -282,6 +282,9 @@ export const API_ENDPOINTS = {
     DETAIL: (id: number) => `/branches/${id}`,
     CREATE: "/branches",
     UPDATE: (id: number) => `/branches/${id}`,
+    // Suspend or reactivate, with a reason (Phase 6 MB-BE1). `PUT UPDATE`
+    // refuses a changed `is_active` (422). branches:manage plus view_all.
+    STATUS: (id: number) => `/branches/${id}/status`,
   },
   SHARE_CAPITAL: {
     LEDGER_LIST: "/share-capital/ledger",

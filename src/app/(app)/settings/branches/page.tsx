@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from "react";
 import { RouteGuard } from "@/components/common";
 import { PageFill, PageLoader, ScrollBox } from "@/components/common/page-fill";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,6 +34,10 @@ import {
 import { toast } from "sonner";
 import { branchService } from "@/services";
 import type { ApiBranch, CreateBranchData, UpdateBranchData } from "@/services/branch.service";
+import { branchStatusOf } from "@/lib/branch-status";
+import { notifyError } from "@/lib/notify";
+import { BranchStatusBadge } from "./_components/branch-status-badge";
+import { BranchStatusActionButton } from "./_components/branch-status-action";
 import { completeRows } from "@/lib/paginate";
 import { FIT_CLASSES } from "@/lib/page-fill";
 import { cn } from "@/lib/utils";
@@ -89,8 +92,8 @@ function BranchFormDialog({ open, onOpenChange, branch, onSave }: BranchFormDial
       }
       onOpenChange(false);
       onSave();
-    } catch {
-      toast.error(isEdit ? "We couldn't update the branch. Please try again." : "We couldn't create the branch. Please try again.");
+    } catch (err) {
+      notifyError(err, isEdit ? "We couldn't update the branch. Please try again." : "We couldn't create the branch. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -209,17 +212,7 @@ function BranchesContent() {
     );
   });
 
-  const activeCount = branches.filter((b) => b.is_active).length;
-
-  async function handleToggleStatus(branch: ApiBranch) {
-    try {
-      await branchService.update(branch.id, { is_active: !branch.is_active });
-      toast.success(`Branch ${branch.is_active ? "deactivated" : "activated"}`);
-      fetchBranches();
-    } catch {
-      toast.error("We couldn't update the branch status. Please try again.");
-    }
-  }
+  const activeCount = branches.filter((b) => branchStatusOf(b) === "active").length;
 
   function handleEdit(branch: ApiBranch) {
     setEditBranch(branch);
@@ -276,7 +269,7 @@ function BranchesContent() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Inactive</CardTitle>
+            <CardTitle className="text-sm font-medium">Suspended or Closed</CardTitle>
             <Building2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -344,16 +337,7 @@ function BranchesContent() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          branch.is_active
-                            ? "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/30"
-                            : "bg-muted text-muted-foreground border-border"
-                        )}
-                      >
-                        {branch.is_active ? "Active" : "Inactive"}
-                      </Badge>
+                      <BranchStatusBadge branch={branch} />
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -366,19 +350,7 @@ function BranchesContent() {
                           <Pencil className="h-3 w-3" />
                           Edit
                         </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className={cn(
-                            "h-7 text-xs",
-                            branch.is_active
-                              ? "text-destructive border-destructive/30 hover:bg-destructive/5"
-                              : "text-green-600 border-green-500/30 hover:bg-green-500/5"
-                          )}
-                          onClick={() => handleToggleStatus(branch)}
-                        >
-                          {branch.is_active ? "Deactivate" : "Activate"}
-                        </Button>
+                        <BranchStatusActionButton branch={branch} onChanged={fetchBranches} />
                       </div>
                     </TableCell>
                   </TableRow>

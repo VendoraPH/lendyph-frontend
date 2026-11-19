@@ -1,6 +1,7 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { fetchAllPages, type DrainResult } from "@/lib/paginate";
+import type { BranchStatus } from "@/lib/branch-status";
 
 export interface ApiBranch {
   id: number;
@@ -8,7 +9,11 @@ export interface ApiBranch {
   code: string;
   address?: string;
   contact_number?: string;
+  /** Active, suspended or closed (Phase 6 MB-BE1); absent from an older backend. */
+  status?: BranchStatus;
+  /** True only while the branch is active; the server derives it from `status`. */
   is_active: boolean;
+  is_main_office?: boolean;
 }
 
 export interface CreateBranchData {
@@ -23,7 +28,15 @@ export interface UpdateBranchData {
   code?: string;
   address?: string;
   contact_number?: string;
-  is_active?: boolean;
+}
+
+/**
+ * Suspend or reactivate. `is_active` is not part of an edit: MB-BE1 refuses a
+ * changed one (422), and closing goes through the closure request.
+ */
+export interface ChangeBranchStatusData {
+  status: Exclude<BranchStatus, "closed">;
+  reason: string;
 }
 
 export interface PublicBranch {
@@ -70,4 +83,8 @@ export const branchService = {
 
   update: (id: number, data: UpdateBranchData) =>
     api.put<ApiBranch>(API_ENDPOINTS.BRANCHES.UPDATE(id), data),
+
+  /** `PATCH /branches/{id}/status`: branches:manage plus branches:view_all; refusals come back in words. */
+  changeStatus: (id: number, data: ChangeBranchStatusData) =>
+    api.patch<ApiBranch>(API_ENDPOINTS.BRANCHES.STATUS(id), data),
 };
