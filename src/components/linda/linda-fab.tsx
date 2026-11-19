@@ -70,7 +70,7 @@ function LindaFabButton() {
             className="size-full select-none rounded-full object-cover"
           />
         </TooltipTrigger>
-        <TooltipContent side="left">Ask Linda</TooltipContent>
+        <TooltipContent side="top" align="end">Ask Linda</TooltipContent>
       </Tooltip>
     </TooltipProvider>
   );
