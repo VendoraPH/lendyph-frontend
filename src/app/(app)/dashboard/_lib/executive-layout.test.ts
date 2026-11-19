@@ -11,6 +11,13 @@ test("only the header and filter bar are pinned; the cards and sections share th
   assert.deepEqual(tokens(L.scrollBody), ["flex", "min-w-0", "flex-col", "gap-4"]);
 });
 
+test("the scroll box positions what's inside it, so screen-reader tables never stretch the page", () => {
+  // The sr-only chart tables, captions and "Critical:" labels are absolute. With
+  // no positioned box they attached to the page, which grew to 3440px at
+  // 1024x640 and scrolled the header and filter bar away.
+  assert.ok(tokens(L.scrollBox).includes("relative"), L.scrollBox);
+});
+
 test("every grid is one shrinkable column at phone width, so charts and tables never push past their card", () => {
   // An implicit grid column is sized to its content: at 390px the charts ran 51-87px past the card.
   for (const grid of [L.columns, L.twoUp, L.kpiGrid]) {

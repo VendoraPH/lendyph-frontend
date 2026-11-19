@@ -84,7 +84,7 @@ function ExecutiveDashboard() {
         exportSlot={<ExportMenu data={data} period={period} branchLabel={branchLabel} disabled={loading} />}
       />
 
-      <ScrollBox>
+      <ScrollBox className={L.scrollBox}>
         {/* Only the header and filter bar stay pinned. The sections' tables scroll sideways in their cards; nothing pins to this box. */}
         <div data-unpinned className={L.scrollBody}>
           <section aria-labelledby="exec-overview" className="space-y-2">

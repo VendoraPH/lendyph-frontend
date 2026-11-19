@@ -10,6 +10,12 @@
 export const EXECUTIVE_LAYOUT = {
   /** The page title and the filter bar. */
   pinned: "shrink-0",
+  /**
+   * The scroll box itself. Positioned, so the absolute screen-reader tables,
+   * captions and labels inside it attach to it, not to the page, which they
+   * would otherwise stretch (the page scrolled the header away).
+   */
+  scrollBox: "relative",
   /** Inside the scroll box: the KPI cards, then the sections. */
   scrollBody: "flex min-w-0 flex-col gap-4",
   kpiGrid: "grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6",

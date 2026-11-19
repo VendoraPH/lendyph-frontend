@@ -39,8 +39,8 @@ test("a card's tooltip shows its API source in development builds only", () => {
 test("the page fits the screen: sections scroll inside their own box, full width", () => {
   const page = read("src/app/(app)/dashboard/executive/page.tsx");
   assert.match(page, /<PageFill className="gap-4">/);
-  assert.match(page, /<ScrollBox>/);
+  assert.match(page, /<ScrollBox className=\{L\.scrollBox\}>/);
   assert.doesNotMatch(page, /max-w-\[/);
   // Only the header and filter bar stay pinned: the KPI cards scroll with the sections.
-  assert.ok(page.indexOf("<ScrollBox>") < page.indexOf("kpis.map("), "the KPI cards are inside the scroll box");
+  assert.ok(page.indexOf("<ScrollBox ") < page.indexOf("kpis.map("), "the KPI cards are inside the scroll box");
 });
