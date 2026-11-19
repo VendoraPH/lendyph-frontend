@@ -30,6 +30,7 @@ import {
 import { showExecutiveLink } from "./_lib/executive-access";
 import { DuesDonut } from "./_components/dues-donut";
 import { DuesTable, TransactionsTable, type DueItemView, type LoadState } from "./_components/dashboard-tables";
+import { dueItemViews, type DailyDueItem } from "./_lib/daily-dues";
 import {
   DASHBOARD_PAGE_CLASS,
   DUES_TABLE_PANEL_CLASS,
@@ -68,16 +69,6 @@ interface DashboardStats {
   sparklines?: Partial<Record<SparklineKey, SparklinePoint[]>>;
 }
 
-interface DailyDueItem {
-  id?: number;
-  borrower?: string;
-  borrower_name?: string;
-  loan_id?: number | string;
-  loan_account_number?: string;
-  amount_due?: number;
-  amount_paid?: number;
-  status?: "paid" | "partial" | "overdue" | "pending" | "collected";
-}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -192,24 +183,7 @@ function DashboardContent() {
     dashboardService
       .dailyDues<DailyDueItem>()
       .then((res) => {
-        const raw = Array.isArray(res?.data) ? res.data : [];
-        const statusMap: Record<string, DueItemView["status"]> = {
-          paid: "collected",
-          collected: "collected",
-          partial: "partial",
-          overdue: "pending",
-          pending: "pending",
-        };
-        setDailyDues(
-          raw.map((item, i) => ({
-            id: Number(item.id ?? i + 1),
-            borrower: item.borrower ?? item.borrower_name ?? "—",
-            loanId: String(item.loan_account_number ?? item.loan_id ?? "—"),
-            amountDue: Number(item.amount_due ?? 0),
-            amountPaid: Number(item.amount_paid ?? 0),
-            status: statusMap[item.status ?? "pending"] ?? "pending",
-          })),
-        );
+        setDailyDues(dueItemViews(Array.isArray(res?.data) ? res.data : []));
         setDuesSummary(res?.summary ?? null);
         setDuesStatus("ready");
       })
@@ -332,7 +306,7 @@ function DashboardContent() {
         contentClassName="px-0"
         actions={
           <Badge variant="outline" className={rateBadgeClass}>
-            {BadgeArrow ? <BadgeArrow className="h-3 w-3 mr-1" aria-hidden="true" /> : null}
+            {BadgeArrow ? <BadgeArrow data-icon="inline-start" aria-hidden="true" /> : null}
             {badge.text}
           </Badge>
         }

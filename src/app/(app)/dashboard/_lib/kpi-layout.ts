@@ -35,6 +35,14 @@ const IN_DIALOG_FLUSH = "in-data-[slot=dialog-content]:mx-0";
 export const DUES_TABS_LIST_CLASS = `mx-4 ${IN_DIALOG_FLUSH}`;
 
 /**
+ * The ring's size: it follows the window's height (7–11rem), so the ring, its
+ * key, its caption and the "Today" list fit the panel at 1366x768 and the ring
+ * never clips on a short screen. The nothing-due picture takes the same height.
+ */
+export const DUES_RING_SIZE_CLASS = "size-[clamp(7rem,20dvh,11rem)]";
+export const DUES_EMPTY_PICTURE_CLASS = "max-h-[clamp(7rem,20dvh,11rem)]";
+
+/**
  * The collections ring's panel beside the Daily dues table: the app's usual
  * inner panel (`rounded-lg border p-4`). On a wide card it runs the table
  * panel's height (`@xl:self-stretch`), so both boxes end level, with the ring
@@ -59,6 +67,8 @@ export const DUES_DONUT_COLUMN_CLASS = `mx-4 flex shrink-0 flex-col items-center
  * border on the scroll box itself lost its rounded clip there. Unlike
  * `overflow-hidden`, `overflow-clip` is no scroll container, so the headings still
  * pin to whichever box scrolls: the table's on the page, the dialog's when expanded.
+ * Being no scroll container, it also keeps a flex item's `min-width: auto`, so
+ * `min-w-0` lets it shrink below its table and the scroll box scrolls sideways.
  */
-export const DUES_TABLE_PANEL_CLASS = `mx-4 flex min-h-0 flex-1 flex-col overflow-clip rounded-lg border @xl:ml-0 ${IN_DIALOG_FLUSH}`;
-export const TRANSACTIONS_TABLE_PANEL_CLASS = `mx-4 flex min-h-0 flex-1 flex-col overflow-clip rounded-lg border ${IN_DIALOG_FLUSH}`;
+export const DUES_TABLE_PANEL_CLASS = `mx-4 flex min-h-0 min-w-0 flex-1 flex-col overflow-clip rounded-lg border @xl:ml-0 ${IN_DIALOG_FLUSH}`;
+export const TRANSACTIONS_TABLE_PANEL_CLASS = `mx-4 flex min-h-0 min-w-0 flex-1 flex-col overflow-clip rounded-lg border ${IN_DIALOG_FLUSH}`;

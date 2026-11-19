@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   DASHBOARD_PAGE_CLASS,
   DUES_DONUT_COLUMN_CLASS,
+  DUES_RING_SIZE_CLASS,
   DUES_TABS_LIST_CLASS,
   DUES_TABLE_PANEL_CLASS,
   TRANSACTIONS_TABLE_PANEL_CLASS,
@@ -119,4 +120,21 @@ test("in the expand dialog the tabs and panels start at the title's left edge", 
   }
   const page = readFileSync(join(import.meta.dirname, "..", "page.tsx"), "utf8");
   assert.match(page, /<TabsList className=\{DUES_TABS_LIST_CLASS\}>/);
+});
+
+test("each table's panel can shrink below its table, so the table scrolls sideways instead of being cut off", () => {
+  // overflow-clip is no scroll container, so the panel kept min-width: auto: at
+  // 1024x640 the panels grew to 815px inside a 714px card and the Status column
+  // was cut off.
+  for (const cls of [DUES_TABLE_PANEL_CLASS, TRANSACTIONS_TABLE_PANEL_CLASS]) {
+    assert.ok(tokens(cls).includes("min-w-0"), `min-w-0 in ${cls}`);
+  }
+});
+
+test("the ring is sized to the window's height so the ring, key, caption and Today list fit at 1366x768", () => {
+  // At 22dvh the panel's content ran 12px taller than its box at 1366x768.
+  assert.equal(DUES_RING_SIZE_CLASS, "size-[clamp(7rem,20dvh,11rem)]");
+  const donut = readFileSync(join(import.meta.dirname, "..", "_components", "dues-donut.tsx"), "utf8");
+  assert.match(donut, /DUES_RING_SIZE_CLASS/);
+  assert.doesNotMatch(donut, /22dvh/);
 });

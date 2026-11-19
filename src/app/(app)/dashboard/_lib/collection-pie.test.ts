@@ -1,5 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { DailyDuesSummary } from "@/types";
 import {
   collectionBadge,
@@ -145,4 +147,10 @@ test("a ring with one slice draws whole: no padding notch at 0% or 100% collecte
   assert.equal(donutPaddingAngle(collectionPieSlices({ ...summary, collected_in_full: 0, partially_collected: 0 })), 0);
   assert.equal(donutPaddingAngle(collectionPieSlices({ ...summary, partially_collected: 0, uncollected: 0 })), 0);
   assert.equal(donutPaddingAngle(collectionPieSlices(summary)), 3);
+});
+
+test("the badge's arrow takes the badge's own gap only, not a second margin", () => {
+  const page = readFileSync(join(import.meta.dirname, "..", "page.tsx"), "utf8");
+  assert.match(page, /<BadgeArrow data-icon="inline-start" aria-hidden="true" \/>/);
+  assert.doesNotMatch(page, /<BadgeArrow[^>]*mr-1/);
 });

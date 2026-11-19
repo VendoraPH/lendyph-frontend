@@ -1,14 +1,14 @@
 import { PieChart, Pie, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { Illustration, hasIllustration } from "@/components/common/illustration";
 import { formatCurrency } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { donutPaddingAngle, type CollectionPieSlice, type TodaySummaryRow } from "../_lib/collection-pie";
-import { DUES_DONUT_COLUMN_CLASS } from "../_lib/kpi-layout";
+import { DUES_DONUT_COLUMN_CLASS, DUES_EMPTY_PICTURE_CLASS, DUES_RING_SIZE_CLASS } from "../_lib/kpi-layout";
 
 /**
  * Today's expected against actual collection, as the server's summary states
  * it, with the "Today" list of the summary's figures under it. The ring scales
- * with the window's height (7–11rem), so it never clips on a 768px-tall
- * screen. Its panel runs the table panel's height on a wide card, with the
+ * with the window's height (`DUES_RING_SIZE_CLASS`). Its panel runs the table panel's height on a wide card, with the
  * ring and list at the top, level with the table's headings.
  *
  * On a day with nothing due, the ring, its key and its caption give way to the
@@ -35,13 +35,13 @@ export function DuesDonut({
       {nothingDue ? (
         <div className="flex flex-col items-center gap-2 py-2">
           {hasIllustration("allCaughtUp") ? (
-            <Illustration name="allCaughtUp" className="max-h-[min(7rem,16dvh)]" />
+            <Illustration name="allCaughtUp" className={DUES_EMPTY_PICTURE_CLASS} />
           ) : null}
           <p className="text-sm font-medium">Nothing due today</p>
         </div>
       ) : (
         <>
-          <div className="relative size-[clamp(7rem,22dvh,11rem)] shrink-0">
+          <div className={cn("relative shrink-0", DUES_RING_SIZE_CLASS)}>
             {rate === null ? (
               // Still loading, or the request failed: an empty ring, since a pie of zeros draws nothing.
               <svg aria-hidden="true" viewBox="0 0 100 100" className="absolute inset-0 size-full text-muted">
@@ -90,7 +90,7 @@ export function DuesDonut({
       )}
       <div className="w-full border-t pt-2">
         <h3 className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Today</h3>
-        <dl className="flex flex-col gap-1.5">
+        <dl className="flex flex-col gap-1">
           {rows.map((row) => (
             <div key={row.key} className="flex items-start justify-between gap-2">
               <dt className="min-w-0 text-xs leading-tight">

@@ -78,6 +78,11 @@ export const SOURCE_PERMISSIONS: Record<SourceKey, Permission[]> = {
   pastDue: ["reports:view"],
 };
 
+/** Whether every permission a source needs is held; a source that isn't is never requested and reads "No access". */
+export function sourcePermitted(name: SourceKey, allowed: ReadonlySet<string>): boolean {
+  return SOURCE_PERMISSIONS[name].every((p) => allowed.has(p));
+}
+
 export const LOADING: Source<never> = { state: "loading" };
 
 /** The payload when it arrived, else `null`. */
