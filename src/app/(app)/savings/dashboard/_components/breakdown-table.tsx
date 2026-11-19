@@ -64,11 +64,11 @@ export function BreakdownTable({
                 {rows.map((row) => (
                   <TableRow key={`${row.group_id ?? "none"}-${row.group_name}`}>
                     <TableCell className="min-w-28 text-sm whitespace-normal">{row.group_name}</TableCell>
-                    <TableCell className="text-right font-mono text-sm tabular-nums">
+                    <TableCell className="text-right text-sm tabular-nums">
                       {countOrDash(row.open_accounts)}
                     </TableCell>
                     {MONEY_COLUMNS.map(([key]) => (
-                      <TableCell key={key} className="text-right font-mono text-sm tabular-nums">
+                      <TableCell key={key} className="text-right text-sm tabular-nums">
                         {currencyOrDash(row[key])}
                       </TableCell>
                     ))}
@@ -79,11 +79,11 @@ export function BreakdownTable({
                 <TableFooter>
                   <TableRow>
                     <TableCell className="font-medium">Total</TableCell>
-                    <TableCell className="text-right font-mono text-sm tabular-nums">
+                    <TableCell className="text-right text-sm tabular-nums">
                       {countOrDash(totals.open_accounts)}
                     </TableCell>
                     {MONEY_COLUMNS.map(([key]) => (
-                      <TableCell key={key} className="text-right font-mono text-sm font-medium tabular-nums">
+                      <TableCell key={key} className="text-right text-sm font-medium tabular-nums">
                         {currencyOrDash(totals[key])}
                       </TableCell>
                     ))}
