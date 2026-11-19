@@ -45,6 +45,8 @@ function note(text: string): { note?: string } {
 
 export interface AmlaChangeRequestFilters {
   status: string | null;
+  /** One change type only, e.g. a waiting `detection_rules` request. */
+  type?: string | null;
   page: number;
 }
 
@@ -67,7 +69,7 @@ export const amlaApi = {
   changeRequests: (filters: AmlaChangeRequestFilters) =>
     paged(
       api.getRaw<AmlaPage<AmlaChangeRequest>>(A.CHANGE_REQUESTS, {
-        params: only({ status: filters.status, page: filters.page }),
+        params: only({ status: filters.status, type: filters.type, page: filters.page }),
       }),
     ),
   ask: (body: AmlaChangeRequestBody) => api.post<AmlaChangeRequest>(A.CHANGE_REQUESTS, body),

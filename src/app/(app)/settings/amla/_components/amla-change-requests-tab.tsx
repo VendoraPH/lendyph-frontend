@@ -14,6 +14,7 @@ import { AmlaChangeRequestList } from "./amla-change-request-list";
 import { AmlaNoteDialog, type AmlaNoteAction } from "./amla-note-dialog";
 import { AmlaPager } from "@/components/amla/amla-pager";
 import { amlaDecisionAction, type AmlaDecision } from "./amla-decisions";
+import { useRuleBaselines } from "./use-rule-baselines";
 
 /** Every settings and calendar change, newest first, with the maker-checker steps the server allows. */
 export function AmlaChangeRequestsTab() {
@@ -25,9 +26,10 @@ export function AmlaChangeRequestsTab() {
 
   const fetcher = useCallback(() => amlaApi.changeRequests({ status: status === "" ? null : status, page }), [status, page]);
   const resource = useApiResource(fetcher);
+  const baselines = useRuleBaselines(resource.data?.data);
 
   function decide(request: AmlaChangeRequest, decision: AmlaDecision) {
-    setAction(amlaDecisionAction(request, decision));
+    setAction(amlaDecisionAction(request, decision, baselines));
   }
 
   return (
@@ -63,7 +65,7 @@ export function AmlaChangeRequestsTab() {
         {(result) => (
           <>
             <ScrollBox className="min-h-0 flex-1">
-              <AmlaChangeRequestList requests={result.data} userId={userId} can={can} onDecide={decide} />
+              <AmlaChangeRequestList requests={result.data} userId={userId} can={can} onDecide={decide} baselines={baselines} />
             </ScrollBox>
             <AmlaPager meta={result.meta} onPage={setPage} />
           </>
