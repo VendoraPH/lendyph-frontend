@@ -10,6 +10,7 @@ import {
   humanizeSegment,
   menuTitles,
   nestedPageTitle,
+  rootPageTitle,
   subPageTitle,
 } from "./page-titles";
 import { SIDEBAR_NAV } from "@/constants/navigation";
@@ -258,4 +259,12 @@ test("Settings → Linda's breadcrumb reads its menu title, with the menu entry 
   const menuTitle = menuTitles([{ title: "Settings", href: "/settings", children: [LINDA_SETTINGS_NAV] }]);
   assert.equal(subPageTitle("settings", "linda", { menuTitle }), "Linda");
   assert.equal(subPageTitle("settings", "linda"), "Linda");
+});
+
+test("/savings reads its menu title under the section, since the section also holds a dashboard", () => {
+  assert.equal(rootPageTitle("savings"), "Savings Accounts");
+  // Other sections' own pages keep reading the section's title alone.
+  assert.equal(rootPageTitle("loans"), undefined);
+  assert.equal(rootPageTitle("dashboard"), undefined);
+  assert.equal(rootPageTitle("constructor"), undefined);
 });

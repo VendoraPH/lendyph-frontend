@@ -11,6 +11,8 @@ import {
   nativeValidityApplies,
   nextStepIndex,
   previousStepIndex,
+  railStepClickable,
+  reportInvalidStep,
   stepCheckFailure,
   stepErrorsOf,
   stepFooterButtons,
@@ -19,7 +21,10 @@ import {
   stepProgressPercent,
   stepProgressText,
   stepperLayoutClasses,
+  stepsToCheckBefore,
   type FormStepDef,
+  type StepCheckTrigger,
+  type StepErrors,
 } from "./form-stepper";
 
 const steps: FormStepDef[] = [
@@ -254,8 +259,8 @@ test("phones: a single step needs no menu in either mode", () => {
 });
 
 test("noValidate: a form that opts out of browser validation is never checked natively", () => {
-  // The loan form's Share Capital Build-Up steps by whole pesos, so ₱50.50 is
-  // :invalid to the browser, yet the form (noValidate) and the server accept it.
+  // A loan amount below the product's minimum is :invalid to the browser, yet
+  // the loan form (noValidate) reports it with its own message.
   assert.equal(nativeValidityApplies({ noValidate: true }), false);
   assert.equal(nativeValidityApplies({ noValidate: true }, { formNoValidate: false }), false);
 });
@@ -313,4 +318,60 @@ test("dialog layout has one fixed height from sm, so the footer never moves betw
   // Phones keep the content-sized dialog.
   assert.doesNotMatch(dialog, /(^| )h-\[/);
   assert.doesNotMatch(stepperLayoutClasses("page").root, /h-\[/);
+});
+
+test("a failed check hands the form its errors, the step and what triggered it (Save or Next)", () => {
+  const calls: [StepErrors, string, StepCheckTrigger][] = [];
+  const notified: string[][] = [];
+  const onInvalid = (errors: StepErrors, stepId: string, trigger: StepCheckTrigger) => {
+    calls.push([errors, stepId, trigger]);
+  };
+  reportInvalidStep({ first_name: "First name" }, "personal", "save", { onInvalid, notify: (m) => notified.push(m) });
+  reportInvalidStep({ email: "Email" }, "contact", "next", { onInvalid, notify: (m) => notified.push(m) });
+  assert.deepEqual(calls, [
+    [{ first_name: "First name" }, "personal", "save"],
+    [{ email: "Email" }, "contact", "next"],
+  ]);
+  assert.deepEqual(notified, []);
+});
+
+test("without the form's own onInvalid, a failed check shows the default message list", () => {
+  const notified: string[][] = [];
+  reportInvalidStep({ first_name: "First name", email: ["Email", "Email"] }, "personal", "next", {
+    notify: (m) => notified.push(m),
+  });
+  assert.deepEqual(notified, [["First name", "Email"]]);
+});
+
+test("rail: create mode offers every step, so a click on a later one can say what's missing", () => {
+  for (let i = 0; i < 4; i++) {
+    assert.equal(railStepClickable(i, { mode: "create", current: 0, count: 4 }), true);
+  }
+});
+
+test("rail: nextDisabled keeps later steps closed in create mode, but not earlier ones or edit mode", () => {
+  assert.equal(railStepClickable(0, { mode: "create", current: 1, count: 4, nextDisabled: true }), true);
+  assert.equal(railStepClickable(1, { mode: "create", current: 1, count: 4, nextDisabled: true }), true);
+  assert.equal(railStepClickable(2, { mode: "create", current: 1, count: 4, nextDisabled: true }), false);
+  assert.equal(railStepClickable(3, { mode: "edit", current: 1, count: 4, nextDisabled: true }), true);
+});
+
+test("rail: a step outside the list is never clickable", () => {
+  assert.equal(railStepClickable(-1, { mode: "edit", current: 0, count: 4 }), false);
+  assert.equal(railStepClickable(4, { mode: "create", current: 0, count: 4 }), false);
+});
+
+test("create: moving forward checks the open step, then every later step before the target that hasn't passed", () => {
+  // From step 1 to the next step: only the open step, as Next does.
+  assert.deepEqual(stepsToCheckBefore(1, { current: 0, passed: [false, false, false, false] }), [0]);
+  // From step 1 to step 4 with nothing passed: the open step first, so a refused click shows its message.
+  assert.deepEqual(stepsToCheckBefore(3, { current: 0, passed: [false, false, false, false] }), [0, 1, 2]);
+  // Steps already passed aren't checked again, as before.
+  assert.deepEqual(stepsToCheckBefore(3, { current: 0, passed: [false, true, true, false] }), [0]);
+  assert.deepEqual(stepsToCheckBefore(3, { current: 1, passed: [true, false, false, false] }), [1, 2]);
+});
+
+test("create: going back or staying checks nothing", () => {
+  assert.deepEqual(stepsToCheckBefore(0, { current: 2, passed: [true, true, false, false] }), []);
+  assert.deepEqual(stepsToCheckBefore(2, { current: 2, passed: [true, true, false, false] }), []);
 });

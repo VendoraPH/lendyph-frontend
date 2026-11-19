@@ -1,18 +1,22 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Plus, Scale } from "lucide-react";
+import { LoadingContent } from "@/components/common/data-state";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useChartOfAccounts } from "@/hooks";
+import { CHART_OF_ACCOUNTS_HREF, chartGate } from "@/lib/accounting/chart-status";
 import { notifySuccess } from "@/lib/notify";
 import { accountingService } from "@/services";
 import type { OpeningBalance } from "@/types";
 import {
   buildDraft,
   editorLinesFrom,
+  openingChartNotice,
   equityAccountId,
   SUGGESTION_REMOVE_LABEL,
   requestFailure,
@@ -39,7 +43,8 @@ interface OpeningBalanceEditorProps {
  * offer, added only when the user asks.
  */
 export function OpeningBalanceEditor({ opening, onAnswer, onReload }: OpeningBalanceEditorProps) {
-  const { postable, isTemplate, truncated, total } = useChartOfAccounts();
+  const { postable, isTemplate, truncated, total, status } = useChartOfAccounts();
+  const chartNotice = openingChartNotice(status);
   const [asOf, setAsOf] = useState(opening.as_of ?? "");
   const [lines, setLines] = useState<EditorLine[]>(() => editorLinesFrom(opening));
   const [dirty, setDirty] = useState(false);
@@ -91,6 +96,9 @@ export function OpeningBalanceEditor({ opening, onAnswer, onReload }: OpeningBal
     save(next);
   };
 
+  // Wait for the chart, so the editor never shows before its chart notice.
+  if (chartGate(status) === "loading") return <LoadingContent />;
+
   return (
     <div className="space-y-6">
       {truncated && (
@@ -101,10 +109,17 @@ export function OpeningBalanceEditor({ opening, onAnswer, onReload }: OpeningBal
           consequence="An account missing from the chart cannot be chosen on a line below."
         />
       )}
-      {isTemplate && (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-          The organisation&apos;s chart of accounts couldn&apos;t be read (it needs Chart of
-          Accounts: View), so the opening balances can&apos;t be saved from here.
+      {chartNotice && (
+        <div role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+          {chartNotice}
+          {status === "not_set_up" && (
+            <>
+              {" "}
+              <Link href={CHART_OF_ACCOUNTS_HREF} className="font-medium underline underline-offset-3">
+                Set up the chart of accounts
+              </Link>
+            </>
+          )}
         </div>
       )}
 

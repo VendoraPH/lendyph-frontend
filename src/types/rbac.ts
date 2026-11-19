@@ -12,6 +12,10 @@ export type Role =
   // Keeps the books (round C). A system role nobody gets from a seeder; the
   // owner assigns it in Users.
   | "accountant"
+  // AMLA compliance (Phase 6): every AMLA permission, every branch, and
+  // read-only lending, savings and GCash. A system role nobody gets from a
+  // seeder; the owner assigns it in Users.
+  | "compliance_officer"
   | "loan_officer"
   | "loan_processor"
   | "cashier"
@@ -49,7 +53,15 @@ export type Module =
   // Branch access. `branches:view_all` sees every branch's data; without it
   // the API limits a user to the branches they are assigned to (another
   // branch's record answers 404, a `branch_id` filter outside them 403).
+  // `branches:manage` (Phase 6) adds, edits, opens and closes branches, and
+  // also needs `view_all`.
   | "branches"
+  // ── Interbranch Transfers (Phase 6) ──
+  //
+  // Money moved between branches through 1190 Interbranch Clearing. `view`
+  // reads them, `create` starts one, `approve` approves it (never the
+  // maker's own) and `receive` confirms it at the receiving branch.
+  | "interbranch_transfers"
   | "audit_logs"
   | "share_capital"
   | "collaterals"
@@ -127,7 +139,8 @@ export type Module =
   // for approval (approval itself runs through the existing loan approval
   // chain); `assess` re-runs and annotates the preliminary assessment;
   // `convert` turns an approved application into a loan; `settings` edits
-  // public links and the module's settings. Not seeded by the backend yet.
+  // public links and the module's settings. Seeded for admin and super_admin
+  // only (Phase 6, X0), never loan officers.
   | "loan_origination"
   // ── Savings & Deposits ──
   //
@@ -168,7 +181,19 @@ export type Module =
   // on the dashboard and a member's credit profile); `settings` chooses the AI
   // model in Settings → Linda, which also needs `branches:view_all`. Seeded for
   // admin and super_admin only. Revoking `use` is the instant off switch.
-  | "linda";
+  | "linda"
+  // ── AMLA Compliance (Phase 6) ──
+  //
+  // `view` reads the AMLA dashboard and reports; `alerts` works monitoring
+  // alerts; `cases` runs cases; `cdd` keeps due diligence and AML risk;
+  // `screening` screens members against the uploaded watchlists; `sanctions`
+  // places and lifts holds for an AMLA order; `ctr` and `str` prepare
+  // covered and suspicious transaction reports; `approve` approves a report
+  // someone else prepared; `export` makes the filing files; `submit` records
+  // a filing with the AMLC; `settings` changes settings, rules and the
+  // calendar (a second holder approves); `audit` reads AMLA's own log. Seeded
+  // for admin, super_admin and the Compliance Officer only.
+  | "amla";
 
 export type Action =
   | "view"
@@ -247,7 +272,21 @@ export type Action =
   | "assess"
   | "convert"
   // Linda: asking it questions (`linda:use`).
-  | "use";
+  | "use"
+  // ── AMLA verbs (see the `amla` module above) ──
+  | "alerts"
+  | "cases"
+  | "cdd"
+  | "screening"
+  | "sanctions"
+  | "ctr"
+  | "str"
+  | "audit"
+  // The executive dashboard (`dashboard:analytics`), beside `dashboard:view`,
+  // which every role holds.
+  | "analytics"
+  // Interbranch transfers: confirming one at the receiving branch.
+  | "receive";
 
 export type Permission = `${Module}:${Action}`;
 

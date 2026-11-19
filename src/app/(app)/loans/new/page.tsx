@@ -5,7 +5,7 @@ import { RouteGuard } from "@/components/common";
 import { PageFill, PageLoader, ScrollBox } from "@/components/common/page-fill";
 import { FIT_CLASSES } from "@/lib/page-fill";
 import { FormStep, FormStepper, type FormStepperHandle } from "@/components/common/form-stepper";
-import { FORM_STEP_GRID, errorMessages, stepErrorsOf, type StepErrors } from "@/lib/form-stepper";
+import { FORM_STEP_GRID, stepErrorsOf, type StepCheckTrigger, type StepErrors } from "@/lib/form-stepper";
 import { MissingAccessNotice } from "./_components/missing-access-notice";
 import { missingLoanFormAccess } from "./_lib/missing-access";
 import { StaffPicker } from "@/components/common/staff-picker";
@@ -145,7 +145,13 @@ import {
 } from "./_lib/loan-preview";
 import { SHARE_CAPITAL_VALUE_HIDDEN } from "@/app/(app)/loans/[id]/_lib/collateral-display";
 import { useLoanPreview } from "./_hooks/use-loan-preview";
-import { useSubmitPressed } from "./_hooks/use-submit-pressed";
+
+/**
+ * A fee's label with its rate in smaller type. Each part keeps the label's own
+ * line height (Tailwind's `text-xs` would set 16 px), so the label is as tall
+ * as the date labels and the fee boxes line up with the date boxes.
+ */
+const FEE_LABEL_CLASS = "flex items-center gap-0.5 *:leading-none";
 import { saveLoanEdit } from "./_lib/save-loan-edit";
 import {
   amountInputValue,
@@ -159,7 +165,7 @@ import {
 } from "./_lib/restructure-edit";
 import { COLLECTED_BEFORE_INSURANCE, proceedsFigures } from "@/lib/restructure-proceeds";
 import { formatProductRangeMessage } from "./_lib/product-range-message";
-import { loanFormMissing, loanFormSteps, serverFieldErrors } from "./_lib/loan-form-steps";
+import { invalidStepMessages, loanFormMissing, loanFormSteps, serverFieldErrors } from "./_lib/loan-form-steps";
 
 // ── Helpers ──
 
@@ -793,9 +799,8 @@ function NewLoanApplicationInner() {
   }
   // Next shows the open step's missing fields. Save (the stepper checks every
   // step and opens the first that fails) shows every missing field at once.
-  const submitPressed = useSubmitPressed();
-  function onInvalid(errors: StepErrors) {
-    notifyValidation(submitPressed.pressed.current ? Object.values(missingFields) : errorMessages(errors));
+  function onInvalid(errors: StepErrors, _stepId: string, trigger: StepCheckTrigger) {
+    notifyValidation(invalidStepMessages(trigger, errors, missingFields));
   }
 
   // ── Submit ──
@@ -993,7 +998,7 @@ function NewLoanApplicationInner() {
 
       {/* One step per card. At fit the open step scrolls under the rail and
           Back, Next and the submit stay at the foot. */}
-      <form noValidate onSubmit={onFormSubmit} className={FIT_CLASSES.section} {...submitPressed.formProps}>
+      <form noValidate onSubmit={onFormSubmit} className={FIT_CLASSES.section}>
         <FormStepper
           ref={stepperRef}
           steps={steps}
@@ -1212,7 +1217,7 @@ function NewLoanApplicationInner() {
               <div className={FORM_STEP_GRID.grid}>
               {/* Product */}
               <div className="space-y-2" data-field="loan_product_id">
-                <Label>
+                <Label htmlFor="loan-product">
                   Loan Product <span className="text-destructive">*</span>
                 </Label>
                 <Select
@@ -1220,7 +1225,7 @@ function NewLoanApplicationInner() {
                   onValueChange={(value) => handleProductChange(value)}
                   items={products.map((p) => ({ value: String(p.id), label: p.name }))}
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger id="loan-product" className="w-full">
                     <SelectValue placeholder="Select a loan product" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1252,10 +1257,11 @@ function NewLoanApplicationInner() {
 
                 {/* Principal Amount */}
                 <div className="space-y-2">
-                  <Label>
+                  <Label htmlFor="principal-amount">
                     Loan Amount <span className="text-destructive">*</span>
                   </Label>
                   <Input
+                    id="principal-amount"
                     name="principal_amount"
                     type="number"
                     placeholder="0.00"
@@ -1279,10 +1285,11 @@ function NewLoanApplicationInner() {
 
                 {/* Term */}
                 <div className="space-y-2">
-                  <Label>
+                  <Label htmlFor="loan-term">
                     Term ({termUnit}) <span className="text-destructive">*</span>
                   </Label>
                   <Input
+                    id="loan-term"
                     name="term"
                     type="number"
                     placeholder="0"
@@ -1296,13 +1303,13 @@ function NewLoanApplicationInner() {
 
                 {/* Payment Frequency */}
                 <div className="space-y-2" data-field="frequency">
-                  <Label>Payment Frequency</Label>
+                  <Label htmlFor="payment-frequency">Payment Frequency</Label>
                   <Select
                     value={paymentFrequency ?? null}
                     onValueChange={(value) => setPaymentFrequency(value ?? null)}
                     disabled={productFrequencies.length === 1}
                   >
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger id="payment-frequency" className="w-full">
                       <SelectValue placeholder="Select frequency">
                         {(value: string | null) =>
                           value ? (PAYMENT_FREQUENCY_LABELS[value] ?? value) : "Select frequency"
@@ -1327,8 +1334,9 @@ function NewLoanApplicationInner() {
 
                 {/* Interest Rate */}
                 <div className="space-y-2">
-                  <Label>Interest Rate (% per {ratePeriodWord(rateFrequency)})</Label>
+                  <Label htmlFor="interest-rate">Interest Rate (% per {ratePeriodWord(rateFrequency)})</Label>
                   <Input
+                    id="interest-rate"
                     name="interest_rate"
                     inputMode="decimal"
                     placeholder="0"
@@ -1390,8 +1398,8 @@ function NewLoanApplicationInner() {
                         type="number"
                         min={isRestructureEdit ? 0 : (selectedProduct.min_scb ?? 0)}
                         max={isRestructureEdit ? undefined : (selectedProduct.max_scb ?? undefined)}
-                        step="1"
-                        placeholder="0"
+                        step="0.01"
+                        placeholder="0.00"
                         value={scbAmount}
                         onChange={(e) => setScbAmount(e.target.value)}
                       />
@@ -1710,12 +1718,13 @@ function NewLoanApplicationInner() {
                 </div>
               </section>
 
-              {/* Level with the dates' fields: the heading's line and gap. */}
+              {/* Level with the dates' fields: the heading's line and gap.
+                  FEE_LABEL_CLASS keeps each fee label as tall as the date labels. */}
               <div className="@container xl:pt-8">
               <div className="grid grid-cols-1 gap-4 @md:grid-cols-2 @xl:grid-cols-3 @4xl:grid-cols-4">
                 {/* Processing Fee */}
                 <div className="space-y-2" data-field="deductions.processing_fee">
-                  <Label className="flex items-center gap-0.5">
+                  <Label className={FEE_LABEL_CLASS}>
                     Processing Fee
                     <span className="text-muted-foreground font-normal text-xs ml-0.5">(</span>
                     {editingFeeRate === "processing" ? (
@@ -1757,7 +1766,7 @@ function NewLoanApplicationInner() {
 
                 {/* Service Fee */}
                 <div className="space-y-2" data-field="deductions.service_fee">
-                  <Label className="flex items-center gap-0.5">
+                  <Label className={FEE_LABEL_CLASS}>
                     Service Fee
                     <span className="text-muted-foreground font-normal text-xs ml-0.5">(</span>
                     {editingFeeRate === "service" ? (
@@ -1799,7 +1808,7 @@ function NewLoanApplicationInner() {
                 {/* Carried fees — the notarial fee: charged, but not editable here */}
                 {carriedDeductions.map((d, idx) => (
                   <div key={`${d.name}-${idx}`} className="space-y-2">
-                    <Label className="flex items-center gap-0.5">
+                    <Label className={FEE_LABEL_CLASS}>
                       {d.name}
                       <span className="text-muted-foreground font-normal text-xs ml-0.5">
                         ({formatRate(d.amount)}%)

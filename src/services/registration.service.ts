@@ -217,13 +217,16 @@ export const registrationService = {
 
   /**
    * Approve a pending registration. The endpoint enforces the
-   * `borrowers:approve` permission, that the applicant is still `pending`, and
-   * that at least one valid ID is on file — then stamps approved_by/approved_at.
-   * Rejects with 422 (`errors.status` / `errors.valid_id`) when a gate fails, so
-   * callers must surface the server message rather than generic copy.
+   * `borrowers:approve` permission, that the applicant is still `pending`, that
+   * at least one valid ID is on file, and that the member has a branch: the
+   * registration's own, or `branch_id`, one of the caller's branches (Phase 6,
+   * D7; approval never moves a registration to another branch) — then stamps
+   * approved_by/approved_at. Rejects with 422 (`errors.status` /
+   * `errors.valid_id` / `errors.branch_id`) when a gate fails, so callers must
+   * surface the server message rather than generic copy.
    */
-  approve: (id: number) =>
-    api.patch<Registration>(API_ENDPOINTS.REGISTRATIONS.APPROVE(id)),
+  approve: (id: number, data: { branch_id?: number } = {}) =>
+    api.patch<Registration>(API_ENDPOINTS.REGISTRATIONS.APPROVE(id), data),
 
   /**
    * Soft-reject a pending registration: sets status to `rejected` and records

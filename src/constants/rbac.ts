@@ -37,6 +37,26 @@ export const MEMBER_PORTAL_PERMISSIONS: readonly Permission[] = [
 ];
 
 /**
+ * The thirteen AMLA permissions, as lendyph-backend seeds them (Phase 6, X0),
+ * in that order.
+ */
+export const AMLA_PERMISSIONS: readonly Permission[] = [
+  "amla:view",
+  "amla:alerts",
+  "amla:cases",
+  "amla:cdd",
+  "amla:screening",
+  "amla:sanctions",
+  "amla:ctr",
+  "amla:str",
+  "amla:approve",
+  "amla:export",
+  "amla:submit",
+  "amla:settings",
+  "amla:audit",
+];
+
+/**
  * Every permission lendyph-backend creates (RoleAndPermissionSeeder and the
  * permission migrations). The seeder syncs `Permission::all()` to both
  * super_admin and admin, and each permission migration grants both, so both
@@ -176,6 +196,23 @@ const EVERY_PERMISSION: Permission[] = [
   // `linda:settings` also needs `branches:view_all` to open Settings → Linda.
   "linda:use",
   "linda:settings",
+  // Phase 6 (X0). Seeded for admin and super_admin only; the Compliance
+  // Officer also holds the AMLA keys.
+  ...AMLA_PERMISSIONS,
+  "dashboard:analytics",
+  "dashboard:export",
+  "dashboard:settings",
+  "branches:manage",
+  "borrowers:transfer",
+  "interbranch_transfers:view",
+  "interbranch_transfers:create",
+  "interbranch_transfers:approve",
+  "interbranch_transfers:receive",
+  "loan_origination:view",
+  "loan_origination:update",
+  "loan_origination:assess",
+  "loan_origination:convert",
+  "loan_origination:settings",
 ];
 
 /**
@@ -243,6 +280,31 @@ export const ROLES: Record<Role, RoleConfig> = {
       "share_capital:view",
       "gcash:view",
       "fees:view",
+    ],
+  },
+  // Mirrors `RoleAndPermissionSeeder::COMPLIANCE_OFFICER_PERMISSIONS` exactly
+  // (Phase 6, X0; AMLA analysis §4.12). Every AMLA permission and every
+  // branch, with read-only lending, savings and GCash, so alerts and cases can
+  // be traced to their records. No `audit_logs:view` or `reports:export`.
+  compliance_officer: {
+    label: "Compliance Officer",
+    description:
+      "Anti-money laundering compliance: alerts, cases, due diligence, screening, sanctions, covered and suspicious transaction reports and the AMLA log, with read-only lending, savings and GCash in every branch. Assigned by the owner.",
+    permissions: [
+      ...AMLA_PERMISSIONS,
+      "branches:view_all",
+      "borrowers:view",
+      "reports:view",
+      "dashboard:view",
+      "loans:view",
+      "loan_adjustments:view",
+      "payments:view",
+      "collaterals:view",
+      "fees:view",
+      "share_capital:view",
+      "auto_pay:view",
+      "savings:view",
+      "gcash:view",
     ],
   },
   loan_officer: {

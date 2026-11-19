@@ -45,10 +45,11 @@ test("the matrix offers loan_products:manage and nothing else for loan products"
   assert.deepEqual(offered.filter((p) => p.startsWith("loan_products:")), ["loan_products:manage"]);
 });
 
-// The API seeds one branch permission (backend #211). Any other `branches:*`
-// would be refused whole on save (422), breaking every later save of the role.
-test("the matrix offers branches:view_all and nothing else for branches", () => {
-  assert.deepEqual(offered.filter((p) => p.startsWith("branches:")), ["branches:view_all"]);
+// The API seeds `branches:view_all` (backend #211) and, since Phase 6 (X0),
+// `branches:manage`. Any other `branches:*` would be refused whole on save
+// (422), breaking every later save of the role.
+test("the matrix offers branches:view_all and branches:manage, and nothing else for branches", () => {
+  assert.deepEqual(offered.filter((p) => p.startsWith("branches:")), ["branches:view_all", "branches:manage"]);
 });
 
 // Round C: posting the allowance is its own permission (backend C1 seeds
@@ -184,4 +185,94 @@ test("the roles screen describes the Linda module and labels its use action", ()
   const page = readFileSync(resolve(process.cwd(), "src/app/(app)/settings/user-roles/page.tsx"), "utf8");
   assert.match(page, /linda: \{\n\s+label: "Linda \(AI assistant\)"/);
   assert.match(page, /\n  use: \{ label: "Use",/);
+});
+
+// Phase 6 (X0): the API seeds these for admin and super_admin only. Each
+// module's checkboxes are exactly the server's keys, in its order.
+const PHASE6_OFFERED: Record<string, string[]> = {
+  amla: [
+    "amla:view",
+    "amla:alerts",
+    "amla:cases",
+    "amla:cdd",
+    "amla:screening",
+    "amla:sanctions",
+    "amla:ctr",
+    "amla:str",
+    "amla:approve",
+    "amla:export",
+    "amla:submit",
+    "amla:settings",
+    "amla:audit",
+  ],
+  dashboard: ["dashboard:view", "dashboard:analytics", "dashboard:export", "dashboard:settings"],
+  interbranch_transfers: [
+    "interbranch_transfers:view",
+    "interbranch_transfers:create",
+    "interbranch_transfers:approve",
+    "interbranch_transfers:receive",
+  ],
+  loan_origination: [
+    "loan_origination:view",
+    "loan_origination:update",
+    "loan_origination:assess",
+    "loan_origination:convert",
+    "loan_origination:settings",
+  ],
+};
+
+for (const [mod, keys] of Object.entries(PHASE6_OFFERED)) {
+  test(`the matrix offers exactly the ${mod} permissions the server seeds`, () => {
+    assert.deepEqual(offered.filter((p) => p.startsWith(`${mod}:`)), keys);
+  });
+}
+
+test("the matrix offers borrowers:transfer beside the other member permissions", () => {
+  assert.deepEqual(offered.filter((p) => p.startsWith("borrowers:")), [
+    "borrowers:view",
+    "borrowers:create",
+    "borrowers:update",
+    "borrowers:delete",
+    "borrowers:approve",
+    "borrowers:transfer",
+  ]);
+});
+
+// No key ever reads raw: every Phase 6 checkbox has its module's own words.
+test("every Phase 6 permission reads in its module's own words", () => {
+  const phase6 = [...Object.values(PHASE6_OFFERED).flat(), "borrowers:transfer", "branches:manage"].filter(
+    (p) => p !== "dashboard:view",
+  );
+  for (const permission of phase6) {
+    const [mod, action] = permission.split(":");
+    const label = moduleActionLabel(mod as keyof typeof MODULE_ACTIONS, action as never);
+    assert.ok(label, `${permission} has no label of its own`);
+    assert.doesNotMatch(label, /_|:/, permission);
+  }
+});
+
+// The roles screen names every offered module and every offered action, so a
+// checkbox can never fall back to its raw key.
+test("the roles screen describes every module the matrix offers", () => {
+  const page = readFileSync(resolve(process.cwd(), "src/app/(app)/settings/user-roles/page.tsx"), "utf8");
+  for (const mod of Object.keys(MODULE_ACTIONS)) {
+    assert.match(page, new RegExp(`\\n  ${mod}: \\{\\n\\s+label: "[^"_]+"`), mod);
+  }
+});
+
+test("the roles screen labels every offered action in words", () => {
+  const page = readFileSync(resolve(process.cwd(), "src/app/(app)/settings/user-roles/page.tsx"), "utf8");
+  const actions = new Set(Object.values(MODULE_ACTIONS).flat());
+  for (const action of actions) {
+    assert.match(page, new RegExp(`\\n  ${action}: \\{ label: "[^"_]+"`), action);
+  }
+});
+
+// Releasing an AMLA order's holds and reading the AMLA log are granted on
+// their own, never swept in with the rest of the module.
+test("AMLA's toggle-all leaves sanctions and the AMLA log to their own checkboxes", () => {
+  const swept = moduleToggleActions("amla" as never);
+  assert.equal(swept.includes("sanctions" as never), false);
+  assert.equal(swept.includes("audit" as never), false);
+  assert.equal(swept.length, 11);
 });

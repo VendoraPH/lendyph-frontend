@@ -2,6 +2,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import type { OpeningBalance, OpeningBalanceLine } from "@/types";
 import {
+  openingChartNotice,
   CONFLICT_MESSAGE,
   FINALISE_CONFIRM,
   OPENING_EQUITY_LABEL,
@@ -489,5 +490,20 @@ describe("the server's warnings", () => {
       openingWarnings(opening({ warnings: ["", "  ", 5 as never, CONTRA] })),
       [CONTRA],
     );
+  });
+});
+
+describe("the chart notice", () => {
+  test("a chart nobody saved says so, never that a permission is missing", () => {
+    // Flag 12: a 200 with no accounts read as "it needs Chart of Accounts: View".
+    const notice = openingChartNotice("not_set_up");
+    assert.equal(notice, "The chart of accounts hasn't been set up yet. Until then, the opening balances can't be saved from here.");
+    assert.doesNotMatch(notice ?? "", /permission|View/);
+  });
+
+  test("a refused read names the permission; a saved chart shows nothing", () => {
+    assert.match(openingChartNotice("no_access") ?? "", /Chart of Accounts: View/);
+    assert.equal(openingChartNotice("saved"), null);
+    assert.equal(openingChartNotice("loading"), null);
   });
 });

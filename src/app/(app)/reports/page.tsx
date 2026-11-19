@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Search, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { visibleReports } from "./_lib/report-catalog";
+import { categoryDescription, visibleReports } from "./_lib/report-catalog";
 import { reportIcon3D } from "./_lib/report-icons-3d";
 import { Icon3D } from "@/components/common/icon-3d";
 import { CATEGORY_ILLUSTRATION, CATEGORY_META } from "./_lib/types";
@@ -124,7 +124,7 @@ export default function ReportsPage() {
                           {meta.label}
                         </h2>
                         <p className="text-xs text-muted-foreground/80">
-                          {meta.description}
+                          {categoryDescription(cat, catalog)}
                         </p>
                       </div>
                     </div>

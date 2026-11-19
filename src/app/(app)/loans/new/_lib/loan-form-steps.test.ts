@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { firstStepWithError, stepErrorsOf, stepIndexForField } from "@/lib/form-stepper";
 import {
   LOAN_FORM_SENT_FIELDS,
+  invalidStepMessages,
   loanFormMissing,
   loanFormSteps,
   serverFieldErrors,
@@ -77,7 +78,7 @@ test("the checks keep the form's labels and their order", () => {
   assert.deepEqual(Object.values(loanFormMissing(NOTHING_OK)), [
     "Member",
     "Loan product",
-    "Principal amount",
+    "Loan amount",
     "Term",
     "Payment frequency",
     "Interest rate",
@@ -96,7 +97,7 @@ test("each step validates only its own checks", () => {
   assert.deepEqual(byStep.member, ["Member"]);
   assert.deepEqual(byStep.terms, [
     "Loan product",
-    "Principal amount",
+    "Loan amount",
     "Term",
     "Payment frequency",
     "Interest rate",
@@ -150,4 +151,11 @@ test("serverFieldErrors reads a 422's field errors only", () => {
   assert.deepEqual(serverFieldErrors({ response: { status: 500, data: { errors: { term: ["x"] } } } }), {});
   assert.deepEqual(serverFieldErrors(new Error("boom")), {});
   assert.deepEqual(serverFieldErrors(null), {});
+});
+
+test("a failed Save lists every missing field at once; Next lists only the open step's", () => {
+  const missing = loanFormMissing({ ...ALL_OK, hasMember: false, termOk: false, hasReleaseDate: false });
+  const termsStepErrors = { term: "Term" };
+  assert.deepEqual(invalidStepMessages("save", termsStepErrors, missing), ["Member", "Term", "Release date"]);
+  assert.deepEqual(invalidStepMessages("next", termsStepErrors, missing), ["Term"]);
 });
