@@ -146,6 +146,13 @@ import {
 import { SHARE_CAPITAL_VALUE_HIDDEN } from "@/app/(app)/loans/[id]/_lib/collateral-display";
 import { useLoanPreview } from "./_hooks/use-loan-preview";
 import { useSubmitPressed } from "./_hooks/use-submit-pressed";
+
+/**
+ * A fee's label with its rate in smaller type. Each part keeps the label's own
+ * line height (Tailwind's `text-xs` would set 16 px), so the label is as tall
+ * as the date labels and the fee boxes line up with the date boxes.
+ */
+const FEE_LABEL_CLASS = "flex items-center gap-0.5 *:leading-none";
 import { saveLoanEdit } from "./_lib/save-loan-edit";
 import {
   amountInputValue,
@@ -1713,12 +1720,13 @@ function NewLoanApplicationInner() {
                 </div>
               </section>
 
-              {/* Level with the dates' fields: the heading's line and gap. */}
+              {/* Level with the dates' fields: the heading's line and gap.
+                  FEE_LABEL_CLASS keeps each fee label as tall as the date labels. */}
               <div className="@container xl:pt-8">
               <div className="grid grid-cols-1 gap-4 @md:grid-cols-2 @xl:grid-cols-3 @4xl:grid-cols-4">
                 {/* Processing Fee */}
                 <div className="space-y-2" data-field="deductions.processing_fee">
-                  <Label className="flex items-center gap-0.5">
+                  <Label className={FEE_LABEL_CLASS}>
                     Processing Fee
                     <span className="text-muted-foreground font-normal text-xs ml-0.5">(</span>
                     {editingFeeRate === "processing" ? (
@@ -1760,7 +1768,7 @@ function NewLoanApplicationInner() {
 
                 {/* Service Fee */}
                 <div className="space-y-2" data-field="deductions.service_fee">
-                  <Label className="flex items-center gap-0.5">
+                  <Label className={FEE_LABEL_CLASS}>
                     Service Fee
                     <span className="text-muted-foreground font-normal text-xs ml-0.5">(</span>
                     {editingFeeRate === "service" ? (
@@ -1802,7 +1810,7 @@ function NewLoanApplicationInner() {
                 {/* Carried fees — the notarial fee: charged, but not editable here */}
                 {carriedDeductions.map((d, idx) => (
                   <div key={`${d.name}-${idx}`} className="space-y-2">
-                    <Label className="flex items-center gap-0.5">
+                    <Label className={FEE_LABEL_CLASS}>
                       {d.name}
                       <span className="text-muted-foreground font-normal text-xs ml-0.5">
                         ({formatRate(d.amount)}%)
