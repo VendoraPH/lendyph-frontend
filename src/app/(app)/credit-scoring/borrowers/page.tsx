@@ -22,7 +22,6 @@ import {
   riskLevelParam,
   optionParam,
   loanProductParam,
-  ALL_BRANCHES,
   ALL_RISK_LEVELS,
   ALL_OPTIONS,
 } from "../_components/filters";
@@ -53,6 +52,7 @@ import type {
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { FIT_CLASSES } from "@/lib/page-fill";
 import { cn } from "@/lib/utils";
+import { useBranchFilter, useBranchFollowingPage } from "@/hooks/use-working-branch";
 
 function TrendIcon({ trend }: { trend: BorrowerScoreRow["score_trend"] }) {
   if (trend === null) return <span className="text-muted-foreground">—</span>;
@@ -63,14 +63,14 @@ function TrendIcon({ trend }: { trend: BorrowerScoreRow["score_trend"] }) {
 }
 
 function BorrowerScoresContent() {
-  const [branch, setBranch] = useState(ALL_BRANCHES);
+  const [branch, setBranch] = useBranchFilter();
   const [riskLevel, setRiskLevel] = useState(ALL_RISK_LEVELS);
   const [trend, setTrend] = useState(ALL_OPTIONS);
   const [memberType, setMemberType] = useState(ALL_OPTIONS);
   const [loanProduct, setLoanProduct] = useState(ALL_OPTIONS);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useBranchFollowingPage();
   const [perPage, setPerPage] = useState<number>(CREDIT_SCORING_PER_PAGE);
   const { can } = usePermission();
   const canViewLoans = can("loans:view");
@@ -82,7 +82,7 @@ function BorrowerScoresContent() {
       setPage(1);
     }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(t);
-  }, [searchInput]);
+  }, [searchInput, setPage]);
 
   const fetcher = useCallback((): Promise<CreditScoringPage<BorrowerScoreRow>> => {
     const filters: BorrowerScoreFilters = {

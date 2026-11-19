@@ -10,6 +10,7 @@ import { ChangePasswordForm } from "@/components/common/change-password-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/hooks";
+import { forgetUserWorkingBranch } from "@/hooks/use-working-branch";
 import { tokenManager } from "@/lib/axios-client";
 import { signOut } from "@/lib/sign-out";
 import { notifyError } from "@/lib/notify";
@@ -144,6 +145,7 @@ export default function ChangePasswordPage() {
     await signOut({
       getAccessToken: tokenManager.getAccessToken,
       clearTokens: tokenManager.clearTokens,
+      forgetWorkingBranch: () => forgetUserWorkingBranch(user?.id),
       logout: authService.logout,
     });
     localStorage.removeItem("lendy_remember_me");

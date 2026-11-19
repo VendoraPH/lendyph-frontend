@@ -12,7 +12,6 @@ import { FIT_CLASSES } from "@/lib/page-fill";
 import { cn } from "@/lib/utils";
 import { AccountingPageHeader } from "../_components/page-header";
 import {
-  ALL_BRANCHES,
   BranchFilter,
   DateFilter,
   FilterBar,
@@ -25,6 +24,7 @@ import { EquityChangesReport } from "./_components/equity-changes-report";
 import { StatementNotesReport } from "./_components/statement-notes-report";
 import { canSeeStatementNotes } from "./_lib/statement-notes";
 import { statementRangeError } from "./_lib/statement-request";
+import { useBranchFilter } from "@/hooks/use-working-branch";
 
 function startOfYearISO(): string {
   return `${new Date().getFullYear()}-01-01`;
@@ -62,7 +62,7 @@ export default function FinancialStatementsPage() {
   const [tab, setTab] = useState("balance-sheet");
   const [from, setFrom] = useState(startOfYearISO());
   const [to, setTo] = useState(todayISO());
-  const [branch, setBranch] = useState(ALL_BRANCHES);
+  const [branch, setBranch] = useBranchFilter();
   const { can } = usePermission();
   const showNotes = canSeeStatementNotes(can, env.features.cda);
   const notesTab = showNotes && tab === "notes";

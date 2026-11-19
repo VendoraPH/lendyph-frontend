@@ -46,6 +46,7 @@ import { NO_BRANCH_ASSIGNED, accountLabel, reconciledLabel, rowFigures } from ".
 import { signedCentavos } from "./_lib/signed-money";
 import { startAccountsReason } from "./_lib/start-accounts";
 import type { ReconciliationDetail } from "./_lib/types";
+import { useBranchFilter } from "@/hooks/use-working-branch";
 
 const DESCRIPTION = "Prove each money account against its statement.";
 
@@ -59,7 +60,7 @@ function ReconciliationContent() {
   const accountsLoading = startAccounts.status === "loading";
   const moneyAccounts = startAccounts.status === "ready" ? startAccounts.accounts : [];
   const [accountId, setAccountId] = useState<number | null>(null);
-  const [branchFilter, setBranchFilter] = useState(ANY_BRANCH);
+  const [branchFilter, setBranchFilter] = useBranchFilter({ fallback: ANY_BRANCH });
   const [creating, setCreating] = useState(false);
   const branchSource = useBranchChoiceSource();
   const unassigned = reconciliationBranchChoice(branchSource).kind === "unassigned";

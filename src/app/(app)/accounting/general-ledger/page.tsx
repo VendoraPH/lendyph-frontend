@@ -52,12 +52,12 @@ import {
   type LedgerUrlState,
 } from "../_lib/dashboard-ledger-query";
 import {
-  ALL_BRANCHES,
   BranchFilter,
   DateFilter,
   FilterBar,
   branchParam,
 } from "../_components/accounting-filters";
+import { useBranchFilter } from "@/hooks/use-working-branch";
 
 function GeneralLedgerContent() {
   const router = useRouter();
@@ -67,7 +67,7 @@ function GeneralLedgerContent() {
   // Never the template: its ids are placeholders, and the ledger refuses them (422).
   const postable = savedAccountsOnly(chart);
   const chartNotice = chartTemplateNotice(chart.status);
-  const [branch, setBranch] = useState(ALL_BRANCHES);
+  const [branch, setBranch] = useBranchFilter();
 
   // This month to today, fixed for the visit, so a URL without dates means it.
   const [defaults] = useState<LedgerDefaults>(() => {

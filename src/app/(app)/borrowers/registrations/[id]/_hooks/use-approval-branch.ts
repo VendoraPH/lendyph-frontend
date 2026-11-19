@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useWorkingBranch } from "@/hooks/use-working-branch";
 import { useBranches } from "@/hooks";
 import { useAuthStore } from "@/store";
 import { branchPicker } from "@/lib/user-branches";
@@ -29,7 +30,9 @@ export function useApprovalBranch(registrationBranchId: number | null | undefine
   const [picked, setPicked] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const choice = approvalBranch(registrationBranchId, offered, picked);
+  // Until one is picked, the working branch (multi-branch flag) when it is offered.
+  const { branchId: working } = useWorkingBranch();
+  const choice = approvalBranch(registrationBranchId, offered, picked ?? working);
   const fixedName = choice.fixed ? (branches.find((b) => b.id === choice.branchId)?.name ?? null) : null;
 
   return {

@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import Link from "next/link";
 import { Check, Undo2, X } from "lucide-react";
-import { ALL_BRANCHES, branchIdParam } from "@/components/common/branch-filter";
+import { branchIdParam } from "@/components/common/branch-filter";
 import { AlignedBranchFilter } from "../../_components/aligned-branch-filter";
 import { DataState } from "@/components/common/data-state";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
@@ -38,6 +38,7 @@ import {
   approvalSubject,
 } from "../_lib/approval-rules";
 import { DecideDialog, type Decision } from "./decide-dialog";
+import { useBranchFilter, useBranchFollowingPage } from "@/hooks/use-working-branch";
 
 const STATUSES: SavingsApprovalStatus[] = ["pending", "approved", "rejected", "cancelled", "expired"];
 const KIND_OPTIONS = [
@@ -55,8 +56,8 @@ export function ApprovalsScreen() {
   const userId = useAuthStore((s) => s.user?.id ?? null);
   const [status, setStatus] = useState<SavingsApprovalStatus>("pending");
   const [kind, setKind] = useState("all");
-  const [branch, setBranch] = useState(ALL_BRANCHES);
-  const [page, setPage] = useState(1);
+  const [branch, setBranch] = useBranchFilter();
+  const [page, setPage] = useBranchFollowingPage();
   const [perPage, setPerPage] = useState(20);
   const [deciding, setDeciding] = useState<{ approval: SavingsApproval; decision: Decision } | null>(null);
 

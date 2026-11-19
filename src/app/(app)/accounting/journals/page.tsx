@@ -63,6 +63,7 @@ import {
   registerAmount,
   registerTotalLabel,
 } from "./_lib/journal-register";
+import { useBranchFilter, useBranchFollowingPage } from "@/hooks/use-working-branch";
 
 function startOfMonthISO(): string {
   const now = new Date();
@@ -79,11 +80,11 @@ function JournalEntriesContent() {
   const router = useRouter();
   const [from, setFrom] = useState(startOfMonthISO);
   const [to, setTo] = useState(todayISO);
-  const [branch, setBranch] = useState(ALL_BRANCHES);
+  const [branch, setBranch] = useBranchFilter();
   const [status, setStatus] = useState<string>(ANY_STATUS);
   const [source, setSource] = useState<string>(ANY_SOURCE);
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useBranchFollowingPage();
   const [reload, setReload] = useState(0);
 
   const params = useMemo(
