@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import assert from "node:assert/strict";
 import { isValidPeriod, periodDays, presetPeriod, previousPeriod } from "./periods";
 
@@ -57,4 +57,19 @@ test("a whole month compares with the whole month before it", () => {
 
 test("no comparison for an invalid period", () => {
   assert.equal(previousPeriod({ from: "2026-11-30", to: "2026-11-01" }), null);
+});
+
+test("with no date given, presets count from today in Manila, whatever the computer's zone", () => {
+  const zone = process.env.TZ;
+  // 12:00 UTC on 2026-11-19: 20:00 the 19th in Manila, already 02:00 the 20th in Kiritimati (UTC+14).
+  mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 10, 19, 12, 0) });
+  process.env.TZ = "Pacific/Kiritimati";
+  try {
+    assert.deepEqual(presetPeriod("today", FALLBACK), { from: "2026-11-19", to: "2026-11-19" });
+    assert.deepEqual(presetPeriod("this_month", FALLBACK), { from: "2026-11-01", to: "2026-11-19" });
+  } finally {
+    mock.timers.reset();
+    if (zone === undefined) delete process.env.TZ;
+    else process.env.TZ = zone;
+  }
 });

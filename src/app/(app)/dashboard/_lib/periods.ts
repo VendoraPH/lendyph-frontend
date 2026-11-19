@@ -1,4 +1,4 @@
-import { formatDateISO } from "@/lib/format";
+import { formatDateISO, todayDate } from "@/lib/format";
 
 /** The dashboard's reporting periods. Every range is inclusive, as YYYY-MM-DD. */
 export type DashboardPreset =
@@ -49,8 +49,9 @@ const iso = (y: number, m: number, d: number) => formatDateISO(new Date(y, m, d)
  * The range a preset stands for, counted from `now`. Weeks start on Monday.
  * "This …" periods run to today, not to the end of the period: a figure for
  * days that have not happened yet would be a forecast. "Custom" keeps `fallback`.
+ * `now` defaults to today in Manila (`todayDate`), whatever the computer's zone.
  */
-export function presetPeriod(preset: DashboardPreset, fallback: Period, now: Date = new Date()): Period {
+export function presetPeriod(preset: DashboardPreset, fallback: Period, now: Date = todayDate()): Period {
   const y = now.getFullYear();
   const m = now.getMonth();
   const d = now.getDate();

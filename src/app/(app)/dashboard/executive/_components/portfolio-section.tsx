@@ -10,17 +10,15 @@ import { DATA_UNAVAILABLE, compactPeso, formatMetric, toNumber } from "../../_li
 import { Figure, SectionShell, SourceGate } from "./section-shell";
 
 const SLICE_COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"];
-const MAX_SLICES = 5;
+/** Products past the named ones share one muted colour; each keeps its own slice and figure (no browser sum). */
+const REST_COLOR = "var(--muted-foreground)";
+const NAMED_SLICES = 4;
 
-/** The five largest products and the rest as "Other", so the ring stays readable. */
+/** Every product with a balance, largest first, each as its own server figure. */
 function slices(rows: ProductRow[]) {
-  const withBalance = rows.filter((r) => (r.outstanding ?? 0) > 0);
-  const top = withBalance.slice(0, MAX_SLICES - 1);
-  const rest = withBalance.slice(MAX_SLICES - 1);
-  const list = top.map((r) => ({ name: r.name, value: r.outstanding ?? 0 }));
-  if (rest.length === 1) list.push({ name: rest[0].name, value: rest[0].outstanding ?? 0 });
-  else if (rest.length > 1) list.push({ name: "Other", value: rest.reduce((s, r) => s + (r.outstanding ?? 0), 0) });
-  return list;
+  return rows
+    .filter((r) => (r.outstanding ?? 0) > 0)
+    .map((r, i) => ({ name: r.name, value: r.outstanding ?? 0, color: i < NAMED_SLICES ? SLICE_COLORS[i] : REST_COLOR }));
 }
 
 const money = (v: number | null) => (v === null ? DATA_UNAVAILABLE : formatCurrency(v));
@@ -28,7 +26,9 @@ const money = (v: number | null) => (v === null ? DATA_UNAVAILABLE : formatCurre
 export function PortfolioSection({ data }: { data: ExecutiveData }) {
   const rows = productRows(readyData(data.products));
   const pie = slices(rows);
-  const config = Object.fromEntries(pie.map((s, i) => [`s${i}`, { label: s.name, color: SLICE_COLORS[i] }])) satisfies ChartConfig;
+  const named = pie.slice(0, NAMED_SLICES);
+  const others = pie.length - named.length;
+  const config = Object.fromEntries(pie.map((s, i) => [`s${i}`, { label: s.name, color: s.color }])) satisfies ChartConfig;
   const out = readyData(data.balance)?.outstanding;
   const stages = pipelineStages(readyData(data.loanStats));
 
@@ -36,7 +36,7 @@ export function PortfolioSection({ data }: { data: ExecutiveData }) {
     <SectionShell
       title="Loan Portfolio"
       icon={<Briefcase className="size-4" />}
-      note="Product shares are of the outstanding balance as of today. The report's own share column is of the amount released."
+      note="Outstanding is everything owed as of today. Share of released is the report's share of the amount released."
     >
       <div className="grid gap-4 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
         <SourceGate source={data.products} empty={pie.length === 0} emptyText="No outstanding loans.">
@@ -44,21 +44,29 @@ export function PortfolioSection({ data }: { data: ExecutiveData }) {
             <ChartContainer config={config} className="mx-auto aspect-square h-[220px]" aria-hidden="true">
               <PieChart>
                 <ChartTooltip content={<ChartTooltipContent formatter={(v, name) => `${name}: ${formatCurrency(Number(v))}`} hideLabel />} />
-                <Pie data={pie} dataKey="value" nameKey="name" innerRadius="58%" outerRadius="90%" strokeWidth={0} isAnimationActive={false}>
-                  {pie.map((s, i) => (
-                    <Cell key={s.name} fill={SLICE_COLORS[i]} />
+                <Pie data={pie} dataKey="value" nameKey="name" innerRadius="58%" outerRadius="90%" strokeWidth={others > 0 ? 1 : 0} stroke="var(--card)" isAnimationActive={false}>
+                  {pie.map((s) => (
+                    <Cell key={s.name} fill={s.color} />
                   ))}
                 </Pie>
               </PieChart>
             </ChartContainer>
             <ul className="mt-2 space-y-1 text-xs">
-              {pie.map((s, i) => (
+              {named.map((s) => (
                 <li key={s.name} className="flex items-center gap-2">
-                  <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: SLICE_COLORS[i] }} aria-hidden="true" />
+                  <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: s.color }} aria-hidden="true" />
                   <span className="flex-1 truncate">{s.name}</span>
                   <span className="tabular-nums text-muted-foreground">{compactPeso(s.value)}</span>
                 </li>
               ))}
+              {others > 0 ? (
+                <li className="flex items-center gap-2 text-muted-foreground">
+                  <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: REST_COLOR }} aria-hidden="true" />
+                  <span className="flex-1 truncate">
+                    {others} other {others === 1 ? "product" : "products"}
+                  </span>
+                </li>
+              ) : null}
             </ul>
           </div>
         </SourceGate>
@@ -72,7 +80,7 @@ export function PortfolioSection({ data }: { data: ExecutiveData }) {
                   <th scope="col" className="py-2 text-left font-medium">Product</th>
                   <th scope="col" className="py-2 text-right font-medium">Loans</th>
                   <th scope="col" className="py-2 text-right font-medium">Outstanding</th>
-                  <th scope="col" className="py-2 text-right font-medium">Share</th>
+                  <th scope="col" className="py-2 text-right font-medium">Share of released</th>
                   <th scope="col" className="py-2 text-right font-medium">PAR 30</th>
                 </tr>
               </thead>

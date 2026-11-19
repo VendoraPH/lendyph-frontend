@@ -7,7 +7,7 @@ import { formatCurrency } from "@/lib/format";
 import { readyData, type ExecutiveData } from "../../_lib/executive-data";
 import { agingPoints, collectionTrend, monthLabel } from "../../_lib/executive-sections";
 import { compactPeso, formatMetric, toNumber } from "../../_lib/metrics";
-import { Figure, SectionShell, SourceGate } from "./section-shell";
+import { Figure, SectionShell, SourceGate, figureText } from "./section-shell";
 
 const trendConfig = {
   due: { label: "Due", color: "var(--chart-2)" },
@@ -31,10 +31,10 @@ export function CollectionSection({ data }: { data: ExecutiveData }) {
       note="Due and collected cover the selected period. Aging is as of the period's last day."
     >
       <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Figure label="Due in period" value={formatMetric(toNumber(totals?.total_due), "currency")} />
-        <Figure label="Collected against dues" value={formatMetric(toNumber(totals?.total_collected), "currency")} />
-        <Figure label="Repayments received" value={formatMetric(toNumber(repayments?.total), "currency")} />
-        <Figure label="Penalties collected" value={formatMetric(toNumber(repayments?.penalty), "currency")} />
+        <Figure label="Due in period" value={figureText(data.efficiency, toNumber(totals?.total_due), "currency")} />
+        <Figure label="Collected against dues" value={figureText(data.efficiency, toNumber(totals?.total_collected), "currency")} />
+        <Figure label="Repayments received" value={figureText(data.cashFlow, toNumber(repayments?.total), "currency")} />
+        <Figure label="Penalties collected" value={figureText(data.cashFlow, toNumber(repayments?.penalty), "currency")} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -85,7 +85,7 @@ export function CollectionSection({ data }: { data: ExecutiveData }) {
             <table className="sr-only">
               <caption>Past due aging</caption>
               <thead>
-                <tr><th scope="col">Days past due</th><th scope="col">Installments</th><th scope="col">Amount</th></tr>
+                <tr><th scope="col">Days past due</th><th scope="col">Loans</th><th scope="col">Amount</th></tr>
               </thead>
               <tbody>
                 {aging.map((a) => (

@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { CollapsibleCard } from "@/components/common/collapsible-card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DATA_UNAVAILABLE } from "../../_lib/metrics";
+import { DATA_UNAVAILABLE, formatMetric, type MetricFormat } from "../../_lib/metrics";
 import type { Source } from "../../_lib/executive-data";
 
 /** A dashboard section: a collapsible card with an icon and an optional note under its body. */
@@ -62,6 +62,17 @@ export function SourceGate({
     );
   }
   return <>{children}</>;
+}
+
+/**
+ * A tile's text for a figure from `source`: "No access" when the user may not
+ * read it, a dash while it loads, else the server's figure ("Data
+ * Unavailable" when it wasn't sent).
+ */
+export function figureText(source: Source<unknown>, value: number | null, format: MetricFormat): string {
+  if (source.state === "denied") return "No access";
+  if (source.state === "loading") return "—";
+  return formatMetric(value, format);
 }
 
 /** A small labelled figure, for the section tiles. */

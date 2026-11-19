@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { usePermission } from "@/hooks";
 import { accountingService, loanService, reportService } from "@/services";
 import type { Permission } from "@/types";
-import { LOADING, type ExecutiveData, type Source, type SourceKey } from "../_lib/executive-data";
+import type { PastDueTotals } from "@/types/dashboard-reports";
+import { LOADING, SOURCE_PERMISSIONS, type ExecutiveData, type Source, type SourceKey } from "../_lib/executive-data";
 import { previousPeriod, type Period } from "../_lib/periods";
 
 export interface ExecutiveFilters {
@@ -11,55 +12,56 @@ export interface ExecutiveFilters {
   branchId?: number;
 }
 
-interface Request {
-  permission: Permission;
-  load: () => Promise<unknown>;
-}
+
+type Load = () => Promise<unknown>;
 
 /**
- * Every read the dashboard makes, by source. Balances (loan balance summary,
- * products, performance) take no dates: the server dates them to today, and a
+ * Every read the dashboard makes, by source; each needs the permissions in
+ * `SOURCE_PERMISSIONS`. Balances (loan balance summary, products,
+ * performance, past due) take no dates: the server dates them to today, and a
  * date range there would filter by release date instead. Aging and
  * provisioning are as of the period's last day; the rest cover the period.
  */
-function requests({ period, branchId }: ExecutiveFilters): Partial<Record<SourceKey, Request>> {
+function requests({ period, branchId }: ExecutiveFilters): Partial<Record<SourceKey, Load>> {
   const branch = branchId ? { branch_id: branchId } : {};
   const range = { ...branch, date_from: period.from, date_to: period.to };
   const prev = previousPeriod(period);
   const prevRange = prev ? { ...branch, date_from: prev.from, date_to: prev.to } : null;
-  const report = (load: () => Promise<unknown>): Request => ({ permission: "reports:view", load });
 
   return {
-    balance: report(() => reportService.loanBalanceSummary(branch)),
-    aging: report(() => reportService.aging({ ...branch, as_of_date: period.to })),
-    cashFlow: report(() => reportService.cashFlow(range)),
-    efficiency: report(() => reportService.collectionEfficiency(range)),
-    products: report(() => reportService.portfolioByProduct(branch)),
-    performance: report(() => reportService.performance(range)),
-    provisioning: report(() => reportService.provisioning({ ...branch, as_of_date: period.to })),
-    shareCapital: report(() => reportService.shareCapital(range)),
-    income: report(() => reportService.income(range)),
-    borrowers: report(() => reportService.borrowers(range)),
-    disbursements: report(() => reportService.disbursements(range)),
+    balance: () => reportService.loanBalanceSummary(branch),
+    aging: () => reportService.aging({ ...branch, as_of_date: period.to }),
+    cashFlow: () => reportService.cashFlow(range),
+    efficiency: () => reportService.collectionEfficiency(range),
+    products: () => reportService.portfolioByProduct(branch),
+    performance: () => reportService.performance(range),
+    provisioning: () => reportService.provisioning({ ...branch, as_of_date: period.to }),
+    shareCapital: () => reportService.shareCapital(range),
+    income: () => reportService.income(range),
+    borrowers: () => reportService.borrowers(range),
+    disbursements: () => reportService.disbursements(range),
     ...(prevRange && {
-      prevCashFlow: report(() => reportService.cashFlow(prevRange)),
-      prevEfficiency: report(() => reportService.collectionEfficiency(prevRange)),
-      prevDisbursements: report(() => reportService.disbursements(prevRange)),
+      prevCashFlow: () => reportService.cashFlow(prevRange),
+      prevEfficiency: () => reportService.collectionEfficiency(prevRange),
+      prevDisbursements: () => reportService.disbursements(prevRange),
     }),
-    accounting: {
-      permission: "accounting:view",
-      load: () => accountingService.dashboard(period.to, branchId, period.from),
-    },
-    loanStats: {
-      permission: "loans:view",
-      // One row asked for: only `meta.stats` (counts per status) is read.
-      load: () =>
-        loanService.list({ ...branch, per_page: 1 }).then((res) => {
-          const stats = res?.meta?.stats;
-          if (!stats) throw new Error("no stats");
-          return stats;
+    accounting: () => accountingService.dashboard(period.to, branchId, period.from),
+    // One row asked for: only `meta.stats` (counts per status) is read.
+    loanStats: () =>
+      loanService.list({ ...branch, per_page: 1 }).then((res) => {
+        const stats = res?.meta?.stats;
+        if (!stats) throw new Error("no stats");
+        return stats;
+      }),
+    // The Past Due Loans page's cards: past grace, each loan once. One row asked for: only `totals` is read.
+    pastDue: () =>
+      reportService
+        .duePastDue({ ...branch, past_due_only: 1, per_page: 1 })
+        .then((res) => {
+          const totals = (res as { totals?: PastDueTotals } | null)?.totals;
+          if (!totals) throw new Error("no totals");
+          return totals;
         }),
-    },
   };
 }
 
@@ -80,9 +82,11 @@ const SOURCE_KEYS: SourceKey[] = [
   "prevDisbursements",
   "accounting",
   "loanStats",
+  "pastDue",
 ];
 
-const PERMISSIONS: Permission[] = ["reports:view", "accounting:view", "loans:view"];
+const PERMISSIONS: Permission[] = [...new Set(Object.values(SOURCE_PERMISSIONS).flat())];
+const permitted = (name: SourceKey, allowed: Set<string>) => SOURCE_PERMISSIONS[name].every((p) => allowed.has(p));
 
 /**
  * Loads the executive dashboard's sources in parallel, each on its own, so a
@@ -109,10 +113,9 @@ export function useExecutiveDashboard(filters: ExecutiveFilters, reloadCount: nu
       setStored((prev) => ({ key, data: { ...(prev.key === key ? prev.data : {}), [name]: source } }));
 
     for (const name of SOURCE_KEYS) {
-      const request = table[name];
-      if (!request || !allowed.has(request.permission)) continue;
-      request
-        .load()
+      const load = table[name];
+      if (!load || !permitted(name, allowed)) continue;
+      load()
         .then((data) => settle(name, data && typeof data === "object" ? { state: "ready", data } : { state: "error" }))
         .catch(() => settle(name, { state: "error" }));
     }
@@ -123,9 +126,8 @@ export function useExecutiveDashboard(filters: ExecutiveFilters, reloadCount: nu
   const table = requests({ period: { from, to }, branchId });
   const result = {} as Record<SourceKey, Source<unknown>>;
   for (const name of SOURCE_KEYS) {
-    const request = table[name];
     result[name] =
-      loaded[name] ?? (!request ? { state: "error" } : allowed.has(request.permission) ? LOADING : { state: "denied" });
+      loaded[name] ?? (!table[name] ? { state: "error" } : permitted(name, allowed) ? LOADING : { state: "denied" });
   }
   return result as ExecutiveData;
 }

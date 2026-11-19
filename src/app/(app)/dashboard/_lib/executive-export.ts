@@ -54,7 +54,7 @@ export function executiveDocument(
         { key: "name", header: "Product", width: 30 },
         { key: "loans", header: "Loans", align: "right" },
         { key: "outstanding", header: "Outstanding", align: "right" },
-        { key: "share", header: "Share", align: "right" },
+        { key: "share", header: "Share of released", align: "right" },
         { key: "par", header: "PAR 30", align: "right" },
       ],
       rows: productRows(readyData(data.products)).map((p) => ({
@@ -68,10 +68,10 @@ export function executiveDocument(
     },
     {
       kind: "table",
-      title: `Past Due Aging (as of ${period.to})`,
+      title: `Past Due Aging (as of ${formatDate(period.to)})`,
       columns: [
         { key: "bucket", header: "Days past due", width: 20 },
-        { key: "count", header: "Installments", align: "right" },
+        { key: "count", header: "Loans", align: "right" },
         { key: "amount", header: "Amount", align: "right" },
       ],
       rows: agingPoints(readyData(data.aging)).map((a) => ({
@@ -87,6 +87,7 @@ export function executiveDocument(
       compact: true,
       columns: [
         { key: "name", header: "Branch", width: 24 },
+        { key: "members", header: "Members", align: "right" },
         { key: "outstanding", header: "Outstanding", align: "right" },
         { key: "released", header: "Released", align: "right" },
         { key: "collected", header: "Collected", align: "right" },
@@ -95,6 +96,7 @@ export function executiveDocument(
       ],
       rows: branchRows(readyData(data.balance), readyData(data.efficiency), readyData(data.performance)).map((b) => ({
         name: b.name,
+        members: b.activeBorrowers === null ? "—" : formatMetric(b.activeBorrowers, "count"),
         outstanding: money(b.outstanding),
         released: money(b.released),
         collected: money(b.collected),

@@ -3,11 +3,11 @@
 import { Bar, CartesianGrid, ComposedChart, Line, XAxis, YAxis } from "recharts";
 import { Landmark } from "lucide-react";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
-import { formatCurrency } from "@/lib/format";
-import { fromCentavos, readyData, type ExecutiveData } from "../../_lib/executive-data";
+import { formatCurrency, formatDate } from "@/lib/format";
+import { cashBalance, fromCentavos, readyData, type ExecutiveData } from "../../_lib/executive-data";
 import { incomeExpenseSeries, monthLabel } from "../../_lib/executive-sections";
 import { compactPeso, formatMetric, toNumber } from "../../_lib/metrics";
-import { Figure, SectionShell, SourceGate } from "./section-shell";
+import { Figure, SectionShell, SourceGate, figureText } from "./section-shell";
 
 const config = {
   income: { label: "Income", color: "var(--chart-1)" },
@@ -23,7 +23,6 @@ export function FinancialSection({ data }: { data: ExecutiveData }) {
   const income = readyData(data.income);
   const share = readyData(data.shareCapital);
   const provisioning = readyData(data.provisioning);
-  const cash = acc ? (fromCentavos(acc.cash_on_hand) ?? 0) + (fromCentavos(acc.cash_in_bank) ?? 0) + (fromCentavos(acc.e_wallets) ?? 0) : null;
 
   return (
     <SectionShell
@@ -36,7 +35,7 @@ export function FinancialSection({ data }: { data: ExecutiveData }) {
           <Figure label="Income (period)" value={money(fromCentavos(acc?.period.income))} />
           <Figure label="Expenses (period)" value={money(fromCentavos(acc?.period.expenses))} />
           <Figure label="Net income (period)" value={money(fromCentavos(acc?.period.net_income))} />
-          <Figure label="Cash and e-wallets" value={money(cash)} hint={acc ? `As of ${acc.as_of}` : undefined} />
+          <Figure label="Cash balance" value={money(cashBalance(acc))} hint={acc ? `All money accounts, as of ${formatDate(acc.as_of)}` : undefined} />
           <Figure label="Total assets" value={money(fromCentavos(acc?.total_assets))} />
           <Figure label="Total equity" value={money(fromCentavos(acc?.total_equity))} />
         </div>
@@ -83,13 +82,15 @@ export function FinancialSection({ data }: { data: ExecutiveData }) {
             <div className="grid grid-cols-2 gap-2">
               <Figure label="Interest" value={money(toNumber(income?.interest_income))} />
               <Figure label="Processing fees" value={money(toNumber(income?.processing_fees))} />
+              <Figure label="Service fees" value={money(toNumber(income?.service_fee))} />
+              <Figure label="Other fees" value={money(toNumber(income?.other_fees))} />
               <Figure label="Penalties" value={money(toNumber(income?.penalty_income))} />
               <Figure label="Total" value={money(toNumber(income?.total))} />
             </div>
           </SourceGate>
           <div className="grid grid-cols-2 gap-2">
-            <Figure label="Share capital" value={data.shareCapital.state === "ready" ? money(toNumber(share?.closing_balance)) : "—"} hint="Closing balance" />
-            <Figure label="Required allowance" value={data.provisioning.state === "ready" ? money(toNumber(provisioning?.totals?.required_allowance)) : "—"} hint="Provisioning" />
+            <Figure label="Share capital" value={figureText(data.shareCapital, toNumber(share?.closing_balance), "currency")} hint="Closing balance" />
+            <Figure label="Required allowance" value={figureText(data.provisioning, toNumber(provisioning?.totals?.required_allowance), "currency")} hint="Provisioning" />
           </div>
         </div>
       </div>

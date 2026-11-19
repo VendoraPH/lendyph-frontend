@@ -20,22 +20,21 @@ export interface ProductRow {
   released: number | null;
   outstanding: number | null;
   par: number | null;
-  /** Share of the outstanding book, in percent; `null` when the book total is unknown or zero. */
+  /** The server's share of the amount released, in percent (`portfolio_share`); `null` when not sent. */
   share: number | null;
 }
 
-/** Products by outstanding balance, largest first, with their share of the book. */
+/** Products by everything owed (`total_outstanding`), largest first, with the server's share of the amount released. */
 export function productRows(report: PortfolioByProductReport | null): ProductRow[] {
-  const rows = (report?.products ?? []).map((p) => ({
-    name: p.product_name?.trim() || "Unnamed product",
-    loans: toNumber(p.loan_count),
-    released: toNumber(p.total_released),
-    outstanding: toNumber(p.outstanding),
-    par: toNumber(p.par_ratio),
-  }));
-  const book = rows.reduce((sum, r) => sum + (r.outstanding ?? 0), 0);
-  return rows
-    .map((r) => ({ ...r, share: book > 0 && r.outstanding !== null ? (r.outstanding / book) * 100 : null }))
+  return (report?.products ?? [])
+    .map((p) => ({
+      name: p.product_name?.trim() || "Unnamed product",
+      loans: toNumber(p.loan_count),
+      released: toNumber(p.total_released),
+      outstanding: toNumber(p.total_outstanding),
+      par: toNumber(p.par_ratio),
+      share: toNumber(p.portfolio_share),
+    }))
     .sort((a, b) => (b.outstanding ?? -1) - (a.outstanding ?? -1));
 }
 
@@ -118,7 +117,7 @@ export function branchRows(
     return r;
   };
   for (const b of balance?.by_branch ?? []) {
-    row(b.branch_id, b.branch_name).outstanding = toNumber(b.outstanding_balance);
+    row(b.branch_id, b.branch_name).outstanding = toNumber(b.total_outstanding);
   }
   for (const b of efficiency?.by_branch ?? []) {
     const r = row(b.branch_id, b.branch_name);
@@ -152,7 +151,7 @@ export function officerRows(report: PerformanceReport | null, limit = 10): Offic
       name: o.officer_name?.trim() || "Unassigned",
       released: toNumber(o.released_amount),
       collected: toNumber(o.collected),
-      outstanding: toNumber(o.outstanding),
+      outstanding: toNumber(o.total_outstanding),
       par: toNumber(o.par_ratio),
       activeBorrowers: toNumber(o.active_borrowers),
     }))
@@ -168,7 +167,7 @@ export interface PipelineStage {
 
 const PIPELINE: [string, string][] = [
   ["draft", "Draft"],
-  ["for_review", "For review"],
+  ["for_review", "For Approval"],
   ["approved", "Approved, awaiting release"],
   ["rejected", "Rejected"],
 ];

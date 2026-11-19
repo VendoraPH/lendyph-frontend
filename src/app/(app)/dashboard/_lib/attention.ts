@@ -6,7 +6,7 @@
 
 import { formatCurrency } from "@/lib/format";
 import { readyData, type ExecutiveData } from "./executive-data";
-import { formatMetric, sumKnown, toNumber } from "./metrics";
+import { formatMetric, toNumber } from "./metrics";
 
 export type AlertTone = "critical" | "warning";
 
@@ -27,6 +27,9 @@ export const ATTENTION_THRESHOLDS = {
 } as const;
 
 const plural = (n: number, one: string, many = `${one}s`) => `${formatMetric(n, "count")} ${n === 1 ? one : many}`;
+
+/** A server amount, or a dash when it wasn't sent: never ₱0.00 for a missing figure. */
+const money = (v: number | null) => (v === null ? "—" : formatCurrency(v));
 
 export function attentionItems(d: ExecutiveData): AttentionItem[] {
   const items: AttentionItem[] = [];
@@ -50,7 +53,7 @@ export function attentionItems(d: ExecutiveData): AttentionItem[] {
       id: "par",
       tone: par >= t.parCritical ? "critical" : "warning",
       title: `Portfolio at risk is ${par.toFixed(2)}%`,
-      detail: `Above the ${par >= t.parCritical ? t.parCritical : t.parWarning}% threshold. ${formatCurrency(toNumber(balance?.at_risk_amount))} of principal is more than 30 days past due.`,
+      detail: `Above the ${par >= t.parCritical ? t.parCritical : t.parWarning}% threshold. ${money(toNumber(balance?.at_risk_amount))} of principal is more than 30 days past due.`,
       href: "/loans/past-due",
     });
   }
@@ -63,7 +66,7 @@ export function attentionItems(d: ExecutiveData): AttentionItem[] {
       id: "collection",
       tone: rate < t.collectionCritical ? "critical" : "warning",
       title: `Collection efficiency is ${rate.toFixed(2)}%`,
-      detail: `${formatCurrency(toNumber(efficiency?.uncollected))} of the amount due in the period is uncollected.`,
+      detail: `${money(toNumber(efficiency?.uncollected))} of the amount due in the period is uncollected.`,
       href: "/reports/collection_efficiency",
     });
   }
@@ -76,7 +79,7 @@ export function attentionItems(d: ExecutiveData): AttentionItem[] {
       id: "over-90",
       tone: "critical",
       title: "Accounts more than 90 days past due",
-      detail: `${formatCurrency(over90)} across ${plural(count, "installment")}.`,
+      detail: `${formatCurrency(over90)} across ${plural(count, "loan")}.`,
       href: "/reports/aging_report",
     });
   }
@@ -122,14 +125,13 @@ export function attentionItems(d: ExecutiveData): AttentionItem[] {
     });
   }
 
-  const pastDue = balance?.overdue ? sumKnown(balance.overdue.principal, balance.overdue.interest, balance.overdue.penalty) : null;
-  const pastDueLoans = toNumber(balance?.overdue?.loan_count);
+  const pastDue = toNumber(readyData(d.pastDue)?.past_due_amount);
   if (pastDue !== null && pastDue > 0 && !items.some((i) => i.id === "par")) {
     items.push({
       id: "past-due",
       tone: "warning",
       title: "Loans with past due installments",
-      detail: `${formatCurrency(pastDue)} past due${pastDueLoans !== null ? ` on ${plural(pastDueLoans, "loan")}` : ""}.`,
+      detail: `${formatCurrency(pastDue)} past due after the grace period.`,
       href: "/loans/past-due",
     });
   }

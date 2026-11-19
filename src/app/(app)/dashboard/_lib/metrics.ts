@@ -32,26 +32,26 @@ export interface MetricDefinition {
 
 export const METRICS = {
   outstanding_principal: {
-    label: "Outstanding Portfolio",
+    label: "Total Portfolio",
     kind: "balance",
     format: "currency",
-    formula: "Unpaid principal of every released, ongoing and defaulted loan, as of today.",
-    source: "GET /reports/loan-balance-summary → outstanding.principal",
+    formula: "Unpaid principal of every released, ongoing and defaulted loan, as of today (the Dashboard's Total Portfolio).",
+    source: "GET /reports/loan-balance-summary → outstanding_principal",
     href: "/reports/portfolio_summary",
   },
-  outstanding_balance: {
-    label: "Total Receivable",
+  total_outstanding: {
+    label: "Outstanding",
     kind: "balance",
     format: "currency",
-    formula: "Outstanding principal + interest + penalty + insurance still owed, as of today.",
-    source: "GET /reports/loan-balance-summary → outstanding.balance",
+    formula: "Everything still owed (principal, interest, penalty and insurance premium) on released, ongoing and defaulted loans, as of today.",
+    source: "GET /reports/loan-balance-summary → total_outstanding",
     href: "/reports/portfolio_summary",
   },
   active_loans: {
     label: "Active Loans",
     kind: "balance",
     format: "count",
-    formula: "Number of loans released and not yet completed, as of today.",
+    formula: "Number of released and ongoing loans, as of today. Defaulted loans are not counted.",
     source: "GET /reports/loan-balance-summary → active_loans",
     href: "/loans",
   },
@@ -75,7 +75,8 @@ export const METRICS = {
     label: "Collections",
     kind: "period",
     format: "currency",
-    formula: "Posted repayments in the period: principal + interest + penalty + overpayment.",
+    formula:
+      "All loan payments received in the period: principal, interest, penalty, insurance premium (held for the insurer) and overpayment.",
     source: "GET /reports/cash-flow → inflows.repayments.total",
     href: "/reports/cash_flow",
   },
@@ -92,7 +93,7 @@ export const METRICS = {
     kind: "ratio",
     format: "percent",
     formula:
-      "Outstanding principal of loans with an installment more than 30 days past due ÷ total outstanding principal × 100, as of today.",
+      "Unpaid principal of loans with an installment more than 30 days past its due date (grace not applied) ÷ total unpaid principal × 100, as of today.",
     source: "GET /reports/loan-balance-summary → par_ratio",
     href: "/reports/portfolio_by_product",
     lowerIsBetter: true,
@@ -101,8 +102,8 @@ export const METRICS = {
     label: "Past Due Amount",
     kind: "balance",
     format: "currency",
-    formula: "Principal + interest + penalty of installments past their due date, as of today.",
-    source: "GET /reports/loan-balance-summary → overdue",
+    formula: "Principal, interest and penalty of installments past their grace period, as of today: the Past Due Loans page's total.",
+    source: "GET /reports/due-past-due?past_due_only=1 → totals.past_due_amount",
     href: "/loans/past-due",
     lowerIsBetter: true,
   },
@@ -138,7 +139,7 @@ export type MetricId = keyof typeof METRICS;
 /** The Executive Overview cards, in order. */
 export const OVERVIEW_METRICS: MetricId[] = [
   "outstanding_principal",
-  "outstanding_balance",
+  "total_outstanding",
   "active_loans",
   "active_borrowers",
   "loans_released",
@@ -159,13 +160,6 @@ export function toNumber(value: Num): number | null {
   if (value === null || value === undefined || value === "") return null;
   const n = typeof value === "number" ? value : Number(value);
   return Number.isFinite(n) ? n : null;
-}
-
-/** The sum of the parts that were sent; `null` only when none were. */
-export function sumKnown(...values: Num[]): number | null {
-  const known = values.map(toNumber).filter((v): v is number => v !== null);
-  if (known.length === 0) return null;
-  return Math.round(known.reduce((a, b) => a + b, 0) * 100) / 100;
 }
 
 /**

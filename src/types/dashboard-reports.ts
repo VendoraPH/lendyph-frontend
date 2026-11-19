@@ -10,12 +10,20 @@
 
 export type Num = number | string | null | undefined;
 
-/** GET /reports/loan-balance-summary — balances are always as of today. */
+/**
+ * GET /reports/loan-balance-summary — balances are always as of today.
+ * `total_outstanding` (everything owed) and `outstanding_principal` are the
+ * loan pages' figures on the collectible loans; `outstanding.balance` and
+ * `by_branch[].outstanding_balance` are deprecated aliases the screens never read.
+ */
 export interface LoanBalanceSummaryReport {
   portfolio?: { loan_count?: Num; active_loan_count?: Num; total_released?: Num };
   active_loans?: Num;
-  outstanding?: { principal?: Num; interest?: Num; penalty?: Num; insurance?: Num; balance?: Num };
-  overdue?: { principal?: Num; interest?: Num; penalty?: Num; loan_count?: Num };
+  total_outstanding?: Num;
+  outstanding_principal?: Num;
+  outstanding?: { principal?: Num; interest?: Num; penalty?: Num; insurance?: Num; balance?: Num; total?: Num };
+  /** From the bare due date (grace not applied); `total` is the server's sum of the three. */
+  overdue?: { principal?: Num; interest?: Num; penalty?: Num; loan_count?: Num; total?: Num };
   at_risk_amount?: Num;
   /** Percent, e.g. 4.25 for 4.25%. */
   par_ratio?: Num;
@@ -25,6 +33,8 @@ export interface LoanBalanceSummaryReport {
     branch_name?: string | null;
     loan_count?: Num;
     total_released?: Num;
+    total_outstanding?: Num;
+    outstanding_principal?: Num;
     outstanding_balance?: Num;
   }[];
 }
@@ -34,7 +44,7 @@ export interface AgingBucket {
   count?: Num;
 }
 
-/** GET /reports/aging — measured from the due date, grace ignored, penalty included. */
+/** GET /reports/aging — measured from the due date, grace ignored, penalty included. `count` is loans. */
 export interface AgingReport {
   as_of_date?: string;
   buckets?: Partial<Record<"1_30" | "31_60" | "61_90" | "over_90", AgingBucket>>;
@@ -44,7 +54,8 @@ export interface AgingReport {
 /** GET /reports/cash-flow over a date range. */
 export interface CashFlowReport {
   inflows?: {
-    repayments?: { principal?: Num; interest?: Num; penalty?: Num; overpayment?: Num; total?: Num; count?: Num };
+    /** `total` includes the insurance premium collected (`insurance`). */
+    repayments?: { principal?: Num; interest?: Num; penalty?: Num; insurance?: Num; overpayment?: Num; total?: Num; count?: Num };
     share_capital_credit?: Num;
   };
   outflows?: { releases?: { net_proceeds?: Num; count?: Num } };
@@ -71,6 +82,9 @@ export interface ProductPortfolioRow {
   product_name?: string | null;
   loan_count?: Num;
   total_released?: Num;
+  /** Everything owed on the collectible loans. */
+  total_outstanding?: Num;
+  /** Deprecated alias (principal plus premium): never read. */
   outstanding?: Num;
   outstanding_principal?: Num;
   avg_interest_rate?: Num;
@@ -97,6 +111,9 @@ export interface PerformanceRow {
   released_amount?: Num;
   collected?: Num;
   payment_count?: Num;
+  /** Everything owed on the collectible loans. */
+  total_outstanding?: Num;
+  /** Deprecated alias (principal plus premium): never read. */
   outstanding?: Num;
   outstanding_principal?: Num;
   overdue_amount?: Num;
@@ -130,6 +147,8 @@ export interface ShareCapitalReport {
 export interface IncomeReport {
   interest_income?: Num;
   processing_fees?: Num;
+  service_fee?: Num;
+  other_fees?: Num;
   penalty_income?: Num;
   total?: Num;
 }
@@ -148,4 +167,13 @@ export interface DisbursementsReport {
   total_disbursed?: Num;
   avg_disbursement?: Num;
   pending_release?: Num;
+}
+
+/**
+ * `totals` of GET /reports/due-past-due?past_due_only=1: the Past Due Loans
+ * page's money cards, past the grace period, each loan counted once.
+ */
+export interface PastDueTotals {
+  past_due_amount?: Num;
+  total_outstanding?: Num;
 }

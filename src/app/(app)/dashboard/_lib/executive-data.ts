@@ -3,6 +3,7 @@
  * the hook fills `ExecutiveData`, everything here reads it.
  */
 
+import type { Permission } from "@/types";
 import type { AccountingDashboard } from "@/types/accounting";
 import type {
   AgingReport,
@@ -12,12 +13,13 @@ import type {
   DisbursementsReport,
   IncomeReport,
   LoanBalanceSummaryReport,
+  PastDueTotals,
   PerformanceReport,
   PortfolioByProductReport,
   ProvisioningReport,
   ShareCapitalReport,
 } from "@/types/dashboard-reports";
-import { OVERVIEW_METRICS, percentChange, pointChange, sumKnown, toNumber, type MetricId } from "./metrics";
+import { OVERVIEW_METRICS, percentChange, pointChange, toNumber, type MetricId } from "./metrics";
 
 /**
  * One source's state. `denied` is a read the user lacks the permission for,
@@ -47,9 +49,36 @@ export interface ExecutiveData {
   accounting: Source<AccountingDashboard>;
   /** `meta.stats` of GET /loans: loan counts per status. */
   loanStats: Source<Record<string, number>>;
+  /** `totals` of GET /reports/due-past-due?past_due_only=1 (the Past Due Loans page's cards). */
+  pastDue: Source<PastDueTotals>;
 }
 
 export type SourceKey = keyof ExecutiveData;
+
+/**
+ * What each source needs before it is requested. A user missing any of them
+ * never sends the request, and the source reads "No access". Share capital
+ * also needs share_capital:view, as the Dashboard's own Share Capital card does.
+ */
+export const SOURCE_PERMISSIONS: Record<SourceKey, Permission[]> = {
+  balance: ["reports:view"],
+  aging: ["reports:view"],
+  cashFlow: ["reports:view"],
+  prevCashFlow: ["reports:view"],
+  efficiency: ["reports:view"],
+  prevEfficiency: ["reports:view"],
+  products: ["reports:view"],
+  performance: ["reports:view"],
+  provisioning: ["reports:view"],
+  shareCapital: ["reports:view", "share_capital:view"],
+  income: ["reports:view"],
+  borrowers: ["reports:view"],
+  disbursements: ["reports:view"],
+  prevDisbursements: ["reports:view"],
+  accounting: ["accounting:view"],
+  loanStats: ["loans:view"],
+  pastDue: ["reports:view"],
+};
 
 export const LOADING: Source<never> = { state: "loading" };
 
@@ -74,14 +103,14 @@ export interface KpiView {
 /** Which source each card reads, for its loading and permission state. */
 const KPI_SOURCE: Record<MetricId, SourceKey> = {
   outstanding_principal: "balance",
-  outstanding_balance: "balance",
+  total_outstanding: "balance",
   active_loans: "balance",
   active_borrowers: "borrowers",
   loans_released: "disbursements",
   collections: "cashFlow",
   collection_rate: "efficiency",
   par30: "balance",
-  past_due_amount: "balance",
+  past_due_amount: "pastDue",
   required_allowance: "provisioning",
   share_capital: "shareCapital",
   net_income: "accounting",
@@ -95,9 +124,9 @@ function kpiValue(id: MetricId, d: ExecutiveData): { value: number | null; chang
   const balance = readyData(d.balance);
   switch (id) {
     case "outstanding_principal":
-      return { value: toNumber(balance?.outstanding?.principal), change: null };
-    case "outstanding_balance":
-      return { value: toNumber(balance?.outstanding?.balance), change: null };
+      return { value: toNumber(balance?.outstanding_principal), change: null };
+    case "total_outstanding":
+      return { value: toNumber(balance?.total_outstanding), change: null };
     case "active_loans":
       return { value: toNumber(balance?.active_loans ?? balance?.portfolio?.active_loan_count), change: null };
     case "active_borrowers":
@@ -117,12 +146,7 @@ function kpiValue(id: MetricId, d: ExecutiveData): { value: number | null; chang
     case "par30":
       return { value: toNumber(balance?.par_ratio), change: null };
     case "past_due_amount":
-      return {
-        value: balance?.overdue
-          ? sumKnown(balance.overdue.principal, balance.overdue.interest, balance.overdue.penalty)
-          : null,
-        change: null,
-      };
+      return { value: toNumber(readyData(d.pastDue)?.past_due_amount), change: null };
     case "required_allowance":
       return { value: toNumber(readyData(d.provisioning)?.totals?.required_allowance), change: null };
     case "share_capital": {
@@ -159,6 +183,15 @@ export function overviewKpis(d: ExecutiveData): KpiView[] {
 
 /** Whether a metric is a position "as of today" no matter the period picked. */
 export function isAsOfToday(id: MetricId): boolean {
-  return KPI_SOURCE[id] === "balance" || id === "active_borrowers";
+  return KPI_SOURCE[id] === "balance" || id === "past_due_amount" || id === "active_borrowers";
+}
+
+/**
+ * The money accounts' balance at the ledger's as-of date, in pesos: the
+ * server's last trend month (`cash` there is at `as_of`). `null` when the
+ * ledger sent no months.
+ */
+export function cashBalance(accounting: AccountingDashboard | null): number | null {
+  return fromCentavos(accounting?.months?.at(-1)?.cash);
 }
 

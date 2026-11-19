@@ -10,7 +10,6 @@ import {
   formatMetric,
   percentChange,
   pointChange,
-  sumKnown,
   toNumber,
 } from "./metrics";
 
@@ -22,12 +21,6 @@ test("server figures parse, and a missing one is null, never zero", () => {
   assert.equal(toNumber(undefined), null);
   assert.equal(toNumber(""), null);
   assert.equal(toNumber("n/a"), null);
-});
-
-test("a sum of parts uses what was sent and is null only when nothing was", () => {
-  assert.equal(sumKnown("100.10", 50, null), 150.1);
-  assert.equal(sumKnown(null, undefined), null);
-  assert.equal(sumKnown(0, 0), 0);
 });
 
 test("percent change has no value without a base", () => {
