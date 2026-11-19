@@ -9,6 +9,7 @@ import { pipelineStages, productRows, productShareSlices } from "../../_lib/exec
 import { DATA_UNAVAILABLE, formatMetric, toNumber } from "../../_lib/metrics";
 import { EXECUTIVE_LAYOUT as L } from "../../_lib/executive-layout";
 import { CARD_STATE_TEXT, balanceHeading } from "../../_lib/executive-overview";
+import { VISIBLE_SCROLLBAR } from "@/components/amla/visible-scrollbar";
 import { Figure, SectionShell, SourceGate } from "./section-shell";
 
 const SLICE_COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"];
@@ -66,7 +67,7 @@ export function PortfolioSection({ data, pastPeriod }: { data: ExecutiveData; pa
         </SourceGate>
 
         <SourceGate source={data.products} empty={rows.length === 0} notice={notice}>
-          <div className={`${L.cell} overflow-x-auto`}>
+          <div className={`${L.cell} overflow-x-auto pb-1 ${VISIBLE_SCROLLBAR}`} tabIndex={0} role="region" aria-label="Portfolio by product, scrolls sideways">
             <table className="w-full min-w-[640px] text-sm">
               <caption className="sr-only">Portfolio by product</caption>
               <thead className="text-xs text-muted-foreground">

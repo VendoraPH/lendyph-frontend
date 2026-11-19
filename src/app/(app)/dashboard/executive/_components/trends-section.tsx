@@ -18,10 +18,10 @@ const lendingConfig = {
 } satisfies ChartConfig;
 
 const cashConfig = {
-  // One blue, one orange and a dark blue line: no two series share a look.
+  // Blue, orange and a dashed green line: three hues, so no two series look alike.
   cash_in: { label: "Cash in", color: "var(--chart-1)" },
   cash_out: { label: "Cash out", color: "var(--chart-2)" },
-  net_cash: { label: "Net cash", color: "var(--chart-3)" },
+  net_cash: { label: "Net cash", color: "var(--success)" },
 } satisfies ChartConfig;
 
 const membersConfig = { new_members: { label: "New members", color: "var(--chart-3)" } } satisfies ChartConfig;

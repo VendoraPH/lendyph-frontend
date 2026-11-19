@@ -2,10 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import type { AccountingDashboard } from "@/types/accounting";
-import type { ExecutiveAttention, ExecutivePeriod, ExecutiveTurnaround, FiltersAppliedTo, ShareCapitalControl } from "@/types/executive-dashboard";
+import type { ExecutiveAttention, ExecutiveFilterKey, ExecutivePeriod, ExecutiveTurnaround, FiltersAppliedTo, ShareCapitalControl } from "@/types/executive-dashboard";
 import { attentionView, ATTENTION_STATE_TEXT } from "./attention";
 import { booksParams } from "@/services/executive-dashboard.service";
-import { SECTION_FILTERS, sectionFilterNote, figureFilterNote, financialBooks, shareCapitalControlTable, trendSeries, turnaroundRows } from "./executive-books";
+import { SECTION_FILTERS, reportFigureNote, sectionFilterNote, figureFilterNote, financialBooks, shareCapitalControlTable, trendSeries, turnaroundRows } from "./executive-books";
 import { cardFilterNote, executiveQuery, sentFilters } from "./executive-overview";
 
 const period: ExecutivePeriod = {
@@ -268,17 +268,12 @@ test("rules that can't be judged come between those needing attention and the cl
   assert.deepEqual(view.rows.map((r) => r.key), ["d", "b", "e", "f", "g", "a", "c"]);
 });
 
-test("a section with no server filter list says which sent filters it ignores, from its known filters", () => {
+test("Share Capital Control, which sends no filter list, ignores every page filter", () => {
   assert.deepEqual(SECTION_FILTERS.shareCapitalControl, []);
   assert.equal(
     sectionFilterNote(["product_id", "officer_id", "collector_id"], "shareCapitalControl"),
     "Covers every product, loan officer and collector: this figure doesn't follow those filters.",
   );
-  assert.equal(
-    sectionFilterNote(["product_id", "officer_id", "collector_id"], "operations"),
-    "Covers every product and collector: this figure doesn't follow those filters.",
-  );
-  assert.equal(sectionFilterNote(["officer_id"], "operations"), null);
   assert.equal(sectionFilterNote([], "shareCapitalControl"), null);
 });
 
@@ -294,4 +289,35 @@ test("a figure that repeats an overview card takes the card's own filter list", 
   assert.equal(cardFilterNote(overview, "share_capital"), "Covers every product and collector: this figure doesn't follow those filters.");
   assert.equal(cardFilterNote(overview, "missing"), null);
   assert.equal(cardFilterNote(null, "share_capital"), null);
+});
+
+// ── Check E8 ───────────────────────────────────────────────────────────────
+
+test("each report figure gets its own note, from the report's filter list", () => {
+  const disbursements: FiltersAppliedTo = { filters_applied: ["product_id", "officer_id"], filters_applied_to: {} };
+  const members: FiltersAppliedTo = { filters_applied: [], filters_applied_to: {} };
+  const performance: FiltersAppliedTo = { filters_applied: ["product_id"], filters_applied_to: { collector_id: ["by_officer.collected"] } };
+  const sent: ExecutiveFilterKey[] = ["product_id", "collector_id"];
+  assert.equal(
+    reportFigureNote(sent, disbursements, "pending_release", []),
+    "Covers every collector: this figure doesn't follow the collector filter.",
+  );
+  assert.equal(
+    reportFigureNote(sent, members, "total_active_borrowers", []),
+    "Covers every product and collector: this figure doesn't follow those filters.",
+  );
+  // A path covers what sits under it.
+  assert.equal(reportFigureNote(sent, performance, "by_officer.collected", []), null);
+  assert.equal(
+    reportFigureNote(sent, performance, "by_officer.total_outstanding", []),
+    "Covers every collector: this figure doesn't follow the collector filter.",
+  );
+});
+
+test("a report that sends no filter list falls back to the figure's known filters", () => {
+  assert.equal(reportFigureNote(["officer_id"], {}, "pending_release", ["officer_id"]), null);
+  assert.equal(
+    reportFigureNote(["product_id"], null, "pending_release", ["officer_id"]),
+    "Covers every product: this figure doesn't follow the product filter.",
+  );
 });

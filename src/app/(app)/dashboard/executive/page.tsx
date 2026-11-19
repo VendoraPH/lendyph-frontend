@@ -190,7 +190,10 @@ function ExecutiveDashboard() {
               <FinancialSection
                 data={data}
                 allowance={cardFigureText(overview, "required_allowance")}
-                capitalNotes={[cardFilterNote(overview, "share_capital"), cardFilterNote(overview, "required_allowance")]}
+                capitalNotes={{
+                  shareCapital: cardFilterNote(overview, "share_capital"),
+                  allowance: cardFilterNote(overview, "required_allowance"),
+                }}
               />
               <TrendsSection source={endpoints.trends} sentFilters={sentFilterKeys} />
               <TurnaroundSection source={endpoints.turnaround} sentFilters={sentFilterKeys} />

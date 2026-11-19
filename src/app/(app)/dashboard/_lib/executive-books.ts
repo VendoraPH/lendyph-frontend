@@ -18,20 +18,37 @@ import { monthLabel } from "./executive-sections";
 
 /** Which sent filters a figure of an EB-D2 response follows: every figure for `filters_applied`, some for `filters_applied_to`. */
 export function figureFilterNote(sent: readonly ExecutiveFilterKey[], response: FiltersAppliedTo, figure: string): string | null {
+  // A named path covers itself and every figure under it ("by_officer" covers "by_officer.collected").
+  const covers = (path: string) => figure === path || figure.startsWith(`${path}.`);
   const followed = sent.filter(
-    (key) => response.filters_applied.includes(key) || (response.filters_applied_to[key] ?? []).includes(figure),
+    (key) => response.filters_applied.includes(key) || (response.filters_applied_to[key] ?? []).some(covers),
   );
   return ignoredFilterNote(sent, followed);
 }
 
 /**
+ * One report figure's note: from the report's own `filters_applied` and
+ * `filters_applied_to` (EB-A) when it sends them, else from the filters the
+ * figure is known to follow. Each figure gets its own, never the section.
+ */
+export function reportFigureNote(
+  sent: readonly ExecutiveFilterKey[],
+  report: Partial<FiltersAppliedTo> | null | undefined,
+  figure: string,
+  known: readonly ExecutiveFilterKey[],
+): string | null {
+  if (report && Array.isArray(report.filters_applied)) {
+    return figureFilterNote(sent, { filters_applied: report.filters_applied, filters_applied_to: report.filters_applied_to ?? {} }, figure);
+  }
+  return ignoredFilterNote(sent, known);
+}
+
+/**
  * The page filters each section follows, where its response names none:
- * share capital isn't kept by product, officer or collector, and the Member
- * Report and loan counts follow the officer only.
+ * share capital isn't kept by product, officer or collector.
  */
 export const SECTION_FILTERS = {
   shareCapitalControl: [] as ExecutiveFilterKey[],
-  operations: ["officer_id"] as ExecutiveFilterKey[],
 } as const;
 
 /** The note for a section that ignores some sent filters, from its known filters. */
