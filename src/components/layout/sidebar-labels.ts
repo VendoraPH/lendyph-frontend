@@ -11,3 +11,9 @@ export function countLabel(count: number | undefined, noun: string, state: strin
 export function collapsedNavLabel(title: string, badgeLabel?: string): string {
   return badgeLabel ? `${title}, ${badgeLabel}` : title;
 }
+
+/** "4 new in Loans": a menu link's unviewed notifications, in words. */
+export function newLabel(count: number | undefined, title: string): string | undefined {
+  if (!count || count <= 0) return undefined;
+  return `${count} new in ${title}`;
+}
