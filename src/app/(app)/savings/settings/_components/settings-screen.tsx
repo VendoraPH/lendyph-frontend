@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { DataState } from "@/components/common/data-state";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { useApiResource } from "@/hooks";
 import { savingsService } from "@/services";
+import type { PrepareBooksResult } from "@/types";
 import { ApprovalSettingsCard } from "./approval-settings-card";
 import { BooksCard } from "./books-card";
 import { TaxRulesCard } from "./tax-rules-card";
@@ -17,6 +18,9 @@ import { TaxRulesCard } from "./tax-rules-card";
 export function SettingsScreen() {
   const fetcher = useCallback(() => savingsService.settings(), []);
   const resource = useApiResource(fetcher);
+  // Outside DataState, which unmounts the cards while the settings refresh, so
+  // the books set-up's result stays on screen afterwards.
+  const [booksResult, setBooksResult] = useState<PrepareBooksResult | null>(null);
 
   return (
     <PageFill>
@@ -34,7 +38,14 @@ export function SettingsScreen() {
         {(settings) => (
           <ScrollBox className="p-px">
             <div className="grid gap-6 lg:grid-cols-2">
-              <BooksCard settings={settings} onPrepared={() => resource.refetch()} />
+              <BooksCard
+                settings={settings}
+                result={booksResult}
+                onPrepared={(result) => {
+                  setBooksResult(result);
+                  resource.refetch();
+                }}
+              />
               <ApprovalSettingsCard settings={settings} onSaved={() => resource.refetch()} />
               <TaxRulesCard settings={settings} onAdded={() => resource.refetch()} />
             </div>
