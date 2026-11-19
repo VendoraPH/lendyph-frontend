@@ -7,6 +7,7 @@ import {
   buildTransferInput,
   canSendBack,
   sendBackForm,
+  transferBranchOptions,
   transferActionButtons,
   transferFailure,
   transferStatusLabel,
@@ -203,4 +204,35 @@ test("a 409 says someone else changed it first", () => {
     refusal(409, undefined, "Another change to this transfer was saved at the same moment. Reload it and try again."),
   );
   assert.match(conflict.general ?? "", /Reload it and try again/);
+});
+
+// ── Which branches a transfer can use ──
+
+test("a transfer can use active and suspended branches, never closed ones; a suspended one is marked", () => {
+  const listed = [
+    { id: 1, name: "Main", code: "MAIN", is_active: true, status: "active" as const },
+    { id: 2, name: "North", code: "NTH", is_active: false, status: "suspended" as const },
+    { id: 3, name: "South", code: "STH", is_active: false, status: "closed" as const },
+    { id: 4, name: "East", code: "EST", is_active: true },
+    { id: 5, name: "West", code: "WST", is_active: false },
+  ];
+  const all = transferBranchOptions(listed, { viewAll: true, own: [] });
+  assert.deepEqual(all.sources.map((b) => [b.id, b.label]), [
+    [1, "Main"],
+    [2, "North (Suspended)"],
+    [4, "East"],
+    // An older answer with no status: inactive reads as suspended (branchStatusOf).
+    [5, "West (Suspended)"],
+  ]);
+  assert.deepEqual(all.destinations.map((b) => b.id), [1, 2, 4, 5]);
+
+  // A branch user sends only from their own branches (still never a closed
+  // one), and may send to any branch that isn't closed.
+  const own = [
+    { id: 2, name: "North", code: "NTH" },
+    { id: 3, name: "South", code: "STH" },
+  ];
+  const branchUser = transferBranchOptions(listed, { viewAll: false, own });
+  assert.deepEqual(branchUser.sources.map((b) => [b.id, b.label]), [[2, "North (Suspended)"]]);
+  assert.deepEqual(branchUser.destinations.map((b) => b.id), [1, 2, 4, 5]);
 });

@@ -2,19 +2,19 @@
 
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { NamedBranch } from "@/lib/branch-choice";
+import type { TransferBranchOption } from "../_lib/transfers";
 
 interface BranchPickerProps {
   id: string;
   label: string;
-  branches: readonly (NamedBranch & { code?: string | null })[];
+  branches: readonly TransferBranchOption[];
   value: number | null;
   loading?: boolean;
   disabled?: boolean;
   onChange: (id: number | null) => void;
 }
 
-/** One branch, by name. A picked branch missing from the list still reads by its name when it can. */
+/** One branch, by name; a suspended one reads "(Suspended)". */
 export function BranchPicker({ id, label, branches, value, loading, disabled, onChange }: BranchPickerProps) {
   const selected = branches.find((b) => b.id === value) ?? null;
   return (
@@ -29,13 +29,13 @@ export function BranchPicker({ id, label, branches, value, loading, disabled, on
       >
         <SelectTrigger id={id} className="w-full">
           <SelectValue>
-            {() => (loading ? "Loading branches…" : (selected?.name ?? "Choose a branch"))}
+            {() => (loading ? "Loading branches…" : (selected?.label ?? "Choose a branch"))}
           </SelectValue>
         </SelectTrigger>
         <SelectContent>
           {branches.map((b) => (
             <SelectItem key={b.id} value={String(b.id)}>
-              {b.name}
+              {b.label}
               {b.code ? ` (${b.code})` : ""}
             </SelectItem>
           ))}

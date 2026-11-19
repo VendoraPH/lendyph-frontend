@@ -13,12 +13,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useBranches, useDialogOpening } from "@/hooks";
+import { useDialogOpening } from "@/hooks";
 import { useApiResource } from "@/hooks/use-api-resource";
-import { pickableBranches } from "@/lib/branch-choice";
+import { completeRows } from "@/lib/paginate";
 import { notifySuccess, notifyWarning } from "@/lib/notify";
 import { userBranches } from "@/lib/user-branches";
-import { accountingService, interbranchTransferService } from "@/services";
+import { accountingService, branchService, interbranchTransferService } from "@/services";
 import { useAuthStore } from "@/store";
 import { AccountSelect } from "../../_components/account-select";
 import { CASH_ACCOUNTS_PER_PAGE } from "../../cash-bank/_lib/cash-bank";
@@ -27,6 +27,7 @@ import {
   PURPOSE_MAX,
   REFERENCE_MAX,
   buildTransferInput,
+  transferBranchOptions,
   transferFailure,
   type TransferForm,
   type TransferFormErrors,
@@ -50,7 +51,11 @@ export function TransferFormDialog({ open, initial, onOpenChange, onCreated }: T
   const caller = useAuthStore((s) => s.user);
   const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
   const canListAccounts = useAuthStore((s) => s.hasPermission("cash_accounts:view"));
-  const { branches, loading: branchesLoading } = useBranches(open);
+  // Every branch, suspended ones included: a suspended branch can still send
+  // and receive transfers; only a closed one can't (transferBranchOptions).
+  const branchesFetcher = useCallback(() => branchService.listAll().then(completeRows), []);
+  const branchList = useApiResource(branchesFetcher, open);
+  const branchesLoading = branchList.loading && !branchList.data;
   const accountsFetcher = useCallback(
     () => accountingService.cashAccountsPage({ per_page: CASH_ACCOUNTS_PER_PAGE }),
     [],
@@ -58,9 +63,9 @@ export function TransferFormDialog({ open, initial, onOpenChange, onCreated }: T
   const accounts = useApiResource(accountsFetcher, open && canListAccounts);
   const moneyAccounts = accounts.data?.data ?? [];
 
-  const sources = useMemo(
-    () => pickableBranches({ viewAll, own: userBranches(caller), listed: branches }),
-    [viewAll, caller, branches],
+  const { sources, destinations: allDestinations } = useMemo(
+    () => transferBranchOptions(branchList.data ?? [], { viewAll, own: userBranches(caller) }),
+    [branchList.data, viewAll, caller],
   );
 
   const [form, setForm] = useState<TransferForm>(EMPTY_TRANSFER_FORM);
@@ -73,7 +78,7 @@ export function TransferFormDialog({ open, initial, onOpenChange, onCreated }: T
     setGeneral(null);
   }
 
-  const destinations = branches.filter((b) => b.id !== form.sourceBranchId);
+  const destinations = allDestinations.filter((b) => b.id !== form.sourceBranchId);
   const set = <K extends keyof TransferForm>(key: K, value: TransferForm[K]) => {
     setForm((f) => ({ ...f, [key]: value }));
     setErrors((e) => ({ ...e, [key]: undefined }));

@@ -7,6 +7,7 @@
 
 import { fromCentavos, toCentavos } from "@/lib/accounting/money";
 import { getErrorMessage, validationErrors } from "@/lib/api-error";
+import { branchStatusOf, type BranchStatusFields } from "@/lib/branch-status";
 import type {
   InterbranchTransfer,
   InterbranchTransferActions,
@@ -230,4 +231,41 @@ export function transferFailure(err: unknown): { fields: TransferFormErrors; gen
   }
   if (errors && other.length === 0 && Object.keys(fields).length > 0) return { fields, general: null };
   return { fields, general: other[0] ?? getErrorMessage(err, FAILED) };
+}
+
+/** A branch a transfer can use, labelled for the picker. */
+export interface TransferBranchOption {
+  id: number;
+  name: string;
+  code?: string | null;
+  label: string;
+}
+
+type ListedBranch = { id: number; name: string; code?: string | null } & BranchStatusFields;
+
+/**
+ * The branches a transfer can use (MB-BE5): a closed branch refuses transfers,
+ * a suspended one allows them (to empty its cash before closing, say) and is
+ * marked "(Suspended)". The source is one of the caller's branches (every
+ * listed one with See all branches); the destination may be any branch that
+ * isn't closed. The server checks both again.
+ */
+export function transferBranchOptions(
+  listed: readonly ListedBranch[],
+  caller: { viewAll: boolean; own: readonly { id: number; name: string; code?: string | null }[] },
+): { sources: TransferBranchOption[]; destinations: TransferBranchOption[] } {
+  const byId = new Map(listed.map((b) => [b.id, b]));
+  const option = (b: { id: number; name: string; code?: string | null }): TransferBranchOption | null => {
+    const known = byId.get(b.id);
+    const status = known ? branchStatusOf(known) : "active";
+    if (status === "closed") return null;
+    return { id: b.id, name: b.name, code: b.code, label: status === "suspended" ? `${b.name} (Suspended)` : b.name };
+  };
+  const keep = (rows: readonly { id: number; name: string; code?: string | null }[]) =>
+    rows.map(option).filter((o): o is TransferBranchOption => o !== null);
+  const ownIds = new Set(caller.own.map((b) => b.id));
+  const sourceRows = caller.viewAll
+    ? listed
+    : [...listed.filter((b) => ownIds.has(b.id)), ...caller.own.filter((b) => !byId.has(b.id))];
+  return { sources: keep(sourceRows), destinations: keep(listed) };
 }
