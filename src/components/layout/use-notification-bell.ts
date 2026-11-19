@@ -16,6 +16,7 @@ import {
   type TrailingCall,
 } from "@/lib/notification-feed";
 import { createUnreadPoller, isUnauthorizedError, type UnreadPoller } from "@/lib/session-poller";
+import { useUnreadCountStore } from "@/store/unread-count-store";
 import type { AppNotification } from "@/types/notification";
 
 export type NotificationListStatus = "idle" | "loading" | "ready" | "error";
@@ -59,7 +60,10 @@ export function useNotificationBell(enabled: boolean) {
       load: () => {
         const token = gate.token();
         return notificationService.unreadCount().then((n) => {
-          if (!cancelled && gate.accepts(token)) setCount(n);
+          if (cancelled || !gate.accepts(token)) return;
+          setCount(n);
+          // The sidebar's "new" badges read their list off this schedule.
+          useUnreadCountStore.getState().publish(n);
         });
       },
       isHidden: () => document.hidden,
@@ -79,6 +83,7 @@ export function useNotificationBell(enabled: boolean) {
       cancelled = true;
       poller.dispose();
       pollerRef.current = null;
+      useUnreadCountStore.getState().clear();
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("focus", onFocus);
     };

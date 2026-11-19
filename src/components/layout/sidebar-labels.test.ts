@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { collapsedNavLabel, countLabel, navActivePath } from "./sidebar-labels";
+import { collapsedNavLabel, countLabel, navActivePath, newLabel } from "./sidebar-labels";
 
 test("collapsedNavLabel names every icon-only link by its menu title", () => {
   assert.equal(collapsedNavLabel("Dashboard"), "Dashboard");
@@ -34,4 +34,11 @@ test("navActivePath: a new application, or a malformed edit id, stays on New App
 test("navActivePath: other pages keep their own path", () => {
   assert.equal(navActivePath("/borrowers/new", "5"), "/borrowers/new");
   assert.equal(navActivePath("/loans", null), "/loans");
+});
+
+test("newLabel says how many are new in the section, in words, and nothing at zero", () => {
+  assert.equal(newLabel(1, "Loans"), "1 new in Loans");
+  assert.equal(newLabel(4, "Savings Approvals"), "4 new in Savings Approvals");
+  assert.equal(newLabel(0, "Loans"), undefined);
+  assert.equal(newLabel(undefined, "Loans"), undefined);
 });

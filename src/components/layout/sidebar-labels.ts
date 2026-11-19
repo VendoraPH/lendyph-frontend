@@ -23,3 +23,9 @@ export function navActivePath(pathname: string, editParam: string | null): strin
   if (pathname === "/loans/new" && parseEditLoanId(editParam) !== null) return "/loans";
   return pathname;
 }
+
+/** "4 new in Loans": a menu link's unviewed notifications, in words. */
+export function newLabel(count: number | undefined, title: string): string | undefined {
+  if (!count || count <= 0) return undefined;
+  return `${count} new in ${title}`;
+}

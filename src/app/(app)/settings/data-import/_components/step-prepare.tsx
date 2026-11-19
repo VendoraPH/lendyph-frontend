@@ -26,6 +26,7 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { useBranches } from "@/hooks";
 import { branchPicker } from "@/lib/user-branches";
+import { importBranchChoice } from "./import-branch";
 import { useAuthStore } from "@/store";
 import { formatDate } from "@/lib/format";
 import { downloadImportTemplate, IMPORT_TEMPLATES } from "@/lib/import-template";
@@ -112,11 +113,13 @@ function BranchGate({
   // click that has no decision in it — but the control stays on screen and
   // captioned, because a branch silently chosen for you is the one field nobody
   // checks, and it is the field that decides where an entire book lands.
+  // A branch the picker no longer offers is dropped, so the run never sends
+  // one the server refuses.
   useEffect(() => {
-    if (value === null && branches.length === 1) {
-      onChange(branches[0].id);
-    }
-  }, [branches, value, onChange]);
+    if (loading) return;
+    const choice = importBranchChoice(branches, value);
+    if (choice !== value) onChange(choice);
+  }, [branches, value, onChange, loading]);
 
   if (loading) {
     return (

@@ -38,11 +38,14 @@ const SAVINGS = [
 ];
 
 // Phase 3: the seven savings permissions are seeded for admin and super_admin
-// only (savings design §3); other roles get them through the roles screen.
-test("admin and super_admin hold all seven savings permissions, and no other role holds one", () => {
+// only (savings design §3); other roles get them through the roles screen. The
+// Compliance Officer (Phase 6) reads savings, read-only.
+test("admin and super_admin hold all seven savings permissions, and no other role but the Compliance Officer's view holds one", () => {
   for (const [role, config] of Object.entries(ROLES)) {
     const held = config.permissions.filter((p) => p.startsWith("savings:"));
-    assert.deepEqual(held, role === "admin" || role === "super_admin" ? SAVINGS : [], role);
+    const expected =
+      role === "admin" || role === "super_admin" ? SAVINGS : role === "compliance_officer" ? ["savings:view"] : [];
+    assert.deepEqual(held, expected, role);
   }
 });
 
@@ -209,8 +212,35 @@ test("general_bookkeeper and manager keep their accounting grants", () => {
 // The seven savings permissions come with Phase 3's savings foundation (S1),
 // the sixteen CDA permissions with the CDA foundation (backend #277), and the
 // six Member Portal permissions with the portal foundation (backend #287), and
-// the two Linda permissions with Linda v1.
+// the two Linda permissions with Linda v1, and Phase 6's keys with X0.
 const BACKEND_PERMISSIONS = [
+  "amla:alerts",
+  "amla:approve",
+  "amla:audit",
+  "amla:cases",
+  "amla:cdd",
+  "amla:ctr",
+  "amla:export",
+  "amla:sanctions",
+  "amla:screening",
+  "amla:settings",
+  "amla:str",
+  "amla:submit",
+  "amla:view",
+  "borrowers:transfer",
+  "branches:manage",
+  "dashboard:analytics",
+  "dashboard:export",
+  "dashboard:settings",
+  "interbranch_transfers:approve",
+  "interbranch_transfers:create",
+  "interbranch_transfers:receive",
+  "interbranch_transfers:view",
+  "loan_origination:assess",
+  "loan_origination:convert",
+  "loan_origination:settings",
+  "loan_origination:update",
+  "loan_origination:view",
   "accounting:allowance",
   "accounting:close",
   "accounting:reconcile",
@@ -355,4 +385,87 @@ test("ROLE_OPTIONS never offers super_admin", () => {
 test("admin holds exactly every backend permission", () => {
   assert.deepEqual([...ROLES.admin.permissions].sort(), [...BACKEND_PERMISSIONS].sort());
   assert.equal(new Set(ROLES.admin.permissions).size, ROLES.admin.permissions.length);
+});
+
+// Phase 6 (X0): every new key is seeded for admin and super_admin only. The
+// Compliance Officer also holds the thirteen AMLA keys; nobody else holds any.
+const PHASE6 = [
+  "amla:view",
+  "amla:alerts",
+  "amla:cases",
+  "amla:cdd",
+  "amla:screening",
+  "amla:sanctions",
+  "amla:ctr",
+  "amla:str",
+  "amla:approve",
+  "amla:export",
+  "amla:submit",
+  "amla:settings",
+  "amla:audit",
+  "dashboard:analytics",
+  "dashboard:export",
+  "dashboard:settings",
+  "branches:manage",
+  "borrowers:transfer",
+  "interbranch_transfers:view",
+  "interbranch_transfers:create",
+  "interbranch_transfers:approve",
+  "interbranch_transfers:receive",
+  "loan_origination:view",
+  "loan_origination:update",
+  "loan_origination:assess",
+  "loan_origination:convert",
+  "loan_origination:settings",
+];
+const AMLA = PHASE6.filter((p) => p.startsWith("amla:"));
+
+test("admin and super_admin hold every Phase 6 permission", () => {
+  for (const role of ["admin", "super_admin"] as const) {
+    for (const permission of PHASE6) assert.ok(ROLES[role].permissions.includes(permission as never), `${role} ${permission}`);
+  }
+});
+
+test("no other role holds a Phase 6 permission, but the Compliance Officer's AMLA keys", () => {
+  for (const [role, config] of Object.entries(ROLES)) {
+    if (role === "admin" || role === "super_admin") continue;
+    const held = config.permissions.filter((p) => PHASE6.includes(p));
+    assert.deepEqual(held, role === "compliance_officer" ? AMLA : [], role);
+  }
+});
+
+// Copied from lendyph-backend `RoleAndPermissionSeeder::COMPLIANCE_OFFICER_PERMISSIONS`
+// (Phase 6, X0; AMLA analysis §4.12): every AMLA key, every branch, and
+// read-only lending, savings and GCash. Assigned by the owner.
+const COMPLIANCE_OFFICER_PERMISSIONS = [
+  ...AMLA,
+  "branches:view_all",
+  "borrowers:view",
+  "reports:view",
+  "dashboard:view",
+  "loans:view",
+  "loan_adjustments:view",
+  "payments:view",
+  "collaterals:view",
+  "fees:view",
+  "share_capital:view",
+  "auto_pay:view",
+  "savings:view",
+  "gcash:view",
+];
+
+test("the Compliance Officer is labelled in words and holds exactly the server's list", () => {
+  assert.equal(ROLES.compliance_officer.label, "Compliance Officer");
+  assert.equal(
+    ROLES.compliance_officer.description,
+    "Anti-money laundering compliance: alerts, cases, due diligence, screening, sanctions, covered and suspicious transaction reports and the AMLA log, with read-only lending, savings and GCash in every branch. Assigned by the owner.",
+  );
+  assert.deepEqual([...ROLES.compliance_officer.permissions].sort(), [...COMPLIANCE_OFFICER_PERMISSIONS].sort());
+  assert.equal(new Set(ROLES.compliance_officer.permissions).size, ROLES.compliance_officer.permissions.length);
+});
+
+test("the Compliance Officer writes nothing outside AMLA", () => {
+  for (const p of ROLES.compliance_officer.permissions.filter((p) => !p.startsWith("amla:"))) {
+    assert.match(p, /:view(_all)?$/, p);
+  }
 });
