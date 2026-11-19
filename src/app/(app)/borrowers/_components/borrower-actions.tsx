@@ -26,6 +26,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import type { Borrower } from "@/types";
+import { memberActionsLabel } from "./utils";
 
 // ── Toggle Status Dialog ──
 
@@ -142,8 +143,11 @@ export function BorrowerActionsCell({
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger className="outline-none">
-          <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+        <DropdownMenuTrigger
+          className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          aria-label={memberActionsLabel(borrower.full_name)}
+        >
+          <MoreHorizontal className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem

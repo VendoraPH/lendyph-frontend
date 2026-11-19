@@ -2,8 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { loanDocumentService } from "@/services";
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { PrintableRefusedError, findPrintable } from "./catalog";
+import { join, resolve } from "node:path";
+import { PrintableRefusedError, documentsAvailableLabel, findPrintable } from "./catalog";
 
 /**
  * The document carries the loan it was built from, which the print log needs.
@@ -79,4 +79,12 @@ test("every place that opens a document shows a refusal's own message", () => {
     const source = readFileSync(resolve(process.cwd(), file), "utf8");
     assert.match(source, /err instanceof PrintableRefusedError\s*\?\s*err\.message/, file);
   }
+});
+
+test("the Documents page counts every card it shows, the Data Import Template included", () => {
+  assert.equal(documentsAvailableLabel(15), "16 documents available");
+  assert.equal(documentsAvailableLabel(0), "1 document available");
+  const page = readFileSync(join(process.cwd(), "src/app/(app)/printables/page.tsx"), "utf8");
+  assert.match(page, /\{documentsAvailableLabel\(catalog\.length\)\}/);
+  assert.doesNotMatch(page, /\{catalog\.length\} documents available/);
 });

@@ -84,3 +84,8 @@ export function registrationSubmittedAt(registration: {
 export function paymentReferenceCell(payment: { reference_number?: string | null }): string {
   return payment.reference_number?.trim() || "—";
 }
+
+/** The accessible name of a member row's ⋯ menu: "Actions for Ana Cruz". */
+export function memberActionsLabel(fullName: string): string {
+  return `Actions for ${fullName}`;
+}
