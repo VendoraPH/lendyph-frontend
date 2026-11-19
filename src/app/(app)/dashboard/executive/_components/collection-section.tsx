@@ -8,7 +8,7 @@ import { readyData, type ExecutiveData } from "../../_lib/executive-data";
 import { agingPoints, collectionTrend, hasActivity, monthLabel } from "../../_lib/executive-sections";
 import { EXECUTIVE_LAYOUT as L } from "../../_lib/executive-layout";
 import { compactPeso, formatMetric, toNumber } from "../../_lib/metrics";
-import { CARD_STATE_TEXT } from "../../_lib/executive-overview";
+import { CARD_STATE_TEXT, balanceHeading } from "../../_lib/executive-overview";
 import { Figure, SectionShell, SourceGate, figureText } from "./section-shell";
 
 const trendConfig = {
@@ -74,7 +74,7 @@ export function CollectionSection({ data, pastPeriod }: { data: ExecutiveData; p
         </div>
 
         <div className={L.cell}>
-          <h3 className="mb-2 text-sm font-medium">Past due aging (as of today)</h3>
+          <h3 className="mb-2 text-sm font-medium">{balanceHeading("Past due aging", pastPeriod)}</h3>
           <SourceGate
             source={data.aging}
             empty={!hasActivity(aging, ["amount"])}

@@ -17,7 +17,6 @@ import type {
   PastDueTotals,
   PerformanceReport,
   PortfolioByProductReport,
-  ProvisioningReport,
   ShareCapitalReport,
 } from "@/types/dashboard-reports";
 
@@ -38,7 +37,6 @@ export interface ExecutiveData {
   efficiency: Source<CollectionEfficiencyReport>;
   products: Source<PortfolioByProductReport>;
   performance: Source<PerformanceReport>;
-  provisioning: Source<ProvisioningReport>;
   shareCapital: Source<ShareCapitalReport>;
   income: Source<IncomeReport>;
   borrowers: Source<BorrowersReport>;
@@ -64,7 +62,6 @@ export const SOURCE_PERMISSIONS: Record<SourceKey, Permission[]> = {
   efficiency: ["reports:view"],
   products: ["reports:view"],
   performance: ["reports:view"],
-  provisioning: ["reports:view"],
   shareCapital: ["reports:view", "share_capital:view"],
   income: ["reports:view"],
   borrowers: ["reports:view"],

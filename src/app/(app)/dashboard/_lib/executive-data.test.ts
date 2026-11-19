@@ -25,7 +25,6 @@ function data(overrides: Partial<ExecutiveData> = {}): ExecutiveData {
     efficiency: LOADING,
     products: LOADING,
     performance: LOADING,
-    provisioning: LOADING,
     shareCapital: LOADING,
     income: LOADING,
     borrowers: LOADING,

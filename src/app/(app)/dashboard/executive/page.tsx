@@ -15,6 +15,7 @@ import { todayISO } from "@/lib/format";
 import {
   booksState,
   captionText,
+  cardFigureText,
   cardViews,
   executiveQuery,
   isPastPeriod,
@@ -167,7 +168,7 @@ function ExecutiveDashboard() {
             <div className="flex min-w-0 flex-col gap-4">
               <PortfolioSection data={data} pastPeriod={pastPeriod} />
               <CollectionSection data={data} pastPeriod={pastPeriod} />
-              <FinancialSection data={data} booksReady={booksReady} pastPeriod={pastPeriod} />
+              <FinancialSection data={data} booksReady={booksReady} allowance={cardFigureText(overview, "required_allowance")} />
               <OperationsSection data={data} />
               <BranchSection source={endpoints.branches} sentFilters={overview?.filters_applied ?? []} />
             </div>

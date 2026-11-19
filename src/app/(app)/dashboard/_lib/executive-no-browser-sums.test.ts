@@ -34,3 +34,17 @@ test("no dashboard file adds figures up with reduce", () => {
   const found = sources.filter((s) => /\.reduce\(/.test(s.text)).map((s) => s.path);
   assert.deepEqual(found, []);
 });
+
+test("Required Allowance is the overview card's, never the Provisioning report's total", () => {
+  // Every dashboard file, EB-D2's included: one figure, from one place.
+  const everywhere = (dir: string): string[] =>
+    readdirSync(dir).flatMap((name) => {
+      const path = join(dir, name);
+      if (statSync(path).isDirectory()) return everywhere(path);
+      return /\.tsx?$/.test(name) && !name.endsWith(".test.ts") ? [path] : [];
+    });
+  const found = everywhere(ROOT).filter((path) =>
+    /totals\??\.required_allowance|reportService\.provisioning/.test(readFileSync(path, "utf8")),
+  );
+  assert.deepEqual(found, []);
+});

@@ -193,7 +193,7 @@ export const CARD_META: Record<string, CardMeta> = {
     href: "/reports/provisioning",
     kind: "balance",
     lowerIsBetter: true,
-    formula: "Each aging bucket's unpaid principal times its provisioning rate, from the Provisioning report.",
+    formula: "The loan loss allowance the allowance posting books: each aging bucket's balance times its provisioning rate.",
   },
 };
 
@@ -278,6 +278,23 @@ function cardView(card: ExecutiveCard, sent: readonly ExecutiveFilterKey[]): Car
   };
 }
 
+/**
+ * One card's figure in words, for a section that repeats it (Required
+ * Allowance in the financial section): the card's own value or state, so the
+ * dashboard never shows two figures for one thing. A dash while it loads.
+ */
+export function cardFigureText(overview: ExecutiveOverview | null, key: string): string {
+  const card = overview?.cards[key];
+  if (!card) return "—";
+  if (card.state === "no_access") return CARD_STATE_TEXT.no_access;
+  return cardView(card, overview.filters_applied).valueText;
+}
+
+/** A balance section's heading: "(as of today)" only while it shows today's figures. */
+export function balanceHeading(title: string, pastPeriod: boolean): string {
+  return pastPeriod ? title : `${title} (as of today)`;
+}
+
 /** The cards to show, in the server's order. A card the caller may not see (`no_access`) is left out. */
 export function cardViews(overview: ExecutiveOverview): CardView[] {
   return Object.values(overview.cards)
@@ -300,6 +317,9 @@ const LENDING_COLUMNS: { key: ExecutiveBranchColumn; header: string; format: For
   { key: "collection_efficiency", header: "Collection Efficiency", format: "percent" },
 ];
 
+/** The columns read as of `balances_as_of` (today); the rest cover the period. */
+const BALANCE_COLUMNS = new Set<ExecutiveBranchColumn>(["gross_loan_portfolio", "total_outstanding", "active_loans", "past_due_amount", "par_30"]);
+
 const BOOK_COLUMNS: { key: ExecutiveBranchColumn; header: string; format: Format }[] = [
   { key: "revenue", header: "Revenue", format: "money" },
   { key: "expenses", header: "Expenses", format: "money" },
@@ -320,6 +340,8 @@ export interface BranchTableColumn {
 }
 
 export interface BranchTable {
+  /** Header groups over the columns, so today's balances never read as the past period's. */
+  groups: { label: string; span: number }[];
   columns: BranchTableColumn[];
   rows: { key: string; name: string; cells: Partial<Record<ExecutiveBranchColumn, string>> }[];
   /** The server's totals, never a sum of the rows. */
@@ -342,7 +364,13 @@ export function branchTable(response: ExecutiveBranches, sent: readonly Executiv
   const cells = (row: Omit<ExecutiveBranches["totals"], never>) =>
     Object.fromEntries(columns.map((c) => [c.key, cellText(row[c.key], c.format)]));
 
+  const balances = LENDING_COLUMNS.filter((c) => BALANCE_COLUMNS.has(c.key)).length;
   return {
+    groups: [
+      { label: `Balances as of ${formatDate(response.balances_as_of)}`, span: balances },
+      { label: "For the period", span: LENDING_COLUMNS.length - balances },
+      ...(books ? [{ label: "Books, for the period", span: BOOK_COLUMNS.length }] : []),
+    ],
     columns: columns.map((c) => ({
       key: c.key,
       header: c.header,

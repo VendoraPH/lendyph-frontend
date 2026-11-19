@@ -31,6 +31,14 @@ export function BranchSection({ source, sentFilters }: { source: EndpointSource<
                 <table className="w-full min-w-[960px] text-sm">
                   <caption className="sr-only">Performance by branch</caption>
                   <thead className="text-xs text-muted-foreground">
+                    <tr>
+                      <td />
+                      {table.groups.map((g) => (
+                        <th key={g.label} scope="colgroup" colSpan={g.span} className="border-b px-2 pt-1 text-center font-medium">
+                          {g.label}
+                        </th>
+                      ))}
+                    </tr>
                     <tr className="border-b">
                       <th scope="col" className="py-2 pr-2 text-left font-medium">
                         Branch

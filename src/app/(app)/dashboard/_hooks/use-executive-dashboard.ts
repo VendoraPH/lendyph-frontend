@@ -24,7 +24,7 @@ type Load = () => Promise<unknown>;
 /**
  * Every read the dashboard makes, by source; each needs the permissions in
  * `SOURCE_PERMISSIONS`. Balances (loan balance summary, products,
- * performance, past due, aging, provisioning) take no dates: the server dates
+ * performance, past due, aging) take no dates: the server dates
  * them to today. A past as-of date is never sent ("No backfill"): for a past
  * period the sections show "No snapshot for this date" instead. The rest cover
  * the period.
@@ -40,7 +40,6 @@ function requests({ period, branchId }: { period: ServerRange; branchId?: number
     efficiency: () => reportService.collectionEfficiency(range),
     products: () => reportService.portfolioByProduct(branch),
     performance: () => reportService.performance(range),
-    provisioning: () => reportService.provisioning(branch),
     shareCapital: () => reportService.shareCapital(range),
     income: () => reportService.income(range),
     borrowers: () => reportService.borrowers(range),
@@ -72,7 +71,6 @@ const SOURCE_KEYS: SourceKey[] = [
   "efficiency",
   "products",
   "performance",
-  "provisioning",
   "shareCapital",
   "income",
   "borrowers",

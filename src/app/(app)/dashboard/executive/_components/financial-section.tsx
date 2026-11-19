@@ -22,16 +22,23 @@ const money = (v: number | null) => formatMetric(v, "currency");
 /**
  * `booksReady` is the overview's book cards' state: while the books aren't set
  * up, the ledger figures read "Requires configuration", as the cards do, never
- * ₱0.00. `pastPeriod`: the required allowance is today's, so a past period
- * shows "No snapshot for this date".
+ * ₱0.00. Required Allowance is the overview card's own figure (and state).
  */
-export function FinancialSection({ data, booksReady, pastPeriod }: { data: ExecutiveData; booksReady: boolean; pastPeriod: boolean }) {
+export function FinancialSection({
+  data,
+  booksReady,
+  allowance,
+}: {
+  data: ExecutiveData;
+  booksReady: boolean;
+  /** The overview's Required Allowance card in words: the figure the allowance posting books. */
+  allowance: string;
+}) {
   const books = booksReady ? null : CARD_STATE_TEXT.requires_configuration;
   const acc = readyData(data.accounting);
   const series = incomeExpenseSeries(acc).map((p) => ({ ...p, label: monthLabel(p.month) }));
   const income = readyData(data.income);
   const share = readyData(data.shareCapital);
-  const provisioning = readyData(data.provisioning);
 
   return (
     <SectionShell
@@ -106,8 +113,8 @@ export function FinancialSection({ data, booksReady, pastPeriod }: { data: Execu
             <Figure label="Share capital" value={figureText(data.shareCapital, toNumber(share?.closing_balance), "currency")} hint="Closing balance" />
             <Figure
               label="Required allowance"
-              value={pastPeriod ? CARD_STATE_TEXT.no_snapshot : figureText(data.provisioning, toNumber(provisioning?.totals?.required_allowance), "currency")}
-              hint="Provisioning, as of today"
+              value={allowance}
+              hint="As the allowance posting books it"
             />
           </div>
         </div>

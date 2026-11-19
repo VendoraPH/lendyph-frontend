@@ -6,7 +6,7 @@ import { executiveDocument } from "./executive-export";
 
 const KEYS: (keyof ExecutiveData)[] = [
   "balance", "aging", "cashFlow", "efficiency", "products", "performance",
-  "provisioning", "shareCapital", "income", "borrowers", "disbursements", "accounting", "loanStats",
+  "shareCapital", "income", "borrowers", "disbursements", "accounting", "loanStats",
   "pastDue",
 ];
 

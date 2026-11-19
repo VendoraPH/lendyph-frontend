@@ -5,7 +5,9 @@ import {
   EXECUTIVE_PRESETS,
   booksState,
   branchTable,
+  balanceHeading,
   captionText,
+  cardFigureText,
   cardViews,
   isPastPeriod,
   rangeProblem,
@@ -361,4 +363,29 @@ test("a custom range missing a date asks for it, and sends nothing", () => {
   assert.equal(rangeProblem({ preset: "custom", from: undefined, to: "2026-11-20" }), "Choose a start date");
   assert.equal(rangeProblem({ preset: "custom", from: "2026-11-01", to: "2026-11-20" }), null);
   assert.equal(rangeProblem({ preset: "this_month" }), null);
+});
+
+// ── Re-check E5 ────────────────────────────────────────────────────────────
+
+test("Required Allowance anywhere on the dashboard is the overview card's figure", () => {
+  const o = overview([card({ key: "required_allowance", value: 45037.5 })]);
+  assert.equal(cardFigureText(o, "required_allowance"), "₱45,037.50");
+  assert.equal(cardFigureText(overview([card({ key: "required_allowance", state: "no_snapshot" })]), "required_allowance"), "No snapshot for this date");
+  assert.equal(cardFigureText(overview([card({ key: "required_allowance", state: "no_access" })]), "required_allowance"), "Not available");
+  assert.equal(cardFigureText(null, "required_allowance"), "—");
+});
+
+test("a balance heading says as of today only while it shows today's figures", () => {
+  assert.equal(balanceHeading("Past due aging", false), "Past due aging (as of today)");
+  assert.equal(balanceHeading("Past due aging", true), "Past due aging");
+});
+
+test("the branch table groups its columns: balances as of the server's date, then the period", () => {
+  const table = branchTable(branches({ balances_as_of: "2026-11-19" }), []);
+  assert.deepEqual(table.groups, [
+    { label: "Balances as of Nov 19, 2026", span: 5 },
+    { label: "For the period", span: 3 },
+    { label: "Books, for the period", span: 3 },
+  ]);
+  assert.deepEqual(branchTable(branches({ books_state: "no_access" }), []).groups.map((g) => g.span), [5, 3]);
 });

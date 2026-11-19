@@ -8,7 +8,7 @@ import { readyData, type ExecutiveData } from "../../_lib/executive-data";
 import { pipelineStages, productRows, productShareSlices } from "../../_lib/executive-sections";
 import { DATA_UNAVAILABLE, formatMetric, toNumber } from "../../_lib/metrics";
 import { EXECUTIVE_LAYOUT as L } from "../../_lib/executive-layout";
-import { CARD_STATE_TEXT } from "../../_lib/executive-overview";
+import { CARD_STATE_TEXT, balanceHeading } from "../../_lib/executive-overview";
 import { Figure, SectionShell, SourceGate } from "./section-shell";
 
 const SLICE_COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"];
@@ -95,7 +95,7 @@ export function PortfolioSection({ data, pastPeriod }: { data: ExecutiveData; pa
 
       <div className={`mt-4 ${L.twoUp}`}>
         <div className={L.cell}>
-          <h3 className="mb-2 text-sm font-medium">Outstanding by component (as of today)</h3>
+          <h3 className="mb-2 text-sm font-medium">{balanceHeading("Outstanding by component", pastPeriod)}</h3>
           <SourceGate source={data.balance} height="h-24" notice={notice}>
             <div className={L.tiles}>
               <Figure label="Principal" value={money(toNumber(out?.principal))} />
