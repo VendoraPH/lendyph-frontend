@@ -9,12 +9,12 @@ import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { only, paged } from "@/lib/amla/api";
 import type { AmlaPage } from "@/types/amla";
+import type { AmlaMaskedId } from "@/types/amla-screening";
 import type {
   AmlaCddRow,
   AmlaCddView,
   AmlaIdVerification,
   AmlaIdVerificationBody,
-  AmlaMemberIdDocument,
   AmlaProfileBody,
   AmlaReview,
   AmlaReviewBody,
@@ -62,9 +62,8 @@ export const amlaCddApi = {
     api.post<AmlaRiskAssessment>(A.CDD_RISK_ASSESSMENTS(s.segment, s.id), body),
   review: (s: AmlaSubjectAddress, body: AmlaReviewBody) => api.post<AmlaReview>(A.CDD_REVIEWS(s.segment, s.id), body),
   /**
-   * The member's documents, for picking one of their own valid IDs (needs
-   * `borrowers:view`). The CDD API lists no IDs of its own, so this reads the
-   * member screen's list; only each ID's type and last four are ever shown.
+   * The subject's IDs on record, each once, by type and last four only (AMLA-B5,
+   * `amla:cdd`, logged). The full number never reaches the browser.
    */
-  memberIdDocuments: (memberId: number) => api.get<AmlaMemberIdDocument[]>(API_ENDPOINTS.DOCUMENTS.BORROWER_LIST(memberId)),
+  validIds: (s: AmlaSubjectAddress) => api.get<AmlaMaskedId[]>(A.CDD_VALID_IDS(s.segment, s.id)),
 };

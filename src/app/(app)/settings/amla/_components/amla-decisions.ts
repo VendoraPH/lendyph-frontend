@@ -1,7 +1,7 @@
 import { amlaApi } from "@/lib/amla/api";
 import { amlaChangeRequestChanges, type AmlaRuleBaselines } from "@/lib/amla/settings-view";
 import type { AmlaChangeRequest } from "@/types/amla";
-import type { AmlaNoteAction } from "./amla-note-dialog";
+import type { AmlaNoteAction } from "@/components/amla/amla-note-dialog";
 
 export type AmlaDecision = "approve" | "reject" | "withdraw";
 

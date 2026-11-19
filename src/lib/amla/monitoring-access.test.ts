@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Permission } from "@/types";
-import { AMLA_ALERTS_PERMISSION, AMLA_CTR_PERMISSION, amlaMonitoringAccess, amlaRecordId } from "./monitoring-access";
+import { AMLA_ALERTS_PERMISSION, AMLA_CTR_PERMISSION, amlaMonitoringAccess } from "./monitoring-access";
+import { amlaRecordId } from "./record-id";
 
 const holds = (...held: string[]) => (p: Permission) => held.includes(p);
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");

@@ -205,6 +205,9 @@ export const AMLA_NAV: NavItem = {
     // The rules in force, and how detection runs: head office only, as its endpoint is.
     { title: "Transaction Monitoring", href: "/amla/monitoring", permission: "amla:view", alsoRequires: ["branches:view_all"] },
     { title: "Customers", href: "/amla/customers", permission: "amla:cdd", alsoRequires: ["amla:view"] },
+    // Screening and the orders register cover the whole cooperative, as their endpoints do.
+    { title: "Screening", href: "/amla/screening", permission: "amla:screening", alsoRequires: ["amla:view", "branches:view_all"] },
+    { title: "Orders Register", href: "/amla/orders", permission: "amla:sanctions", alsoRequires: ["amla:view", "branches:view_all"] },
     {
       title: "Risk Rules",
       href: "/amla/risk-rules",
