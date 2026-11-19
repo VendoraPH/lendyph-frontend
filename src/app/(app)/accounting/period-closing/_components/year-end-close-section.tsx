@@ -14,10 +14,11 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useAccountingResource } from "@/hooks";
+import { useAccountingResource, useChartOfAccounts } from "@/hooks";
 import { notifySuccess } from "@/lib/notify";
 import { accountingService } from "@/services";
 import type { AccountingPeriod, YearClose } from "@/types";
+import { ChartNotSetUp } from "../../_components/chart-not-set-up";
 import { DataState } from "../../_components/data-state";
 import {
   YEAR_CLOSE_FORBIDDEN,
@@ -49,6 +50,8 @@ function Forbidden() {
 }
 
 export function YearEndCloseSection({ periods, closes, onChanged }: YearEndCloseSectionProps) {
+  // With no saved chart there is no net surplus account to close into.
+  const chartNotSetUp = useChartOfAccounts().status === "not_set_up";
   const yearItems = useMemo(() => closeYearItems(periods, closes), [periods, closes]);
   const [picked, setPicked] = useState<string | null>(null);
   const selected =
@@ -98,7 +101,9 @@ export function YearEndCloseSection({ periods, closes, onChanged }: YearEndClose
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
-        {yearItems.length === 0 ? (
+        {chartNotSetUp ? (
+          <ChartNotSetUp description="The year-end close moves the year's income and expenses to the chart's net surplus account, so the chart has to be saved first." />
+        ) : yearItems.length === 0 ? (
           <p className="text-sm text-muted-foreground">Every year in the books is closed.</p>
         ) : (
           <>

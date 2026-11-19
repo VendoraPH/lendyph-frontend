@@ -188,6 +188,22 @@ test("the confirm names the year, the date and the account", () => {
   );
 });
 
+test("with no net surplus account (no saved chart) the preview and confirm still read in words", () => {
+  // Flag 10: reading `.code` of a null account took the page to "Something went wrong".
+  const noAccount = preview({ net_surplus_account: null, can_close: false });
+  assert.equal(previewView(noAccount).movesTo, "No net surplus account is set");
+  assert.equal(
+    closeConfirmText(noAccount),
+    "This posts a closing entry for each branch dated Dec 31, 2026, moving the year's income and expenses to the net surplus account, then closes every month of 2026. Reopen only to correct the year.",
+  );
+});
+
+test("the section shows the set-up state while no chart is saved", () => {
+  const section = source("_components/year-end-close-section.tsx");
+  assert.match(section, /status === "not_set_up"/);
+  assert.match(section, /<ChartNotSetUp/);
+});
+
 test("a refused close shows the server's words: a 409's message, or each blocking reason on year", () => {
   assert.deepEqual(closeRefusalReasons(httpError(409, "2026 is already closed."), 2026), ["2026 is already closed."]);
   assert.deepEqual(

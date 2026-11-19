@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { accountingService } from "@/services";
 import { templateAccounts } from "@/constants/chart-of-accounts";
+import { chartStatus, type ChartStatus } from "@/lib/accounting/chart-status";
 import type { DrainResult } from "@/lib/paginate";
 import type { Account } from "@/types";
 import { useAccountingResource } from "./use-accounting-resource";
@@ -38,6 +39,11 @@ export interface ChartOfAccounts {
    * how you get a 409 (or worse, a second chart).
    */
   notBuiltYet: boolean;
+  /**
+   * Why `isTemplate` is set, told apart: `not_set_up` only when the server
+   * answered with no accounts, never for a refused or failed read.
+   */
+  status: ChartStatus;
   /** Re-read the chart, e.g. after seeding it. */
   refetch: () => void;
 }
@@ -77,6 +83,7 @@ export function useChartOfAccounts(): ChartOfAccounts {
     total: isTemplate ? null : (data?.total ?? null),
     isTemplate,
     notBuiltYet: unavailable || (canView && !error && (data?.rows.length ?? 0) === 0),
+    status: chartStatus({ canView, loading, unavailable, error, rows: data?.rows.length ?? null }),
     refetch,
   };
 }
