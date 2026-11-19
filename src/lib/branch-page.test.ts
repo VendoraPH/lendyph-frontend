@@ -64,6 +64,17 @@ test("Make main office is offered on an active branch that isn't already the mai
   );
 });
 
+test("Make main office is disabled, with the reason, while the branch has a closure waiting", () => {
+  assert.deepEqual(
+    mainOfficeAction({ status: "active", is_active: true, is_main_office: false }, manager, { closureWaiting: true }),
+    { disabledReason: "A request to close this branch is waiting. Approve, reject or cancel it first." },
+  );
+  assert.deepEqual(
+    mainOfficeAction({ status: "active", is_active: true, is_main_office: false }, manager, { closureWaiting: false }),
+    { disabledReason: null },
+  );
+});
+
 test("figures read the server's values in words, ₱ with two decimals; zero is ₱0.00", () => {
   const rows = branchFigureRows({
     active_loans: 12,

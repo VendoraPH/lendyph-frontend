@@ -59,9 +59,14 @@ test("a closed branch offers no status action: it stays closed", () => {
 });
 
 test("the main office can't be suspended, and says why", () => {
-  const action = branchStatusAction({ status: "active", is_active: true, is_main_office: true });
+  const action = branchStatusAction({ status: "active", is_active: true, is_main_office: true }, true);
   assert.equal(action?.target, "suspended");
   assert.equal(action?.disabledReason, "The main office stays active. Make another branch the main office first.");
+});
+
+test("with the multi-branch flag off, Make main office is hidden, so the reason doesn't point to it", () => {
+  const action = branchStatusAction({ status: "active", is_active: true, is_main_office: true }, false);
+  assert.equal(action?.disabledReason, "The main office stays active.");
 });
 
 test("a branch from a backend before MB-BE1 still gets its action from is_active", () => {

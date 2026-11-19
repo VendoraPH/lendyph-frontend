@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type RefObject } from "react";
 import { Landmark } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DisabledReason } from "@/components/common/disabled-reason";
@@ -10,11 +10,20 @@ import { mainOfficeAction } from "@/lib/branch-page";
 import { notifySuccess } from "@/lib/notify";
 import { branchService, type ApiBranch } from "@/services/branch.service";
 
+interface MainOfficeActionProps {
+  branch: ApiBranch;
+  onChanged: () => void;
+  /** A closure request waits on this branch (from GET /branches/{id}/closure). */
+  closureWaiting: boolean;
+  /** Takes focus after success, since this button then disappears. */
+  fallbackFocus: RefObject<HTMLElement | null>;
+}
+
 /** "Make main office", with a reason that goes into both branches' audit rows (multi-branch flag). */
-export function MainOfficeAction({ branch, onChanged }: { branch: ApiBranch; onChanged: () => void }) {
+export function MainOfficeAction({ branch, onChanged, closureWaiting, fallbackFocus }: MainOfficeActionProps) {
   const { can } = usePermission();
   const [open, setOpen] = useState(false);
-  const action = mainOfficeAction(branch, can);
+  const action = mainOfficeAction(branch, can, { closureWaiting });
   if (!action) return null;
 
   return (
@@ -31,6 +40,7 @@ export function MainOfficeAction({ branch, onChanged }: { branch: ApiBranch; onC
         title={`Make ${branch.name} the main office`}
         description="The current main office stops being the main office. The reason goes into both branches' audit trails."
         confirmLabel="Make main office"
+        fallbackFocus={fallbackFocus}
         onConfirm={async (reason) => {
           await branchService.makeMainOffice(branch.id, { reason });
           notifySuccess(`${branch.name} is now the main office`);

@@ -51,18 +51,26 @@ export interface BranchStatusAction {
 /** `BranchStatus::change()`'s refusal for the main office, so the page says it before the server would. */
 export const MAIN_OFFICE_STAYS_ACTIVE = "The main office stays active. Make another branch the main office first.";
 
+/** With the multi-branch flag off there is no Make main office to point to. */
+const MAIN_OFFICE_STAYS_ACTIVE_ONLY = "The main office stays active.";
+
 /**
  * Suspend for an active branch, Reactivate for a suspended one, nothing for a
  * closed one (a closed branch stays closed). The main office stays active, so
- * its Suspend is shown disabled with the reason.
+ * its Suspend is shown disabled with the reason; it names Make main office only
+ * when the multi-branch flag shows that action.
  */
-export function branchStatusAction(branch: BranchStatusFields): BranchStatusAction | null {
+export function branchStatusAction(branch: BranchStatusFields, multiBranch = false): BranchStatusAction | null {
   const status = branchStatusOf(branch);
   if (status === "closed") return null;
   if (status === "suspended") return { target: "active", label: "Reactivate", disabledReason: null };
   return {
     target: "suspended",
     label: "Suspend",
-    disabledReason: branch.is_main_office ? MAIN_OFFICE_STAYS_ACTIVE : null,
+    disabledReason: branch.is_main_office
+      ? multiBranch
+        ? MAIN_OFFICE_STAYS_ACTIVE
+        : MAIN_OFFICE_STAYS_ACTIVE_ONLY
+      : null,
   };
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -11,6 +11,7 @@ import {
 import { DataState } from "@/components/common/data-state";
 import { useApiResource } from "@/hooks/use-api-resource";
 import { branchFigureRows, type BranchPageFeatures } from "@/lib/branch-page";
+import type { BranchClosureInfo } from "@/lib/branch-closure";
 import { formatDate } from "@/lib/format";
 import { branchService, type ApiBranch } from "@/services/branch.service";
 import { BranchClosurePanel } from "./branch-closure-panel";
@@ -38,9 +39,15 @@ export function BranchDetailsDialog({ branch, onOpenChange, features, onChanged 
 function DetailsBody({ branchId, features, onChanged }: { branchId: number; features: BranchPageFeatures; onChanged: () => void }) {
   const fetcher = useCallback(() => branchService.detail(branchId), [branchId]);
   const resource = useApiResource<ApiBranch>(fetcher);
+  // Read here, not in the panel, so Make main office knows a closure waits.
+  const closureFetcher = useCallback(() => branchService.closure(branchId), [branchId]);
+  const closure = useApiResource<BranchClosureInfo>(closureFetcher, features.closure);
+  const closureWaiting = closure.data?.request?.status === "pending";
+  const titleRef = useRef<HTMLHeadingElement>(null);
 
   function changed() {
     resource.refetch();
+    closure.refetch();
     onChanged();
   }
 
@@ -48,7 +55,7 @@ function DetailsBody({ branchId, features, onChanged }: { branchId: number; feat
   return (
     <>
       <DialogHeader>
-        <DialogTitle className="flex flex-wrap items-center gap-2">
+        <DialogTitle ref={titleRef} tabIndex={-1} className="flex flex-wrap items-center gap-2 outline-none">
           {loaded?.name ?? "Branch details"}
           {loaded && <BranchStatusBadge branch={loaded} />}
           {loaded?.is_main_office && <MainOfficeBadge />}
@@ -63,10 +70,15 @@ function DetailsBody({ branchId, features, onChanged }: { branchId: number; feat
               {features.figures && branch.figures && <Figures branch={branch} />}
               {features.mainOffice && (
                 <div>
-                  <MainOfficeAction branch={branch} onChanged={changed} />
+                  <MainOfficeAction
+                    branch={branch}
+                    onChanged={changed}
+                    closureWaiting={closureWaiting}
+                    fallbackFocus={titleRef}
+                  />
                 </div>
               )}
-              {features.closure && <BranchClosurePanel branch={branch} onChanged={changed} />}
+              {features.closure && <BranchClosurePanel branch={branch} resource={closure} onChanged={changed} fallbackFocus={titleRef} />}
             </div>
           )}
         </DataState>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useId, useState } from "react";
+import { useId, useState, type RefObject } from "react";
 import { CheckCircle2, CircleAlert, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { DataState } from "@/components/common/data-state";
 import { DisabledReason } from "@/components/common/disabled-reason";
 import { ReasonDialog } from "@/components/common/reason-dialog";
-import { useApiResource } from "@/hooks/use-api-resource";
+import type { ApiResource } from "@/hooks/use-api-resource";
 import { useAuthStore } from "@/store";
 import {
   checklistItemWords,
@@ -29,19 +29,27 @@ type Dialog = "request" | "approve" | "reject" | null;
  * cancellable by the requester. Rendered only for branches:manage plus
  * branches:view_all, behind the multi-branch flag.
  */
-export function BranchClosurePanel({ branch, onChanged }: { branch: ApiBranch; onChanged: () => void }) {
+export function BranchClosurePanel({
+  branch,
+  resource,
+  onChanged,
+  fallbackFocus,
+}: {
+  branch: ApiBranch;
+  /** GET /branches/{id}/closure, read by the details dialog; `onChanged` refetches it. */
+  resource: ApiResource<BranchClosureInfo>;
+  onChanged: () => void;
+  /**
+   * Every closure action removes the button that started it, and the refresh
+   * redraws this panel, so focus goes to this element (the dialog's title).
+   */
+  fallbackFocus: RefObject<HTMLElement | null>;
+}) {
   const userId = useAuthStore((s) => s.user?.id ?? null);
-  const fetcher = useCallback(() => branchService.closure(branch.id), [branch.id]);
-  const resource = useApiResource<BranchClosureInfo>(fetcher);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [effectiveOn, setEffectiveOn] = useState("");
   const [cancelling, setCancelling] = useState(false);
   const dateId = useId();
-
-  function changed() {
-    resource.refetch();
-    onChanged();
-  }
 
   async function cancelRequest() {
     setCancelling(true);
@@ -55,7 +63,8 @@ export function BranchClosurePanel({ branch, onChanged }: { branch: ApiBranch; o
     setCancelling(false);
     if (!ok) return;
     notifySuccess("Request to close cancelled");
-    changed();
+    onChanged();
+    fallbackFocus.current?.focus();
   }
 
   return (
@@ -156,12 +165,13 @@ export function BranchClosurePanel({ branch, onChanged }: { branch: ApiBranch; o
         title={`Ask to close ${branch.name}`}
         description="A different user approves it. The server checks the checklist again before the branch closes, and the request goes into the audit trail."
         confirmLabel="Ask to close"
+        fallbackFocus={fallbackFocus}
         destructive
         missingFields={effectiveOn ? [] : ["Closing date"]}
         onConfirm={async (reason) => {
           await branchService.requestClosure(branch.id, { effective_on: effectiveOn, reason });
           notifySuccess("Request to close sent for approval");
-          changed();
+          onChanged();
         }}
       >
         <div className="space-y-2">
@@ -190,13 +200,14 @@ export function BranchClosurePanel({ branch, onChanged }: { branch: ApiBranch; o
         title={`Approve closing ${branch.name}`}
         description="The branch closes on the requested date and takes nothing new after that. This can't be undone."
         confirmLabel="Approve closing"
+        fallbackFocus={fallbackFocus}
         reasonLabel="Note"
         reasonRequired={false}
         destructive
         onConfirm={async (note) => {
           await branchService.approveClosure(branch.id, { note: note || null });
           notifySuccess(`${branch.name} is closed`);
-          changed();
+          onChanged();
         }}
       />
 
@@ -206,11 +217,12 @@ export function BranchClosurePanel({ branch, onChanged }: { branch: ApiBranch; o
         title={`Reject closing ${branch.name}`}
         description="The branch stays open. The note goes into the audit trail."
         confirmLabel="Reject"
+        fallbackFocus={fallbackFocus}
         reasonLabel="Note"
         onConfirm={async (note) => {
           await branchService.rejectClosure(branch.id, { note });
           notifySuccess("Request to close rejected");
-          changed();
+          onChanged();
         }}
       />
     </section>

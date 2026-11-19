@@ -1,9 +1,10 @@
 "use client";
 
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { useDialogOpening } from "@/hooks/use-dialog-opening";
 import { getErrorMessage } from "@/lib/api-error";
+import { dialogFinalFocus } from "@/lib/dialog-focus";
 import { notifyValidation } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -34,6 +35,11 @@ interface ReasonDialogProps {
   destructive?: boolean;
   /** Fields above the reason (a closing date); the caller owns their state. */
   children?: ReactNode;
+  /**
+   * Where focus goes after a success that removes the button that opened the
+   * dialog; otherwise focus returns to that button.
+   */
+  fallbackFocus?: RefObject<HTMLElement | null>;
   /** Names of the caller's own required fields still empty, checked on confirm. */
   missingFields?: string[];
   /**
@@ -62,6 +68,7 @@ export function ReasonDialog({
   destructive = false,
   children,
   missingFields = [],
+  fallbackFocus,
   onConfirm,
 }: ReasonDialogProps) {
   const fieldId = useId();
@@ -69,13 +76,27 @@ export function ReasonDialog({
   const [reason, setReason] = useState("");
   const [refusal, setRefusal] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const alertRef = useRef<HTMLParagraphElement>(null);
+  // Set only in handlers: true once the action succeeded and closed the dialog.
+  const succeeded = useRef(false);
   if (useDialogOpening(open, title)) {
     setReason("");
     setRefusal(null);
   }
 
+  // A refusal takes focus, so it is read out and focus never falls to the page.
+  useEffect(() => {
+    if (refusal) alertRef.current?.focus();
+  }, [refusal]);
+
+  function close() {
+    succeeded.current = false;
+    onOpenChange(false);
+  }
+
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (busy) return;
     const missing = [...missingFields, ...(reasonRequired && !reason.trim() ? [reasonLabel] : [])];
     if (missing.length > 0) {
       notifyValidation(missing);
@@ -88,13 +109,17 @@ export function ReasonDialog({
       (err: unknown) => getErrorMessage(err, `We couldn't ${confirmLabel.toLowerCase()}. Please try again.`),
     );
     setBusy(false);
-    if (failure === null) onOpenChange(false);
-    else setRefusal(failure);
+    if (failure === null) {
+      succeeded.current = true;
+      onOpenChange(false);
+    } else setRefusal(failure);
   }
 
   return (
-    <Dialog open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
-      <DialogContent>
+    <Dialog open={open} onOpenChange={(next) => !busy && (next ? onOpenChange(true) : close())}>
+      <DialogContent
+        finalFocus={() => dialogFinalFocus({ succeeded: succeeded.current, fallback: fallbackFocus?.current ?? null })}
+      >
         <form onSubmit={submit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
@@ -118,19 +143,22 @@ export function ReasonDialog({
           </div>
           {refusal && (
             <p
+              ref={alertRef}
               id={errorId}
               role="alert"
-              className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+              tabIndex={-1}
+              className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive outline-none focus-visible:ring-3 focus-visible:ring-destructive/20"
             >
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
               {refusal}
             </p>
           )}
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
+            <Button type="button" variant="outline" onClick={close} disabled={busy}>
               Cancel
             </Button>
-            <Button type="submit" variant={destructive ? "destructive" : "default"} disabled={busy}>
+            {/* Stays focusable while busy, so focus never drops to the page. */}
+            <Button type="submit" variant={destructive ? "destructive" : "default"} disabled={busy} focusableWhenDisabled>
               {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
               {confirmLabel}
             </Button>

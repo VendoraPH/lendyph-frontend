@@ -41,13 +41,23 @@ export function branchPageFeatures(multiBranch: boolean, can: Can): BranchPageFe
 /**
  * Make main office: on an active branch that isn't already it, for
  * branches:manage plus view_all. A suspended branch is shown it disabled with
- * the server's reason; a closed one never is.
+ * the server's reason; a closed one never is. While a closure waits it is
+ * disabled too: moving the main office there would make the closure's
+ * approval fail (MB-BE2 makes the server refuse it as well).
  */
-export function mainOfficeAction(branch: BranchStatusFields, can: Can): { disabledReason: string | null } | null {
+export function mainOfficeAction(
+  branch: BranchStatusFields,
+  can: Can,
+  { closureWaiting = false }: { closureWaiting?: boolean } = {},
+): { disabledReason: string | null } | null {
   if (!mayChangeBranchStatus(can) || branch.is_main_office) return null;
   const status = branchStatusOf(branch);
   if (status === "closed") return null;
-  return { disabledReason: status === "active" ? null : "Only an active branch can be the main office." };
+  if (status !== "active") return { disabledReason: "Only an active branch can be the main office." };
+  if (closureWaiting) {
+    return { disabledReason: "A request to close this branch is waiting. Approve, reject or cancel it first." };
+  }
+  return { disabledReason: null };
 }
 
 /** `BranchFigures::for()`: counts and peso figures, all from the server. */

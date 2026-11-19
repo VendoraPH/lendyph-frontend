@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { env } from "@/config/env";
 import { DisabledReason } from "@/components/common/disabled-reason";
 import { ReasonDialog } from "@/components/common/reason-dialog";
 import { usePermission } from "@/hooks/use-permission";
@@ -32,7 +33,7 @@ const COPY = {
 export function BranchStatusActionButton({ branch, onChanged }: { branch: ApiBranch; onChanged: () => void }) {
   const { can } = usePermission();
   const [open, setOpen] = useState(false);
-  const action = branchStatusAction(branch);
+  const action = branchStatusAction(branch, env.features.multiBranch);
   if (!action || !mayChangeBranchStatus(can)) return null;
 
   const copy = COPY[action.target];
