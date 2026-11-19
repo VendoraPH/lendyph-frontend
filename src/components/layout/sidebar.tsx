@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { Suspense, useState, useEffect, useMemo, useRef, useCallback, type ReactNode } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { SIDEBAR_NAV } from "@/constants";
 import { navChildAllowed, navItemAllowed, navItemHref, type NavItem } from "@/constants/navigation";
 import { usePermission } from "@/hooks";
@@ -28,7 +28,7 @@ import {
 import { BrandLogo } from "@/components/common";
 import { selectSidebarCollapsed, useUIStore } from "@/store/ui-store";
 import { systemService } from "@/services";
-import { collapsedNavLabel, countLabel } from "./sidebar-labels";
+import { collapsedNavLabel, countLabel, navActivePath } from "./sidebar-labels";
 
 interface SidebarProps {
   mobileOpen: boolean;
@@ -283,6 +283,11 @@ function NavLink({
   );
 }
 
+/** The highlighted path, from the query string too, which needs a Suspense boundary. */
+function ActivePathWithQuery({ pathname, children }: { pathname: string; children: (activePath: string) => ReactNode }) {
+  return children(navActivePath(pathname, useSearchParams().get("edit")));
+}
+
 // ── Sidebar Content ──
 
 function SidebarContent({
@@ -348,6 +353,36 @@ function SidebarContent({
     };
   }, []);
 
+  /** The menu's links, highlighting `activePath`. */
+  function renderNavLinks(activePath: string) {
+    return SIDEBAR_NAV.filter((item) => navItemAllowed(item, can)).map((item) => (
+      <NavLink
+        key={item.href}
+        item={item}
+        pathname={activePath}
+        collapsed={collapsed}
+        onNavigate={onNavigate}
+        badge={
+          item.href === "/borrowers"
+            ? pendingRegistrationsCount
+            : item.href === "/loans"
+              ? pendingLoanApprovals
+              : undefined
+        }
+        badgeLabel={
+          item.href === "/borrowers"
+            ? countLabel(pendingRegistrationsCount, "registration", "awaiting review")
+            : item.href === "/loans"
+              ? countLabel(pendingLoanApprovals, "loan application", "awaiting your approval")
+              : undefined
+        }
+        childBadges={
+          item.href === "/loans" ? { "/loans": pendingLoanApprovals } : undefined
+        }
+      />
+    ));
+  }
+
   return (
     <TooltipProvider>
       <div className="flex h-full flex-col">
@@ -391,32 +426,9 @@ function SidebarContent({
               Navigation
             </span>
           )}
-          {SIDEBAR_NAV.filter((item) => navItemAllowed(item, can)).map((item) => (
-            <NavLink
-              key={item.href}
-              item={item}
-              pathname={pathname}
-              collapsed={collapsed}
-              onNavigate={onNavigate}
-              badge={
-                item.href === "/borrowers"
-                  ? pendingRegistrationsCount
-                  : item.href === "/loans"
-                    ? pendingLoanApprovals
-                    : undefined
-              }
-              badgeLabel={
-                item.href === "/borrowers"
-                  ? countLabel(pendingRegistrationsCount, "registration", "awaiting review")
-                  : item.href === "/loans"
-                    ? countLabel(pendingLoanApprovals, "loan application", "awaiting your approval")
-                    : undefined
-              }
-              childBadges={
-                item.href === "/loans" ? { "/loans": pendingLoanApprovals } : undefined
-              }
-            />
-          ))}
+          <Suspense fallback={renderNavLinks(pathname)}>
+            <ActivePathWithQuery pathname={pathname}>{renderNavLinks}</ActivePathWithQuery>
+          </Suspense>
         </nav>
 
         {/* Footer */}
