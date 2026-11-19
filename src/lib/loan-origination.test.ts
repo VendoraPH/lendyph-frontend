@@ -1,32 +1,42 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import * as lib from "./loan-origination";
 import {
   APPLICATION_STATUSES,
+  EMPLOYMENT_TYPES,
+  MEMBER_DOCUMENT_MAX_MB,
+  RELEASE_METHODS,
   STAFF_TRANSITIONS,
   ageOn,
   allowedTransitions,
   borrowerFacingStatus,
   completedSteps,
   completionPercent,
-  declaredMonthlyIncome,
+  consentIsDraft,
+  declaredExpenseRows,
+  declaredIncomeRows,
   emptyDraft,
   fileProblem,
   formatDuration,
+  inWords,
   maskMobile,
   mergeDraft,
-  monthlyDebtPayments,
-  monthlyExpenses,
+  otpSentMessage,
   parseAmount,
   percentChange,
   ratioTone,
-  toMonthly,
+  reminderNotice,
+  settingsSaveBlocker,
+  allStatusCount,
+  uploadRules,
+  uploadSettingsProblems,
   validateContact,
   validateEmployment,
   validateExpenses,
   validateLoanRequest,
   validatePersonal,
 } from "./loan-origination";
-import type { PublicLoanProduct } from "@/types/loan-origination";
+import type { PublicApplicationPortal, PublicLoanProduct } from "@/types/loan-origination";
 
 const product: PublicLoanProduct = {
   id: 1,
@@ -69,17 +79,6 @@ test("applicants see Under Review for every internal processing step", () => {
   assert.equal(borrowerFacingStatus("rejected"), "not_approved");
 });
 
-test("toMonthly converts each frequency the documented way", () => {
-  assert.equal(toMonthly(1000, "monthly"), 1000);
-  assert.equal(toMonthly(1000, "weekly"), 4333.33);
-  assert.equal(toMonthly(1000, "bi_weekly"), 2166.67);
-  assert.equal(toMonthly(1000, "semi_monthly"), 2000);
-  assert.equal(toMonthly(500, "daily"), 13000);
-  assert.equal(toMonthly(12000, "annual"), 1000);
-  assert.equal(toMonthly(-5, "monthly"), 0);
-  assert.equal(toMonthly(Number.NaN, "monthly"), 0);
-});
-
 test("parseAmount accepts commas and the peso sign, and refuses negatives", () => {
   assert.equal(parseAmount("25,000"), 25000);
   assert.equal(parseAmount("₱1,500.50"), 1500.5);
@@ -88,25 +87,25 @@ test("parseAmount accepts commas and the peso sign, and refuses negatives", () =
   assert.equal(parseAmount("abc"), null);
 });
 
-test("declared income: salaried uses net pay, else gross, plus other income", () => {
-  const e = { ...emptyDraft().employment, income_source: "employed" as const, gross_monthly_income: "30000", other_regular_income: "2000" };
-  assert.equal(declaredMonthlyIncome(e), 32000);
-  assert.equal(declaredMonthlyIncome({ ...e, net_monthly_income: "25000" }), 27000);
+test("the browser never adds up income, expenses or debts: the server's assessment does", () => {
+  for (const name of ["toMonthly", "PERIODS_PER_YEAR", "declaredMonthlyIncome", "monthlyExpenses", "monthlyDebtPayments"]) {
+    assert.equal((lib as Record<string, unknown>)[name], undefined, `${name} is still exported`);
+  }
 });
 
-test("declared income: a business without a net figure is revenue less expenses, never negative", () => {
-  const e = { ...emptyDraft().employment, income_source: "business_owner" as const, monthly_revenue: "50000", monthly_business_expenses: "35000" };
-  assert.equal(declaredMonthlyIncome(e), 15000);
-  assert.equal(declaredMonthlyIncome({ ...e, monthly_business_expenses: "60000" }), 0);
-  assert.equal(declaredMonthlyIncome({ ...e, monthly_net_business_income: "12000" }), 12000);
+test("declared income rows show each entered amount as typed, with no total", () => {
+  const e = { ...emptyDraft().employment, income_source: "employed" as const, gross_monthly_income: "30000", net_monthly_income: "", other_regular_income: "2,000", salary_frequency: "semi_monthly" as const };
+  assert.deepEqual(declaredIncomeRows(e), [
+    ["Gross monthly pay", "₱30,000.00"],
+    ["Paid", "Twice a month"],
+    ["Other regular income a month", "₱2,000.00"],
+  ]);
+  const farm = { ...emptyDraft().employment, income_source: "farmer" as const, other_income_amount: "60000", other_income_frequency: "quarterly" as const };
+  assert.deepEqual(declaredIncomeRows(farm), [["Amount received", "₱60,000.00 every three months"]]);
+  assert.deepEqual(declaredIncomeRows(emptyDraft().employment), []);
 });
 
-test("declared income: other sources convert their frequency", () => {
-  const e = { ...emptyDraft().employment, income_source: "farmer" as const, other_income_amount: "60000", other_income_frequency: "quarterly" as const };
-  assert.equal(declaredMonthlyIncome(e), 20000);
-});
-
-test("expenses and debts add up, and existing loans count only when declared", () => {
+test("declared expense rows list each entered line and each existing loan, with no total", () => {
   const x = {
     ...emptyDraft().expenses,
     housing: "5000",
@@ -115,9 +114,13 @@ test("expenses and debts add up, and existing loans count only when declared", (
     has_existing_loans: true,
     existing_loans: [{ institution: "Bank", outstanding_balance: "", payment_amount: "1000", payment_frequency: "weekly" as const, remaining_term: "" }],
   };
-  assert.equal(monthlyExpenses(x), 13000);
-  assert.equal(monthlyDebtPayments(x), 5833.33);
-  assert.equal(monthlyDebtPayments({ ...x, has_existing_loans: false }), 1500);
+  assert.deepEqual(declaredExpenseRows(x), [
+    ["Rent or housing", "₱5,000.00"],
+    ["Food", "₱8,000.00"],
+    ["Credit card payments", "₱1,500.00"],
+    ["Bank", "₱1,000.00 weekly"],
+  ]);
+  assert.deepEqual(declaredExpenseRows({ ...x, has_existing_loans: false }).length, 3);
 });
 
 test("contact validation accepts PH mobile formats and an optional email", () => {
@@ -195,4 +198,70 @@ test("small helpers", () => {
   assert.equal(fileProblem({ name: "id.PDF", size: 1000, type: "" }, ["pdf", "jpg"], 5), null);
   assert.ok(fileProblem({ name: "id.exe", size: 1000, type: "" }, ["pdf"], 5));
   assert.ok(fileProblem({ name: "id.pdf", size: 6 * 1024 * 1024, type: "" }, ["pdf"], 5));
+});
+
+test("uploads follow the member document rules, whatever the link allows", () => {
+  assert.equal(MEMBER_DOCUMENT_MAX_MB, 10);
+  assert.deepEqual(uploadRules(["pdf", "JPG", "exe"], 25), { extensions: ["pdf", "jpg"], maxMb: 10 });
+  assert.deepEqual(uploadRules([], 0).maxMb, 10);
+  assert.ok(uploadRules([], 0).extensions.includes("jfif"));
+  assert.deepEqual(uploadRules([".png"], 5), { extensions: ["png"], maxMb: 5 });
+  assert.ok(fileProblem({ name: "run.exe", size: 1000, type: "" }, ["exe", "pdf"], 25));
+  assert.ok(fileProblem({ name: "scan.pdf", size: 12 * 1024 * 1024, type: "" }, ["pdf"], 25));
+  assert.equal(fileProblem({ name: "scan.jfif", size: 1000, type: "" }, [], 0), null);
+});
+
+test("upload settings outside the member document rules are refused before saving", () => {
+  assert.deepEqual(uploadSettingsProblems({ accepted_file_types: ["pdf", "jpg"], max_upload_mb: 10 }), []);
+  assert.equal(uploadSettingsProblems({ accepted_file_types: ["pdf", "exe", "heic"], max_upload_mb: 10 }).length, 1);
+  assert.match(uploadSettingsProblems({ accepted_file_types: ["pdf", "exe"], max_upload_mb: 10 })[0], /EXE/);
+  assert.equal(uploadSettingsProblems({ accepted_file_types: ["pdf"], max_upload_mb: 20 }).length, 1);
+});
+
+test("an OTP screen says a code was sent only when the server says it went out", () => {
+  const base = { resend_after: 60, expires_in: 300, channel: "sms" as const, destination: "0917•••4567" };
+  assert.match(otpSentMessage({ ...base, delivered: true }), /^We sent a code to 0917•••4567\. It expires in 5 minutes\.$/);
+  for (const r of [{ ...base, delivered: false }, base]) {
+    const text = otpSentMessage(r);
+    assert.doesNotMatch(text, /We sent/);
+    assert.match(text, /no message went out/);
+  }
+});
+
+test("a reminder reads sent only when the server sent it", () => {
+  assert.equal(reminderNotice({ channel: "sms", sent_at: "2026-11-19T01:00:00Z", delivered: true }), "Reminder sent to the applicant");
+  assert.match(reminderNotice({ channel: "sms", sent_at: null, delivered: false }), /^Reminder logged/);
+  assert.match(reminderNotice({ channel: "sms", sent_at: null }), /^Reminder logged/);
+});
+
+test("consent texts read as a draft until the server marks every one final", () => {
+  const text = (final?: boolean) => ({ version: "v1", text: "…", ...(final === undefined ? {} : { final }) });
+  const portal = (f?: boolean, credit: boolean | null = null) =>
+    ({ privacy_notice: text(f), terms: text(f), declaration: text(f), credit_authorization: credit === null ? null : text(credit) }) as unknown as PublicApplicationPortal;
+  assert.equal(consentIsDraft(portal()), true);
+  assert.equal(consentIsDraft(portal(false)), true);
+  assert.equal(consentIsDraft(portal(true)), false);
+  assert.equal(consentIsDraft(portal(true, false)), true);
+  assert.equal(consentIsDraft(portal(true, true)), false);
+});
+
+test("the All tab shows the server's total, never a sum of the status counts", () => {
+  assert.equal(allStatusCount({ submitted: 3, approved: 2 }), undefined);
+  assert.equal(allStatusCount({ submitted: 3, approved: 2, total: 9 }), 9);
+  assert.equal(allStatusCount(undefined), undefined);
+});
+
+test("company-wide settings save only with all-branch access", () => {
+  assert.equal(settingsSaveBlocker(true), null);
+  assert.match(settingsSaveBlocker(false) ?? "", /all branches/i);
+});
+
+test("stored keys read in words on the staff screens", () => {
+  assert.equal(inWords("bank_transfer", RELEASE_METHODS), "Bank transfer");
+  assert.equal(inWords("cash", RELEASE_METHODS), "Cash at the office");
+  assert.equal(inWords("ofw", EMPLOYMENT_TYPES), "Overseas worker");
+  assert.equal(inWords("semi_monthly"), "Twice a month");
+  assert.equal(inWords("single"), "Single");
+  assert.equal(inWords(""), null);
+  assert.equal(inWords(null), null);
 });

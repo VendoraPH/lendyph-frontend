@@ -22,7 +22,7 @@ export function Confirmation({ token, result }: { token: string; result: SubmitR
         <p className="font-medium">What happens next</p>
         <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
           <li>We review your details and documents.</li>
-          <li>We contact you by text or email if we need anything more.</li>
+          <li>We get in touch if we need anything more.</li>
           <li>Submitting is not an approval. We tell you our decision when the review is done.</li>
         </ul>
       </div>

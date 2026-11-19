@@ -1,21 +1,11 @@
 "use client";
 
-import { formatCurrency } from "@/lib/format";
-import { declaredMonthlyIncome, FREQUENCY_LABELS, INCOME_SOURCE_LABELS } from "@/lib/loan-origination";
+import { EMPLOYMENT_TYPES, FREQUENCY_LABELS, INCOME_SOURCE_LABELS } from "@/lib/loan-origination";
 import type { IncomeFrequency, IncomeSource } from "@/types/loan-origination";
 import { MoneyField, optionsOf, SelectField, TextAreaField, TextField } from "./form-field";
 import type { StepProps } from "./step-types";
 
-const EMPLOYMENT_TYPES = [
-  { value: "regular", label: "Regular or permanent" },
-  { value: "contractual", label: "Contractual" },
-  { value: "probationary", label: "Probationary" },
-  { value: "government", label: "Government" },
-  { value: "ofw", label: "Overseas worker" },
-];
-
 export function StepEmployment({ value: e, errors, onChange }: StepProps<"employment">) {
-  const total = declaredMonthlyIncome(e);
   const source = e.income_source;
   return (
     <div className="space-y-6">
@@ -62,9 +52,8 @@ export function StepEmployment({ value: e, errors, onChange }: StepProps<"employ
       {source && (
         <>
           <MoneyField id="other_regular_income" label="Other regular income a month" hint="Remittances, rent received, allowances." value={e.other_regular_income} error={errors.other_regular_income} onChange={(other_regular_income) => onChange({ other_regular_income })} />
-          <p className="rounded-lg bg-muted/50 p-3 text-sm">
-            Declared income: <span className="font-semibold tabular-nums">{formatCurrency(total)}</span> a month
-            <span className="block text-xs text-muted-foreground">We confirm this against your documents when we review your application.</span>
+          <p className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
+            We confirm your income against your documents when we review your application.
           </p>
         </>
       )}

@@ -8,6 +8,7 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Switch } from "@/components/ui/switch";
 import { useBranches } from "@/hooks";
 import { useDialogOpening } from "@/hooks/use-dialog-opening";
+import { calendarDate, formatDateISO } from "@/lib/format";
 import { branchPicker } from "@/lib/user-branches";
 import { loanOriginationService } from "@/services";
 import { useAuthStore } from "@/store";
@@ -32,7 +33,7 @@ function fromLink(l: ApplicationLink): ApplicationLinkInput {
     active: l.active,
     branch_id: l.branch_id,
     loan_product_ids: l.loan_product_ids,
-    expires_at: l.expires_at ? l.expires_at.slice(0, 10) : null,
+    expires_at: l.expires_at ? formatDateISO(calendarDate(l.expires_at)) : null,
     display_name: l.display_name,
     contact_phone: l.contact_phone,
     contact_email: l.contact_email,
@@ -60,8 +61,11 @@ export function LinkFormDialog({
   const picker = branchPicker(branches, caller, viewAll);
   const [form, setForm] = useState<ApplicationLinkInput>(EMPTY);
   const [logo, setLogo] = useState<File | null>(null);
+  // Without branches:view_all a link belongs to one of the caller's branches:
+  // "Default branch" (the company setting) may be a branch they can't see.
+  const ownBranchOnly = !viewAll;
   if (useDialogOpening(open, link)) {
-    setForm(link ? fromLink(link) : EMPTY);
+    setForm(link ? fromLink(link) : { ...EMPTY, branch_id: ownBranchOnly ? (picker.branches[0]?.id ?? null) : null });
     setLogo(null);
   }
   const set = (patch: Partial<ApplicationLinkInput>) => setForm((f) => ({ ...f, ...patch }));
@@ -88,7 +92,7 @@ export function LinkFormDialog({
       confirmLabel={link ? "Save link" : "Create link"}
       successMessage={link ? "Link saved" : "Link created"}
       errorMessage="Could not save the link"
-      canConfirm={form.name.trim() !== ""}
+      canConfirm={form.name.trim() !== "" && (!ownBranchOnly || form.branch_id !== null)}
       onConfirm={save}
       onDone={onDone}
       size="lg"
@@ -106,7 +110,13 @@ export function LinkFormDialog({
             value={form.branch_id ?? ""}
             onChange={(e) => set({ branch_id: e.target.value ? Number(e.target.value) : null })}
           >
-            <NativeSelectOption value="">Default branch</NativeSelectOption>
+            {ownBranchOnly ? (
+              <NativeSelectOption value="" disabled>
+                Choose a branch
+              </NativeSelectOption>
+            ) : (
+              <NativeSelectOption value="">Default branch</NativeSelectOption>
+            )}
             {picker.branches.map((b) => (
               <NativeSelectOption key={b.id} value={b.id}>
                 {b.name}

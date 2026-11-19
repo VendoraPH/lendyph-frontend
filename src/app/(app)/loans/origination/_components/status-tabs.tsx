@@ -1,10 +1,12 @@
 "use client";
 
+import { allStatusCount } from "@/lib/loan-origination";
 import { cn } from "@/lib/utils";
 
 /**
  * A row of status chips. Counts come from the server's `meta.stats` (every
- * status, ignoring the status filter), never from the rows on this page.
+ * status, ignoring the status filter), never from the rows on this page; the
+ * "All" count is its `total`, never a sum of the chips.
  */
 export function StatusTabs<S extends string>({
   value,
@@ -19,7 +21,7 @@ export function StatusTabs<S extends string>({
   stats: Record<string, number> | undefined;
   onChange: (status: S | undefined) => void;
 }) {
-  const total = stats ? Object.values(stats).reduce((sum, n) => sum + n, 0) : undefined;
+  const total = allStatusCount(stats);
   const chip = (key: S | undefined, label: string, count: number | undefined) => (
     <button
       key={key ?? "all"}

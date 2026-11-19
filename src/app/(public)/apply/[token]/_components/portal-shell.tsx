@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import Image from "next/image";
 import { Loader2 } from "lucide-react";
 import type { PublicApplicationPortal } from "@/types/loan-origination";
 
@@ -12,9 +13,10 @@ export function PortalShell({ portal, children }: { portal: PublicApplicationPor
       <header className="border-b bg-white">
         <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-3">
           {org?.logo_url && (
-            // API-served image: plain <img>, never next/image.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={org.logo_url} alt="" className="h-9 w-9 rounded object-contain" />
+            // `unoptimized`: the API's own file, served as it is (next.config.ts allows no remote image hosts).
+            <span className="relative inline-block h-9 w-9 shrink-0">
+              <Image src={org.logo_url} alt="" fill unoptimized className="rounded object-contain" />
+            </span>
           )}
           <span className="font-semibold">{org?.name ?? "Loan application"}</span>
         </div>

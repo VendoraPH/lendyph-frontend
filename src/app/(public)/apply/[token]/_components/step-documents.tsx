@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { CheckCircle2, FileUp, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { fileProblem, formatFileSize } from "@/lib/loan-origination";
+import { fileProblem, formatFileSize, uploadAccept, uploadRules } from "@/lib/loan-origination";
 import { publicApplicationService, publicErrorMessage } from "@/services/public-application.service";
 import type { ApplicationDocument, DocumentRequirement } from "@/types/loan-origination";
 
@@ -95,7 +95,7 @@ function DocumentRow({
             id={inputId}
             type="file"
             className="sr-only"
-            accept={accept.map((t) => `.${t.replace(/^\./, "")}`).join(",")}
+            accept={uploadAccept(accept)}
             onChange={(e) => {
               upload(e.target.files?.[0]);
               e.target.value = "";
@@ -136,10 +136,11 @@ export function StepDocuments({
   error?: string;
   onChange: (documents: ApplicationDocument[]) => void;
 }) {
+  const rules = uploadRules(accept, maxMb);
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        Clear photos or scans are fine. {accept.map((t) => t.toUpperCase()).join(", ")}, up to {maxMb} MB each.
+        Clear photos or scans are fine. {rules.extensions.map((t) => t.toUpperCase()).join(", ")}, up to {rules.maxMb} MB each.
       </p>
       <ul className="space-y-3">
         {requirements.map((r) => (

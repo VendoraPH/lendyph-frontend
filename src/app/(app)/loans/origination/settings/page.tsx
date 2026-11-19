@@ -7,7 +7,8 @@ import { ScrollBox } from "@/components/common/page-fill";
 import { RouteGuard } from "@/components/common/route-guard";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useApiResource } from "@/hooks";
+import { useApiResource, usePermission } from "@/hooks";
+import { settingsSaveBlocker, uploadSettingsProblems } from "@/lib/loan-origination";
 import { notifyError, notifySuccess, notifyValidation } from "@/lib/notify";
 import { loanOriginationService } from "@/services";
 import type { OriginationSettings } from "@/types/loan-origination";
@@ -23,6 +24,7 @@ function problems(s: OriginationSettings): string[] {
   if (s.general.draft_expiration_days < 1) out.push("Drafts must be kept at least one day.");
   if (s.assessment.max_dti <= 0) out.push("The highest debt-to-income must be above zero.");
   if (s.documents.accepted_file_types.length === 0) out.push("Accept at least one file type.");
+  out.push(...uploadSettingsProblems(s.documents));
   if (s.documents.types.some((t) => !t.label.trim())) out.push("Name every document type, or remove the empty ones.");
   return out;
 }
@@ -31,6 +33,7 @@ function SettingsForm({ initial }: { initial: OriginationSettings }) {
   const [form, setForm] = useState(initial);
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState("general");
+  const blocker = settingsSaveBlocker(usePermission().can("branches:view_all"));
   const set = <K extends keyof OriginationSettings>(key: K) => (value: OriginationSettings[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
 
@@ -66,11 +69,12 @@ function SettingsForm({ initial }: { initial: OriginationSettings }) {
             <TabsTrigger value="documents">Documents</TabsTrigger>
             <TabsTrigger value="notifications">Messages</TabsTrigger>
           </TabsList>
-          <Button size="sm" onClick={save} disabled={saving}>
+          <Button size="sm" onClick={save} disabled={saving || blocker !== null} title={blocker ?? undefined}>
             {saving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Save className="mr-1 h-4 w-4" />}
             Save settings
           </Button>
         </div>
+        {blocker && <p className="text-xs text-muted-foreground">{blocker}</p>}
         <TabsContent value="general">
           <GeneralSection value={form.general} onChange={set("general")} />
         </TabsContent>

@@ -192,6 +192,17 @@ export interface DocumentRequirement {
   required: boolean;
 }
 
+/** A text the applicant accepts, by version. */
+export interface ConsentText {
+  version: string;
+  text: string;
+  /**
+   * True once it is the owner's approved wording. Absent or false: the screen
+   * marks it as a draft (staging carries placeholder text until the owner signs).
+   */
+  final?: boolean;
+}
+
 /** `GET /public/apply/{token}`: everything the landing page shows. */
 export interface PublicApplicationPortal {
   organization: {
@@ -208,10 +219,10 @@ export interface PublicApplicationPortal {
   intro: string | null;
   eligibility: string | null;
   estimated_minutes: number | null;
-  privacy_notice: { version: string; text: string };
-  terms: { version: string; text: string };
-  credit_authorization: { version: string; text: string } | null;
-  declaration: { version: string; text: string };
+  privacy_notice: ConsentText;
+  terms: ConsentText;
+  credit_authorization: ConsentText | null;
+  declaration: ConsentText;
   products: PublicLoanProduct[];
   /** Documents the applicant may be asked for, for the landing page list. */
   documents: DocumentRequirement[];
@@ -229,6 +240,19 @@ export interface OtpRequestResult {
   channel: "sms" | "email";
   /** Where the code went, masked (`0917•••4321`). */
   destination: string;
+  /**
+   * True only when a provider actually sent the message. Sending is log-only
+   * until the owner signs, so absent or false means nothing went out.
+   */
+  delivered?: boolean;
+}
+
+/** `POST …/remind`: what happened to the reminder. */
+export interface ReminderResult {
+  channel: string;
+  sent_at: string | null;
+  /** True only when a provider actually sent it; absent or false: logged only. */
+  delivered?: boolean;
 }
 
 /**

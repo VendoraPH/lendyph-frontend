@@ -15,6 +15,7 @@ import type {
   DocumentStatus,
   OriginationDashboard,
   OriginationSettings,
+  ReminderResult,
 } from "@/types/loan-origination";
 
 const L = API_ENDPOINTS.LOAN_ORIGINATION;
@@ -62,8 +63,8 @@ export const loanOriginationService = {
   /** Moves the application to Additional Information Required and tells the applicant. */
   requestInformation: (id: number, message: string, documentTypes: string[]) =>
     api.post<ApplicationDetail>(L.REQUEST_INFO(id), { message, document_types: documentTypes }),
-  /** Reminds an applicant whose draft is incomplete, through the configured channel. */
-  remind: (id: number) => api.post<{ channel: string; sent_at: string }>(L.REMIND(id)),
+  /** Reminds an applicant whose draft is incomplete; `delivered` says whether anything went out. */
+  remind: (id: number) => api.post<ReminderResult>(L.REMIND(id)),
   /** Links to an existing member after review, or `null` to create one on conversion. */
   linkMember: (id: number, borrowerId: number | null) =>
     api.post<ApplicationDetail>(L.LINK_MEMBER(id), { borrower_id: borrowerId }),

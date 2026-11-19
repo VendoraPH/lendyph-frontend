@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRightLeft, BellRing, HandCoins, MessageSquareMore, Send, StickyNote, UserCheck, UserPlus } from "lucide-react";
 import { PermissionButton } from "@/components/common/permission-button";
-import { allowedTransitions, isClosed, isUnsubmitted } from "@/lib/loan-origination";
+import { allowedTransitions, isClosed, isUnsubmitted, reminderNotice } from "@/lib/loan-origination";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { loanOriginationService } from "@/services";
 import type { ApplicationDetail, ApplicationStatus } from "@/types/loan-origination";
@@ -34,7 +34,7 @@ export function ApplicationActions({ application: a, onChanged }: { application:
   const remind = () =>
     loanOriginationService
       .remind(a.id)
-      .then(() => notifySuccess("Reminder sent to the applicant"))
+      .then((result) => notifySuccess(reminderNotice(result)))
       .catch((err) => notifyError(err, "Could not send the reminder"));
 
   const button = (which: Exclude<Open, null>, label: string, Icon: typeof Send, primary = false) => (

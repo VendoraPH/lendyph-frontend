@@ -24,7 +24,10 @@ export function DocumentsSection({ value, onChange }: { value: Documents; onChan
 
   return (
     <>
-      <SettingsCard title="Uploads" description="What applicants may upload, and how long the files are kept.">
+      <SettingsCard
+        title="Uploads"
+        description="What applicants may upload, within the member document rules (JPG, PNG, PDF, DOC or DOCX, up to 10 MB), and how long the files are kept."
+      >
         <div className="grid gap-4 sm:grid-cols-3">
           <div className="space-y-1.5">
             <Label htmlFor="file-types">Accepted file types</Label>

@@ -2,16 +2,11 @@
 
 import { Loader2 } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
+import { RELEASE_METHODS } from "@/lib/loan-origination";
 import type { LoanEstimate, PublicLoanProduct } from "@/types/loan-origination";
 import { MoneyField, SelectField, TextAreaField } from "./form-field";
 import type { StepProps } from "./step-types";
 
-const RELEASE_METHODS = [
-  { value: "cash", label: "Cash at the office" },
-  { value: "bank_transfer", label: "Bank transfer" },
-  { value: "gcash", label: "GCash" },
-  { value: "check", label: "Check" },
-];
 const label = (s: string) => s.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 
 function EstimateBox({ estimate, error, loading }: { estimate: LoanEstimate | null; error: string | null; loading: boolean }) {

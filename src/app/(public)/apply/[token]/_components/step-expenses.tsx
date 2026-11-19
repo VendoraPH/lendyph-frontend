@@ -2,26 +2,11 @@
 
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { formatCurrency } from "@/lib/format";
-import { FREQUENCY_LABELS, monthlyDebtPayments, monthlyExpenses } from "@/lib/loan-origination";
-import type { ApplicantExpenses, ExistingDebt, IncomeFrequency } from "@/types/loan-origination";
+import { DEBT_LINES, EXPENSE_LINES, FREQUENCY_LABELS } from "@/lib/loan-origination";
+import type { ExistingDebt, IncomeFrequency } from "@/types/loan-origination";
 import { MoneyField, optionsOf, SelectField, TextField } from "./form-field";
 import type { StepProps } from "./step-types";
 
-const LIVING: { key: keyof ApplicantExpenses & string; label: string }[] = [
-  { key: "housing", label: "Rent or housing" },
-  { key: "utilities", label: "Electricity, water and internet" },
-  { key: "food", label: "Food" },
-  { key: "transportation", label: "Transportation" },
-  { key: "education", label: "School fees" },
-  { key: "family_support", label: "Support to family" },
-  { key: "other_essential", label: "Other necessary expenses" },
-];
-const DEBTS: { key: keyof ApplicantExpenses & string; label: string }[] = [
-  { key: "credit_card_payments", label: "Credit card payments" },
-  { key: "other_debt_payments", label: "Other debt payments" },
-  { key: "other_commitments", label: "Other regular commitments" },
-];
 const NEW_LOAN: ExistingDebt = { institution: "", outstanding_balance: "", payment_amount: "", payment_frequency: "monthly", remaining_term: "" };
 
 export function StepExpenses({ value: x, errors, onChange }: StepProps<"expenses">) {
@@ -33,13 +18,10 @@ export function StepExpenses({ value: x, errors, onChange }: StepProps<"expenses
       <section className="space-y-3">
         <h3 className="text-sm font-semibold">Monthly household expenses</h3>
         <div className="grid gap-4 sm:grid-cols-2">
-          {LIVING.map(({ key, label }) => (
+          {EXPENSE_LINES.map(({ key, label }) => (
             <MoneyField key={key} id={key} label={label} value={x[key] as string} error={errors[key]} onChange={(v) => onChange({ [key]: v })} />
           ))}
         </div>
-        <p className="text-sm text-muted-foreground">
-          Total: <span className="font-medium text-foreground tabular-nums">{formatCurrency(monthlyExpenses(x))}</span> a month
-        </p>
       </section>
 
       <section className="space-y-3">
@@ -91,13 +73,10 @@ export function StepExpenses({ value: x, errors, onChange }: StepProps<"expenses
       <section className="space-y-3">
         <h3 className="text-sm font-semibold">Other monthly payments</h3>
         <div className="grid gap-4 sm:grid-cols-3">
-          {DEBTS.map(({ key, label }) => (
+          {DEBT_LINES.map(({ key, label }) => (
             <MoneyField key={key} id={key} label={label} value={x[key] as string} error={errors[key]} onChange={(v) => onChange({ [key]: v })} />
           ))}
         </div>
-        <p className="text-sm text-muted-foreground">
-          Debt payments: <span className="font-medium text-foreground tabular-nums">{formatCurrency(monthlyDebtPayments(x))}</span> a month
-        </p>
       </section>
     </div>
   );

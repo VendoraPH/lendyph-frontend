@@ -5,10 +5,10 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/format";
 import {
-  declaredMonthlyIncome,
+  consentIsDraft,
+  declaredExpenseRows,
+  declaredIncomeRows,
   INCOME_SOURCE_LABELS,
-  monthlyDebtPayments,
-  monthlyExpenses,
   parseAmount,
   type WizardStepId,
 } from "@/lib/loan-origination";
@@ -98,11 +98,15 @@ export function StepReview({
       </Section>
       <Section title="Income" step="employment" onEdit={onEdit}>
         <Row label="Source" value={e.income_source ? INCOME_SOURCE_LABELS[e.income_source] : null} />
-        <Row label="Declared a month" value={formatCurrency(declaredMonthlyIncome(e))} />
+        {declaredIncomeRows(e).map(([label, value]) => (
+          <Row key={label} label={label} value={value} />
+        ))}
       </Section>
       <Section title="Expenses and debts" step="expenses" onEdit={onEdit}>
-        <Row label="Household a month" value={formatCurrency(monthlyExpenses(x))} />
-        <Row label="Debt payments a month" value={formatCurrency(monthlyDebtPayments(x))} />
+        <Row label="Existing loans" value={x.has_existing_loans === null ? null : x.has_existing_loans ? "Yes" : "None"} />
+        {declaredExpenseRows(x).map(([label, value], i) => (
+          <Row key={`${i}-${label}`} label={label} value={value} />
+        ))}
       </Section>
       <Section title="Documents" step="documents" onEdit={onEdit}>
         {documents.filter((d) => d.file_name).length === 0 ? (
@@ -114,6 +118,11 @@ export function StepReview({
 
       <section className="space-y-4 rounded-xl border bg-card p-4">
         <h3 className="text-sm font-semibold">Before you submit</h3>
+        {consentIsDraft(portal) && (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900" role="note">
+            Draft wording: these texts are placeholders until the cooperative approves its own.
+          </p>
+        )}
         <ConsentBox id="consent-privacy" label="Privacy notice" text={portal.privacy_notice.text} checked={c.privacy} onChange={set("privacy")} />
         <ConsentBox id="consent-terms" label="Terms" text={portal.terms.text} checked={c.terms} onChange={set("terms")} />
         {portal.credit_authorization && (

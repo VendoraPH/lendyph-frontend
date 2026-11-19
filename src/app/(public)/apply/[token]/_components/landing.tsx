@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/format";
+import { consentIsDraft } from "@/lib/loan-origination";
 import type { PublicApplicationPortal } from "@/types/loan-origination";
 
 export function Landing({
@@ -86,6 +87,12 @@ export function Landing({
           </ul>
         </section>
       )}
+
+      <details className="rounded-xl border bg-card p-4 text-sm">
+        <summary className="cursor-pointer font-semibold">Privacy notice</summary>
+        {consentIsDraft(portal) && <p className="mt-2 text-xs text-amber-800">Draft wording, until the cooperative approves its own.</p>}
+        <p className="mt-2 whitespace-pre-line text-muted-foreground">{portal.privacy_notice.text}</p>
+      </details>
     </div>
   );
 }

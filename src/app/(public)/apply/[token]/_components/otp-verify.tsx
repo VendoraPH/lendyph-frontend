@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { normalizeMobile, validateContact, type WizardErrors } from "@/lib/loan-origination";
+import { normalizeMobile, otpSentMessage, validateContact, type WizardErrors } from "@/lib/loan-origination";
 import {
   publicApplicationService,
   publicErrorMessage,
@@ -138,10 +138,7 @@ export function OtpVerify({
       )}
       {sent && (
         <div className="space-y-3 rounded-lg border bg-muted/40 p-3">
-          <p className="text-sm">
-            We sent a code to <span className="font-medium">{sent.destination}</span>. It expires in{" "}
-            {Math.round(sent.expires_in / 60)} minutes.
-          </p>
+          <p className="text-sm">{otpSentMessage(sent)}</p>
           <TextField
             id="otp-code"
             label="Code"

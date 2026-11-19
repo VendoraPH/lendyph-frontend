@@ -1,7 +1,7 @@
 /**
  * Loan Origination rules the screens share, as pure functions: status labels
- * and allowed moves, what an applicant is told, frequency conversion for the
- * wizard's running totals, the wizard's own checks, and dashboard rates.
+ * and allowed moves, what an applicant is told, the declared amounts as
+ * entered, the wizard's own checks, and dashboard rates.
  *
  * The server is the authority for every one of these. The transitions here
  * only decide which buttons to offer; the API refuses any other move. The
@@ -21,8 +21,12 @@ import type {
   DocumentStatus,
   IncomeFrequency,
   IncomeSource,
+  OtpRequestResult,
+  PublicApplicationPortal,
   PublicLoanProduct,
+  ReminderResult,
 } from "@/types/loan-origination";
+import { DOCUMENT_EXTENSIONS } from "./file-validation";
 import { formatCurrency } from "./format";
 
 export type Tone = "neutral" | "info" | "warning" | "success" | "danger";
@@ -247,31 +251,35 @@ export const FREQUENCY_LABELS: Record<IncomeFrequency, string> = {
   annual: "Yearly",
 };
 
+/** Options a wizard select offers: the stored value and its words. */
+export type Option = { value: string; label: string };
+
+export const EMPLOYMENT_TYPES: readonly Option[] = [
+  { value: "regular", label: "Regular or permanent" },
+  { value: "contractual", label: "Contractual" },
+  { value: "probationary", label: "Probationary" },
+  { value: "government", label: "Government" },
+  { value: "ofw", label: "Overseas worker" },
+];
+
+export const RELEASE_METHODS: readonly Option[] = [
+  { value: "cash", label: "Cash at the office" },
+  { value: "bank_transfer", label: "Bank transfer" },
+  { value: "gcash", label: "GCash" },
+  { value: "check", label: "Check" },
+];
+
 /**
- * How many times a year each frequency pays. Daily counts working days
- * (26 a month), the convention cooperatives use for daily collections; the
- * server's assessment uses the same table, which Settings shows.
+ * A stored key in words: its option's label, a frequency's label, else the
+ * key with spaces and a capital ("bi_weekly" reads "Bi weekly").
  */
-export const PERIODS_PER_YEAR: Record<IncomeFrequency, number> = {
-  daily: 312,
-  weekly: 52,
-  bi_weekly: 26,
-  semi_monthly: 24,
-  monthly: 12,
-  quarterly: 4,
-  semi_annual: 2,
-  annual: 1,
-};
-
-/** Rounds to centavos, avoiding float drift such as 0.1 + 0.2. */
-function centavos(value: number): number {
-  return Math.round((value + Number.EPSILON) * 100) / 100;
-}
-
-/** An amount paid at `frequency`, as a monthly figure. */
-export function toMonthly(amount: number, frequency: IncomeFrequency): number {
-  if (!Number.isFinite(amount) || amount <= 0) return 0;
-  return centavos((amount * PERIODS_PER_YEAR[frequency]) / 12);
+export function inWords(value: string | null | undefined, options: readonly Option[] = []): string | null {
+  if (!value) return null;
+  const option = options.find((o) => o.value === value);
+  if (option) return option.label;
+  if (value in FREQUENCY_LABELS) return FREQUENCY_LABELS[value as IncomeFrequency];
+  const text = value.replace(/_/g, " ").trim();
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : null;
 }
 
 /**
@@ -285,63 +293,82 @@ export function parseAmount(value: string): number | null {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
-function sum(values: (number | null)[]): number {
-  return centavos(values.reduce<number>((total, v) => total + (v ?? 0), 0));
+/** A label and what the applicant entered for it, ready to show. */
+export type DeclaredRow = [label: string, value: string];
+
+/** An entered amount in pesos, with its frequency in words when it has one. */
+function declared(value: string, frequency?: IncomeFrequency | ""): string | null {
+  const n = parseAmount(value);
+  if (n === null) return null;
+  return frequency ? `${formatCurrency(n)} ${FREQUENCY_LABELS[frequency].toLowerCase()}` : formatCurrency(n);
+}
+
+function rows(entries: [string, string | null][]): DeclaredRow[] {
+  return entries.filter((e): e is DeclaredRow => e[1] !== null && e[1] !== "");
 }
 
 /**
- * The applicant's declared income as a monthly figure, for the running total
- * on the wizard. Labelled "declared" there: the assessment uses the server's
- * recognition rules and verified amounts.
+ * The income the applicant declared, each amount as entered. Nothing is added
+ * up or converted to a month here: the server's assessment works out monthly
+ * income by its own recognition rules (`AssessmentFigures`).
  */
-export function declaredMonthlyIncome(e: ApplicantEmployment): number {
-  const other = parseAmount(e.other_regular_income);
+export function declaredIncomeRows(e: ApplicantEmployment): DeclaredRow[] {
+  const other: [string, string | null] = ["Other regular income a month", declared(e.other_regular_income)];
   switch (e.income_source) {
-    case "employed": {
-      const net = parseAmount(e.net_monthly_income) ?? parseAmount(e.gross_monthly_income);
-      return sum([net, other]);
-    }
+    case "employed":
+      return rows([
+        ["Gross monthly pay", declared(e.gross_monthly_income)],
+        ["Take-home pay a month", declared(e.net_monthly_income)],
+        ["Paid", e.salary_frequency ? FREQUENCY_LABELS[e.salary_frequency] : null],
+        other,
+      ]);
     case "self_employed":
-    case "business_owner": {
-      const net = parseAmount(e.monthly_net_business_income);
-      if (net !== null) return sum([net, other]);
-      const revenue = parseAmount(e.monthly_revenue);
-      const costs = parseAmount(e.monthly_business_expenses) ?? 0;
-      return sum([revenue === null ? null : Math.max(0, revenue - costs), other]);
-    }
+    case "business_owner":
+      return rows([
+        ["Average sales a month", declared(e.monthly_revenue)],
+        ["Business costs a month", declared(e.monthly_business_expenses)],
+        ["Net income a month", declared(e.monthly_net_business_income)],
+        other,
+      ]);
     case "farmer":
     case "pensioner":
-    case "other": {
-      const amount = parseAmount(e.other_income_amount);
-      const freq = e.other_income_frequency || "monthly";
-      return sum([amount === null ? null : toMonthly(amount, freq), other]);
-    }
+    case "other":
+      return rows([["Amount received", declared(e.other_income_amount, e.other_income_frequency)], other]);
     default:
-      return 0;
+      return [];
   }
 }
 
-export function monthlyExpenses(x: ApplicantExpenses): number {
-  return sum(
-    [x.housing, x.utilities, x.food, x.transportation, x.education, x.family_support, x.other_essential].map(
-      parseAmount,
-    ),
-  );
-}
+/** Monthly household expenses, as the wizard asks for them. */
+export const EXPENSE_LINES: readonly { key: keyof ApplicantExpenses & string; label: string }[] = [
+  { key: "housing", label: "Rent or housing" },
+  { key: "utilities", label: "Electricity, water and internet" },
+  { key: "food", label: "Food" },
+  { key: "transportation", label: "Transportation" },
+  { key: "education", label: "School fees" },
+  { key: "family_support", label: "Support to family" },
+  { key: "other_essential", label: "Other necessary expenses" },
+];
 
-/** Declared debt payments a month, every existing loan converted to monthly. */
-export function monthlyDebtPayments(x: ApplicantExpenses): number {
-  const loans = x.has_existing_loans
-    ? x.existing_loans.map((l) => {
-        const amount = parseAmount(l.payment_amount);
-        return amount === null ? null : toMonthly(amount, l.payment_frequency || "monthly");
-      })
-    : [];
-  return sum([
-    ...loans,
-    parseAmount(x.credit_card_payments),
-    parseAmount(x.other_debt_payments),
-    parseAmount(x.other_commitments),
+/** Other regular payments, as the wizard asks for them. */
+export const DEBT_LINES: readonly { key: keyof ApplicantExpenses & string; label: string }[] = [
+  { key: "credit_card_payments", label: "Credit card payments" },
+  { key: "other_debt_payments", label: "Other debt payments" },
+  { key: "other_commitments", label: "Other regular commitments" },
+];
+
+/**
+ * The expenses and debts the applicant declared, each line as entered, then
+ * each existing loan's payment with its frequency. No totals: the server's
+ * assessment adds them up.
+ */
+export function declaredExpenseRows(x: ApplicantExpenses): DeclaredRow[] {
+  return rows([
+    ...[...EXPENSE_LINES, ...DEBT_LINES].map(({ key, label }): [string, string | null] => [label, declared(x[key] as string)]),
+    ...(x.has_existing_loans ? x.existing_loans : []).map((l): [string, string | null] => [
+      l.institution.trim() || "Unnamed lender",
+      declared(l.payment_amount, l.payment_frequency),
+    ]),
   ]);
 }
 
@@ -645,23 +672,102 @@ export function formatFileSize(bytes: number | null | undefined): string {
   return `${Math.round(bytes / (1024 * 102.4)) / 10} MB`;
 }
 
+/** The member document size limit, which the server applies to every document upload. */
+export const MEMBER_DOCUMENT_MAX_MB = 10;
+
+/** The member document file names (`jpg`, `pdf`, …), without the dot. */
+const MEMBER_DOCUMENT_TYPES: readonly string[] = DOCUMENT_EXTENSIONS.map((e) => e.slice(1));
+
+const normalizeType = (t: string) => t.trim().toLowerCase().replace(/^\./, "");
+
 /**
- * Why a file can't be uploaded, or null when it can. The server checks again
- * (type by content, size, malware); this only saves a slow upload that would
- * fail anyway.
+ * What the browser lets an applicant pick: the link's file types that the
+ * member document rules also take (all of those when the link names none),
+ * and the smaller of the link's size and the member document limit. The
+ * server checks again by content; this only saves a doomed upload.
  */
+export function uploadRules(serverTypes: readonly string[], serverMaxMb: number): { extensions: string[]; maxMb: number } {
+  const listed = serverTypes.map(normalizeType).filter(Boolean);
+  const extensions =
+    listed.length === 0 ? [...MEMBER_DOCUMENT_TYPES] : listed.filter((t, i) => MEMBER_DOCUMENT_TYPES.includes(t) && listed.indexOf(t) === i);
+  const maxMb =
+    Number.isFinite(serverMaxMb) && serverMaxMb > 0 ? Math.min(serverMaxMb, MEMBER_DOCUMENT_MAX_MB) : MEMBER_DOCUMENT_MAX_MB;
+  return { extensions, maxMb };
+}
+
+/** For a file input's `accept`. */
+export function uploadAccept(serverTypes: readonly string[]): string {
+  return uploadRules(serverTypes, 0).extensions.map((t) => `.${t}`).join(",");
+}
+
+/** Why a file can't be uploaded, or null when it can, by `uploadRules`. */
 export function fileProblem(
   file: { name: string; size: number; type: string },
   acceptedTypes: readonly string[],
   maxMb: number,
 ): string | null {
+  const rules = uploadRules(acceptedTypes, maxMb);
   const dot = file.name.lastIndexOf(".");
   const ext = dot >= 0 ? file.name.slice(dot + 1).toLowerCase() : "";
-  const accepted = acceptedTypes.map((t) => t.toLowerCase().replace(/^\./, ""));
-  if (accepted.length > 0 && !accepted.includes(ext)) {
-    return `Upload a ${accepted.map((t) => t.toUpperCase()).join(", ")} file.`;
+  if (!rules.extensions.includes(ext)) {
+    return rules.extensions.length === 0
+      ? "Files can't be uploaded here right now. Please contact the office."
+      : `Upload a ${rules.extensions.map((t) => t.toUpperCase()).join(", ")} file.`;
   }
   if (file.size === 0) return "This file is empty. Choose another.";
-  if (file.size > maxMb * 1024 * 1024) return `This file is larger than ${maxMb} MB.`;
+  if (file.size > rules.maxMb * 1024 * 1024) return `This file is larger than ${rules.maxMb} MB.`;
   return null;
+}
+
+/** What Settings would let applicants upload beyond the member document rules. */
+export function uploadSettingsProblems(documents: { accepted_file_types: readonly string[]; max_upload_mb: number }): string[] {
+  const out: string[] = [];
+  const outside = documents.accepted_file_types.map(normalizeType).filter((t) => t && !MEMBER_DOCUMENT_TYPES.includes(t));
+  if (outside.length > 0) {
+    out.push(
+      `Applicants can upload only the member document types (JPG, PNG, PDF, DOC, DOCX). Remove ${outside.map((t) => t.toUpperCase()).join(", ")}.`,
+    );
+  }
+  if (documents.max_upload_mb > MEMBER_DOCUMENT_MAX_MB) {
+    out.push(`The largest file can be at most ${MEMBER_DOCUMENT_MAX_MB} MB, as for member documents.`);
+  }
+  return out;
+}
+
+// ── What the applicant and staff are told ──────────────────────────────────
+
+/**
+ * The line under the code box. Sending is log-only until the owner signs, so
+ * "we sent" is said only when the server reports the message went out.
+ */
+export function otpSentMessage(result: OtpRequestResult): string {
+  if (result.delivered === true) {
+    return `We sent a code to ${result.destination}. It expires in ${Math.round(result.expires_in / 60)} minutes.`;
+  }
+  return `Text and email sending is not switched on yet, so no message went out to ${result.destination}. Please contact the office to continue.`;
+}
+
+/** The toast after "Remind applicant", by what the server says it did. */
+export function reminderNotice(result: ReminderResult): string {
+  return result.delivered === true
+    ? "Reminder sent to the applicant"
+    : "Reminder logged. Sending is not switched on yet, so nothing went out.";
+}
+
+/** True until the server marks every text the applicant accepts as final (the owner's wording). */
+export function consentIsDraft(
+  portal: Pick<PublicApplicationPortal, "privacy_notice" | "terms" | "declaration" | "credit_authorization">,
+): boolean {
+  const texts = [portal.privacy_notice, portal.terms, portal.declaration, portal.credit_authorization];
+  return texts.some((t) => t !== null && t?.final !== true);
+}
+
+/** The "All" chip's count: the server's `meta.stats.total`, never a sum of the per-status counts. */
+export function allStatusCount(stats: Record<string, number> | undefined): number | undefined {
+  return typeof stats?.total === "number" ? stats.total : undefined;
+}
+
+/** Why Settings can't be saved, or null. They apply to every branch, like Savings and Reminders settings. */
+export function settingsSaveBlocker(viewAll: boolean): string | null {
+  return viewAll ? null : "These settings apply to all branches, so saving them needs access to all branches.";
 }

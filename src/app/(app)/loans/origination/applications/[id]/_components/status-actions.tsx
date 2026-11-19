@@ -84,8 +84,8 @@ export function RequestInfoDialog({ application, open, onOpenChange, onDone }: D
       onOpenChange={onOpenChange}
       title="Request more information"
       description="The applicant sees this message when they track or reopen the application."
-      confirmLabel="Send request"
-      successMessage="Request sent to the applicant"
+      confirmLabel="Save request"
+      successMessage="Request saved. The applicant sees it when they check their application."
       errorMessage="Could not send the request"
       canConfirm={message.trim() !== ""}
       onConfirm={() => loanOriginationService.requestInformation(application.id, message.trim(), types)}
