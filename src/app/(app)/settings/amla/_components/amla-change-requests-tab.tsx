@@ -11,7 +11,7 @@ import { AMLA_CHANGE_STATUS_OPTIONS } from "@/lib/amla/settings-view";
 import { useAuthStore } from "@/store";
 import type { AmlaChangeRequest } from "@/types/amla";
 import { AmlaChangeRequestList } from "./amla-change-request-list";
-import { AmlaNoteDialog, type AmlaNoteAction } from "./amla-note-dialog";
+import { AmlaNoteDialog, type AmlaNoteAction } from "@/components/amla/amla-note-dialog";
 import { AmlaPager } from "@/components/amla/amla-pager";
 import { amlaDecisionAction, type AmlaDecision } from "./amla-decisions";
 import { useRuleBaselines } from "./use-rule-baselines";

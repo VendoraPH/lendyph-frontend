@@ -189,6 +189,18 @@ export const GROUPS: { title: string; description: string; fields: MappingField[
     ],
   },
   {
+    title: "Between branches",
+    description: "Where money moving from one branch to another is held until it arrives.",
+    fields: [
+      {
+        key: "interbranch_clearing",
+        label: "Interbranch clearing",
+        hint: "Debited in the sending branch and credited in the receiving one (1190). Across branches it holds only what is still in transit.",
+        types: ["asset"],
+      },
+    ],
+  },
+  {
     title: "Savings and time deposits",
     description:
       "Where members' deposits and the interest paid on them post. A cooperative chart maps these; a savings product can't be turned on until all four are set.",

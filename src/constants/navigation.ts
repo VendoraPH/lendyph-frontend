@@ -147,6 +147,18 @@ export const MEMBER_PORTAL_NAV: NavItem = {
  * mediation, audit and tax reports also need their restricted view, and the
  * menu hides them without it. Shown only when NEXT_PUBLIC_ENABLE_CDA is on.
  */
+/**
+ * Accounting → Interbranch Transfers (Phase 6 MB-BE5), beside Cash & Bank, for
+ * `interbranch_transfers:view`. Shown only while NEXT_PUBLIC_ENABLE_MULTI_BRANCH
+ * is on; the route answers not found otherwise
+ * (accounting/interbranch-transfers/layout.tsx).
+ */
+export const INTERBRANCH_TRANSFERS_NAV: NavSubItem = {
+  title: "Interbranch Transfers",
+  href: "/accounting/interbranch-transfers",
+  permission: "interbranch_transfers:view",
+};
+
 /** Settings → Penalties, for `penalties:view`, shown only while its flag is on. */
 export const PENALTIES_SETTINGS_NAV: NavSubItem = {
   title: "Penalties",
@@ -205,6 +217,9 @@ export const AMLA_NAV: NavItem = {
     // The rules in force, and how detection runs: head office only, as its endpoint is.
     { title: "Transaction Monitoring", href: "/amla/monitoring", permission: "amla:view", alsoRequires: ["branches:view_all"] },
     { title: "Customers", href: "/amla/customers", permission: "amla:cdd", alsoRequires: ["amla:view"] },
+    // Screening and the orders register cover the whole cooperative, as their endpoints do.
+    { title: "Screening", href: "/amla/screening", permission: "amla:screening", alsoRequires: ["amla:view", "branches:view_all"] },
+    { title: "Orders Register", href: "/amla/orders", permission: "amla:sanctions", alsoRequires: ["amla:view", "branches:view_all"] },
     {
       title: "Risk Rules",
       href: "/amla/risk-rules",
@@ -448,6 +463,7 @@ export const SIDEBAR_NAV: NavItem[] = [
       { title: "Chart of Accounts", href: "/accounting/chart-of-accounts", permission: "chart_of_accounts:view" },
       { title: "Journal Entries", href: "/accounting/journals", permission: "journals:view" },
       { title: "Cash & Bank", href: "/accounting/cash-bank", permission: "cash_accounts:view" },
+      ...(env.features.multiBranch ? [INTERBRANCH_TRANSFERS_NAV] : []),
       { title: "Expenses & Payables", href: "/accounting/expenses", permission: "expenses:view" },
       { title: "Loan Accounting", href: "/accounting/loans" },
       { title: "General Ledger", href: "/accounting/general-ledger" },

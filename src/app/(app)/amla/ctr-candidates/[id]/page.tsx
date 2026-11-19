@@ -2,7 +2,8 @@
 
 import { notFound, useParams } from "next/navigation";
 import { RouteGuard } from "@/components/common/route-guard";
-import { AMLA_CTR_PERMISSION, amlaRecordId } from "@/lib/amla/monitoring-access";
+import { AMLA_CTR_PERMISSION } from "@/lib/amla/monitoring-access";
+import { amlaRecordId } from "@/lib/amla/record-id";
 import { CtrDetail } from "../../_components/ctr-detail";
 
 /** One CTR candidate. Outside the caller's branches it answers not found. */

@@ -18,8 +18,6 @@ export interface AmlaCddAccess {
   customers: boolean;
   /** Walk-ins carry no branch, so they are head-office only. */
   walkIns: boolean;
-  /** Picking a member's own valid ID reads the member's documents (`borrowers:view`). */
-  memberIds: boolean;
 }
 
 export function amlaCddAccess(can: Can): AmlaCddAccess {
@@ -27,7 +25,6 @@ export function amlaCddAccess(can: Can): AmlaCddAccess {
   return {
     customers,
     walkIns: customers && can("branches:view_all"),
-    memberIds: customers && can("borrowers:view"),
   };
 }
 

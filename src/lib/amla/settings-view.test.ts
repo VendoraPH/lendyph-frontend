@@ -439,3 +439,9 @@ test("the same high-risk countries in another order are no change, and show noth
   const lines = amlaChangeRequestChanges({ ...REQUEST, type: "risk_rules", payload: reordered }, { risk: [RISK_BASE] });
   assert.equal(lines.some((line) => line.startsWith("High-risk countries")), false);
 });
+
+test("a reason's limit can follow the server's own, such as 2,000 characters for a match decision", () => {
+  assert.equal(amlaReasonError("x".repeat(2000), 2000), null);
+  assert.equal(amlaReasonError("x".repeat(2001), 2000), "Keep it to 2,000 characters.");
+  assert.equal(amlaReasonError("x".repeat(1001)), "Keep it to 1,000 characters.");
+});

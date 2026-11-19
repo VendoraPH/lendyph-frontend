@@ -306,6 +306,19 @@ export const API_ENDPOINTS = {
     CLOSURE_APPROVE: (id: number) => `/branches/${id}/closure/approve`,
     CLOSURE_REJECT: (id: number) => `/branches/${id}/closure/reject`,
   },
+  // Money moved between branches through 1190 (Phase 6 MB-BE5). Each step's
+  // permission is checked by the server; approve, receive and reverse take an
+  // Idempotency-Key.
+  INTERBRANCH_TRANSFERS: {
+    LIST: "/interbranch-transfers",
+    CREATE: "/interbranch-transfers",
+    IN_TRANSIT: "/interbranch-transfers/in-transit",
+    DETAIL: (id: number) => `/interbranch-transfers/${id}`,
+    ACTION: (id: number, action: "approve" | "reject" | "cancel" | "receive" | "reverse") =>
+      `/interbranch-transfers/${id}/${action}`,
+    // The §15 branch counts (dashboard:analytics; each figure null without its source's permission).
+    BRANCH_COUNTS: "/branch-counts",
+  },
   SHARE_CAPITAL: {
     LEDGER_LIST: "/share-capital/ledger",
     LEDGER_CREATE: "/share-capital/ledger",
@@ -672,6 +685,22 @@ export const API_ENDPOINTS = {
     CDD_ID_VERIFICATIONS: (segment: string, id: number) => `/amla/cdd/${segment}/${id}/id-verifications`,
     CDD_RISK_ASSESSMENTS: (segment: string, id: number) => `/amla/cdd/${segment}/${id}/risk-assessments`,
     CDD_REVIEWS: (segment: string, id: number) => `/amla/cdd/${segment}/${id}/reviews`,
+    /** AMLA-B5: a subject's IDs on record, by type and last four only (`amla:cdd`). */
+    CDD_VALID_IDS: (segment: string, id: number) => `/amla/cdd/${segment}/${id}/valid-ids`,
+    /** AMLA-B5: screening needs `amla:screening`, orders `amla:sanctions`; both with every branch. */
+    SCREENING_LISTS: "/amla/screening/lists",
+    SCREENING_LIST_UPLOAD: (source: string) => `/amla/screening/lists/${source}/versions`,
+    SCREENING_RESCREEN: "/amla/screening/rescreen",
+    SCREENING_MATCHES: "/amla/screening/matches",
+    SCREENING_MATCH: (id: number) => `/amla/screening/matches/${id}`,
+    SCREENING_MATCH_CONFIRM: (id: number) => `/amla/screening/matches/${id}/confirm`,
+    SCREENING_MATCH_CLEAR: (id: number) => `/amla/screening/matches/${id}/clear`,
+    ORDERS: "/amla/orders",
+    ORDER: (id: number) => `/amla/orders/${id}`,
+    ORDER_RELEASE: (id: number) => `/amla/orders/${id}/release`,
+    ORDER_RELEASE_APPROVE: (id: number) => `/amla/orders/${id}/release/approve`,
+    ORDER_RELEASE_REJECT: (id: number) => `/amla/orders/${id}/release/reject`,
+    ORDER_RELEASE_WITHDRAW: (id: number) => `/amla/orders/${id}/release/withdraw`,
     RISK_RULES: "/amla/risk-rules",
     /** AMLA-B3: alerts need `amla:alerts`, candidates `amla:ctr`; both branch-scoped. Rules are head office. */
     ALERTS: "/amla/alerts",

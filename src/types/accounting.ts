@@ -411,6 +411,11 @@ export interface AccountMapping {
   /** Money received that cannot be identified yet, held until it is (2390). */
   suspense: number;
   /**
+   * Where an interbranch transfer clears between the two branches' books
+   * (1190, Phase 6 MB-BE5). Optional: an answer from before it reads as unmapped.
+   */
+  interbranch_clearing?: number | null;
+  /**
    * Savings & Deposits (Phase 3). Mapped on a cooperative chart (2050, 2060,
    * 5160 and 2210); a lending company chart has no deposit accounts, so they
    * stay unmapped there and a savings product can't be turned on.
