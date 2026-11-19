@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { AmlaPager } from "@/components/amla/amla-pager";
-import { ALL_BRANCHES, BranchFilter, branchIdParam } from "@/components/common/branch-filter";
+import { BranchFilter, branchIdParam } from "@/components/common/branch-filter";
 import { DataState } from "@/components/common/data-state";
 import { FillSection, PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useApiResource, usePermission } from "@/hooks";
+import { useBranchFilter, useBranchScopedFilters } from "@/hooks/use-working-branch";
 import { amlaCddAccess } from "@/lib/amla/cdd-access";
 import { amlaCddApi, type AmlaCddFilters } from "@/lib/amla/cdd-api";
 import { AMLA_CDD_STATUS_OPTIONS, amlaWorklistRow } from "@/lib/amla/cdd-view";
@@ -22,27 +23,35 @@ interface Draft {
   type: string;
   status: string;
   search: string;
-  branch: string;
 }
 
-const START: Draft = { type: "", status: "", search: "", branch: ALL_BRANCHES };
+/** The filters a read uses: `branch_id` follows the working branch until it is picked here (`useBranchScopedFilters`). */
+interface Applied extends Draft {
+  branch_id?: number;
+  page: number;
+}
 
-function filtersOf(draft: Draft, page: number): AmlaCddFilters {
-  return { type: draft.type, status: draft.status, search: draft.search, branchId: branchIdParam(draft.branch), page };
+const START: Draft = { type: "", status: "", search: "" };
+
+function toApi(applied: Applied): AmlaCddFilters {
+  return { type: applied.type, status: applied.status, search: applied.search, branchId: applied.branch_id, page: applied.page };
 }
 
 /**
  * The CDD worklist: members in the caller's branches and, for head office,
  * walk-ins, each with the server's CDD status, risk level and next review.
  * Every read is logged by the server, so filters apply on "Show" and each
- * Show or page reads once.
+ * Show or page reads once. The branch follows the header's working branch
+ * (multi-branch flag on) until it is picked here, and a header switch goes
+ * back to page 1; with the flag off it starts at every branch, as before.
  */
 export function CustomersWorklist() {
   const { can } = usePermission();
   const access = amlaCddAccess(can);
   const [draft, setDraft] = useState(START);
-  const [applied, setApplied] = useState(() => filtersOf(START, 1));
-  const fetcher = useMemo(() => once(() => amlaCddApi.worklist(applied)), [applied]);
+  const [branch, setBranch] = useBranchFilter();
+  const [applied, setApplied] = useBranchScopedFilters<Applied>(() => ({ ...START, page: 1 }));
+  const fetcher = useMemo(() => once(() => amlaCddApi.worklist(toApi(applied))), [applied]);
   const resource = useApiResource(fetcher);
 
   return (
@@ -59,7 +68,7 @@ export function CustomersWorklist() {
         className="flex shrink-0 flex-wrap items-end gap-3"
         onSubmit={(e) => {
           e.preventDefault();
-          setApplied(filtersOf(draft, 1));
+          setApplied({ ...draft, branch_id: branchIdParam(branch), page: 1 });
         }}
       >
         {access.walkIns && (
@@ -95,7 +104,7 @@ export function CustomersWorklist() {
             onChange={(e) => setDraft({ ...draft, search: e.target.value })}
           />
         </div>
-        <BranchFilter value={draft.branch} onChange={(branch) => setDraft({ ...draft, branch })} />
+        <BranchFilter value={branch} onChange={setBranch} />
         <Button type="submit" variant="outline">
           Show
         </Button>
@@ -148,7 +157,7 @@ export function CustomersWorklist() {
                   </TableBody>
                 </Table>
               </ScrollBox>
-              <AmlaPager meta={page.meta} onPage={(next) => setApplied({ ...applied, page: next })} />
+              <AmlaPager meta={page.meta} onPage={(next) => setApplied((current) => ({ ...current, page: next }))} />
             </>
           )}
         </DataState>
