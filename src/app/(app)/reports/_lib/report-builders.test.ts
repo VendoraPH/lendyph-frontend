@@ -3567,6 +3567,25 @@ test("share capital states when it was scoped to one branch", () => {
   assert.equal(scopeNote(orgWide), false);
 });
 
+test("share capital scoped by the branch each entry posted in says so, in words", () => {
+  const notes = (scope: string) =>
+    buildShareCapitalDoc({ ...SHARE_CAPITAL_PAYLOAD, branch_scope: scope }, RANGE)
+      .sections.filter((sec) => sec.kind === "note")
+      .map((sec) => (sec as { text: string }).text);
+
+  const posted = notes("posted_branch");
+  const scopeNote = posted.find((text) => /Scoped to the selected branch/.test(text));
+  assert.ok(scopeNote, "a posted-branch scope note is shown");
+  assert.match(scopeNote!, /branch where each entry was posted/);
+  assert.match(scopeNote!, /moved .* keeps .* earlier entries in their old branch/);
+  assert.doesNotMatch(scopeNote!, /posted_branch|branch_id|ledger has no branch column/);
+
+  // The older backend's scope keeps its own note; the two never show together.
+  assert.equal(posted.some((text) => /no branch column/.test(text)), false);
+  assert.equal(notes("borrower_branch").some((text) => /branch where each entry was posted/.test(text)), false);
+  assert.equal(notes("organisation").some((text) => /Scoped to the selected branch/.test(text)), false);
+});
+
 // What a `collector` or `viewer` receives: identical aggregates, no roster.
 // `by_member` is null rather than [] — an empty array would assert that no
 // member holds share capital, which `member_count: 214` flatly contradicts.

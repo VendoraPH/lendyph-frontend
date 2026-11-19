@@ -2522,9 +2522,18 @@ export function buildShareCapitalDoc(raw: unknown, range: DateRange): ReportDocu
     sections.push({ kind: "note", text: String(pledgeNote) });
   }
 
-  // `branch_id` IS honoured here, through the member's branch rather than a
-  // column on the ledger, so the scope is stated rather than assumed.
-  if (scope === "borrower_branch") {
+  // `branch_id` IS honoured here, so the scope is stated rather than assumed.
+  // Since backend #334 (`posted_branch`) each entry counts in the branch whose
+  // books it posted in; an older backend (`borrower_branch`) used the
+  // member's current branch.
+  if (scope === "posted_branch") {
+    sections.push({
+      kind: "note",
+      text:
+        "Scoped to the selected branch: share capital counts in the branch where each entry was posted. " +
+        "A member who moved to another branch keeps their earlier entries in their old branch.",
+    });
+  } else if (scope === "borrower_branch") {
     sections.push({
       kind: "note",
       text:
