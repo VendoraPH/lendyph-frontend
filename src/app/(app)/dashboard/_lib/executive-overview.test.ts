@@ -3,8 +3,12 @@ import assert from "node:assert/strict";
 
 import {
   EXECUTIVE_PRESETS,
+  booksState,
   branchTable,
+  captionText,
   cardViews,
+  isPastPeriod,
+  rangeProblem,
   executiveQuery,
   ignoredFilterNote,
   parLoanRows,
@@ -315,4 +319,46 @@ test("PAR loans read the member by name and code only, with the server's figures
       outstanding: "₱14,000.00",
     },
   ]);
+});
+
+// ── Browser check E4 ───────────────────────────────────────────────────────
+
+test("a ready balance card with no previous value says why, never a blank", () => {
+  const [view] = cardViews(overview([card({ key: "gross_loan_portfolio", value: 100, previous_value: null })]));
+  assert.equal(view.previousText, "No comparison: no snapshot for the earlier date");
+  assert.equal(view.changeText, null);
+});
+
+test("the server's previous_state is used when it sends one", () => {
+  const [snap] = cardViews(
+    overview([card({ key: "collections", value: 100, previous_value: null, previous_state: "no_snapshot" })]),
+  );
+  assert.equal(snap.previousText, "No comparison: no snapshot for the earlier date");
+  const [none] = cardViews(overview([card({ key: "collections", value: 100, previous_value: null })]));
+  assert.equal(none.previousText, "No comparison for the earlier period");
+});
+
+test("a past period is one that ends before the server's today", () => {
+  assert.equal(isPastPeriod({ ...period, to: "2026-10-31" }, "2026-11-19"), true);
+  assert.equal(isPastPeriod(period, "2026-11-19"), false);
+});
+
+test("the caption reads the server's refusal instead of waiting forever", () => {
+  assert.equal(captionText(period, null), periodCaption(period));
+  assert.equal(captionText(null, null), "Working out the period…");
+  assert.equal(captionText(null, "The end date can't be after today."), "Period not available: The end date can't be after today.");
+});
+
+test("the books read Requires configuration when the overview's book cards say so", () => {
+  assert.equal(booksState(overview([card({ key: "net_income", state: "requires_configuration" })])), "requires_configuration");
+  assert.equal(booksState(overview([card({ key: "net_income", value: 5 })])), "ready");
+  assert.equal(booksState(overview([card({ key: "net_income", state: "no_access" })])), "ready");
+  assert.equal(booksState(null), "ready");
+});
+
+test("a custom range missing a date asks for it, and sends nothing", () => {
+  assert.equal(rangeProblem({ preset: "custom", from: "2026-11-20", to: undefined }), "Choose an end date");
+  assert.equal(rangeProblem({ preset: "custom", from: undefined, to: "2026-11-20" }), "Choose a start date");
+  assert.equal(rangeProblem({ preset: "custom", from: "2026-11-01", to: "2026-11-20" }), null);
+  assert.equal(rangeProblem({ preset: "this_month" }), null);
 });

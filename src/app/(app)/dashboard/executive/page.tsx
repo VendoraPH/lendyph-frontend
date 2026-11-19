@@ -11,7 +11,17 @@ import { useAuthStore } from "@/store";
 import type { ExecutivePreset } from "@/types/executive-dashboard";
 import { useExecutiveDashboard } from "../_hooks/use-executive-dashboard";
 import { useExecutiveEndpoints } from "../_hooks/use-executive-endpoints";
-import { cardViews, executiveQuery, periodCaption, updatedText, type PeriodChoice } from "../_lib/executive-overview";
+import { todayISO } from "@/lib/format";
+import {
+  booksState,
+  captionText,
+  cardViews,
+  executiveQuery,
+  isPastPeriod,
+  rangeProblem,
+  updatedText,
+  type PeriodChoice,
+} from "../_lib/executive-overview";
 import { EXECUTIVE_LAYOUT as L } from "../_lib/executive-layout";
 import { AttentionPanel } from "./_components/attention-panel";
 import { BranchSection } from "./_components/branch-section";
@@ -31,7 +41,11 @@ const CARD_PLACES = 14;
 
 function ExecutiveDashboard() {
   // A preset by name, or a custom range: the server works out the dates in Manila.
+  // `choice` is what the controls show; `sent` is the last complete one, so a
+  // custom range missing a date sends nothing and says what's missing.
   const [choice, setChoice] = useState<PeriodChoice>({ preset: INITIAL_PRESET });
+  const [sent, setSent] = useState<PeriodChoice>({ preset: INITIAL_PRESET });
+  const problem = rangeProblem(choice);
   const [branch, setBranch] = useBranchFilter();
   const [reloadCount, setReloadCount] = useState(0);
   const [parOpen, setParOpen] = useState(false);
@@ -45,28 +59,42 @@ function ExecutiveDashboard() {
   const branchLabel = branchOptions.items.find((i) => i.value === branch)?.label ?? null;
 
   const branchId = branchIdParam(branch);
-  const query = useMemo(() => executiveQuery(choice, branchId), [choice, branchId]);
+  const query = useMemo(() => executiveQuery(sent, branchId), [sent, branchId]);
   const endpoints = useExecutiveEndpoints(query, reloadCount);
   const overview = endpoints.overview.state === "ready" ? endpoints.overview.data : null;
   const branchesData = endpoints.branches.state === "ready" ? endpoints.branches.data : null;
   // The server's period, from whichever of the two answered first.
   const period = overview?.period ?? branchesData?.period ?? null;
-  const periodRefused = endpoints.overview.state === "refused" && endpoints.branches.state !== "ready" ? endpoints.overview.message : null;
+  const refusal =
+    endpoints.overview.state === "refused"
+      ? endpoints.overview.message
+      : endpoints.branches.state === "refused"
+        ? endpoints.branches.message
+        : null;
+  const periodRefused = period === null ? refusal : null;
   const data = useExecutiveDashboard({ period, branchId }, reloadCount, periodRefused !== null);
+  // The server's today (the branch table's balances date): balances follow the cards' as-of rule.
+  const pastPeriod = period !== null && isPastPeriod(period, branchesData?.balances_as_of ?? todayISO());
+  const booksReady = booksState(overview) === "ready";
   const cards = overview ? cardViews(overview) : [];
   const loading =
     endpoints.overview.state === "loading" ||
     endpoints.branches.state === "loading" ||
     Object.values(data).some((s) => s.state === "loading");
 
+  function choose(next: PeriodChoice) {
+    setChoice(next);
+    if (rangeProblem(next) === null) setSent(next);
+  }
+
   function choosePreset(next: ExecutivePreset) {
     // Custom starts from the dates on screen; the server checks them.
-    setChoice(next === "custom" ? { preset: "custom", from: period?.from, to: period?.to } : { preset: next });
+    choose(next === "custom" ? { preset: "custom", from: period?.from, to: period?.to } : { preset: next });
   }
 
   function chooseRange(from: string | null, to: string | null) {
-    if (!from || !to) return;
-    setChoice({ preset: "custom", from, to });
+    // A start moved past the end clears the end: it is asked for, never dropped silently.
+    choose({ preset: "custom", from: from ?? undefined, to: to ?? undefined });
   }
 
   return (
@@ -78,7 +106,7 @@ function ExecutiveDashboard() {
           </Link>
           <h1 className="text-xl font-semibold">Executive Dashboard</h1>
           <p className="text-sm text-muted-foreground">
-            {period ? periodCaption(period) : "Working out the period…"}
+            {captionText(period, periodRefused)}
             {branchLabel ? ` · ${branchLabel}` : ""}
           </p>
         </div>
@@ -104,9 +132,9 @@ function ExecutiveDashboard() {
         }
       />
 
-      {periodRefused ? (
+      {problem || periodRefused ? (
         <p role="alert" className={`${L.pinned} rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive`}>
-          {periodRefused}
+          {problem ?? periodRefused}
         </p>
       ) : null}
 
@@ -120,9 +148,9 @@ function ExecutiveDashboard() {
               </h2>
               {overview ? <p className="text-xs text-muted-foreground">{updatedText(overview.generated_at)}</p> : null}
             </div>
-            {endpoints.overview.state === "refused" && !periodRefused ? (
-              <p role="alert" className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                {endpoints.overview.message}
+            {endpoints.overview.state === "refused" ? (
+              <p className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+                The cards are not available: {endpoints.overview.message}
               </p>
             ) : (
               <div className={L.kpiGrid}>
@@ -137,9 +165,9 @@ function ExecutiveDashboard() {
 
           <div className={L.columns}>
             <div className="flex min-w-0 flex-col gap-4">
-              <PortfolioSection data={data} />
-              <CollectionSection data={data} />
-              <FinancialSection data={data} />
+              <PortfolioSection data={data} pastPeriod={pastPeriod} />
+              <CollectionSection data={data} pastPeriod={pastPeriod} />
+              <FinancialSection data={data} booksReady={booksReady} pastPeriod={pastPeriod} />
               <OperationsSection data={data} />
               <BranchSection source={endpoints.branches} sentFilters={overview?.filters_applied ?? []} />
             </div>

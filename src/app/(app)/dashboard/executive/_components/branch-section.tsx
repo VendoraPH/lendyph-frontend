@@ -26,7 +26,8 @@ export function BranchSection({ source, sentFilters }: { source: EndpointSource<
           {table && (
             <div className="space-y-2">
               <p className="text-xs text-muted-foreground">{table.updated}</p>
-              <div className="overflow-x-auto">
+              {/* The scrollbar stays visible (the system's overlay one hides), so the last columns are findable. */}
+              <div className="overflow-x-auto pb-1 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-track]:bg-muted/40" tabIndex={0} role="region" aria-label="Performance by branch, scrolls sideways">
                 <table className="w-full min-w-[960px] text-sm">
                   <caption className="sr-only">Performance by branch</caption>
                   <thead className="text-xs text-muted-foreground">

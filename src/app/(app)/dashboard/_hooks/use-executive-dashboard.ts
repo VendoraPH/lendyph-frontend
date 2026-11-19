@@ -24,9 +24,10 @@ type Load = () => Promise<unknown>;
 /**
  * Every read the dashboard makes, by source; each needs the permissions in
  * `SOURCE_PERMISSIONS`. Balances (loan balance summary, products,
- * performance, past due) take no dates: the server dates them to today, and a
- * date range there would filter by release date instead. Aging and
- * provisioning are as of the period's last day; the rest cover the period.
+ * performance, past due, aging, provisioning) take no dates: the server dates
+ * them to today. A past as-of date is never sent ("No backfill"): for a past
+ * period the sections show "No snapshot for this date" instead. The rest cover
+ * the period.
  */
 function requests({ period, branchId }: { period: ServerRange; branchId?: number }): Partial<Record<SourceKey, Load>> {
   const branch = branchId ? { branch_id: branchId } : {};
@@ -34,12 +35,12 @@ function requests({ period, branchId }: { period: ServerRange; branchId?: number
 
   return {
     balance: () => reportService.loanBalanceSummary(branch),
-    aging: () => reportService.aging({ ...branch, as_of_date: period.to }),
+    aging: () => reportService.aging(branch),
     cashFlow: () => reportService.cashFlow(range),
     efficiency: () => reportService.collectionEfficiency(range),
     products: () => reportService.portfolioByProduct(branch),
     performance: () => reportService.performance(range),
-    provisioning: () => reportService.provisioning({ ...branch, as_of_date: period.to }),
+    provisioning: () => reportService.provisioning(branch),
     shareCapital: () => reportService.shareCapital(range),
     income: () => reportService.income(range),
     borrowers: () => reportService.borrowers(range),

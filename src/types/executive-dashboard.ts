@@ -46,6 +46,8 @@ export interface ExecutiveCard {
   change_unit: "percent" | "points";
   as_of: string | null;
   previous_as_of: string | null;
+  /** Why `previous_value` is missing, when the server says (a backend follow-up adds it). */
+  previous_state?: ExecutiveCardState | null;
   state: ExecutiveCardState;
   /** The filters sent that this card followed. */
   filters_applied: ExecutiveFilterKey[];

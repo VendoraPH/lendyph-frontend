@@ -8,6 +8,7 @@ import { readyData, type ExecutiveData } from "../../_lib/executive-data";
 import { pipelineStages, productRows, productShareSlices } from "../../_lib/executive-sections";
 import { DATA_UNAVAILABLE, formatMetric, toNumber } from "../../_lib/metrics";
 import { EXECUTIVE_LAYOUT as L } from "../../_lib/executive-layout";
+import { CARD_STATE_TEXT } from "../../_lib/executive-overview";
 import { Figure, SectionShell, SourceGate } from "./section-shell";
 
 const SLICE_COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"];
@@ -16,7 +17,9 @@ const REST_COLOR = "var(--muted-foreground)";
 
 const money = (v: number | null) => (v === null ? DATA_UNAVAILABLE : formatCurrency(v));
 
-export function PortfolioSection({ data }: { data: ExecutiveData }) {
+/** `pastPeriod`: product shares and outstanding are today's balances, so a past period shows "No snapshot for this date" (No backfill). */
+export function PortfolioSection({ data, pastPeriod }: { data: ExecutiveData; pastPeriod: boolean }) {
+  const notice = pastPeriod ? CARD_STATE_TEXT.no_snapshot : null;
   const rows = productRows(readyData(data.products));
   // The server's shares: its named products, then its "other" row.
   const pie = productShareSlices(readyData(data.products)).map((s, i) => ({
@@ -35,7 +38,7 @@ export function PortfolioSection({ data }: { data: ExecutiveData }) {
       note="Outstanding is everything owed as of today. Share of portfolio is each product's share of the unpaid principal, from the report."
     >
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
-        <SourceGate source={data.products} empty={pie.length === 0} emptyText="No outstanding loans.">
+        <SourceGate source={data.products} empty={pie.length === 0} emptyText="No outstanding loans." notice={notice}>
           <div className={L.cell}>
             <ChartContainer config={config} className="mx-auto aspect-square h-[220px]" aria-hidden="true">
               <PieChart>
@@ -59,7 +62,7 @@ export function PortfolioSection({ data }: { data: ExecutiveData }) {
           </div>
         </SourceGate>
 
-        <SourceGate source={data.products} empty={rows.length === 0}>
+        <SourceGate source={data.products} empty={rows.length === 0} notice={notice}>
           <div className={`${L.cell} overflow-x-auto`}>
             <table className="w-full text-sm">
               <caption className="sr-only">Portfolio by product</caption>
@@ -93,7 +96,7 @@ export function PortfolioSection({ data }: { data: ExecutiveData }) {
       <div className={`mt-4 ${L.twoUp}`}>
         <div className={L.cell}>
           <h3 className="mb-2 text-sm font-medium">Outstanding by component (as of today)</h3>
-          <SourceGate source={data.balance} height="h-24">
+          <SourceGate source={data.balance} height="h-24" notice={notice}>
             <div className={L.tiles}>
               <Figure label="Principal" value={money(toNumber(out?.principal))} />
               <Figure label="Interest" value={money(toNumber(out?.interest))} />
@@ -103,7 +106,7 @@ export function PortfolioSection({ data }: { data: ExecutiveData }) {
           </SourceGate>
         </div>
         <div className={L.cell}>
-          <h3 className="mb-2 text-sm font-medium">Application pipeline</h3>
+          <h3 className="mb-2 text-sm font-medium">Application pipeline (as of today)</h3>
           <SourceGate source={data.loanStats} height="h-24">
             <div className={L.tiles}>
               {stages.map((s) => (

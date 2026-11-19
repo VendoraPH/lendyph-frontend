@@ -13,7 +13,7 @@ import {
   officerRows,
   pipelineStages,
 } from "./executive-sections";
-import { attentionItems } from "./attention";
+import { attentionItems, attentionStatus } from "./attention";
 
 const ready = <T,>(data: T) => ({ state: "ready" as const, data });
 
@@ -161,4 +161,20 @@ test("attention: past due is the grace-rule total, and a missing figure reads a 
 test("attention: the over-90 count is of loans, as the aging report counts them", () => {
   const items = attentionItems(data({ aging: ready({ buckets: { over_90: { amount: "800", count: 3 } } }) }));
   assert.equal(items.find((i) => i.id === "over-90")?.detail, "₱800.00 across 3 loans.");
+});
+
+test("attention reads Not available when its data failed, never Nothing needs attention", () => {
+  const failed = Object.fromEntries(Object.keys(data()).map((k) => [k, { state: "error" }])) as unknown as ExecutiveData;
+  assert.equal(attentionStatus(failed), "failed");
+  assert.equal(attentionStatus(data()), "loading");
+  const fine = Object.fromEntries(Object.keys(data()).map((k) => [k, ready({})])) as unknown as ExecutiveData;
+  assert.equal(attentionStatus(fine), "ready");
+  // A source the user may not read is not a failure.
+  assert.equal(attentionStatus({ ...fine, accounting: { state: "denied" } }), "ready");
+  assert.equal(attentionStatus({ ...fine, pastDue: { state: "error" } }), "failed");
+});
+
+test("balances are asked for as of today: never a past as_of_date (No backfill)", () => {
+  const hook = readFileSync(join(import.meta.dirname, "..", "_hooks", "use-executive-dashboard.ts"), "utf8");
+  assert.doesNotMatch(hook, /as_of_date/);
 });

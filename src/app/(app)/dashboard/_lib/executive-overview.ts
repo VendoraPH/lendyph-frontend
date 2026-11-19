@@ -62,6 +62,35 @@ export function periodCaption(period: ExecutivePeriod): string {
   return `${period.label}: ${range(period.from, period.to)}, compared with ${range(period.previous.from, period.previous.to)}`;
 }
 
+/** The caption: the server's period, its refusal in words, or that it is still being worked out. */
+export function captionText(period: ExecutivePeriod | null, refusal: string | null): string {
+  if (period) return periodCaption(period);
+  return refusal ? `Period not available: ${refusal}` : "Working out the period…";
+}
+
+/**
+ * Whether the period ends before today (`today` is the server's, from the
+ * branch table's `balances_as_of`). Balances then come only from snapshots:
+ * today's balances are never shown under a past date ("No backfill").
+ */
+export function isPastPeriod(period: ExecutivePeriod, today: string): boolean {
+  return period.to < today;
+}
+
+/** A custom range waiting for one of its dates; nothing is sent until both are there. */
+export function rangeProblem(choice: PeriodChoice): string | null {
+  if (choice.preset !== "custom") return null;
+  if (!choice.from) return "Choose a start date";
+  if (!choice.to) return "Choose an end date";
+  return null;
+}
+
+/** The books' state from the overview's book cards: the ledger sections follow it. */
+export function booksState(overview: ExecutiveOverview | null): "ready" | "requires_configuration" {
+  const books = ["interest_income", "net_income"].map((key) => overview?.cards[key]?.state);
+  return books.includes("requires_configuration") ? "requires_configuration" : "ready";
+}
+
 /** The server's cache time, in Manila. */
 export function updatedText(generatedAt: string): string {
   return `Updated ${formatDateTime(generatedAt)}`;
@@ -209,15 +238,28 @@ function changeText(change: number | null, unit: ExecutiveCard["change_unit"]): 
   return unit === "points" ? `${sign}${size.toFixed(2)} pts` : `${sign}${size.toFixed(1)}%`;
 }
 
+const NO_SNAPSHOT_COMPARISON = "No comparison: no snapshot for the earlier date";
+
+/**
+ * Why a ready card has no previous value: the server's `previous_state` when
+ * it sends one; otherwise a balance's comparison date had no snapshot.
+ */
+function noComparison(card: ExecutiveCard, meta: CardMeta): string {
+  const state = card.previous_state ?? (meta.kind === "balance" ? "no_snapshot" : null);
+  if (state === "no_snapshot") return NO_SNAPSHOT_COMPARISON;
+  if (state === "no_access") return "No comparison: not available";
+  if (state === "requires_configuration") return `No comparison: ${CARD_STATE_TEXT.requires_configuration.toLowerCase()}`;
+  return "No comparison for the earlier period";
+}
+
 function cardView(card: ExecutiveCard, sent: readonly ExecutiveFilterKey[]): CardView {
   const meta = CARD_META[card.key] ?? FALLBACK_META;
   const state = card.state as CardViewState;
   const ready = state === "ready";
   const stateText = ready ? null : CARD_STATE_TEXT[state];
-  const previous =
-    ready && card.previous_value !== null
-      ? `Previous: ${unitText(card.previous_value, card.unit)}${card.previous_as_of ? ` (${formatDate(card.previous_as_of)})` : ""}`
-      : null;
+  const previous = !ready ? null : card.previous_value !== null
+    ? `Previous: ${unitText(card.previous_value, card.unit)}${card.previous_as_of ? ` (${formatDate(card.previous_as_of)})` : ""}`
+    : noComparison(card, meta);
 
   return {
     key: card.key,

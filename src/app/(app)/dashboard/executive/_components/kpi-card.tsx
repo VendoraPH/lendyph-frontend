@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import Link from "next/link";
 import { ArrowDownRight, ArrowUpRight, Info, Minus } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -23,6 +24,7 @@ const TITLE_CLASS = "text-left text-xs font-medium text-muted-foreground after:a
  * opens its loans (`onOpenPar`) when the user may read them.
  */
 export function KpiCard({ card, onOpenPar }: { card: CardView; onOpenPar: (() => void) | null }) {
+  const describedBy = useId();
   const ChangeIcon = card.changeTone === "flat" ? Minus : card.changeText?.startsWith("+") ? ArrowUpRight : ArrowDownRight;
   const ready = card.state === "ready";
 
@@ -32,14 +34,14 @@ export function KpiCard({ card, onOpenPar }: { card: CardView; onOpenPar: (() =>
         <div className="flex items-start justify-between gap-2">
           {card.href === "par" ? (
             onOpenPar ? (
-              <button type="button" onClick={onOpenPar} className={TITLE_CLASS}>
+              <button type="button" onClick={onOpenPar} className={TITLE_CLASS} aria-describedby={describedBy}>
                 {card.label}
               </button>
             ) : (
               <span className="text-xs font-medium text-muted-foreground">{card.label}</span>
             )
           ) : (
-            <Link href={card.href} className={TITLE_CLASS}>
+            <Link href={card.href} className={TITLE_CLASS} aria-describedby={describedBy}>
               {card.label}
             </Link>
           )}
@@ -65,12 +67,33 @@ export function KpiCard({ card, onOpenPar }: { card: CardView; onOpenPar: (() =>
           ) : null}
         </div>
 
-        <p
-          className={cn("font-bold tabular-nums leading-tight", ready ? "text-xl" : "text-sm text-muted-foreground")}
-          title={ready ? card.valueText : undefined}
-        >
-          {card.compactText}
-        </p>
+        {/* The exact figure, for screen readers on the card's link. */}
+        <span id={describedBy} className="sr-only">
+          {[card.valueText, card.previousText, card.asOfText].filter(Boolean).join(". ")}
+        </span>
+        {ready && card.compactText !== card.valueText ? (
+          // Above the link's overlay, so hover and Tab both reach the exact figure.
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span
+                    tabIndex={0}
+                    aria-label={`${card.label}: ${card.valueText}`}
+                    className="relative z-10 w-fit rounded text-xl font-bold tabular-nums leading-tight outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                  />
+                }
+              >
+                {card.compactText}
+              </TooltipTrigger>
+              <TooltipContent side="top">{card.valueText}</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : (
+          <p className={cn("font-bold tabular-nums leading-tight", ready ? "text-xl" : "text-sm text-muted-foreground")}>
+            {card.compactText}
+          </p>
+        )}
 
         {card.previousText ? <p className="text-[11px] text-muted-foreground">{card.previousText}</p> : null}
         {card.filterNote ? <p className="text-[11px] text-amber-700 dark:text-amber-400">{card.filterNote}</p> : null}

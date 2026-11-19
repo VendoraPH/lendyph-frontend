@@ -36,24 +36,32 @@ export function SourceGate({
   empty,
   emptyText = "No records for this selection.",
   height = "h-[220px]",
+  notice = null,
   children,
 }: {
   source: Source<unknown>;
+  /**
+   * Shown instead of the figures whatever the source holds: "No snapshot for
+   * this date" for a balance on a past period, "Requires configuration" for
+   * books that aren't set up.
+   */
+  notice?: string | null;
   /** True when the source arrived but has nothing to draw. */
   empty?: boolean;
   emptyText?: string;
   height?: string;
   children: ReactNode;
 }) {
-  if (source.state === "loading") return <Skeleton className={`${height} w-full`} />;
+  if (notice === null && source.state === "loading") return <Skeleton className={`${height} w-full`} />;
   const message =
-    source.state === "denied"
+    notice ??
+    (source.state === "denied"
       ? "No access: your role cannot view this data."
       : source.state === "error"
         ? DATA_UNAVAILABLE
         : empty
           ? emptyText
-          : null;
+          : null);
   if (message) {
     return (
       <div className={`flex ${height} items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground`}>
