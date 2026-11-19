@@ -11,7 +11,6 @@ import { cn } from "@/lib/utils";
 import type { BookKind, ColumnBookKind } from "@/types";
 import { AccountingPageHeader } from "../_components/page-header";
 import {
-  ALL_BRANCHES,
   BranchFilter,
   DateFilter,
   FilterBar,
@@ -20,6 +19,7 @@ import {
 import { BookReport } from "./_components/book-report";
 import { ColumnBookReport } from "./_components/column-book";
 import { BOOK_VIEW_ITEMS, isBookView, type BookView } from "./_lib/column-book";
+import { useBranchFilter } from "@/hooks/use-working-branch";
 
 interface BookTab {
   kind: BookKind;
@@ -111,7 +111,7 @@ export default function AccountingBooksPage() {
   const [tab, setTab] = useState<string>(BOOKS[0].kind);
   const [from, setFrom] = useState(startOfMonthISO());
   const [to, setTo] = useState(todayISO());
-  const [branch, setBranch] = useState(ALL_BRANCHES);
+  const [branch, setBranch] = useBranchFilter();
   const [view, setView] = useState<BookView>("columns");
 
   const branchId = branchParam(branch);

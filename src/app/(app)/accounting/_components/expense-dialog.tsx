@@ -15,6 +15,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useChartOfAccounts, useDialogOpening } from "@/hooks";
+import { useWorkingBranchPreset } from "@/hooks/use-working-branch";
 import { formatCentavos } from "@/lib/accounting/money";
 import { formatDate, todayISO } from "@/lib/format";
 import { useAuthStore } from "@/store";
@@ -61,13 +62,14 @@ export function ExpenseDialog({ open, onOpenChange, onSubmit }: ExpenseDialogPro
   const { postable, isTemplate } = useChartOfAccounts();
 
   const [form, setForm] = useState<NewExpenseForm>(() => newExpenseForm(todayISO()));
-  const [branchId, setBranchId] = useState<number | null>(null);
+  // view_all only: the working branch, else No branch (head office).
+  const [branchId, setBranchId, resetBranch] = useWorkingBranchPreset<number | null>((working) => working);
   const [submitting, setSubmitting] = useState(false);
   const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
 
   if (useDialogOpening(open, null)) {
     setForm(newExpenseForm(todayISO()));
-    setBranchId(null);
+    resetBranch();
   }
 
   const set =

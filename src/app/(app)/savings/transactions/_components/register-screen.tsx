@@ -35,6 +35,7 @@ import {
   labelOf,
   reversalBlocker,
 } from "../../_lib/savings-rules";
+import { useBranchFilter } from "@/hooks/use-working-branch";
 
 const TYPE_OPTIONS = [
   { value: "all", label: "All types" },
@@ -47,7 +48,7 @@ const TYPE_OPTIONS = [
 /** Every savings account's transactions (`GET /savings/transactions`), paged on the server. */
 export function RegisterScreen() {
   const [type, setType] = useState("all");
-  const [branch, setBranch] = useState(ALL_BRANCHES);
+  const [branch, setBranch] = useBranchFilter();
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [searchDraft, setSearchDraft] = useState("");

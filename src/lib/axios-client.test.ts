@@ -446,6 +446,7 @@ describe("a deliberate sign-out", () => {
     signOut({
       getAccessToken: tokenManager.getAccessToken,
       clearTokens: tokenManager.clearTokens,
+      forgetWorkingBranch: () => {},
       logout: authService.logout,
     });
 

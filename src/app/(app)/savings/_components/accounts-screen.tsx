@@ -31,11 +31,12 @@ import { statusTabs } from "../_lib/savings-rules";
 import { AccountStatusBadge } from "./account-status-badge";
 import { Kpi } from "./kpi";
 import { OpenAccountDialog } from "./open-account-dialog";
+import { useBranchFilter } from "@/hooks/use-working-branch";
 
 export function AccountsScreen() {
   const router = useRouter();
   const [status, setStatus] = useState("all");
-  const [branch, setBranch] = useState(ALL_BRANCHES);
+  const [branch, setBranch] = useBranchFilter();
   const [searchDraft, setSearchDraft] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);

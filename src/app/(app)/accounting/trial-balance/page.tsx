@@ -25,16 +25,16 @@ import { outOfBalanceMessage } from "../_lib/trial-balance-side";
 import { AccountingPageHeader } from "../_components/page-header";
 import { DataState } from "../_components/data-state";
 import {
-  ALL_BRANCHES,
   BranchFilter,
   DateFilter,
   FilterBar,
   branchParam,
 } from "../_components/accounting-filters";
+import { useBranchFilter } from "@/hooks/use-working-branch";
 
 function TrialBalanceContent() {
   const [asOf, setAsOf] = useState(todayISO());
-  const [branch, setBranch] = useState(ALL_BRANCHES);
+  const [branch, setBranch] = useBranchFilter();
 
   const fetcher = useCallback(
     () => accountingService.trialBalance(asOf, branchParam(branch)),

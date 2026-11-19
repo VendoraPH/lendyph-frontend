@@ -19,6 +19,7 @@ import type { InterestRun } from "@/types";
 import { OptionSelect, type Option } from "../../_components/option-select";
 import { RUN_STATUS_TABS } from "../_lib/run-rules";
 import { RunStatusBadge } from "./run-status-badge";
+import { useBranchFilter } from "@/hooks/use-working-branch";
 
 const ALL_PRODUCTS = "all";
 
@@ -67,7 +68,7 @@ function RunsTable({ runs }: { runs: InterestRun[] }) {
 export function RunsList({ productOptions }: { productOptions: readonly Option[] }) {
   const [status, setStatus] = useState("all");
   const [product, setProduct] = useState(ALL_PRODUCTS);
-  const [branch, setBranch] = useState(ALL_BRANCHES);
+  const [branch, setBranch] = useBranchFilter();
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(20);
 

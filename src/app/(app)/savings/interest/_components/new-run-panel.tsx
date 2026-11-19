@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Calculator } from "lucide-react";
 import { ALL_BRANCHES, branchIdParam } from "@/components/common/branch-filter";
+import { useWorkingBranch } from "@/hooks/use-working-branch";
+import { branchFilterDefault } from "@/lib/working-branch";
 import { AlignedBranchFilter } from "../../_components/aligned-branch-filter";
 import { PermissionButton } from "@/components/common/permission-button";
 import { Button } from "@/components/ui/button";
@@ -54,7 +56,10 @@ function PreviewResult({ preview }: { preview: InterestRunPreview }) {
 export function NewRunPanel({ productOptions, onCreated }: { productOptions: readonly Option[]; onCreated: () => void }) {
   const router = useRouter();
   const guard = useSubmitGuard();
-  const [form, setForm] = useState<RunForm>(EMPTY_FORM);
+  // The branch starts on the working branch (multi-branch flag), else All.
+  const { branchId: working } = useWorkingBranch();
+  const emptyForm = (): RunForm => ({ ...EMPTY_FORM, branch: branchFilterDefault({ working, fallback: ALL_BRANCHES }) });
+  const [form, setForm] = useState<RunForm>(emptyForm);
   const [request, setRequest] = useState<InterestRunRequest | null>(null);
   const [preview, setPreview] = useState<InterestRunPreview | null>(null);
   const [previewing, setPreviewing] = useState(false);
@@ -89,7 +94,7 @@ export function NewRunPanel({ productOptions, onCreated }: { productOptions: rea
       .run(() => savingsInterestService.create(request))
       ?.then((runs) => {
         notifySuccess(createdMessage(runs), "Another user must approve each run before it posts.");
-        setForm(EMPTY_FORM);
+        setForm(emptyForm());
         setRequest(null);
         setPreview(null);
         if (runs.length === 1) router.push(`/savings/interest/${runs[0].id}`);

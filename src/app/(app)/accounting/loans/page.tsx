@@ -10,7 +10,6 @@ import type { LoanAccountingSummary } from "@/types";
 import { AccountingPageHeader } from "../_components/page-header";
 import { DataState } from "../_components/data-state";
 import {
-  ALL_BRANCHES,
   BranchFilter,
   DateFilter,
   FilterBar,
@@ -20,10 +19,11 @@ import { AgingTable } from "./_components/aging-table";
 import { LoansByAge } from "./_components/loans-by-age";
 import { PostingRulesCard } from "./_components/posting-rules-card";
 import { BooksFigures, BooksVsRecords, RecordsFigures } from "./_components/summary-figures";
+import { useBranchFilter } from "@/hooks/use-working-branch";
 
 function LoanAccountingContent() {
   const [asOf, setAsOf] = useState(todayISO());
-  const [branch, setBranch] = useState(ALL_BRANCHES);
+  const [branch, setBranch] = useBranchFilter();
   const branchId = branchParam(branch);
 
   const fetcher = useCallback(

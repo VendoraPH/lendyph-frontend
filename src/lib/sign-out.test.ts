@@ -12,6 +12,9 @@ function harness(opts: { token?: string | null; logoutFails?: boolean } = {}) {
       steps.push("clear");
       stored = null;
     },
+    forgetWorkingBranch: () => {
+      steps.push("forget working branch");
+    },
     logout: (token: string) => {
       steps.push(`logout ${token} (stored: ${stored ?? "none"})`);
       return new Promise<void>((resolve, reject) => {
@@ -30,7 +33,7 @@ describe("signOut", () => {
     // Storage is already empty while Log out is still out, so the bell and the
     // badge stop at once and a 401 meanwhile finds no session to expire.
     assert.equal(h.stored(), null);
-    assert.deepEqual(h.steps, ["clear", "logout old (stored: none)"]);
+    assert.deepEqual(h.steps, ["clear", "forget working branch", "logout old (stored: none)"]);
 
     h.release();
     await done;
@@ -42,12 +45,21 @@ describe("signOut", () => {
     h.release();
     await done;
     assert.equal(h.stored(), null);
-    assert.deepEqual(h.steps, ["clear", "logout old (stored: none)"]);
+    assert.deepEqual(h.steps, ["clear", "forget working branch", "logout old (stored: none)"]);
   });
 
   test("with no token stored there is nothing to revoke: no request", async () => {
     const h = harness({ token: null });
     await signOut(h.deps);
-    assert.deepEqual(h.steps, ["clear"]);
+    assert.deepEqual(h.steps, ["clear", "forget working branch"]);
+  });
+
+  test("forgets the user's working branch, even when Log out fails", async () => {
+    const h = harness({ logoutFails: true });
+    const done = signOut(h.deps);
+    // Forgotten before Log out goes out, so the next sign-in starts afresh.
+    assert.deepEqual(h.steps, ["clear", "forget working branch", "logout old (stored: none)"]);
+    h.release();
+    await done;
   });
 });

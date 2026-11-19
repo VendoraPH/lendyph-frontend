@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { ALL_BRANCHES, branchIdParam } from "@/components/common/branch-filter";
+import { branchIdParam } from "@/components/common/branch-filter";
 import { DataState } from "@/components/common/data-state";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,6 +20,7 @@ import { KpiGrid } from "./kpi-grid";
 import { SeriesCharts } from "./series-charts";
 import { BreakdownTable } from "./breakdown-table";
 import { MaturityBuckets } from "./maturity-buckets";
+import { useBranchFilter } from "@/hooks/use-working-branch";
 
 /** Reports one click away, for users who can open them. */
 const REPORT_LINKS = [
@@ -33,7 +34,7 @@ export function SavingsDashboardScreen() {
   const { can } = usePermission();
   const [preset, setPreset] = useState<DashboardPreset>("this_month");
   const [custom, setCustom] = useState<DashboardPeriod>(() => presetPeriod("this_month", todayDate()));
-  const [branch, setBranch] = useState(ALL_BRANCHES);
+  const [branch, setBranch] = useBranchFilter();
   const [product, setProduct] = useState(ALL_PRODUCTS);
 
   const period = preset === "custom" ? custom : presetPeriod(preset, todayDate());

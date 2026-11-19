@@ -21,6 +21,7 @@ import {
 } from "../_lib/report-subject";
 import { toMemberOption, type MemberOption } from "@/hooks/use-member-search";
 import { useAuth, useBranches } from "@/hooks";
+import { useWorkingBranchPreset } from "@/hooks/use-working-branch";
 import { useBrandingStore } from "@/store/branding-store";
 import { branchPicker, pickedBranchLabel } from "@/lib/user-branches";
 import { Button } from "@/components/ui/button";
@@ -172,9 +173,10 @@ function ReportDetailContent({
     linkedPeriod ?? presetRange(defaultPreset, { from: "", to: "" })
   );
   // A link's `?branch=<id>` presets the picker on reports that filter by
-  // branch. It counts only once the picker offers it (see `pickedBranchId`).
-  const [branchChoice, setBranchChoice] = useState<number | null>(
-    report?.supportsBranch ? branchParam : null
+  // branch, else the working branch (multi-branch flag). Either counts only
+  // once the picker offers it (see `linkedBranchId`).
+  const [branchChoice, setBranchChoice] = useWorkingBranchPreset<number | null>((working) =>
+    report?.supportsBranch ? (branchParam ?? working) : null
   );
   // The savings product filter, and its words for the report's subtitle.
   const [product, setProduct] = useState<{ value: string; label: string }>({ value: ALL_PRODUCTS, label: "" });

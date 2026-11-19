@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import Link from "next/link";
 import { Search } from "lucide-react";
-import { BranchFilter, ALL_BRANCHES, branchIdParam } from "@/components/common/branch-filter";
+import { BranchFilter, branchIdParam } from "@/components/common/branch-filter";
 import { DataState } from "@/components/common/data-state";
 import { TablePagination } from "@/components/common/table-pagination";
 import { Input } from "@/components/ui/input";
@@ -27,6 +27,7 @@ import { StateBadge } from "../../_components/state-badge";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { FIT_CLASSES } from "@/lib/page-fill";
 import { cn } from "@/lib/utils";
+import { useBranchFilter } from "@/hooks/use-working-branch";
 
 const TYPE_OPTIONS = [{ value: "all", label: "Every request type" }, ...optionsOf(REQUEST_TYPE_LABELS)];
 const PER_PAGE = 25;
@@ -39,7 +40,7 @@ const PER_PAGE = 25;
 export function RequestsScreen() {
   const [status, setStatus] = useState<PortalRequestStatus>("submitted");
   const [type, setType] = useState("all");
-  const [branch, setBranch] = useState(ALL_BRANCHES);
+  const [branch, setBranch] = useBranchFilter();
   const [draft, setDraft] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);

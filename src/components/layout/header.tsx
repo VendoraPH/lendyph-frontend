@@ -49,6 +49,8 @@ import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { NotificationBell } from "./notification-bell";
 import { accountMenuLabel } from "./account-menu-label";
+import { WorkingBranchSelector } from "./working-branch-selector";
+import { forgetUserWorkingBranch } from "@/hooks/use-working-branch";
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -159,6 +161,7 @@ export function Header({ onMenuClick }: HeaderProps) {
     await signOut({
       getAccessToken: tokenManager.getAccessToken,
       clearTokens: tokenManager.clearTokens,
+      forgetWorkingBranch: () => forgetUserWorkingBranch(user?.id),
       logout: authService.logout,
     });
     localStorage.removeItem("lendy_remember_me");
@@ -195,6 +198,9 @@ export function Header({ onMenuClick }: HeaderProps) {
 
         {/* Right side: notifications + avatar */}
         <div className="flex items-center gap-2">
+          {/* Working branch (multi-branch flag only) */}
+          <WorkingBranchSelector />
+
           {/* Theme toggle */}
           <ThemeToggle />
 

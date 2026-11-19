@@ -1,0 +1,184 @@
+/**
+ * The working branch (Phase 6, multi-branch): the branch a user is working in,
+ * picked in the header, that presets every branch filter and form branch
+ * picker. It is a browser convenience only: kept per user in localStorage,
+ * never sent as proof of anything (the server checks every `branch_id`), so
+ * switching it isn't audited. Pure, so it runs under `tsx --test`.
+ */
+
+import { ALL_BRANCHES } from "./branch-filter";
+import { pickableBranches, type NamedBranch } from "./branch-choice";
+import type { BranchSelectItem, BranchViewer } from "./user-branches";
+
+const KEY_PREFIX = "lendy-working-branch:";
+
+/** The localStorage key of one user's working branch. */
+export function workingBranchKey(userId: number): string {
+  return `${KEY_PREFIX}${userId}`;
+}
+
+/** The part of `Storage` used here, so tests can hand in a Map. */
+export interface WorkingBranchStorage {
+  getItem: (key: string) => string | null;
+  setItem: (key: string, value: string) => void;
+  removeItem: (key: string) => void;
+}
+
+type StorageSource = () => WorkingBranchStorage;
+type UserId = number | null | undefined;
+
+/**
+ * The user's stored working branch id, or null: none stored, no user, an
+ * unreadable value, or a storage that can't be reached (blocked, server render).
+ */
+export function readWorkingBranch(storage: StorageSource, userId: UserId): number | null {
+  if (userId === null || userId === undefined) return null;
+  let raw: string | null;
+  try {
+    raw = storage().getItem(workingBranchKey(userId));
+  } catch {
+    return null;
+  }
+  if (raw === null || !/^\d+$/.test(raw)) return null;
+  const id = Number(raw);
+  return id > 0 ? id : null;
+}
+
+/** Stores the user's working branch; null (All branches) removes it. A failed write is dropped. */
+export function writeWorkingBranch(storage: StorageSource, userId: UserId, branchId: number | null): void {
+  if (userId === null || userId === undefined) return;
+  try {
+    if (branchId === null) storage().removeItem(workingBranchKey(userId));
+    else storage().setItem(workingBranchKey(userId), String(branchId));
+  } catch {
+    // Not saved: the working branch is only a convenience.
+  }
+}
+
+/** Forgets the user's working branch, at sign-out. */
+export function forgetWorkingBranch(storage: StorageSource, userId: UserId): void {
+  writeWorkingBranch(storage, userId, null);
+}
+
+/**
+ * The working branch that counts, or null. With the flag off there is none, so
+ * every filter keeps today's default. A branch user's stored branch counts only
+ * while it is still theirs; view_all may hold any branch. Once the branch list
+ * (`GET /branches`, active branches only) is loaded, a branch it no longer
+ * lists stops counting too.
+ */
+export function workingBranchFor(args: {
+  enabled: boolean;
+  stored: number | null;
+  viewer: BranchViewer;
+  listed?: readonly { id: number }[] | null;
+}): number | null {
+  const { enabled, stored, viewer, listed } = args;
+  if (!enabled || stored === null) return null;
+  if (!viewer.viewAll && !viewer.branchIds.includes(stored)) return null;
+  if (listed && listed.length > 0 && !listed.some((b) => b.id === stored)) return null;
+  return stored;
+}
+
+/**
+ * A list's branch filter default: the page's own `?branch=` first, then the
+ * working branch, then the page's default today (`fallback`).
+ */
+export function branchFilterDefault(args: {
+  url?: string | null;
+  working: number | null;
+  fallback: string;
+}): string {
+  const { url, working, fallback } = args;
+  if (url) return url;
+  if (working !== null) return String(working);
+  return fallback;
+}
+
+/**
+ * A form branch picker's preselection: the working branch when the form offers
+ * it, else the form's own preselection.
+ */
+export function workingBranchPreset<T extends string | null>(
+  working: number | null,
+  offered: readonly string[],
+  own: T,
+): string | T {
+  if (working !== null && offered.includes(String(working))) return String(working);
+  return own;
+}
+
+export type WorkingBranchSelector =
+  /** No branch and no view_all: the header shows nothing. */
+  | { kind: "none" }
+  /** One branch and no view_all: the header names it, as plain text. */
+  | { kind: "single"; branch: NamedBranch }
+  | { kind: "select"; items: BranchSelectItem[] };
+
+/**
+ * What the header's selector offers: only the caller's branches, and with
+ * view_all "All branches" first. A branch user's own branches stand in while
+ * the list loads; once loaded, only the ones it lists (active) are offered.
+ */
+export function workingBranchSelector<T extends NamedBranch>(source: {
+  viewAll: boolean;
+  own: readonly T[];
+  listed: readonly T[];
+}): WorkingBranchSelector {
+  const toItem = (b: NamedBranch) => ({ value: String(b.id), label: b.name });
+  if (source.viewAll) {
+    const branches = pickableBranches(source);
+    return { kind: "select", items: [{ value: ALL_BRANCHES, label: "All branches" }, ...branches.map(toItem)] };
+  }
+  const listedIds = new Set(source.listed.map((b) => b.id));
+  const branches =
+    source.listed.length > 0 ? source.own.filter((b) => listedIds.has(b.id)) : [...source.own];
+  if (branches.length === 0) return { kind: "none" };
+  if (branches.length === 1) return { kind: "single", branch: branches[0] };
+  return { kind: "select", items: branches.map(toItem) };
+}
+
+/** The selector's value: the working branch, else All branches for view_all, else nothing picked. */
+export function workingBranchSelectorValue(working: number | null, viewAll: boolean): string | null {
+  if (working !== null) return String(working);
+  return viewAll ? ALL_BRANCHES : null;
+}
+
+/**
+ * A filter object that carries the branch as `branch_id` (Reminders,
+ * Applications), and the working branch it was last picked under: `undefined`
+ * while it was never picked on the page.
+ */
+export interface BranchScopedFilters<T extends { branch_id?: number }> {
+  filters: T;
+  pickedUnder: number | null | undefined;
+}
+
+export function initialBranchFilters<T extends { branch_id?: number }>(filters: T): BranchScopedFilters<T> {
+  return { filters, pickedUnder: undefined };
+}
+
+/**
+ * The filters the page shows: as stored once its branch was picked under the
+ * current working branch, otherwise with the branch following the working
+ * branch (none: every branch, today's default). Other filters always stay.
+ */
+export function shownBranchFilters<T extends { branch_id?: number }>(
+  state: BranchScopedFilters<T>,
+  working: number | null,
+): T {
+  if (state.pickedUnder !== undefined && state.pickedUnder === working) return state.filters;
+  const rest = { ...state.filters };
+  delete rest.branch_id;
+  return working === null ? rest : { ...rest, branch_id: working };
+}
+
+/** Stores the page's next filters; a changed `branch_id` counts as a pick under `working`. */
+export function nextBranchFilters<T extends { branch_id?: number }>(
+  prev: BranchScopedFilters<T>,
+  next: T,
+  working: number | null,
+): BranchScopedFilters<T> {
+  const shown = shownBranchFilters(prev, working);
+  return { filters: next, pickedUnder: next.branch_id !== shown.branch_id ? working : prev.pickedUnder };
+}

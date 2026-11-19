@@ -6,7 +6,7 @@ import { ArrowLeft } from "lucide-react";
 import { RouteGuard } from "@/components/common";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { useBranches, usePermission } from "@/hooks";
-import { ALL_BRANCHES, branchFilterOptions, branchIdParam } from "@/lib/branch-filter";
+import { branchFilterOptions, branchIdParam } from "@/lib/branch-filter";
 import { formatDateRange } from "@/lib/report-format";
 import { todayISO } from "@/lib/format";
 import { useAuthStore } from "@/store";
@@ -23,13 +23,14 @@ import { FinancialSection } from "./_components/financial-section";
 import { KpiCard } from "./_components/kpi-card";
 import { OperationsSection } from "./_components/operations-section";
 import { PortfolioSection } from "./_components/portfolio-section";
+import { useBranchFilter } from "@/hooks/use-working-branch";
 
 const INITIAL_PRESET: DashboardPreset = "this_month";
 
 function ExecutiveDashboard() {
   const [preset, setPreset] = useState<DashboardPreset>(INITIAL_PRESET);
   const [period, setPeriod] = useState<Period>(() => presetPeriod(INITIAL_PRESET, { from: todayISO(), to: todayISO() }));
-  const [branch, setBranch] = useState(ALL_BRANCHES);
+  const [branch, setBranch] = useBranchFilter();
   const [reloadCount, setReloadCount] = useState(0);
 
   const { branches } = useBranches();
