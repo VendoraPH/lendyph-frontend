@@ -249,6 +249,11 @@ export const API_ENDPOINTS = {
     COLLECTIONS_TREND: "/dashboard/collections-trend",
     DAILY_DUES: "/dashboard/daily-dues",
     RECENT_TRANSACTIONS: "/dashboard/recent-transactions",
+    // The executive dashboard (Phase 6 EB-D1): dashboard:analytics, plus each
+    // figure's source permission. PAR loans also need reports:view and loans:view.
+    EXECUTIVE_OVERVIEW: "/dashboard/executive/overview",
+    EXECUTIVE_BRANCHES: "/dashboard/executive/branches",
+    EXECUTIVE_PAR_LOANS: "/dashboard/executive/par-loans",
   },
   USERS: {
     LIST: "/users",

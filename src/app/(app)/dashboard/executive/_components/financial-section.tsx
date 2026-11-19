@@ -8,6 +8,7 @@ import { cashBalance, fromCentavos, readyData, type ExecutiveData } from "../../
 import { hasActivity, incomeExpenseSeries, monthLabel } from "../../_lib/executive-sections";
 import { EXECUTIVE_LAYOUT as L } from "../../_lib/executive-layout";
 import { compactPeso, formatMetric, toNumber } from "../../_lib/metrics";
+import { CARD_STATE_TEXT } from "../../_lib/executive-overview";
 import { Figure, SectionShell, SourceGate, figureText } from "./section-shell";
 
 const config = {
@@ -18,12 +19,26 @@ const config = {
 
 const money = (v: number | null) => formatMetric(v, "currency");
 
-export function FinancialSection({ data }: { data: ExecutiveData }) {
+/**
+ * `booksReady` is the overview's book cards' state: while the books aren't set
+ * up, the ledger figures read "Requires configuration", as the cards do, never
+ * ₱0.00. Required Allowance is the overview card's own figure (and state).
+ */
+export function FinancialSection({
+  data,
+  booksReady,
+  allowance,
+}: {
+  data: ExecutiveData;
+  booksReady: boolean;
+  /** The overview's Required Allowance card in words: the figure the allowance posting books. */
+  allowance: string;
+}) {
+  const books = booksReady ? null : CARD_STATE_TEXT.requires_configuration;
   const acc = readyData(data.accounting);
   const series = incomeExpenseSeries(acc).map((p) => ({ ...p, label: monthLabel(p.month) }));
   const income = readyData(data.income);
   const share = readyData(data.shareCapital);
-  const provisioning = readyData(data.provisioning);
 
   return (
     <SectionShell
@@ -31,7 +46,7 @@ export function FinancialSection({ data }: { data: ExecutiveData }) {
       icon={<Landmark className="size-4" />}
       note="Ledger figures come from posted journals. Cash-basis income is what was collected in the period, not what was recognized."
     >
-      <SourceGate source={data.accounting} height="h-24">
+      <SourceGate source={data.accounting} height="h-24" notice={books}>
         <div className={L.tiles}>
           <Figure label="Income (period)" value={money(fromCentavos(acc?.period.income))} />
           <Figure label="Expenses (period)" value={money(fromCentavos(acc?.period.expenses))} />
@@ -46,6 +61,7 @@ export function FinancialSection({ data }: { data: ExecutiveData }) {
         <div className={L.cell}>
           <h3 className="mb-2 text-sm font-medium">Income vs expenses, last 12 months</h3>
           <SourceGate
+            notice={books}
             source={data.accounting}
             empty={!hasActivity(series, ["income", "expenses", "net"])}
             emptyText="No income or expenses posted in these 12 months."
@@ -95,7 +111,11 @@ export function FinancialSection({ data }: { data: ExecutiveData }) {
           </SourceGate>
           <div className={L.tiles}>
             <Figure label="Share capital" value={figureText(data.shareCapital, toNumber(share?.closing_balance), "currency")} hint="Closing balance" />
-            <Figure label="Required allowance" value={figureText(data.provisioning, toNumber(provisioning?.totals?.required_allowance), "currency")} hint="Provisioning" />
+            <Figure
+              label="Required allowance"
+              value={allowance}
+              hint="As the allowance posting books it"
+            />
           </div>
         </div>
       </div>

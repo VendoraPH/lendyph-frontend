@@ -2,14 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   DATA_UNAVAILABLE,
-  METRICS,
-  OVERVIEW_METRICS,
   changeTone,
   compactPeso,
-  formatChange,
   formatMetric,
-  percentChange,
-  pointChange,
   toNumber,
 } from "./metrics";
 
@@ -21,20 +16,6 @@ test("server figures parse, and a missing one is null, never zero", () => {
   assert.equal(toNumber(undefined), null);
   assert.equal(toNumber(""), null);
   assert.equal(toNumber("n/a"), null);
-});
-
-test("percent change has no value without a base", () => {
-  assert.equal(percentChange(150, 100), 50);
-  assert.equal(percentChange(50, 100), -50);
-  assert.equal(percentChange(100, 0), null);
-  assert.equal(percentChange(null, 100), null);
-  assert.equal(percentChange(100, null), null);
-  assert.equal(percentChange(-50, -100), 50);
-});
-
-test("a ratio changes in points", () => {
-  assert.equal(pointChange(92.5, 90), 2.5);
-  assert.equal(pointChange(null, 90), null);
 });
 
 test("a rise is bad news for a metric where lower is better", () => {
@@ -56,18 +37,3 @@ test("values format by kind, and a missing value says so", () => {
   assert.equal(compactPeso(-130_000), "-₱130K");
 });
 
-test("changes read as percent or points", () => {
-  assert.equal(formatChange(4.24, "period"), "+4.2%");
-  assert.equal(formatChange(-1.1, "ratio"), "−1.10 pts");
-  assert.equal(formatChange(null, "period"), null);
-});
-
-test("every overview metric is defined, with a formula, a source and a drilldown", () => {
-  assert.equal(OVERVIEW_METRICS.length, 12);
-  for (const id of OVERVIEW_METRICS) {
-    const m = METRICS[id];
-    assert.ok(m.formula.length > 10, `${id} has no formula`);
-    assert.ok(m.source.startsWith("GET /"), `${id} has no source`);
-    assert.ok(m.href.startsWith("/"), `${id} has no drilldown`);
-  }
-});

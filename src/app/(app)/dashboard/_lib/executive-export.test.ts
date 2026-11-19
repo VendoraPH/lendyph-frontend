@@ -1,12 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { LOADING, type ExecutiveData } from "./executive-data";
+import type { ExecutiveBranches, ExecutiveCard, ExecutiveOverview, ExecutivePeriod } from "@/types/executive-dashboard";
+import { type ExecutiveData } from "./executive-data";
 import { executiveDocument } from "./executive-export";
-import { DATA_UNAVAILABLE } from "./metrics";
 
 const KEYS: (keyof ExecutiveData)[] = [
-  "balance", "aging", "cashFlow", "prevCashFlow", "efficiency", "prevEfficiency", "products", "performance",
-  "provisioning", "shareCapital", "income", "borrowers", "disbursements", "accounting", "loanStats",
+  "balance", "aging", "cashFlow", "efficiency", "products", "performance",
+  "shareCapital", "income", "borrowers", "disbursements", "accounting", "loanStats",
   "pastDue",
 ];
 
@@ -14,62 +14,126 @@ function data(overrides: Partial<ExecutiveData> = {}): ExecutiveData {
   return { ...(Object.fromEntries(KEYS.map((k) => [k, { state: "error" }])) as unknown as ExecutiveData), ...overrides };
 }
 
-const PERIOD = { from: "2026-11-01", to: "2026-11-17" };
+const PERIOD: ExecutivePeriod = {
+  preset: "this_month",
+  label: "This Month",
+  from: "2026-11-01",
+  to: "2026-11-17",
+  days: 17,
+  previous: { from: "2026-10-01", to: "2026-10-17", days: 17 },
+  as_of: "2026-11-17",
+};
 
-test("the export is an executive_dashboard document led by the 12 overview figures", () => {
-  const doc = executiveDocument(data(), PERIOD, new Date(2026, 10, 17, 9, 0));
+const card = (key: string, over: Partial<ExecutiveCard> = {}): ExecutiveCard => ({
+  key,
+  label: key,
+  unit: "money",
+  value: 1500000,
+  previous_value: 1000000,
+  change: 50,
+  change_unit: "percent",
+  as_of: "2026-11-17",
+  previous_as_of: "2026-10-17",
+  state: "ready",
+  filters_applied: [],
+  details: {},
+  ...over,
+});
+
+const OVERVIEW: ExecutiveOverview = {
+  period: PERIOD,
+  generated_at: "2026-11-17 09:00:00",
+  filters_applied: [],
+  cards: {
+    gross_loan_portfolio: card("gross_loan_portfolio", { label: "Gross Loan Portfolio" }),
+    past_due_amount: card("past_due_amount", { label: "Past Due Amount", state: "no_snapshot", value: null }),
+    net_income: card("net_income", { label: "Net Income", state: "no_access", value: null }),
+  },
+};
+
+const BRANCHES: ExecutiveBranches = {
+  period: PERIOD,
+  filters_applied: {},
+  generated_at: "2026-11-17 09:00:00",
+  balances_as_of: "2026-11-17",
+  books_state: "no_access",
+  rows: [
+    {
+      branch_id: 1,
+      branch_name: "Main",
+      gross_loan_portfolio: 100,
+      total_outstanding: 120,
+      active_loans: 7,
+      past_due_amount: 10,
+      past_due_loans: 1,
+      par_30: { amount: 10, ratio: 10, loans: 1 },
+      loans_released: 50,
+      collections: 40,
+      collected_insurance: 2,
+      collection_efficiency: 90,
+      revenue: null,
+      expenses: null,
+      net: null,
+    },
+  ],
+  totals: {
+    gross_loan_portfolio: 555.55,
+    total_outstanding: 120,
+    active_loans: 7,
+    past_due_amount: 10,
+    past_due_loans: 1,
+    par_30: { amount: 10, ratio: 10, loans: 1 },
+    loans_released: 50,
+    collections: 40,
+    collected_insurance: 2,
+    collection_efficiency: 90,
+    revenue: null,
+    expenses: null,
+    net: null,
+  },
+};
+
+test("the export is an executive_dashboard document led by the server's cards, in words", () => {
+  const doc = executiveDocument({ data: data(), overview: OVERVIEW, branches: BRANCHES, period: PERIOD }, new Date(2026, 10, 17, 9, 0));
   assert.equal(doc.reportId, "executive_dashboard");
-  assert.equal(doc.meta.title, "Executive Dashboard");
-  const grid = doc.sections[0];
-  assert.equal(grid.kind, "kpi_grid");
-  if (grid.kind !== "kpi_grid") return;
-  assert.equal(grid.items.length, 12);
-});
-
-test("a figure that failed exports as Data Unavailable, never zero, and a refused one as No access", () => {
-  const doc = executiveDocument(data({ borrowers: { state: "denied" }, products: LOADING }), PERIOD);
+  assert.equal(doc.meta.period, "Nov 1, 2026 – Nov 17, 2026");
   const grid = doc.sections[0];
   if (grid.kind !== "kpi_grid") throw new Error("expected the KPI grid first");
-  const byLabel = Object.fromEntries(grid.items.map((i) => [i.label, i.value]));
-  assert.equal(byLabel["Total Portfolio"], DATA_UNAVAILABLE);
-  assert.equal(byLabel["Active Members"], "No access");
-  assert.ok(!Object.values(byLabel).includes("₱0"));
+  const byLabel = Object.fromEntries(grid.items.map((i) => [i.label, i]));
+  assert.equal(byLabel["Gross Loan Portfolio"].value, "₱1,500,000.00");
+  assert.equal(byLabel["Gross Loan Portfolio"].hint, "As of Nov 17, 2026 · +50.0% against the previous period");
+  assert.equal(byLabel["Past Due Amount"].value, "No snapshot for this date");
+  assert.equal("Net Income" in byLabel, false);
 });
 
-test("an outstanding balance carries its as-of-today scope into the export", () => {
-  const doc = executiveDocument(
-    data({ balance: { state: "ready", data: { outstanding_principal: "1500000" } } }),
-    PERIOD,
-  );
+test("without the overview, the export says the cards could not be read", () => {
+  const doc = executiveDocument({ data: data(), overview: null, branches: null, period: PERIOD });
   const grid = doc.sections[0];
   if (grid.kind !== "kpi_grid") throw new Error("expected the KPI grid first");
-  const principal = grid.items.find((i) => i.label === "Total Portfolio");
-  assert.equal(principal?.hint?.startsWith("As of today"), true);
+  assert.deepEqual(grid.items, []);
 });
 
-test("the export's tables carry the screen's columns and dates in words", () => {
-  const doc = executiveDocument(
-    data({
-      aging: { state: "ready", data: { buckets: { "1_30": { amount: "50", count: 2 } } } },
-      performance: { state: "ready", data: { by_branch: [{ branch_id: 1, branch_name: "Main", active_borrowers: 7 }] } },
-    }),
-    PERIOD,
-  );
+test("the branch table is the server's rows and totals, never a sum", () => {
+  const doc = executiveDocument({ data: data(), overview: OVERVIEW, branches: BRANCHES, period: PERIOD });
+  const table = doc.sections.find((s) => s.kind === "table" && s.title === "Branch Performance");
+  if (!table || table.kind !== "table") throw new Error("expected the branch table");
+  assert.deepEqual(table.columns.map((c) => c.header).slice(0, 4), ["Branch", "Gross Loan Portfolio", "Outstanding", "Active Loans"]);
+  assert.equal(table.columns.some((c) => c.header === "Revenue"), false);
+  assert.equal(table.rows[0].gross_loan_portfolio, "₱100.00");
+  assert.equal(table.rows.at(-1)?.name, "Total");
+  assert.equal(table.rows.at(-1)?.gross_loan_portfolio, "₱555.55");
+});
+
+test("the export's other tables carry the screen's columns and dates in words", () => {
+  const doc = executiveDocument({
+    data: data({ aging: { state: "ready", data: { buckets: { "1_30": { amount: "50", count: 2 } } } } }),
+    overview: OVERVIEW,
+    branches: BRANCHES,
+    period: PERIOD,
+  });
   const tables = doc.sections.filter((s) => s.kind === "table");
   const aging = tables.find((t) => t.title?.startsWith("Past Due Aging"));
   assert.equal(aging?.title, "Past Due Aging (as of Nov 17, 2026)");
-  assert.deepEqual(aging?.columns.map((c) => c.header), ["Days past due", "Loans", "Amount"]);
-  const branches = tables.find((t) => t.title === "Branch Performance");
-  assert.deepEqual(branches?.columns.map((c) => c.header), [
-    "Branch",
-    "Members",
-    "Outstanding",
-    "Released",
-    "Collected",
-    "Collection rate",
-    "PAR 30",
-  ]);
-  assert.equal(branches?.rows[0].members, "7");
   const products = tables.find((t) => t.title?.startsWith("Portfolio by Product"));
-  assert.deepEqual(products?.columns.map((c) => c.header), ["Product", "Loans", "Outstanding", "Share of released", "PAR 30"]);
+  assert.deepEqual(products?.columns.map((c) => c.header), ["Product", "Loans", "Outstanding", "Principal Balance", "Share of portfolio", "PAR 30"]);
 });
