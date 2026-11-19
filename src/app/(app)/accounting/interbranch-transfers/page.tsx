@@ -27,7 +27,7 @@ import {
   type TransferForm,
   type TransferStep,
 } from "./_lib/transfers";
-import { VISIBLE_SCROLLBAR } from "./_lib/table-scroll";
+import { VISIBLE_SCROLLBAR } from "@/components/amla/visible-scrollbar";
 
 const PER_PAGE = 25;
 

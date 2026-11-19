@@ -8,7 +8,8 @@ import { FIT_CLASSES } from "@/lib/page-fill";
 import type { InterbranchInTransitReport, InterbranchTransfer } from "@/types/interbranch-transfer";
 import { centavosOrDash } from "../../_lib/server-figure";
 import type { TransferActionButton } from "../_lib/transfers";
-import { NESTED_VISIBLE_SCROLLBAR, VISIBLE_SCROLLBAR } from "../_lib/table-scroll";
+import { TABLES_SCROLL_WITH_BOX } from "../_lib/table-scroll";
+import { VISIBLE_SCROLLBAR } from "@/components/amla/visible-scrollbar";
 import { cn } from "@/lib/utils";
 import { TransfersTable } from "./transfers-table";
 
@@ -25,7 +26,8 @@ interface InTransitReportProps {
  * sent less received). Every figure and total is the server's.
  *
  * One scroll box holds both tables, each under its own heading, so every row
- * stays readable on a short screen. `data-unpinned`: nothing pins inside it,
+ * stays readable on a short screen. It is the one element that scrolls, both
+ * ways, and the focusable region, so the arrow keys move it sideways too. `data-unpinned`: nothing pins inside it,
  * so no heading or total ever covers another. The totals are one plain block.
  */
 export function InTransitReport({ report, canCreate, onAction, onSendBack }: InTransitReportProps) {
@@ -35,7 +37,7 @@ export function InTransitReport({ report, canCreate, onAction, onSendBack }: InT
     <Card className={FIT_CLASSES.section}>
       <CardContent className={FIT_CLASSES.section}>
         <ScrollBox className={VISIBLE_SCROLLBAR} tabIndex={0} role="region" aria-label="In transit, scrolls sideways">
-          <div data-unpinned="" className={cn("space-y-6", NESTED_VISIBLE_SCROLLBAR)}>
+          <div data-unpinned="" className={cn("space-y-6", TABLES_SCROLL_WITH_BOX)}>
             <p className="text-sm text-muted-foreground">
               As of {formatDate(report.as_of)}
               {accounts ? `, on ${accounts}` : ""}. A transfer approved and not yet received keeps Interbranch
