@@ -3,7 +3,7 @@ import { usePermission } from "@/hooks";
 import { accountingService, loanService, reportService } from "@/services";
 import type { Permission } from "@/types";
 import type { PastDueTotals } from "@/types/dashboard-reports";
-import { LOADING, SOURCE_PERMISSIONS, type ExecutiveData, type Source, type SourceKey } from "../_lib/executive-data";
+import { LOADING, SOURCE_PERMISSIONS, sourcePermitted, type ExecutiveData, type Source, type SourceKey } from "../_lib/executive-data";
 import { previousPeriod, type Period } from "../_lib/periods";
 
 export interface ExecutiveFilters {
@@ -84,7 +84,6 @@ const SOURCE_KEYS: SourceKey[] = [
 ];
 
 const PERMISSIONS: Permission[] = [...new Set(Object.values(SOURCE_PERMISSIONS).flat())];
-const permitted = (name: SourceKey, allowed: Set<string>) => SOURCE_PERMISSIONS[name].every((p) => allowed.has(p));
 
 /**
  * Loads the executive dashboard's sources in parallel, each on its own, so a
@@ -112,7 +111,7 @@ export function useExecutiveDashboard(filters: ExecutiveFilters, reloadCount: nu
 
     for (const name of SOURCE_KEYS) {
       const load = table[name];
-      if (!load || !permitted(name, allowed)) continue;
+      if (!load || !sourcePermitted(name, allowed)) continue;
       load()
         .then((data) => settle(name, data && typeof data === "object" ? { state: "ready", data } : { state: "error" }))
         .catch(() => settle(name, { state: "error" }));
@@ -125,7 +124,7 @@ export function useExecutiveDashboard(filters: ExecutiveFilters, reloadCount: nu
   const result = {} as Record<SourceKey, Source<unknown>>;
   for (const name of SOURCE_KEYS) {
     result[name] =
-      loaded[name] ?? (!table[name] ? { state: "error" } : permitted(name, allowed) ? LOADING : { state: "denied" });
+      loaded[name] ?? (!table[name] ? { state: "error" } : sourcePermitted(name, allowed) ? LOADING : { state: "denied" });
   }
   return result as ExecutiveData;
 }
