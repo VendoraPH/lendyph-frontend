@@ -189,6 +189,14 @@ export const env = {
     // Dashboard). Off by default; turned on for staging builds only. Literal
     // reference, as above.
     executiveDashboard: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_EXECUTIVE_DASHBOARD),
+    // AMLA Compliance (Phase 6: monitoring, cases, CTR and STR, screening and
+    // the AMLA log). Off by default: no AMLA screen shows until the backend
+    // serves /amla. Literal reference, as above.
+    amla: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_AMLA),
+    // Multi-branch operations (Phase 6: branch management, member transfers,
+    // interbranch transfers and the branch selector). Off by default until the
+    // backend serves them. Literal reference, as above.
+    multiBranch: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_MULTI_BRANCH),
   },
   debug: {
     enabled: getBoolEnvVar("NEXT_PUBLIC_DEBUG", false),

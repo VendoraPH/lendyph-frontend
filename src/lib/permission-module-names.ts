@@ -6,6 +6,7 @@ const MODULE_NAMES: Record<string, string> = {
   borrowers: "Members",
   gcash: "GCash",
   cda: "CDA Compliance",
+  amla: "AMLA Compliance",
 };
 
 /** A permission module key as users read it ("auto_pay" → "Auto Pay", "borrowers" → "Members"). */

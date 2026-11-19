@@ -19,3 +19,10 @@ test("the menu and this page read CDA's requirement from one place", async () =>
   const { MODULE_ALSO_REQUIRES } = await import("./permission-module-names");
   assert.deepEqual(CDA_NAV.alsoRequires, MODULE_ALSO_REQUIRES.cda);
 });
+
+test("Phase 6's modules read in words, AMLA included", () => {
+  assert.deepEqual(
+    viewableModuleNames(["amla:view", "interbranch_transfers:view", "loan_origination:view"]),
+    ["AMLA Compliance", "Interbranch Transfers", "Loan Origination"],
+  );
+});
