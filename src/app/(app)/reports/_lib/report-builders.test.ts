@@ -2886,20 +2886,24 @@ test("the cash flow branch note follows the rule the server says placed share ca
       )
     );
 
+  // Both scopes mean a branch filter was applied, so no Unassigned row is
+  // listed and the sentence doesn't mention one.
   // Since backend #334: the branch each entry was posted in.
   assert.equal(
     noteFor("posted_branch"),
     "Share capital paid in and out is in the row of the branch where each entry was posted; " +
-      "a member who moved keeps their earlier entries in their old branch. " +
-      "Entries with no branch are under Unassigned."
+      "a member who moved keeps their earlier entries in their old branch."
   );
   // An older backend: the member's branch.
   assert.equal(
     noteFor("borrower_branch"),
-    "Share capital paid in and out is in the row of the branch each member belongs to; " +
-      "members with no branch are under Unassigned."
+    "Share capital paid in and out is in the row of the branch each member belongs to."
   );
+  assert.doesNotMatch(noteFor("posted_branch")!, /Unassigned/);
+  assert.doesNotMatch(noteFor("borrower_branch")!, /Unassigned/);
+  // No branch filter: the Unassigned row can be listed, so it is named.
   assert.equal(noteFor("organisation"), CASH_FLOW_BRANCH_NOTE);
+  assert.match(noteFor("organisation")!, /Unassigned/);
 });
 
 test("cash flow says where payments' share capital build-up is counted, without moving a total", () => {

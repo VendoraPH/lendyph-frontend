@@ -1904,20 +1904,21 @@ function cashFlowBranchRows(rows: Record<string, unknown>[]): Record<string, unk
  * the net is restated as its own block rather than left as one KPI card among
  * four.
  */
-/** The Cash Flow branch breakdown's share capital sentence, by the rule that placed the rows. */
+/**
+ * The Cash Flow branch breakdown's share capital sentence, by the rule that
+ * placed the rows. Either branch scope means a branch filter was applied, so
+ * no Unassigned row is listed and the sentence names none; only the unfiltered
+ * answer mentions it.
+ */
 function cashFlowBranchNote(scope: unknown): string {
   if (scope === "posted_branch") {
     return (
       "Share capital paid in and out is in the row of the branch where each entry was posted; " +
-      "a member who moved keeps their earlier entries in their old branch. " +
-      "Entries with no branch are under Unassigned."
+      "a member who moved keeps their earlier entries in their old branch."
     );
   }
   if (scope === "borrower_branch") {
-    return (
-      "Share capital paid in and out is in the row of the branch each member belongs to; " +
-      "members with no branch are under Unassigned."
-    );
+    return "Share capital paid in and out is in the row of the branch each member belongs to.";
   }
   return "Share capital paid in and out is in its branch's row; entries with no branch are under Unassigned.";
 }
@@ -2061,7 +2062,7 @@ export function buildCashFlowDoc(raw: unknown, range: DateRange): ReportDocument
     // report. `share_capital.branch_scope` says which rule placed the rows
     // when a branch filter is applied: `posted_branch` since backend #334,
     // `borrower_branch` before. Unfiltered (`organisation`) it doesn't say,
-    // so that sentence holds under both.
+    // so that sentence holds under both and is the only one naming Unassigned.
     sections.push({ kind: "note", text: cashFlowBranchNote(pick(shareBlock, ["branch_scope"])) });
   }
 
