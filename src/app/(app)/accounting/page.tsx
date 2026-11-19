@@ -41,7 +41,6 @@ import type { AccountingDashboard, RecentJournal } from "@/types";
 import { AccountingPageHeader } from "./_components/page-header";
 import { DataState } from "./_components/data-state";
 import {
-  ALL_BRANCHES,
   BranchFilter,
   DateFilter,
   FilterBar,
@@ -61,6 +60,7 @@ import {
   defaultDashboardFrom,
   periodRangeLabel,
 } from "./_lib/dashboard-period";
+import { useBranchFilter } from "@/hooks/use-working-branch";
 
 /** Where a loan officer actually goes from here. */
 const SHORTCUTS = [
@@ -76,7 +76,7 @@ function AccountingDashboardContent() {
   const [asOf, setAsOf] = useState(todayISO());
   // Follows As of's month until someone picks a From of their own.
   const [fromPicked, setFromPicked] = useState<string | null>(null);
-  const [branch, setBranch] = useState(ALL_BRANCHES);
+  const [branch, setBranch] = useBranchFilter();
   // Held here, outside the data state, so changing a filter keeps the open tab.
   const [tab, setTab] = useState<DashboardTab>("figures");
   const from = fromPicked ?? defaultDashboardFrom(asOf);

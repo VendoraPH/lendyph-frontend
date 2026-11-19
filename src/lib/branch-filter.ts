@@ -39,3 +39,21 @@ export function branchIdParam(value: string): number | undefined {
   const id = Number(value);
   return id > 0 ? id : undefined;
 }
+
+/** What a branch picker reads while the branch list loads. */
+export const LOADING_BRANCHES = "Loading branches…";
+
+/**
+ * What a branch filter's trigger shows for `value`: the value when its items
+ * name it; otherwise nothing picked, with "Loading branches…" while the list
+ * loads (a preset working branch the list hasn't brought yet), else "Select a
+ * branch". Never the raw id.
+ */
+export function shownBranchValue(
+  value: string,
+  items: readonly BranchSelectItem[],
+  loading: boolean,
+): { value: string | null; placeholder: string | undefined } {
+  if (items.some((i) => i.value === value)) return { value, placeholder: undefined };
+  return { value: null, placeholder: loading ? LOADING_BRANCHES : "Select a branch" };
+}

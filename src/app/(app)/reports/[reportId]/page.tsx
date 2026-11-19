@@ -1,6 +1,7 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useId, useState } from "react";
+import { LOADING_BRANCHES } from "@/lib/branch-filter";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -21,6 +22,7 @@ import {
 } from "../_lib/report-subject";
 import { toMemberOption, type MemberOption } from "@/hooks/use-member-search";
 import { useAuth, useBranches } from "@/hooks";
+import { useWorkingBranchPreset } from "@/hooks/use-working-branch";
 import { useBrandingStore } from "@/store/branding-store";
 import { branchPicker, pickedBranchLabel } from "@/lib/user-branches";
 import { Button } from "@/components/ui/button";
@@ -172,9 +174,10 @@ function ReportDetailContent({
     linkedPeriod ?? presetRange(defaultPreset, { from: "", to: "" })
   );
   // A link's `?branch=<id>` presets the picker on reports that filter by
-  // branch. It counts only once the picker offers it (see `pickedBranchId`).
-  const [branchChoice, setBranchChoice] = useState<number | null>(
-    report?.supportsBranch ? branchParam : null
+  // branch, else the working branch (multi-branch flag). Either counts only
+  // once the picker offers it (see `linkedBranchId`).
+  const [branchChoice, setBranchChoice] = useWorkingBranchPreset<number | null>((working) =>
+    report?.supportsBranch ? (branchParam ?? working) : null
   );
   // The savings product filter, and its words for the report's subtitle.
   const [product, setProduct] = useState<{ value: string; label: string }>({ value: ALL_PRODUCTS, label: "" });
@@ -203,6 +206,7 @@ function ReportDetailContent({
   // A linked branch still waiting on the list holds Generate, so the first run
   // can't go out for every branch while the link asked for one.
   const branchPending = branchChoice !== null && branchesLoading;
+  const branchFieldId = useId();
   const logoUrl = useBrandingStore((s) => s.logoUrl);
   const loadBranding = useBrandingStore((s) => s.load);
 
@@ -590,7 +594,9 @@ function ReportDetailContent({
             <div className="mt-4 flex flex-wrap items-end gap-4 border-t pt-4 fit:mt-3 fit:gap-3 fit:pt-3">
               {report.supportsBranch && (
                 <div className="space-y-1">
-                  <Label className="text-xs">Branch</Label>
+                  <Label htmlFor={branchFieldId} className="text-xs">
+                    Branch
+                  </Label>
                   <Select
                     value={branchId === null ? ALL_BRANCHES : String(branchId)}
                     onValueChange={(v: string | null) => {
@@ -600,8 +606,9 @@ function ReportDetailContent({
                       setDoc(null);
                     }}
                   >
-                    <SelectTrigger className="h-9 w-56">
-                      <SelectValue>{() => branchLabel}</SelectValue>
+                    <SelectTrigger id={branchFieldId} className="h-9 w-56">
+                      {/* A preset branch waits on the list: never "All Branches" first. */}
+                      <SelectValue>{() => (branchPending ? LOADING_BRANCHES : branchLabel)}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value={ALL_BRANCHES}>

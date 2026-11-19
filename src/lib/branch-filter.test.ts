@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { ALL_BRANCHES, branchFilterOptions, branchIdParam } from "./branch-filter";
+import { ALL_BRANCHES, LOADING_BRANCHES, branchFilterOptions, branchIdParam, shownBranchValue } from "./branch-filter";
 
 const branches = [
   { id: 1, name: "Main", code: "MN" },
@@ -43,5 +43,25 @@ describe("branchIdParam", () => {
 
   test("a branch option sends its id", () => {
     assert.equal(branchIdParam("12"), 12);
+  });
+});
+
+describe("shownBranchValue: a branch filter never shows a raw id or a wrong All", () => {
+  const items = [
+    { value: ALL_BRANCHES, label: "All branches" },
+    { value: "2", label: "North" },
+  ];
+
+  test("a value the items name is shown", () => {
+    assert.deepEqual(shownBranchValue("2", items, false), { value: "2", placeholder: undefined });
+    assert.deepEqual(shownBranchValue(ALL_BRANCHES, items, true), { value: ALL_BRANCHES, placeholder: undefined });
+  });
+
+  test("a branch not listed yet reads Loading branches while the list loads", () => {
+    assert.deepEqual(shownBranchValue("3", [items[0]], true), { value: null, placeholder: LOADING_BRANCHES });
+  });
+
+  test("a branch the loaded list doesn't offer reads Select a branch, never its id", () => {
+    assert.deepEqual(shownBranchValue("3", items, false), { value: null, placeholder: "Select a branch" });
   });
 });

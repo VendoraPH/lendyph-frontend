@@ -9,7 +9,7 @@ import { creditScoringService } from "@/services";
 import { CREDIT_SCORING_PER_PAGE } from "@/services/credit-scoring.service";
 import { CREDIT_SCORING_PER_PAGE_OPTIONS } from "@/lib/credit-scoring/paging";
 import { CreditScoringPageHeader } from "../_components/page-header";
-import { BranchFilter, FilterBar, branchParam, ALL_BRANCHES } from "../_components/filters";
+import { BranchFilter, FilterBar, branchParam } from "../_components/filters";
 import { ScoreHistoryTable } from "../_components/score-history-table";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -17,12 +17,13 @@ import type { CreditScoreHistoryEntry, CreditScoringPage, ScoreHistoryFilters } 
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { FIT_CLASSES } from "@/lib/page-fill";
 import { cn } from "@/lib/utils";
+import { useBranchFilter, useBranchFollowingPage } from "@/hooks/use-working-branch";
 
 function ScoreHistoryContent() {
-  const [branch, setBranch] = useState(ALL_BRANCHES);
+  const [branch, setBranch] = useBranchFilter();
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useBranchFollowingPage();
   const [perPage, setPerPage] = useState<number>(CREDIT_SCORING_PER_PAGE);
 
   const fetcher = useCallback((): Promise<CreditScoringPage<CreditScoreHistoryEntry>> => {

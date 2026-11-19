@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { DataState } from "@/components/common/data-state";
 import { FIT_CLASSES } from "@/lib/page-fill";
 import { TablePagination } from "@/components/common/table-pagination";
@@ -13,6 +13,7 @@ import type { ReminderListFilters, ReminderQueueStatus } from "@/types/reminder"
 import { QueueTable } from "../_components/queue-table";
 import { ReminderFilters } from "../_components/reminder-filters";
 import { emptyArt, filtersActive } from "@/lib/illustrations";
+import { useBranchScopedFilters } from "@/hooks/use-working-branch";
 
 const STATUSES = Object.keys(QUEUE_STATUS_META) as ReminderQueueStatus[];
 const PER_PAGE_OPTIONS = [20, 50, 100] as const;
@@ -68,7 +69,7 @@ function StatusFilter({
 }
 
 export default function ReminderQueuePage() {
-  const [filters, setFilters] = useState<ReminderListFilters>({ page: 1, per_page: 20 });
+  const [filters, setFilters] = useBranchScopedFilters<ReminderListFilters>(() => ({ page: 1, per_page: 20 }));
   const fetcher = useCallback(() => reminderService.listQueue(filters), [filters]);
   const queue = useApiResource(fetcher);
   const { testMode } = useReminderTestModeContext();

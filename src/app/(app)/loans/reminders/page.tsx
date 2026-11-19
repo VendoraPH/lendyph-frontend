@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -36,6 +36,7 @@ import { reminderService } from "@/services";
 import type { ReminderDashboard, ReminderListFilters } from "@/types/reminder";
 import { QueueTable } from "./_components/queue-table";
 import { ReminderFilters, StatusSelect } from "./_components/reminder-filters";
+import { useBranchScopedFilters } from "@/hooks/use-working-branch";
 
 /**
  * `sent*` counts leave out logged-only messages and `logged*` counts are just
@@ -195,7 +196,7 @@ function DashboardBody({
 }
 
 export default function RemindersDashboardPage() {
-  const [filters, setFilters] = useState<ReminderListFilters>(() => ({ date: todayISO() }));
+  const [filters, setFilters] = useBranchScopedFilters<ReminderListFilters>(() => ({ date: todayISO() }));
   // Only the dashboard's own filters; paging and ranges belong to the lists.
   const fetcher = useCallback(() => {
     const { date, branch_id, channel, status, loan_product_id, search } = filters;

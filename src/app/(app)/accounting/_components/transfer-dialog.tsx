@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { todayISO } from "@/lib/format";
+import { useWorkingBranchPreset } from "@/hooks/use-working-branch";
 import { useAuthStore } from "@/store";
 import type { Account } from "@/types";
 import {
@@ -59,7 +60,8 @@ export function TransferDialog({
   const [charge, setCharge] = useState("");
   const [description, setDescription] = useState("");
   const [reference, setReference] = useState("");
-  const [branchId, setBranchId] = useState<number | null>(null);
+  // view_all only: the working branch, else No branch (head office).
+  const [branchId, setBranchId] = useWorkingBranchPreset<number | null>((working) => working);
   const [submitting, setSubmitting] = useState(false);
   const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
 

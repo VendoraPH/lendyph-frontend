@@ -15,6 +15,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { BranchSelectField } from "@/components/common/branch-select-field";
 import { useDialogOpening } from "@/hooks";
+import { useWorkingBranch } from "@/hooks/use-working-branch";
+import { workingBranchPreset } from "@/lib/working-branch";
 import type { BranchChoiceState } from "@/hooks/use-branch-choice-source";
 import { AccountSelect } from "../../_components/account-select";
 import { reconciliationBranchChoice } from "../_lib/branch-scope";
@@ -69,7 +71,12 @@ export function NewReconciliationDialog({
 }: NewReconciliationDialogProps) {
   const canViewAll = branchSource.viewAll;
   const branchChoice = reconciliationBranchChoice(branchSource);
-  const preselected = branchChoice.kind === "pick" ? branchChoice.preselected : null;
+  // The working branch when the form offers it (multi-branch flag), else the form's own.
+  const { branchId: working } = useWorkingBranch();
+  const preselected =
+    branchChoice.kind === "pick"
+      ? workingBranchPreset(working, branchChoice.items.map((i) => i.value), branchChoice.preselected)
+      : null;
   const [form, setForm] = useState<StatementForm>(EMPTY_FORM);
   const [paste, setPaste] = useState("");
   const [pasteErrors, setPasteErrors] = useState<string[]>([]);
