@@ -8,9 +8,8 @@ import { FIT_CLASSES } from "@/lib/page-fill";
 import type { InterbranchInTransitReport, InterbranchTransfer } from "@/types/interbranch-transfer";
 import { centavosOrDash } from "../../_lib/server-figure";
 import type { TransferActionButton } from "../_lib/transfers";
-import { TABLES_SCROLL_WITH_BOX } from "../_lib/table-scroll";
 import { VISIBLE_SCROLLBAR } from "@/components/amla/visible-scrollbar";
-import { cn } from "@/lib/utils";
+import { SidewaysScroll } from "./sideways-scroll";
 import { TransfersTable } from "./transfers-table";
 
 interface InTransitReportProps {
@@ -26,8 +25,9 @@ interface InTransitReportProps {
  * sent less received). Every figure and total is the server's.
  *
  * One scroll box holds both tables, each under its own heading, so every row
- * stays readable on a short screen. It is the one element that scrolls, both
- * ways, and the focusable region, so the arrow keys move it sideways too. `data-unpinned`: nothing pins inside it,
+ * stays readable on a short screen. The box scrolls up and down; each table
+ * scrolls sideways in its own focusable region (SidewaysScroll), so the
+ * headings and notes stay in view. `data-unpinned`: nothing pins inside it,
  * so no heading or total ever covers another. The totals are one plain block.
  */
 export function InTransitReport({ report, canCreate, onAction, onSendBack }: InTransitReportProps) {
@@ -36,8 +36,8 @@ export function InTransitReport({ report, canCreate, onAction, onSendBack }: InT
   return (
     <Card className={FIT_CLASSES.section}>
       <CardContent className={FIT_CLASSES.section}>
-        <ScrollBox className={VISIBLE_SCROLLBAR} tabIndex={0} role="region" aria-label="In transit, scrolls sideways">
-          <div data-unpinned="" className={cn("space-y-6", TABLES_SCROLL_WITH_BOX)}>
+        <ScrollBox className={VISIBLE_SCROLLBAR} tabIndex={0} role="region" aria-label="In transit">
+          <div data-unpinned="" className="space-y-6">
             <p className="text-sm text-muted-foreground">
               As of {formatDate(report.as_of)}
               {accounts ? `, on ${accounts}` : ""}. A transfer approved and not yet received keeps Interbranch
@@ -51,13 +51,15 @@ export function InTransitReport({ report, canCreate, onAction, onSendBack }: InT
               {report.transfers.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Nothing is in transit.</p>
               ) : (
-                <TransfersTable
-                  rows={report.transfers}
-                  canCreate={canCreate}
-                  onAction={onAction}
-                  onSendBack={onSendBack}
-                  showAge
-                />
+                <SidewaysScroll label="Transfers in transit, scrolls sideways">
+                  <TransfersTable
+                    rows={report.transfers}
+                    canCreate={canCreate}
+                    onAction={onAction}
+                    onSendBack={onSendBack}
+                    showAge
+                  />
+                </SidewaysScroll>
               )}
             </section>
 
@@ -65,24 +67,26 @@ export function InTransitReport({ report, canCreate, onAction, onSendBack }: InT
               <h2 id="ibt-positions-heading" className="text-sm font-medium">
                 Net interbranch position by branch
               </h2>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Branch</TableHead>
-                    <TableHead className="text-right">Net position (sent less received)</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {report.branches.map((row) => (
-                    <TableRow key={row.branch_id ?? "none"}>
-                      <TableCell>{row.branch_name}</TableCell>
-                      <TableCell className="text-right font-mono tabular-nums">
-                        {centavosOrDash(row.net_interbranch_position)}
-                      </TableCell>
+              <SidewaysScroll label="Net interbranch position by branch, scrolls sideways">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Branch</TableHead>
+                      <TableHead className="text-right">Net position (sent less received)</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {report.branches.map((row) => (
+                      <TableRow key={row.branch_id ?? "none"}>
+                        <TableCell>{row.branch_name}</TableCell>
+                        <TableCell className="text-right font-mono tabular-nums">
+                          {centavosOrDash(row.net_interbranch_position)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </SidewaysScroll>
 
               <dl className="space-y-1 rounded-md border bg-muted/40 p-3 text-sm">
                 <div className="flex items-center justify-between gap-4">
