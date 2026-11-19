@@ -185,6 +185,17 @@ export interface IncomeExpensePoint {
   net: number;
 }
 
+/**
+ * Whether any point has a non-zero figure in `keys`. A chart of only zeros or
+ * gaps shows its empty state instead of an axis running ₱0.00 to ₱4.00.
+ */
+export function hasActivity<T extends object>(points: readonly T[], keys: readonly (keyof T)[]): boolean {
+  return points.some((p) => keys.some((k) => {
+    const v = p[k];
+    return typeof v === "number" && Number.isFinite(v) && v !== 0;
+  }));
+}
+
 /** The ledger's last 12 months, in pesos. */
 export function incomeExpenseSeries(accounting: AccountingDashboard | null): IncomeExpensePoint[] {
   return (accounting?.months ?? []).map((m) => ({

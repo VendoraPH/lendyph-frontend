@@ -41,4 +41,6 @@ test("the page fits the screen: sections scroll inside their own box, full width
   assert.match(page, /<PageFill className="gap-4">/);
   assert.match(page, /<ScrollBox>/);
   assert.doesNotMatch(page, /max-w-\[/);
+  // Only the header and filter bar stay pinned: the KPI cards scroll with the sections.
+  assert.ok(page.indexOf("<ScrollBox>") < page.indexOf("kpis.map("), "the KPI cards are inside the scroll box");
 });

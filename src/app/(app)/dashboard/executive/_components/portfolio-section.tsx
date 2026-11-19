@@ -7,6 +7,7 @@ import { formatCurrency } from "@/lib/format";
 import { readyData, type ExecutiveData } from "../../_lib/executive-data";
 import { pipelineStages, productRows, type ProductRow } from "../../_lib/executive-sections";
 import { DATA_UNAVAILABLE, compactPeso, formatMetric, toNumber } from "../../_lib/metrics";
+import { EXECUTIVE_LAYOUT as L } from "../../_lib/executive-layout";
 import { Figure, SectionShell, SourceGate } from "./section-shell";
 
 const SLICE_COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"];
@@ -38,9 +39,9 @@ export function PortfolioSection({ data }: { data: ExecutiveData }) {
       icon={<Briefcase className="size-4" />}
       note="Outstanding is everything owed as of today. Share of released is the report's share of the amount released."
     >
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
         <SourceGate source={data.products} empty={pie.length === 0} emptyText="No outstanding loans.">
-          <div>
+          <div className={L.cell}>
             <ChartContainer config={config} className="mx-auto aspect-square h-[220px]" aria-hidden="true">
               <PieChart>
                 <ChartTooltip content={<ChartTooltipContent formatter={(v, name) => `${name}: ${formatCurrency(Number(v))}`} hideLabel />} />
@@ -72,7 +73,7 @@ export function PortfolioSection({ data }: { data: ExecutiveData }) {
         </SourceGate>
 
         <SourceGate source={data.products} empty={rows.length === 0}>
-          <div className="overflow-x-auto">
+          <div className={`${L.cell} overflow-x-auto`}>
             <table className="w-full text-sm">
               <caption className="sr-only">Portfolio by product</caption>
               <thead className="text-xs text-muted-foreground">
@@ -100,11 +101,11 @@ export function PortfolioSection({ data }: { data: ExecutiveData }) {
         </SourceGate>
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <div>
+      <div className={`mt-4 ${L.twoUp}`}>
+        <div className={L.cell}>
           <h3 className="mb-2 text-sm font-medium">Outstanding by component (as of today)</h3>
           <SourceGate source={data.balance} height="h-24">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className={L.tiles}>
               <Figure label="Principal" value={money(toNumber(out?.principal))} />
               <Figure label="Interest" value={money(toNumber(out?.interest))} />
               <Figure label="Penalty" value={money(toNumber(out?.penalty))} />
@@ -112,10 +113,10 @@ export function PortfolioSection({ data }: { data: ExecutiveData }) {
             </div>
           </SourceGate>
         </div>
-        <div>
+        <div className={L.cell}>
           <h3 className="mb-2 text-sm font-medium">Application pipeline</h3>
           <SourceGate source={data.loanStats} height="h-24">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className={L.tiles}>
               {stages.map((s) => (
                 <Figure key={s.status} label={s.label} value={formatMetric(s.count, "count")} />
               ))}

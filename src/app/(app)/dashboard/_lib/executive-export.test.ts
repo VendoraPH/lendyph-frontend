@@ -6,7 +6,7 @@ import { DATA_UNAVAILABLE } from "./metrics";
 
 const KEYS: (keyof ExecutiveData)[] = [
   "balance", "aging", "cashFlow", "prevCashFlow", "efficiency", "prevEfficiency", "products", "performance",
-  "provisioning", "shareCapital", "income", "borrowers", "disbursements", "prevDisbursements", "accounting", "loanStats",
+  "provisioning", "shareCapital", "income", "borrowers", "disbursements", "accounting", "loanStats",
   "pastDue",
 ];
 

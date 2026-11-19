@@ -12,6 +12,7 @@ import { todayISO } from "@/lib/format";
 import { useAuthStore } from "@/store";
 import { useExecutiveDashboard } from "../_hooks/use-executive-dashboard";
 import { overviewKpis } from "../_lib/executive-data";
+import { EXECUTIVE_LAYOUT as L } from "../_lib/executive-layout";
 import { isValidPeriod, presetPeriod, type DashboardPreset, type Period } from "../_lib/periods";
 import { AttentionPanel } from "./_components/attention-panel";
 import { BranchSection } from "./_components/branch-section";
@@ -56,7 +57,7 @@ function ExecutiveDashboard() {
 
   return (
     <PageFill className="gap-4">
-      <div className="flex shrink-0 flex-wrap items-end justify-between gap-2">
+      <div className={`${L.pinned} flex flex-wrap items-end justify-between gap-2`}>
         <div>
           <Link href="/dashboard" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
             <ArrowLeft className="size-3" /> Dashboard
@@ -83,30 +84,32 @@ function ExecutiveDashboard() {
         exportSlot={<ExportMenu data={data} period={period} branchLabel={branchLabel} disabled={loading} />}
       />
 
-      <section aria-labelledby="exec-overview" className="shrink-0 space-y-2">
-        <h2 id="exec-overview" className="text-sm font-semibold">
-          Executive Overview
-        </h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
-          {kpis.map((k) => (
-            <KpiCard key={k.id} kpi={k} periodTo={period.to} />
-          ))}
-        </div>
-      </section>
-
       <ScrollBox>
-        {/* The sections' own tables scroll sideways in their cards; nothing pins to this box. */}
-        <div data-unpinned className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
-          <div className="flex min-w-0 flex-col gap-4">
-            <PortfolioSection data={data} />
-            <CollectionSection data={data} />
-            <FinancialSection data={data} />
-            <OperationsSection data={data} />
-            <BranchSection data={data} />
+        {/* Only the header and filter bar stay pinned. The sections' tables scroll sideways in their cards; nothing pins to this box. */}
+        <div data-unpinned className={L.scrollBody}>
+          <section aria-labelledby="exec-overview" className="space-y-2">
+            <h2 id="exec-overview" className="text-sm font-semibold">
+              Executive Overview
+            </h2>
+            <div className={L.kpiGrid}>
+              {kpis.map((k) => (
+                <KpiCard key={k.id} kpi={k} periodTo={period.to} />
+              ))}
+            </div>
+          </section>
+
+          <div className={L.columns}>
+            <div className="flex min-w-0 flex-col gap-4">
+              <PortfolioSection data={data} />
+              <CollectionSection data={data} />
+              <FinancialSection data={data} />
+              <OperationsSection data={data} />
+              <BranchSection data={data} />
+            </div>
+            <aside className={`${L.cell} xl:sticky xl:top-0 xl:self-start`}>
+              <AttentionPanel data={data} />
+            </aside>
           </div>
-          <aside className="xl:sticky xl:top-0 xl:self-start">
-            <AttentionPanel data={data} />
-          </aside>
         </div>
       </ScrollBox>
     </PageFill>

@@ -5,7 +5,8 @@ import { Landmark } from "lucide-react";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { cashBalance, fromCentavos, readyData, type ExecutiveData } from "../../_lib/executive-data";
-import { incomeExpenseSeries, monthLabel } from "../../_lib/executive-sections";
+import { hasActivity, incomeExpenseSeries, monthLabel } from "../../_lib/executive-sections";
+import { EXECUTIVE_LAYOUT as L } from "../../_lib/executive-layout";
 import { compactPeso, formatMetric, toNumber } from "../../_lib/metrics";
 import { Figure, SectionShell, SourceGate, figureText } from "./section-shell";
 
@@ -31,7 +32,7 @@ export function FinancialSection({ data }: { data: ExecutiveData }) {
       note="Ledger figures come from posted journals. Cash-basis income is what was collected in the period, not what was recognized."
     >
       <SourceGate source={data.accounting} height="h-24">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        <div className={L.tiles}>
           <Figure label="Income (period)" value={money(fromCentavos(acc?.period.income))} />
           <Figure label="Expenses (period)" value={money(fromCentavos(acc?.period.expenses))} />
           <Figure label="Net income (period)" value={money(fromCentavos(acc?.period.net_income))} />
@@ -41,11 +42,15 @@ export function FinancialSection({ data }: { data: ExecutiveData }) {
         </div>
       </SourceGate>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,18rem)]">
-        <div>
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,18rem)]">
+        <div className={L.cell}>
           <h3 className="mb-2 text-sm font-medium">Income vs expenses, last 12 months</h3>
-          <SourceGate source={data.accounting} empty={series.length === 0}>
-            <ChartContainer config={config} className="h-[240px] w-full" aria-hidden="true">
+          <SourceGate
+            source={data.accounting}
+            empty={!hasActivity(series, ["income", "expenses", "net"])}
+            emptyText="No income or expenses posted in these 12 months."
+          >
+            <ChartContainer config={config} className="h-[240px] w-full min-w-0" aria-hidden="true">
               <ComposedChart data={series} margin={{ left: 4, right: 4 }}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} />
@@ -76,10 +81,10 @@ export function FinancialSection({ data }: { data: ExecutiveData }) {
           </SourceGate>
         </div>
 
-        <div className="space-y-2">
+        <div className={`${L.cell} space-y-2`}>
           <h3 className="text-sm font-medium">Collected income (cash basis)</h3>
           <SourceGate source={data.income} height="h-40">
-            <div className="grid grid-cols-2 gap-2">
+            <div className={L.tiles}>
               <Figure label="Interest" value={money(toNumber(income?.interest_income))} />
               <Figure label="Processing fees" value={money(toNumber(income?.processing_fees))} />
               <Figure label="Service fees" value={money(toNumber(income?.service_fee))} />
@@ -88,7 +93,7 @@ export function FinancialSection({ data }: { data: ExecutiveData }) {
               <Figure label="Total" value={money(toNumber(income?.total))} />
             </div>
           </SourceGate>
-          <div className="grid grid-cols-2 gap-2">
+          <div className={L.tiles}>
             <Figure label="Share capital" value={figureText(data.shareCapital, toNumber(share?.closing_balance), "currency")} hint="Closing balance" />
             <Figure label="Required allowance" value={figureText(data.provisioning, toNumber(provisioning?.totals?.required_allowance), "currency")} hint="Provisioning" />
           </div>

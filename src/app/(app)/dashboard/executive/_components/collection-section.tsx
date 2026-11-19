@@ -5,7 +5,8 @@ import { HandCoins } from "lucide-react";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { formatCurrency } from "@/lib/format";
 import { readyData, type ExecutiveData } from "../../_lib/executive-data";
-import { agingPoints, collectionTrend, monthLabel } from "../../_lib/executive-sections";
+import { agingPoints, collectionTrend, hasActivity, monthLabel } from "../../_lib/executive-sections";
+import { EXECUTIVE_LAYOUT as L } from "../../_lib/executive-layout";
 import { compactPeso, formatMetric, toNumber } from "../../_lib/metrics";
 import { Figure, SectionShell, SourceGate, figureText } from "./section-shell";
 
@@ -30,18 +31,18 @@ export function CollectionSection({ data }: { data: ExecutiveData }) {
       icon={<HandCoins className="size-4" />}
       note="Due and collected cover the selected period. Aging is as of the period's last day."
     >
-      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className={`mb-4 ${L.tiles}`}>
         <Figure label="Due in period" value={figureText(data.efficiency, toNumber(totals?.total_due), "currency")} />
         <Figure label="Collected against dues" value={figureText(data.efficiency, toNumber(totals?.total_collected), "currency")} />
         <Figure label="Repayments received" value={figureText(data.cashFlow, toNumber(repayments?.total), "currency")} />
         <Figure label="Penalties collected" value={figureText(data.cashFlow, toNumber(repayments?.penalty), "currency")} />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div>
+      <div className={L.twoUp}>
+        <div className={L.cell}>
           <h3 className="mb-2 text-sm font-medium">Due vs collected by month</h3>
-          <SourceGate source={data.efficiency} empty={trend.length === 0}>
-            <ChartContainer config={trendConfig} className="h-[220px] w-full" aria-hidden="true">
+          <SourceGate source={data.efficiency} empty={!hasActivity(trend, ["due", "collected"])}>
+            <ChartContainer config={trendConfig} className="h-[220px] w-full min-w-0" aria-hidden="true">
               <BarChart data={trend} margin={{ left: 4, right: 4 }}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} />
@@ -70,10 +71,10 @@ export function CollectionSection({ data }: { data: ExecutiveData }) {
           </SourceGate>
         </div>
 
-        <div>
+        <div className={L.cell}>
           <h3 className="mb-2 text-sm font-medium">Past due aging</h3>
-          <SourceGate source={data.aging} empty={aging.every((a) => a.amount === 0)} emptyText="Nothing past due.">
-            <ChartContainer config={agingConfig} className="h-[220px] w-full" aria-hidden="true">
+          <SourceGate source={data.aging} empty={!hasActivity(aging, ["amount"])} emptyText="Nothing past due.">
+            <ChartContainer config={agingConfig} className="h-[220px] w-full min-w-0" aria-hidden="true">
               <BarChart data={aging} layout="vertical" margin={{ left: 4, right: 12 }}>
                 <CartesianGrid horizontal={false} />
                 <XAxis type="number" tickLine={false} axisLine={false} fontSize={11} tickFormatter={(v) => compactPeso(Number(v))} />

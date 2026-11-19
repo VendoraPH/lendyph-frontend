@@ -67,9 +67,9 @@ export const METRICS = {
     label: "Loans Released",
     kind: "period",
     format: "currency",
-    formula: "Sum of the principal released in the period.",
-    source: "GET /reports/disbursements → total_disbursed",
-    href: "/reports/disbursement_report",
+    formula: "Principal of the loans released in the period, before deductions (the member received the net proceeds).",
+    source: "GET /reports/cash-flow → non_cash.principal_released",
+    href: "/reports/releases_list",
   },
   collections: {
     label: "Collections",

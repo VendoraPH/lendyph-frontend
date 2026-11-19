@@ -43,7 +43,6 @@ function requests({ period, branchId }: ExecutiveFilters): Partial<Record<Source
     ...(prevRange && {
       prevCashFlow: () => reportService.cashFlow(prevRange),
       prevEfficiency: () => reportService.collectionEfficiency(prevRange),
-      prevDisbursements: () => reportService.disbursements(prevRange),
     }),
     accounting: () => accountingService.dashboard(period.to, branchId, period.from),
     // One row asked for: only `meta.stats` (counts per status) is read.
@@ -79,7 +78,6 @@ const SOURCE_KEYS: SourceKey[] = [
   "income",
   "borrowers",
   "disbursements",
-  "prevDisbursements",
   "accounting",
   "loanStats",
   "pastDue",

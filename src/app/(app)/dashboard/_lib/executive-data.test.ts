@@ -6,6 +6,8 @@ import {
   agingPoints,
   branchRows,
   collectionTrend,
+  hasActivity,
+  incomeExpenseSeries,
   monthLabel,
   officerRows,
   pipelineStages,
@@ -30,7 +32,6 @@ function data(overrides: Partial<ExecutiveData> = {}): ExecutiveData {
     income: LOADING,
     borrowers: LOADING,
     disbursements: LOADING,
-    prevDisbursements: LOADING,
     accounting: LOADING,
     loanStats: LOADING,
     pastDue: LOADING,
@@ -68,13 +69,38 @@ test("period figures compare with the previous period; a zero base has no change
       prevCashFlow: ready({ inflows: { repayments: { total: "1000" } } }),
       efficiency: ready({ collection_rate: 92 }),
       prevEfficiency: ready({ collection_rate: 95 }),
-      disbursements: ready({ total_disbursed: 500 }),
-      prevDisbursements: ready({ total_disbursed: 0 }),
     }),
   );
   assert.equal(kpi(views, "collections").change, 50);
   assert.equal(kpi(views, "collection_rate").change, -3);
-  assert.equal(kpi(views, "loans_released").change, null);
+});
+
+test("Loans Released is the principal released, not the net proceeds paid out", () => {
+  const views = overviewKpis(
+    data({
+      cashFlow: ready({ non_cash: { principal_released: "80000.00" }, outflows: { releases: { net_proceeds: "76000.00" } } }),
+      prevCashFlow: ready({ non_cash: { principal_released: "64000.00" } }),
+      disbursements: ready({ total_disbursed: "76000.00" }),
+    }),
+  );
+  assert.equal(kpi(views, "loans_released").value, 80000);
+  assert.equal(kpi(views, "loans_released").change, 25);
+  const zeroBase = overviewKpis(
+    data({ cashFlow: ready({ non_cash: { principal_released: 500 } }), prevCashFlow: ready({ non_cash: { principal_released: 0 } }) }),
+  );
+  assert.equal(kpi(zeroBase, "loans_released").change, null);
+});
+
+test("a chart with nothing but zeros or gaps draws the empty state, not an axis", () => {
+  const acc = {
+    months: [
+      { month: "2026-10", income: 0, expenses: 0, net_income: 0, cash: 0 },
+      { month: "2026-11", income: 0, expenses: 0, net_income: 0, cash: 0 },
+    ],
+  } as unknown as AccountingDashboard;
+  assert.equal(hasActivity(incomeExpenseSeries(acc), ["income", "expenses", "net"]), false);
+  assert.equal(hasActivity([], ["income"]), false);
+  assert.equal(hasActivity([{ due: 0, collected: 12.5 }], ["due", "collected"]), true);
 });
 
 test("share capital compares with its opening balance; net income is read from centavos", () => {

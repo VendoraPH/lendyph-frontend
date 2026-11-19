@@ -45,7 +45,6 @@ export interface ExecutiveData {
   income: Source<IncomeReport>;
   borrowers: Source<BorrowersReport>;
   disbursements: Source<DisbursementsReport>;
-  prevDisbursements: Source<DisbursementsReport>;
   accounting: Source<AccountingDashboard>;
   /** `meta.stats` of GET /loans: loan counts per status. */
   loanStats: Source<Record<string, number>>;
@@ -74,7 +73,6 @@ export const SOURCE_PERMISSIONS: Record<SourceKey, Permission[]> = {
   income: ["reports:view"],
   borrowers: ["reports:view"],
   disbursements: ["reports:view"],
-  prevDisbursements: ["reports:view"],
   accounting: ["accounting:view"],
   loanStats: ["loans:view"],
   pastDue: ["reports:view"],
@@ -106,7 +104,7 @@ const KPI_SOURCE: Record<MetricId, SourceKey> = {
   total_outstanding: "balance",
   active_loans: "balance",
   active_borrowers: "borrowers",
-  loans_released: "disbursements",
+  loans_released: "cashFlow",
   collections: "cashFlow",
   collection_rate: "efficiency",
   par30: "balance",
@@ -132,8 +130,8 @@ function kpiValue(id: MetricId, d: ExecutiveData): { value: number | null; chang
     case "active_borrowers":
       return { value: toNumber(readyData(d.borrowers)?.total_active_borrowers), change: null };
     case "loans_released": {
-      const value = toNumber(readyData(d.disbursements)?.total_disbursed);
-      return { value, change: percentChange(value, toNumber(readyData(d.prevDisbursements)?.total_disbursed)) };
+      const value = toNumber(readyData(d.cashFlow)?.non_cash?.principal_released);
+      return { value, change: percentChange(value, toNumber(readyData(d.prevCashFlow)?.non_cash?.principal_released)) };
     }
     case "collections": {
       const value = toNumber(readyData(d.cashFlow)?.inflows?.repayments?.total);

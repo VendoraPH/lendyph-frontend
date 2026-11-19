@@ -3,6 +3,7 @@
 import { Users } from "lucide-react";
 import { readyData, type ExecutiveData } from "../../_lib/executive-data";
 import { officerRows } from "../../_lib/executive-sections";
+import { EXECUTIVE_LAYOUT as L } from "../../_lib/executive-layout";
 import { formatMetric, toNumber } from "../../_lib/metrics";
 import { Figure, SectionShell, SourceGate } from "./section-shell";
 
@@ -20,9 +21,9 @@ export function OperationsSection({ data }: { data: ExecutiveData }) {
       icon={<Users className="size-4" />}
       note="New and repeat members, and releases, cover the selected period. Officer balances are as of today."
     >
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className={L.twoUp}>
         <SourceGate source={data.borrowers} height="h-24">
-          <div className="grid grid-cols-2 gap-2">
+          <div className={`${L.cell} ${L.tiles}`}>
             <Figure label="Active members" value={formatMetric(toNumber(borrowers?.total_active_borrowers), "count")} />
             <Figure label="New members" value={formatMetric(toNumber(borrowers?.new_borrowers), "count")} />
             <Figure label="Repeat members" value={formatMetric(toNumber(borrowers?.repeat_borrowers), "count")} />
@@ -30,10 +31,10 @@ export function OperationsSection({ data }: { data: ExecutiveData }) {
           </div>
         </SourceGate>
         <SourceGate source={data.disbursements} height="h-24">
-          <div className="grid grid-cols-2 gap-2">
+          <div className={`${L.cell} ${L.tiles}`}>
             <Figure label="Loans released" value={formatMetric(toNumber(releases?.loans_released), "count")} />
-            <Figure label="Amount released" value={formatMetric(toNumber(releases?.total_disbursed), "currency")} />
-            <Figure label="Average release" value={formatMetric(toNumber(releases?.avg_disbursement), "currency")} />
+            <Figure label="Net proceeds released" value={formatMetric(toNumber(releases?.total_disbursed), "currency")} />
+            <Figure label="Average net proceeds" value={formatMetric(toNumber(releases?.avg_disbursement), "currency")} />
             <Figure label="Awaiting release" value={formatMetric(toNumber(releases?.pending_release), "count")} />
           </div>
         </SourceGate>

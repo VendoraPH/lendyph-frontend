@@ -41,7 +41,7 @@ export function FilterBar({
   exportSlot: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-end gap-3 rounded-xl border bg-card p-3 shadow-sm">
+    <div className="flex shrink-0 flex-wrap items-end gap-3 rounded-xl border bg-card p-3 shadow-sm">
       <div className="space-y-1.5">
         <Label htmlFor="exec-period" className="text-xs text-muted-foreground">
           Period

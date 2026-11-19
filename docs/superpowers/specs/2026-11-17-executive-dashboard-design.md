@@ -30,7 +30,7 @@ No new backend endpoint. The page combines the aggregate report endpoints that a
 | past due | `GET /reports/due-past-due` → `totals.past_due_amount` (grace rule, the Past Due Loans page's card) | `past_due_only=1`, `per_page=1`, `branch_id` |
 | products | `GET /reports/portfolio-by-product` | `branch_id` |
 | aging, provisioning | `/reports/aging`, `/reports/provisioning` | `as_of_date` = period end |
-| cash flow, collection efficiency, performance, share capital, income, borrowers, disbursements | `/reports/*` | `date_from`/`date_to` (plus the previous period for cash flow, efficiency and disbursements) |
+| cash flow, collection efficiency, performance, share capital, income, borrowers, disbursements | `/reports/*` | `date_from`/`date_to` (plus the previous period for cash flow and efficiency; Loans Released reads cash flow's `non_cash.principal_released`) |
 | accounting | `GET /accounting/dashboard` | `as_of`, `from`, `branch_id` (centavos) |
 | loanStats | `GET /loans?per_page=1` | `meta.stats` counts by status |
 
