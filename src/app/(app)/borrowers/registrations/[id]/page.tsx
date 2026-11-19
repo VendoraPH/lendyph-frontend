@@ -32,6 +32,9 @@ import {
   type ValidIdDraft,
 } from "./_components/registration-valid-ids-editor";
 import { compressImage } from "@/lib/image-compress";
+import { ApprovalBranchField } from "./_components/approval-branch-field";
+import { useApprovalBranch } from "./_hooks/use-approval-branch";
+import { APPROVAL_BRANCH_REQUIRED, approvalBranchError, approvalPayload } from "./_lib/approval-branch";
 import {
   syncValidIdDrafts,
   validIdDraftErrors,
@@ -59,6 +62,7 @@ function RegistrationReviewContent() {
   const [rejectOpen, setRejectOpen] = useState(false);
   const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
   const [idPreview, setIdPreview] = useState<{ title: string; images: PreviewImage[] } | null>(null);
+  const branch = useApprovalBranch(registration?.branch_id);
 
   useEffect(() => {
     async function load() {
@@ -92,10 +96,25 @@ function RegistrationReviewContent() {
     setDraft((prev) => ({ ...prev, [field]: value }));
   }
 
+  // The server refuses an approval with no branch; say so before asking it,
+  // and before an edit-and-approve saves anything.
+  function branchMissing(): boolean {
+    if (branch.branchId !== null) return false;
+    branch.setError(APPROVAL_BRANCH_REQUIRED);
+    return true;
+  }
+
+  // A refusal of the branch also shows under the picker, in the server's words.
+  function showBranchRefusal(err: unknown) {
+    const message = approvalBranchError(err);
+    if (message) branch.setError(message);
+  }
+
   async function handleApprove() {
+    if (branchMissing()) return;
     setApproving(true);
     try {
-      await registrationService.approve(registrationId);
+      await registrationService.approve(registrationId, approvalPayload(branch.branchId));
       toast.success("Registration approved. Member profile activated.");
       router.push(`/borrowers/${registrationId}`);
     } catch (err) {
@@ -103,6 +122,7 @@ function RegistrationReviewContent() {
       // file). Those 422s explain exactly what is missing, so surface the
       // server's wording — a generic "please try again" sends the operator
       // round in circles looking for a fault that isn't there.
+      showBranchRefusal(err);
       notifyError(err, "We couldn't approve the registration. Please try again.");
     } finally {
       setApproving(false);
@@ -151,6 +171,7 @@ function RegistrationReviewContent() {
       toast.error(sentencesMessage(idErrors));
       return;
     }
+    if (branchMissing()) return;
 
     setSavingEdit(true);
     // Which step we're on. Each one commits before the next begins, so a
@@ -163,7 +184,7 @@ function RegistrationReviewContent() {
       phase = "ids";
       await syncValidIds();
       phase = "approve";
-      await registrationService.approve(registrationId);
+      await registrationService.approve(registrationId, approvalPayload(branch.branchId));
       toast.success("Registration updated and approved. Member profile activated.");
       router.push(`/borrowers/${registrationId}`);
     } catch (err) {
@@ -181,6 +202,7 @@ function RegistrationReviewContent() {
         // Only the approval gate refused — the applicant is no longer pending,
         // or still has no valid ID on file. Stay in edit mode so the operator
         // can fix the cause rather than losing the screen.
+        showBranchRefusal(err);
         notifyError(
           err,
           "We couldn't approve this registration. Please try again.",
@@ -392,6 +414,7 @@ function RegistrationReviewContent() {
                 setDraft({});
               }}
               onSaveEdit={handleSaveEdit}
+              branchField={<ApprovalBranchField branch={branch} disabled={approving || savingEdit} />}
             />
           </div>
         </ScrollBox>

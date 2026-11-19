@@ -46,8 +46,9 @@ test("admin's module count never exceeds the modules offered", () => {
 // Admin is also granted `branches:view_all` (backend migration
 // 2026_11_02_210000), the one permission of the Branch Access module, and the
 // four reminders permissions (Phase 2), savings:view, cda:view and
-// member_portal:view (Phase 3), penalties:view (Phase 4) and linda:use
-// (Linda v1).
+// member_portal:view (Phase 3), penalties:view (Phase 4), linda:use
+// (Linda v1), and amla:view, interbranch_transfers:view and
+// loan_origination:view (Phase 6).
 const REMINDERS = [
   "reminders:view",
   "reminders:send",
@@ -58,6 +59,9 @@ const REMINDERS = [
   "member_portal:view",
   "penalties:view",
   "linda:use",
+  "amla:view",
+  "interbranch_transfers:view",
+  "loan_origination:view",
 ];
 
 test("admin holding loan_products:manage, branches:view_all and reminders is in every offered module", () => {
@@ -141,4 +145,15 @@ test("several permissions in one module count it once", () => {
 
 test("a role with no permissions is in no modules", () => {
   assert.equal(roleModuleCount([]), 0);
+});
+
+test("AMLA has thirteen checkboxes and counts as one module", () => {
+  assert.equal(MODULE_ACTIONS.amla.length, 13);
+  assert.equal(roleModuleCount(["amla:audit"]), 1);
+  assert.equal(roleModuleCount(MODULE_ACTIONS.amla.map((a) => `amla:${a}`)), 1);
+});
+
+test("Interbranch Transfers and Loan Origination each count as one module", () => {
+  assert.equal(roleModuleCount(["interbranch_transfers:receive"]), 1);
+  assert.equal(roleModuleCount(["loan_origination:convert", "loan_origination:view"]), 1);
 });
