@@ -1,5 +1,14 @@
 import { PAYMENT_METHOD_OPTIONS } from "@/constants/payment-methods";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
+import {
+  AMLA_PRIORITY_WORDS,
+  AMLA_RISK_FACTOR_WORDS,
+  AMLA_RISK_VALUE_WORDS,
+  amlaParamLine,
+  amlaPoints,
+  amlaRuleTitle,
+  amlaThresholdsLine,
+} from "@/lib/amla/rule-words";
 import type {
   AmlaCalendar,
   AmlaChangeRequest,
@@ -164,7 +173,10 @@ function storedValueWords(unit: string, value: unknown): string {
  */
 export function amlaChangeRequestChanges(request: Pick<AmlaChangeRequest, "type" | "payload">): string[] {
   const payload = request.payload;
-  if (request.type !== "settings" || !isRecord(payload)) return [];
+  if (!isRecord(payload)) return [];
+  if (request.type === "detection_rules") return detectionRuleChanges(payload);
+  if (request.type === "risk_rules") return riskRuleChanges(payload);
+  if (request.type !== "settings") return [];
   const changed = isRecord(payload.changed) ? payload.changed : {};
   const sourcesChanged = isRecord(payload.sources_changed) ? payload.sources_changed : {};
   const verified = Array.isArray(payload.verified) ? payload.verified : [];
@@ -186,6 +198,45 @@ export function amlaChangeRequestChanges(request: Pick<AmlaChangeRequest, "type"
 
   const known = new Set(SETTING_WORDS.map((s) => s.key));
   if (Object.keys(changed).some((key) => !known.has(key))) lines.push("Another setting: changed");
+  return lines;
+}
+
+/** A detection rules change: each changed rule as proposed (`changed_rules`, `definition`). */
+function detectionRuleChanges(payload: Record<string, unknown>): string[] {
+  const definition = isRecord(payload.definition) ? payload.definition : {};
+  const changed = Array.isArray(payload.changed_rules) ? payload.changed_rules.map(String) : [];
+  return changed.flatMap((code) => {
+    const entry = definition[code];
+    if (!isRecord(entry)) return [];
+    const priority = AMLA_PRIORITY_WORDS[String(entry.priority)] ?? "Another";
+    const params = isRecord(entry.params) ? Object.entries(entry.params).map(([name, value]) => amlaParamLine(name, value)) : [];
+    const head = `${amlaRuleTitle(code)}: ${entry.active ? "on" : "off"}, ${priority} priority.`;
+    return [params.length > 0 ? `${head} ${params.join("; ")}` : head];
+  });
+}
+
+/** A risk rules change: each changed section as proposed (`changed_sections`, `definition`). */
+function riskRuleChanges(payload: Record<string, unknown>): string[] {
+  const definition = isRecord(payload.definition) ? payload.definition : {};
+  const sections = Array.isArray(payload.changed_sections) ? payload.changed_sections.map(String) : [];
+  const lines: string[] = [];
+  if (sections.includes("factors") && isRecord(definition.factors)) {
+    for (const [factor, values] of Object.entries(definition.factors)) {
+      if (!isRecord(values)) continue;
+      const label = Object.hasOwn(AMLA_RISK_FACTOR_WORDS, factor) ? AMLA_RISK_FACTOR_WORDS[factor] : "Another factor";
+      const points = Object.entries(values).map(
+        ([value, n]) => `${Object.hasOwn(AMLA_RISK_VALUE_WORDS, value) ? AMLA_RISK_VALUE_WORDS[value] : "Another value"} ${amlaPoints(Number(n))}`,
+      );
+      lines.push(`${label}: ${points.join(", ")}`);
+    }
+  }
+  if (sections.includes("thresholds") && isRecord(definition.thresholds)) {
+    lines.push(`Thresholds: ${amlaThresholdsLine({ medium: definition.thresholds.medium, high: definition.thresholds.high })}`);
+  }
+  if (sections.includes("high_risk_countries")) {
+    const countries = Array.isArray(definition.high_risk_countries) ? definition.high_risk_countries.map(String) : [];
+    lines.push(`High-risk countries: ${countries.length > 0 ? countries.join(", ") : "none"}`);
+  }
   return lines;
 }
 

@@ -346,3 +346,40 @@ test("a setting this screen doesn't know yet never shows its stored key", () => 
   const lines = amlaChangeRequestChanges({ ...REQUEST, payload: { changed: { new_rule: { from: 1, to: 2 } } } });
   assert.deepEqual(lines, ["Another setting: changed"]);
 });
+
+test("a detection rules change shows each changed rule as proposed, in words", () => {
+  const payload = {
+    base_version: 1,
+    definition: {
+      A: { active: true, priority: "high", params: { min_transactions: 2 } },
+      E: { active: true, priority: "critical", params: { min_in_amount: "120000.00", out_share_pct: 90, within_days: 3 } },
+      G: { active: false, priority: "low", params: {} },
+    },
+    changed_rules: ["E", "G"],
+  };
+  assert.deepEqual(amlaChangeRequestChanges({ ...REQUEST, type: "detection_rules", payload }), [
+    "E · Rapid movement of funds: on, Critical priority. Smallest amount received: ₱120,000.00; Share that leaves again: 90%; Within: 3 days",
+    "G · Third party transactions: off, Low priority.",
+  ]);
+});
+
+test("a risk rules change shows each changed section as proposed, in words", () => {
+  const payload = {
+    base_version: 1,
+    definition: {
+      factors: { customer_type: { member: 0, walk_in: 15 }, mystery: { x: 1 } },
+      thresholds: { medium: 25, high: 45 },
+      high_risk_countries: [],
+    },
+    changed_sections: ["factors", "thresholds", "high_risk_countries"],
+  };
+  assert.deepEqual(amlaChangeRequestChanges({ ...REQUEST, type: "risk_rules", payload }), [
+    "Customer type: Member 0 points, Walk-in 15 points",
+    "Another factor: Another value 1 point",
+    "Thresholds: Medium from 25 points, High from 45 points",
+    "High-risk countries: none",
+  ]);
+  assert.deepEqual(amlaChangeRequestChanges({ ...REQUEST, type: "risk_rules", payload: { ...payload, changed_sections: ["thresholds"] } }), [
+    "Thresholds: Medium from 25 points, High from 45 points",
+  ]);
+});
