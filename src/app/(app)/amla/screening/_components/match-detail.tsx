@@ -46,6 +46,7 @@ function MatchBody({ match, onDecided }: { match: AmlaScreeningMatchDetail; onDe
             confirmLabel: "Confirm match",
             destructive: true,
             success: "Match confirmed",
+            maxLength: 2000,
             failure: "The match couldn't be confirmed.",
             run: (reason) => amlaScreeningApi.confirm(match.id, reason),
           }
@@ -56,6 +57,7 @@ function MatchBody({ match, onDecided }: { match: AmlaScreeningMatchDetail; onDe
             required: true,
             confirmLabel: "Clear as a false positive",
             success: "Match cleared",
+            maxLength: 2000,
             failure: "The match couldn't be cleared.",
             run: (reason) => amlaScreeningApi.clear(match.id, reason),
           },

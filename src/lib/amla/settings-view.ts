@@ -375,10 +375,11 @@ export function amlaSettingsDraft(settings: AmlaSetting[]): AmlaSettingsDraft {
   );
 }
 
-export function amlaReasonError(reason: string): string | null {
+/** A reason is required and at most `max` characters (1,000 unless the endpoint allows more). */
+export function amlaReasonError(reason: string, max: number = REASON_MAX): string | null {
   const trimmed = reason.trim();
   if (trimmed === "") return "Give the reason for the change.";
-  if (trimmed.length > REASON_MAX) return "Keep it to 1,000 characters.";
+  if (trimmed.length > max) return `Keep it to ${max.toLocaleString("en-PH")} characters.`;
   return null;
 }
 

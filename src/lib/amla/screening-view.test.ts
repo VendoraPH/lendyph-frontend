@@ -15,6 +15,7 @@ import {
   amlaOrderLines,
   amlaOrderRow,
   amlaReleaseBody,
+  amlaUploadErrors,
   amlaWatchlistFileError,
   amlaWatchlistView,
 } from "./screening-view";
@@ -65,7 +66,7 @@ test("a watchlist reads its version in force, its file kind and whether a rescre
     source: "amlc",
     title: "AMLC designations",
     file: "A CSV file made from the template",
-    inForce: `Resolution 2026-12: 41 entries, uploaded by Ana Cruz, ${formatDateTime("2026-11-21T02:00:00Z")}`,
+    inForce: `Resolution 2026-12: 41 entries, uploaded by Ana Cruz, ${formatDateTime("2026-11-21T02:00:00Z")}.`,
     rescreen: "Everyone will be screened against it on the next screening run.",
   });
   const un = amlaWatchlistView({ ...LIST, source: "un", source_words: "UN Security Council consolidated list", format: "xml", active_version: null });
@@ -73,7 +74,7 @@ test("a watchlist reads its version in force, its file kind and whether a rescre
   assert.equal(un.inForce, "No list uploaded yet.");
   assert.equal(un.rescreen, null);
   const one = amlaWatchlistView({ ...LIST, active_version: { ...LIST.active_version!, entry_count: 1, version_label: null, rescreen_pending: false, rescreened_at: "2026-11-21T03:00:00Z" } });
-  assert.equal(one.inForce, `Version #3: 1 entry, uploaded by Ana Cruz, ${formatDateTime("2026-11-21T02:00:00Z")}`);
+  assert.equal(one.inForce, `Version #3: 1 entry, uploaded by Ana Cruz, ${formatDateTime("2026-11-21T02:00:00Z")}.`);
   assert.equal(one.rescreen, `Everyone was screened against it ${formatDateTime("2026-11-21T03:00:00Z")}.`);
 });
 
@@ -281,4 +282,39 @@ test("a release request needs its reason and the lifting order's reference", () 
   });
   assert.deepEqual(amlaReleaseBody({ reason: "", reference: "CA" }), { error: "Give the reason for the release." });
   assert.deepEqual(amlaReleaseBody({ reason: "Lifted", reference: " " }), { error: "Give the reference of the order or resolution that lifts it." });
+});
+
+test("a refused upload lists every row error the server sends, in its words", () => {
+  const refusal = {
+    response: {
+      status: 422,
+      data: {
+        message: "Row 2: the reference is missing. (and 2 more errors)",
+        errors: { file: ["Row 2: the reference is missing.", "Row 3: the type must be individual or entity.", "Row 3: the birth year must be four digits, or a range such as 1960-1965."] },
+      },
+    },
+  };
+  assert.deepEqual(amlaUploadErrors(refusal), [
+    "Row 2: the reference is missing.",
+    "Row 3: the type must be individual or entity.",
+    "Row 3: the birth year must be four digits, or a range such as 1960-1965.",
+  ]);
+  assert.deepEqual(amlaUploadErrors({ response: { status: 422, data: { message: "This file is the list already in force.", errors: { file: ["This file is the list already in force."] } } } }), [
+    "This file is the list already in force.",
+  ]);
+  assert.deepEqual(amlaUploadErrors({ response: { status: 500, data: { message: "Server Error" } } }), ["The list couldn't be uploaded."]);
+  assert.deepEqual(amlaUploadErrors(new Error("offline")), ["The list couldn't be uploaded."]);
+});
+
+test("order banners end with one full stop, whether or not the reason already ends a sentence", () => {
+  const ask = (reason: string) =>
+    amlaOrderLines({ ...ORDER, pending_release: { id: 4, requested_by: ana, requested_at: "2026-11-22T01:00:00Z", reason, release_reference: "CA-1" } }).pending;
+  assert.match(ask("Lifted by the court.") ?? "", /: Lifted by the court\. A different/);
+  assert.match(ask("Lifted by the court") ?? "", /: Lifted by the court\. A different/);
+  assert.match(ask("Lifted?") ?? "", /: Lifted\? A different/);
+  const released = (reason: string) =>
+    amlaOrderLines({ ...ORDER, status: "released", status_words: "Released", released_by: ana, released_at: "2026-11-23T01:00:00Z", release_reason: reason, release_reference: "CA-1", release_requested_by: ana }).released;
+  assert.match(released("Lifted.") ?? "", /: Lifted\.$/);
+  assert.match(released("Lifted!") ?? "", /: Lifted!$/);
+  assert.doesNotMatch(released("Lifted.") ?? "", /\.\./);
 });

@@ -26,6 +26,7 @@ import {
   actorName,
   canPlaceHold,
   holdReleaseOffer,
+  LEGAL_ORDER_HOLD_NOTE,
   labelOf,
 } from "../../../_lib/savings-rules";
 import { PlaceHoldDialog } from "./place-hold-dialog";
@@ -145,7 +146,8 @@ function HoldAction({ hold, onRelease }: { hold: SavingsHold; onRelease: () => v
   const { can } = usePermission();
   const offer = holdReleaseOffer(hold);
   if (offer.note) {
-    return env.features.memberPortal && can("member_portal:requests") ? (
+    // Only a member request's hold is decided elsewhere; a legal order's note is plain text.
+    return offer.note !== LEGAL_ORDER_HOLD_NOTE && env.features.memberPortal && can("member_portal:requests") ? (
       <Link href="/member-portal/requests" className="text-xs text-muted-foreground underline">
         {offer.note}
       </Link>

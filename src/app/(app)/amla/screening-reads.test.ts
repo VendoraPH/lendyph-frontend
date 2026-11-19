@@ -26,3 +26,14 @@ test("each screening and order read is a one-shot read", () => {
     }
   }
 });
+
+test("a match decision takes the server's 2,000-character reason", () => {
+  const source = readFileSync(join(DIRS[0], "match-detail.tsx"), "utf8");
+  assert.equal(source.match(/maxLength: 2000/g)?.length, 2);
+});
+
+test("a refused upload's row errors stay in the card, not a toast that vanishes", () => {
+  const source = readFileSync(join(DIRS[0], "watchlists-tab.tsx"), "utf8");
+  assert.match(source, /amlaUploadErrors\(err\)/);
+  assert.doesNotMatch(source, /notifyError\(err, "The list couldn't be uploaded\."\)/);
+});

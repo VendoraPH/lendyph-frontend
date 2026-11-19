@@ -1,3 +1,4 @@
+import { getFieldErrors } from "@/lib/api-error";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import type { AmlaOption } from "@/lib/amla/settings-view";
 import type {
@@ -16,6 +17,12 @@ import type {
  */
 
 type Result<T> = { body: T } | { error: string };
+
+/** Ends a sentence with one full stop, unless it already ends in . ! or ?. */
+function sentence(text: string): string {
+  const trimmed = text.trim();
+  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+}
 
 const NA = "Data not available";
 
@@ -56,7 +63,7 @@ export function amlaWatchlistView(list: AmlaWatchlist) {
   let rescreen: string | null = null;
   if (active) {
     const entries = `${active.entry_count} ${active.entry_count === 1 ? "entry" : "entries"}`;
-    inForce = `${active.version_label ?? `Version #${active.id}`}: ${entries}, uploaded by ${active.uploaded_by?.name ?? "a former user"}, ${formatDateTime(active.uploaded_at)}`;
+    inForce = `${active.version_label ?? `Version #${active.id}`}: ${entries}, uploaded by ${active.uploaded_by?.name ?? "a former user"}, ${formatDateTime(active.uploaded_at)}.`;
     if (active.rescreen_pending) rescreen = "Everyone will be screened against it on the next screening run.";
     else if (active.rescreened_at) rescreen = `Everyone was screened against it ${formatDateTime(active.rescreened_at)}.`;
   }
@@ -67,6 +74,16 @@ export function amlaWatchlistView(list: AmlaWatchlist) {
     inForce,
     rescreen,
   };
+}
+
+/**
+ * Every reason the server refused an upload: each malformed row's message
+ * (a 422 lists them all under `file`), else one plain line. Nothing is kept
+ * from a refused file.
+ */
+export function amlaUploadErrors(err: unknown): string[] {
+  const messages = getFieldErrors(err);
+  return messages.length > 0 ? messages : ["The list couldn't be uploaded."];
 }
 
 /** The file must be the list's own kind; the server checks its size and contents and refuses in words. */
@@ -153,11 +170,11 @@ export function amlaOrderLines(order: AmlaOrderDetail) {
 
   const p = order.pending_release;
   const pending = p
-    ? `${p.requested_by?.name ?? "A former user"} asked for its release ${formatDateTime(p.requested_at)} (${p.release_reference}): ${p.reason}. A different sanctions holder approves or rejects it.`
+    ? `${p.requested_by?.name ?? "A former user"} asked for its release ${formatDateTime(p.requested_at)} (${p.release_reference}): ${sentence(p.reason)} A different sanctions holder approves or rejects it.`
     : null;
   const released =
     order.status === "released" && order.released_at
-      ? `Released by ${order.released_by?.name ?? "a former user"}, ${formatDateTime(order.released_at)}, as asked by ${order.release_requested_by?.name ?? "a former user"}${order.release_reference ? ` (${order.release_reference})` : ""}: ${order.release_reason ?? "no reason given"}.`
+      ? `Released by ${order.released_by?.name ?? "a former user"}, ${formatDateTime(order.released_at)}, as asked by ${order.release_requested_by?.name ?? "a former user"}${order.release_reference ? ` (${order.release_reference})` : ""}: ${sentence(order.release_reason ?? "no reason given")}`
       : null;
   return { facts, holds: order.holds.map(holdLine), pending, released };
 }
