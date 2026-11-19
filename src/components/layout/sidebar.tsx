@@ -28,7 +28,8 @@ import {
 import { BrandLogo } from "@/components/common";
 import { selectSidebarCollapsed, useUIStore } from "@/store/ui-store";
 import { systemService } from "@/services";
-import { collapsedNavLabel, countLabel } from "./sidebar-labels";
+import { collapsedNavLabel, countLabel, newLabel } from "./sidebar-labels";
+import { useUnseenNavBadges } from "./use-unseen-nav-badges";
 
 interface SidebarProps {
   mobileOpen: boolean;
@@ -77,6 +78,20 @@ function CountPill({
   );
 }
 
+/**
+ * Unread notifications in this section the user hasn't opened yet. Red, unlike
+ * the orange work counts, and gone once the page they point to is viewed.
+ */
+function NewPill({ count, label }: { count?: number; label?: string }) {
+  if (!count || count <= 0) return null;
+  return (
+    <span className="inline-flex items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white leading-none">
+      <span aria-hidden={label ? true : undefined}>{count > 99 ? "99+" : count}</span>
+      {label && <span className="sr-only">{label}</span>}
+    </span>
+  );
+}
+
 // ── Nav Link ──
 
 function NavLink({
@@ -87,6 +102,8 @@ function NavLink({
   badge,
   badgeLabel,
   childBadges,
+  unseen,
+  childUnseen,
 }: {
   item: NavItem;
   pathname: string;
@@ -97,6 +114,10 @@ function NavLink({
   badgeLabel?: string;
   /** Count shown on a child link, keyed by its href. */
   childBadges?: Record<string, number>;
+  /** Unread notifications in this section not yet viewed. */
+  unseen?: number;
+  /** The same per child link, keyed by its href. */
+  childUnseen?: Record<string, number>;
 }) {
   const { can } = usePermission();
   // Children are filtered, not just the parent. `SIDEBAR_NAV.filter` below
@@ -133,6 +154,8 @@ function NavLink({
   useEffect(() => {
     if (isOpen) setExpanded(true);
   }, [isOpen]);
+  const unseenLabel = newLabel(unseen, item.title);
+  const fullLabel = [unseenLabel, badgeLabel].filter(Boolean).join(", ") || undefined;
   const iconClass = iconColors[item.href] || "bg-gradient-to-br from-gray-400 to-gray-500 text-white";
 
   // ── Collapsed ──
@@ -146,7 +169,7 @@ function NavLink({
               onClick={onNavigate}
               // Only an icon shows, so the link is named here, the same way for
               // every item; this also overrides an icon's own alt text.
-              aria-label={collapsedNavLabel(item.title, badgeLabel)}
+              aria-label={collapsedNavLabel(item.title, fullLabel)}
               className={cn(
                 "flex items-center justify-center rounded-2xl p-2 transition-all duration-200",
                 "hover:bg-muted",
@@ -157,7 +180,14 @@ function NavLink({
         >
           <span className={cn("relative flex items-center justify-center rounded-xl h-9 w-9 shadow-sm", iconClass)}>
             <item.icon className="h-4 w-4" />
-            {badge && badge > 0 ? (
+            {unseen && unseen > 0 ? (
+              <span
+                aria-hidden="true"
+                className="absolute -right-1.5 -top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold leading-none text-white ring-2 ring-background"
+              >
+                {unseen > 99 ? "99+" : unseen}
+              </span>
+            ) : badge && badge > 0 ? (
               <span
                 aria-hidden="true"
                 className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-brand-orange ring-2 ring-background"
@@ -208,7 +238,12 @@ function NavLink({
           <item.icon className="h-3.5 w-3.5" />
         </span>
         <span className="truncate">{item.title}</span>
-        {badge && badge > 0 ? (
+        {unseen && unseen > 0 ? (
+          <span className="ml-auto flex items-center gap-1">
+            <NewPill count={unseen} label={unseenLabel} />
+            <CountPill count={badge} label={badgeLabel} />
+          </span>
+        ) : badge && badge > 0 ? (
           <span className="ml-auto inline-flex items-center justify-center rounded-full bg-brand-orange px-1.5 py-0.5 text-[10px] font-bold text-white leading-none">
             {badge}
           </span>
@@ -236,6 +271,7 @@ function NavLink({
         </span>
         <span className="flex-1 text-left truncate">{item.title}</span>
         {/* Visible while the menu is closed; the child link carries it once open. */}
+        {!expanded && <NewPill count={unseen} label={unseenLabel} />}
         {!expanded && <CountPill count={badge} label={badgeLabel} />}
         <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-300", expanded && "rotate-180")} />
       </button>
@@ -269,10 +305,16 @@ function NavLink({
                   <span className="truncate">{child.title}</span>
                   {/* Only while open: the closed submenu stays in the accessibility
                       tree, and the parent already announces the count. */}
-                  <CountPill
-                    count={expanded ? childBadges?.[child.href] : undefined}
-                    label={child.href === item.href ? badgeLabel : undefined}
-                  />
+                  <span className="flex items-center gap-1">
+                    <NewPill
+                      count={expanded ? childUnseen?.[child.href] : undefined}
+                      label={newLabel(childUnseen?.[child.href], child.title)}
+                    />
+                    <CountPill
+                      count={expanded ? childBadges?.[child.href] : undefined}
+                      label={child.href === item.href ? badgeLabel : undefined}
+                    />
+                  </span>
                 </span>
               </Link>
             );
@@ -313,6 +355,8 @@ function SidebarContent({
   // someone who can read the list it is counted from (`GET /loans` needs
   // loans:view); the server limits the count to the user's own steps.
   const pendingLoanApprovals = usePendingLoanApprovals(pendingApprovalsBadgeEnabled(can));
+  // "New" badges: unread notifications per section, until the user opens them.
+  const unseen = useUnseenNavBadges(SIDEBAR_NAV, pathname, can);
   const [apiStatus, setApiStatus] = useState<"checking" | "ok" | "down">("checking");
 
   useEffect(() => {
@@ -415,6 +459,8 @@ function SidebarContent({
               childBadges={
                 item.href === "/loans" ? { "/loans": pendingLoanApprovals } : undefined
               }
+              unseen={unseen.items[item.href]}
+              childUnseen={unseen.children}
             />
           ))}
         </nav>

@@ -8,22 +8,14 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { getInitials } from "@/lib/initials";
-import { formatCurrency } from "@/lib/format";
 import { currencyOrDash } from "@/lib/report-format";
+import { dueAmountLabel, type DueItemView } from "../_lib/daily-dues";
 import type { RecentTransactionRow } from "../_lib/recent-transactions";
 
 /** Request lifecycle for a section, so empty data and a failed fetch render differently. */
 export type LoadState = "loading" | "ready" | "error";
 
-/** A daily-dues row, after mapping the API response. */
-export type DueItemView = {
-  id: number;
-  borrower: string;
-  loanId: string;
-  amountDue: number;
-  amountPaid: number;
-  status: "collected" | "partial" | "pending";
-};
+export type { DueItemView } from "../_lib/daily-dues";
 
 /** Placeholder row for a table with nothing to show. */
 function TableEmptyRow({
@@ -74,9 +66,9 @@ export function DuesTable({ items, state }: { items: DueItemView[]; state: LoadS
               </div>
             </TableCell>
             <TableCell className="text-sm text-muted-foreground">{item.loanId}</TableCell>
-            <TableCell className="text-right text-sm font-medium">{formatCurrency(item.amountDue)}</TableCell>
+            <TableCell className="text-right text-sm font-medium">{dueAmountLabel(item.amountDue)}</TableCell>
             <TableCell className="text-right text-sm font-medium">
-              {item.amountPaid > 0 ? formatCurrency(item.amountPaid) : "—"}
+              {dueAmountLabel(item.amountPaid)}
             </TableCell>
             <TableCell className="pr-4 text-right">
               <Badge
