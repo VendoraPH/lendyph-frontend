@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { AmlaRefusedPanel } from "@/components/amla/amla-refused-panel";
+import { amlaFound, amlaRefused } from "@/lib/amla/record-read";
 import { DataState } from "@/components/common/data-state";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Badge } from "@/components/ui/badge";
@@ -29,7 +31,7 @@ import { SubmissionDialog } from "./submission-dialog";
  * shows the report the server answers with, without reading it again.
  */
 export function FilingDetail({ id }: { id: number }) {
-  const [fetcher] = useState(() => once(() => amlaCaseApi.report(id)));
+  const [fetcher] = useState(() => once(() => amlaCaseApi.report(id).then(amlaFound, amlaRefused)));
   const resource = useApiResource(fetcher);
   const [latest, setLatest] = useState<AmlaReportDetail | null>(null);
   return (
@@ -38,7 +40,13 @@ export function FilingDetail({ id }: { id: number }) {
         Back to Regulatory Submissions
       </Link>
       <DataState resource={resource} summary="This report, its deadline and its filing steps." endpoints={["GET /amla/reports/{id}"]}>
-        {(report) => <FilingBody report={latest ?? report} onReport={setLatest} />}
+        {(read) =>
+          "refused" in read ? (
+            <AmlaRefusedPanel {...read} backHref="/amla/submissions" backLabel="Back to Regulatory Submissions" />
+          ) : (
+            <FilingBody report={latest ?? read.record} onReport={setLatest} />
+          )
+        }
       </DataState>
     </PageFill>
   );

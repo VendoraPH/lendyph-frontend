@@ -10,8 +10,9 @@ import { useDialogOpening } from "@/hooks/use-dialog-opening";
 import { useSubmitGuard } from "@/hooks/use-submit-guard";
 import { amlaAlertActions } from "@/lib/amla/monitoring-access";
 import { amlaMonitoringApi } from "@/lib/amla/monitoring-api";
-import { amlaAlertStepNote, amlaCloseReasonBody } from "@/lib/amla/monitoring-view";
+import { amlaAlertHistoryLine, amlaAlertStepNote, amlaCloseReasonBody } from "@/lib/amla/monitoring-view";
 import { once } from "@/lib/amla/once";
+import { amlaStepConflict } from "@/lib/amla/record-read";
 import { formatDateTime } from "@/lib/format";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { useAuthStore } from "@/store";
@@ -56,8 +57,15 @@ const TEXT: Readonly<Record<Step, StepText>> = {
   },
 };
 
+interface WorkflowProps {
+  alert: AmlaAlertDetail;
+  onChanged: (row: AmlaAlertRow) => void;
+  /** A 409: the dialog closes, and the page reads the alert again and keeps the server's words. */
+  onConflict: (message: string) => void;
+}
+
 /** Assign to me, start review and close, as the server allows them; each answers the alert's row. */
-export function AlertWorkflow({ alert, onChanged }: { alert: AmlaAlertDetail; onChanged: (row: AmlaAlertRow) => void }) {
+export function AlertWorkflow({ alert, onChanged, onConflict }: WorkflowProps) {
   const { can } = usePermission();
   const userId = useAuthStore((state) => state.user?.id ?? null);
   const actions = amlaAlertActions(alert, userId, can);
@@ -91,7 +99,12 @@ export function AlertWorkflow({ alert, onChanged }: { alert: AmlaAlertDetail; on
         setStep(null);
         onChanged(row);
       })
-      .catch((err: unknown) => notifyError(err, words.failure));
+      .catch((err: unknown) => {
+        const conflict = amlaStepConflict(err);
+        if (conflict === null) return notifyError(err, words.failure);
+        setStep(null);
+        onConflict(conflict);
+      });
   }
 
   const shown = buttons.filter(([, , allowed]) => allowed);
@@ -159,15 +172,12 @@ export function AlertHistoryCard({ alertId }: { alertId: number }) {
             {history.data.map((entry) => (
               <li key={entry.id} className="rounded-md border p-2">
                 <div className="flex flex-wrap justify-between gap-2">
-                  <span className="font-medium">
-                    {entry.action_words}
-                    {entry.assignee ? ` to ${entry.assignee.name}` : ""} · {entry.to_status_words}
-                  </span>
+                  <span className="font-medium">{amlaAlertHistoryLine(entry).title}</span>
                   <span className="text-muted-foreground">
                     {entry.by?.name ?? "System"} · {entry.at ? formatDateTime(entry.at) : "—"}
                   </span>
                 </div>
-                {entry.note && <p className="mt-1 whitespace-pre-wrap">{entry.note}</p>}
+                {entry.note && <p className="mt-1 whitespace-pre-wrap">{amlaAlertHistoryLine(entry).note}</p>}
               </li>
             ))}
           </ol>

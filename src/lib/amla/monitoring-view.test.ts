@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { formatDate, formatDateTime } from "@/lib/format";
 import type {
   AmlaAlertDetail,
+  AmlaAlertHistoryStep,
   AmlaAlertRow,
   AmlaCtrRow,
   AmlaDetectionRulesVersion,
@@ -15,7 +16,9 @@ import {
   AMLA_PRIORITY_OPTIONS,
   amlaAlertLines,
   amlaAlertRow,
+  amlaAlertHistoryLine,
   amlaAlertStepNote,
+  amlaEscalationNotes,
   amlaAlertWithRow,
   amlaCloseReasonBody,
   amlaCtrRow,
@@ -415,4 +418,41 @@ test("a workflow step's answer updates the alert's status and assignee without r
   assert.equal(merged.assigned_to?.name, "Me");
   assert.equal(merged.reason, "Why");
   assert.deepEqual(merged.transactions, []);
+});
+
+const step = (over: Partial<AmlaAlertHistoryStep> = {}): AmlaAlertHistoryStep => ({
+  id: 1,
+  action: "closed",
+  action_words: "Closed with a documented reason",
+  from_status: "under_review",
+  to_status: "closed",
+  to_status_words: "Closed with a documented reason",
+  by: { id: 2, name: "Ana" },
+  assignee: null,
+  case_id: null,
+  note: "Known salary",
+  at: null,
+  ...over,
+});
+
+test("a history step reads once, with its reason or note, and its new status only when it says more", () => {
+  assert.deepEqual(amlaAlertHistoryLine(step()), { title: "Closed with a documented reason", note: "Reason: Known salary" });
+  assert.deepEqual(
+    amlaAlertHistoryLine(step({ action: "assigned", action_words: "Assigned", to_status: "assigned", to_status_words: "Assigned", assignee: { id: 9, name: "Me" }, note: null })),
+    { title: "Assigned to Me", note: null },
+  );
+  assert.deepEqual(
+    amlaAlertHistoryLine(step({ action: "review_started", action_words: "Review started", to_status: "under_review", to_status_words: "Under review", note: "Checking" })),
+    { title: "Review started · Under review", note: "Note: Checking" },
+  );
+});
+
+test("the notes typed when an alert was escalated, for the case it went to", () => {
+  const history = [
+    step({ id: 1, action: "assigned", note: "mine" }),
+    step({ id: 2, action: "escalated", case_id: 4, note: "See the cash-ins" }),
+    step({ id: 3, action: "escalated", case_id: 5, note: "Another case" }),
+    step({ id: 4, action: "escalated", case_id: 4, note: null }),
+  ];
+  assert.deepEqual(amlaEscalationNotes(history, 4).map((h) => h.note), ["See the cash-ins"]);
 });

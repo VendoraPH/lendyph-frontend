@@ -148,7 +148,7 @@ function EscalateDialog({ open, alert, onClose }: { open: boolean; alert: AmlaAl
         </div>
       )}
       <div className="space-y-1">
-        <Label htmlFor="amla-escalate-note">Note (optional)</Label>
+        <Label htmlFor="amla-escalate-note">Note (optional, kept on the alert&apos;s history and shown with the alert on the case)</Label>
         <Textarea id="amla-escalate-note" value={form.note} maxLength={2000} disabled={submitting} onChange={(e) => set({ note: e.target.value })} />
       </div>
     </CddFormDialog>

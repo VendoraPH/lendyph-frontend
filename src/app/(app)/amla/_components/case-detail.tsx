@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { AmlaRefusedPanel } from "@/components/amla/amla-refused-panel";
+import { amlaFound, amlaRefused } from "@/lib/amla/record-read";
 import { DataState } from "@/components/common/data-state";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Badge } from "@/components/ui/badge";
@@ -25,12 +27,12 @@ import { CaseAlertsCard, CaseDecisionCard, CaseEvidenceCard, CaseHistoryCard, Ca
  * again, and only an evidence upload reads it again.
  */
 export function CaseDetail({ id }: { id: number }) {
-  const [fetcher, setFetcher] = useState(() => once(() => amlaCaseApi.case(id)));
+  const [fetcher, setFetcher] = useState(() => once(() => amlaCaseApi.case(id).then(amlaFound, amlaRefused)));
   const resource = useApiResource(fetcher);
   const [latest, setLatest] = useState<AmlaCaseDetail | null>(null);
   const reload = () => {
     setLatest(null);
-    setFetcher(() => once(() => amlaCaseApi.case(id)));
+    setFetcher(() => once(() => amlaCaseApi.case(id).then(amlaFound, amlaRefused)));
   };
 
   return (
@@ -39,7 +41,13 @@ export function CaseDetail({ id }: { id: number }) {
         Back to Compliance Cases
       </Link>
       <DataState resource={resource} summary="This case, its alerts, notes, evidence and decision." endpoints={["GET /amla/cases/{id}"]}>
-        {(record) => <CaseBody record={latest ?? record} onCase={setLatest} onReload={reload} />}
+        {(read) =>
+          "refused" in read ? (
+            <AmlaRefusedPanel {...read} backHref="/amla/cases" backLabel="Back to Compliance Cases" />
+          ) : (
+            <CaseBody record={latest ?? read.record} onCase={setLatest} onReload={reload} />
+          )
+        }
       </DataState>
     </PageFill>
   );

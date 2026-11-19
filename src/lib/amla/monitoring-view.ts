@@ -16,6 +16,7 @@ import { AMLA_CHANNEL_OPTIONS, amlaReasonError, type AmlaOption } from "@/lib/am
 import type { AmlaChangeRequestBody, AmlaPage } from "@/types/amla";
 import type {
   AmlaAlertDetail,
+  AmlaAlertHistoryStep,
   AmlaAlertRow,
   AmlaCtrRow,
   AmlaDetectionRulesVersion,
@@ -49,6 +50,19 @@ export const AMLA_ALERT_STATUS_OPTIONS: readonly AmlaOption[] = [
 /** A workflow step answers the alert's row; it updates the open alert without reading it again. */
 export function amlaAlertWithRow(detail: AmlaAlertDetail, row: AmlaAlertRow): AmlaAlertDetail {
   return { ...detail, ...row };
+}
+
+/** One workflow step in words: its action (to whom), its new status only when that says more, and its reason or note. */
+export function amlaAlertHistoryLine(step: AmlaAlertHistoryStep): { title: string; note: string | null } {
+  let title = step.assignee ? `${step.action_words} to ${step.assignee.name}` : step.action_words;
+  if (step.to_status_words !== step.action_words) title += ` · ${step.to_status_words}`;
+  const note = step.note ? `${step.action === "closed" ? "Reason" : "Note"}: ${step.note}` : null;
+  return { title, note };
+}
+
+/** The notes typed when the alert was escalated into this case: the server keeps them on the alert's history. */
+export function amlaEscalationNotes(history: AmlaAlertHistoryStep[], caseId: number): AmlaAlertHistoryStep[] {
+  return history.filter((step) => step.action === "escalated" && step.case_id === caseId && step.note);
 }
 
 /** Closing needs the reason the server keeps (3 to 2,000 characters). */

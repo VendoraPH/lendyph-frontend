@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { AmlaRefusedPanel } from "@/components/amla/amla-refused-panel";
+import { amlaFound, amlaRefused } from "@/lib/amla/record-read";
 import { DataState } from "@/components/common/data-state";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Badge } from "@/components/ui/badge";
@@ -22,25 +24,54 @@ import { TransactionsTable } from "./transactions-table";
  * shows the row the server answers with, without reading the alert again.
  */
 export function AlertDetail({ id }: { id: number }) {
-  const [fetcher] = useState(() => once(() => amlaMonitoringApi.alert(id)));
+  const read = () => once(() => amlaMonitoringApi.alert(id).then(amlaFound, amlaRefused));
+  const [fetcher, setFetcher] = useState(read);
   const resource = useApiResource(fetcher);
   const [latest, setLatest] = useState<AmlaAlertDetail | null>(null);
+  // A step refused with 409: someone else moved the alert on, so it is read once again and the server's words stay here.
+  const [conflict, setConflict] = useState<string | null>(null);
+  const onConflict = (message: string) => {
+    setConflict(message);
+    setLatest(null);
+    setFetcher(read);
+  };
   return (
     <PageFill>
       <Link href="/amla/alerts" className="shrink-0 text-sm text-muted-foreground underline-offset-4 hover:underline">
         Back to Alerts
       </Link>
+      {conflict && (
+        <p role="alert" className="shrink-0 rounded-md border border-destructive/40 p-3 text-sm">
+          {conflict}
+        </p>
+      )}
       <DataState resource={resource} summary="This alert, its reason and its transactions." endpoints={["GET /amla/alerts/{id}"]}>
         {(loaded) => {
-          const alert = latest ?? loaded;
-          return <AlertBody alert={alert} onChanged={(row) => setLatest(amlaAlertWithRow(alert, row))} />;
+          if ("refused" in loaded) return <AmlaRefusedPanel {...loaded} backHref="/amla/alerts" backLabel="Back to Alerts" />;
+          const alert = latest ?? loaded.record;
+          return (
+            <AlertBody
+              alert={alert}
+              onChanged={(row) => {
+                setConflict(null);
+                setLatest(amlaAlertWithRow(alert, row));
+              }}
+              onConflict={onConflict}
+            />
+          );
         }}
       </DataState>
     </PageFill>
   );
 }
 
-function AlertBody({ alert, onChanged }: { alert: AmlaAlertDetail; onChanged: (row: AmlaAlertRow) => void }) {
+interface BodyProps {
+  alert: AmlaAlertDetail;
+  onChanged: (row: AmlaAlertRow) => void;
+  onConflict: (message: string) => void;
+}
+
+function AlertBody({ alert, onChanged, onConflict }: BodyProps) {
   const { can } = usePermission();
   const row = amlaAlertRow(alert);
   const lines = amlaAlertLines(alert, amlaMonitoringAccess(can).customerLinks);
@@ -77,7 +108,7 @@ function AlertBody({ alert, onChanged }: { alert: AmlaAlertDetail; onChanged: (r
 
       {lines.cleared && <p className="rounded-md border bg-muted/40 p-3 text-sm">{lines.cleared}</p>}
       <div className="flex flex-wrap items-start gap-2">
-        <AlertWorkflow alert={alert} onChanged={onChanged} />
+        <AlertWorkflow alert={alert} onChanged={onChanged} onConflict={onConflict} />
         <AlertCaseLine alert={alert} />
       </div>
 

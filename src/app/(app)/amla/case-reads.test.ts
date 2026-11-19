@@ -45,3 +45,18 @@ test("Audit & Compliance History reuses Settings → AMLA's log viewer instead o
   assert.match(page, /AmlaLogTab/);
   assert.doesNotMatch(page, /amlaApi\.log\(/);
 });
+
+test("a record page reads a refused record (404 or 403) as not found or no access, never as not connected", () => {
+  for (const name of ["case-detail.tsx", "filing-detail.tsx", "alert-detail.tsx", "ctr-detail.tsx"]) {
+    const [, source] = sources.find(([file]) => file === name) ?? [];
+    assert.match(source ?? "", /\.then\(amlaFound, amlaRefused\)\)/, name);
+    assert.match(source ?? "", /<AmlaRefusedPanel/, name);
+  }
+});
+
+test("an alert step refused with 409 reads the alert again and keeps the server's words on the page", () => {
+  const [, workflow] = sources.find(([file]) => file === "alert-workflow.tsx") ?? [];
+  assert.match(workflow ?? "", /amlaStepConflict\(err\)/);
+  const [, detail] = sources.find(([file]) => file === "alert-detail.tsx") ?? [];
+  assert.match(detail ?? "", /role="alert"/);
+});

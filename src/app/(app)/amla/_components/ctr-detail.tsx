@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { AmlaRefusedPanel } from "@/components/amla/amla-refused-panel";
+import { amlaFound, amlaRefused } from "@/lib/amla/record-read";
 import { DataState } from "@/components/common/data-state";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +20,7 @@ import { TransactionsTable } from "./transactions-table";
 
 /** One CTR candidate: why it is one, the settings version it was measured by, and its transaction. Read once. */
 export function CtrDetail({ id }: { id: number }) {
-  const [fetcher] = useState(() => once(() => amlaMonitoringApi.ctrCandidate(id)));
+  const [fetcher] = useState(() => once(() => amlaMonitoringApi.ctrCandidate(id).then(amlaFound, amlaRefused)));
   const resource = useApiResource(fetcher);
   return (
     <PageFill>
@@ -26,7 +28,13 @@ export function CtrDetail({ id }: { id: number }) {
         Back to CTR Candidates
       </Link>
       <DataState resource={resource} summary="This CTR candidate and its transaction." endpoints={["GET /amla/ctr-candidates/{id}"]}>
-        {(candidate) => <CtrBody candidate={candidate} />}
+        {(read) =>
+          "refused" in read ? (
+            <AmlaRefusedPanel {...read} backHref="/amla/ctr-candidates" backLabel="Back to CTR Candidates" />
+          ) : (
+            <CtrBody candidate={read.record} />
+          )
+        }
       </DataState>
     </PageFill>
   );

@@ -1,18 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { amlaCaseApi, readBlobError } from "@/lib/amla/case-api";
-import { amlaAlertRow } from "@/lib/amla/monitoring-view";
+import { amlaMonitoringApi } from "@/lib/amla/monitoring-api";
+import { amlaAlertRow, amlaEscalationNotes } from "@/lib/amla/monitoring-view";
+import { once } from "@/lib/amla/once";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { formatFileSize } from "@/lib/loan-origination";
 import { notifyError } from "@/lib/notify";
 import { saveBlob } from "@/lib/save-blob";
+import { useApiResource } from "@/hooks";
 import type { AmlaCaseDetail } from "@/types/amla-cases";
+import type { AmlaAlertHistoryStep } from "@/types/amla-monitoring";
 
 const at = (value: string | null) => (value ? formatDateTime(value) : "—");
 
@@ -84,6 +88,7 @@ export function CaseAlertsCard({ record, canOpenAlerts }: { record: AmlaCaseDeta
                     row.reference
                   )}
                   <div className="text-xs text-muted-foreground">{row.status}</div>
+                  {canOpenAlerts && <EscalationNote alertId={row.id} caseId={record.id} />}
                 </TableCell>
                 <TableCell className="whitespace-normal">{row.rule}</TableCell>
                 <TableCell>
@@ -189,5 +194,37 @@ export function CaseReportsCard({ record, canOpen }: { record: AmlaCaseDetail; c
         ))}
       </ul>
     </Section>
+  );
+}
+
+const NO_HISTORY = () => Promise.resolve<AmlaAlertHistoryStep[]>([]);
+
+/**
+ * The note typed when the alert was escalated: the server keeps it on the
+ * alert's history, not among the case's notes. That history read is logged,
+ * so it is made only when asked for, once.
+ */
+function EscalationNote({ alertId, caseId }: { alertId: number; caseId: number }) {
+  const [fetcher, setFetcher] = useState<(() => Promise<AmlaAlertHistoryStep[]>) | null>(null);
+  const history = useApiResource(fetcher ?? NO_HISTORY, fetcher !== null);
+  if (fetcher === null) {
+    return (
+      <Button variant="link" size="sm" className="h-auto px-0 text-xs" onClick={() => setFetcher(() => once(() => amlaMonitoringApi.alertHistory(alertId)))}>
+        Show escalation note
+      </Button>
+    );
+  }
+  if (history.loading) return <p className="text-xs text-muted-foreground">Loading…</p>;
+  if (history.error) return <p className="text-xs text-destructive">{history.error}</p>;
+  const notes = amlaEscalationNotes(history.data ?? [], caseId);
+  if (notes.length === 0) return <p className="text-xs text-muted-foreground">No note was written when it was escalated.</p>;
+  return (
+    <>
+      {notes.map((step) => (
+        <p key={step.id} className="text-xs whitespace-pre-wrap">
+          Escalation note ({step.by?.name ?? "—"}): {step.note}
+        </p>
+      ))}
+    </>
   );
 }
