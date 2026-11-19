@@ -9,29 +9,38 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useApiResource, usePermission } from "@/hooks";
 import { amlaMonitoringAccess } from "@/lib/amla/monitoring-access";
 import { amlaMonitoringApi } from "@/lib/amla/monitoring-api";
-import { amlaAlertLines, amlaAlertRow } from "@/lib/amla/monitoring-view";
+import { amlaAlertLines, amlaAlertRow, amlaAlertWithRow } from "@/lib/amla/monitoring-view";
 import { once } from "@/lib/amla/once";
-import type { AmlaAlertDetail } from "@/types/amla-monitoring";
+import type { AmlaAlertDetail, AmlaAlertRow } from "@/types/amla-monitoring";
 import { AlertCaseLine } from "./alert-escalate";
+import { AlertHistoryCard, AlertWorkflow } from "./alert-workflow";
 import { TransactionsTable } from "./transactions-table";
 
-/** One alert: the rule and the version it cites, why it was raised, its indicators and every transaction behind it. Read once. */
+/**
+ * One alert: the rule and the version it cites, why it was raised, its
+ * indicators and every transaction behind it. Read once; a workflow step
+ * shows the row the server answers with, without reading the alert again.
+ */
 export function AlertDetail({ id }: { id: number }) {
   const [fetcher] = useState(() => once(() => amlaMonitoringApi.alert(id)));
   const resource = useApiResource(fetcher);
+  const [latest, setLatest] = useState<AmlaAlertDetail | null>(null);
   return (
     <PageFill>
       <Link href="/amla/alerts" className="shrink-0 text-sm text-muted-foreground underline-offset-4 hover:underline">
         Back to Alerts
       </Link>
       <DataState resource={resource} summary="This alert, its reason and its transactions." endpoints={["GET /amla/alerts/{id}"]}>
-        {(alert) => <AlertBody alert={alert} />}
+        {(loaded) => {
+          const alert = latest ?? loaded;
+          return <AlertBody alert={alert} onChanged={(row) => setLatest(amlaAlertWithRow(alert, row))} />;
+        }}
       </DataState>
     </PageFill>
   );
 }
 
-function AlertBody({ alert }: { alert: AmlaAlertDetail }) {
+function AlertBody({ alert, onChanged }: { alert: AmlaAlertDetail; onChanged: (row: AmlaAlertRow) => void }) {
   const { can } = usePermission();
   const row = amlaAlertRow(alert);
   const lines = amlaAlertLines(alert, amlaMonitoringAccess(can).customerLinks);
@@ -67,7 +76,10 @@ function AlertBody({ alert }: { alert: AmlaAlertDetail }) {
       </div>
 
       {lines.cleared && <p className="rounded-md border bg-muted/40 p-3 text-sm">{lines.cleared}</p>}
-      <AlertCaseLine alert={alert} />
+      <div className="flex flex-wrap items-start gap-2">
+        <AlertWorkflow alert={alert} onChanged={onChanged} />
+        <AlertCaseLine alert={alert} />
+      </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
         <Card>
@@ -115,6 +127,8 @@ function AlertBody({ alert }: { alert: AmlaAlertDetail }) {
           <TransactionsTable transactions={alert.transactions} />
         </CardContent>
       </Card>
+
+      <AlertHistoryCard alertId={alert.id} />
     </ScrollBox>
   );
 }

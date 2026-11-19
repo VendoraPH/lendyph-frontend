@@ -12,7 +12,7 @@ const files = readdirSync(DIR).filter((name) => name.endsWith(".tsx"));
 const sources = files.map((name) => [name, readFileSync(join(DIR, name), "utf8")] as const);
 
 test("each monitoring read is a one-shot read", () => {
-  const reads = ["alerts", "alert", "ctrCandidates", "ctrCandidate", "detectionRules", "detectionRuleVersions", "riskRules"];
+  const reads = ["alerts", "alert", "ctrCandidates", "ctrCandidate", "detectionRules", "detectionRuleVersions", "riskRules", "alertHistory"];
   for (const read of reads) {
     const callers = sources.filter(([, source]) => source.includes(`amlaMonitoringApi.${read}(`));
     assert.ok(callers.length > 0, `${read} is read somewhere`);

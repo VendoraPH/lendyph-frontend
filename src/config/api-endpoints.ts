@@ -678,6 +678,10 @@ export const API_ENDPOINTS = {
      * `amla:approve`, the STR `amla:str`); reports and deadlines any reporting
      * key (an STR also every branch). Every view, download and export is logged.
      */
+    ALERT_ASSIGN: (id: number) => `/amla/alerts/${id}/assign`,
+    ALERT_REVIEW: (id: number) => `/amla/alerts/${id}/review`,
+    ALERT_CLOSE: (id: number) => `/amla/alerts/${id}/close`,
+    ALERT_HISTORY: (id: number) => `/amla/alerts/${id}/history`,
     ALERT_ESCALATE: (id: number) => `/amla/alerts/${id}/escalate`,
     CASES: "/amla/cases",
     CASE: (id: number) => `/amla/cases/${id}`,

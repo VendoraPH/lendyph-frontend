@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Permission } from "@/types";
-import { AMLA_ALERTS_PERMISSION, AMLA_CTR_PERMISSION, amlaMonitoringAccess, amlaRecordId } from "./monitoring-access";
+import { AMLA_ALERTS_PERMISSION, AMLA_CTR_PERMISSION, amlaAlertActions, amlaMonitoringAccess, amlaRecordId } from "./monitoring-access";
 
 const holds = (...held: string[]) => (p: Permission) => held.includes(p);
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
@@ -70,4 +70,28 @@ test("a record's route id is a positive whole number of at most 18 digits, as th
   for (const bad of ["0", "-1", "7a", "", "1".repeat(19), undefined, ["7"]]) {
     assert.equal(amlaRecordId(bad), null, String(bad));
   }
+});
+
+const alertOf = (status: string, assignee: number | null = null) => ({ status, assigned_to: assignee === null ? null : { id: assignee, name: "A" } });
+const ALERTS = holds("amla:view", "amla:alerts");
+
+test("a workable alert can be assigned to me, unless it is already mine", () => {
+  for (const status of ["open", "assigned", "under_review"]) assert.equal(amlaAlertActions(alertOf(status), 9, ALERTS).assignToMe, true, status);
+  assert.equal(amlaAlertActions(alertOf("assigned", 9), 9, ALERTS).assignToMe, false);
+  assert.equal(amlaAlertActions(alertOf("open"), null, ALERTS).assignToMe, false);
+});
+
+test("review starts from open or assigned only; close from any workable status", () => {
+  assert.equal(amlaAlertActions(alertOf("open"), 9, ALERTS).review, true);
+  assert.equal(amlaAlertActions(alertOf("assigned"), 9, ALERTS).review, true);
+  assert.equal(amlaAlertActions(alertOf("under_review"), 9, ALERTS).review, false);
+  for (const status of ["open", "assigned", "under_review"]) assert.equal(amlaAlertActions(alertOf(status), 9, ALERTS).close, true, status);
+});
+
+test("escalated, closed and cleared alerts take no step, and every step needs amla:alerts under amla:view", () => {
+  for (const status of ["escalated", "closed", "cleared"]) {
+    assert.deepEqual(amlaAlertActions(alertOf(status), 9, ALERTS), { assignToMe: false, review: false, close: false, history: true }, status);
+  }
+  assert.deepEqual(amlaAlertActions(alertOf("open"), 9, holds("amla:view")), { assignToMe: false, review: false, close: false, history: false });
+  assert.deepEqual(amlaAlertActions(alertOf("open"), 9, holds("amla:alerts")), { assignToMe: false, review: false, close: false, history: false });
 });

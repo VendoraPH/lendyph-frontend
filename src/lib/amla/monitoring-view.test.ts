@@ -15,6 +15,9 @@ import {
   AMLA_PRIORITY_OPTIONS,
   amlaAlertLines,
   amlaAlertRow,
+  amlaAlertStepNote,
+  amlaAlertWithRow,
+  amlaCloseReasonBody,
   amlaCtrRow,
   amlaDetectionChangeBody,
   amlaDetectionDraft,
@@ -34,6 +37,10 @@ const NA = "Data not available";
 test("the filters read in the server's words", () => {
   assert.deepEqual(AMLA_ALERT_STATUS_OPTIONS, [
     { value: "open", label: "Open" },
+    { value: "assigned", label: "Assigned" },
+    { value: "under_review", label: "Under review" },
+    { value: "escalated", label: "Escalated to a case" },
+    { value: "closed", label: "Closed with a documented reason" },
     { value: "cleared", label: "Cleared by a rerun" },
   ]);
   assert.deepEqual(AMLA_PRIORITY_OPTIONS.map((o) => o.label), ["Critical", "High", "Medium", "Low"]);
@@ -385,4 +392,27 @@ test("server notes never show internal build codes", () => {
 test("a waiting rule change is the first pending request the server lists, if any", () => {
   assert.equal(amlaPendingRequestId({ data: [{ id: 12 }, { id: 11 }], meta: { current_page: 1, per_page: 25, total: 2, last_page: 1 } }), 12);
   assert.equal(amlaPendingRequestId({ data: [], meta: { current_page: 1, per_page: 25, total: 0, last_page: 1 } }), null);
+});
+
+test("closing an alert needs a reason of 3 to 2,000 characters, as the server checks", () => {
+  assert.deepEqual(amlaCloseReasonBody("  "), { error: "Say why the alert is closed." });
+  assert.deepEqual(amlaCloseReasonBody("ok"), { error: "Give a reason of at least 3 characters." });
+  assert.ok("error" in amlaCloseReasonBody("x".repeat(2001)));
+  assert.deepEqual(amlaCloseReasonBody(" Salary from a known employer "), { body: "Salary from a known employer" });
+});
+
+test("an optional step note is kept to 2,000 characters", () => {
+  assert.deepEqual(amlaAlertStepNote("  "), { body: "" });
+  assert.deepEqual(amlaAlertStepNote(" Checking "), { body: "Checking" });
+  assert.ok("error" in amlaAlertStepNote("x".repeat(2001)));
+});
+
+test("a workflow step's answer updates the alert's status and assignee without reading the alert again", () => {
+  const detail = { ...ALERT, reason: "Why", indicators: [], cleared_at: null, cleared_note: null, transactions: [] } as AmlaAlertDetail;
+  const answered: AmlaAlertRow = { ...ALERT, status: "assigned", status_words: "Assigned", assigned_to: { id: 9, name: "Me" } };
+  const merged = amlaAlertWithRow(detail, answered);
+  assert.equal(merged.status, "assigned");
+  assert.equal(merged.assigned_to?.name, "Me");
+  assert.equal(merged.reason, "Why");
+  assert.deepEqual(merged.transactions, []);
 });
