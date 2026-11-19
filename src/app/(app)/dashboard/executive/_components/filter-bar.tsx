@@ -30,6 +30,7 @@ export function FilterBar({
   onRefresh,
   refreshing,
   exportSlot,
+  filtersSlot,
 }: {
   preset: ExecutivePreset;
   onPreset: (preset: ExecutivePreset) => void;
@@ -42,15 +43,19 @@ export function FilterBar({
   onRefresh: () => void;
   refreshing: boolean;
   exportSlot: React.ReactNode;
+  /** The product, officer and collector filters. */
+  filtersSlot?: React.ReactNode;
 }) {
   return (
-    <div className="flex shrink-0 flex-wrap items-end gap-3 rounded-xl border bg-card p-3 shadow-sm">
-      <div className="space-y-1.5">
+    // One row where it fits: each label sits beside its control, and the
+    // product, officer and collector filters sit behind "More filters".
+    <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border bg-card px-3 py-2 shadow-sm">
+      <div className="flex items-center gap-2">
         <Label htmlFor="exec-period" className="text-xs text-muted-foreground">
           Period
         </Label>
         <Select value={preset} onValueChange={(v) => v && onPreset(v as ExecutivePreset)} items={PRESET_ITEMS}>
-          <SelectTrigger id="exec-period" className="w-[190px]">
+          <SelectTrigger id="exec-period" className="w-[170px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -65,12 +70,12 @@ export function FilterBar({
 
       <DateRangeFilter label="Dates" from={from} to={to} onChange={onRange} />
 
-      <div className="space-y-1.5">
+      <div className="flex items-center gap-2">
         <Label htmlFor="exec-branch" className="text-xs text-muted-foreground">
           Branch
         </Label>
         <Select value={branch} onValueChange={(v) => v && onBranch(v)} items={branchItems}>
-          <SelectTrigger id="exec-branch" className="w-[180px]">
+          <SelectTrigger id="exec-branch" className="w-[170px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -82,6 +87,8 @@ export function FilterBar({
           </SelectContent>
         </Select>
       </div>
+
+      {filtersSlot}
 
       <div className="ml-auto flex items-center gap-2">
         <Button variant="outline" size="sm" onClick={onRefresh} disabled={refreshing}>

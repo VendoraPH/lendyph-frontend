@@ -12,9 +12,7 @@ import type {
   CashFlowReport,
   CollectionEfficiencyReport,
   DisbursementsReport,
-  IncomeReport,
   LoanBalanceSummaryReport,
-  PastDueTotals,
   PerformanceReport,
   PortfolioByProductReport,
   ShareCapitalReport,
@@ -38,14 +36,11 @@ export interface ExecutiveData {
   products: Source<PortfolioByProductReport>;
   performance: Source<PerformanceReport>;
   shareCapital: Source<ShareCapitalReport>;
-  income: Source<IncomeReport>;
   borrowers: Source<BorrowersReport>;
   disbursements: Source<DisbursementsReport>;
   accounting: Source<AccountingDashboard>;
   /** `meta.stats` of GET /loans: loan counts per status. */
   loanStats: Source<Record<string, number>>;
-  /** `totals` of GET /reports/due-past-due?past_due_only=1 (the Past Due Loans page's cards). */
-  pastDue: Source<PastDueTotals>;
 }
 
 export type SourceKey = keyof ExecutiveData;
@@ -63,12 +58,10 @@ export const SOURCE_PERMISSIONS: Record<SourceKey, Permission[]> = {
   products: ["reports:view"],
   performance: ["reports:view"],
   shareCapital: ["reports:view", "share_capital:view"],
-  income: ["reports:view"],
   borrowers: ["reports:view"],
   disbursements: ["reports:view"],
   accounting: ["accounting:view"],
   loanStats: ["loans:view"],
-  pastDue: ["reports:view"],
 };
 
 /** Whether every permission a source needs is held; a source that isn't is never requested and reads "No access". */
@@ -86,13 +79,3 @@ export function readyData<T>(source: Source<T>): T | null {
 /** Centavos (the accounting API) to pesos. */
 export const fromCentavos = (centavos: number | null | undefined): number | null =>
   typeof centavos === "number" && Number.isFinite(centavos) ? centavos / 100 : null;
-
-/**
- * The money accounts' balance at the ledger's as-of date, in pesos: the
- * server's last trend month (`cash` there is at `as_of`). `null` when the
- * ledger sent no months.
- */
-export function cashBalance(accounting: AccountingDashboard | null): number | null {
-  return fromCentavos(accounting?.months?.at(-1)?.cash);
-}
-

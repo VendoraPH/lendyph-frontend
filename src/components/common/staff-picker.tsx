@@ -32,6 +32,8 @@ interface StaffPickerProps {
   "aria-label"?: string;
   /** Adds a button back to "no officer", for forms where the field is optional. */
   clearable?: boolean;
+  /** The clear button's name for screen readers; "Clear account officer" unless the field is someone else. */
+  clearLabel?: string;
   disabled?: boolean;
   placeholder?: string;
   className?: string;
@@ -58,6 +60,7 @@ export function StaffPicker({
   id,
   "aria-label": ariaLabel,
   clearable = false,
+  clearLabel = "Clear account officer",
   disabled = false,
   placeholder = "Select account officer",
   className,
@@ -159,7 +162,7 @@ export function StaffPicker({
             type="button"
             variant="ghost"
             size="icon"
-            aria-label="Clear account officer"
+            aria-label={clearLabel}
             onClick={() => {
               onChange(null);
               triggerRef.current?.focus();

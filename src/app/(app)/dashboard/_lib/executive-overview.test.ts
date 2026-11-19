@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 
 import {
   EXECUTIVE_PRESETS,
-  booksState,
   branchTable,
   balanceHeading,
   captionText,
@@ -349,13 +348,6 @@ test("the caption reads the server's refusal instead of waiting forever", () => 
   assert.equal(captionText(period, null), periodCaption(period));
   assert.equal(captionText(null, null), "Working out the period…");
   assert.equal(captionText(null, "The end date can't be after today."), "Period not available: The end date can't be after today.");
-});
-
-test("the books read Requires configuration when the overview's book cards say so", () => {
-  assert.equal(booksState(overview([card({ key: "net_income", state: "requires_configuration" })])), "requires_configuration");
-  assert.equal(booksState(overview([card({ key: "net_income", value: 5 })])), "ready");
-  assert.equal(booksState(overview([card({ key: "net_income", state: "no_access" })])), "ready");
-  assert.equal(booksState(null), "ready");
 });
 
 test("a custom range missing a date asks for it, and sends nothing", () => {

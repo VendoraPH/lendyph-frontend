@@ -6,8 +6,7 @@ import { executiveDocument } from "./executive-export";
 
 const KEYS: (keyof ExecutiveData)[] = [
   "balance", "aging", "cashFlow", "efficiency", "products", "performance",
-  "shareCapital", "income", "borrowers", "disbursements", "accounting", "loanStats",
-  "pastDue",
+  "shareCapital", "borrowers", "disbursements", "accounting", "loanStats",
 ];
 
 function data(overrides: Partial<ExecutiveData> = {}): ExecutiveData {
@@ -94,7 +93,7 @@ const BRANCHES: ExecutiveBranches = {
 };
 
 test("the export is an executive_dashboard document led by the server's cards, in words", () => {
-  const doc = executiveDocument({ data: data(), overview: OVERVIEW, branches: BRANCHES, period: PERIOD }, new Date(2026, 10, 17, 9, 0));
+  const doc = executiveDocument({ data: data(), overview: OVERVIEW, branches: BRANCHES, attention: null, sentFilters: [], period: PERIOD }, new Date(2026, 10, 17, 9, 0));
   assert.equal(doc.reportId, "executive_dashboard");
   assert.equal(doc.meta.period, "Nov 1, 2026 – Nov 17, 2026");
   const grid = doc.sections[0];
@@ -107,14 +106,14 @@ test("the export is an executive_dashboard document led by the server's cards, i
 });
 
 test("without the overview, the export says the cards could not be read", () => {
-  const doc = executiveDocument({ data: data(), overview: null, branches: null, period: PERIOD });
+  const doc = executiveDocument({ data: data(), overview: null, branches: null, attention: null, sentFilters: [], period: PERIOD });
   const grid = doc.sections[0];
   if (grid.kind !== "kpi_grid") throw new Error("expected the KPI grid first");
   assert.deepEqual(grid.items, []);
 });
 
 test("the branch table is the server's rows and totals, never a sum", () => {
-  const doc = executiveDocument({ data: data(), overview: OVERVIEW, branches: BRANCHES, period: PERIOD });
+  const doc = executiveDocument({ data: data(), overview: OVERVIEW, branches: BRANCHES, attention: null, sentFilters: [], period: PERIOD });
   const table = doc.sections.find((s) => s.kind === "table" && s.title === "Branch Performance");
   if (!table || table.kind !== "table") throw new Error("expected the branch table");
   assert.deepEqual(table.columns.map((c) => c.header).slice(0, 4), ["Branch", "Gross Loan Portfolio", "Outstanding", "Active Loans"]);
@@ -129,6 +128,8 @@ test("the export's other tables carry the screen's columns and dates in words", 
     data: data({ aging: { state: "ready", data: { buckets: { "1_30": { amount: "50", count: 2 } } } } }),
     overview: OVERVIEW,
     branches: BRANCHES,
+    attention: null,
+    sentFilters: [],
     period: PERIOD,
   });
   const tables = doc.sections.filter((s) => s.kind === "table");
@@ -136,4 +137,29 @@ test("the export's other tables carry the screen's columns and dates in words", 
   assert.equal(aging?.title, "Past Due Aging (as of Nov 17, 2026)");
   const products = tables.find((t) => t.title?.startsWith("Portfolio by Product"));
   assert.deepEqual(products?.columns.map((c) => c.header), ["Product", "Loans", "Outstanding", "Principal Balance", "Share of portfolio", "PAR 30"]);
+});
+
+test("Requires Attention exports the server's rules in words, and says when they couldn't be read", () => {
+  const attention = {
+    period: PERIOD,
+    as_of: "2026-11-17",
+    thresholds: {},
+    rules: [
+      { key: "approval_wait", label: "Loans waiting for approval", rule: null, threshold: 3, link: "/loans", state: "needs_attention" as const, value: 2, title: "2 loans waiting for approval for more than 3 days", detail: "5 loans waiting for approval in all.", as_of: "2026-11-17" },
+    ],
+    alerts: [],
+    filters_applied: [],
+    filters_applied_to: {},
+  };
+  const doc = executiveDocument({ data: data(), overview: OVERVIEW, branches: BRANCHES, attention, sentFilters: [], period: PERIOD });
+  const table = doc.sections.find((s) => s.kind === "table" && s.title === "Requires Attention");
+  if (!table || table.kind !== "table") throw new Error("expected the attention table");
+  assert.deepEqual(table.rows[0], {
+    state: "Needs attention",
+    title: "Loans waiting for approval: 2 loans waiting for approval for more than 3 days",
+    detail: "5 loans waiting for approval in all. As of Nov 17, 2026",
+  });
+  const missing = executiveDocument({ data: data(), overview: OVERVIEW, branches: BRANCHES, attention: null, sentFilters: [], period: PERIOD });
+  const none = missing.sections.find((s) => s.kind === "table" && s.title === "Requires Attention");
+  assert.equal(none?.kind === "table" ? none.emptyText : null, "Not available: the checks couldn't be read.");
 });

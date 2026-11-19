@@ -139,4 +139,105 @@ export interface ExecutiveQuery {
   date_from?: string;
   date_to?: string;
   branch_id?: number;
+  product_id?: number;
+  officer_id?: number;
+  collector_id?: number;
+}
+
+/** The page filters a figure may follow, by id; absent means every one. */
+export type ExecutiveFilters = Partial<Record<ExecutiveFilterKey, number>>;
+
+/** EB-D2's responses name the filters each figure followed, by filter. */
+export interface FiltersAppliedTo {
+  /** The filters sent that every figure followed. */
+  filters_applied: ExecutiveFilterKey[];
+  /** For a filter only some figures follow: which ones. */
+  filters_applied_to: Partial<Record<ExecutiveFilterKey, string[]>>;
+}
+
+// ── EB-D2 ──────────────────────────────────────────────────────────────────
+
+export type AttentionState =
+  | "needs_attention"
+  | "clear"
+  | "no_access"
+  | "no_data"
+  | "no_snapshot"
+  | "requires_configuration";
+
+/** One rule of `GET /dashboard/executive/attention`, in the server's words. */
+export interface AttentionRule {
+  key: string;
+  label: string;
+  /** The rule in words, from the dashboard settings. */
+  rule: string | null;
+  threshold: number | null;
+  link: string;
+  state: AttentionState;
+  value: number | string | null;
+  title: string;
+  detail: string;
+  /** The day the rule's figures are read on. */
+  as_of?: string | null;
+}
+
+export interface ExecutiveAttention extends FiltersAppliedTo {
+  period: ExecutivePeriod;
+  as_of: string;
+  thresholds: Record<string, number>;
+  rules: AttentionRule[];
+  alerts: AttentionRule[];
+}
+
+/** One month of `GET /dashboard/executive/trends`: Cash Flow's and the Member Report's own figures. */
+export interface TrendMonth {
+  month: string;
+  from: string;
+  to: string;
+  principal_released: number;
+  principal_collected: number;
+  cash_in: number;
+  cash_out: number;
+  net_cash: number;
+  new_members: number;
+}
+
+export interface ExecutiveTrends extends FiltersAppliedTo {
+  period: ExecutivePeriod;
+  months: TrendMonth[];
+}
+
+/** One stretch of `GET /dashboard/executive/turnaround`. */
+export interface TurnaroundStretch {
+  loans: number;
+  average_days: number | null;
+  median_days: number | null;
+  /** Loans that ended the stretch in the period but have no start to measure from. */
+  not_measured: number;
+}
+
+export interface ExecutiveTurnaround extends FiltersAppliedTo {
+  period: ExecutivePeriod;
+  submitted_to_approved: TurnaroundStretch;
+  approved_to_released: TurnaroundStretch;
+  submitted_to_released: TurnaroundStretch;
+}
+
+/** One branch of `GET /dashboard/executive/share-capital-control`. Centavos. */
+export interface ShareCapitalControlRow {
+  branch_id: number | null;
+  branch_name: string;
+  subledger: number;
+  books: number | null;
+  difference: number | null;
+  is_reconciled: boolean | null;
+}
+
+export interface ShareCapitalControl {
+  as_of: string;
+  books_state: { state: string; label: string; reason: string | null };
+  account: { id: number; code: string; name: string } | null;
+  rows: ShareCapitalControlRow[];
+  totals: Omit<ShareCapitalControlRow, "branch_id" | "branch_name">;
+  is_reconciled: boolean | null;
 }

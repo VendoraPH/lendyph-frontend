@@ -36,6 +36,9 @@ before(async () => {
     }
     if (path === "/dashboard/executive/overview") return res.end(JSON.stringify({ data: { period, generated_at: "2026-11-19 09:00:00", filters_applied: [], cards: {} } }));
     if (path === "/dashboard/executive/branches") return res.end(JSON.stringify({ data: { period, rows: [], totals: {} } }));
+    if (["/dashboard/executive/trends", "/dashboard/executive/attention", "/dashboard/executive/turnaround", "/dashboard/executive/share-capital-control"].includes(path)) {
+      return res.end(JSON.stringify({ data: { period, months: [], rules: [], filters_applied: [], filters_applied_to: {} } }));
+    }
     if (path === "/dashboard/executive/par-loans") {
       return res.end(JSON.stringify({ data: [{ loan_id: 1 }], meta: { par: `par_${query.par}`, current_page: Number(query.page), last_page: 3, per_page: 25, total: 51, totals: { loans: 51, outstanding_principal: 1000 }, filters_applied: [] } }));
     }
@@ -81,5 +84,34 @@ describe("executiveDashboardService", () => {
   test("a refused custom range reads the server's words", async () => {
     const err = await executiveDashboardService.overview({ preset: "custom", date_from: "2026-10-31", date_to: "2026-10-01" }).catch((e) => e);
     assert.equal(getErrorMessage(err, "fallback"), "The end date can't be before the start date.");
+  });
+});
+
+describe("EB-D2's endpoints", () => {
+  const query = { preset: "custom", date_from: "2026-10-01", date_to: "2026-10-31", branch_id: 2, product_id: 5, officer_id: 9, collector_id: 11 } as const;
+  const sent = { preset: "custom", from: "2026-10-01", to: "2026-10-31", branch_id: "2", product_id: "5", officer_id: "9", collector_id: "11" };
+
+  test("trends, attention and turnaround get the period, branch and every page filter, the range as from and to", async () => {
+    requests = [];
+    await executiveDashboardService.trends(query);
+    await executiveDashboardService.attention(query);
+    await executiveDashboardService.turnaround(query);
+    assert.deepEqual(requests, [
+      { path: "/dashboard/executive/trends", query: sent },
+      { path: "/dashboard/executive/attention", query: sent },
+      { path: "/dashboard/executive/turnaround", query: sent },
+    ]);
+  });
+
+  test("the share capital control is a position: it gets the branch only", async () => {
+    requests = [];
+    await executiveDashboardService.shareCapitalControl(query);
+    assert.deepEqual(requests, [{ path: "/dashboard/executive/share-capital-control", query: { branch_id: "2" } }]);
+  });
+
+  test("the overview and branches get the page filters too", async () => {
+    requests = [];
+    await executiveDashboardService.overview({ preset: "this_month", product_id: 5, collector_id: 11 });
+    assert.deepEqual(requests[0].query, { preset: "this_month", product_id: "5", collector_id: "11" });
   });
 });

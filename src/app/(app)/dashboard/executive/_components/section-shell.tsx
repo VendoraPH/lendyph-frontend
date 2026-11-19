@@ -84,12 +84,14 @@ export function figureText(source: Source<unknown>, value: number | null, format
 }
 
 /** A small labelled figure, for the section tiles. */
-export function Figure({ label, value, hint }: { label: string; value: string; hint?: string }) {
+export function Figure({ label, value, hint, note }: { label: string; value: string; hint?: string; note?: string | null }) {
   return (
     <div className="rounded-lg border bg-muted/30 px-3 py-2">
       <p className="text-[11px] text-muted-foreground">{label}</p>
       <p className="text-base font-semibold tabular-nums">{value}</p>
       {hint ? <p className="text-[10px] text-muted-foreground">{hint}</p> : null}
+      {/* A page filter this figure doesn't follow. */}
+      {note ? <p className="text-[10px] text-amber-700 dark:text-amber-400">{note}</p> : null}
     </div>
   );
 }
