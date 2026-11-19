@@ -394,6 +394,23 @@ export function amlaReviewLines(profile: AmlaCddProfile): { next: string; last: 
   };
 }
 
+/** A subject page's tabs, in order. */
+export const AMLA_PROFILE_TABS = [
+  { value: "needs", label: "What's needed" },
+  { value: "answers", label: "Answers" },
+  { value: "risk", label: "AML risk" },
+  { value: "ids", label: "ID checks" },
+  { value: "reviews", label: "Reviews" },
+  { value: "changes", label: "Changes" },
+] as const;
+
+export type AmlaProfileTab = (typeof AMLA_PROFILE_TABS)[number]["value"];
+
+/** The open tab from `?tab=` (the house pattern), so a save and its reload stay on it; anything else opens "What's needed". */
+export function amlaProfileTab(raw: string | null): AmlaProfileTab {
+  return AMLA_PROFILE_TABS.find((tab) => tab.value === raw)?.value ?? "needs";
+}
+
 /** `AmlaProfile::KYC_FIELDS` in words. */
 const FIELD_WORDS: Readonly<Record<string, string>> = {
   nationality: "Nationality",

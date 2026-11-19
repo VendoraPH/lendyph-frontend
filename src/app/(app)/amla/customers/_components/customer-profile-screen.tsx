@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { DataState } from "@/components/common/data-state";
 import { FillSection, PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useApiResource } from "@/hooks";
 import type { AmlaSubjectRef } from "@/lib/amla/cdd-access";
 import { amlaCddApi } from "@/lib/amla/cdd-api";
-import { NO_BRANCH, amlaCddStatusTone, amlaCompletenessLines } from "@/lib/amla/cdd-view";
+import { AMLA_PROFILE_TABS, NO_BRANCH, amlaCddStatusTone, amlaCompletenessLines, amlaProfileTab } from "@/lib/amla/cdd-view";
 import { once } from "@/lib/amla/once";
 import type { AmlaCddView } from "@/types/amla-cdd";
 import { ChangesCard } from "./changes-card";
@@ -48,7 +49,7 @@ function ProfileBody({ view, subject, onChanged }: { view: AmlaCddView; subject:
   const completeness = amlaCompletenessLines(view.completeness);
   const branch = who.branch?.name ?? NO_BRANCH;
   const place = who.type === "walk_in" ? `Walk-in · ${branch}` : [who.code, branch].filter(Boolean).join(" · ");
-  const [tab, setTab] = useState("needs");
+  const [tab, setTab] = useProfileTab();
 
   return (
     <FillSection className="gap-4">
@@ -66,7 +67,7 @@ function ProfileBody({ view, subject, onChanged }: { view: AmlaCddView; subject:
       {/* Tabs, so at fit only the open tab's body scrolls, inside its own box. */}
       <Tabs value={tab} onValueChange={(v) => setTab(String(v))} className="flex min-h-0 flex-1 flex-col">
         <TabsList className="max-w-full shrink-0 justify-start overflow-x-auto">
-          {TABS.map((t) => (
+          {AMLA_PROFILE_TABS.map((t) => (
             <TabsTrigger key={t.value} value={t.value}>
               {t.label}
             </TabsTrigger>
@@ -121,11 +122,22 @@ function ProfileBody({ view, subject, onChanged }: { view: AmlaCddView; subject:
   );
 }
 
-const TABS = [
-  { value: "needs", label: "What's needed" },
-  { value: "answers", label: "Answers" },
-  { value: "risk", label: "AML risk" },
-  { value: "ids", label: "ID checks" },
-  { value: "reviews", label: "Reviews" },
-  { value: "changes", label: "Changes" },
-];
+/**
+ * The open tab, kept in `?tab=` (as GCash keeps its tabs): a save reloads the
+ * profile, which remounts the tabs, and the URL keeps the user where they were.
+ */
+function useProfileTab(): [string, (value: string) => void] {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const tab = amlaProfileTab(searchParams.get("tab"));
+  const setTab = useCallback(
+    (value: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("tab", value);
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [router, pathname, searchParams],
+  );
+  return [tab, setTab];
+}

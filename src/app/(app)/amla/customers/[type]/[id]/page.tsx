@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { notFound, useParams } from "next/navigation";
 import { RouteGuard } from "@/components/common/route-guard";
 import { AMLA_CUSTOMERS_PERMISSION, amlaSubjectFromRoute } from "@/lib/amla/cdd-access";
@@ -12,7 +13,10 @@ export default function AmlaCustomerPage() {
   if (subject === null) notFound();
   return (
     <RouteGuard permission={AMLA_CUSTOMERS_PERMISSION} pageName="Customer due diligence">
-      <CustomerProfileScreen key={`${subject.segment}-${subject.id}`} subject={subject} />
+      {/* The open tab is read from the URL, which needs a Suspense boundary. */}
+      <Suspense fallback={null}>
+        <CustomerProfileScreen key={`${subject.segment}-${subject.id}`} subject={subject} />
+      </Suspense>
     </RouteGuard>
   );
 }

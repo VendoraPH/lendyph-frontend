@@ -4,6 +4,7 @@ import { formatDate, formatDateTime } from "@/lib/format";
 import type { AmlaCddProfile, AmlaCddRow, AmlaProfileChange, AmlaRiskAssessment } from "@/types/amla-cdd";
 import {
   AMLA_CDD_STATUS_OPTIONS,
+  AMLA_PROFILE_TABS,
   AMLA_RISK_LEVEL_OPTIONS,
   amlaAnswersChangedText,
   amlaAssessBody,
@@ -13,6 +14,7 @@ import {
   amlaIdDocumentOptions,
   amlaIdVerificationBody,
   amlaOccupationAnswer,
+  amlaProfileTab,
   amlaProfileBody,
   amlaProfileChangeRow,
   amlaProfileDraft,
@@ -372,4 +374,24 @@ test("the answers' last change is the latest change to an answer, never a review
   );
   assert.equal(amlaAnswersChangedText(PROFILE, []), "No answers saved yet.");
   assert.equal(amlaAnswersChangedText({ ...PROFILE, exists: false }, []), "Not started. The first save starts the profile.");
+});
+
+test("the profile's tabs, in order, each in words", () => {
+  assert.deepEqual(AMLA_PROFILE_TABS, [
+    { value: "needs", label: "What's needed" },
+    { value: "answers", label: "Answers" },
+    { value: "risk", label: "AML risk" },
+    { value: "ids", label: "ID checks" },
+    { value: "reviews", label: "Reviews" },
+    { value: "changes", label: "Changes" },
+  ]);
+});
+
+test("the open tab comes from ?tab=, so a save and its reload keep it; anything else opens What's needed", () => {
+  assert.equal(amlaProfileTab("risk"), "risk");
+  assert.equal(amlaProfileTab("changes"), "changes");
+  assert.equal(amlaProfileTab(null), "needs");
+  assert.equal(amlaProfileTab(""), "needs");
+  assert.equal(amlaProfileTab("constructor"), "needs");
+  assert.equal(amlaProfileTab("Risk"), "needs");
 });
