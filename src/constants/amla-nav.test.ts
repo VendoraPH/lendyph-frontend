@@ -55,14 +55,32 @@ test("the AMLA Compliance section shows for any of amla:view, amla:settings or a
   assert.equal(nav.navItemAllowed(section, holds("amla:audit")), true);
 });
 
-test("it holds Customers and an AMLA Settings link, nothing a later slice builds", () => {
-  assert.deepEqual(
-    (nav.AMLA_NAV.children ?? []).map((c) => [c.title, c.href]),
-    [
-      ["Customers", "/amla/customers"],
-      ["AMLA Settings", "/settings/amla"],
-    ],
-  );
+test("it holds Customers, Screening, the Orders Register and an AMLA Settings link, settings last", () => {
+  const links = (nav.AMLA_NAV.children ?? []).map((c) => [c.title, c.href]);
+  const at = (href: string) => links.findIndex(([, h]) => h === href);
+  assert.deepEqual(links[at("/amla/screening")], ["Screening", "/amla/screening"]);
+  assert.deepEqual(links[at("/amla/orders")], ["Orders Register", "/amla/orders"]);
+  assert.ok(at("/amla/customers") < at("/amla/screening"));
+  assert.ok(at("/amla/screening") < at("/amla/orders"));
+  assert.deepEqual(links[links.length - 1], ["AMLA Settings", "/settings/amla"]);
+});
+
+const link = (href: string) => {
+  const found = (nav.AMLA_NAV.children ?? []).find((c) => c.href === href);
+  assert.ok(found, href);
+  return found;
+};
+
+test("Screening needs amla:screening with every branch, under amla:view, as its endpoints do", () => {
+  assert.equal(nav.navChildAllowed(link("/amla/screening"), holds("amla:screening", "amla:view", "branches:view_all")), true);
+  assert.equal(nav.navChildAllowed(link("/amla/screening"), holds("amla:screening", "amla:view")), false);
+  assert.equal(nav.navChildAllowed(link("/amla/screening"), holds("amla:view", "branches:view_all")), false);
+});
+
+test("the Orders Register needs amla:sanctions with every branch, under amla:view", () => {
+  assert.equal(nav.navChildAllowed(link("/amla/orders"), holds("amla:sanctions", "amla:view", "branches:view_all")), true);
+  assert.equal(nav.navChildAllowed(link("/amla/orders"), holds("amla:sanctions", "amla:view")), false);
+  assert.equal(nav.navChildAllowed(link("/amla/orders"), holds("amla:screening", "amla:view", "branches:view_all")), false);
 });
 
 test("Customers needs amla:cdd, plus amla:view for the AMLA pages, as its endpoints and the /amla guard do", () => {
@@ -73,11 +91,11 @@ test("Customers needs amla:cdd, plus amla:view for the AMLA pages, as its endpoi
 });
 
 test("AMLA Settings opens as Settings → AMLA does, so the Compliance Officer has a menu path without settings:view", () => {
-  const link = (nav.AMLA_NAV.children ?? [])[1];
-  assert.equal(nav.navChildAllowed(link, holds("amla:settings")), true);
-  assert.equal(nav.navChildAllowed(link, holds("amla:audit")), true);
-  assert.equal(nav.navChildAllowed(link, holds("amla:view")), true);
-  assert.equal(nav.navChildAllowed(link, holds("amla:cdd")), false);
+  const settings = link("/settings/amla");
+  assert.equal(nav.navChildAllowed(settings, holds("amla:settings")), true);
+  assert.equal(nav.navChildAllowed(settings, holds("amla:audit")), true);
+  assert.equal(nav.navChildAllowed(settings, holds("amla:view")), true);
+  assert.equal(nav.navChildAllowed(settings, holds("amla:cdd")), false);
 });
 
 test("the section's own link opens the first page the user can open", () => {

@@ -206,13 +206,3 @@ export interface AmlaReviewBody {
   outcome: string;
   notes?: string;
 }
-
-/** A member's valid ID as the member documents list sends it; only its type and last four are shown. */
-export interface AmlaMemberIdDocument {
-  id: number;
-  type: string;
-  label?: string | null;
-  custom_type_name?: string | null;
-  id_number?: string | null;
-  side?: string | null;
-}

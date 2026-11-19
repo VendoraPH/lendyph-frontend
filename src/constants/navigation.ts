@@ -197,6 +197,9 @@ export const AMLA_NAV: NavItem = {
   anyOf: [...AMLA_SETTINGS_PAGE_PERMISSIONS],
   children: [
     { title: "Customers", href: "/amla/customers", permission: "amla:cdd", alsoRequires: ["amla:view"] },
+    // Screening and the orders register cover the whole cooperative, as their endpoints do.
+    { title: "Screening", href: "/amla/screening", permission: "amla:screening", alsoRequires: ["amla:view", "branches:view_all"] },
+    { title: "Orders Register", href: "/amla/orders", permission: "amla:sanctions", alsoRequires: ["amla:view", "branches:view_all"] },
     { ...AMLA_SETTINGS_NAV, title: "AMLA Settings" },
   ],
 };
