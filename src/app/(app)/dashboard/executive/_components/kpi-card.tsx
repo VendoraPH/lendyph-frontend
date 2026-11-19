@@ -49,7 +49,9 @@ export function KpiCard({ kpi, periodTo }: { kpi: KpiView; periodTo: string }) {
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-72">
                 <p>{m.formula}</p>
-                <p className="mt-1 font-mono text-[10px] opacity-80">{m.source}</p>
+                {process.env.NODE_ENV === "development" ? (
+                  <p className="mt-1 font-mono text-[10px] opacity-80">{m.source}</p>
+                ) : null}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>

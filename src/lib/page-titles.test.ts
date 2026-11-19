@@ -65,6 +65,10 @@ describe("subPageTitle (the breadcrumb's second part)", () => {
     assert.equal(subPageTitle("credit-scoring", "settings"), "Settings");
   });
 
+  test("the Executive Dashboard reads its own title", () => {
+    assert.equal(subPageTitle("dashboard", "executive"), "Executive Dashboard");
+  });
+
   test("Payment History and the Share Capital pages read their menu titles", () => {
     assert.equal(subPageTitle("payments", "history"), "Payment History");
     assert.equal(subPageTitle("share-capital", "ledger"), "Subsidiary Ledger");

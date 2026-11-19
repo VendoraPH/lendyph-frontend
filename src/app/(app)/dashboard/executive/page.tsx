@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { RouteGuard } from "@/components/common";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { useBranches, usePermission } from "@/hooks";
 import { ALL_BRANCHES, branchFilterOptions, branchIdParam } from "@/lib/branch-filter";
 import { formatDateRange } from "@/lib/report-format";
@@ -54,8 +55,8 @@ function ExecutiveDashboard() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 p-4 md:p-6">
-      <div className="flex flex-wrap items-end justify-between gap-2">
+    <PageFill className="gap-4">
+      <div className="flex shrink-0 flex-wrap items-end justify-between gap-2">
         <div>
           <Link href="/dashboard" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
             <ArrowLeft className="size-3" /> Dashboard
@@ -82,7 +83,7 @@ function ExecutiveDashboard() {
         exportSlot={<ExportMenu data={data} period={period} branchLabel={branchLabel} disabled={loading} />}
       />
 
-      <section aria-labelledby="exec-overview" className="space-y-2">
+      <section aria-labelledby="exec-overview" className="shrink-0 space-y-2">
         <h2 id="exec-overview" className="text-sm font-semibold">
           Executive Overview
         </h2>
@@ -93,19 +94,22 @@ function ExecutiveDashboard() {
         </div>
       </section>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="flex min-w-0 flex-col gap-4">
-          <PortfolioSection data={data} />
-          <CollectionSection data={data} />
-          <FinancialSection data={data} />
-          <OperationsSection data={data} />
-          <BranchSection data={data} />
+      <ScrollBox>
+        {/* The sections' own tables scroll sideways in their cards; nothing pins to this box. */}
+        <div data-unpinned className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
+          <div className="flex min-w-0 flex-col gap-4">
+            <PortfolioSection data={data} />
+            <CollectionSection data={data} />
+            <FinancialSection data={data} />
+            <OperationsSection data={data} />
+            <BranchSection data={data} />
+          </div>
+          <aside className="xl:sticky xl:top-0 xl:self-start">
+            <AttentionPanel data={data} />
+          </aside>
         </div>
-        <aside className="xl:sticky xl:top-4 xl:self-start">
-          <AttentionPanel data={data} />
-        </aside>
-      </div>
-    </div>
+      </ScrollBox>
+    </PageFill>
   );
 }
 

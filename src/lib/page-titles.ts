@@ -103,6 +103,7 @@ const ID_TITLES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     "risk-monitoring": "Risk Monitoring",
     "score-history": "Score History",
   },
+  dashboard: { executive: "Executive Dashboard" },
   payments: { history: "Payment History" },
   "share-capital": {
     ledger: "Subsidiary Ledger",
