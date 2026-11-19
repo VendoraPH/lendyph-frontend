@@ -53,3 +53,13 @@ export function chartTemplateNotice(status: ChartStatus): string | null {
 export function savedAccountsOnly<T>({ isTemplate, postable }: { isTemplate: boolean; postable: T[] }): T[] {
   return isTemplate ? [] : postable;
 }
+
+/**
+ * What a screen that needs the chart shows: its loading state until the chart
+ * is answered (so the screen never flashes before the set-up state), the
+ * set-up state when no chart is saved, otherwise itself.
+ */
+export function chartGate(status: ChartStatus): "loading" | "set_up" | "screen" {
+  if (status === "loading") return "loading";
+  return status === "not_set_up" ? "set_up" : "screen";
+}

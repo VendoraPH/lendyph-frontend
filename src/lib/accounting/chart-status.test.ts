@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chartStatus, chartTemplateNotice, savedAccountsOnly } from "./chart-status";
+import { chartGate, chartStatus, chartTemplateNotice, savedAccountsOnly } from "./chart-status";
 
 const answered = { canView: true, loading: false, unavailable: false, error: null };
 
@@ -39,4 +39,14 @@ test("a read-only picker never offers template accounts", () => {
   const postable = [{ id: 1 }, { id: 2 }];
   assert.deepEqual(savedAccountsOnly({ isTemplate: true, postable }), []);
   assert.deepEqual(savedAccountsOnly({ isTemplate: false, postable }), postable);
+});
+
+test("a screen that needs the chart waits for it, then shows the set-up state or itself", () => {
+  // The General Ledger showed an empty picker for 3 s before the set-up state.
+  assert.equal(chartGate("loading"), "loading");
+  assert.equal(chartGate("not_set_up"), "set_up");
+  assert.equal(chartGate("saved"), "screen");
+  // A refused or failed read never blocks the screen: it says why on the screen itself.
+  assert.equal(chartGate("no_access"), "screen");
+  assert.equal(chartGate("unavailable"), "screen");
 });

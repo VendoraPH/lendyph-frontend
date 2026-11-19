@@ -3,12 +3,13 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Plus, Scale } from "lucide-react";
+import { LoadingContent } from "@/components/common/data-state";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useChartOfAccounts } from "@/hooks";
-import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounting/chart-status";
+import { CHART_OF_ACCOUNTS_HREF, chartGate } from "@/lib/accounting/chart-status";
 import { notifySuccess } from "@/lib/notify";
 import { accountingService } from "@/services";
 import type { OpeningBalance } from "@/types";
@@ -94,6 +95,9 @@ export function OpeningBalanceEditor({ opening, onAnswer, onReload }: OpeningBal
     setLines(next);
     save(next);
   };
+
+  // Wait for the chart, so the editor never shows before its chart notice.
+  if (chartGate(status) === "loading") return <LoadingContent />;
 
   return (
     <div className="space-y-6">

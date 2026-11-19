@@ -200,7 +200,8 @@ test("with no net surplus account (no saved chart) the preview and confirm still
 
 test("the section shows the set-up state while no chart is saved", () => {
   const section = source("_components/year-end-close-section.tsx");
-  assert.match(section, /status === "not_set_up"/);
+  assert.match(section, /chartGate\(useChartOfAccounts\(\)\.status\)/);
+  assert.match(section, /<LoadingContent \/>/);
   assert.match(section, /<ChartNotSetUp/);
 });
 

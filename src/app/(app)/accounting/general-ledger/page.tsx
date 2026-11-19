@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/table";
 import { useAccountingResource, useChartOfAccounts } from "@/hooks";
 import { accountingService } from "@/services";
-import { chartTemplateNotice, savedAccountsOnly } from "@/lib/accounting/chart-status";
+import { chartGate, chartTemplateNotice, savedAccountsOnly } from "@/lib/accounting/chart-status";
 import { formatCentavos } from "@/lib/accounting/money";
 import { todayISO } from "@/lib/format";
 import { formatValue } from "@/lib/report-format";
@@ -146,7 +146,10 @@ function GeneralLedgerContent() {
 
   const account = postable.find((a) => a.id === accountId);
 
-  if (chart.status === "not_set_up") {
+  const gate = chartGate(chart.status);
+  // The page's usual loading state until the chart answers, so the picker never flashes before the set-up state.
+  if (gate === "loading") return <PageLoader />;
+  if (gate === "set_up") {
     return (
       <FillSection className="gap-6">
         <ChartNotSetUp description="The General Ledger lists the movements through one account of your chart, so the chart has to be saved first." />
