@@ -80,3 +80,17 @@ export function compactPesoTick(centavos: number): string {
   const sign = centavos < 0 ? "-" : "";
   return `${sign}₱${COMPACT.format(Math.abs(centavos) / 100)}`;
 }
+
+export type ChartFigureKey = "income" | "expenses" | "net_income" | "cash";
+
+/**
+ * Whether any row has a non-zero figure in `keys`. A chart of only zeros or
+ * gaps shows its empty state instead of an axis of repeated "₱0" ticks, as
+ * the executive dashboard does.
+ */
+export function chartHasFigures(rows: readonly DashboardChartRow[], keys: readonly ChartFigureKey[]): boolean {
+  return rows.some((row) => keys.some((key) => {
+    const value = row[key];
+    return typeof value === "number" && Number.isFinite(value) && value !== 0;
+  }));
+}

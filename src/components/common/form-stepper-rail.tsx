@@ -4,8 +4,10 @@
  * `FormStepper`'s step rail, a `nav` labelled "Form steps":
  *
  * - wide: numbered steps with titles, a check on finished ones and
- *   `aria-current="step"` on the open one; a step that can't be opened yet is
- *   disabled;
+ *   `aria-current="step"` on the open one. A step that isn't open yet keeps a
+ *   "not yet" cursor, and clicking it shows what's missing (as Next does).
+ *   Titles take at most two lines, then end in "…" with the full title on
+ *   hover;
  * - narrow: "Step 2 of 4 · Contact" with a thin bar. In `edit` mode that line
  *   is a menu of every step, so an editor can jump to any step on a phone too
  *   (`stepMenuOptions`). A native select, so phones show their own picker.
@@ -31,7 +33,8 @@ export function StepRail({
   steps,
   index,
   passed,
-  reachable,
+  clickable,
+  opensDirectly,
   onSelect,
 }: {
   compactClassName: string;
@@ -40,7 +43,10 @@ export function StepRail({
   steps: readonly FormStepDef[];
   index: number;
   passed: readonly boolean[];
-  reachable: (i: number) => boolean;
+  /** Whether the step's button takes clicks (false while saving, or behind `nextDisabled`). */
+  clickable: (i: number) => boolean;
+  /** Whether the step opens without checking the steps before it (`canGoToStep`). */
+  opensDirectly: (i: number) => boolean;
   onSelect: (i: number) => void;
 }) {
   const count = steps.length;
@@ -53,7 +59,7 @@ export function StepRail({
             aria-label="Go to step"
             value={steps[index].id}
             onChange={(e) => onSelect(steps.findIndex((s) => s.id === e.target.value))}
-            disabled={!reachable(index)}
+            disabled={!clickable(index)}
             className="w-full"
           >
             {menu.map((o) => (
@@ -81,9 +87,12 @@ export function StepRail({
               <button
                 type="button"
                 onClick={() => onSelect(i)}
-                disabled={!current && !reachable(i)}
+                disabled={!current && !clickable(i)}
                 aria-current={current ? "step" : undefined}
-                className="flex min-w-0 items-center gap-2 rounded-md p-1 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50 enabled:cursor-pointer disabled:cursor-not-allowed"
+                className={cn(
+                  "flex min-w-0 items-center gap-2 rounded-md p-1 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed",
+                  current || opensDirectly(i) ? "enabled:cursor-pointer" : "cursor-not-allowed"
+                )}
               >
                 <span
                   aria-hidden="true"
@@ -103,7 +112,9 @@ export function StepRail({
                   )}
                 >
                   <span className="sr-only">{`Step ${i + 1}: `}</span>
-                  {s.title}
+                  <span className="line-clamp-2 break-words" title={s.title}>
+                    {s.title}
+                  </span>
                   {done ? <span className="sr-only">, completed</span> : null}
                 </span>
               </button>

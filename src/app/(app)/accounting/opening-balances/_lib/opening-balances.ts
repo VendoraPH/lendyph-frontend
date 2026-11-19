@@ -9,6 +9,7 @@
  */
 
 import { getErrorMessage, httpStatusOf } from "@/lib/api-error";
+import { chartTemplateNotice, type ChartStatus } from "@/lib/accounting/chart-status";
 import { formatCentavos, toCentavos } from "@/lib/accounting/money";
 import type {
   OpeningBalance,
@@ -325,4 +326,10 @@ export function postedElsewhereText(opening: OpeningBalance): string {
 export function accessNotice(canViewAllBranches: boolean): string | null {
   if (canViewAllBranches) return null;
   return "Opening balances belong to the whole organisation, not to one branch, so this screen needs access to every branch. Ask an administrator for it.";
+}
+
+/** Why the editor can't save, when the chart isn't the saved one; null when it is. */
+export function openingChartNotice(status: ChartStatus): string | null {
+  const why = chartTemplateNotice(status);
+  return why === null ? null : `${why} Until then, the opening balances can't be saved from here.`;
 }

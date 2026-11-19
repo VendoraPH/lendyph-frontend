@@ -8,7 +8,7 @@ test("a permission chip reads module and action in words", () => {
   assert.equal(permissionChipLabel("borrowers:view"), "Members: View");
   assert.equal(permissionChipLabel("gcash:transact"), "GCash: Transact");
   assert.equal(permissionChipLabel("loans:write_off"), "Loans: Write Off");
-  assert.equal(permissionChipLabel("chart_of_accounts:view"), "Chart Of Accounts: View");
+  assert.equal(permissionChipLabel("chart_of_accounts:view"), "Chart of Accounts: View");
   assert.equal(permissionChipLabel("branches:view_all"), "Branches: View All");
 });
 

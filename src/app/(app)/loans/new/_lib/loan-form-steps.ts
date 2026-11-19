@@ -8,7 +8,7 @@
  * field a `name`, `id` or `data-field` equal to its key, so an error focuses it.
  */
 
-import type { FormStepDef } from "@/lib/form-stepper";
+import { errorMessages, type FormStepDef, type StepCheckTrigger, type StepErrors } from "@/lib/form-stepper";
 
 /**
  * Every key the form sends on `POST /loans` or `PUT /loans/{id}`. Typed by
@@ -103,7 +103,7 @@ export function loanFormMissing(c: LoanFormCheck): Record<string, string> {
   const missing: Record<string, string> = {};
   if (!c.hasMember) missing.borrower_id = "Member";
   if (!c.hasProduct) missing.loan_product_id = "Loan product";
-  if (!c.principalOk) missing.principal_amount = "Principal amount";
+  if (!c.principalOk) missing.principal_amount = "Loan amount";
   if (!c.termOk) missing.term = "Term";
   if (!c.hasFrequency) missing.frequency = "Payment frequency";
   if (!c.rateOk) missing.interest_rate = "Interest rate";
@@ -113,6 +113,21 @@ export function loanFormMissing(c: LoanFormCheck): Record<string, string> {
   if (c.serviceFeeInvalid) missing["deductions.service_fee"] = "Service fee";
   if (c.remarksMissing) missing.remarks = "Remarks";
   return missing;
+}
+
+/**
+ * The "Please complete" list for a step that failed its check. On Save the
+ * stepper checks every step and stops at the first that fails; the loan forms
+ * then list every missing field at once (`missing`, in the submit check's
+ * order), as they did before they had steps. On Next only the open step's.
+ * Shared with the restructure form.
+ */
+export function invalidStepMessages(
+  trigger: StepCheckTrigger,
+  stepErrors: StepErrors,
+  missing: Record<string, string>,
+): string[] {
+  return trigger === "save" ? Object.values(missing) : errorMessages(stepErrors);
 }
 
 /** A 422's field errors (`errors`), for `showErrors`; empty for any other answer. */

@@ -15,8 +15,10 @@
  *   (required, min, pattern…, reported with the browser's message), then
  *   `validateStep`. A `noValidate` form skips the browser's checks entirely,
  *   so it accepts exactly what it did before. `create`: a step opens only once
- *   the steps before it pass, and Save shows on the last step. `edit`: any
- *   step opens (on phones through a step menu), and Save shows on every step.
+ *   the steps before it pass (a click on a later rail step checks them and
+ *   shows what's missing, as Next does), and Save shows on the last step.
+ *   `edit`: any step opens (on phones through a step menu), and Save shows on
+ *   every step. `onInvalid` is told whether Save or Next started the check.
  * - Save is the form's own `type="submit"`, so the parent's `onSubmit` runs;
  *   the stepper never submits by itself. Before it does, every step is
  *   validated again and the first failing one opens. Enter in a field on any
@@ -67,6 +69,7 @@ import {
   firstErrorField,
   firstStepWithError,
   previousStepIndex,
+  railStepClickable,
   stepFooterButtons,
   stepperLayoutClasses,
   type FormStepDef,
@@ -74,7 +77,13 @@ import {
 import { cn } from "@/lib/utils";
 
 export type { FormStepperHandle, FormStepperProps } from "@/components/common/form-stepper-types";
-export type { FormStepDef, FormStepperLayout, FormStepperMode, StepErrors } from "@/lib/form-stepper";
+export type {
+  FormStepDef,
+  FormStepperLayout,
+  FormStepperMode,
+  StepCheckTrigger,
+  StepErrors,
+} from "@/lib/form-stepper";
 
 interface StepperContext {
   steps: readonly FormStepDef[];
@@ -115,7 +124,7 @@ export function FormStepper({
   /** Every step is checked again, in order; the first failing one opens and the submit stops. */
   function handleSubmitClick(event: MouseEvent<HTMLButtonElement>) {
     for (let i = 0; i < count; i++) {
-      if (!nav.check(i, event.currentTarget)) {
+      if (!nav.check(i, "save", event.currentTarget)) {
         event.preventDefault();
         return;
       }
@@ -165,7 +174,8 @@ export function FormStepper({
           steps={steps}
           index={index}
           passed={passedList}
-          reachable={(i) => !submitting && canGoToStep(i, { mode, current: index, passed: passedList, nextDisabled })}
+          clickable={(i) => !submitting && railStepClickable(i, { mode, current: index, count, nextDisabled })}
+          opensDirectly={(i) => canGoToStep(i, { mode, current: index, passed: passedList, nextDisabled })}
           onSelect={nav.goTo}
         />
         <p role="status" aria-live="polite" className="sr-only">

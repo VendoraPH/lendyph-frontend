@@ -196,7 +196,7 @@ function ReportBody({ report, drafts, setDrafts, reloading, onChange, onReload }
           <ReviewSteps steps={report.approval_steps} />
           <ValidationPanel issues={report.issues} critical={report.critical_count} warnings={report.warning_count} />
           {report.applicable && needsDocument(report) && <ReportDocumentUpload report={report} onChange={onChange} />}
-          {report.readiness_breakdown && <ReadinessBreakdown breakdown={report.readiness_breakdown} sections={report.sections} />}
+          {report.readiness_breakdown && <ReadinessBreakdown breakdown={report.readiness_breakdown} sections={report.sections} report={report} />}
           <ExportPanel reportId={report.id} />
           <SnapshotHistory key={`${report.id}:${report.snapshot?.id ?? 0}:${report.status}`} reportId={report.id} />
           <WorkflowHistory events={report.history} />

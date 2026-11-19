@@ -49,13 +49,15 @@ export interface MoneyInputOptions {
 /**
  * The typed amount, exactly, or why it can't be used. Blank, negative and
  * anything that isn't plain pesos are refused as "must be more than ₱0.00"
- * (or "must be ₱0.00 or more" when zero is allowed).
+ * (or "must be ₱0.00 or more" when zero is allowed, where a blank reads
+ * "is required (₱0.00 or more)", since ₱0.00 is a valid answer to type).
  */
 export function parseMoneyInput(
   raw: string,
   { label = "Amount", allowZero = false }: MoneyInputOptions = {},
 ): ParsedAmount {
   const refused = allowZero ? `${label} must be ₱0.00 or more` : `${label} must be more than ₱0.00`;
+  if (allowZero && raw.trim() === "") return { ok: false, message: `${label} is required (₱0.00 or more)` };
   const match = PESOS.exec(raw.trim());
   if (!match) return { ok: false, message: refused };
 

@@ -4,7 +4,13 @@
  */
 
 import type { ReactNode, Ref } from "react";
-import type { FormStepDef, FormStepperLayout, FormStepperMode, StepErrors } from "@/lib/form-stepper";
+import type {
+  FormStepDef,
+  FormStepperLayout,
+  FormStepperMode,
+  StepCheckTrigger,
+  StepErrors,
+} from "@/lib/form-stepper";
 
 /** What the parent can do through `ref`. */
 export interface FormStepperHandle {
@@ -36,9 +42,12 @@ export interface FormStepperProps {
   /**
    * Shows a failed step's errors. Defaults to one `notifyValidation` toast
    * listing the messages, so returning field labels as messages reads like
-   * today's forms ("Please complete: First name and Email.").
+   * today's forms ("Please complete: First name and Email."). `trigger` says
+   * whether Save (`save`, every step is checked in turn) or Next (`next`: Next,
+   * Enter or the rail) started the check, so a form can list every missing
+   * field on Save.
    */
-  onInvalid?: (errors: StepErrors, stepId: string) => void;
+  onInvalid?: (errors: StepErrors, stepId: string, trigger: StepCheckTrigger) => void;
   /** The submit button's label, e.g. "Save Member". */
   submitLabel: ReactNode;
   /** Shown with a spinner while `submitting`, e.g. "Saving…". */

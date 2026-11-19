@@ -886,8 +886,11 @@ function ProductActionsCell({
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger className="outline-none">
-          <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+        <DropdownMenuTrigger
+          aria-label={`Actions for ${product.name}`}
+          className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        >
+          <MoreHorizontal className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onClick={() => setOpenDialog("edit")}>

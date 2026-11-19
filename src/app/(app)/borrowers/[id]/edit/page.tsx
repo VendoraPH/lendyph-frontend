@@ -941,8 +941,8 @@ function EditBorrowerContent() {
 
                 {validIds.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-4 text-center">
-                    Attach additional valid IDs. IDs on file are removed from the member&apos;s Documents
-                    tab.
+                    Add another valid ID with Add ID. Saving keeps the IDs already on file; to remove one,
+                    use the member&apos;s Documents tab.
                   </p>
                 ) : (
                   <div className="grid gap-4 xl:grid-cols-2">

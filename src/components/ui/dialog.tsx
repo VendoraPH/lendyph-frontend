@@ -7,6 +7,7 @@ import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
+import { dialogSizeClass, type DialogSize } from "./dialog-size"
 
 function Dialog({
   open,
@@ -62,17 +63,6 @@ function DialogOverlay({
   )
 }
 
-type DialogSize = "sm" | "default" | "md" | "lg" | "xl" | "full"
-
-const dialogSizeClasses: Record<DialogSize, string> = {
-  sm: "sm:max-w-sm",
-  default: "sm:max-w-md",
-  md: "sm:max-w-lg",
-  lg: "sm:max-w-2xl",
-  xl: "sm:max-w-4xl",
-  full: "sm:max-w-[calc(100vw-4rem)] sm:max-h-[calc(100vh-4rem)] h-full",
-}
-
 function DialogContent({
   className,
   children,
@@ -93,7 +83,7 @@ function DialogContent({
         className={cn(
           "fixed inset-0 z-50 m-auto flex h-fit w-full max-w-[calc(100%-2rem)] max-h-[calc(100dvh-2rem)] flex-col gap-4 bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 outline-none",
           isFullScreen ? "rounded-lg overflow-auto" : "rounded-xl overflow-hidden",
-          dialogSizeClasses[size],
+          dialogSizeClass(size, typeof className === "string" ? className : undefined),
           className
         )}
         render={

@@ -1,31 +1,37 @@
 "use client";
 
-import { useState } from "react";
 import { BookCheck } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { usePermission } from "@/hooks";
 import { useSubmitGuard } from "@/hooks/use-submit-guard";
 import { notifyError, notifySuccess, notifyWarning } from "@/lib/notify";
 import { savingsService } from "@/services";
+import { cn } from "@/lib/utils";
 import type { PrepareBooksResult, SavingsSettings } from "@/types";
 import { ActionButton } from "../../_components/action-button";
 import { prepareBooksBlocker, prepareBooksSummary } from "../_lib/settings-form";
 
 interface BooksCardProps {
   settings: SavingsSettings;
-  onPrepared: () => void;
+  /**
+   * The last set-up's result. The screen keeps it, so it still shows after the
+   * settings refresh (which unmounts this card while it loads).
+   */
+  result: PrepareBooksResult | null;
+  /** After a set-up: its result (null when it failed); the screen refreshes the settings. */
+  onPrepared: (result: PrepareBooksResult | null) => void;
 }
 
 /**
  * Savings needs its accounts (2050, 2060, 5160, 2210) and posting roles in
  * the chart before a product can be turned on. While `books_ready` is false
  * this lists what's missing, in the server's words, and offers to set it up.
- * Servers before S6 send no `books_ready`, and the card stays hidden.
+ * Servers before S6 send no `books_ready`, and the card stays hidden. After a
+ * set-up it stays, with what was added and mapped, once the books are ready.
  */
-export function BooksCard({ settings, onPrepared }: BooksCardProps) {
+export function BooksCard({ settings, result, onPrepared }: BooksCardProps) {
   const { can } = usePermission();
   const { submitting, run } = useSubmitGuard();
-  const [result, setResult] = useState<PrepareBooksResult | null>(null);
   const blocker = prepareBooksBlocker(can);
 
   if (settings.books_ready !== false && result === null) return null;
@@ -33,26 +39,33 @@ export function BooksCard({ settings, onPrepared }: BooksCardProps) {
   function prepare() {
     run(() => savingsService.prepareBooks())
       ?.then((done) => {
-        setResult(done);
         if (done.books_ready) notifySuccess("Savings is set up in the books");
         else notifyWarning("Some of the savings books still need setting up", (done.books_missing ?? []).join(" "));
-        onPrepared();
+        onPrepared(done);
       })
       .catch((err: unknown) => {
         // 422 (no chart yet) and 409 (pressed twice at once) come in the server's words.
         notifyError(err, "Couldn't set up savings in the books.");
-        onPrepared();
+        onPrepared(null);
       });
   }
 
   const summary = result ? prepareBooksSummary(result) : [];
   const missing = settings.books_missing ?? [];
+  const ready = settings.books_ready !== false;
 
   return (
-    <Card className="border-amber-300 dark:border-amber-800 lg:col-span-2" role="region" aria-labelledby="books-title">
+    <Card
+      className={cn(
+        "lg:col-span-2",
+        ready ? "border-emerald-300 dark:border-emerald-800" : "border-amber-300 dark:border-amber-800"
+      )}
+      role="region"
+      aria-labelledby="books-title"
+    >
       <CardHeader>
         <CardTitle id="books-title" className="text-base">
-          {settings.books_ready === false ? "Savings isn't set up in the books yet" : "Savings books"}
+          {ready ? "Savings is set up in the books" : "Savings isn't set up in the books yet"}
         </CardTitle>
         <CardDescription>
           A savings product can be turned on only once the chart of accounts has its savings accounts and posting

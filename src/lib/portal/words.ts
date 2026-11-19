@@ -62,3 +62,23 @@ export function penaltyMonthsText(months: number | null | undefined): string | n
   if (typeof months !== "number" || !Number.isInteger(months) || months < 1) return null;
   return `Penalty: ${plural(months, "month")} late`;
 }
+
+/**
+ * The months-late note for a penalty balance: only while penalty is still
+ * owed (`balance`, the server's figure, above ₱0.00), so a penalty that was
+ * paid or waived reads nothing under its ₱0.00. Compares the server's figure;
+ * adds nothing.
+ */
+export function penaltyOwedNote(months: number | null | undefined, balance: string | null | undefined): string | null {
+  if (typeof balance !== "string" || !/^\d+(\.\d+)?$/.test(balance) || !/[1-9]/.test(balance)) return null;
+  return penaltyMonthsText(months);
+}
+
+/**
+ * The label for a payment's date: "Past due since" once the date is before
+ * `today` (Manila's, `todayISO()`), else "Due on". Dates compare as
+ * YYYY-MM-DD.
+ */
+export function dueDateLabel(dueDate: string, today: string): string {
+  return dueDate.slice(0, 10) < today ? "Past due since" : "Due on";
+}

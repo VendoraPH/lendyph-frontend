@@ -42,7 +42,7 @@ export function MaturityBuckets({ buckets, asOf }: { buckets: readonly SavingsMa
                   content={
                     <ChartTooltipContent
                       formatter={(_value, _name, item) => (
-                        <span className="font-mono tabular-nums">{(item as { payload?: BucketPoint }).payload?.due ?? "—"}</span>
+                        <span className="tabular-nums">{(item as { payload?: BucketPoint }).payload?.due ?? "—"}</span>
                       )}
                     />
                   }
@@ -69,9 +69,9 @@ export function MaturityBuckets({ buckets, asOf }: { buckets: readonly SavingsMa
                 {points.map((p) => (
                   <TableRow key={p.key}>
                     <TableCell className="text-sm">{p.label}</TableCell>
-                    <TableCell className="text-right font-mono text-sm tabular-nums">{p.count}</TableCell>
-                    <TableCell className="text-right font-mono text-sm tabular-nums">{p.principal}</TableCell>
-                    <TableCell className="text-right font-mono text-sm tabular-nums">{p.due}</TableCell>
+                    <TableCell className="text-right text-sm tabular-nums">{p.count}</TableCell>
+                    <TableCell className="text-right text-sm tabular-nums">{p.principal}</TableCell>
+                    <TableCell className="text-right text-sm tabular-nums">{p.due}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
