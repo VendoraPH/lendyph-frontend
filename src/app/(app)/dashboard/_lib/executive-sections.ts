@@ -7,7 +7,6 @@ import type { AccountingDashboard } from "@/types/accounting";
 import type {
   AgingReport,
   CollectionEfficiencyReport,
-  LoanBalanceSummaryReport,
   PerformanceReport,
   PortfolioByProductReport,
 } from "@/types/dashboard-reports";
@@ -18,24 +17,58 @@ export interface ProductRow {
   name: string;
   loans: number | null;
   released: number | null;
+  /** Principal Balance (`outstanding_principal`). */
+  principal: number | null;
+  /** Everything owed (`total_outstanding`). */
   outstanding: number | null;
   par: number | null;
-  /** The server's share of the amount released, in percent (`portfolio_share`); `null` when not sent. */
+  /** The server's share of the unpaid principal, in percent (`outstanding_share`); `null` when not sent. */
   share: number | null;
 }
 
-/** Products by everything owed (`total_outstanding`), largest first, with the server's share of the amount released. */
+const productName = (name: string | null | undefined) => name?.trim() || "Unnamed product";
+
+/** Products by everything owed (`total_outstanding`), largest first, with the server's share of the outstanding book. */
 export function productRows(report: PortfolioByProductReport | null): ProductRow[] {
   return (report?.products ?? [])
     .map((p) => ({
-      name: p.product_name?.trim() || "Unnamed product",
+      name: productName(p.product_name),
       loans: toNumber(p.loan_count),
       released: toNumber(p.total_released),
+      principal: toNumber(p.outstanding_principal),
       outstanding: toNumber(p.total_outstanding),
       par: toNumber(p.par_ratio),
-      share: toNumber(p.portfolio_share),
+      share: toNumber(p.outstanding_share),
     }))
     .sort((a, b) => (b.outstanding ?? -1) - (a.outstanding ?? -1));
+}
+
+export interface ProductShareSlice {
+  name: string;
+  /** The server's `outstanding_share`, whole percent. */
+  share: number;
+  other: boolean;
+}
+
+/**
+ * The product share chart: the server's named products (`named_product_ids`,
+ * largest first) by their `outstanding_share`, then its `other` row as one
+ * slice. Every share is the server's; nothing is added up here.
+ */
+export function productShareSlices(report: PortfolioByProductReport | null): ProductShareSlice[] {
+  const products = report?.products ?? [];
+  const named = (report?.named_product_ids ?? []).flatMap((id) => {
+    const product = products.find((p) => p.product_id === id);
+    const share = toNumber(product?.outstanding_share);
+    return product && share !== null && share > 0 ? [{ name: productName(product.product_name), share, other: false }] : [];
+  });
+  const other = report?.other;
+  const count = toNumber(other?.product_count) ?? 0;
+  const otherShare = toNumber(other?.outstanding_share);
+  if (count > 0 && otherShare !== null && otherShare > 0) {
+    named.push({ name: `${count} other ${count === 1 ? "product" : "products"}`, share: otherShare, other: true });
+  }
+  return named;
 }
 
 export interface AgingPoint {
@@ -78,59 +111,6 @@ export function collectionTrend(report: CollectionEfficiencyReport | null): Tren
       collected: toNumber(p.total_collected) ?? 0,
       rate: toNumber(p.collection_rate),
     }));
-}
-
-export interface BranchRow {
-  key: string;
-  name: string;
-  outstanding: number | null;
-  released: number | null;
-  collected: number | null;
-  collectionRate: number | null;
-  par: number | null;
-  activeBorrowers: number | null;
-}
-
-/** One row per branch, merged across the balance, efficiency and performance reports by branch id. */
-export function branchRows(
-  balance: LoanBalanceSummaryReport | null,
-  efficiency: CollectionEfficiencyReport | null,
-  performance: PerformanceReport | null,
-): BranchRow[] {
-  const rows = new Map<string, BranchRow>();
-  const row = (id: number | null | undefined, name: string | null | undefined) => {
-    const key = id == null ? `name:${name ?? ""}` : String(id);
-    let r = rows.get(key);
-    if (!r) {
-      r = {
-        key,
-        name: name?.trim() || "No branch",
-        outstanding: null,
-        released: null,
-        collected: null,
-        collectionRate: null,
-        par: null,
-        activeBorrowers: null,
-      };
-      rows.set(key, r);
-    }
-    return r;
-  };
-  for (const b of balance?.by_branch ?? []) {
-    row(b.branch_id, b.branch_name).outstanding = toNumber(b.total_outstanding);
-  }
-  for (const b of efficiency?.by_branch ?? []) {
-    const r = row(b.branch_id, b.branch_name);
-    r.collected = toNumber(b.total_collected);
-    r.collectionRate = toNumber(b.collection_rate);
-  }
-  for (const b of performance?.by_branch ?? []) {
-    const r = row(b.branch_id, b.branch_name);
-    r.released = toNumber(b.released_amount);
-    r.par = toNumber(b.par_ratio);
-    r.activeBorrowers = toNumber(b.active_borrowers);
-  }
-  return [...rows.values()].sort((a, b) => (b.outstanding ?? -1) - (a.outstanding ?? -1));
 }
 
 export interface OfficerRow {

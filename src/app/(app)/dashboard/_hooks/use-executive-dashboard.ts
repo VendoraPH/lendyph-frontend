@@ -4,10 +4,16 @@ import { accountingService, loanService, reportService } from "@/services";
 import type { Permission } from "@/types";
 import type { PastDueTotals } from "@/types/dashboard-reports";
 import { LOADING, SOURCE_PERMISSIONS, sourcePermitted, type ExecutiveData, type Source, type SourceKey } from "../_lib/executive-data";
-import { previousPeriod, type Period } from "../_lib/periods";
+
+/** A date range the server worked out (`DashboardPeriod`), as YYYY-MM-DD in Manila. */
+export interface ServerRange {
+  from: string;
+  to: string;
+}
 
 export interface ExecutiveFilters {
-  period: Period;
+  /** The server's period; null until the overview has answered, or when it failed. */
+  period: ServerRange | null;
   /** `undefined` for every branch the user may see. */
   branchId?: number;
 }
@@ -22,11 +28,9 @@ type Load = () => Promise<unknown>;
  * date range there would filter by release date instead. Aging and
  * provisioning are as of the period's last day; the rest cover the period.
  */
-function requests({ period, branchId }: ExecutiveFilters): Partial<Record<SourceKey, Load>> {
+function requests({ period, branchId }: { period: ServerRange; branchId?: number }): Partial<Record<SourceKey, Load>> {
   const branch = branchId ? { branch_id: branchId } : {};
   const range = { ...branch, date_from: period.from, date_to: period.to };
-  const prev = previousPeriod(period);
-  const prevRange = prev ? { ...branch, date_from: prev.from, date_to: prev.to } : null;
 
   return {
     balance: () => reportService.loanBalanceSummary(branch),
@@ -40,10 +44,6 @@ function requests({ period, branchId }: ExecutiveFilters): Partial<Record<Source
     income: () => reportService.income(range),
     borrowers: () => reportService.borrowers(range),
     disbursements: () => reportService.disbursements(range),
-    ...(prevRange && {
-      prevCashFlow: () => reportService.cashFlow(prevRange),
-      prevEfficiency: () => reportService.collectionEfficiency(prevRange),
-    }),
     accounting: () => accountingService.dashboard(period.to, branchId, period.from),
     // One row asked for: only `meta.stats` (counts per status) is read.
     loanStats: () =>
@@ -68,9 +68,7 @@ const SOURCE_KEYS: SourceKey[] = [
   "balance",
   "aging",
   "cashFlow",
-  "prevCashFlow",
   "efficiency",
-  "prevEfficiency",
   "products",
   "performance",
   "provisioning",
@@ -88,22 +86,25 @@ const PERMISSIONS: Permission[] = [...new Set(Object.values(SOURCE_PERMISSIONS).
 /**
  * Loads the executive dashboard's sources in parallel, each on its own, so a
  * slow or failed report leaves the rest of the page standing. A source the
- * user lacks the permission for is never requested and reads `denied`; a
- * comparison with no previous period reads `error` (no comparison shown).
+ * user lacks the permission for is never requested and reads `denied`.
+ * Nothing loads until the server has worked out the period (`period` null):
+ * then every source reads loading, or `error` when the period failed.
  *
  * Results are stored with the request they answer, so a figure for an old
  * filter is never shown under a new one.
  */
-export function useExecutiveDashboard(filters: ExecutiveFilters, reloadCount: number): ExecutiveData {
+export function useExecutiveDashboard(filters: ExecutiveFilters, reloadCount: number, periodFailed = false): ExecutiveData {
   const { can } = usePermission();
   // The permissions as one string, so the effect re-runs only when one changes.
   const granted = PERMISSIONS.filter((p) => can(p)).join(",");
-  const { from, to } = filters.period;
+  const from = filters.period?.from ?? "";
+  const to = filters.period?.to ?? "";
   const branchId = filters.branchId;
   const key = [from, to, branchId ?? "all", reloadCount, granted].join("|");
   const [stored, setStored] = useState<{ key: string; data: Partial<ExecutiveData> }>({ key: "", data: {} });
 
   useEffect(() => {
+    if (!from || !to) return;
     const allowed = new Set(granted.split(","));
     const table = requests({ period: { from, to }, branchId });
     const settle = (name: SourceKey, source: Source<unknown>) =>
@@ -118,6 +119,10 @@ export function useExecutiveDashboard(filters: ExecutiveFilters, reloadCount: nu
     }
   }, [key, from, to, branchId, granted]);
 
+  if (!from || !to) {
+    const waiting = periodFailed ? ({ state: "error" } as const) : LOADING;
+    return Object.fromEntries(SOURCE_KEYS.map((name) => [name, waiting])) as unknown as ExecutiveData;
+  }
   const loaded = stored.key === key ? stored.data : {};
   const allowed = new Set(granted.split(","));
   const table = requests({ period: { from, to }, branchId });

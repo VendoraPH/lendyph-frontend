@@ -6,12 +6,15 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DateRangeFilter } from "@/components/common/date-range-filter";
 import type { BranchSelectItem } from "@/lib/user-branches";
-import { DASHBOARD_PRESETS, type DashboardPreset } from "../../_lib/periods";
+import type { ExecutivePreset } from "@/types/executive-dashboard";
+import { EXECUTIVE_PRESETS } from "../../_lib/executive-overview";
 
-const PRESET_ITEMS = DASHBOARD_PRESETS.map((p) => ({ value: p.id, label: p.label }));
+const PRESET_ITEMS = EXECUTIVE_PRESETS.map((p) => ({ value: p.id, label: p.label }));
 
 /**
- * The dashboard's period, branch, refresh and export controls. The branch
+ * The dashboard's period, branch, refresh and export controls. A preset's
+ * dates are the server's (shown once it answers); picking dates makes the
+ * period a custom range. The branch
  * options come from the page, which also needs the picked branch's name for
  * the export letterhead, so the branch list loads once.
  */
@@ -28,8 +31,8 @@ export function FilterBar({
   refreshing,
   exportSlot,
 }: {
-  preset: DashboardPreset;
-  onPreset: (preset: DashboardPreset) => void;
+  preset: ExecutivePreset;
+  onPreset: (preset: ExecutivePreset) => void;
   from: string;
   to: string;
   onRange: (from: string | null, to: string | null) => void;
@@ -46,8 +49,8 @@ export function FilterBar({
         <Label htmlFor="exec-period" className="text-xs text-muted-foreground">
           Period
         </Label>
-        <Select value={preset} onValueChange={(v) => v && onPreset(v as DashboardPreset)} items={PRESET_ITEMS}>
-          <SelectTrigger id="exec-period" className="w-[150px]">
+        <Select value={preset} onValueChange={(v) => v && onPreset(v as ExecutivePreset)} items={PRESET_ITEMS}>
+          <SelectTrigger id="exec-period" className="w-[190px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

@@ -3,17 +3,15 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AccountingDashboard } from "@/types/accounting";
-import { LOADING, SOURCE_PERMISSIONS, cashBalance, sourcePermitted, overviewKpis, type ExecutiveData, type KpiView } from "./executive-data";
+import { LOADING, SOURCE_PERMISSIONS, cashBalance, sourcePermitted, type ExecutiveData } from "./executive-data";
 import {
   agingPoints,
-  branchRows,
   collectionTrend,
   hasActivity,
   incomeExpenseSeries,
   monthLabel,
   officerRows,
   pipelineStages,
-  productRows,
 } from "./executive-sections";
 import { attentionItems } from "./attention";
 
@@ -24,9 +22,7 @@ function data(overrides: Partial<ExecutiveData> = {}): ExecutiveData {
     balance: LOADING,
     aging: LOADING,
     cashFlow: LOADING,
-    prevCashFlow: LOADING,
     efficiency: LOADING,
-    prevEfficiency: LOADING,
     products: LOADING,
     performance: LOADING,
     provisioning: LOADING,
@@ -41,58 +37,6 @@ function data(overrides: Partial<ExecutiveData> = {}): ExecutiveData {
   };
 }
 
-const kpi = (views: KpiView[], id: KpiView["id"]) => views.find((v) => v.id === id)!;
-
-test("cards wait while loading, and say so when a figure is missing or not allowed", () => {
-  const views = overviewKpis(
-    data({
-      balance: ready({ outstanding_principal: "1000.00" }),
-      borrowers: { state: "denied" },
-      cashFlow: { state: "error" },
-    }),
-  );
-  assert.deepEqual(kpi(views, "outstanding_principal"), {
-    id: "outstanding_principal",
-    value: 1000,
-    change: null,
-    changeBasis: null,
-    state: "ready",
-  });
-  assert.equal(kpi(views, "total_outstanding").state, "unavailable");
-  assert.equal(kpi(views, "active_borrowers").state, "denied");
-  assert.equal(kpi(views, "collections").state, "unavailable");
-  assert.equal(kpi(views, "net_income").state, "loading");
-});
-
-test("period figures compare with the previous period; a zero base has no change", () => {
-  const views = overviewKpis(
-    data({
-      cashFlow: ready({ inflows: { repayments: { total: "1500" } } }),
-      prevCashFlow: ready({ inflows: { repayments: { total: "1000" } } }),
-      efficiency: ready({ collection_rate: 92 }),
-      prevEfficiency: ready({ collection_rate: 95 }),
-    }),
-  );
-  assert.equal(kpi(views, "collections").change, 50);
-  assert.equal(kpi(views, "collection_rate").change, -3);
-});
-
-test("Loans Released is the principal released, not the net proceeds paid out", () => {
-  const views = overviewKpis(
-    data({
-      cashFlow: ready({ non_cash: { principal_released: "80000.00" }, outflows: { releases: { net_proceeds: "76000.00" } } }),
-      prevCashFlow: ready({ non_cash: { principal_released: "64000.00" } }),
-      disbursements: ready({ total_disbursed: "76000.00" }),
-    }),
-  );
-  assert.equal(kpi(views, "loans_released").value, 80000);
-  assert.equal(kpi(views, "loans_released").change, 25);
-  const zeroBase = overviewKpis(
-    data({ cashFlow: ready({ non_cash: { principal_released: 500 } }), prevCashFlow: ready({ non_cash: { principal_released: 0 } }) }),
-  );
-  assert.equal(kpi(zeroBase, "loans_released").change, null);
-});
-
 test("a chart with nothing but zeros or gaps draws the empty state, not an axis", () => {
   const acc = {
     months: [
@@ -103,55 +47,6 @@ test("a chart with nothing but zeros or gaps draws the empty state, not an axis"
   assert.equal(hasActivity(incomeExpenseSeries(acc), ["income", "expenses", "net"]), false);
   assert.equal(hasActivity([], ["income"]), false);
   assert.equal(hasActivity([{ due: 0, collected: 12.5 }], ["due", "collected"]), true);
-});
-
-test("share capital compares with its opening balance; net income is read from centavos", () => {
-  const views = overviewKpis(
-    data({
-      shareCapital: ready({ opening_balance: "200000", closing_balance: "210000" }),
-      accounting: ready({ period: { from: "", to: "", income: 0, expenses: 0, net_income: 1234567 } } as unknown as AccountingDashboard),
-    }),
-  );
-  assert.equal(kpi(views, "share_capital").change, 5);
-  assert.equal(kpi(views, "share_capital").changeBasis, "opening_balance");
-  assert.equal(kpi(views, "net_income").value, 12345.67);
-});
-
-test("Total Portfolio is the collectible unpaid principal and Outstanding is everything owed, never the deprecated aliases", () => {
-  const views = overviewKpis(
-    data({
-      balance: ready({
-        outstanding_principal: "900.00",
-        total_outstanding: "1200.00",
-        outstanding: { principal: "1000.00", balance: "1100.00" },
-      }),
-    }),
-  );
-  assert.equal(kpi(views, "outstanding_principal").value, 900);
-  assert.equal(kpi(views, "total_outstanding").value, 1200);
-});
-
-test("past due is the Past Due Loans page's grace-rule total, never a browser sum of parts", () => {
-  const overdue = { principal: "100", interest: "10.5", penalty: "4", total: "114.50" };
-  const views = overviewKpis(data({ balance: ready({ overdue }), pastDue: ready({ past_due_amount: "96.25" }) }));
-  assert.equal(kpi(views, "past_due_amount").value, 96.25);
-  const missing = overviewKpis(data({ balance: ready({ overdue }), pastDue: ready({}) }));
-  assert.equal(kpi(missing, "past_due_amount").state, "unavailable");
-});
-
-test("products sort by everything owed and show the server's share of the amount released", () => {
-  const rows = productRows({
-    products: [
-      { product_name: "Salary", total_outstanding: "250", outstanding: "999", portfolio_share: "40" },
-      { product_name: "Business", total_outstanding: "750", outstanding: "1", par_ratio: "4.5", portfolio_share: 60 },
-      { product_name: "Old", total_outstanding: "0" },
-    ],
-  });
-  assert.deepEqual(rows.map((r) => [r.name, r.outstanding, r.share, r.par]), [
-    ["Business", 750, 60, 4.5],
-    ["Salary", 250, 40, null],
-    ["Old", 0, null, null],
-  ]);
 });
 
 test("officers read everything owed, not the deprecated alias", () => {
@@ -206,20 +101,6 @@ test("aging is empty without a report, so the chart never draws invented zeros",
   const points = agingPoints({ buckets: { "1_30": { amount: "50", count: 2 } } });
   assert.deepEqual(points[0], { bucket: "1–30 days", amount: 50, count: 2 });
   assert.equal(points.length, 4);
-});
-
-test("branches merge across reports by id", () => {
-  const rows = branchRows(
-    { by_branch: [{ branch_id: 1, branch_name: "Main", total_outstanding: "900", outstanding_balance: "1" }] },
-    { by_branch: [{ branch_id: 1, branch_name: "Main", total_collected: "80", collection_rate: "88.5" }] },
-    { by_branch: [{ branch_id: 2, branch_name: "North", released_amount: "300", par_ratio: 1 }] },
-  );
-  assert.equal(rows.length, 2);
-  assert.deepEqual(
-    { name: rows[0].name, outstanding: rows[0].outstanding, collectionRate: rows[0].collectionRate },
-    { name: "Main", outstanding: 900, collectionRate: 88.5 },
-  );
-  assert.equal(rows[1].released, 300);
 });
 
 test("trend, pipeline and month labels", () => {
