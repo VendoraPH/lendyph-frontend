@@ -654,6 +654,12 @@ export const API_ENDPOINTS = {
     CHANGE_REQUEST_REJECT: (id: number) => `/amla/change-requests/${id}/reject`,
     CHANGE_REQUEST_WITHDRAW: (id: number) => `/amla/change-requests/${id}/withdraw`,
     LOG: "/amla/log",
+    /** AMLA-B4: every CDD route needs `amla:cdd`; a walk-in also needs `branches:view_all`. */
+    CDD_SUBJECTS: "/amla/cdd/subjects",
+    CDD_SUBJECT: (segment: string, id: number) => `/amla/cdd/${segment}/${id}`,
+    CDD_ID_VERIFICATIONS: (segment: string, id: number) => `/amla/cdd/${segment}/${id}/id-verifications`,
+    CDD_RISK_ASSESSMENTS: (segment: string, id: number) => `/amla/cdd/${segment}/${id}/risk-assessments`,
+    CDD_REVIEWS: (segment: string, id: number) => `/amla/cdd/${segment}/${id}/reviews`,
   },
   /**
    * CDA Compliance (CDA design §3). Every route needs `branches:view_all` plus
