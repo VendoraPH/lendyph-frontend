@@ -12,7 +12,7 @@ import { useIsClient, usePermission } from "@/hooks";
 import { AreaChart, Area } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Wallet, FileText, PhilippinePeso, AlertTriangle, TrendingUp, Landmark, BarChart3 } from "lucide-react";
+import { Wallet, FileText, PhilippinePeso, AlertTriangle, TrendingUp, TrendingDown, Landmark, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { env } from "@/config/env";
 import { formatCurrency, formatDateFull } from "@/lib/format";
@@ -20,10 +20,23 @@ import { shareCapitalService } from "@/services";
 import { dashboardService } from "@/services/dashboard.service";
 import type { DailyDuesSummary } from "@/types";
 import { shareCapitalBookBalance } from "./_lib/share-capital-kpi";
-import { collectionPieSlices, collectionRateTone, shownCollectionRate } from "./_lib/collection-pie";
+import {
+  collectionBadge,
+  collectionPieSlices,
+  isNothingDue,
+  shownCollectionRate,
+  todaySummaryRows,
+} from "./_lib/collection-pie";
+import { showExecutiveLink } from "./_lib/executive-access";
 import { DuesDonut } from "./_components/dues-donut";
 import { DuesTable, TransactionsTable, type DueItemView, type LoadState } from "./_components/dashboard-tables";
-import { DASHBOARD_PAGE_CLASS, DUES_TABLE_PANEL_CLASS, TRANSACTIONS_TABLE_PANEL_CLASS, dashboardKpiClasses } from "./_lib/kpi-layout";
+import {
+  DASHBOARD_PAGE_CLASS,
+  DUES_TABLE_PANEL_CLASS,
+  DUES_TABS_LIST_CLASS,
+  TRANSACTIONS_TABLE_PANEL_CLASS,
+  dashboardKpiClasses,
+} from "./_lib/kpi-layout";
 import { insuranceCollected } from "./_lib/insurance-collected";
 import { recentTransactionRows, type RecentTransactionRow } from "./_lib/recent-transactions";
 import {
@@ -240,18 +253,22 @@ function DashboardContent() {
   const dueItems = dailyDues;
   const transactions = recentTransactions;
 
-  // The pie and the rate are the server's figures (GET /dashboard/daily-dues
-  // `summary`); a row's "Paid" includes penalty, so adding rows up here could
-  // pass 100%.
+  // The pie, the rate and the "Today" list are the server's figures (GET
+  // /dashboard/daily-dues `summary`); a row's "Paid" includes penalty, so adding
+  // rows up here could pass 100%.
   const collectionRate = shownCollectionRate(duesSummary);
   const collectionRateLabel = collectionRate === null ? "—" : `${collectionRate}%`;
   const pieData = collectionPieSlices(duesSummary);
+  const todayRows = todaySummaryRows(duesSummary);
+  const nothingDue = isNothingDue(duesSummary, duesStatus);
+  const badge = collectionBadge(collectionRate, nothingDue);
+  const BadgeArrow = badge.arrow === "up" ? TrendingUp : badge.arrow === "down" ? TrendingDown : null;
   const rateBadgeClass = {
     good: "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400",
     fair: "border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400",
     poor: "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400",
     unknown: "border-border bg-muted text-muted-foreground",
-  }[collectionRateTone(collectionRate)];
+  }[badge.tone];
 
   return (
     <>
@@ -315,13 +332,13 @@ function DashboardContent() {
         contentClassName="px-0"
         actions={
           <Badge variant="outline" className={rateBadgeClass}>
-            <TrendingUp className="h-3 w-3 mr-1" />
-            {collectionRateLabel} collected
+            {BadgeArrow ? <BadgeArrow className="h-3 w-3 mr-1" aria-hidden="true" /> : null}
+            {badge.text}
           </Badge>
         }
       >
         <Tabs defaultValue="dues" className={cn(FIT_CLASSES.section, "gap-3")}>
-          <TabsList className="mx-4">
+          <TabsList className={DUES_TABS_LIST_CLASS}>
             <TabsTrigger value="dues">Daily dues</TabsTrigger>
             <TabsTrigger value="transactions">Recent transactions</TabsTrigger>
           </TabsList>
@@ -333,6 +350,8 @@ function DashboardContent() {
                 rate={collectionRate}
                 rateLabel={collectionRateLabel}
                 slices={pieData}
+                rows={todayRows}
+                nothingDue={nothingDue}
                 mounted={mounted}
               />
               <div className={DUES_TABLE_PANEL_CLASS}>
@@ -366,10 +385,11 @@ export default function DashboardPage() {
 
 /** The page root: fills the main area at fit, and is the dashboard's size container. */
 function DashboardPageFill() {
+  const { can } = usePermission();
   return (
     <PageFill className={cn(DASHBOARD_PAGE_CLASS, "gap-4")}>
       <NoBranchBanner />
-      {env.features.executiveDashboard ? (
+      {showExecutiveLink(env.features.executiveDashboard, can) ? (
         <div className="flex shrink-0 justify-end">
           <Link
             href="/dashboard/executive"

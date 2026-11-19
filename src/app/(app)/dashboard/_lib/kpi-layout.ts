@@ -28,16 +28,23 @@ export function dashboardKpiClasses(): { grid: string; card: string; content: st
   };
 }
 
+/** Inside the expand dialog, the card's 16px inset is dropped, so the body starts at the dialog title's left edge. */
+const IN_DIALOG_FLUSH = "in-data-[slot=dialog-content]:mx-0";
+
+/** The card's tabs: in line with the panels under them, on the card and in the dialog. */
+export const DUES_TABS_LIST_CLASS = `mx-4 ${IN_DIALOG_FLUSH}`;
+
 /**
  * The collections ring's panel beside the Daily dues table: the app's usual
- * inner panel (`rounded-lg border p-4`), sized to its content and at the top,
- * level with the table's headings. Centred in a column as tall as the card,
- * the ring floated below them whenever the list was short. No fill, so the
- * empty ring (a muted stroke) stays visible. Its left edge lines up with the
- * tabs above it; on a narrow card it sits above the table, full width.
+ * inner panel (`rounded-lg border p-4`). On a wide card it runs the table
+ * panel's height (`@xl:self-stretch`), so both boxes end level, with the ring
+ * and the "Today" list at the top (`justify-start`), level with the table's
+ * headings; below the list it shows plain space. On a short screen it scrolls
+ * inside its own box. No fill, so the empty ring (a muted stroke) stays
+ * visible. Its left edge lines up with the tabs above it; on a narrow card it
+ * sits above the table, full width.
  */
-export const DUES_DONUT_COLUMN_CLASS =
-  "mx-4 flex shrink-0 flex-col items-center justify-start gap-2 rounded-lg border p-4 @xl:mr-0 @xl:w-60 @xl:self-start";
+export const DUES_DONUT_COLUMN_CLASS = `mx-4 flex shrink-0 flex-col items-center justify-start gap-2 rounded-lg border p-4 @xl:mr-0 @xl:w-60 @xl:self-stretch @xl:min-h-0 @xl:overflow-y-auto ${IN_DIALOG_FLUSH}`;
 
 /**
  * The Daily dues and Recent transactions tables' own panels: the ring's inner
@@ -53,5 +60,5 @@ export const DUES_DONUT_COLUMN_CLASS =
  * `overflow-hidden`, `overflow-clip` is no scroll container, so the headings still
  * pin to whichever box scrolls: the table's on the page, the dialog's when expanded.
  */
-export const DUES_TABLE_PANEL_CLASS = "mx-4 flex min-h-0 flex-1 flex-col overflow-clip rounded-lg border @xl:ml-0";
-export const TRANSACTIONS_TABLE_PANEL_CLASS = "mx-4 flex min-h-0 flex-1 flex-col overflow-clip rounded-lg border";
+export const DUES_TABLE_PANEL_CLASS = `mx-4 flex min-h-0 flex-1 flex-col overflow-clip rounded-lg border @xl:ml-0 ${IN_DIALOG_FLUSH}`;
+export const TRANSACTIONS_TABLE_PANEL_CLASS = `mx-4 flex min-h-0 flex-1 flex-col overflow-clip rounded-lg border ${IN_DIALOG_FLUSH}`;
