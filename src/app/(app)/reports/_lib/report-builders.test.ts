@@ -2806,9 +2806,11 @@ const CASH_FLOW_WITH_SHARE_BY_BRANCH = {
   },
 };
 
+// Unfiltered (`organisation`), the answer doesn't say which rule placed the
+// rows, so the sentence holds under both.
 const CASH_FLOW_BRANCH_NOTE =
-  "Share capital paid in and out is in the row of the branch each member belongs to; " +
-  "members with no branch are under Unassigned.";
+  "Share capital paid in and out is in its branch's row; " +
+  "entries with no branch are under Unassigned.";
 
 test("cash flow breaks down by branch, members' share capital included, in plain words", () => {
   const doc = buildCashFlowDoc(CASH_FLOW_WITH_SHARE_BY_BRANCH, RANGE);
@@ -2873,6 +2875,31 @@ test("the branch note is the same plain sentence whether or not the server sends
 
   assert.equal(noteText(without), CASH_FLOW_BRANCH_NOTE);
   assert.equal(noteText(buildCashFlowDoc(CASH_FLOW_WITH_SHARE_BY_BRANCH, RANGE)), CASH_FLOW_BRANCH_NOTE);
+});
+
+test("the cash flow branch note follows the rule the server says placed share capital", () => {
+  const noteFor = (scope: string) =>
+    noteText(
+      buildCashFlowDoc(
+        { ...CASH_FLOW_WITH_SHARE_BY_BRANCH, share_capital: { ...CASH_FLOW_WITH_SHARE_BY_BRANCH.share_capital, branch_scope: scope } },
+        RANGE
+      )
+    );
+
+  // Since backend #334: the branch each entry was posted in.
+  assert.equal(
+    noteFor("posted_branch"),
+    "Share capital paid in and out is in the row of the branch where each entry was posted; " +
+      "a member who moved keeps their earlier entries in their old branch. " +
+      "Entries with no branch are under Unassigned."
+  );
+  // An older backend: the member's branch.
+  assert.equal(
+    noteFor("borrower_branch"),
+    "Share capital paid in and out is in the row of the branch each member belongs to; " +
+      "members with no branch are under Unassigned."
+  );
+  assert.equal(noteFor("organisation"), CASH_FLOW_BRANCH_NOTE);
 });
 
 test("cash flow says where payments' share capital build-up is counted, without moving a total", () => {
