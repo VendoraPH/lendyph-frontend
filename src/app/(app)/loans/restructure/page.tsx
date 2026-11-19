@@ -19,7 +19,7 @@ import {
 import { RouteGuard } from "@/components/common";
 import { PageFill, PageLoader, ScrollBox } from "@/components/common/page-fill";
 import { FormStep, FormStepper, type FormStepperHandle } from "@/components/common/form-stepper";
-import { FORM_STEP_GRID, errorMessages, stepErrorsOf, type StepErrors } from "@/lib/form-stepper";
+import { FORM_STEP_GRID, stepErrorsOf, type StepCheckTrigger, type StepErrors } from "@/lib/form-stepper";
 import { FIT_CLASSES } from "@/lib/page-fill";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { StaffPicker } from "@/components/common/staff-picker";
@@ -115,14 +115,13 @@ import {
   shownSecurityStatus,
 } from "@/app/(app)/loans/new/_lib/loan-preview";
 import { useLoanPreview } from "@/app/(app)/loans/new/_hooks/use-loan-preview";
-import { useSubmitPressed } from "@/app/(app)/loans/new/_hooks/use-submit-pressed";
 import {
   PAYMENT_FREQUENCY_LABELS,
   PAYMENT_FREQUENCY_OPTIONS,
   LOAN_STATUS_COLORS,
 } from "@/constants";
 import { loanDisplayStatus, loanRowStatusLabel } from "@/constants/loan-status";
-import { serverFieldErrors } from "@/app/(app)/loans/new/_lib/loan-form-steps";
+import { invalidStepMessages, serverFieldErrors } from "@/app/(app)/loans/new/_lib/loan-form-steps";
 import { RESTRUCTURE_STEPS, restructureMissing } from "./_lib/restructure-steps";
 
 import type { CollateralType, Loan, LoanStatus, StaffMember } from "@/types";
@@ -714,9 +713,8 @@ function RestructureLoanInner() {
   }
   // Next shows the open step's missing fields. Submit (the stepper checks
   // every step and opens the first that fails) shows every missing field.
-  const submitPressed = useSubmitPressed();
-  function onInvalid(errors: StepErrors) {
-    notifyValidation(submitPressed.pressed.current ? Object.values(missingFields) : errorMessages(errors));
+  function onInvalid(errors: StepErrors, _stepId: string, trigger: StepCheckTrigger) {
+    notifyValidation(invalidStepMessages(trigger, errors, missingFields));
   }
 
   const handleSubmit = async () => {
@@ -839,7 +837,7 @@ function RestructureLoanInner() {
 
         {/* One step per card. At fit the open step scrolls under the rail;
             Cancel, Back, Next and Submit stay at the foot. */}
-        <form noValidate onSubmit={onFormSubmit} className={FIT_CLASSES.section} {...submitPressed.formProps}>
+        <form noValidate onSubmit={onFormSubmit} className={FIT_CLASSES.section}>
         <FormStepper
           ref={stepperRef}
           steps={RESTRUCTURE_STEPS}

@@ -11,14 +11,16 @@ import { stepHasNativeInvalid, useStepFocus } from "@/components/common/form-ste
 import type { FormStepperProps } from "@/components/common/form-stepper-types";
 import { notifyValidation } from "@/lib/notify";
 import {
-  canGoToStep,
-  errorMessages,
   firstErrorField,
   nativeValidityApplies,
   nextStepIndex,
+  railStepClickable,
+  reportInvalidStep,
   stepCheckFailure,
   stepProgressText,
+  stepsToCheckBefore,
   type FormStepperMode,
+  type StepCheckTrigger,
 } from "@/lib/form-stepper";
 
 type NavOptions = Pick<FormStepperProps, "steps" | "validateStep" | "onInvalid" | "initialStepId" | "onStepChange"> & {
@@ -68,9 +70,10 @@ export function useStepperNav({
   /**
    * Validates one step: the browser's own constraints first (unless the form
    * is `noValidate`), then `validateStep`. On a failure marks it, opens it and
-   * shows the browser's message or the form's errors.
+   * shows the browser's message or the form's errors. `trigger` goes to
+   * `onInvalid`.
    */
-  function check(i: number, submitter?: { formNoValidate: boolean }): boolean {
+  function check(i: number, trigger: StepCheckTrigger, submitter?: { formNoValidate: boolean }): boolean {
     const target = steps[i];
     const root = rootRef.current;
     const result = validateStep ? validateStep(target.id) : true;
@@ -82,8 +85,7 @@ export function useStepperNav({
     markPassed(target.id, failure === null);
     if (failure === null) return true;
     if (failure === "custom" && result !== true) {
-      if (onInvalid) onInvalid(result, target.id);
-      else notifyValidation(errorMessages(result));
+      reportInvalidStep(result, target.id, trigger, { onInvalid, notify: notifyValidation });
       open(i, firstErrorField(result, target.fields));
     } else {
       open(i, null, true);
@@ -92,13 +94,21 @@ export function useStepperNav({
   }
 
   function goNext() {
-    if (!isLast && !nextDisabled && check(index)) open(nextStepIndex(index, count));
+    if (!isLast && !nextDisabled && check(index, "next")) open(nextStepIndex(index, count));
   }
 
-  /** From the rail or the phone menu; `create` validates the open step before moving on. */
+  /**
+   * From the rail or the phone menu. Moving forward in `create` checks the open
+   * step, then each later step on the way that hasn't passed; the first that
+   * fails opens with its message, as Next shows it.
+   */
   function goTo(target: number) {
-    if (target === index || !canGoToStep(target, { mode, current: index, passed: passedList, nextDisabled })) return;
-    if (target > index && mode === "create" && !check(index)) return;
+    if (target === index || !railStepClickable(target, { mode, current: index, count, nextDisabled })) return;
+    if (mode === "create") {
+      for (const i of stepsToCheckBefore(target, { current: index, passed: passedList })) {
+        if (!check(i, "next")) return;
+      }
+    }
     open(target);
   }
 

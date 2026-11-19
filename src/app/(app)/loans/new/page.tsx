@@ -5,7 +5,7 @@ import { RouteGuard } from "@/components/common";
 import { PageFill, PageLoader, ScrollBox } from "@/components/common/page-fill";
 import { FIT_CLASSES } from "@/lib/page-fill";
 import { FormStep, FormStepper, type FormStepperHandle } from "@/components/common/form-stepper";
-import { FORM_STEP_GRID, errorMessages, stepErrorsOf, type StepErrors } from "@/lib/form-stepper";
+import { FORM_STEP_GRID, stepErrorsOf, type StepCheckTrigger, type StepErrors } from "@/lib/form-stepper";
 import { MissingAccessNotice } from "./_components/missing-access-notice";
 import { missingLoanFormAccess } from "./_lib/missing-access";
 import { StaffPicker } from "@/components/common/staff-picker";
@@ -145,7 +145,6 @@ import {
 } from "./_lib/loan-preview";
 import { SHARE_CAPITAL_VALUE_HIDDEN } from "@/app/(app)/loans/[id]/_lib/collateral-display";
 import { useLoanPreview } from "./_hooks/use-loan-preview";
-import { useSubmitPressed } from "./_hooks/use-submit-pressed";
 
 /**
  * A fee's label with its rate in smaller type. Each part keeps the label's own
@@ -166,7 +165,7 @@ import {
 } from "./_lib/restructure-edit";
 import { COLLECTED_BEFORE_INSURANCE, proceedsFigures } from "@/lib/restructure-proceeds";
 import { formatProductRangeMessage } from "./_lib/product-range-message";
-import { loanFormMissing, loanFormSteps, serverFieldErrors } from "./_lib/loan-form-steps";
+import { invalidStepMessages, loanFormMissing, loanFormSteps, serverFieldErrors } from "./_lib/loan-form-steps";
 
 // ── Helpers ──
 
@@ -800,9 +799,8 @@ function NewLoanApplicationInner() {
   }
   // Next shows the open step's missing fields. Save (the stepper checks every
   // step and opens the first that fails) shows every missing field at once.
-  const submitPressed = useSubmitPressed();
-  function onInvalid(errors: StepErrors) {
-    notifyValidation(submitPressed.pressed.current ? Object.values(missingFields) : errorMessages(errors));
+  function onInvalid(errors: StepErrors, _stepId: string, trigger: StepCheckTrigger) {
+    notifyValidation(invalidStepMessages(trigger, errors, missingFields));
   }
 
   // ── Submit ──
@@ -1000,7 +998,7 @@ function NewLoanApplicationInner() {
 
       {/* One step per card. At fit the open step scrolls under the rail and
           Back, Next and the submit stay at the foot. */}
-      <form noValidate onSubmit={onFormSubmit} className={FIT_CLASSES.section} {...submitPressed.formProps}>
+      <form noValidate onSubmit={onFormSubmit} className={FIT_CLASSES.section}>
         <FormStepper
           ref={stepperRef}
           steps={steps}
