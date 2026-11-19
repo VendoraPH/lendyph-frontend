@@ -18,9 +18,10 @@ const lendingConfig = {
 } satisfies ChartConfig;
 
 const cashConfig = {
+  // One blue, one orange and a dark blue line: no two series share a look.
   cash_in: { label: "Cash in", color: "var(--chart-1)" },
-  cash_out: { label: "Cash out", color: "var(--chart-4)" },
-  net_cash: { label: "Net cash", color: "var(--chart-2)" },
+  cash_out: { label: "Cash out", color: "var(--chart-2)" },
+  net_cash: { label: "Net cash", color: "var(--chart-3)" },
 } satisfies ChartConfig;
 
 const membersConfig = { new_members: { label: "New members", color: "var(--chart-3)" } } satisfies ChartConfig;
@@ -114,7 +115,7 @@ export function TrendsSection({ source, sentFilters }: { source: EndpointSource<
                     <ChartLegend content={<ChartLegendContent />} />
                     <Bar dataKey="cash_in" fill="var(--color-cash_in)" radius={[3, 3, 0, 0]} isAnimationActive={false} />
                     <Bar dataKey="cash_out" fill="var(--color-cash_out)" radius={[3, 3, 0, 0]} isAnimationActive={false} />
-                    <Line dataKey="net_cash" stroke="var(--color-net_cash)" strokeWidth={2} dot={false} isAnimationActive={false} />
+                    <Line dataKey="net_cash" stroke="var(--color-net_cash)" strokeWidth={2.5} strokeDasharray="5 3" dot={{ r: 2.5 }} isAnimationActive={false} />
                   </ComposedChart>
                 </ChartContainer>
                 <ChartTable caption="Cash in, out and net by month" points={points} keys={["cash_in", "cash_out", "net_cash"]} />

@@ -5,8 +5,8 @@ import type { AccountingDashboard } from "@/types/accounting";
 import type { ExecutiveAttention, ExecutivePeriod, ExecutiveTurnaround, FiltersAppliedTo, ShareCapitalControl } from "@/types/executive-dashboard";
 import { attentionView, ATTENTION_STATE_TEXT } from "./attention";
 import { booksParams } from "@/services/executive-dashboard.service";
-import { figureFilterNote, financialBooks, shareCapitalControlTable, trendSeries, turnaroundRows } from "./executive-books";
-import { executiveQuery, sentFilters } from "./executive-overview";
+import { SECTION_FILTERS, sectionFilterNote, figureFilterNote, financialBooks, shareCapitalControlTable, trendSeries, turnaroundRows } from "./executive-books";
+import { cardFilterNote, executiveQuery, sentFilters } from "./executive-overview";
 
 const period: ExecutivePeriod = {
   preset: "this_month",
@@ -103,8 +103,8 @@ test("rules needing attention come first, with the server's title, detail and li
   assert.equal(view.count, 1);
   assert.deepEqual(view.rows.map((r) => [r.key, r.stateText, r.tone]), [
     ["par30_rise", "Needs attention", "attention"],
-    ["overdue_share", "Clear", "clear"],
     ["control_difference", "Requires configuration", "neutral"],
+    ["overdue_share", "Clear", "clear"],
   ]);
   assert.equal(view.rows[0].title, "PAR 30 is 7.5% today, 5% on Nov 12, 2026");
   assert.equal(view.rows[0].href, "/loans/past-due");
@@ -248,4 +248,50 @@ test("the share capital control waits for the books in the server's words", () =
   assert.equal(table.notice, "Requires configuration: The opening balances have not been finalised yet.");
   assert.equal(table.rows[0].books, "—");
   assert.equal(table.rows[0].status, "Not compared");
+});
+
+// ── Check E7 ───────────────────────────────────────────────────────────────
+
+test("rules that can't be judged come between those needing attention and the clear ones", () => {
+  const view = attentionView(
+    attention([
+      { key: "a", state: "clear" },
+      { key: "b", state: "requires_configuration" },
+      { key: "c", state: "clear" },
+      { key: "d", state: "needs_attention" },
+      { key: "e", state: "no_access" },
+      { key: "f", state: "no_data" },
+      { key: "g", state: "no_snapshot" },
+    ]),
+    [],
+  );
+  assert.deepEqual(view.rows.map((r) => r.key), ["d", "b", "e", "f", "g", "a", "c"]);
+});
+
+test("a section with no server filter list says which sent filters it ignores, from its known filters", () => {
+  assert.deepEqual(SECTION_FILTERS.shareCapitalControl, []);
+  assert.equal(
+    sectionFilterNote(["product_id", "officer_id", "collector_id"], "shareCapitalControl"),
+    "Covers every product, loan officer and collector: this figure doesn't follow those filters.",
+  );
+  assert.equal(
+    sectionFilterNote(["product_id", "officer_id", "collector_id"], "operations"),
+    "Covers every product and collector: this figure doesn't follow those filters.",
+  );
+  assert.equal(sectionFilterNote(["officer_id"], "operations"), null);
+  assert.equal(sectionFilterNote([], "shareCapitalControl"), null);
+});
+
+test("a figure that repeats an overview card takes the card's own filter list", () => {
+  const overview = {
+    period,
+    generated_at: "2026-11-19 09:00:00",
+    filters_applied: ["product_id", "collector_id"] as const,
+    cards: {
+      share_capital: { key: "share_capital", label: "Share Capital", unit: "money", value: 1, previous_value: null, change: null, change_unit: "percent", as_of: null, previous_as_of: null, state: "ready", filters_applied: [], details: {} },
+    },
+  } as unknown as Parameters<typeof cardFilterNote>[0];
+  assert.equal(cardFilterNote(overview, "share_capital"), "Covers every product and collector: this figure doesn't follow those filters.");
+  assert.equal(cardFilterNote(overview, "missing"), null);
+  assert.equal(cardFilterNote(null, "share_capital"), null);
 });

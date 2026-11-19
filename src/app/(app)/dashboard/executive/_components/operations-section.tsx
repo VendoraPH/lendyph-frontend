@@ -1,6 +1,8 @@
 "use client";
 
 import { Users } from "lucide-react";
+import type { ExecutiveFilterKey } from "@/types/executive-dashboard";
+import { sectionFilterNote } from "../../_lib/executive-books";
 import { readyData, type ExecutiveData } from "../../_lib/executive-data";
 import { officerRows } from "../../_lib/executive-sections";
 import { EXECUTIVE_LAYOUT as L } from "../../_lib/executive-layout";
@@ -10,7 +12,8 @@ import { Figure, SectionShell, SourceGate } from "./section-shell";
 const dash = (v: number | null, format: "currency" | "count" | "percent") => (v === null ? "—" : formatMetric(v, format));
 
 /** Members, releases, and the loan officers' books. */
-export function OperationsSection({ data }: { data: ExecutiveData }) {
+export function OperationsSection({ data, sentFilters }: { data: ExecutiveData; sentFilters: ExecutiveFilterKey[] }) {
+  const filterNote = sectionFilterNote(sentFilters, "operations");
   const borrowers = readyData(data.borrowers);
   const releases = readyData(data.disbursements);
   const officers = officerRows(readyData(data.performance));
@@ -21,6 +24,7 @@ export function OperationsSection({ data }: { data: ExecutiveData }) {
       icon={<Users className="size-4" />}
       note="New and repeat members, and releases, cover the selected period. Officer balances are as of today."
     >
+      {filterNote ? <p className="mb-2 text-[11px] text-amber-700 dark:text-amber-400">{filterNote}</p> : null}
       <div className={L.twoUp}>
         <SourceGate source={data.borrowers} height="h-24">
           <div className={`${L.cell} ${L.tiles}`}>

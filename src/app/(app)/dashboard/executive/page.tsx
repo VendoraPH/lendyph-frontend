@@ -15,6 +15,7 @@ import { todayISO } from "@/lib/format";
 import {
   captionText,
   cardFigureText,
+  cardFilterNote,
   cardViews,
   executiveQuery,
   isPastPeriod,
@@ -186,12 +187,16 @@ function ExecutiveDashboard() {
             <div className="flex min-w-0 flex-col gap-4">
               <PortfolioSection data={data} pastPeriod={pastPeriod} />
               <CollectionSection data={data} pastPeriod={pastPeriod} />
-              <FinancialSection data={data} allowance={cardFigureText(overview, "required_allowance")} />
+              <FinancialSection
+                data={data}
+                allowance={cardFigureText(overview, "required_allowance")}
+                capitalNotes={[cardFilterNote(overview, "share_capital"), cardFilterNote(overview, "required_allowance")]}
+              />
               <TrendsSection source={endpoints.trends} sentFilters={sentFilterKeys} />
               <TurnaroundSection source={endpoints.turnaround} sentFilters={sentFilterKeys} />
-              <OperationsSection data={data} />
+              <OperationsSection data={data} sentFilters={sentFilterKeys} />
               <BranchSection source={endpoints.branches} sentFilters={sentFilterKeys} />
-              <ShareCapitalControlSection source={endpoints.shareCapitalControl} />
+              <ShareCapitalControlSection source={endpoints.shareCapitalControl} sentFilters={sentFilterKeys} />
             </div>
             <aside className={`${L.cell} xl:sticky xl:top-0 xl:self-start`}>
               <AttentionPanel source={endpoints.attention} sentFilters={sentFilterKeys} />

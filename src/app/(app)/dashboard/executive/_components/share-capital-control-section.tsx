@@ -1,9 +1,9 @@
 "use client";
 
 import { Scale } from "lucide-react";
-import type { ShareCapitalControl } from "@/types/executive-dashboard";
+import type { ExecutiveFilterKey, ShareCapitalControl } from "@/types/executive-dashboard";
 import type { EndpointSource } from "../../_hooks/use-executive-endpoints";
-import { shareCapitalControlTable } from "../../_lib/executive-books";
+import { sectionFilterNote, shareCapitalControlTable } from "../../_lib/executive-books";
 import { SectionShell, SourceGate } from "./section-shell";
 
 /**
@@ -11,8 +11,10 @@ import { SectionShell, SourceGate } from "./section-shell";
  * the share capital subledger against its account, by branch, as of today,
  * with the server's totals. Needs accounting:view and share_capital:view.
  */
-export function ShareCapitalControlSection({ source }: { source: EndpointSource<ShareCapitalControl> }) {
+export function ShareCapitalControlSection({ source, sentFilters }: { source: EndpointSource<ShareCapitalControl>; sentFilters: ExecutiveFilterKey[] }) {
   const table = source.state === "ready" ? shareCapitalControlTable(source.data) : null;
+  // Share capital isn't kept by product, officer or collector: only the branch narrows it.
+  const filterNote = sectionFilterNote(sentFilters, "shareCapitalControl");
 
   return (
     <SectionShell title="Share Capital Control" icon={<Scale className="size-4" />} note={table?.summary}>
@@ -25,6 +27,7 @@ export function ShareCapitalControlSection({ source }: { source: EndpointSource<
           {table && (
             <div className="space-y-2">
               {table.notice ? <p className="text-sm text-muted-foreground">{table.notice}</p> : null}
+              {filterNote ? <p className="text-[11px] text-amber-700 dark:text-amber-400">{filterNote}</p> : null}
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[560px] text-sm">
                   <caption className="sr-only">Share capital subledger against {table.account ?? "its account"}, by branch</caption>

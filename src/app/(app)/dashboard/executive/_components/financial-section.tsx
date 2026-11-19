@@ -26,11 +26,15 @@ const config = {
 export function FinancialSection({
   data,
   allowance,
+  capitalNotes,
 }: {
   data: ExecutiveData;
   /** The overview's Required Allowance card in words: the figure the allowance posting books. */
   allowance: string;
+  /** The share capital and allowance cards' filter notes, from the cards' own filter lists. */
+  capitalNotes: (string | null)[];
 }) {
+  const notes = [...new Set(capitalNotes.filter((n): n is string => n !== null))];
   const acc = readyData(data.accounting);
   const books = acc ? financialBooks(acc) : null;
   const notice = books?.notice ?? null;
@@ -91,6 +95,7 @@ export function FinancialSection({
 
         <div className={`${L.cell} space-y-2`}>
           <h3 className="text-sm font-medium">Capital and allowance</h3>
+          {notes.length ? <p className="text-[11px] text-amber-700 dark:text-amber-400">{notes.join(" ")}</p> : null}
           <div className={L.tiles}>
             <Figure label="Share capital" value={figureText(data.shareCapital, toNumber(share?.closing_balance), "currency")} hint="Closing balance" />
             <Figure

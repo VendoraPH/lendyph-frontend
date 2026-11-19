@@ -67,27 +67,27 @@ export function PortfolioSection({ data, pastPeriod }: { data: ExecutiveData; pa
 
         <SourceGate source={data.products} empty={rows.length === 0} notice={notice}>
           <div className={`${L.cell} overflow-x-auto`}>
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[640px] text-sm">
               <caption className="sr-only">Portfolio by product</caption>
               <thead className="text-xs text-muted-foreground">
                 <tr className="border-b">
-                  <th scope="col" className="py-2 text-left font-medium">Product</th>
-                  <th scope="col" className="py-2 text-right font-medium">Loans</th>
-                  <th scope="col" className="py-2 text-right font-medium">Outstanding</th>
-                  <th scope="col" className="py-2 text-right font-medium">Principal Balance</th>
-                  <th scope="col" className="py-2 text-right font-medium">Share of portfolio</th>
-                  <th scope="col" className="py-2 text-right font-medium">PAR 30</th>
+                  <th scope="col" className="py-2 pr-3 text-left font-medium">Product</th>
+                  <th scope="col" className="whitespace-nowrap px-3 py-2 text-right font-medium">Loans</th>
+                  <th scope="col" className="whitespace-nowrap px-3 py-2 text-right font-medium">Outstanding</th>
+                  <th scope="col" className="whitespace-nowrap px-3 py-2 text-right font-medium">Principal Balance</th>
+                  <th scope="col" className="whitespace-nowrap px-3 py-2 text-right font-medium">Share of portfolio</th>
+                  <th scope="col" className="whitespace-nowrap px-3 py-2 text-right font-medium">PAR 30</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.slice(0, 8).map((r) => (
                   <tr key={r.name} className="border-b last:border-0">
-                    <th scope="row" className="py-1.5 text-left font-normal">{r.name}</th>
-                    <td className="py-1.5 text-right tabular-nums">{r.loans === null ? "—" : formatMetric(r.loans, "count")}</td>
-                    <td className="py-1.5 text-right tabular-nums">{money(r.outstanding)}</td>
-                    <td className="py-1.5 text-right tabular-nums">{money(r.principal)}</td>
-                    <td className="py-1.5 text-right tabular-nums">{r.share === null ? "—" : formatMetric(r.share, "percent")}</td>
-                    <td className="py-1.5 text-right tabular-nums">{r.par === null ? "—" : formatMetric(r.par, "percent")}</td>
+                    <th scope="row" className="py-1.5 pr-3 text-left font-normal">{r.name}</th>
+                    <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">{r.loans === null ? "—" : formatMetric(r.loans, "count")}</td>
+                    <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">{money(r.outstanding)}</td>
+                    <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">{money(r.principal)}</td>
+                    <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">{r.share === null ? "—" : formatMetric(r.share, "percent")}</td>
+                    <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">{r.par === null ? "—" : formatMetric(r.par, "percent")}</td>
                   </tr>
                 ))}
               </tbody>

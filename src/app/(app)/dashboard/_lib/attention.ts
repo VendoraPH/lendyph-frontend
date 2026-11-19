@@ -54,7 +54,7 @@ export interface AttentionView {
 
 const range = (from: string, to: string) => (from === to ? formatDate(from) : `${formatDate(from)} – ${formatDate(to)}`);
 
-/** Every rule, those needing attention first, in the server's order otherwise. */
+/** Every rule: those needing attention first, then those that can't be judged, then the clear ones; the server's order within each. */
 export function attentionView(response: ExecutiveAttention, sent: readonly ExecutiveFilterKey[]): AttentionView {
   const rows = response.rules.map((rule) => ({
     key: rule.key,
@@ -69,6 +69,8 @@ export function attentionView(response: ExecutiveAttention, sent: readonly Execu
       : `As of ${formatDate(rule.as_of ?? response.as_of)}`,
     filterNote: figureFilterNote(sent, response, rule.key),
   }));
-  const first = rows.filter((r) => r.tone === "attention");
-  return { count: first.length, rows: [...first, ...rows.filter((r) => r.tone !== "attention")] };
+  // Needs attention first, then the rules that can't be judged, then the clear ones.
+  const group = (tone: AttentionTone) => rows.filter((r) => r.tone === tone);
+  const first = group("attention");
+  return { count: first.length, rows: [...first, ...group("neutral"), ...group("clear")] };
 }

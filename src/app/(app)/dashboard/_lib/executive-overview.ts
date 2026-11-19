@@ -299,6 +299,12 @@ export function cardFigureText(overview: ExecutiveOverview | null, key: string):
   return cardView(card, overview.filters_applied).valueText;
 }
 
+/** The filter note of a figure that repeats an overview card, from that card's own filter list. */
+export function cardFilterNote(overview: ExecutiveOverview | null, key: string): string | null {
+  const card = overview?.cards[key];
+  return card ? ignoredFilterNote(overview.filters_applied, card.filters_applied) : null;
+}
+
 /** A balance section's heading: "(as of today)" only while it shows today's figures. */
 export function balanceHeading(title: string, pastPeriod: boolean): string {
   return pastPeriod ? title : `${title} (as of today)`;

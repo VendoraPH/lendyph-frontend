@@ -24,6 +24,21 @@ export function figureFilterNote(sent: readonly ExecutiveFilterKey[], response: 
   return ignoredFilterNote(sent, followed);
 }
 
+/**
+ * The page filters each section follows, where its response names none:
+ * share capital isn't kept by product, officer or collector, and the Member
+ * Report and loan counts follow the officer only.
+ */
+export const SECTION_FILTERS = {
+  shareCapitalControl: [] as ExecutiveFilterKey[],
+  operations: ["officer_id"] as ExecutiveFilterKey[],
+} as const;
+
+/** The note for a section that ignores some sent filters, from its known filters. */
+export function sectionFilterNote(sent: readonly ExecutiveFilterKey[], section: keyof typeof SECTION_FILTERS): string | null {
+  return ignoredFilterNote(sent, SECTION_FILTERS[section]);
+}
+
 // ── Financial section ──────────────────────────────────────────────────────
 
 /** Centavos as ₱ with two decimals; a figure the server didn't send reads a dash, never ₱0.00. */
