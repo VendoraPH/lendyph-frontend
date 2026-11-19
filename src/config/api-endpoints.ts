@@ -285,6 +285,14 @@ export const API_ENDPOINTS = {
     // Suspend or reactivate, with a reason (Phase 6 MB-BE1). `PUT UPDATE`
     // refuses a changed `is_active` (422). branches:manage plus view_all.
     STATUS: (id: number) => `/branches/${id}/status`,
+    // Multi-branch (MB-BE1), each needing branches:manage plus view_all:
+    // move the main-office flag (with a reason), and the closure: GET the
+    // checklist and waiting request, POST to ask, DELETE to cancel, and
+    // approve or reject by a different user.
+    MAIN_OFFICE: (id: number) => `/branches/${id}/main-office`,
+    CLOSURE: (id: number) => `/branches/${id}/closure`,
+    CLOSURE_APPROVE: (id: number) => `/branches/${id}/closure/approve`,
+    CLOSURE_REJECT: (id: number) => `/branches/${id}/closure/reject`,
   },
   SHARE_CAPITAL: {
     LEDGER_LIST: "/share-capital/ledger",

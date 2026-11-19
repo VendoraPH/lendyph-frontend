@@ -70,7 +70,7 @@ before(async () => {
 
       const edit = path.match(/^\/branches\/(\d+)$/);
       const status = path.match(/^\/branches\/(\d+)\/status$/);
-      const row = rows.find((r) => r.id === Number((edit ?? status)?.[1]));
+      const row = rows.find((r) => r.id === Number(path.match(/^\/branches\/(\d+)/)?.[1]));
       if (!row) return reply(res, 404, { message: "Not found." });
 
       if (edit && req.method === "PUT") {
@@ -98,6 +98,20 @@ before(async () => {
         }
         row.status = body.status as Row["status"];
         return reply(res, 200, { data: resource(row) });
+      }
+
+      // The multi-branch routes: recorded, answered with the shapes MB-BE1 sends.
+      const nested = path.match(/^\/branches\/(\d+)\/(main-office|closure(?:\/approve|\/reject)?)$/);
+      if (nested) {
+        if (nested[2] === "main-office") return reply(res, 200, { data: { ...resource(row), is_main_office: true } });
+        if (nested[2] === "closure" && req.method === "GET") {
+          return reply(res, 200, {
+            data: { branch_id: row.id, status: row.status, can_close: true, checklist: [], request: null },
+          });
+        }
+        return reply(res, req.method === "POST" && nested[2] === "closure" ? 201 : 200, {
+          data: { id: 5, branch_id: row.id, status: "pending" },
+        });
       }
 
       return reply(res, 404, { message: "not stubbed" });
@@ -162,5 +176,38 @@ describe("branchService.update", () => {
 
     assert.equal(requests[0].method, "PUT");
     assert.equal("is_active" in requests[0].body, false);
+  });
+});
+
+describe("the multi-branch actions", () => {
+  test("Make main office sends PUT /branches/{id}/main-office with the reason", async () => {
+    seed();
+    const branch = await branchService.makeMainOffice(2, { reason: "Head office moved" });
+
+    assert.deepEqual(requests, [
+      { method: "PUT", path: "/branches/2/main-office", body: { reason: "Head office moved" } },
+    ]);
+    assert.equal(branch.is_main_office, true);
+  });
+
+  test("the closure reads, asks, approves, rejects and cancels on its own routes", async () => {
+    seed();
+    const info = await branchService.closure(2);
+    await branchService.requestClosure(2, { effective_on: "2026-11-19", reason: "Merged" });
+    await branchService.approveClosure(2, { note: null });
+    await branchService.rejectClosure(2, { note: "Not yet" });
+    await branchService.cancelClosure(2);
+
+    assert.equal(info.can_close, true);
+    assert.deepEqual(
+      requests.map((r) => [r.method, r.path, r.body]),
+      [
+        ["GET", "/branches/2/closure", {}],
+        ["POST", "/branches/2/closure", { effective_on: "2026-11-19", reason: "Merged" }],
+        ["POST", "/branches/2/closure/approve", { note: null }],
+        ["POST", "/branches/2/closure/reject", { note: "Not yet" }],
+        ["DELETE", "/branches/2/closure", {}],
+      ],
+    );
   });
 });
