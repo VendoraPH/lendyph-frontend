@@ -8,9 +8,24 @@ const MODULE_NAMES: Record<string, string> = {
   cda: "CDA Compliance",
 };
 
+/** Short words that stay lower case in a title, unless they come first. */
+const SMALL_WORDS = new Set(["of", "and", "the", "to", "for", "in", "on"]);
+
+/**
+ * A snake_case key in title case: "chart_of_accounts" → "Chart of Accounts".
+ * Short words (of, and, the, to, for, in, on) stay lower case except first.
+ */
+export function titleCaseKey(key: string): string {
+  return key
+    .split("_")
+    .filter(Boolean)
+    .map((word, i) => (i > 0 && SMALL_WORDS.has(word) ? word : word.charAt(0).toUpperCase() + word.slice(1)))
+    .join(" ");
+}
+
 /** A permission module key as users read it ("auto_pay" → "Auto Pay", "borrowers" → "Members"). */
 export function permissionModuleName(key: string): string {
-  return MODULE_NAMES[key] ?? key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  return MODULE_NAMES[key] ?? titleCaseKey(key);
 }
 
 /**
