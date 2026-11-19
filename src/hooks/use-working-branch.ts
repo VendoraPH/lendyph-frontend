@@ -11,6 +11,7 @@ import {
   initialBranchFilters,
   nextBranchFilters,
   readWorkingBranch,
+  readWorkingBranchName,
   shownBranchFilters,
   workingBranchFor,
   writeWorkingBranch,
@@ -48,10 +49,12 @@ export interface WorkingBranch {
   viewAll: boolean;
   /** What is stored for this user, checked only for its form. */
   stored: number | null;
+  /** The stored branch's name, kept with it so the header can show it before the list loads. */
+  storedName: string | null;
   /** The working branch that counts (`workingBranchFor`), or null. */
   branchId: number | null;
-  /** Switches it; null is All branches (view_all) and stores nothing. */
-  setBranchId: (branchId: number | null) => void;
+  /** Switches it; null is All branches (or All my branches) and stores nothing. */
+  setBranch: (branch: { id: number; name: string } | null) => void;
 }
 
 /** The signed-in user's working branch, kept per user in this browser only. */
@@ -65,15 +68,20 @@ export function useWorkingBranch(): WorkingBranch {
     () => (enabled ? readWorkingBranch(browserStorage, userId) : null),
     () => null,
   );
+  const storedName = useSyncExternalStore(
+    subscribe,
+    () => (enabled ? readWorkingBranchName(browserStorage, userId) : null),
+    () => null,
+  );
   const branchId = workingBranchFor({ enabled, stored, viewer: branchViewer(user, viewAll) });
-  const setBranchId = useCallback(
-    (next: number | null) => {
+  const setBranch = useCallback(
+    (next: { id: number; name: string } | null) => {
       writeWorkingBranch(browserStorage, userId, next);
       notify();
     },
     [userId],
   );
-  return { enabled, viewAll, stored, branchId, setBranchId };
+  return { enabled, viewAll, stored, storedName, branchId, setBranch };
 }
 
 /**

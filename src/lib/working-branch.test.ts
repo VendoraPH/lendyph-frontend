@@ -9,6 +9,8 @@ import {
   initialBranchFilters,
   nextBranchFilters,
   readWorkingBranch,
+  readWorkingBranchName,
+  selectorShownValue,
   shownBranchFilters,
   workingBranchFor,
   workingBranchKey,
@@ -54,41 +56,63 @@ const oneBranch = branchViewer({ branches: [SOUTH] }, false);
 const noBranch = branchViewer({ branches: [] }, false);
 
 describe("working branch storage", () => {
-  test("is kept per user, under a key holding the user's id", () => {
+  test("is kept per user, under a key holding the user's id, with the branch's name", () => {
     const m = memoryStorage();
-    writeWorkingBranch(m.storage, 7, 2);
-    writeWorkingBranch(m.storage, 8, 3);
-    assert.equal(m.map.get(workingBranchKey(7)), "2");
+    writeWorkingBranch(m.storage, 7, SOUTH);
+    writeWorkingBranch(m.storage, 8, EAST);
+    assert.equal(m.map.get(workingBranchKey(7)), JSON.stringify({ id: 2, name: "South" }));
     assert.equal(readWorkingBranch(m.storage, 7), 2);
+    assert.equal(readWorkingBranchName(m.storage, 7), "South");
     assert.equal(readWorkingBranch(m.storage, 8), 3);
     assert.equal(readWorkingBranch(m.storage, 9), null);
   });
 
   test("no user reads nothing and writes nothing", () => {
     const m = memoryStorage();
-    writeWorkingBranch(m.storage, null, 2);
+    writeWorkingBranch(m.storage, null, SOUTH);
     assert.equal(m.map.size, 0);
     assert.equal(readWorkingBranch(m.storage, null), null);
+    assert.equal(readWorkingBranchName(m.storage, null), null);
   });
 
   test("writing no branch (All branches) removes the stored one", () => {
     const m = memoryStorage();
-    writeWorkingBranch(m.storage, 7, 2);
+    writeWorkingBranch(m.storage, 7, SOUTH);
     writeWorkingBranch(m.storage, 7, null);
     assert.equal(m.map.has(workingBranchKey(7)), false);
   });
 
   test("an unreadable stored value reads as none", () => {
-    for (const raw of ["", "all", "0", "-1", "2.5", "1e3", " 2", "abc"]) {
+    const bad = ["", "all", "0", "-1", "2.5", "1e3", " 2", "abc", "{", "null", "[2]",
+      JSON.stringify({ id: 0, name: "X" }), JSON.stringify({ id: "2", name: "X" }), JSON.stringify({ name: "X" })];
+    for (const raw of bad) {
       const m = memoryStorage();
       m.map.set(workingBranchKey(7), raw);
-      assert.equal(readWorkingBranch(m.storage, 7), null, JSON.stringify(raw));
+      assert.equal(readWorkingBranch(m.storage, 7), null, raw);
+      assert.equal(readWorkingBranchName(m.storage, 7), null, raw);
+    }
+  });
+
+  test("a bare id (stored before names were kept) still reads, with no name", () => {
+    const m = memoryStorage();
+    m.map.set(workingBranchKey(7), "2");
+    assert.equal(readWorkingBranch(m.storage, 7), 2);
+    assert.equal(readWorkingBranchName(m.storage, 7), null);
+  });
+
+  test("a stored name that isn't text, or is blank, is no name", () => {
+    for (const name of [5, "", "  ", null]) {
+      const m = memoryStorage();
+      m.map.set(workingBranchKey(7), JSON.stringify({ id: 2, name }));
+      assert.equal(readWorkingBranch(m.storage, 7), 2);
+      assert.equal(readWorkingBranchName(m.storage, 7), null, JSON.stringify(name));
     }
   });
 
   test("a blocked or full storage never throws: reads none, drops writes", () => {
     const m = memoryStorage({ throws: true });
-    assert.doesNotThrow(() => writeWorkingBranch(m.storage, 7, 2));
+    assert.doesNotThrow(() => writeWorkingBranch(m.storage, 7, SOUTH));
+    assert.equal(readWorkingBranchName(m.storage, 7), null);
     assert.equal(readWorkingBranch(m.storage, 7), null);
     assert.doesNotThrow(() => forgetWorkingBranch(m.storage, 7));
     assert.doesNotThrow(() => readWorkingBranch(() => { throw new Error("no window"); }, 7));
@@ -96,8 +120,8 @@ describe("working branch storage", () => {
 
   test("sign-out forgets only the signed-out user's branch", () => {
     const m = memoryStorage();
-    writeWorkingBranch(m.storage, 7, 2);
-    writeWorkingBranch(m.storage, 8, 3);
+    writeWorkingBranch(m.storage, 7, SOUTH);
+    writeWorkingBranch(m.storage, 8, EAST);
     forgetWorkingBranch(m.storage, 7);
     assert.equal(readWorkingBranch(m.storage, 7), null);
     assert.equal(readWorkingBranch(m.storage, 8), 3);
@@ -215,6 +239,43 @@ describe("workingBranchSelector: what the header shows", () => {
   test("a deactivated own branch is not offered once the list loads", () => {
     const s = workingBranchSelector({ viewAll: false, own: [NORTH, SOUTH, EAST], listed: [NORTH, SOUTH] });
     assert.deepEqual(s.kind === "select" && s.items.map((i) => i.value), [ALL_BRANCHES, "1", "2"]);
+  });
+
+  test("view_all, list still loading: the stored branch is offered by its stored name, never its id", () => {
+    const s = workingBranchSelector({ viewAll: true, own: [NORTH], listed: [], stored: { id: 3, name: "East" } });
+    assert.deepEqual(s.kind === "select" && s.items, [
+      { value: ALL_BRANCHES, label: "All branches" },
+      { value: "1", label: "North" },
+      { value: "3", label: "East" },
+    ]);
+  });
+
+  test("once the list loads, the list's names win and nothing is added twice", () => {
+    const s = workingBranchSelector({
+      viewAll: true,
+      own: [NORTH],
+      listed: LISTED,
+      stored: { id: 3, name: "Old East" },
+    });
+    assert.deepEqual(s.kind === "select" && s.items.map((i) => i.label), ["All branches", "North", "South", "East"]);
+  });
+
+  test("a stored branch with no name is not offered: the header waits for the list", () => {
+    const s = workingBranchSelector({ viewAll: true, own: [NORTH], listed: [], stored: { id: 3, name: null } });
+    assert.deepEqual(s.kind === "select" && s.items.map((i) => i.value), [ALL_BRANCHES, "1"]);
+    assert.equal(selectorShownValue("3", s.kind === "select" ? s.items : []), null);
+  });
+
+  test("a branch user is never offered a stored branch that isn't theirs", () => {
+    const s = workingBranchSelector({ viewAll: false, own: [NORTH, SOUTH], listed: [], stored: { id: 3, name: "East" } });
+    assert.deepEqual(s.kind === "select" && s.items.map((i) => i.value), [ALL_BRANCHES, "1", "2"]);
+  });
+
+  test("selectorShownValue: a value its items name, else nothing (a loading state, never an id)", () => {
+    const items = [{ value: ALL_BRANCHES, label: "All branches" }, { value: "2", label: "South" }];
+    assert.equal(selectorShownValue("2", items), "2");
+    assert.equal(selectorShownValue(ALL_BRANCHES, items), ALL_BRANCHES);
+    assert.equal(selectorShownValue("9", items), null);
   });
 
   test("one branch: plain text", () => {

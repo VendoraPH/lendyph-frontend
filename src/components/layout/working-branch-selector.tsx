@@ -11,9 +11,10 @@ import {
 } from "@/components/ui/select";
 import { useBranches } from "@/hooks";
 import { useWorkingBranch } from "@/hooks/use-working-branch";
-import { branchIdParam } from "@/lib/branch-filter";
+import { LOADING_BRANCHES, branchIdParam } from "@/lib/branch-filter";
 import { branchViewer, userBranches } from "@/lib/user-branches";
 import {
+  selectorShownValue,
   workingBranchFor,
   workingBranchSelector,
   workingBranchSelectorValue,
@@ -28,7 +29,7 @@ import { useAuthStore } from "@/store";
  */
 export function WorkingBranchSelector() {
   const user = useAuthStore((s) => s.user);
-  const { enabled, viewAll, stored, setBranchId } = useWorkingBranch();
+  const { enabled, viewAll, stored, storedName, setBranch } = useWorkingBranch();
   const { branches, loading, error } = useBranches(enabled);
   const own = useMemo(() => userBranches(user), [user]);
   const loaded = !loading && error === null;
@@ -38,11 +39,16 @@ export function WorkingBranchSelector() {
   // A stored branch the user may no longer work in (unassigned, or inactive
   // once the list loads) is forgotten, so no page presets it.
   useEffect(() => {
-    if (stored !== null && working === null) setBranchId(null);
-  }, [stored, working, setBranchId]);
+    if (stored !== null && working === null) setBranch(null);
+  }, [stored, working, setBranch]);
 
   if (!enabled) return null;
-  const selector = workingBranchSelector({ viewAll, own, listed });
+  const selector = workingBranchSelector({
+    viewAll,
+    own,
+    listed,
+    stored: stored === null ? null : { id: stored, name: storedName },
+  });
   if (selector.kind === "none") return null;
 
   if (selector.kind === "single") {
@@ -55,12 +61,18 @@ export function WorkingBranchSelector() {
     );
   }
 
+  const { items } = selector;
+  // A branch its items don't name yet (no stored name, list loading) shows a
+  // loading state, never its id.
+  const value = selectorShownValue(workingBranchSelectorValue(working), items);
+  const pick = (v: string | null) => {
+    const id = v === null ? undefined : branchIdParam(v);
+    const label = items.find((i) => i.value === v)?.label;
+    setBranch(id === undefined || label === undefined ? null : { id, name: label });
+  };
+
   return (
-    <Select
-      value={workingBranchSelectorValue(working)}
-      onValueChange={(v) => setBranchId(v === null ? null : (branchIdParam(v) ?? null))}
-      items={selector.items}
-    >
+    <Select value={value} onValueChange={pick} items={items}>
       <SelectTrigger
         size="sm"
         aria-label="Working branch"
@@ -69,11 +81,11 @@ export function WorkingBranchSelector() {
       >
         <Building2 className="text-muted-foreground" aria-hidden="true" />
         <span className="min-w-0 truncate">
-          <SelectValue />
+          <SelectValue placeholder={LOADING_BRANCHES} />
         </span>
       </SelectTrigger>
       <SelectContent>
-        {selector.items.map((item) => (
+        {items.map((item) => (
           <SelectItem key={item.value} value={item.value}>
             {item.label}
           </SelectItem>

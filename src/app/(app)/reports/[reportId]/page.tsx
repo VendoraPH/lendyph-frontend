@@ -1,6 +1,7 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useId, useState } from "react";
+import { LOADING_BRANCHES } from "@/lib/branch-filter";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -205,6 +206,7 @@ function ReportDetailContent({
   // A linked branch still waiting on the list holds Generate, so the first run
   // can't go out for every branch while the link asked for one.
   const branchPending = branchChoice !== null && branchesLoading;
+  const branchFieldId = useId();
   const logoUrl = useBrandingStore((s) => s.logoUrl);
   const loadBranding = useBrandingStore((s) => s.load);
 
@@ -592,7 +594,9 @@ function ReportDetailContent({
             <div className="mt-4 flex flex-wrap items-end gap-4 border-t pt-4 fit:mt-3 fit:gap-3 fit:pt-3">
               {report.supportsBranch && (
                 <div className="space-y-1">
-                  <Label className="text-xs">Branch</Label>
+                  <Label htmlFor={branchFieldId} className="text-xs">
+                    Branch
+                  </Label>
                   <Select
                     value={branchId === null ? ALL_BRANCHES : String(branchId)}
                     onValueChange={(v: string | null) => {
@@ -602,8 +606,9 @@ function ReportDetailContent({
                       setDoc(null);
                     }}
                   >
-                    <SelectTrigger className="h-9 w-56">
-                      <SelectValue>{() => branchLabel}</SelectValue>
+                    <SelectTrigger id={branchFieldId} className="h-9 w-56">
+                      {/* A preset branch waits on the list: never "All Branches" first. */}
+                      <SelectValue>{() => (branchPending ? LOADING_BRANCHES : branchLabel)}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value={ALL_BRANCHES}>

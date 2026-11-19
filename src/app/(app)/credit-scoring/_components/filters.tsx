@@ -5,6 +5,7 @@ import { useApiResource, useBranches, usePermission } from "@/hooks";
 import { loanProductService } from "@/services";
 import { completeRows } from "@/lib/paginate";
 import { MEMBER_TYPE_LABELS, SCORE_TREND_LABELS } from "@/lib/credit-scoring/labels";
+import { shownBranchValue } from "@/lib/branch-filter";
 import { branchFilterItems, branchPicker } from "@/lib/user-branches";
 import { useAuthStore } from "@/store";
 import { Label } from "@/components/ui/label";
@@ -84,24 +85,29 @@ interface BranchFilterProps {
 }
 
 export function BranchFilter({ value, onChange }: BranchFilterProps) {
-  const { branches } = useBranches();
+  const id = useId();
+  const { branches, loading } = useBranches();
   // Without `branches:view_all` the API answers 403 to a branch outside the
   // caller's own, so only theirs are offered (branchPicker).
   const caller = useAuthStore((s) => s.user);
   const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
   const picker = branchPicker(branches, caller, viewAll);
   const items = branchFilterItems(branches, ALL_BRANCHES, picker.viewer);
+  // A preset branch the list hasn't brought yet reads "Loading branches…", never its id.
+  const shown = shownBranchValue(value, items, loading);
 
   return (
     <div className="flex flex-col gap-1.5">
-      <Label className="text-xs text-muted-foreground">Branch</Label>
+      <Label htmlFor={id} className="text-xs text-muted-foreground">
+        Branch
+      </Label>
       <Select
-        value={value}
+        value={shown.value}
         onValueChange={(v) => onChange(v ?? ALL_BRANCHES)}
         items={items}
       >
-        <SelectTrigger className="w-[180px]">
-          <SelectValue />
+        <SelectTrigger id={id} className="w-[180px]">
+          <SelectValue placeholder={shown.placeholder} />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value={ALL_BRANCHES}>{picker.allLabel}</SelectItem>

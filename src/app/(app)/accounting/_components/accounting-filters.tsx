@@ -1,6 +1,8 @@
 "use client";
 
+import { useId } from "react";
 import { useBranches } from "@/hooks";
+import { shownBranchValue } from "@/lib/branch-filter";
 import { branchFilterItems, branchPicker } from "@/lib/user-branches";
 import { useAuthStore } from "@/store";
 import { Input } from "@/components/ui/input";
@@ -22,25 +24,31 @@ interface BranchFilterProps {
 }
 
 export function BranchFilter({ value, onChange }: BranchFilterProps) {
-  const { branches } = useBranches();
+  const id = useId();
+  const { branches, loading } = useBranches();
   // Without `branches:view_all` the API answers 403 to a `branch_id` outside
   // the caller's branches, so only theirs are offered, and "all" means all of
   // theirs. `items` and the rendered options read the same viewer.
   const caller = useAuthStore((s) => s.user);
   const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
   const picker = branchPicker(branches, caller, viewAll);
+  const items = branchFilterItems(branches, ALL_BRANCHES, picker.viewer);
+  // A preset branch the list hasn't brought yet reads "Loading branches…", never its id.
+  const shown = shownBranchValue(value, items, loading);
 
   return (
     <div className="flex flex-col gap-1.5">
-      <Label className="text-xs text-muted-foreground">Branch</Label>
+      <Label htmlFor={id} className="text-xs text-muted-foreground">
+        Branch
+      </Label>
       {/* This Select hands back `string | null`; there is no null option here. */}
       <Select
-        value={value}
+        value={shown.value}
         onValueChange={(v) => onChange(v ?? ALL_BRANCHES)}
-        items={branchFilterItems(branches, ALL_BRANCHES, picker.viewer)}
+        items={items}
       >
-        <SelectTrigger className="w-[180px]">
-          <SelectValue />
+        <SelectTrigger id={id} className="w-[180px]">
+          <SelectValue placeholder={shown.placeholder} />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value={ALL_BRANCHES}>{picker.allLabel}</SelectItem>
