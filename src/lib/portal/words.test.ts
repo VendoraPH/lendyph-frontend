@@ -1,6 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fileSize, penaltyMonthsText, plural, rateText, safeMemberLink } from "./words";
+import {
+  dueDateLabel,
+  fileSize,
+  penaltyMonthsText,
+  penaltyOwedNote,
+  plural,
+  rateText,
+  safeMemberLink,
+} from "./words";
 
 test("a rate reads as stored, trailing zeros dropped, never rounded", () => {
   assert.equal(rateText("3.0000"), "3%");
@@ -51,6 +59,27 @@ test("the monthly penalty note shows only for a charged month", () => {
   assert.equal(penaltyMonthsText(1), "Penalty: 1 month late");
   assert.equal(penaltyMonthsText(3), "Penalty: 3 months late");
   assert.equal(penaltyMonthsText(1.5), null);
+});
+
+test("the months-late note shows only while penalty is still owed (the server's balance)", () => {
+  assert.equal(penaltyOwedNote(1, "150.00"), "Penalty: 1 month late");
+  assert.equal(penaltyOwedNote(2, "0.01"), "Penalty: 2 months late");
+  // Paid or waived: a charged month under a ₱0.00 balance reads nothing.
+  assert.equal(penaltyOwedNote(1, "0.00"), null);
+  assert.equal(penaltyOwedNote(1, "0"), null);
+  assert.equal(penaltyOwedNote(1, null), null);
+  assert.equal(penaltyOwedNote(1, undefined), null);
+  assert.equal(penaltyOwedNote(1, "-5.00"), null);
+  assert.equal(penaltyOwedNote(1, "abc"), null);
+  assert.equal(penaltyOwedNote(0, "150.00"), null);
+});
+
+test("a payment date already past reads 'Past due since'; today or later reads 'Due on'", () => {
+  assert.equal(dueDateLabel("2026-11-18", "2026-11-19"), "Past due since");
+  assert.equal(dueDateLabel("2026-11-19", "2026-11-19"), "Due on");
+  assert.equal(dueDateLabel("2026-12-01", "2026-11-19"), "Due on");
+  // A server time with its date first compares by the date.
+  assert.equal(dueDateLabel("2026-11-18T00:00:00+08:00", "2026-11-19"), "Past due since");
 });
 
 test("percent-encoded dot segments can't step out of the member portal", () => {

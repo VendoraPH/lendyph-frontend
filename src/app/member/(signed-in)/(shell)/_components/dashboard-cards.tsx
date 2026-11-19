@@ -1,8 +1,8 @@
 import { Money } from "@/components/portal/money";
 import { StatCard } from "@/components/portal/stat-card";
-import { formatDate } from "@/lib/format";
+import { formatDate, todayISO } from "@/lib/format";
 import type { Dashboard } from "@/lib/portal/types";
-import { plural } from "@/lib/portal/words";
+import { dueDateLabel, plural } from "@/lib/portal/words";
 
 /**
  * The dashboard's figure cards. Each block is the server's, and a block the
@@ -32,7 +32,8 @@ export function DashboardCards({ data }: { data: Dashboard }) {
           title="Next payment"
           value={<Money value={next_payment.amount} />}
           lines={[
-            { label: "Due on", value: formatDate(next_payment.due_date) },
+            // A date already past is the oldest unpaid one: say so, not "Due on".
+            { label: dueDateLabel(next_payment.due_date, todayISO()), value: formatDate(next_payment.due_date) },
             { label: "On", value: plural(next_payment.loans_count, "loan") },
           ]}
           href="/member/loans"

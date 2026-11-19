@@ -4,7 +4,7 @@ import { SectionCard } from "@/components/portal/section-card";
 import { formatDate } from "@/lib/format";
 import { FREQUENCY, INTEREST_METHOD, NONE, TERM_UNIT, labelOf } from "@/lib/portal/labels";
 import type { LoanDetail } from "@/lib/portal/types";
-import { penaltyMonthsText, rateText } from "@/lib/portal/words";
+import { penaltyOwedNote, rateText } from "@/lib/portal/words";
 
 const date = (value: string | null) => (value ? formatDate(value) : NONE);
 
@@ -14,7 +14,7 @@ const date = (value: string | null) => (value ? formatDate(value) : NONE);
  * "Total Paid" all money received for the loan.
  */
 export function LoanSummary({ loan }: { loan: LoanDetail }) {
-  const penaltyNote = penaltyMonthsText(loan.penalty_months);
+  const penaltyNote = penaltyOwedNote(loan.penalty_months, loan.outstanding_penalty);
   return (
     <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
       <SectionCard title="What you owe">

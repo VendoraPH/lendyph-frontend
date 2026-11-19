@@ -14,7 +14,7 @@ export function KpiGrid({ kpis }: { kpis: SavingsDashboardKpis }) {
             <p className="text-sm text-muted-foreground">{card.label}</p>
             <p
               className={cn(
-                "font-mono text-2xl font-semibold tabular-nums",
+                "text-2xl font-semibold tabular-nums",
                 card.signed === "negative" && "text-red-600",
                 card.signed === "positive" && "text-emerald-600",
               )}

@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/chart";
 import type { DashboardMonth } from "@/types";
 import {
+  chartHasFigures,
   compactPesoTick,
   dashboardChartRows,
   type DashboardChartRow,
@@ -83,6 +84,15 @@ const AXES = (
   </>
 );
 
+/** In a chart's place when it has only zeros or gaps: an axis of "₱0" ticks says nothing. */
+function NoFigures({ text }: { text: string }) {
+  return (
+    <p className="flex h-[260px] items-center justify-center text-center text-sm text-muted-foreground fit:h-auto fit:min-h-0 fit:flex-1">
+      {text}
+    </p>
+  );
+}
+
 /** The same figures as a table, for screen readers. */
 function ScreenReaderTable({
   caption,
@@ -122,6 +132,8 @@ function ScreenReaderTable({
 
 export function TrendCharts({ months }: { months: readonly DashboardMonth[] | undefined }) {
   const rows = dashboardChartRows(months);
+  const hasResult = chartHasFigures(rows, ["income", "expenses", "net_income"]);
+  const hasCash = chartHasFigures(rows, ["cash"]);
 
   if (rows.length === 0) {
     return (
@@ -141,31 +153,37 @@ export function TrendCharts({ months }: { months: readonly DashboardMonth[] | un
           <CardTitle className="text-base">Income and expenses, last 12 months</CardTitle>
         </CardHeader>
         <CardContent className="fit:flex fit:min-h-0 fit:flex-1 fit:flex-col">
-          <ChartContainer
-            config={RESULT_CONFIG}
-            className="aspect-auto h-[260px] w-full fit:h-auto fit:min-h-0 fit:flex-1"
-            aria-hidden="true"
-          >
-            <ComposedChart data={rows} margin={{ left: 4, right: 8 }}>
-              {AXES}
-              {TOOLTIP}
-              <ChartLegend content={<ChartLegendContent />} />
-              <Bar dataKey="income" fill="var(--color-income)" radius={[3, 3, 0, 0]} />
-              <Bar dataKey="expenses" fill="var(--color-expenses)" radius={[3, 3, 0, 0]} />
-              <Line
-                dataKey="net_income"
-                type="monotone"
-                stroke="var(--color-net_income)"
-                strokeWidth={2}
-                dot={false}
+          {!hasResult ? (
+            <NoFigures text="No income or expenses in the last 12 months." />
+          ) : (
+            <>
+              <ChartContainer
+                config={RESULT_CONFIG}
+                className="aspect-auto h-[260px] w-full fit:h-auto fit:min-h-0 fit:flex-1"
+                aria-hidden="true"
+              >
+                <ComposedChart data={rows} margin={{ left: 4, right: 8 }}>
+                  {AXES}
+                  {TOOLTIP}
+                  <ChartLegend content={<ChartLegendContent />} />
+                  <Bar dataKey="income" fill="var(--color-income)" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="expenses" fill="var(--color-expenses)" radius={[3, 3, 0, 0]} />
+                  <Line
+                    dataKey="net_income"
+                    type="monotone"
+                    stroke="var(--color-net_income)"
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                </ComposedChart>
+              </ChartContainer>
+              <ScreenReaderTable
+                caption="Income, expenses and net income by month"
+                rows={rows}
+                keys={["income", "expenses", "net_income"]}
               />
-            </ComposedChart>
-          </ChartContainer>
-          <ScreenReaderTable
-            caption="Income, expenses and net income by month"
-            rows={rows}
-            keys={["income", "expenses", "net_income"]}
-          />
+            </>
+          )}
         </CardContent>
       </Card>
 
@@ -174,24 +192,30 @@ export function TrendCharts({ months }: { months: readonly DashboardMonth[] | un
           <CardTitle className="text-base">Cash at month end</CardTitle>
         </CardHeader>
         <CardContent className="fit:flex fit:min-h-0 fit:flex-1 fit:flex-col">
-          <ChartContainer
-            config={CASH_CONFIG}
-            className="aspect-auto h-[260px] w-full fit:h-auto fit:min-h-0 fit:flex-1"
-            aria-hidden="true"
-          >
-            <LineChart data={rows} margin={{ left: 4, right: 8 }}>
-              {AXES}
-              {TOOLTIP}
-              <Line
-                dataKey="cash"
-                type="monotone"
-                stroke="var(--color-cash)"
-                strokeWidth={2}
-                dot={{ r: 3 }}
-              />
-            </LineChart>
-          </ChartContainer>
-          <ScreenReaderTable caption="Cash at month end by month" rows={rows} keys={["cash"]} />
+          {!hasCash ? (
+            <NoFigures text="No cash at month end in the last 12 months." />
+          ) : (
+            <>
+              <ChartContainer
+                config={CASH_CONFIG}
+                className="aspect-auto h-[260px] w-full fit:h-auto fit:min-h-0 fit:flex-1"
+                aria-hidden="true"
+              >
+                <LineChart data={rows} margin={{ left: 4, right: 8 }}>
+                  {AXES}
+                  {TOOLTIP}
+                  <Line
+                    dataKey="cash"
+                    type="monotone"
+                    stroke="var(--color-cash)"
+                    strokeWidth={2}
+                    dot={{ r: 3 }}
+                  />
+                </LineChart>
+              </ChartContainer>
+              <ScreenReaderTable caption="Cash at month end by month" rows={rows} keys={["cash"]} />
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

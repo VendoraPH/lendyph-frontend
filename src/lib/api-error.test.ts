@@ -335,3 +335,18 @@ test("a request refused because the session ended reads as the session-expired m
     "Your session has expired. Please sign in again.",
   );
 });
+
+test("validationErrors reads a 422's field messages, keeping non-empty text only", async () => {
+  const { validationErrors } = await import("./api-error");
+  const err = { response: { status: 422, data: { errors: { name: ["Taken", "", 3], code: "not a list" } } } };
+  assert.deepEqual(validationErrors(err), { name: ["Taken"], code: [] });
+  assert.equal(validationErrors({ response: { status: 409, data: { errors: { name: ["x"] } } } }), null);
+  assert.equal(validationErrors({ response: { status: 422, data: {} } }), null);
+  assert.equal(validationErrors(null), null);
+});
+
+test("the credit-scoring path re-exports the shared validationErrors", async () => {
+  const shared = await import("./api-error");
+  const old = await import("./credit-scoring/field-errors");
+  assert.equal(old.validationErrors, shared.validationErrors);
+});

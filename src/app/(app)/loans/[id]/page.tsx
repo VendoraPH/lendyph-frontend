@@ -745,6 +745,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
   const [soaLoading, setSoaLoading] = useState(false);
   const [soaDoc, setSoaDoc] = useState<ReportDocument | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(true);
+  // Kept here, so collapsing the card and opening it again keeps the open tab.
+  const [scheduleTab, setScheduleTab] = useState("schedule");
   const [approvalStepsOpen, setApprovalStepsOpen] = useState(true);
   const [memberCoMakerOpen, setMemberCoMakerOpen] = useState(true);
   const [workflowHistoryOpen, setWorkflowHistoryOpen] = useState(true);
@@ -3795,7 +3797,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   if (!isReleased) return scheduleTable;
 
                   return (
-                    <Tabs defaultValue="schedule" className="gap-3">
+                    <Tabs value={scheduleTab} onValueChange={(v) => setScheduleTab(String(v))} className="gap-3">
                       <TabsList>
                         <TabsTrigger value="schedule">Schedule</TabsTrigger>
                         <TabsTrigger value="balances">Amortization Balance</TabsTrigger>

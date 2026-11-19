@@ -38,6 +38,7 @@ import {
   humanizeSegment,
   menuTitles,
   nestedPageTitle,
+  rootPageTitle,
   subPageTitle,
 } from "@/lib/page-titles";
 import { SIDEBAR_NAV } from "@/constants";
@@ -72,8 +73,16 @@ function Breadcrumb({ editParam }: { editParam: string | null }) {
   const pageTitle = getPageTitle(firstSegment);
 
   if (segments.length === 1) {
+    const rootLabel = rootPageTitle(firstSegment);
+    if (rootLabel === undefined) {
+      return <span className="text-sm font-medium text-foreground">{pageTitle}</span>;
+    }
     return (
-      <span className="text-sm font-medium text-foreground">{pageTitle}</span>
+      <div className="flex items-center gap-1.5 text-sm">
+        <span className="text-muted-foreground">{pageTitle}</span>
+        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/60" />
+        <span className="font-medium text-foreground">{rootLabel}</span>
+      </div>
     );
   }
 

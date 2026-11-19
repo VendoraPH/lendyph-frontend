@@ -35,11 +35,19 @@ describe("parseMoneyInput", () => {
 
   test("allowZero accepts 0 but still refuses blank and negatives", () => {
     assert.deepEqual(parseMoneyInput("0", { allowZero: true }), { ok: true, amount: 0, value: "0.00" });
+    // Blank says it's required: "must be ₱0.00 or more" read as if 0 were typed wrong.
     assert.deepEqual(parseMoneyInput("", { allowZero: true, label: "Initial deposit" }), {
+      ok: false,
+      message: "Initial deposit is required (₱0.00 or more)",
+    });
+    assert.deepEqual(parseMoneyInput("   ", { allowZero: true, label: "Initial deposit" }), {
+      ok: false,
+      message: "Initial deposit is required (₱0.00 or more)",
+    });
+    assert.deepEqual(parseMoneyInput("-1", { allowZero: true, label: "Initial deposit" }), {
       ok: false,
       message: "Initial deposit must be ₱0.00 or more",
     });
-    assert.equal(parseMoneyInput("-1", { allowZero: true }).ok, false);
   });
 });
 

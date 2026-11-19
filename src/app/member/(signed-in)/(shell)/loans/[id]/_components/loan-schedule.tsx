@@ -11,7 +11,7 @@ import { FIT_CLASSES } from "@/lib/page-fill";
 import { usePortalResource } from "@/lib/portal/hooks/use-portal-resource";
 import { SCHEDULE_STATUS, SCHEDULE_STATUS_TONE } from "@/lib/portal/labels";
 import { portalService } from "@/lib/portal/portal-api";
-import { penaltyMonthsText } from "@/lib/portal/words";
+import { penaltyOwedNote } from "@/lib/portal/words";
 import { cn } from "@/lib/utils";
 
 /**
@@ -57,8 +57,10 @@ export function LoanSchedule({ loanId }: { loanId: number }) {
                     </TableCell>
                     <TableCell className="text-right">
                       <Money value={period.penalty.balance} />
-                      {penaltyMonthsText(period.penalty_months) && (
-                        <span className="block text-[10px] text-destructive">{penaltyMonthsText(period.penalty_months)}</span>
+                      {penaltyOwedNote(period.penalty_months, period.penalty.balance) && (
+                        <span className="block text-[10px] text-destructive">
+                          {penaltyOwedNote(period.penalty_months, period.penalty.balance)}
+                        </span>
                       )}
                     </TableCell>
                     <TableCell className="text-right font-medium">

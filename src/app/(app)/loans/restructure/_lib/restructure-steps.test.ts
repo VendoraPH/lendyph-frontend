@@ -67,7 +67,7 @@ test("the checks keep the form's labels and their order", () => {
     "Member",
     "Source loan",
     "Loan product",
-    "Principal amount",
+    "Loan amount",
     "Term",
     "Payment frequency",
     "Interest rate",
@@ -85,7 +85,7 @@ test("each step validates only its own checks", () => {
   assert.deepEqual(byStep.source, ["Member", "Source loan"]);
   assert.deepEqual(byStep.terms, [
     "Loan product",
-    "Principal amount",
+    "Loan amount",
     "Term",
     "Payment frequency",
     "Interest rate",

@@ -34,6 +34,16 @@ function Art({ name, icon }: { name: IllustrationName; icon: ReactNode }) {
   return hasIllustration(name) ? <Illustration name={name} /> : <>{icon}</>;
 }
 
+/** DataState's loading spinner and words without its card, for a part of a screen inside a card. */
+export function LoadingContent() {
+  return (
+    <div role="status" className="flex flex-col items-center gap-4 py-12 text-center">
+      <Spinner className="h-6 w-6" />
+      <p className="text-sm text-muted-foreground">Loading…</p>
+    </div>
+  );
+}
+
 function Panel({ children }: { children: ReactNode }) {
   return (
     // `shrink-0`: in a page that fits the screen, a status card under tall

@@ -42,7 +42,6 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  Download,
 } from "lucide-react";
 import { startOfMonth, endOfMonth, subMonths, startOfYear } from "date-fns";
 import type { DateRange } from "react-day-picker";
@@ -691,11 +690,6 @@ function SubsidiaryLedgerContent() {
                       </div>
                     </PopoverContent>
                   </Popover>
-                  {/* Export placeholder */}
-                  <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
-                    <Download className="h-3.5 w-3.5" />
-                    Export
-                  </Button>
                 </div>
               </div>
             </CardHeader>

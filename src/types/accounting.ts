@@ -1138,7 +1138,8 @@ export interface YearClosePreview {
   year: number;
   /** "YYYY-12-31", the closing entries' date. */
   as_of: string;
-  net_surplus_account: AccountingAccountRef;
+  /** Null while no net surplus account is mapped (as with no saved chart). */
+  net_surplus_account: AccountingAccountRef | null;
   branches: YearClosePreviewBranch[];
   total_income: number;
   total_expenses: number;

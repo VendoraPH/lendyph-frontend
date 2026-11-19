@@ -19,6 +19,8 @@ export interface RecordField {
   help?: string;
   /** Layout only: a long one-line field (a street address) takes two columns from `md`. */
   wide?: boolean;
+  /** The label is read by screen readers only, when a heading right above already says it. */
+  labelHidden?: boolean;
 }
 
 /** What the form sends: text as typed, a whole number for a count, true or false for a checkbox, null when blank. */
