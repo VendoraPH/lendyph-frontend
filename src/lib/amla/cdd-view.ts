@@ -1,6 +1,6 @@
-import { VALID_ID_OPTIONS } from "@/constants";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { amlaSubjectHref } from "@/lib/amla/cdd-access";
+import type { AmlaMaskedId } from "@/types/amla-screening";
 import type { AmlaOption } from "@/lib/amla/settings-view";
 import type {
   AmlaCddProfile,
@@ -8,7 +8,6 @@ import type {
   AmlaCompleteness,
   AmlaCompletenessItem,
   AmlaIdVerificationBody,
-  AmlaMemberIdDocument,
   AmlaProfileBody,
   AmlaProfileChange,
   AmlaReviewBody,
@@ -291,30 +290,16 @@ export function amlaProfileBody(profile: AmlaCddProfile, draft: AmlaProfileDraft
   return Object.keys(body).length === 0 ? { unchanged: "Nothing changed, so nothing was saved." } : { body };
 }
 
-const ID_TYPE_WORDS: Readonly<Record<string, string>> = Object.fromEntries(VALID_ID_OPTIONS.map((o) => [o.value, o.label]));
-const CUSTOM_NAME_MAX = 100;
-
-/** `IdTypes::fromDocument`: the type in words, never free text that could hold a number. */
-function idTypeWords(label: string | null | undefined, customName: string | null | undefined): string {
-  const key = label ?? "";
-  if (key !== "others") return key !== "" && Object.hasOwn(ID_TYPE_WORDS, key) ? ID_TYPE_WORDS[key] : "Others";
-  const name = (customName ?? "").trim();
-  return name !== "" && name.length <= CUSTOM_NAME_MAX && !/\d/.test(name) ? name : "Others";
-}
-
 /**
- * A member's own valid IDs to pick from, by type and last four characters only
- * (spaces and dashes ignored, as the server keeps them). The whole number is
- * never put in a label.
+ * The ID picker's choices: the server's masked IDs, by type and last four only
+ * (`GET /amla/cdd/{type}/{id}/valid-ids`). A member's is keyed by its document;
+ * a walk-in's ID on record has none.
  */
-export function amlaIdDocumentOptions(documents: AmlaMemberIdDocument[]): AmlaOption[] {
-  return documents.flatMap((doc) => {
-    if (doc.type !== "valid_id") return [];
-    const number = (doc.id_number ?? "").replace(/[\s-]/g, "").toUpperCase();
-    if (number === "") return [];
-    const side = doc.side === "front" || doc.side === "back" ? ` (${doc.side})` : "";
-    return [{ value: String(doc.id), label: `${idTypeWords(doc.label, doc.custom_type_name)} ****${number.slice(-4)}${side}` }];
-  });
+export function amlaMaskedIdOptions(ids: AmlaMaskedId[]): AmlaOption[] {
+  return ids.map((id) => ({
+    value: id.document_id === null ? "" : String(id.document_id),
+    label: id.id_number_masked ? `${id.id_type_words} ${id.id_number_masked}` : id.id_type_words,
+  }));
 }
 
 export interface AmlaIdVerificationForm {

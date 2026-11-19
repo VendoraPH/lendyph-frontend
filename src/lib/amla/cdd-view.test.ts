@@ -11,7 +11,7 @@ import {
   amlaCddStatusTone,
   amlaCompletenessLines,
   amlaFactorRows,
-  amlaIdDocumentOptions,
+  amlaMaskedIdOptions,
   amlaIdVerificationBody,
   amlaOccupationAnswer,
   amlaProfileTab,
@@ -270,22 +270,23 @@ test("the other source's description is sent with the source, and cleared when t
   assert.deepEqual(amlaProfileBody(PROFILE, toOther), { body: { source_of_funds: "other", source_of_funds_other: "Rental income" } });
 });
 
-test("a member's valid IDs read by type and last four only, never the whole number", () => {
-  const options = amlaIdDocumentOptions([
-    { id: 10, type: "valid_id", label: "drivers_license", id_number: "N01-23-456789", side: "front" },
-    { id: 11, type: "valid_id", label: "others", custom_type_name: "Barangay ID", id_number: "BRGY 55 21" },
-    { id: 12, type: "valid_id", label: "others", custom_type_name: "ID 1234", id_number: "778899" },
-    { id: 13, type: "photo", label: null, id_number: null },
-    { id: 14, type: "valid_id", label: "passport", id_number: null },
-    { id: 15, type: "valid_id", label: "something_else", id_number: "AB12" },
+test("the ID picker offers the server's masked IDs only: type and last four, keyed by the member's document", () => {
+  assert.deepEqual(
+    amlaMaskedIdOptions([
+      { document_id: 10, id_type: "drivers_license", id_type_words: "Driver's License", id_number_masked: "****6789" },
+      { document_id: 11, id_type: "others", id_type_words: "Barangay ID", id_number_masked: null },
+    ]),
+    [
+      { value: "10", label: "Driver's License ****6789" },
+      { value: "11", label: "Barangay ID" },
+    ],
+  );
+});
+
+test("a walk-in's ID on record has no document, so it is offered as the walk-in's ID", () => {
+  assert.deepEqual(amlaMaskedIdOptions([{ document_id: null, id_type: "passport", id_type_words: "Passport", id_number_masked: "****1234" }]), [
+    { value: "", label: "Passport ****1234" },
   ]);
-  assert.deepEqual(options, [
-    { value: "10", label: "Driver's License ****6789 (front)" },
-    { value: "11", label: "Barangay ID ****5521" },
-    { value: "12", label: "Others ****8899" },
-    { value: "15", label: "Others ****AB12" },
-  ]);
-  assert.ok(options.every((o) => !o.label.includes("456789")));
 });
 
 test("an ID check needs a method and a result; a member's needs one of their IDs", () => {

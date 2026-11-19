@@ -1,23 +1,24 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
-import { useApiResource, usePermission } from "@/hooks";
+import { useApiResource } from "@/hooks";
 import { useDialogOpening } from "@/hooks/use-dialog-opening";
 import { useSubmitGuard } from "@/hooks/use-submit-guard";
-import { amlaCddAccess, type AmlaSubjectRef } from "@/lib/amla/cdd-access";
+import type { AmlaSubjectRef } from "@/lib/amla/cdd-access";
 import { amlaCddApi } from "@/lib/amla/cdd-api";
 import {
   AMLA_ID_METHOD_OPTIONS,
   AMLA_ID_RESULT_OPTIONS,
-  amlaIdDocumentOptions,
+  amlaMaskedIdOptions,
   amlaIdVerificationBody,
   type AmlaIdVerificationForm,
 } from "@/lib/amla/cdd-view";
 import type { AmlaOption } from "@/lib/amla/settings-view";
+import { once } from "@/lib/amla/once";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { CddFormDialog } from "./cdd-form-dialog";
 
@@ -32,22 +33,23 @@ interface Props {
 
 /**
  * Record a person's check of an ID already on record: one of the member's own
- * valid IDs, or the walk-in's ID. Only its type and last four are kept.
+ * valid IDs, or the walk-in's ID. The choices come from the AMLA masked-ID
+ * list, by type and last four only, so a full ID number never reaches the
+ * browser. It is read once each time the dialog opens (the server logs it).
  */
 export function IdVerificationDialog({ open, subject, onClose, onRecorded }: Props) {
-  const { can } = usePermission();
   const member = subject.type === "member";
-  const canList = amlaCddAccess(can).memberIds;
   const [form, setForm] = useState(EMPTY);
   const [error, setError] = useState<string | null>(null);
   const { submitting, run } = useSubmitGuard();
-  const fetcher = useCallback(() => amlaCddApi.memberIdDocuments(subject.id), [subject.id]);
-  const documents = useApiResource(fetcher, open && member && canList);
-  const choices = documents.data ? amlaIdDocumentOptions(documents.data) : [];
+  const [fetcher, setFetcher] = useState(() => once(() => amlaCddApi.validIds(subject)));
+  const ids = useApiResource(fetcher, open);
+  const choices = ids.data ? amlaMaskedIdOptions(ids.data) : [];
 
   if (useDialogOpening(open, subject)) {
     setForm(EMPTY);
     setError(null);
+    setFetcher(() => once(() => amlaCddApi.validIds(subject)));
   }
 
   const set = (key: keyof AmlaIdVerificationForm) => (value: string) => {
@@ -91,8 +93,13 @@ export function IdVerificationDialog({ open, subject, onClose, onRecorded }: Pro
       onClose={onClose}
       onSubmit={submit}
     >
-      {member && <MemberIdPicker canList={canList} loading={documents.loading} failed={documents.error !== null || documents.unavailable} choices={choices} pick={pick} />}
-      {!member && <p className="text-sm text-muted-foreground">The walk-in&apos;s ID on record is checked.</p>}
+      {member ? (
+        <MemberIdPicker loading={ids.loading} failed={ids.error !== null || ids.unavailable} choices={choices} pick={pick} />
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          The walk-in&apos;s ID on record is checked{choices[0] ? `: ${choices[0].label}` : ""}.
+        </p>
+      )}
       <div className="grid gap-3 sm:grid-cols-2">
         {pick("method", "How it was checked", AMLA_ID_METHOD_OPTIONS, "Pick a method")}
         {pick("result", "Result", AMLA_ID_RESULT_OPTIONS, "Pick a result")}
@@ -110,17 +117,13 @@ export function IdVerificationDialog({ open, subject, onClose, onRecorded }: Pro
 }
 
 interface PickerProps {
-  canList: boolean;
   loading: boolean;
   failed: boolean;
   choices: AmlaOption[];
   pick: (key: keyof AmlaIdVerificationForm, label: string, options: readonly AmlaOption[], empty: string) => React.ReactNode;
 }
 
-function MemberIdPicker({ canList, loading, failed, choices, pick }: PickerProps) {
-  if (!canList) {
-    return <p className="text-sm text-muted-foreground">Picking the member&apos;s ID needs access to member records.</p>;
-  }
+function MemberIdPicker({ loading, failed, choices, pick }: PickerProps) {
   if (loading) return <p className="text-sm text-muted-foreground">Loading the member&apos;s IDs…</p>;
   if (failed) return <p className="text-sm text-destructive">The member&apos;s IDs couldn&apos;t be loaded.</p>;
   if (choices.length === 0) {

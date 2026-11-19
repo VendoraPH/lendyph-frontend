@@ -156,6 +156,15 @@ test("other active holds offer Release; a released or expired one offers nothing
   assert.deepEqual(holdReleaseOffer({ type: "member_request", status: "expired" }), { release: false, note: null });
 });
 
+test("a hold the server says can't be released here offers no Release, only that it is held under a legal order", () => {
+  assert.deepEqual(holdReleaseOffer({ type: "legal", status: "active", can_release: false }), {
+    release: false,
+    note: "Held under a legal order",
+  });
+  assert.deepEqual(holdReleaseOffer({ type: "legal", status: "active", can_release: true }), { release: true, note: null });
+  assert.deepEqual(holdReleaseOffer({ type: "legal", status: "released", can_release: false }), { release: false, note: null });
+});
+
 // Gap round B7: a deposit that reactivated the account puts every outflow behind a checker.
 test("an account under the reactivation hold warns before money goes out", () => {
   assert.equal(

@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { amlaApi } from "@/lib/amla/api";
 import { formatDate } from "@/lib/format";
 import type { AmlaCalendarEntry } from "@/types/amla";
-import type { AmlaNoteAction } from "./amla-note-dialog";
+import type { AmlaNoteAction } from "@/components/amla/amla-note-dialog";
 
 interface Props {
   entries: AmlaCalendarEntry[];

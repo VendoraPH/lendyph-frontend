@@ -30,6 +30,8 @@ export interface AmlaNoteAction {
   destructive?: boolean;
   success: string;
   failure: string;
+  /** The endpoint's own limit for the text; 1,000 unless it allows more. */
+  maxLength?: number;
   run: (text: string) => Promise<unknown>;
 }
 
@@ -50,7 +52,7 @@ export function AmlaNoteDialog({ action, onClose, onDone }: { action: AmlaNoteAc
 
   function confirm() {
     if (!action) return;
-    const problem = action.required || text.trim() !== "" ? amlaReasonError(text) : null;
+    const problem = action.required || text.trim() !== "" ? amlaReasonError(text, action.maxLength) : null;
     if (problem) {
       setError(action.required && text.trim() === "" ? `Give the ${action.label.toLowerCase()}.` : problem);
       return;
@@ -85,7 +87,7 @@ export function AmlaNoteDialog({ action, onClose, onDone }: { action: AmlaNoteAc
           <Textarea
             id="amla-note"
             value={text}
-            maxLength={1000}
+            maxLength={action?.maxLength ?? 1000}
             aria-invalid={error !== null}
             aria-describedby={error ? "amla-note-error" : undefined}
             onChange={(e) => {

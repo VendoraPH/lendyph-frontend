@@ -21,10 +21,17 @@ test("walk-ins are head-office only: they carry no branch", () => {
   assert.equal(amlaCddAccess(holds("amla:view", "branches:view_all")).walkIns, false);
 });
 
-test("picking a member's own valid ID reads the member's documents, so it needs borrowers:view too", () => {
-  assert.equal(amlaCddAccess(holds("amla:view", "amla:cdd", "borrowers:view")).memberIds, true);
-  assert.equal(amlaCddAccess(holds("amla:view", "amla:cdd")).memberIds, false);
-  assert.equal(amlaCddAccess(holds("borrowers:view")).memberIds, false);
+test("picking an ID needs nothing beyond amla:cdd: the masked list is an AMLA read", () => {
+  assert.equal("memberIds" in amlaCddAccess(holds("amla:view", "amla:cdd")), false);
+});
+
+test("the ID picker reads only the masked endpoint, never the member's documents with their full numbers", () => {
+  const dialog = read("src/app/(app)/amla/customers/_components/id-verification-dialog.tsx");
+  assert.match(dialog, /amlaCddApi\.validIds\(/);
+  assert.doesNotMatch(dialog, /memberIdDocuments|documents|borrowers:view|memberIds/);
+  const api = read("src/lib/amla/cdd-api.ts");
+  assert.match(api, /CDD_VALID_IDS/);
+  assert.doesNotMatch(api, /DOCUMENTS|memberIdDocuments/);
 });
 
 test("both customer pages guard on amla:cdd before any data is read", () => {

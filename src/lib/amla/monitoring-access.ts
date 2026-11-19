@@ -46,15 +46,6 @@ export function amlaMonitoringAccess(can: Can): AmlaMonitoringAccess {
   };
 }
 
-const ID = /^[0-9]{1,18}$/;
-
-/** A record's id from its route, as the server's routes take it, or null (the page answers not found). */
-export function amlaRecordId(raw: unknown): number | null {
-  if (typeof raw !== "string" || !ID.test(raw)) return null;
-  const id = Number(raw);
-  return Number.isSafeInteger(id) && id > 0 ? id : null;
-}
-
 /** `AmlaAlert::WORKABLE`: the statuses a person can still act on. */
 const WORKABLE_ALERT = ["open", "assigned", "under_review"];
 

@@ -2,7 +2,7 @@
 
 import { notFound, useParams } from "next/navigation";
 import { RouteGuard } from "@/components/common/route-guard";
-import { amlaRecordId } from "@/lib/amla/monitoring-access";
+import { amlaRecordId } from "@/lib/amla/record-id";
 import { CaseDetail } from "../../_components/case-detail";
 
 /** One compliance case: `amla:cases` with every branch. */

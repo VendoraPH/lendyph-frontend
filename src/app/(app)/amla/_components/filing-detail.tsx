@@ -18,7 +18,7 @@ import { notifyError, notifySuccess } from "@/lib/notify";
 import { saveBlob } from "@/lib/save-blob";
 import { useAuthStore } from "@/store";
 import type { AmlaReportDetail } from "@/types/amla-cases";
-import { AmlaNoteDialog, type AmlaNoteAction } from "../../settings/amla/_components/amla-note-dialog";
+import { AmlaNoteDialog, type AmlaNoteAction } from "@/components/amla/amla-note-dialog";
 import { CddFormDialog } from "../customers/_components/cdd-form-dialog";
 import { FilingFieldsCard, FilingStepsCard } from "./filing-sections";
 import { SubmissionDialog } from "./submission-dialog";
