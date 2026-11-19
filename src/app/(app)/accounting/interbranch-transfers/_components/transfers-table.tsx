@@ -40,10 +40,9 @@ function days(n: number | null): string {
 export function TransfersTable({ rows, canCreate, onAction, onSendBack, showAge }: TransfersTableProps) {
   return (
     <Table>
-      <TableHeader className="sticky top-0 z-10 bg-background">
+      <TableHeader>
         <TableRow>
           <TableHead>Transfer</TableHead>
-          <TableHead>Requested</TableHead>
           <TableHead>From</TableHead>
           <TableHead>To</TableHead>
           <TableHead className="text-right">Amount</TableHead>
@@ -62,10 +61,10 @@ export function TransfersTable({ rows, canCreate, onAction, onSendBack, showAge 
                 <p className="max-w-56 truncate text-xs text-muted-foreground" title={t.purpose}>
                   {t.purpose}
                 </p>
-              </TableCell>
-              <TableCell className="whitespace-nowrap text-sm">
-                {t.created_at ? formatDate(t.created_at) : "—"}
-                {t.created_by ? <p className="text-xs text-muted-foreground">{t.created_by.full_name}</p> : null}
+                {/* The request date and maker sit under the number, so the row fits at 1024 px with Actions in view. */}
+                <p className="text-xs text-muted-foreground">
+                  {[t.created_at ? formatDate(t.created_at) : null, t.created_by?.full_name].filter(Boolean).join(" · ") || "—"}
+                </p>
               </TableCell>
               <TableCell className="text-sm">
                 {t.source_branch?.name ?? "—"}
@@ -85,8 +84,8 @@ export function TransfersTable({ rows, canCreate, onAction, onSendBack, showAge 
                   </Badge>
                 )}
               </TableCell>
-              <TableCell className="text-right">
-                <div className="flex flex-wrap justify-end gap-1.5">
+              <TableCell className="w-px text-right">
+                <div className="flex min-w-36 flex-wrap justify-end gap-1.5">
                   {buttons.map((b) => (
                     <Button
                       key={b.kind}
