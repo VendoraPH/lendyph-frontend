@@ -42,3 +42,14 @@ test("newLabel says how many are new in the section, in words, and nothing at ze
   assert.equal(newLabel(0, "Loans"), undefined);
   assert.equal(newLabel(undefined, "Loans"), undefined);
 });
+
+test("the sidebar's toggle is named for what it does, collapsed or open", async () => {
+  const { sidebarToggleLabel } = await import("./sidebar-labels");
+  assert.equal(sidebarToggleLabel(true), "Expand sidebar");
+  assert.equal(sidebarToggleLabel(false), "Collapse sidebar");
+  const { readFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const sidebar = readFileSync(join(import.meta.dirname, "sidebar.tsx"), "utf8");
+  // Both buttons carry the name, the icon-only expand button included.
+  assert.equal(sidebar.match(/aria-label=\{sidebarToggleLabel\(collapsed\)\}/g)?.length, 2);
+});

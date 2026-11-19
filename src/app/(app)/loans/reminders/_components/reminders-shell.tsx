@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { BellRing, PauseCircle, PlayCircle } from "lucide-react";
+import { PauseCircle, PlayCircle } from "lucide-react";
+import { Icon3D } from "@/components/common/icon-3d";
 import { PermissionButton } from "@/components/common/permission-button";
 import { PermissionGate } from "@/components/common/permission-gate";
 import { FillSection, PageFill } from "@/components/common/page-fill";
@@ -55,14 +56,15 @@ export function RemindersShell({ children }: { children: React.ReactNode }) {
     <ReminderTestModeProvider value={testMode}>
       <PageFill className="gap-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-              <BellRing className="h-6 w-6 text-brand-orange" />
-              Reminders
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Automated SMS and email reminders for upcoming and past-due installments.
-            </p>
+          <div className="flex min-w-0 items-center gap-3">
+            {/* A white bell: the soft shadow lets it read on the light page. */}
+            <Icon3D name="empty-reminders" size={40} className="hidden sm:block drop-shadow-[0_1px_3px_rgb(0_0_0/0.25)]" />
+            <div className="min-w-0">
+              <h1 className="text-2xl font-semibold tracking-tight">Reminders</h1>
+              <p className="text-sm text-muted-foreground">
+                Automated SMS and email reminders for upcoming and past-due installments.
+              </p>
+            </div>
           </div>
           {/* Only offered once the pause list has loaded, so the button never
               claims "not paused" about a state it could not read. */}

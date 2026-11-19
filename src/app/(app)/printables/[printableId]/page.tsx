@@ -18,6 +18,8 @@ import { Label } from "@/components/ui/label";
 import { SearchPicker } from "@/components/common/search-picker";
 import { searchEmptyMessage, searchStatus, useSearchPage } from "@/hooks/use-search-page";
 import { cn } from "@/lib/utils";
+import { printableIcon3D } from "@/lib/printables/icons-3d";
+import { Icon3D } from "@/components/common/icon-3d";
 import { ArrowLeft, ChevronRight, FileStack, Loader2, Printer } from "lucide-react";
 import { repaymentService } from "@/services";
 import { PrintableRefusedError, visiblePrintables } from "@/lib/printables/catalog";
@@ -70,7 +72,6 @@ export default function PrintableDetailPage() {
     );
   }
 
-  const Icon = printable.icon;
   const accent = SUBJECT_ACCENT[printable.subject];
   const subjectLabel = SUBJECT_META[printable.subject].label;
   async function handleOpen() {
@@ -137,7 +138,7 @@ export default function PrintableDetailPage() {
                 accent.ring
               )}
             >
-              <Icon className={cn("h-6 w-6", accent.text)} />
+              <Icon3D name={printableIcon3D(printable.icon)} size={36} />
             </div>
             <div className="min-w-0">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">

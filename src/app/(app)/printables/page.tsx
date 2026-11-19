@@ -6,10 +6,12 @@ import { RouteGuard } from "@/components/common";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { FileStack, Printer, Search, Table2 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { Printer, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { visiblePrintables } from "@/lib/printables/catalog";
+import { documentsAvailableLabel, visiblePrintables } from "@/lib/printables/catalog";
+import { printableIcon3D } from "@/lib/printables/icons-3d";
+import type { Icon3DName } from "@/lib/icons-3d";
+import { Icon3D } from "@/components/common/icon-3d";
 import { usePermission } from "@/hooks";
 import { SUBJECT_ACCENT, SUBJECT_ILLUSTRATION, SUBJECT_META } from "@/lib/printables/types";
 import type { PrintableDefinition, PrintableSubject } from "@/lib/printables/types";
@@ -101,7 +103,7 @@ export default function PrintablesPage() {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex items-start gap-4">
               <div className="hidden sm:flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-brand-orange/15 text-brand-orange">
-                <FileStack className="h-6 w-6" />
+                <Icon3D name="empty-documents" size={36} />
               </div>
               <div className="min-w-0">
                 <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
@@ -121,7 +123,7 @@ export default function PrintablesPage() {
                     Print-ready
                   </Badge>
                   <span className="text-muted-foreground">
-                    {catalog.length} documents available
+                    {documentsAvailableLabel(catalog.length)}
                   </span>
                 </div>
               </div>
@@ -200,7 +202,7 @@ export default function PrintablesPage() {
                 <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   <CatalogCard
                     href={IMPORT_TEMPLATE.href}
-                    icon={Table2}
+                    icon="icon-layers"
                     // Not one of `SUBJECT_ACCENT`'s three on purpose: emerald
                     // means "repayment" everywhere else in this catalog.
                     accent={{
@@ -226,7 +228,7 @@ function PrintableCard({ printable }: { printable: PrintableDefinition }) {
   return (
     <CatalogCard
       href={`/printables/${printable.id}`}
-      icon={printable.icon}
+      icon={printableIcon3D(printable.icon)}
       accent={SUBJECT_ACCENT[printable.subject]}
       title={printable.title}
       description={printable.description}
@@ -243,14 +245,14 @@ function PrintableCard({ printable }: { printable: PrintableDefinition }) {
  */
 function CatalogCard({
   href,
-  icon: Icon,
+  icon,
   accent,
   title,
   description,
   footer,
 }: {
   href: string;
-  icon: LucideIcon;
+  icon: Icon3DName;
   accent: { text: string; bg: string; ring: string };
   title: string;
   description: string;
@@ -274,7 +276,7 @@ function CatalogCard({
                 accent.ring
               )}
             >
-              <Icon className={cn("h-5 w-5", accent.text)} />
+              <Icon3D name={icon} size={30} />
             </div>
             <div className="min-w-0">
               <h3 className="text-sm font-semibold leading-tight">{title}</h3>

@@ -39,6 +39,7 @@ import {
   Banknote,
   Wallet,
 } from "lucide-react";
+import { Icon3D } from "@/components/common/icon-3d";
 import { cn } from "@/lib/utils";
 import { reportService } from "@/services";
 import { currencyOrDash } from "@/lib/report-format";
@@ -249,7 +250,7 @@ function PastDueLoansContent() {
             Back to Loans
           </Link>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <AlertTriangle className="h-6 w-6 text-red-600" />
+            <Icon3D name="icon-alert" size={28} />
             Past Due Loans
           </h1>
           <p className="text-sm text-muted-foreground">
