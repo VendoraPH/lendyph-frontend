@@ -9,6 +9,8 @@ import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 const requests: URL[] = [];
 let server: Server;
@@ -186,4 +188,51 @@ test("Daily Collection offers the branch filter and sends the picked branch to b
   const reads = requests.filter((url) => url.pathname.startsWith("/reports/"));
   assert.ok(reads.length >= 2, "both the summary and the repayments are read");
   for (const url of reads) assert.equal(url.searchParams.get("branch_id"), "3", url.pathname);
+});
+
+// Phase 6 decision 10: the Share Capital report's totals and member roster
+// need `share_capital:view` on top of `reports:view`, as the server now
+// answers. Without it the report is off the list and its page says so.
+test("the Share Capital report needs share_capital:view", async () => {
+  const { visibleReports } = await import("./report-catalog");
+  const report = await reportDefinition("share_capital");
+  assert.equal(report.permission, "share_capital:view");
+
+  const without = visibleReports((p) => p !== "share_capital:view").map((r) => r.id);
+  assert.equal(without.includes("share_capital"), false);
+  assert.ok(without.includes("cash_flow"));
+  assert.ok(visibleReports(() => true).some((r) => r.id === "share_capital"));
+});
+
+test("a report the user can't read says No access; an unknown or switched-off one is not found", async () => {
+  const { reportAccess } = await import("./report-catalog");
+  const withoutShareCapital = (p: string) => p !== "share_capital:view";
+
+  assert.equal(reportAccess("share_capital", withoutShareCapital), "no_access");
+  assert.equal(reportAccess("share_capital", () => true), "open");
+  assert.equal(reportAccess("cash_flow", withoutShareCapital), "open");
+  assert.equal(reportAccess("no_such_report", () => true), "not_found");
+  // NEXT_PUBLIC_ENABLE_SAVINGS is unset here: a switched-off module is never
+  // revealed, whatever the user holds.
+  assert.equal(reportAccess("savings_balances", () => true), "not_found");
+  assert.equal(reportAccess("savings_balances", () => false), "not_found");
+});
+
+// A user who can't open the Share Capital report doesn't see it listed, so the
+// Financial section's subtitle doesn't name it either.
+test("the Financial subtitle names share capital only for users who can open its report", async () => {
+  const { categoryDescription, visibleReports } = await import("./report-catalog");
+  const without = visibleReports((p) => p !== "share_capital:view");
+  const withIt = visibleReports(() => true);
+
+  assert.equal(categoryDescription("financial", without), "Cash position and loan loss provisioning");
+  assert.doesNotMatch(categoryDescription("financial", without), /share capital/i);
+  assert.equal(categoryDescription("financial", withIt), "Cash position, share capital, and loan loss provisioning");
+  assert.equal(categoryDescription("performance", without), "Collection efficiency and account officer productivity");
+});
+
+test("the Reports page reads each section's subtitle for the signed-in user", () => {
+  const page = readFileSync(resolve(process.cwd(), "src/app/(app)/reports/page.tsx"), "utf8");
+  assert.match(page, /\{categoryDescription\(cat, catalog\)\}/);
+  assert.doesNotMatch(page, /\{meta\.description\}/);
 });

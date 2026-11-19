@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { AccountingDashboard } from "@/types/accounting";
-import { LOADING, SOURCE_PERMISSIONS, cashBalance, overviewKpis, type ExecutiveData, type KpiView } from "./executive-data";
+import { LOADING, SOURCE_PERMISSIONS, cashBalance, sourcePermitted, overviewKpis, type ExecutiveData, type KpiView } from "./executive-data";
 import {
   agingPoints,
   branchRows,
@@ -187,6 +189,16 @@ test("each source is read only with every permission its figures need", () => {
   assert.deepEqual(SOURCE_PERMISSIONS.loanStats, ["loans:view"]);
   // The Dashboard's own Share Capital card needs share_capital:view; this one does too.
   assert.deepEqual(SOURCE_PERMISSIONS.shareCapital, ["reports:view", "share_capital:view"]);
+});
+
+test("the Share Capital report is never requested without share_capital:view (Phase 6 decision 10)", () => {
+  // The report answers 403 without it, so the hook skips the call and the figure reads "No access".
+  const reportsOnly = new Set(["reports:view"]);
+  assert.equal(sourcePermitted("shareCapital", reportsOnly), false);
+  assert.equal(sourcePermitted("balance", reportsOnly), true);
+  assert.equal(sourcePermitted("shareCapital", new Set(["reports:view", "share_capital:view"])), true);
+  const hook = readFileSync(join(import.meta.dirname, "..", "_hooks", "use-executive-dashboard.ts"), "utf8");
+  assert.match(hook, /if \(!load \|\| !sourcePermitted\(name, allowed\)\) continue;/);
 });
 
 test("aging is empty without a report, so the chart never draws invented zeros", () => {

@@ -39,17 +39,17 @@ import type { Action, Module } from "@/types";
  * `penalties` is offered too (Phase 4, Settings → Penalties): the backend
  * seeds `penalties:view|create|update|delete` for admin and super_admin.
  *
- * `loan_origination` is left out until the backend seeds its permissions
- * (`docs/LOAN_ORIGINATION_BACKEND_HANDOFF.md`); offering it now would 422
- * every save of the role.
- *
  * `linda` is offered too (Linda v1): the backend seeds `linda:use|settings`
  * for admin and super_admin. `settings` works only with `branches:view_all`.
+ *
+ * Phase 6 (X0) seeds, for admin and super_admin only: the thirteen `amla:*`
+ * permissions (the Compliance Officer holds them too),
+ * `dashboard:analytics|export|settings`, `branches:manage`,
+ * `borrowers:transfer`, `interbranch_transfers:view|create|approve|receive`
+ * and `loan_origination:view|update|assess|convert|settings`. An API older
+ * than X0 refuses a save naming one with a 422, so this ships after X0.
  */
-export type UIModule = Exclude<
-  Module,
-  "collections" | "loan_adjustments" | "auto_credit" | "loan_origination"
->;
+export type UIModule = Exclude<Module, "collections" | "loan_adjustments" | "auto_credit">;
 
 // Applicable actions per module — only the actions that make sense for each area
 export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
@@ -57,8 +57,12 @@ export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
   // `update` covers editing, activating and deactivating; `delete` removes a
   // configuration no loan carries (the server answers 409 otherwise).
   penalties: ["view", "create", "update", "delete"],
-  dashboard: ["view"],
-  borrowers: ["view", "create", "update", "delete", "approve"],
+  // `analytics` opens the executive dashboard; `export` and `settings` its
+  // exports and alert thresholds. `view` is the everyday dashboard.
+  dashboard: ["view", "analytics", "export", "settings"],
+  // `transfer` moves a member to another branch, refused while anything of
+  // theirs is open.
+  borrowers: ["view", "create", "update", "delete", "approve", "transfer"],
   // `write_off` (writing off a restructure's shortfall) is seeded for admin
   // and super_admin; the API's grant guard still refuses it to anyone who
   // doesn't hold it themselves. It's left out of the module toggle (below).
@@ -66,14 +70,18 @@ export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
   // `manage` only: creating, editing and deleting products. Viewing them needs
   // `loans:view`, so there is no `loan_products:view` to offer.
   loan_products: ["manage"],
+  // Online applications (Loans → Loan Origination), in the server's order.
+  loan_origination: ["view", "update", "assess", "convert", "settings"],
   payments: ["view", "create", "update", "void"],
   share_capital: ["view", "create", "update"],
   collaterals: ["view", "create", "update", "delete"],
   reports: ["view", "export"],
   users: ["view", "create", "update", "delete"],
-  // `view_all` only: every branch's data. Without it a user sees just the
-  // branches they are assigned to; there is no other branch verb to offer.
-  branches: ["view_all"],
+  // `view_all`: every branch's data. Without it a user sees just the branches
+  // they are assigned to. `manage` adds, edits, opens and closes branches.
+  branches: ["view_all", "manage"],
+  // Money moved between branches; the maker never approves their own.
+  interbranch_transfers: ["view", "create", "approve", "receive"],
   settings: ["view", "update"],
   audit_logs: ["view", "export"],
   auto_pay: ["view", "process", "toggle"],
@@ -133,6 +141,22 @@ export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
   member_portal: ["view", "invite", "manage", "requests", "announcements", "settings"],
   // `use` asks Linda questions; `settings` chooses its AI model.
   linda: ["use", "settings"],
+  // AMLA Compliance, in the server's order.
+  amla: [
+    "view",
+    "alerts",
+    "cases",
+    "cdd",
+    "screening",
+    "sanctions",
+    "ctr",
+    "str",
+    "approve",
+    "export",
+    "submit",
+    "settings",
+    "audit",
+  ],
 };
 
 /**
@@ -167,6 +191,41 @@ export const MODULE_ACTION_LABELS: Partial<Record<UIModule, Partial<Record<Actio
     view_audit: "See audit reports",
     view_tax: "See tax reports",
   },
+  dashboard: {
+    analytics: "Open the executive dashboard",
+    export: "Export the executive dashboard",
+    settings: "Set dashboard alert thresholds",
+  },
+  borrowers: { transfer: "Move members to another branch" },
+  branches: { manage: "Add, edit, open and close branches" },
+  interbranch_transfers: {
+    view: "View interbranch transfers",
+    create: "Start transfers",
+    approve: "Approve someone else's transfers",
+    receive: "Confirm transfers received",
+  },
+  loan_origination: {
+    view: "View online applications",
+    update: "Review applications and send them for approval",
+    assess: "Run and annotate the assessment",
+    convert: "Turn approved applications into loans",
+    settings: "Configure public links and settings",
+  },
+  amla: {
+    view: "View the AMLA dashboard and reports",
+    alerts: "Work monitoring alerts",
+    cases: "Manage cases",
+    cdd: "Keep due diligence and AML risk",
+    screening: "Screen against watchlists",
+    sanctions: "Place and lift holds for an AMLA order",
+    ctr: "Prepare covered transaction reports",
+    str: "Prepare suspicious transaction reports",
+    approve: "Approve reports someone else prepared",
+    export: "Export filing files",
+    submit: "Record filings with the AMLC",
+    settings: "Change AMLA settings, rules and calendar",
+    audit: "Read the AMLA log",
+  },
   member_portal: {
     view: "View portal access and counts",
     invite: "Issue activation and reset codes",
@@ -194,6 +253,9 @@ const OWN_CHECKBOX_ONLY: Partial<Record<UIModule, readonly Action[]>> = {
   // Mediation cases are confidential, and audit and tax reports are
   // restricted: each is granted on its own, never swept in with the rest.
   cda: ["view_mediation", "view_audit", "view_tax"],
+  // Holds for an AMLA order are lifted only by the order, and the AMLA log
+  // shows case activity, so neither is swept in with the rest of AMLA.
+  amla: ["sanctions", "audit"],
 };
 
 /** The actions a module's "toggle all" checkbox covers. */

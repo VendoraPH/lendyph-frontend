@@ -343,7 +343,7 @@ export interface ReportDefinition {
   /**
    * A permission beyond `reports:view` that the report's data needs, such as
    * `savings:view` for the savings reports. Without it the report is not
-   * listed and its page answers "not found".
+   * listed and its page says the user has no access (`reportAccess`).
    */
   permission?: Permission;
   /** False when the report's module is switched off for this deployment. */

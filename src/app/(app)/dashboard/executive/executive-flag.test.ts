@@ -26,9 +26,9 @@ test("a direct URL answers not found while the flag is off", () => {
   assert.match(layout, /if \(!env\.features\.executiveDashboard\) notFound\(\);/);
 });
 
-test("the Dashboard links to it only while the flag is on", () => {
+test("the Dashboard links to it only while the flag is on (and dashboard:analytics is held)", () => {
   const page = read("src/app/(app)/dashboard/page.tsx");
-  assert.match(page, /\{env\.features\.executiveDashboard \? \(\s*<div className="flex shrink-0 justify-end">\s*<Link\s+href="\/dashboard\/executive"/);
+  assert.match(page, /\{showExecutiveLink\(env\.features\.executiveDashboard, can\) \? \(\s*<div className="flex shrink-0 justify-end">\s*<Link\s+href="\/dashboard\/executive"/);
 });
 
 test("a card's tooltip shows its API source in development builds only", () => {

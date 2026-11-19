@@ -79,6 +79,9 @@ import {
   Sparkles,
   Package,
   Building2,
+  ArrowLeftRight,
+  FileInput,
+  ShieldAlert,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -142,7 +145,7 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
     features: [
       "View portfolio KPIs and collection trends",
       "Monitor recent transactions",
-      "View charts and summary widgets",
+      "Open, export and set alert thresholds on the executive dashboard",
     ],
   },
   borrowers: {
@@ -154,6 +157,7 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
       "Create new members",
       "Update member details and status",
       "Deactivate / archive member records",
+      "Move a member to another branch when nothing of theirs is open",
     ],
   },
   loans: {
@@ -176,6 +180,19 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
       "Create new loan products",
       "Edit, activate and deactivate products",
       "Delete loan products",
+    ],
+  },
+  loan_origination: {
+    label: "Loan Origination",
+    description:
+      "Online loan applications from public links, their review and assessment. Changing the module's settings also needs See all branches.",
+    icon: FileInput,
+    features: [
+      "View applications, links, assessments and documents",
+      "Verify documents, assign officers, request information and send for approval",
+      "Run and annotate the preliminary assessment",
+      "Turn an approved application into a loan",
+      "Configure public links and the module's settings",
     ],
   },
   payments: {
@@ -238,6 +255,18 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
     features: [
       "Without this, a user sees only the branches they are assigned to",
       "See every branch's members, loans, payments and reports",
+      "Add, edit, open and close branches (with See all branches)",
+    ],
+  },
+  interbranch_transfers: {
+    label: "Interbranch Transfers",
+    description: "Money moved between branches through Interbranch Clearing.",
+    icon: ArrowLeftRight,
+    features: [
+      "View transfers between branches",
+      "Start a transfer",
+      "Approve a transfer someone else started",
+      "Confirm a transfer at the receiving branch",
     ],
   },
   settings: {
@@ -421,6 +450,20 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
     icon: Sparkles,
     features: ["Ask Linda questions", "Choose the AI model Linda uses"],
   },
+  amla: {
+    label: "AMLA Compliance",
+    description:
+      "Anti-money laundering monitoring, cases and filings with the AMLC. Cases, reports, screening, sanctions and settings also need See all branches.",
+    icon: ShieldAlert,
+    features: [
+      "See the AMLA dashboard and reports, and work monitoring alerts",
+      "Run cases, due diligence and AML risk, and screen against watchlists",
+      "Place and lift holds for an AMLA order",
+      "Prepare covered and suspicious transaction reports, and approve someone else's",
+      "Export filing files and record filings with the AMLC",
+      "Change AMLA settings and read the AMLA log",
+    ],
+  },
 };
 
 
@@ -471,9 +514,20 @@ const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   requests: { label: "Decide requests", colorClass: "bg-teal-500/10 text-teal-700 border-teal-500/30" },
   announcements: { label: "Announcements", colorClass: "bg-violet-500/10 text-violet-700 border-violet-500/30" },
   use: { label: "Use", colorClass: "bg-orange-500/10 text-orange-700 border-orange-500/30" },
-  // Loan Origination verbs; not offered in the matrix until the backend seeds them.
+  // Loan Origination verbs.
   assess: { label: "Assess", colorClass: "bg-sky-500/10 text-sky-700 border-sky-500/30" },
   convert: { label: "Convert", colorClass: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30" },
+  // AMLA verbs; each module reads its own words (MODULE_ACTION_LABELS).
+  alerts: { label: "Alerts", colorClass: "bg-amber-500/10 text-amber-700 border-amber-500/30" },
+  cases: { label: "Cases", colorClass: "bg-violet-500/10 text-violet-700 border-violet-500/30" },
+  cdd: { label: "Due diligence", colorClass: "bg-sky-500/10 text-sky-700 border-sky-500/30" },
+  screening: { label: "Screening", colorClass: "bg-cyan-500/10 text-cyan-700 border-cyan-500/30" },
+  sanctions: { label: "Sanctions", colorClass: "bg-red-500/10 text-red-700 border-red-500/30" },
+  ctr: { label: "Covered transactions", colorClass: "bg-indigo-500/10 text-indigo-700 border-indigo-500/30" },
+  str: { label: "Suspicious transactions", colorClass: "bg-rose-500/10 text-rose-700 border-rose-500/30" },
+  audit: { label: "AMLA log", colorClass: "bg-stone-500/10 text-stone-700 border-stone-500/30" },
+  analytics: { label: "Analytics", colorClass: "bg-blue-500/10 text-blue-700 border-blue-500/30" },
+  receive: { label: "Receive", colorClass: "bg-teal-500/10 text-teal-700 border-teal-500/30" },
 };
 
 /** "credit_scoring:settings" → "Credit Scoring: Configure", as the matrix labels it. */

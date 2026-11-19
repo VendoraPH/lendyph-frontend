@@ -1,6 +1,7 @@
 // src/app/(app)/borrowers/registrations/[id]/_components/review-action-panel.tsx
 "use client";
 
+import type { ReactNode } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, CheckCircle, XCircle, Pencil } from "lucide-react";
@@ -17,6 +18,8 @@ interface Props {
   onReject: () => void;
   onToggleEdit: () => void;
   onSaveEdit: () => void;
+  /** The branch the member is approved into, shown above the decision buttons. */
+  branchField: ReactNode;
 }
 
 function StatusPill({ status }: { status: Registration["status"] }) {
@@ -46,6 +49,7 @@ export function ReviewActionPanel({
   onReject,
   onToggleEdit,
   onSaveEdit,
+  branchField,
 }: Props) {
   const submitted = registrationSubmittedAt(registration);
   const submittedDate = submitted ? formatDate(submitted) : "—";
@@ -108,6 +112,8 @@ export function ReviewActionPanel({
           </div>
         ) : (
           <>
+            {branchField}
+
             <div className="space-y-2">
               {editMode ? (
                 <>

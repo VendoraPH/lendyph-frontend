@@ -36,3 +36,10 @@ test("title case keeps of, and, the, to, for, in and on lower case except first"
   assert.equal(titleCaseKey("auto_pay"), "Auto Pay");
   assert.equal(titleCaseKey(""), "");
 });
+
+test("Phase 6's modules read in words, AMLA included", () => {
+  assert.deepEqual(
+    viewableModuleNames(["amla:view", "interbranch_transfers:view", "loan_origination:view"]),
+    ["AMLA Compliance", "Interbranch Transfers", "Loan Origination"],
+  );
+});

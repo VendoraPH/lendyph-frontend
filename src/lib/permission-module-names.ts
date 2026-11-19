@@ -6,6 +6,7 @@ const MODULE_NAMES: Record<string, string> = {
   borrowers: "Members",
   gcash: "GCash",
   cda: "CDA Compliance",
+  amla: "AMLA Compliance",
 };
 
 /** Short words that stay lower case in a title, unless they come first. */
