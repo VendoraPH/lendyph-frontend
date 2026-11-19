@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { env } from "@/config/env";
-import { CDA_NAV, EXECUTIVE_DASHBOARD_NAV, LINDA_SETTINGS_NAV, MEMBER_PORTAL_NAV, PENALTIES_SETTINGS_NAV, SIDEBAR_NAV, navChildAllowed, navItemAllowed, navItemHref, navItemMatches } from "./navigation";
+import { CDA_NAV, EXECUTIVE_DASHBOARD_NAV, INTERBRANCH_TRANSFERS_NAV, LINDA_SETTINGS_NAV, MEMBER_PORTAL_NAV, PENALTIES_SETTINGS_NAV, SIDEBAR_NAV, navChildAllowed, navItemAllowed, navItemHref, navItemMatches } from "./navigation";
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
 const LAYOUT = "src/app/(app)/credit-scoring/layout.tsx";
@@ -256,4 +256,30 @@ test("on the Executive Dashboard only its own item is highlighted, not Dashboard
   assert.equal(navItemMatches("/loans/12", "/loans", menu), true);
   assert.equal(navItemMatches("/loansx", "/loans", menu), false);
   assert.match(read("src/components/layout/sidebar.tsx"), /navItemMatches\(pathname, item\.href\)/);
+});
+
+test("Accounting → Interbranch Transfers sits under Cash & Bank, only while the multi-branch flag is on", () => {
+  assert.equal(env.features.multiBranch, false);
+  const accounting = SIDEBAR_NAV.find((item) => item.href === "/accounting");
+  assert.equal(accounting?.children?.some((c) => c.href === "/accounting/interbranch-transfers"), false);
+  const nav = read("src/constants/navigation.ts");
+  assert.match(
+    nav,
+    /\{ title: "Cash & Bank", href: "\/accounting\/cash-bank", permission: "cash_accounts:view" \},\s*\.\.\.\(env\.features\.multiBranch \? \[INTERBRANCH_TRANSFERS_NAV\] : \[\]\),/,
+  );
+  const layout = read("src/app/(app)/accounting/interbranch-transfers/layout.tsx");
+  assert.match(layout, /env\.features\.multiBranch/);
+  assert.match(layout, /notFound\(\)/);
+  assert.doesNotMatch(layout, /"use client"/);
+});
+
+test("Interbranch Transfers needs interbranch_transfers:view, as its page does", () => {
+  const holds = (...held: string[]) => (p: string) => held.includes(p);
+  assert.equal(INTERBRANCH_TRANSFERS_NAV.title, "Interbranch Transfers");
+  assert.equal(navChildAllowed(INTERBRANCH_TRANSFERS_NAV, holds()), false);
+  assert.equal(navChildAllowed(INTERBRANCH_TRANSFERS_NAV, holds("interbranch_transfers:view")), true);
+  assert.match(
+    read("src/app/(app)/accounting/interbranch-transfers/page.tsx"),
+    /<RouteGuard permission="interbranch_transfers:view"/,
+  );
 });
