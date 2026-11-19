@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chartStatus, chartTemplateNotice } from "./chart-status";
+import { chartStatus, chartTemplateNotice, savedAccountsOnly } from "./chart-status";
 
 const answered = { canView: true, loading: false, unavailable: false, error: null };
 
@@ -32,4 +32,11 @@ test("the template notice says what's true for each state", () => {
   assert.match(chartTemplateNotice("unavailable") ?? "", /couldn't be loaded/);
   assert.equal(chartTemplateNotice("saved"), null);
   assert.equal(chartTemplateNotice("loading"), null);
+});
+
+test("a read-only picker never offers template accounts", () => {
+  // Flag 11: the General Ledger offered the template, and picking one answered 422.
+  const postable = [{ id: 1 }, { id: 2 }];
+  assert.deepEqual(savedAccountsOnly({ isTemplate: true, postable }), []);
+  assert.deepEqual(savedAccountsOnly({ isTemplate: false, postable }), postable);
 });

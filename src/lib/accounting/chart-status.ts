@@ -45,3 +45,11 @@ export function chartTemplateNotice(status: ChartStatus): string | null {
       return null;
   }
 }
+
+/**
+ * The accounts a picker may offer: none while the chart is the template, whose
+ * ids are placeholders the server doesn't have.
+ */
+export function savedAccountsOnly<T>({ isTemplate, postable }: { isTemplate: boolean; postable: T[] }): T[] {
+  return isTemplate ? [] : postable;
+}
