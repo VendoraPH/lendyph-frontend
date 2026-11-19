@@ -12,6 +12,7 @@ import { amlaMonitoringApi } from "@/lib/amla/monitoring-api";
 import { amlaAlertLines, amlaAlertRow } from "@/lib/amla/monitoring-view";
 import { once } from "@/lib/amla/once";
 import type { AmlaAlertDetail } from "@/types/amla-monitoring";
+import { AlertCaseLine } from "./alert-escalate";
 import { TransactionsTable } from "./transactions-table";
 
 /** One alert: the rule and the version it cites, why it was raised, its indicators and every transaction behind it. Read once. */
@@ -41,6 +42,7 @@ function AlertBody({ alert }: { alert: AmlaAlertDetail }) {
     ["Amount", row.amount],
     ["Transactions", row.transactions],
     ["Detected", row.detected],
+    ["Assigned to", alert.assigned_to?.name ?? "Not assigned"],
   ];
 
   return (
@@ -65,6 +67,7 @@ function AlertBody({ alert }: { alert: AmlaAlertDetail }) {
       </div>
 
       {lines.cleared && <p className="rounded-md border bg-muted/40 p-3 text-sm">{lines.cleared}</p>}
+      <AlertCaseLine alert={alert} />
 
       <div className="grid gap-4 xl:grid-cols-2">
         <Card>

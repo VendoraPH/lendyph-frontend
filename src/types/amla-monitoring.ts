@@ -39,6 +39,10 @@ export interface AmlaAlertRow {
   amount: string;
   transactions_count: number;
   from_history: boolean;
+  /** Since the alert workflow (AMLA-B6): who works it, and the case it went to (head-office case holders only). */
+  assigned_to?: AmlaUserRef | null;
+  case?: { id: number; reference: string } | null;
+  closed_at?: string | null;
   detected_at: string | null;
 }
 

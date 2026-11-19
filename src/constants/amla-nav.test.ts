@@ -61,7 +61,7 @@ const child = (href: string) => {
   return found;
 };
 
-test("it holds the monitoring pages, Customers, Risk Rules and an AMLA Settings link, in that order", () => {
+test("it holds the monitoring pages, Customers, Risk Rules, the cases and filings pages and an AMLA Settings link, in that order", () => {
   assert.deepEqual(
     (nav.AMLA_NAV.children ?? []).map((c) => [c.title, c.href]),
     [
@@ -71,6 +71,11 @@ test("it holds the monitoring pages, Customers, Risk Rules and an AMLA Settings 
       ["Transaction Monitoring", "/amla/monitoring"],
       ["Customers", "/amla/customers"],
       ["Risk Rules", "/amla/risk-rules"],
+      ["Compliance Cases", "/amla/cases"],
+      ["Suspicious Transactions (STR)", "/amla/str"],
+      ["Covered Transactions (CTR)", "/amla/ctr"],
+      ["Regulatory Submissions", "/amla/submissions"],
+      ["Audit & Compliance History", "/amla/history"],
       ["AMLA Settings", "/settings/amla"],
     ],
   );
@@ -107,6 +112,34 @@ test("Customers needs amla:cdd, plus amla:view for the AMLA pages, as its endpoi
   assert.equal(nav.navChildAllowed(customers, holds("amla:cdd", "amla:view")), true);
   assert.equal(nav.navChildAllowed(customers, holds("amla:view")), false);
   assert.equal(nav.navChildAllowed(customers, holds("amla:cdd")), false);
+});
+
+test("Compliance Cases needs amla:cases with every branch, as the case routes do", () => {
+  const cases = child("/amla/cases");
+  assert.equal(nav.navChildAllowed(cases, holds("amla:cases", "amla:view", "branches:view_all")), true);
+  assert.equal(nav.navChildAllowed(cases, holds("amla:cases", "amla:view")), false);
+  assert.equal(nav.navChildAllowed(cases, holds("amla:alerts", "amla:view", "branches:view_all")), false);
+});
+
+test("STRs open on an STR reading key with every branch; CTRs on a CTR reading key in the caller's branches", () => {
+  for (const key of ["amla:str", "amla:approve", "amla:submit", "amla:export"]) {
+    assert.equal(nav.navChildAllowed(child("/amla/str"), holds(key, "amla:view", "branches:view_all")), true, key);
+    assert.equal(nav.navChildAllowed(child("/amla/str"), holds(key, "amla:view")), false, key);
+  }
+  assert.equal(nav.navChildAllowed(child("/amla/str"), holds("amla:ctr", "amla:view", "branches:view_all")), false);
+  for (const key of ["amla:ctr", "amla:approve", "amla:submit", "amla:export"]) {
+    assert.equal(nav.navChildAllowed(child("/amla/ctr"), holds(key, "amla:view")), true, key);
+  }
+  assert.equal(nav.navChildAllowed(child("/amla/ctr"), holds("amla:str", "amla:view")), false);
+});
+
+test("Regulatory Submissions opens on any reporting key; Audit & Compliance History on amla:audit with every branch", () => {
+  for (const key of ["amla:ctr", "amla:str", "amla:approve", "amla:submit", "amla:export"]) {
+    assert.equal(nav.navChildAllowed(child("/amla/submissions"), holds(key, "amla:view")), true, key);
+  }
+  assert.equal(nav.navChildAllowed(child("/amla/submissions"), holds("amla:cases", "amla:view")), false);
+  assert.equal(nav.navChildAllowed(child("/amla/history"), holds("amla:audit", "amla:view", "branches:view_all")), true);
+  assert.equal(nav.navChildAllowed(child("/amla/history"), holds("amla:audit", "amla:view")), false);
 });
 
 test("AMLA Settings opens as Settings → AMLA does, so the Compliance Officer has a menu path without settings:view", () => {

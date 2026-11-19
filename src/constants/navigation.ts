@@ -30,6 +30,7 @@ import { MODULE_ALSO_REQUIRES } from "@/lib/permission-module-names";
 import { meetsPermission } from "@/lib/permission-requirement";
 import { AMLA_SETTINGS_PAGE_PERMISSIONS } from "@/lib/amla/access";
 import { AMLA_RISK_RULES_PERMISSIONS } from "@/lib/amla/monitoring-access";
+import { AMLA_CTR_READ, AMLA_REPORT_READ, AMLA_STR_READ } from "@/lib/amla/case-access";
 import { EXECUTIVE_DASHBOARD_PERMISSION } from "@/app/(app)/dashboard/_lib/executive-access";
 
 export interface NavSubItem {
@@ -186,7 +187,10 @@ export const AMLA_SETTINGS_NAV: NavSubItem = {
  * AMLA Compliance. The /amla pages need `amla:view` (amla/layout.tsx) and each
  * its own key, as its endpoints do: Alerts `amla:alerts`, CTR Candidates
  * `amla:ctr`, Customers `amla:cdd`; Transaction Monitoring and Risk Rules are
- * head office only. The section
+ * head office only. Compliance Cases needs `amla:cases`, the STR and CTR pages
+ * their reading keys, Regulatory Submissions any reporting key and Audit &
+ * Compliance History `amla:audit`; cases, STRs and the history are head
+ * office only. The section
  * also carries an "AMLA Settings" link, opening as Settings → AMLA does, so a
  * Compliance Officer (who holds no `settings:view`) has a menu path to it.
  * Later Phase 6 slices add their pages here. Shown only when
@@ -211,6 +215,17 @@ export const AMLA_NAV: NavItem = {
       permission: [...AMLA_RISK_RULES_PERMISSIONS],
       alsoRequires: ["amla:view", "branches:view_all"],
     },
+    // Cases and filings, each gated as its routes are: cases and STRs are head office's.
+    { title: "Compliance Cases", href: "/amla/cases", permission: "amla:cases", alsoRequires: ["amla:view", "branches:view_all"] },
+    {
+      title: "Suspicious Transactions (STR)",
+      href: "/amla/str",
+      permission: [...AMLA_STR_READ],
+      alsoRequires: ["amla:view", "branches:view_all"],
+    },
+    { title: "Covered Transactions (CTR)", href: "/amla/ctr", permission: [...AMLA_CTR_READ], alsoRequires: ["amla:view"] },
+    { title: "Regulatory Submissions", href: "/amla/submissions", permission: [...AMLA_REPORT_READ], alsoRequires: ["amla:view"] },
+    { title: "Audit & Compliance History", href: "/amla/history", permission: "amla:audit", alsoRequires: ["amla:view", "branches:view_all"] },
     { ...AMLA_SETTINGS_NAV, title: "AMLA Settings" },
   ],
 };

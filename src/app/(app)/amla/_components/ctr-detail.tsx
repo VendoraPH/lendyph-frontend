@@ -13,6 +13,7 @@ import { amlaMonitoringApi } from "@/lib/amla/monitoring-api";
 import { amlaCtrRow } from "@/lib/amla/monitoring-view";
 import { once } from "@/lib/amla/once";
 import type { AmlaCtrDetail } from "@/types/amla-monitoring";
+import { CtrPrepareButton } from "./ctr-prepare";
 import { TransactionsTable } from "./transactions-table";
 
 /** One CTR candidate: why it is one, the settings version it was measured by, and its transaction. Read once. */
@@ -62,6 +63,7 @@ function CtrBody({ candidate }: { candidate: AmlaCtrDetail }) {
           · {row.code}
         </p>
       </div>
+      <CtrPrepareButton candidate={candidate} />
       {row.notes.map((note) => (
         <p key={note} className="rounded-md border bg-muted/40 p-3 text-sm">
           {note}
