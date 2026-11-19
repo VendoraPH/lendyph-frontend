@@ -184,6 +184,21 @@ test("each Phase 2 posting role defaults to the account the backend seeds, of th
   }
 });
 
+test("1190 Interbranch Clearing is seeded under 1000, and the interbranch clearing role defaults to it", () => {
+  // Backend MB-BE5: transfers between branches post Dr 1190 / Cr the money
+  // account in the source branch and the mirror in the destination.
+  const clearing = DEFAULT_CHART_OF_ACCOUNTS.find((a) => a.code === "1190");
+  assert.ok(clearing, "the chart has 1190");
+  assert.equal(clearing.name, "Interbranch Clearing");
+  assert.equal(clearing.type, "asset");
+  assert.equal(clearing.parent, "1000");
+  assert.equal(clearing.is_group ?? false, false);
+  assert.equal(clearing.is_contra ?? false, false);
+  assert.equal(DEFAULT_ACCOUNT_MAPPING_CODES.interbranch_clearing, "1190");
+  const codes = DEFAULT_CHART_OF_ACCOUNTS.map((a) => a.code);
+  assert.equal(codes.indexOf("1190"), codes.indexOf("1180") + 1);
+});
+
 test("unearned restructure income is a contra asset beside the allowance, outside the loans receivable heading", () => {
   // Under 1000, not 1100: the portfolio heading sums gross receivables, and
   // the deferral must reduce them on its own line, as the allowance does.

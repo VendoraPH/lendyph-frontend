@@ -299,6 +299,19 @@ export const API_ENDPOINTS = {
     CLOSURE_APPROVE: (id: number) => `/branches/${id}/closure/approve`,
     CLOSURE_REJECT: (id: number) => `/branches/${id}/closure/reject`,
   },
+  // Money moved between branches through 1190 (Phase 6 MB-BE5). Each step's
+  // permission is checked by the server; approve, receive and reverse take an
+  // Idempotency-Key.
+  INTERBRANCH_TRANSFERS: {
+    LIST: "/interbranch-transfers",
+    CREATE: "/interbranch-transfers",
+    IN_TRANSIT: "/interbranch-transfers/in-transit",
+    DETAIL: (id: number) => `/interbranch-transfers/${id}`,
+    ACTION: (id: number, action: "approve" | "reject" | "cancel" | "receive" | "reverse") =>
+      `/interbranch-transfers/${id}/${action}`,
+    // The §15 branch counts (dashboard:analytics; each figure null without its source's permission).
+    BRANCH_COUNTS: "/branch-counts",
+  },
   SHARE_CAPITAL: {
     LEDGER_LIST: "/share-capital/ledger",
     LEDGER_CREATE: "/share-capital/ledger",
