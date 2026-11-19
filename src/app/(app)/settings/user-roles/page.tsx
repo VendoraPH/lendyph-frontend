@@ -471,6 +471,9 @@ const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   requests: { label: "Decide requests", colorClass: "bg-teal-500/10 text-teal-700 border-teal-500/30" },
   announcements: { label: "Announcements", colorClass: "bg-violet-500/10 text-violet-700 border-violet-500/30" },
   use: { label: "Use", colorClass: "bg-orange-500/10 text-orange-700 border-orange-500/30" },
+  // Loan Origination verbs; not offered in the matrix until the backend seeds them.
+  assess: { label: "Assess", colorClass: "bg-sky-500/10 text-sky-700 border-sky-500/30" },
+  convert: { label: "Convert", colorClass: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30" },
 };
 
 /** "credit_scoring:settings" → "Credit Scoring: Configure", as the matrix labels it. */

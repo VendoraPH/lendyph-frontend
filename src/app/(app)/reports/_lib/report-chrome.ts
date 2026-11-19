@@ -1,7 +1,7 @@
 import { siteConfig } from "@/config/site";
 import { API_BASE_URL } from "@/lib/axios-client";
 import { useBrandingStore } from "@/store/branding-store";
-import type { ReportChrome, ReportDocument, ReportId, ReportSection } from "./types";
+import type { DocumentId, ReportChrome, ReportDocument, ReportSection } from "./types";
 
 /**
  * Document identity, applied after a report is built.
@@ -17,10 +17,10 @@ import type { ReportChrome, ReportDocument, ReportId, ReportSection } from "./ty
 /**
  * Short prefixes for the document reference, one per report.
  *
- * Exhaustive over `ReportId` on purpose: adding a report without a prefix is a
+ * Exhaustive over `DocumentId` on purpose: adding a report without a prefix is a
  * compile error, not a document that quietly references `undefined-20260826`.
  */
-const REFERENCE_PREFIX: Record<ReportId, string> = {
+const REFERENCE_PREFIX: Record<DocumentId, string> = {
   daily_collection: "DCR",
   portfolio_summary: "PSR",
   income_report: "INC",
@@ -57,6 +57,7 @@ const REFERENCE_PREFIX: Record<ReportId, string> = {
   savings_interest_accrual: "SIA",
   savings_account_activity: "SAA",
   savings_member_statement: "MDS",
+  executive_dashboard: "EXD",
 };
 
 /** The prefixes of savings records' own numbers, which no report reference may start with. */
@@ -90,7 +91,7 @@ const manilaStamp = new Intl.DateTimeFormat("en-CA", {
  * members' statements generated in the same minute once carried one reference,
  * and one loan's could still repeat within a minute.
  */
-export function buildReference(reportId: ReportId, at = new Date(), key?: string): string {
+export function buildReference(reportId: DocumentId, at = new Date(), key?: string): string {
   const part = Object.fromEntries(manilaStamp.formatToParts(at).map((p) => [p.type, p.value]));
   const stamp =
     `${part.year}${part.month}${part.day}-${part.hour}${part.minute}` + (key ? part.second : "");

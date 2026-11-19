@@ -265,6 +265,11 @@ export const SIDEBAR_NAV: NavItem[] = [
       // super_admin (other roles only through the roles screen). The six
       // reminder screens are tabs inside /loans/reminders, not menu items.
       { title: "Reminders", href: "/loans/reminders", permission: "reminders:view" },
+      // NEXT_PUBLIC_ENABLE_LOAN_ORIGINATION only. Its six screens are tabs
+      // inside /loans/origination, not menu items.
+      ...(env.features.loanOrigination
+        ? [{ title: "Loan Origination", href: "/loans/origination", permission: "loan_origination:view" as const }]
+        : []),
     ],
   },
   {
