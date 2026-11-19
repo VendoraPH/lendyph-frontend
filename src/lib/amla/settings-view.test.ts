@@ -418,7 +418,7 @@ test("a risk rules change shows only the changed points, thresholds and countrie
   assert.deepEqual(amlaChangeRequestChanges({ ...REQUEST, type: "risk_rules", payload: RISK_PAYLOAD }, { risk: [RISK_BASE] }), [
     "Politically exposed person, PEP: 30 → 35 points",
     "High threshold: 40 → 45 points",
-    "High-risk countries: KP, IR → KP, IR, MM",
+    "High-risk countries: IR, KP → IR, KP, MM",
   ]);
   assert.deepEqual(
     amlaChangeRequestChanges({ ...REQUEST, type: "risk_rules", payload: RISK_PAYLOAD }, { risk: [{ ...RISK_BASE, version: 2 }] })[0],
@@ -432,4 +432,10 @@ test("without the rules to compare with, a risk change lists its changed section
     "Politically exposed person: Not a PEP 0 points, PEP 35 points, Family member of a PEP 20 points",
     "High-risk countries: KP, IR, MM",
   ]);
+});
+
+test("the same high-risk countries in another order are no change, and show nothing", () => {
+  const reordered = { ...RISK_PAYLOAD, definition: { ...RISK_PAYLOAD.definition, high_risk_countries: ["IR", "KP"] } };
+  const lines = amlaChangeRequestChanges({ ...REQUEST, type: "risk_rules", payload: reordered }, { risk: [RISK_BASE] });
+  assert.equal(lines.some((line) => line.startsWith("High-risk countries")), false);
 });

@@ -9,6 +9,7 @@ import {
   amlaParamLine,
   amlaPoints,
   amlaRuleTitle,
+  amlaSortedList,
   amlaThresholdsLine,
 } from "@/lib/amla/rule-words";
 import { AMLA_CHANNEL_OPTIONS, amlaReasonError, type AmlaOption } from "@/lib/amla/settings-view";
@@ -347,8 +348,10 @@ export function amlaRiskChangeBody(
   if (countries.some((code) => !COUNTRY.test(code))) return { error: "List high-risk countries as two-letter codes, such as KP." };
   if (new Set(countries).size !== countries.length) return { error: "List each high-risk country once." };
 
-  const definition = { factors, thresholds: { medium, high }, high_risk_countries: countries };
-  if (JSON.stringify(definition) === JSON.stringify({ factors: current.factors, thresholds: current.thresholds, high_risk_countries: current.high_risk_countries })) {
+  // Countries are a set: sent sorted, and compared regardless of the order stored.
+  const definition = { factors, thresholds: { medium, high }, high_risk_countries: amlaSortedList(countries) };
+  const now = { factors: current.factors, thresholds: current.thresholds, high_risk_countries: amlaSortedList(current.high_risk_countries) };
+  if (JSON.stringify(definition) === JSON.stringify(now)) {
     return { error: "This changes nothing in the risk rules in force." };
   }
   const reasonError = amlaReasonError(reason);

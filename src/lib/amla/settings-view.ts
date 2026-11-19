@@ -11,6 +11,7 @@ import {
   amlaParamValueWords,
   amlaPoints,
   amlaRuleTitle,
+  amlaSortedList,
   amlaStableKeys,
   amlaThresholdsLine,
 } from "@/lib/amla/rule-words";
@@ -337,8 +338,11 @@ function riskRuleChanges(
     const next = Number(thresholds[key]);
     if (base.thresholds[key] !== next) lines.push(`${words} threshold: ${base.thresholds[key]}${now} → ${amlaPoints(next)}`);
   }
-  if (base.high_risk_countries.join(",") !== countries.join(",")) {
-    lines.push(`High-risk countries: ${countryWords(base.high_risk_countries)}${now} → ${countryWords(countries)}`);
+  // Countries are a set: the server may store them in another order, which is no change.
+  const before = amlaSortedList(base.high_risk_countries);
+  const after = amlaSortedList(countries);
+  if (before.join(",") !== after.join(",")) {
+    lines.push(`High-risk countries: ${countryWords(before)}${now} → ${countryWords(after)}`);
   }
   return lines;
 }

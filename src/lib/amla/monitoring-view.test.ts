@@ -337,10 +337,16 @@ test("a risk rules change sends the whole definition with whole-number points an
       definition: {
         factors: { customer_type: { member: 0, walk_in: 10 }, pep: { not_pep: 0, pep: 35 } },
         thresholds: { medium: 20, high: 40 },
-        high_risk_countries: ["KP", "IR", "MM"],
+        high_risk_countries: ["IR", "KP", "MM"],
       },
     },
   });
+});
+
+test("the high-risk countries are sent sorted, and a reordering alone changes nothing", () => {
+  const reordered = amlaRiskDraft(RISK.current.definition);
+  reordered.countries = "IR KP";
+  assert.deepEqual(amlaRiskChangeBody(RISK.current.definition, reordered, "Review"), { error: "This changes nothing in the risk rules in force." });
 });
 
 test("the risk rules form says what is wrong, in words", () => {

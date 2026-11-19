@@ -162,3 +162,8 @@ export function amlaStableKeys(keys: readonly string[], order: readonly string[]
   const rest = keys.filter((key) => !order.includes(key)).sort();
   return [...known, ...rest];
 }
+
+/** An unordered list (countries, channels) in one stable order, so two lists with the same items compare and read alike. */
+export function amlaSortedList(items: readonly unknown[]): string[] {
+  return items.map(String).sort();
+}
