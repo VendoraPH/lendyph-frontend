@@ -25,14 +25,14 @@ const A = API_ENDPOINTS.AMLA;
 type Query = Record<string, string | number | null | undefined>;
 
 /** Only the filters that are set, so an empty one is never sent as `?from=`. */
-function only(query: Query): Record<string, string | number> {
+export function only(query: Query): Record<string, string | number> {
   return Object.fromEntries(
     Object.entries(query).filter((entry): entry is [string, string | number] => entry[1] !== null && entry[1] !== undefined && entry[1] !== ""),
   );
 }
 
 /** A paged list's rows and page meta, without the envelope. */
-async function paged<T>(request: Promise<AmlaPage<T> & { success?: boolean }>): Promise<AmlaPage<T>> {
+export async function paged<T>(request: Promise<AmlaPage<T> & { success?: boolean }>): Promise<AmlaPage<T>> {
   const { data, meta } = await request;
   return { data, meta };
 }
