@@ -8,6 +8,8 @@ import { FIT_CLASSES } from "@/lib/page-fill";
 import type { InterbranchInTransitReport, InterbranchTransfer } from "@/types/interbranch-transfer";
 import { centavosOrDash } from "../../_lib/server-figure";
 import type { TransferActionButton } from "../_lib/transfers";
+import { NESTED_VISIBLE_SCROLLBAR, VISIBLE_SCROLLBAR } from "../_lib/table-scroll";
+import { cn } from "@/lib/utils";
 import { TransfersTable } from "./transfers-table";
 
 interface InTransitReportProps {
@@ -32,8 +34,8 @@ export function InTransitReport({ report, canCreate, onAction, onSendBack }: InT
   return (
     <Card className={FIT_CLASSES.section}>
       <CardContent className={FIT_CLASSES.section}>
-        <ScrollBox>
-          <div data-unpinned="" className="space-y-6">
+        <ScrollBox className={VISIBLE_SCROLLBAR} tabIndex={0} role="region" aria-label="In transit, scrolls sideways">
+          <div data-unpinned="" className={cn("space-y-6", NESTED_VISIBLE_SCROLLBAR)}>
             <p className="text-sm text-muted-foreground">
               As of {formatDate(report.as_of)}
               {accounts ? `, on ${accounts}` : ""}. A transfer approved and not yet received keeps Interbranch

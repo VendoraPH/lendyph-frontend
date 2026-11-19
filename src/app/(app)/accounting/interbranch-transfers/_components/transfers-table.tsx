@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCentavos } from "@/lib/accounting/money";
 import { formatDate } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import type { InterbranchTransfer } from "@/types/interbranch-transfer";
 import {
   canSendBack,
@@ -12,6 +13,7 @@ import {
   transferStatusLabel,
   type TransferActionButton,
 } from "../_lib/transfers";
+import { STICKY_ACTIONS_CELL, STICKY_ACTIONS_HEAD } from "../_lib/table-scroll";
 
 interface TransfersTableProps {
   rows: InterbranchTransfer[];
@@ -47,7 +49,7 @@ export function TransfersTable({ rows, canCreate, onAction, onSendBack, showAge 
           <TableHead>To</TableHead>
           <TableHead className="text-right">Amount</TableHead>
           <TableHead>{showAge ? "In transit for" : "Status"}</TableHead>
-          <TableHead className="text-right">Actions</TableHead>
+          <TableHead className={cn("text-right", STICKY_ACTIONS_HEAD)}>Actions</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -84,7 +86,7 @@ export function TransfersTable({ rows, canCreate, onAction, onSendBack, showAge 
                   </Badge>
                 )}
               </TableCell>
-              <TableCell className="w-px text-right">
+              <TableCell className={cn("w-px text-right", STICKY_ACTIONS_CELL)}>
                 <div className="flex min-w-36 flex-wrap justify-end gap-1.5">
                   {buttons.map((b) => (
                     <Button

@@ -27,6 +27,7 @@ import {
   type TransferForm,
   type TransferStep,
 } from "./_lib/transfers";
+import { VISIBLE_SCROLLBAR } from "./_lib/table-scroll";
 
 const PER_PAGE = 25;
 
@@ -134,7 +135,7 @@ function InterbranchTransfersContent() {
               <FillSection>
                 <Card className={FIT_CLASSES.section}>
                   <CardContent className={FIT_CLASSES.section}>
-                    <ScrollBox>
+                    <ScrollBox className={VISIBLE_SCROLLBAR} tabIndex={0} role="region" aria-label="Transfers, scrolls sideways">
                       <TransfersTable rows={data.data} canCreate={canCreate} onAction={onAction} onSendBack={onSendBack} />
                     </ScrollBox>
                     <TablePagination
