@@ -38,7 +38,9 @@ export function BranchFilter({ value, onChange, className }: BranchFilterProps) 
   const options = branchFilterOptions(branches, caller, viewAll);
 
   return (
-    <div className="space-y-1.5">
+    // gap, not space-y: the select renders a hidden input after its trigger,
+    // and space-y would give the trigger a bottom margin.
+    <div className="flex flex-col gap-1.5">
       <Label htmlFor={id} className="text-xs text-muted-foreground">
         Branch
       </Label>
