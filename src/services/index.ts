@@ -28,6 +28,7 @@ export { collateralTypeService } from "./collateral-type.service";
 export type { CreateCollateralTypeData, UpdateCollateralTypeData } from "./collateral-type.service";
 export { autoPayService } from "./auto-pay.service";
 export { accountingService } from "./accounting.service";
+export { interbranchTransferService } from "./interbranch-transfer.service";
 export { creditScoringService } from "./credit-scoring.service";
 export { reminderService } from "./reminder.service";
 export { loanOriginationService } from "./loan-origination.service";

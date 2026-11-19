@@ -60,6 +60,11 @@ export const DEFAULT_CHART_OF_ACCOUNTS: SeedAccount[] = [
   // reviewed; any balance here needs review.
   { code: "1180", name: "Loan Adjustments Clearing", type: "asset", parent: "1000" },
 
+  // Money moving between branches (Phase 6 MB-BE5): debited in the sending
+  // branch, credited in the receiving one. Across branches it reads only what
+  // is still in transit.
+  { code: "1190", name: "Interbranch Clearing", type: "asset", parent: "1000" },
+
   // Credit-balanced asset: it REDUCES loans receivable. Net Loans Receivable
   // is gross minus this, which is why `is_contra` has to be set.
   {
@@ -225,6 +230,8 @@ export const DEFAULT_ACCOUNT_MAPPING_CODES = {
   // Interest and penalty a restructure capitalised, recognised as the new
   // loan's principal is collected.
   unearned_restructure_income: "1210",
+  // Interbranch transfers clear here between the two branches' books.
+  interbranch_clearing: "1190",
   // Where the year-end close moves the result. Retained Earnings on a
   // company chart; a cooperative chart points it at its own net surplus.
   net_surplus: "3030",
