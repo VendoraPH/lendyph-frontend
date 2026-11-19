@@ -84,6 +84,8 @@ export function DateRangeFilter({
           <Calendar
             mode="single"
             selected={fromDate}
+            // Opens on the chosen month, not today's.
+            defaultMonth={fromDate ?? toDate}
             onSelect={(d) => {
               const nextFrom = d ? formatDateISO(d) : null;
               // A `to` now before the `from` describes no days at all. Drop it
@@ -117,6 +119,7 @@ export function DateRangeFilter({
           <Calendar
             mode="single"
             selected={toDate}
+            defaultMonth={toDate ?? fromDate}
             // The `from` guard above handles the other direction; this one just
             // stops the impossible pick being made in the first place.
             disabled={fromDate ? (d) => d < fromDate : undefined}

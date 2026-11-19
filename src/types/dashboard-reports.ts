@@ -93,11 +93,26 @@ export interface ProductPortfolioRow {
   par_ratio?: Num;
   /** Share of the released amount, not of the outstanding book. */
   portfolio_share?: Num;
+  /** Share of every product's unpaid principal, whole percent; null when nothing is owed. */
+  outstanding_share?: Num;
+}
+
+/** The products past the server's named ones, as one row (EB-A). */
+export interface OtherProductsShare {
+  product_count?: Num;
+  product_ids?: number[];
+  loan_count?: Num;
+  outstanding_principal?: Num;
+  total_outstanding?: Num;
+  outstanding_share?: Num;
 }
 
 /** GET /reports/portfolio-by-product. */
 export interface PortfolioByProductReport {
   products?: ProductPortfolioRow[];
+  /** The products a share chart names, largest first; the rest are `other`. */
+  named_product_ids?: number[];
+  other?: OtherProductsShare | null;
   totals?: Omit<ProductPortfolioRow, "product_id" | "product_name">;
 }
 

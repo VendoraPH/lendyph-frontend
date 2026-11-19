@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { AmlaNoteDialog, type AmlaNoteAction } from "@/app/(app)/settings/amla/_components/amla-note-dialog";
+import { AmlaNoteDialog, type AmlaNoteAction } from "@/components/amla/amla-note-dialog";
 import { DataState } from "@/components/common/data-state";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Badge } from "@/components/ui/badge";

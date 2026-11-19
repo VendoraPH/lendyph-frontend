@@ -67,6 +67,8 @@ test("change requests keep the page meta and send only the filters set", async (
   assert.deepEqual(page, { data: [{ id: 4 }], meta: PAGE_META });
   await amlaApi.changeRequests({ status: null, page: 1 });
   assert.equal(last().url, "/api/amla/change-requests?page=1");
+  await amlaApi.changeRequests({ status: "pending", type: "detection_rules", page: 1 });
+  assert.equal(last().url, "/api/amla/change-requests?status=pending&type=detection_rules&page=1");
 });
 
 test("asking, approving, rejecting and withdrawing post to their own routes", async () => {

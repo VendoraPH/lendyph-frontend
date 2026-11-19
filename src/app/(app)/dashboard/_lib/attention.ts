@@ -31,6 +31,21 @@ const plural = (n: number, one: string, many = `${one}s`) => `${formatMetric(n, 
 /** A server amount, or a dash when it wasn't sent: never ₱0.00 for a missing figure. */
 const money = (v: number | null) => (v === null ? "—" : formatCurrency(v));
 
+/** The sources the checks read. */
+const ATTENTION_SOURCES = ["accounting", "balance", "efficiency", "aging", "loanStats", "disbursements", "pastDue"] as const;
+
+/**
+ * Whether the checks could run: `failed` when any source they read failed,
+ * so the panel never says "nothing needs attention" about data it doesn't
+ * have. A source the user may not read is left out, not a failure.
+ */
+export function attentionStatus(d: ExecutiveData): "loading" | "failed" | "ready" {
+  const states = ATTENTION_SOURCES.map((name) => d[name].state);
+  if (states.includes("error")) return "failed";
+  if (states.includes("loading")) return "loading";
+  return "ready";
+}
+
 export function attentionItems(d: ExecutiveData): AttentionItem[] {
   const items: AttentionItem[] = [];
   const t = ATTENTION_THRESHOLDS;

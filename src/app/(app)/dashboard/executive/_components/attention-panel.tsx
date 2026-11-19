@@ -4,13 +4,18 @@ import Link from "next/link";
 import { AlertOctagon, AlertTriangle, CheckCircle2, ChevronRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { attentionItems } from "../../_lib/attention";
+import { attentionItems, attentionStatus } from "../../_lib/attention";
 import type { ExecutiveData } from "../../_lib/executive-data";
 
-/** What needs someone's attention now, critical first. Nothing is raised from data that failed to load. */
+/**
+ * What needs someone's attention now, critical first, from today's figures
+ * whatever the period (until EB-FE2 reads `/attention`). Nothing is raised
+ * from data that failed to load, and it never says "nothing needs attention"
+ * when some of its data failed.
+ */
 export function AttentionPanel({ data }: { data: ExecutiveData }) {
   const items = attentionItems(data);
-  const stillLoading = Object.values(data).some((s) => s.state === "loading");
+  const status = attentionStatus(data);
 
   return (
     <Card className="rounded-xl border border-border shadow-sm">
@@ -20,12 +25,17 @@ export function AttentionPanel({ data }: { data: ExecutiveData }) {
           Requires Attention
           {items.length > 0 ? <span className="rounded-full bg-muted px-2 text-xs font-medium">{items.length}</span> : null}
         </CardTitle>
+        <p className="text-xs text-muted-foreground">As of today</p>
       </CardHeader>
       <CardContent>
-        {items.length === 0 ? (
+        {items.length === 0 && status === "failed" ? (
+          <p className="text-sm text-muted-foreground" role="status">
+            Not available: some of the figures these checks read couldn&apos;t be loaded.
+          </p>
+        ) : items.length === 0 ? (
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             <CheckCircle2 className="size-4 text-emerald-600" aria-hidden="true" />
-            {stillLoading ? "Checking…" : "Nothing needs attention right now."}
+            {status === "loading" ? "Checking…" : "Nothing needs attention right now."}
           </p>
         ) : (
           <ul className="divide-y">
@@ -52,6 +62,9 @@ export function AttentionPanel({ data }: { data: ExecutiveData }) {
             })}
           </ul>
         )}
+        {items.length > 0 && status === "failed" ? (
+          <p className="mt-2 text-xs text-muted-foreground">Some checks couldn&apos;t run: part of their data couldn&apos;t be loaded.</p>
+        ) : null}
       </CardContent>
     </Card>
   );

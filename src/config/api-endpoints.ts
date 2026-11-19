@@ -249,6 +249,11 @@ export const API_ENDPOINTS = {
     COLLECTIONS_TREND: "/dashboard/collections-trend",
     DAILY_DUES: "/dashboard/daily-dues",
     RECENT_TRANSACTIONS: "/dashboard/recent-transactions",
+    // The executive dashboard (Phase 6 EB-D1): dashboard:analytics, plus each
+    // figure's source permission. PAR loans also need reports:view and loans:view.
+    EXECUTIVE_OVERVIEW: "/dashboard/executive/overview",
+    EXECUTIVE_BRANCHES: "/dashboard/executive/branches",
+    EXECUTIVE_PAR_LOANS: "/dashboard/executive/par-loans",
   },
   USERS: {
     LIST: "/users",
@@ -676,6 +681,14 @@ export const API_ENDPOINTS = {
     ORDER_RELEASE_APPROVE: (id: number) => `/amla/orders/${id}/release/approve`,
     ORDER_RELEASE_REJECT: (id: number) => `/amla/orders/${id}/release/reject`,
     ORDER_RELEASE_WITHDRAW: (id: number) => `/amla/orders/${id}/release/withdraw`,
+    RISK_RULES: "/amla/risk-rules",
+    /** AMLA-B3: alerts need `amla:alerts`, candidates `amla:ctr`; both branch-scoped. Rules are head office. */
+    ALERTS: "/amla/alerts",
+    ALERT: (id: number) => `/amla/alerts/${id}`,
+    CTR_CANDIDATES: "/amla/ctr-candidates",
+    CTR_CANDIDATE: (id: number) => `/amla/ctr-candidates/${id}`,
+    DETECTION_RULES: "/amla/detection-rules",
+    DETECTION_RULE_VERSIONS: "/amla/detection-rules/versions",
   },
   /**
    * CDA Compliance (CDA design §3). Every route needs `branches:view_all` plus

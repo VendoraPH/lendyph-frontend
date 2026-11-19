@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { AmlaPager } from "@/components/amla/amla-pager";
+import { VISIBLE_SCROLLBAR } from "@/components/amla/visible-scrollbar";
 import { BranchFilter, branchIdParam } from "@/components/common/branch-filter";
 import { DataState } from "@/components/common/data-state";
 import { FillSection, PageFill, ScrollBox } from "@/components/common/page-fill";
@@ -125,7 +126,7 @@ export function CustomersWorklist() {
           {(page) => (
             <>
               {/* A set minimum width, so at 1024 the table scrolls sideways inside its box instead of squeezing. */}
-              <ScrollBox className="min-h-0 flex-1">
+              <ScrollBox className={`min-h-0 flex-1 ${VISIBLE_SCROLLBAR}`} tabIndex={0} role="region" aria-label="Customers, scrolls sideways">
                 <Table className="min-w-[48rem]">
                   <TableHeader className="sticky top-0 z-10 bg-background">
                     <TableRow>
