@@ -27,3 +27,14 @@ export function dashboardKpiClasses(): { grid: string; card: string; content: st
     sparkline: "hidden shrink-0 @min-[14rem]/kpi:block",
   };
 }
+
+/**
+ * The collections ring's panel beside the Daily dues table: the app's usual
+ * inner panel (`rounded-lg border p-4`), sized to its content and at the top,
+ * level with the table's headings. Centred in a column as tall as the card,
+ * the ring floated below them whenever the list was short. No fill, so the
+ * empty ring (a muted stroke) stays visible. Its left edge lines up with the
+ * tabs above it; on a narrow card it sits above the table, full width.
+ */
+export const DUES_DONUT_COLUMN_CLASS =
+  "mx-4 flex shrink-0 flex-col items-center justify-start gap-2 rounded-lg border p-4 @xl:mr-0 @xl:w-60 @xl:self-start";

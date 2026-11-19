@@ -119,6 +119,16 @@ export type Module =
   // the roles screen offers them. Nothing is sent to members: the engine runs
   // on log-only drivers, and the screens show test mode.
   | "reminders"
+  // ── Loan Origination ──
+  //
+  // `view` reads applications, links, assessments and documents; `update`
+  // verifies documents, assigns officers, writes notes, requests information,
+  // links a member, moves an application between review steps and submits it
+  // for approval (approval itself runs through the existing loan approval
+  // chain); `assess` re-runs and annotates the preliminary assessment;
+  // `convert` turns an approved application into a loan; `settings` edits
+  // public links and the module's settings. Not seeded by the backend yet.
+  | "loan_origination"
   // ── Savings & Deposits ──
   //
   // `view` reads products, accounts, ledgers and reports; `create` opens an
@@ -233,6 +243,9 @@ export type Action =
   | "invite"
   | "requests"
   | "announcements"
+  // ── Loan Origination verbs (see the `loan_origination` module above) ──
+  | "assess"
+  | "convert"
   // Linda: asking it questions (`linda:use`).
   | "use";
 
