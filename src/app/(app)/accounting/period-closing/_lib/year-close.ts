@@ -8,6 +8,7 @@ import { signedCentavos } from "../../_lib/signed-money";
 import { getErrorMessage, getFieldErrors, httpStatusOf } from "@/lib/api-error";
 import { formatDate, formatDateTime } from "@/lib/format";
 import type {
+  AccountingAccountRef,
   AccountingBranchRef,
   AccountingPeriod,
   YearClose,
@@ -55,6 +56,11 @@ export function netResult(net: number | null | undefined): NetResult {
     amount: typeof net === "number" && Number.isFinite(net) ? formatCentavos(net).replace(/^-/, "") : "—",
     loss,
   };
+}
+
+/** The net surplus account as "3080 Undivided Net Surplus"; the preview's is null while none is mapped. */
+function accountName(account: AccountingAccountRef): string {
+  return `${account.code} ${account.name}`;
 }
 
 function branchName(branch: AccountingBranchRef | null): string {
@@ -117,7 +123,7 @@ export function previewView(preview: YearClosePreview): PreviewView {
   return {
     year: preview.year,
     asOf: formatDate(preview.as_of),
-    movesTo: `Moves to ${account.code} ${account.name}`,
+    movesTo: account ? `Moves to ${accountName(account)}` : "No net surplus account is set",
     branches: preview.branches.map(branchView),
     totalIncome: centavosOrDash(preview.total_income),
     totalExpenses: centavosOrDash(preview.total_expenses),
@@ -131,7 +137,8 @@ export function previewView(preview: YearClosePreview): PreviewView {
 
 export function closeConfirmText(preview: YearClosePreview): string {
   const account = preview.net_surplus_account;
-  return `This posts a closing entry for each branch dated ${formatDate(preview.as_of)}, moving the year's income and expenses to ${account.code} ${account.name}, then closes every month of ${preview.year}. Reopen only to correct the year.`;
+  const target = account ? accountName(account) : "the net surplus account";
+  return `This posts a closing entry for each branch dated ${formatDate(preview.as_of)}, moving the year's income and expenses to ${target}, then closes every month of ${preview.year}. Reopen only to correct the year.`;
 }
 
 /** Why a close was refused, in the server's words: each blocking reason on `year` (422), or its message (409). */

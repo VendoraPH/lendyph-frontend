@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/table";
 import { useAccountingResource, useChartOfAccounts } from "@/hooks";
 import { accountingService } from "@/services";
+import { chartGate, chartTemplateNotice, savedAccountsOnly } from "@/lib/accounting/chart-status";
 import { formatCentavos } from "@/lib/accounting/money";
 import { todayISO } from "@/lib/format";
 import { formatValue } from "@/lib/report-format";
@@ -35,6 +36,7 @@ import type { GeneralLedgerPage as LedgerPage, JournalSource } from "@/types";
 import { AccountingPageHeader } from "../_components/page-header";
 import { DataState } from "../_components/data-state";
 import { AccountSelect } from "../_components/account-select";
+import { ChartNotSetUp } from "../_components/chart-not-set-up";
 import { journalSourceLabel, normalBalanceLabel } from "../_lib/display-labels";
 import { journalHref } from "../journals/_lib/journal-register";
 import { ANY_SOURCE, journalSourceItems } from "../_lib/select-items";
@@ -61,7 +63,10 @@ function GeneralLedgerContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { postable } = useChartOfAccounts();
+  const chart = useChartOfAccounts();
+  // Never the template: its ids are placeholders, and the ledger refuses them (422).
+  const postable = savedAccountsOnly(chart);
+  const chartNotice = chartTemplateNotice(chart.status);
   const [branch, setBranch] = useState(ALL_BRANCHES);
 
   // This month to today, fixed for the visit, so a URL without dates means it.
@@ -141,8 +146,24 @@ function GeneralLedgerContent() {
 
   const account = postable.find((a) => a.id === accountId);
 
+  const gate = chartGate(chart.status);
+  // The page's usual loading state until the chart answers, so the picker never flashes before the set-up state.
+  if (gate === "loading") return <PageLoader />;
+  if (gate === "set_up") {
+    return (
+      <FillSection className="gap-6">
+        <ChartNotSetUp description="The General Ledger lists the movements through one account of your chart, so the chart has to be saved first." />
+      </FillSection>
+    );
+  }
+
   return (
     <FillSection className="gap-6">
+      {chartNotice && (
+        <p role="status" className="shrink-0 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+          {chartNotice} No account can be picked here.
+        </p>
+      )}
       <FilterBar>
         <AccountSelect
           label="Account"

@@ -329,8 +329,9 @@ export interface CdaReadinessBucket {
 }
 
 export interface CdaReadinessBreakdown {
-  passed: number;
-  total: number;
+  /** Absent when the report doesn't apply (no checks were counted). */
+  passed?: number;
+  total?: number;
   by_component: Record<string, CdaReadinessBucket>;
   by_section: Record<string, CdaReadinessBucket>;
   failed: string[];

@@ -3,6 +3,7 @@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import { Textarea } from "@/components/ui/textarea";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import type { RecordDraft, RecordField } from "../_lib/record-form";
@@ -89,7 +90,7 @@ export function RecordFields({
     <>
       {fields.map((field) => (
         <div key={field.key} data-field={field.key} className={fieldSpan(field)}>
-          <Label htmlFor={`rec-${field.key}`}>
+          <Label htmlFor={`rec-${field.key}`} className={cn(field.labelHidden && "sr-only")}>
             {field.label} {field.required && <span className="text-destructive">*</span>}
           </Label>
           <FieldControl

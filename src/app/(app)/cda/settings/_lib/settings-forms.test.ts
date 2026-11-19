@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { CdaSettings } from "@/types/cda";
-import { draftToSettings, draftToTemplate, parseDayList, parseKeyList, settingsToDraft, templateToDraft, toProfile } from "./settings-forms";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { PROFILE_REP_FIELD, draftToSettings, draftToTemplate, parseDayList, parseKeyList, settingsToDraft, templateToDraft, toProfile } from "./settings-forms";
 
 const SETTINGS: CdaSettings = {
   annual_deadline_days: 120,
@@ -52,4 +54,12 @@ test("a template's definition must be a JSON object", () => {
   assert.ok(typeof ok !== "string");
   assert.deepEqual(ok.asset_classes, ["micro", "small"]);
   assert.equal(ok.effective_until, null);
+});
+
+test("the representative picker keeps its name for screen readers but doesn't repeat the section title", () => {
+  // Flag 32: "Authorised representative" showed as the section title, then again as the picker's label.
+  assert.equal(PROFILE_REP_FIELD.label, "Authorised representative");
+  assert.equal(PROFILE_REP_FIELD.labelHidden, true);
+  const fields = readFileSync(join(process.cwd(), "src/app/(app)/cda/_components/record-fields.tsx"), "utf8");
+  assert.match(fields, /field\.labelHidden && "sr-only"/);
 });
