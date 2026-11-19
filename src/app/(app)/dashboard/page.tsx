@@ -22,7 +22,7 @@ import { shareCapitalBookBalance } from "./_lib/share-capital-kpi";
 import { collectionPieSlices, collectionRateTone, shownCollectionRate } from "./_lib/collection-pie";
 import { DuesDonut } from "./_components/dues-donut";
 import { DuesTable, TransactionsTable, type DueItemView, type LoadState } from "./_components/dashboard-tables";
-import { DASHBOARD_PAGE_CLASS, dashboardKpiClasses } from "./_lib/kpi-layout";
+import { DASHBOARD_PAGE_CLASS, DUES_TABLE_PANEL_CLASS, TRANSACTIONS_TABLE_PANEL_CLASS, dashboardKpiClasses } from "./_lib/kpi-layout";
 import { insuranceCollected } from "./_lib/insurance-collected";
 import { recentTransactionRows, type RecentTransactionRow } from "./_lib/recent-transactions";
 import {
@@ -334,16 +334,20 @@ function DashboardContent() {
                 slices={pieData}
                 mounted={mounted}
               />
-              <ScrollBox className="@xl:flex-1">
-                <DuesTable items={dueItems} state={duesStatus} />
-              </ScrollBox>
+              <div className={DUES_TABLE_PANEL_CLASS}>
+                <ScrollBox>
+                  <DuesTable items={dueItems} state={duesStatus} />
+                </ScrollBox>
+              </div>
             </div>
           </TabsContent>
 
           <TabsContent value="transactions" className={FIT_CLASSES.section}>
-            <ScrollBox>
-              <TransactionsTable rows={transactions} state={txStatus} />
-            </ScrollBox>
+            <div className={TRANSACTIONS_TABLE_PANEL_CLASS}>
+              <ScrollBox>
+                <TransactionsTable rows={transactions} state={txStatus} />
+              </ScrollBox>
+            </div>
           </TabsContent>
         </Tabs>
       </ExpandableCard>

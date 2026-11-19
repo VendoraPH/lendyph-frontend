@@ -38,3 +38,20 @@ export function dashboardKpiClasses(): { grid: string; card: string; content: st
  */
 export const DUES_DONUT_COLUMN_CLASS =
   "mx-4 flex shrink-0 flex-col items-center justify-start gap-2 rounded-lg border p-4 @xl:mr-0 @xl:w-60 @xl:self-start";
+
+/**
+ * The Daily dues and Recent transactions tables' own panels: the ring's inner
+ * panel (`rounded-lg border`), so the boxes share one top line with the table's
+ * headings at the top of theirs. With only the ring boxed, its top lined up with
+ * the table's invisible top edge and still read as out of line. Each sits 16px in
+ * from the card's sides; beside the ring, the row's gap spaces the two boxes and
+ * the table takes the rest of the width.
+ *
+ * Each is a wrapper around the table's scroll box that clips its own corners
+ * (`overflow-clip`). The expand dialog turns a scroll box's overflow off, so a
+ * border on the scroll box itself lost its rounded clip there. Unlike
+ * `overflow-hidden`, `overflow-clip` is no scroll container, so the headings still
+ * pin to whichever box scrolls: the table's on the page, the dialog's when expanded.
+ */
+export const DUES_TABLE_PANEL_CLASS = "mx-4 flex min-h-0 flex-1 flex-col overflow-clip rounded-lg border @xl:ml-0";
+export const TRANSACTIONS_TABLE_PANEL_CLASS = "mx-4 flex min-h-0 flex-1 flex-col overflow-clip rounded-lg border";
