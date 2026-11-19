@@ -8,6 +8,7 @@ import {
   CollapsibleTrigger,
   CollapsibleContent,
 } from "@/components/ui/collapsible";
+import { collapsibleToggleLabel } from "@/lib/collapsible-label";
 import { cn } from "@/lib/utils";
 
 interface CollapsibleCardProps {
@@ -58,7 +59,11 @@ export function CollapsibleCard({
       <Card className={className}>
         <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
           <div className="flex items-center gap-2">
-            <CollapsibleTrigger className="flex-1 min-w-0 text-left group/trigger">
+            <CollapsibleTrigger
+              className="flex-1 min-w-0 text-left group/trigger"
+              aria-label={collapsibleToggleLabel(title, open)}
+              aria-expanded={open}
+            >
               <CardTitle className="text-sm font-medium flex items-center gap-2">
                 {icon}
                 {title}

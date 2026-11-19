@@ -45,10 +45,13 @@ export function reportFigureNote(
 
 /**
  * The page filters each section follows, where its response names none:
- * share capital isn't kept by product, officer or collector.
+ * share capital isn't kept by product, officer or collector, and the loan
+ * list's status counts (the application pipeline) follow the branch only.
  */
 export const SECTION_FILTERS = {
   shareCapitalControl: [] as ExecutiveFilterKey[],
+  // GET /loans `meta.stats`: by branch only (LoanController keeps them whole-book).
+  pipeline: [] as ExecutiveFilterKey[],
 } as const;
 
 /** The note for a section that ignores some sent filters, from its known filters. */

@@ -8,6 +8,8 @@ import { readyData, type ExecutiveData } from "../../_lib/executive-data";
 import { pipelineStages, productRows, productShareSlices } from "../../_lib/executive-sections";
 import { DATA_UNAVAILABLE, formatMetric, toNumber } from "../../_lib/metrics";
 import { EXECUTIVE_LAYOUT as L } from "../../_lib/executive-layout";
+import type { ExecutiveFilterKey } from "@/types/executive-dashboard";
+import { sectionFilterNote } from "../../_lib/executive-books";
 import { CARD_STATE_TEXT, balanceHeading } from "../../_lib/executive-overview";
 import { VISIBLE_SCROLLBAR } from "@/components/amla/visible-scrollbar";
 import { Figure, SectionShell, SourceGate } from "./section-shell";
@@ -19,7 +21,17 @@ const REST_COLOR = "var(--muted-foreground)";
 const money = (v: number | null) => (v === null ? DATA_UNAVAILABLE : formatCurrency(v));
 
 /** `pastPeriod`: product shares and outstanding are today's balances, so a past period shows "No snapshot for this date" (No backfill). */
-export function PortfolioSection({ data, pastPeriod }: { data: ExecutiveData; pastPeriod: boolean }) {
+export function PortfolioSection({
+  data,
+  pastPeriod,
+  sentFilters,
+}: {
+  data: ExecutiveData;
+  pastPeriod: boolean;
+  sentFilters: ExecutiveFilterKey[];
+}) {
+  // The pipeline's counts follow the branch only (GET /loans `meta.stats`).
+  const pipelineNote = sectionFilterNote(sentFilters, "pipeline");
   const notice = pastPeriod ? CARD_STATE_TEXT.no_snapshot : null;
   const rows = productRows(readyData(data.products));
   // The server's shares: its named products, then its "other" row.
@@ -119,6 +131,7 @@ export function PortfolioSection({ data, pastPeriod }: { data: ExecutiveData; pa
               ))}
             </div>
           </SourceGate>
+          {pipelineNote ? <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-400">{pipelineNote}</p> : null}
         </div>
       </div>
     </SectionShell>

@@ -185,7 +185,7 @@ function ExecutiveDashboard() {
 
           <div className={L.columns}>
             <div className="flex min-w-0 flex-col gap-4">
-              <PortfolioSection data={data} pastPeriod={pastPeriod} />
+              <PortfolioSection data={data} pastPeriod={pastPeriod} sentFilters={sentFilterKeys} />
               <CollectionSection data={data} pastPeriod={pastPeriod} />
               <FinancialSection
                 data={data}

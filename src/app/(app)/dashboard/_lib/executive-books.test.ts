@@ -321,3 +321,11 @@ test("a report that sends no filter list falls back to the figure's known filter
     "Covers every product: this figure doesn't follow the product filter.",
   );
 });
+
+// ── Check E9 ───────────────────────────────────────────────────────────────
+
+test("the application pipeline follows the branch only, so it notes every page filter", () => {
+  assert.deepEqual(SECTION_FILTERS.pipeline, []);
+  assert.equal(sectionFilterNote(["product_id"], "pipeline"), "Covers every product: this figure doesn't follow the product filter.");
+  assert.equal(sectionFilterNote([], "pipeline"), null);
+});
