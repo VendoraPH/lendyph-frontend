@@ -187,3 +187,31 @@ test("Daily Collection offers the branch filter and sends the picked branch to b
   assert.ok(reads.length >= 2, "both the summary and the repayments are read");
   for (const url of reads) assert.equal(url.searchParams.get("branch_id"), "3", url.pathname);
 });
+
+// Phase 6 decision 10: the Share Capital report's totals and member roster
+// need `share_capital:view` on top of `reports:view`, as the server now
+// answers. Without it the report is off the list and its page says so.
+test("the Share Capital report needs share_capital:view", async () => {
+  const { visibleReports } = await import("./report-catalog");
+  const report = await reportDefinition("share_capital");
+  assert.equal(report.permission, "share_capital:view");
+
+  const without = visibleReports((p) => p !== "share_capital:view").map((r) => r.id);
+  assert.equal(without.includes("share_capital"), false);
+  assert.ok(without.includes("cash_flow"));
+  assert.ok(visibleReports(() => true).some((r) => r.id === "share_capital"));
+});
+
+test("a report the user can't read says No access; an unknown or switched-off one is not found", async () => {
+  const { reportAccess } = await import("./report-catalog");
+  const withoutShareCapital = (p: string) => p !== "share_capital:view";
+
+  assert.equal(reportAccess("share_capital", withoutShareCapital), "no_access");
+  assert.equal(reportAccess("share_capital", () => true), "open");
+  assert.equal(reportAccess("cash_flow", withoutShareCapital), "open");
+  assert.equal(reportAccess("no_such_report", () => true), "not_found");
+  // NEXT_PUBLIC_ENABLE_SAVINGS is unset here: a switched-off module is never
+  // revealed, whatever the user holds.
+  assert.equal(reportAccess("savings_balances", () => true), "not_found");
+  assert.equal(reportAccess("savings_balances", () => false), "not_found");
+});

@@ -263,6 +263,9 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     // honours `branch_id` by resolving it through the member's branch, and
     // reports which scope it applied via `branch_scope`.
     supportsBranch: true,
+    // Its totals and member roster need `share_capital:view` on top of
+    // `reports:view` (Phase 6 decision 10); the server answers 403 without it.
+    permission: "share_capital:view",
     build: reportBuilder(reportService.shareCapital, buildShareCapitalDoc),
   },
   {
@@ -671,4 +674,19 @@ export function visibleReports(can: (permission: Permission) => boolean): Report
   return REPORT_CATALOG.filter(
     (r) => r.available !== false && (!r.permission || can(r.permission)),
   );
+}
+
+/**
+ * Whether a report's page opens for this user. A report whose module is
+ * switched off for this deployment, or that doesn't exist, is "not_found", so
+ * nothing about a switched-off module is revealed. One that is on but needs a
+ * permission the user lacks is "no_access", as the server answers it (403).
+ */
+export function reportAccess(
+  id: string,
+  can: (permission: Permission) => boolean,
+): "open" | "no_access" | "not_found" {
+  const report = REPORT_CATALOG.find((r) => r.id === id);
+  if (!report || report.available === false) return "not_found";
+  return !report.permission || can(report.permission) ? "open" : "no_access";
 }

@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { RouteGuard } from "@/components/common";
+import { AccessDenied, RouteGuard } from "@/components/common";
 // Deep import, not the barrel: re-exporting this one costs every page that
 // imports `@/components/common` ~52 kB it cannot use. See the note in the barrel.
 import { SubjectPicker } from "@/components/common/subject-picker";
@@ -60,7 +60,7 @@ import {
   Table as TableIcon,
 } from "lucide-react";
 import { borrowerService, reportService } from "@/services";
-import { visibleReports } from "../_lib/report-catalog";
+import { REPORT_CATALOG, reportAccess, visibleReports } from "../_lib/report-catalog";
 import { csvFileName } from "../_lib/export-file-name";
 import { PRESETS, presetRange, type Preset } from "../_lib/report-period";
 import { CATEGORY_META, MAX_REPORT_SPAN_YEARS, exceedsReportSpanCap } from "../_lib/types";
@@ -154,9 +154,11 @@ function ReportDetailContent({
   const router = useRouter();
   const reportId = params?.reportId as string | undefined;
   const { user, hasPermission } = useAuth();
-  // A report this deployment or user can't open answers "not found", the
-  // same as an unknown id, so its data is never requested.
+  // A report this deployment or user can't open is never loaded, so its data is
+  // never requested. One that is switched off reads "not found", the same as an
+  // unknown id; one the user lacks the permission for says so.
   const report = visibleReports(hasPermission).find((r) => r.id === (reportId as ReportId));
+  const access = reportAccess(reportId ?? "", hasPermission);
 
   // A link's `?from=&to=` opens the report on that period, as a custom range,
   // on reports that have date controls. It only presets them; nothing runs
@@ -243,6 +245,11 @@ function ReportDetailContent({
   }, [logoUrl]);
 
   const activeRange = preset === "custom" ? range : presetRange(preset, range);
+
+  if (!report && access === "no_access") {
+    const title = REPORT_CATALOG.find((r) => r.id === reportId)?.title;
+    return <AccessDenied pageName={title ? `the ${title}` : "this report"} />;
+  }
 
   if (!report) {
     return (
