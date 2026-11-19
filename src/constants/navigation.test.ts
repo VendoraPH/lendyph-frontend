@@ -213,3 +213,16 @@ test("Settings → Linda needs linda:settings and every branch, as its page and 
   assert.match(page, /<RouteGuard permission="linda:settings"/);
   assert.match(page, /<RouteGuard permission="branches:view_all"/);
 });
+
+test("AMLA is off when the flag isn't set: no Settings link, and its routes answer not found", () => {
+  assert.equal(env.features.amla, false);
+  const settings = SIDEBAR_NAV.find((item) => item.href === "/settings");
+  assert.equal(settings?.children?.some((c) => c.href === "/settings/amla"), false);
+  assert.equal(SIDEBAR_NAV.some((item) => item.href.startsWith("/amla")), false);
+  assert.match(read("src/constants/navigation.ts"), /env\.features\.amla \? \[AMLA_SETTINGS_NAV\]/);
+  for (const path of ["src/app/(app)/amla/layout.tsx", "src/app/(app)/settings/amla/layout.tsx"]) {
+    const layout = read(path);
+    assert.match(layout, /if \(!env\.features\.amla\) notFound\(\);/, path);
+    assert.doesNotMatch(layout, /"use client"/, path);
+  }
+});
