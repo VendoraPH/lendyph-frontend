@@ -1,6 +1,7 @@
 import type { Permission } from "@/types";
 import type { PermissionRequirement } from "@/lib/permission-requirement";
 import type { ComponentType } from "react";
+import type { Icon3DName } from "@/lib/icons-3d";
 import {
   LayoutDashboard,
   Users,
@@ -20,11 +21,13 @@ import {
   ClipboardCheck,
   MonitorSmartphone,
   Sparkles,
+  TrendingUp,
 } from "lucide-react";
 import { GCashIcon } from "@/components/icons/gcash-icon";
 import { env } from "@/config/env";
 import { MODULE_ALSO_REQUIRES } from "@/lib/permission-module-names";
 import { meetsPermission } from "@/lib/permission-requirement";
+import { EXECUTIVE_DASHBOARD_PERMISSION } from "@/app/(app)/dashboard/_lib/executive-access";
 
 export interface NavSubItem {
   title: string;
@@ -56,7 +59,13 @@ export interface NavSubItem {
 export interface NavItem {
   title: string;
   href: string;
+  /** The line icon, for the command palette and items without a 3D icon. */
   icon: ComponentType<{ className?: string }>;
+  /**
+   * The side menu's 3D icon (`@/lib/icons-3d`). Linda (her face) and GCash
+   * (its brand mark) have none and keep their own picture.
+   */
+  icon3d?: Icon3DName;
   permission: Permission;
   /**
    * Permissions needed as well as `permission`, every one of them. CDA
@@ -90,6 +99,21 @@ export function navChildAllowed(child: NavSubItem, can: (permission: Permission)
  * goes to the first page the user can open, so a cashier who only decides
  * Member Portal requests lands on the queue, not on a page they can't open.
  */
+/**
+ * Whether a top-level menu link is the current page's: its own path or a page
+ * under it, unless another menu link matches the page more closely. On
+ * /dashboard/executive only Executive Dashboard is highlighted, not Dashboard.
+ */
+export function navItemMatches(
+  pathname: string,
+  href: string,
+  menu: readonly { href: string }[] = SIDEBAR_NAV,
+): boolean {
+  const matches = (h: string) => pathname === h || pathname.startsWith(`${h}/`);
+  if (!matches(href)) return false;
+  return !menu.some((other) => other.href !== href && other.href.startsWith(`${href}/`) && matches(other.href));
+}
+
 export function navItemHref(item: NavItem, can: (permission: Permission) => boolean): string {
   if (!item.anyOf) return item.href;
   return (item.children ?? []).find((child) => navChildAllowed(child, can))?.href ?? item.href;
@@ -105,6 +129,7 @@ export const MEMBER_PORTAL_NAV: NavItem = {
   title: "Member Portal",
   href: "/member-portal",
   icon: MonitorSmartphone,
+  icon3d: "icon-portal",
   permission: "member_portal:view",
   anyOf: ["member_portal:view", "member_portal:requests", "member_portal:announcements"],
   children: [
@@ -143,6 +168,7 @@ export const CDA_NAV: NavItem = {
   title: "CDA Compliance",
   href: "/cda",
   icon: ClipboardCheck,
+  icon3d: "empty-compliance",
   permission: "cda:view",
   alsoRequires: MODULE_ALSO_REQUIRES.cda as Permission[],
   children: [
@@ -168,6 +194,7 @@ const CREDIT_SCORING_NAV: NavItem = {
   title: "Credit Scoring",
   href: "/credit-scoring",
   icon: Gauge,
+  icon3d: "icon-credit-score",
   permission: "credit_scoring:view",
   /**
    * The backend seeds `credit_scoring:view|override|settings` for admin and
@@ -215,18 +242,34 @@ export const LINDA_NAV: NavItem = {
   permission: "linda:use",
 };
 
+/**
+ * The Executive Dashboard, right below Dashboard. Shown only with
+ * NEXT_PUBLIC_ENABLE_EXECUTIVE_DASHBOARD on and to holders of
+ * `dashboard:analytics`, the same gate as its page (dashboard/executive/layout.tsx).
+ */
+export const EXECUTIVE_DASHBOARD_NAV: NavItem = {
+  title: "Executive Dashboard",
+  href: "/dashboard/executive",
+  icon: TrendingUp,
+  icon3d: "icon-trend",
+  permission: EXECUTIVE_DASHBOARD_PERMISSION,
+};
+
 export const SIDEBAR_NAV: NavItem[] = [
   {
     title: "Dashboard",
     href: "/dashboard",
     icon: LayoutDashboard,
+    icon3d: "icon-dashboard",
     permission: "dashboard:view",
   },
+  ...(env.features.executiveDashboard ? [EXECUTIVE_DASHBOARD_NAV] : []),
   ...(env.features.linda ? [LINDA_NAV] : []),
   {
     title: "Members",
     href: "/borrowers",
     icon: Users,
+    icon3d: "empty-members",
     permission: "borrowers:view",
     children: [
       { title: "All Members", href: "/borrowers" },
@@ -237,6 +280,7 @@ export const SIDEBAR_NAV: NavItem[] = [
     title: "Loans",
     href: "/loans",
     icon: FileText,
+    icon3d: "empty-loans",
     permission: "loans:view",
     children: [
       { title: "All Loans", href: "/loans" },
@@ -263,6 +307,7 @@ export const SIDEBAR_NAV: NavItem[] = [
     title: "Payments",
     href: "/payments",
     icon: CreditCard,
+    icon3d: "empty-payments",
     permission: "payments:view",
     children: [
       { title: "New Payment", href: "/payments" },
@@ -274,6 +319,7 @@ export const SIDEBAR_NAV: NavItem[] = [
     title: "Share Capital",
     href: "/share-capital",
     icon: Landmark,
+    icon3d: "empty-share-capital",
     permission: "share_capital:view",
     children: [
       { title: "Subsidiary Ledger", href: "/share-capital/ledger" },
@@ -289,6 +335,7 @@ export const SIDEBAR_NAV: NavItem[] = [
           title: "Savings",
           href: "/savings",
           icon: PiggyBank,
+          icon3d: "empty-savings" as const,
           permission: "savings:view" as const,
           children: [
             { title: "Dashboard", href: "/savings/dashboard" },
@@ -309,6 +356,7 @@ export const SIDEBAR_NAV: NavItem[] = [
     title: "Collateral",
     href: "/collaterals",
     icon: ShieldCheck,
+    icon3d: "empty-collaterals",
     permission: "collaterals:view",
     children: [
       { title: "Collateral Listing", href: "/collaterals" },
@@ -330,6 +378,7 @@ export const SIDEBAR_NAV: NavItem[] = [
     title: "Accounting",
     href: "/accounting",
     icon: BookOpenCheck,
+    icon3d: "empty-ledger",
     permission: "accounting:view",
     /**
      * Fifteen children, which is the most any menu here has. Two of them —
@@ -366,18 +415,21 @@ export const SIDEBAR_NAV: NavItem[] = [
     title: "User Management",
     href: "/users",
     icon: UserCog,
+    icon3d: "icon-users",
     permission: "users:view",
   },
   {
     title: "Reports",
     href: "/reports",
     icon: BarChart3,
+    icon3d: "pick-report",
     permission: "reports:view",
   },
   {
     title: "Documents",
     href: "/printables",
     icon: FileStack,
+    icon3d: "empty-documents",
     // Same gate as Reports: both read the whole book — every loan, member and
     // payment — so they stand or fall on the same permission.
     permission: "reports:view",
@@ -386,12 +438,14 @@ export const SIDEBAR_NAV: NavItem[] = [
     title: "Audit Trail",
     href: "/audit-trail",
     icon: History,
+    icon3d: "icon-audit",
     permission: "audit_logs:view",
   },
   {
     title: "Settings",
     href: "/settings",
     icon: Settings,
+    icon3d: "icon-settings",
     permission: "settings:view",
     children: [
       { title: "Profile", href: "/settings/profile" },

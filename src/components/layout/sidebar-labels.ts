@@ -29,3 +29,8 @@ export function newLabel(count: number | undefined, title: string): string | und
   if (!count || count <= 0) return undefined;
   return `${count} new in ${title}`;
 }
+
+/** The sidebar's collapse or expand button, named for what it does. */
+export function sidebarToggleLabel(collapsed: boolean): string {
+  return collapsed ? "Expand sidebar" : "Collapse sidebar";
+}

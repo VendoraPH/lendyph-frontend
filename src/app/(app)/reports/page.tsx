@@ -7,9 +7,11 @@ import { useAuth } from "@/hooks";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { FileBarChart, Search, Sparkles } from "lucide-react";
+import { Search, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { categoryDescription, visibleReports } from "./_lib/report-catalog";
+import { reportIcon3D } from "./_lib/report-icons-3d";
+import { Icon3D } from "@/components/common/icon-3d";
 import { CATEGORY_ILLUSTRATION, CATEGORY_META } from "./_lib/types";
 import type { ReportCategory, ReportDefinition } from "./_lib/types";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
@@ -57,7 +59,7 @@ export default function ReportsPage() {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex items-start gap-4">
               <div className="hidden sm:flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-brand-orange/15 text-brand-orange">
-                <FileBarChart className="h-6 w-6" />
+                <Icon3D name="pick-report" size={36} />
               </div>
               <div className="min-w-0">
                 <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
@@ -151,7 +153,6 @@ interface ReportCardProps {
 }
 
 function ReportCard({ report }: ReportCardProps) {
-  const Icon = report.icon;
   return (
     <Link
       href={`/reports/${report.id}`}
@@ -174,7 +175,7 @@ function ReportCard({ report }: ReportCardProps) {
                 report.accent.ring
               )}
             >
-              <Icon className={cn("h-5 w-5", report.accent.text)} />
+              <Icon3D name={reportIcon3D(report.icon)} size={30} />
             </div>
             <div className="min-w-0">
               <h3 className="text-sm font-semibold leading-tight">

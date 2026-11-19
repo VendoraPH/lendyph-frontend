@@ -1,3 +1,5 @@
+import type { Icon3DName } from "@/lib/icons-3d";
+
 /** The page root's own classes: the size container the KPI row queries. */
 export const DASHBOARD_PAGE_CLASS = "@container/dashboard";
 
@@ -27,6 +29,21 @@ export function dashboardKpiClasses(): { grid: string; card: string; content: st
     sparkline: "hidden shrink-0 @min-[14rem]/kpi:block",
   };
 }
+
+/** The dashboard's figure cards, by key. */
+export type KpiKey = "portfolio" | "active_loans" | "collected" | "overdue" | "share_capital";
+
+/**
+ * Each figure card's 3D icon, drawn at the size of the old 28px circle, so the
+ * cards stay level and fit as before.
+ */
+export const KPI_ICONS_3D: Readonly<Record<KpiKey, Icon3DName>> = {
+  portfolio: "icon-wallet",
+  active_loans: "empty-loans",
+  collected: "icon-coin",
+  overdue: "icon-alert",
+  share_capital: "empty-share-capital",
+};
 
 /** Inside the expand dialog, the card's 16px inset is dropped, so the body starts at the dialog title's left edge. */
 const IN_DIALOG_FLUSH = "in-data-[slot=dialog-content]:mx-0";

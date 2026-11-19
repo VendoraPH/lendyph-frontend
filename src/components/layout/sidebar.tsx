@@ -4,7 +4,7 @@ import { Suspense, useState, useEffect, useMemo, useRef, useCallback, type React
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { SIDEBAR_NAV } from "@/constants";
-import { navChildAllowed, navItemAllowed, navItemHref, type NavItem } from "@/constants/navigation";
+import { LINDA_NAV, navChildAllowed, navItemAllowed, navItemHref, navItemMatches, type NavItem } from "@/constants/navigation";
 import { usePermission } from "@/hooks";
 import { useRegistrations } from "@/hooks/use-registrations";
 import {
@@ -26,9 +26,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { BrandLogo } from "@/components/common";
+import { Icon3D } from "@/components/common/icon-3d";
+import { ICON_3D_TILE_CLASS } from "@/lib/icons-3d";
+import { LindaAvatar } from "@/components/linda/linda-avatar";
 import { selectSidebarCollapsed, useUIStore } from "@/store/ui-store";
 import { systemService } from "@/services";
-import { collapsedNavLabel, countLabel, navActivePath, newLabel } from "./sidebar-labels";
+import { collapsedNavLabel, countLabel, navActivePath, newLabel, sidebarToggleLabel } from "./sidebar-labels";
 import { useUnseenNavBadges } from "./use-unseen-nav-badges";
 
 interface SidebarProps {
@@ -40,19 +43,42 @@ const MIN_WIDTH = 64;
 const DEFAULT_WIDTH = 260;
 const MAX_WIDTH = 600;
 
-const iconColors: Record<string, string> = {
-  "/dashboard": "bg-gradient-to-br from-orange-400 to-orange-500 text-white shadow-orange-200 dark:shadow-orange-900/30",
-  "/users": "bg-gradient-to-br from-purple-400 to-purple-500 text-white shadow-purple-200 dark:shadow-purple-900/30",
-  "/share-capital": "bg-gradient-to-br from-indigo-400 to-indigo-500 text-white shadow-indigo-200 dark:shadow-indigo-900/30",
-  "/borrowers": "bg-gradient-to-br from-blue-400 to-blue-500 text-white shadow-blue-200 dark:shadow-blue-900/30",
-  "/loans": "bg-gradient-to-br from-emerald-400 to-emerald-500 text-white shadow-emerald-200 dark:shadow-emerald-900/30",
-  "/payments": "bg-gradient-to-br from-cyan-400 to-cyan-500 text-white shadow-cyan-200 dark:shadow-cyan-900/30",
-  "/reports": "bg-gradient-to-br from-pink-400 to-pink-500 text-white shadow-pink-200 dark:shadow-pink-900/30",
-  "/printables": "bg-gradient-to-br from-rose-400 to-rose-500 text-white shadow-rose-200 dark:shadow-rose-900/30",
-  "/audit-trail": "bg-gradient-to-br from-gray-400 to-gray-500 text-white shadow-gray-200 dark:shadow-gray-900/30",
-  "/settings": "bg-gradient-to-br from-slate-400 to-slate-500 text-white shadow-slate-200 dark:shadow-slate-900/30",
-  "/credit-scoring": "bg-gradient-to-br from-violet-400 to-violet-500 text-white",
-};
+/** GCash, which keeps its own brand mark, still sits on today's grey tile. */
+const LINE_ICON_TILE = "bg-gradient-to-br from-gray-400 to-gray-500 text-white";
+
+/**
+ * An item's icon on its tile: the 3D icon on the soft neutral tile, Linda's
+ * face on the same tile (as on her floating button), or, for GCash, its own
+ * mark on the grey tile. The tile keeps today's size (36px collapsed, 32px
+ * open), so nothing in the menu moves.
+ */
+function NavItemIcon({ item, collapsed, className, children }: {
+  item: NavItem;
+  collapsed?: boolean;
+  className?: string;
+  children?: React.ReactNode;
+}) {
+  const isLinda = item.href === LINDA_NAV.href;
+  return (
+    <span
+      className={cn(
+        "relative flex shrink-0 items-center justify-center rounded-xl shadow-sm",
+        collapsed ? "h-9 w-9" : "h-8 w-8",
+        item.icon3d || isLinda ? ICON_3D_TILE_CLASS : LINE_ICON_TILE,
+        className
+      )}
+    >
+      {item.icon3d ? (
+        <Icon3D name={item.icon3d} size={collapsed ? 28 : 24} eager />
+      ) : isLinda ? (
+        <LindaAvatar decorative className={collapsed ? "size-7" : "size-6"} />
+      ) : (
+        <item.icon className={collapsed ? "h-4 w-4" : "h-3.5 w-3.5"} />
+      )}
+      {children}
+    </span>
+  );
+}
 
 function CountPill({
   count,
@@ -139,15 +165,16 @@ function NavLink({
   // child is hidden must render as a plain link, not as an expander that opens
   // onto nothing.
   const hasChildren = visibleChildren.length > 0;
-  const isExactMatch = pathname === item.href;
-  const isPrefixMatch = pathname.startsWith(item.href + "/");
+  // Its own page or one under it, unless another menu link matches more
+  // closely (on /dashboard/executive, Executive Dashboard rather than Dashboard).
+  const isMatch = navItemMatches(pathname, item.href);
   // For items without children, active on exact or prefix match
   // For items with children, only used to expand — dot shown on child only
-  const isActive = hasChildren ? false : (isExactMatch || isPrefixMatch);
+  const isActive = hasChildren ? false : isMatch;
   const isChildActive = hasChildren
     ? visibleChildren.some((c) => pathname === c.href)
     : false;
-  const isOpen = isExactMatch || isPrefixMatch || isChildActive;
+  const isOpen = isMatch || isChildActive;
   const [expanded, setExpanded] = useState(isOpen);
 
   // Auto-expand when navigating to a child route
@@ -156,7 +183,6 @@ function NavLink({
   }, [isOpen]);
   const unseenLabel = newLabel(unseen, item.title);
   const fullLabel = [unseenLabel, badgeLabel].filter(Boolean).join(", ") || undefined;
-  const iconClass = iconColors[item.href] || "bg-gradient-to-br from-gray-400 to-gray-500 text-white";
 
   // ── Collapsed ──
   if (collapsed) {
@@ -178,8 +204,7 @@ function NavLink({
             />
           }
         >
-          <span className={cn("relative flex items-center justify-center rounded-xl h-9 w-9 shadow-sm", iconClass)}>
-            <item.icon className="h-4 w-4" />
+          <NavItemIcon item={item} collapsed>
             {unseen && unseen > 0 ? (
               <span
                 aria-hidden="true"
@@ -193,7 +218,7 @@ function NavLink({
                 className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-brand-orange ring-2 ring-background"
               />
             ) : null}
-          </span>
+          </NavItemIcon>
         </TooltipTrigger>
         <TooltipContent side="right" className={hasChildren ? "flex flex-col gap-1 p-2.5 min-w-[140px]" : undefined}>
           {hasChildren ? (
@@ -234,9 +259,7 @@ function NavLink({
             : "text-muted-foreground hover:bg-muted hover:text-foreground"
         )}
       >
-        <span className={cn("flex items-center justify-center rounded-xl h-8 w-8 shadow-sm transition-transform duration-200 group-hover:scale-110", iconClass)}>
-          <item.icon className="h-3.5 w-3.5" />
-        </span>
+        <NavItemIcon item={item} className="transition-transform duration-200 group-hover:scale-110" />
         <span className="truncate">{item.title}</span>
         {unseen && unseen > 0 ? (
           <span className="ml-auto flex items-center gap-1">
@@ -266,9 +289,7 @@ function NavLink({
             : "text-muted-foreground hover:bg-muted hover:text-foreground"
         )}
       >
-        <span className={cn("flex items-center justify-center rounded-xl h-8 w-8 shadow-sm transition-transform duration-200 group-hover:scale-110", iconClass)}>
-          <item.icon className="h-3.5 w-3.5" />
-        </span>
+        <NavItemIcon item={item} className="transition-transform duration-200 group-hover:scale-110" />
         <span className="flex-1 text-left truncate">{item.title}</span>
         {/* Visible while the menu is closed; the child link carries it once open. */}
         {!expanded && <NewPill count={unseen} label={unseenLabel} />}
@@ -439,10 +460,13 @@ function SidebarContent({
         )}>
           {collapsed ? (
             <button
+              type="button"
               onClick={onToggle}
               className="rounded-xl p-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-all"
+              aria-label={sidebarToggleLabel(collapsed)}
+              title={sidebarToggleLabel(collapsed)}
             >
-              <ChevronsRight className="h-4 w-4" />
+              <ChevronsRight className="h-4 w-4" aria-hidden="true" />
             </button>
           ) : (
             <>
@@ -451,11 +475,13 @@ function SidebarContent({
               </div>
               {onToggle && (
                 <button
+                  type="button"
                   onClick={onToggle}
                   className="rounded-xl p-1.5 text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted transition-all"
-                  title="Collapse sidebar"
+                  aria-label={sidebarToggleLabel(collapsed)}
+                  title={sidebarToggleLabel(collapsed)}
                 >
-                  <ChevronsLeft className="h-4 w-4" />
+                  <ChevronsLeft className="h-4 w-4" aria-hidden="true" />
                 </button>
               )}
             </>
