@@ -7,22 +7,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Permission } from "@/types";
-import { EXECUTIVE_DASHBOARD_PERMISSION, showExecutiveLink } from "./executive-access";
+import { EXECUTIVE_DASHBOARD_PERMISSION } from "./executive-access";
 
 const read = (path: string) => readFileSync(join(import.meta.dirname, "..", path), "utf8");
 
 test("the executive page's permission is dashboard:analytics", () => {
   assert.equal(EXECUTIVE_DASHBOARD_PERMISSION, "dashboard:analytics");
-});
-
-test("the Dashboard's link shows only with the flag on and dashboard:analytics held", () => {
-  const holder = (p: Permission) => p === EXECUTIVE_DASHBOARD_PERMISSION;
-  const viewer = (p: Permission) => p === "dashboard:view";
-  assert.equal(showExecutiveLink(true, holder), true);
-  assert.equal(showExecutiveLink(true, viewer), false);
-  assert.equal(showExecutiveLink(false, holder), false);
-  assert.equal(showExecutiveLink(false, viewer), false);
 });
 
 test("the route is guarded on its layout, inside the flag check that answers not found", () => {
@@ -34,7 +24,10 @@ test("the route is guarded on its layout, inside the flag check that answers not
   assert.match(layout, /<RouteGuard permission=\{EXECUTIVE_DASHBOARD_PERMISSION\} pageName="Executive Dashboard">\s*\{children\}\s*<\/RouteGuard>/);
 });
 
-test("the Dashboard's link is decided by showExecutiveLink", () => {
+test("the Dashboard page has no link row: the menu carries the Executive Dashboard", () => {
+  // A link row above the figure cards pushed the Collections card 42px down at
+  // 1366x768, so its ring panel scrolled. The side menu is the place for a page.
   const page = read("page.tsx");
-  assert.match(page, /showExecutiveLink\(env\.features\.executiveDashboard, can\)/);
+  assert.doesNotMatch(page, /href="\/dashboard\/executive"/);
+  assert.doesNotMatch(page, /showExecutiveLink/);
 });

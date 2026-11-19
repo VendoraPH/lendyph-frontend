@@ -1904,6 +1904,25 @@ function cashFlowBranchRows(rows: Record<string, unknown>[]): Record<string, unk
  * the net is restated as its own block rather than left as one KPI card among
  * four.
  */
+/**
+ * The Cash Flow branch breakdown's share capital sentence, by the rule that
+ * placed the rows. Either branch scope means a branch filter was applied, so
+ * no Unassigned row is listed and the sentence names none; only the unfiltered
+ * answer mentions it.
+ */
+function cashFlowBranchNote(scope: unknown): string {
+  if (scope === "posted_branch") {
+    return (
+      "Share capital paid in and out is in the row of the branch where each entry was posted; " +
+      "a member who moved keeps their earlier entries in their old branch."
+    );
+  }
+  if (scope === "borrower_branch") {
+    return "Share capital paid in and out is in the row of the branch each member belongs to.";
+  }
+  return "Share capital paid in and out is in its branch's row; entries with no branch are under Unassigned.";
+}
+
 export function buildCashFlowDoc(raw: unknown, range: DateRange): ReportDocument {
   const obj = asRecord(raw);
   const inflowBlock = asRecord(pick(obj, ["inflows", "cash_in"]));
@@ -2035,18 +2054,16 @@ export function buildCashFlowDoc(raw: unknown, range: DateRange): ReportDocument
       ],
     });
     // Each branch row holds that branch's loan cash plus the share capital
-    // paid in and out by its members (by the member's branch); a member with
-    // no branch is in the server's "Unassigned" row (`branch_id` null).
+    // paid in and out on its own; a row with no branch is in the server's
+    // "Unassigned" row (`branch_id` null).
     //
-    // Always this plain sentence: the server's `share_capital.note` is written
+    // Always a plain sentence: the server's `share_capital.note` is written
     // for developers (field names and formulas) and is never printed on the
-    // report. The sentence holds with or without a branch filter.
-    sections.push({
-      kind: "note",
-      text:
-        "Share capital paid in and out is in the row of the branch each member belongs to; " +
-        "members with no branch are under Unassigned.",
-    });
+    // report. `share_capital.branch_scope` says which rule placed the rows
+    // when a branch filter is applied: `posted_branch` since backend #334,
+    // `borrower_branch` before. Unfiltered (`organisation`) it doesn't say,
+    // so that sentence holds under both and is the only one naming Unassigned.
+    sections.push({ kind: "note", text: cashFlowBranchNote(pick(shareBlock, ["branch_scope"])) });
   }
 
   return {
@@ -2522,9 +2539,18 @@ export function buildShareCapitalDoc(raw: unknown, range: DateRange): ReportDocu
     sections.push({ kind: "note", text: String(pledgeNote) });
   }
 
-  // `branch_id` IS honoured here, through the member's branch rather than a
-  // column on the ledger, so the scope is stated rather than assumed.
-  if (scope === "borrower_branch") {
+  // `branch_id` IS honoured here, so the scope is stated rather than assumed.
+  // Since backend #334 (`posted_branch`) each entry counts in the branch whose
+  // books it posted in; an older backend (`borrower_branch`) used the
+  // member's current branch.
+  if (scope === "posted_branch") {
+    sections.push({
+      kind: "note",
+      text:
+        "Scoped to the selected branch: share capital counts in the branch where each entry was posted. " +
+        "A member who moved to another branch keeps their earlier entries in their old branch.",
+    });
+  } else if (scope === "borrower_branch") {
     sections.push({
       kind: "note",
       text:

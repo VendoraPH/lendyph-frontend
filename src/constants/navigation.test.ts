@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { env } from "@/config/env";
-import { CDA_NAV, LINDA_SETTINGS_NAV, MEMBER_PORTAL_NAV, PENALTIES_SETTINGS_NAV, SIDEBAR_NAV, navChildAllowed, navItemAllowed, navItemHref } from "./navigation";
+import { CDA_NAV, EXECUTIVE_DASHBOARD_NAV, LINDA_SETTINGS_NAV, MEMBER_PORTAL_NAV, PENALTIES_SETTINGS_NAV, SIDEBAR_NAV, navChildAllowed, navItemAllowed, navItemHref, navItemMatches } from "./navigation";
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
 const LAYOUT = "src/app/(app)/credit-scoring/layout.tsx";
@@ -225,4 +225,35 @@ test("AMLA is off when the flag isn't set: no Settings link, and its routes answ
     assert.match(layout, /if \(!env\.features\.amla\) notFound\(\);/, path);
     assert.doesNotMatch(layout, /"use client"/, path);
   }
+});
+
+test("Executive Dashboard is its own menu item right below Dashboard, behind its flag", () => {
+  assert.equal(EXECUTIVE_DASHBOARD_NAV.title, "Executive Dashboard");
+  assert.equal(EXECUTIVE_DASHBOARD_NAV.href, "/dashboard/executive");
+  assert.equal(EXECUTIVE_DASHBOARD_NAV.icon3d, "icon-trend");
+  // The flag is off in tests, so the item isn't listed.
+  assert.equal(env.features.executiveDashboard, false);
+  assert.equal(SIDEBAR_NAV.some((item) => item.href === "/dashboard/executive"), false);
+  // Listed straight after Dashboard when the flag is on.
+  assert.match(
+    read("src/constants/navigation.ts"),
+    /permission: "dashboard:view",\s*\},\s*\.\.\.\(env\.features\.executiveDashboard \? \[EXECUTIVE_DASHBOARD_NAV\] : \[\]\),/,
+  );
+});
+
+test("Executive Dashboard shows only to holders of dashboard:analytics, the page's own permission", () => {
+  const holds = (...held: string[]) => (p: string) => held.includes(p);
+  assert.equal(navItemAllowed(EXECUTIVE_DASHBOARD_NAV, holds("dashboard:view")), false);
+  assert.equal(navItemAllowed(EXECUTIVE_DASHBOARD_NAV, holds("dashboard:analytics")), true);
+  assert.match(read("src/constants/navigation.ts"), /permission: EXECUTIVE_DASHBOARD_PERMISSION,/);
+});
+
+test("on the Executive Dashboard only its own item is highlighted, not Dashboard as well", () => {
+  const menu = [{ href: "/dashboard" }, { href: "/dashboard/executive" }, { href: "/loans" }];
+  assert.equal(navItemMatches("/dashboard/executive", "/dashboard", menu), false);
+  assert.equal(navItemMatches("/dashboard/executive", "/dashboard/executive", menu), true);
+  assert.equal(navItemMatches("/dashboard", "/dashboard", menu), true);
+  assert.equal(navItemMatches("/loans/12", "/loans", menu), true);
+  assert.equal(navItemMatches("/loansx", "/loans", menu), false);
+  assert.match(read("src/components/layout/sidebar.tsx"), /navItemMatches\(pathname, item\.href\)/);
 });

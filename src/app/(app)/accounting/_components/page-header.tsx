@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Icon3D } from "@/components/common/icon-3d";
 
 interface AccountingPageHeaderProps {
   title: string;
@@ -18,9 +19,12 @@ export function AccountingPageHeader({
 }: AccountingPageHeaderProps) {
   return (
     <div className="flex shrink-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
-        <p className="text-sm text-muted-foreground">{description}</p>
+      <div className="flex min-w-0 items-center gap-3">
+        <Icon3D name="empty-ledger" size={40} className="hidden sm:block" />
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+          <p className="text-sm text-muted-foreground">{description}</p>
+        </div>
       </div>
       {actions}
     </div>

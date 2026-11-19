@@ -49,6 +49,8 @@ import { shareCapitalService } from "@/services";
 import { formatCurrency, formatDate, formatDateISO, formatDateObj, todayDate } from "@/lib/format";
 import { FIT_CLASSES } from "@/lib/page-fill";
 import { ledgerAmounts } from "@/utils/share-capital";
+import { useAuthStore } from "@/store";
+import { bookTotalsLabels } from "./_lib/book-totals-labels";
 import type {
   ShareCapitalBookTotals,
   ShareCapitalLedgerEntry,
@@ -209,6 +211,10 @@ function SubsidiaryLedgerContent() {
   const memberTotal = membersPage?.total ?? 0;
   const bookTotals = membersPage?.totals ?? null;
   const matchingTotals = membersPage?.matchingTotals ?? null;
+  // A branch user's totals are the members now in their branches; the titles say so.
+  const user = useAuthStore((s) => s.user);
+  const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
+  const totalsLabels = bookTotalsLabels(user, viewAll);
 
   // ── Fetch one member's entries ──
   const selectedMemberId = selectedMember?.borrower_id ?? null;
@@ -426,7 +432,7 @@ function SubsidiaryLedgerContent() {
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Landmark className="h-4 w-4" />
-                    <span className="text-sm font-medium">Total Members</span>
+                    <span className="text-sm font-medium">{totalsLabels.members}</span>
                   </div>
                   <span className="text-2xl font-bold">{bookTotals ? bookTotals.member_count : "—"}</span>
                 </div>
@@ -435,7 +441,7 @@ function SubsidiaryLedgerContent() {
             <Card>
               <CardContent className="py-4 fit:py-0">
                 <div className="flex flex-col gap-1">
-                  <span className="text-sm font-medium text-muted-foreground">Total Credits</span>
+                  <span className="text-sm font-medium text-muted-foreground">{totalsLabels.credits}</span>
                   <span className="text-2xl font-bold text-green-600">{money(bookTotals?.total_credits)}</span>
                 </div>
               </CardContent>
@@ -443,7 +449,7 @@ function SubsidiaryLedgerContent() {
             <Card>
               <CardContent className="py-4 fit:py-0">
                 <div className="flex flex-col gap-1">
-                  <span className="text-sm font-medium text-muted-foreground">Total Debits</span>
+                  <span className="text-sm font-medium text-muted-foreground">{totalsLabels.debits}</span>
                   <span className="text-2xl font-bold text-red-600">{money(bookTotals?.total_debits)}</span>
                 </div>
               </CardContent>
@@ -451,12 +457,15 @@ function SubsidiaryLedgerContent() {
             <Card>
               <CardContent className="py-4 fit:py-0">
                 <div className="flex flex-col gap-1">
-                  <span className="text-sm font-medium text-muted-foreground">Total Share Capital</span>
+                  <span className="text-sm font-medium text-muted-foreground">{totalsLabels.balance}</span>
                   <span className="text-2xl font-bold text-brand-orange">{money(bookTotals?.balance)}</span>
                 </div>
               </CardContent>
             </Card>
           </div>
+          {totalsLabels.note && (
+            <p className="shrink-0 text-xs text-muted-foreground">{totalsLabels.note}</p>
+          )}
 
           {/* Members Table */}
           <Card className={FIT_CLASSES.section}>
