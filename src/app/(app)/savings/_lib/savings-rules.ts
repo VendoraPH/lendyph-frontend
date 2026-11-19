@@ -121,8 +121,19 @@ export const MEMBER_REQUEST_HOLD_NOTE = "Decided in Member Portal → Requests";
  * the request (the server refuses a release here with 422), so it shows
  * where that happens instead.
  */
-export function holdReleaseOffer(hold: Pick<SavingsHold, "type" | "status">): { release: boolean; note: string | null } {
+/** What a savings screen says of a hold only a legal order's own release lifts. */
+export const LEGAL_ORDER_HOLD_NOTE = "Held under a legal order";
+
+/**
+ * Whether a hold offers Release here. The server's `can_release` false (a
+ * hold placed under a legal order) offers none, only the note; absent, the
+ * rules below decide as before.
+ */
+export function holdReleaseOffer(
+  hold: Pick<SavingsHold, "type" | "status"> & { can_release?: boolean },
+): { release: boolean; note: string | null } {
   if (hold.status !== "active") return { release: false, note: null };
+  if (hold.can_release === false) return { release: false, note: LEGAL_ORDER_HOLD_NOTE };
   if (hold.type === "member_request") return { release: false, note: MEMBER_REQUEST_HOLD_NOTE };
   return { release: true, note: null };
 }

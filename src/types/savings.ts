@@ -490,6 +490,8 @@ export interface SavingsHold {
   release_reason: string | null;
   created_by: SavingsUserRef | null;
   released_by: SavingsUserRef | null;
+  /** False when this screen can't release it: a hold placed under a legal order (only the order's release lifts it). */
+  can_release?: boolean;
 }
 
 export interface PlaceSavingsHoldInput {

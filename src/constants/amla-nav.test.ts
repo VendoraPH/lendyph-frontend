@@ -61,7 +61,7 @@ const child = (href: string) => {
   return found;
 };
 
-test("it holds the monitoring pages, Customers, Risk Rules and an AMLA Settings link, in that order", () => {
+test("it holds the monitoring pages, Customers, Screening, the Orders Register, Risk Rules and an AMLA Settings link, in that order", () => {
   assert.deepEqual(
     (nav.AMLA_NAV.children ?? []).map((c) => [c.title, c.href]),
     [
@@ -70,10 +70,24 @@ test("it holds the monitoring pages, Customers, Risk Rules and an AMLA Settings 
       ["CTR Candidates", "/amla/ctr-candidates"],
       ["Transaction Monitoring", "/amla/monitoring"],
       ["Customers", "/amla/customers"],
+      ["Screening", "/amla/screening"],
+      ["Orders Register", "/amla/orders"],
       ["Risk Rules", "/amla/risk-rules"],
       ["AMLA Settings", "/settings/amla"],
     ],
   );
+});
+
+test("Screening needs amla:screening with every branch, under amla:view, as its endpoints do", () => {
+  assert.equal(nav.navChildAllowed(child("/amla/screening"), holds("amla:screening", "amla:view", "branches:view_all")), true);
+  assert.equal(nav.navChildAllowed(child("/amla/screening"), holds("amla:screening", "amla:view")), false);
+  assert.equal(nav.navChildAllowed(child("/amla/screening"), holds("amla:view", "branches:view_all")), false);
+});
+
+test("the Orders Register needs amla:sanctions with every branch, under amla:view", () => {
+  assert.equal(nav.navChildAllowed(child("/amla/orders"), holds("amla:sanctions", "amla:view", "branches:view_all")), true);
+  assert.equal(nav.navChildAllowed(child("/amla/orders"), holds("amla:sanctions", "amla:view")), false);
+  assert.equal(nav.navChildAllowed(child("/amla/orders"), holds("amla:screening", "amla:view", "branches:view_all")), false);
 });
 
 test("the dashboard opens on amla:view, as the /amla guard does", () => {

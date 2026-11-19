@@ -17,7 +17,7 @@ import { AmlaCalendarEntries } from "./amla-calendar-entries";
 import { AmlaChangeRequestList } from "./amla-change-request-list";
 import { amlaDecisionAction } from "./amla-decisions";
 import { AmlaDeadlinePreviewCard } from "./amla-deadline-preview-card";
-import { AmlaNoteDialog, type AmlaNoteAction } from "./amla-note-dialog";
+import { AmlaNoteDialog, type AmlaNoteAction } from "@/components/amla/amla-note-dialog";
 
 /**
  * The working-day calendar that report deadlines count on (holidays, AMLC
