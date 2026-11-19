@@ -637,6 +637,25 @@ export const API_ENDPOINTS = {
     SETTINGS: "/linda/settings",
   },
   /**
+   * AMLA foundation (Phase 6, AMLA-B1). `STATUS`, `CALENDAR` and
+   * `DEADLINE_PREVIEW` need `amla:view`; `SETTINGS` needs `amla:view` or
+   * `amla:settings`, `SETTINGS_VERSIONS` `amla:settings` or `amla:audit`,
+   * change requests `amla:settings` and `LOG` `amla:audit`, each of those
+   * with `branches:view_all`. The maker of a change can't approve or reject it.
+   */
+  AMLA: {
+    STATUS: "/amla/status",
+    SETTINGS: "/amla/settings",
+    SETTINGS_VERSIONS: "/amla/settings/versions",
+    CALENDAR: "/amla/calendar",
+    DEADLINE_PREVIEW: "/amla/deadlines/preview",
+    CHANGE_REQUESTS: "/amla/change-requests",
+    CHANGE_REQUEST_APPROVE: (id: number) => `/amla/change-requests/${id}/approve`,
+    CHANGE_REQUEST_REJECT: (id: number) => `/amla/change-requests/${id}/reject`,
+    CHANGE_REQUEST_WITHDRAW: (id: number) => `/amla/change-requests/${id}/withdraw`,
+    LOG: "/amla/log",
+  },
+  /**
    * CDA Compliance (CDA design §3). Every route needs `branches:view_all` plus
    * its own `cda:*` permission; mediation, audit and tax reports and documents
    * need their restricted view as well. Reports and their workflow are

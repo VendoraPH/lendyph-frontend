@@ -27,6 +27,7 @@ import { GCashIcon } from "@/components/icons/gcash-icon";
 import { env } from "@/config/env";
 import { MODULE_ALSO_REQUIRES } from "@/lib/permission-module-names";
 import { meetsPermission } from "@/lib/permission-requirement";
+import { AMLA_SETTINGS_PAGE_PERMISSIONS } from "@/lib/amla/access";
 import { EXECUTIVE_DASHBOARD_PERMISSION } from "@/app/(app)/dashboard/_lib/executive-access";
 
 export interface NavSubItem {
@@ -162,6 +163,21 @@ export const LINDA_SETTINGS_NAV: NavSubItem = {
   href: "/settings/linda",
   permission: "linda:settings",
   alsoRequires: ["branches:view_all"],
+};
+
+/**
+ * Settings → AMLA: monitoring status, the settings in force and their history,
+ * change requests, the working-day calendar and the AMLA log. Each part needs
+ * its own AMLA key (most also every branch), so the link shows for any key one
+ * part needs, as its page guard does. Shown only when NEXT_PUBLIC_ENABLE_AMLA
+ * is set at build time; the route answers not found otherwise
+ * (settings/amla/layout.tsx). The AMLA pages themselves (dashboard, alerts,
+ * cases, …) come with later Phase 6 slices, each adding its own menu items.
+ */
+export const AMLA_SETTINGS_NAV: NavSubItem = {
+  title: "AMLA",
+  href: "/settings/amla",
+  permission: [...AMLA_SETTINGS_PAGE_PERMISSIONS],
 };
 
 export const CDA_NAV: NavItem = {
@@ -472,6 +488,7 @@ export const SIDEBAR_NAV: NavItem[] = [
           ]
         : []),
       ...(env.features.linda ? [LINDA_SETTINGS_NAV] : []),
+      ...(env.features.amla ? [AMLA_SETTINGS_NAV] : []),
       // Lives under Settings because it is admin-only, org-wide, one-time
       // config — and because it belongs to neither Members nor Loans: a single
       // run writes both.
