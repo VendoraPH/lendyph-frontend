@@ -12,7 +12,7 @@ import { useAuthStore } from "@/store";
 import type { AmlaChangeRequest } from "@/types/amla";
 import { AmlaChangeRequestList } from "./amla-change-request-list";
 import { AmlaNoteDialog, type AmlaNoteAction } from "./amla-note-dialog";
-import { AmlaPager } from "./amla-pager";
+import { AmlaPager } from "@/components/amla/amla-pager";
 import { amlaDecisionAction, type AmlaDecision } from "./amla-decisions";
 
 /** Every settings and calendar change, newest first, with the maker-checker steps the server allows. */

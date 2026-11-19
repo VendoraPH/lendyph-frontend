@@ -21,6 +21,7 @@ import {
   ClipboardCheck,
   MonitorSmartphone,
   Sparkles,
+  ShieldAlert,
   TrendingUp,
 } from "lucide-react";
 import { GCashIcon } from "@/components/icons/gcash-icon";
@@ -178,6 +179,26 @@ export const AMLA_SETTINGS_NAV: NavSubItem = {
   title: "AMLA",
   href: "/settings/amla",
   permission: [...AMLA_SETTINGS_PAGE_PERMISSIONS],
+};
+
+/**
+ * AMLA Compliance. The /amla pages need `amla:view` (amla/layout.tsx) and each
+ * its own key, as its endpoints do: Customers needs `amla:cdd`. The section
+ * also carries an "AMLA Settings" link, opening as Settings → AMLA does, so a
+ * Compliance Officer (who holds no `settings:view`) has a menu path to it.
+ * Later Phase 6 slices add their pages here. Shown only when
+ * NEXT_PUBLIC_ENABLE_AMLA is set at build time.
+ */
+export const AMLA_NAV: NavItem = {
+  title: "AMLA Compliance",
+  href: "/amla",
+  icon: ShieldAlert,
+  permission: "amla:view",
+  anyOf: [...AMLA_SETTINGS_PAGE_PERMISSIONS],
+  children: [
+    { title: "Customers", href: "/amla/customers", permission: "amla:cdd", alsoRequires: ["amla:view"] },
+    { ...AMLA_SETTINGS_NAV, title: "AMLA Settings" },
+  ],
 };
 
 export const CDA_NAV: NavItem = {
@@ -390,6 +411,7 @@ export const SIDEBAR_NAV: NavItem[] = [
   ...(env.features.creditScoring ? [CREDIT_SCORING_NAV] : []),
   ...(env.features.cda ? [CDA_NAV] : []),
   ...(env.features.memberPortal ? [MEMBER_PORTAL_NAV] : []),
+  ...(env.features.amla ? [AMLA_NAV] : []),
   {
     title: "Accounting",
     href: "/accounting",
