@@ -85,7 +85,7 @@ function CountPill({
 function NewPill({ count, label }: { count?: number; label?: string }) {
   if (!count || count <= 0) return null;
   return (
-    <span className="inline-flex items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold text-white leading-none">
+    <span className="inline-flex items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white leading-none">
       <span aria-hidden={label ? true : undefined}>{count > 99 ? "99+" : count}</span>
       {label && <span className="sr-only">{label}</span>}
     </span>
@@ -154,7 +154,7 @@ function NavLink({
   useEffect(() => {
     if (isOpen) setExpanded(true);
   }, [isOpen]);
-  const unseenLabel = newLabel(unseen);
+  const unseenLabel = newLabel(unseen, item.title);
   const fullLabel = [unseenLabel, badgeLabel].filter(Boolean).join(", ") || undefined;
   const iconClass = iconColors[item.href] || "bg-gradient-to-br from-gray-400 to-gray-500 text-white";
 
@@ -183,7 +183,7 @@ function NavLink({
             {unseen && unseen > 0 ? (
               <span
                 aria-hidden="true"
-                className="absolute -right-1.5 -top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold leading-none text-white ring-2 ring-background"
+                className="absolute -right-1.5 -top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold leading-none text-white ring-2 ring-background"
               >
                 {unseen > 99 ? "99+" : unseen}
               </span>
@@ -308,7 +308,7 @@ function NavLink({
                   <span className="flex items-center gap-1">
                     <NewPill
                       count={expanded ? childUnseen?.[child.href] : undefined}
-                      label={newLabel(childUnseen?.[child.href])}
+                      label={newLabel(childUnseen?.[child.href], child.title)}
                     />
                     <CountPill
                       count={expanded ? childBadges?.[child.href] : undefined}
@@ -355,15 +355,8 @@ function SidebarContent({
   // someone who can read the list it is counted from (`GET /loans` needs
   // loans:view); the server limits the count to the user's own steps.
   const pendingLoanApprovals = usePendingLoanApprovals(pendingApprovalsBadgeEnabled(can));
-  const visibleNav = useMemo(
-    () => SIDEBAR_NAV.filter((item) => navItemAllowed(item, can)),
-    // `can` is a fresh closure every render; permissions only change with the
-    // user, which remounts the shell (see `visibleChildren` above).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
   // "New" badges: unread notifications per section, until the user opens them.
-  const unseen = useUnseenNavBadges(visibleNav, pathname);
+  const unseen = useUnseenNavBadges(SIDEBAR_NAV, pathname, can);
   const [apiStatus, setApiStatus] = useState<"checking" | "ok" | "down">("checking");
 
   useEffect(() => {
@@ -442,7 +435,7 @@ function SidebarContent({
               Navigation
             </span>
           )}
-          {visibleNav.map((item) => (
+          {SIDEBAR_NAV.filter((item) => navItemAllowed(item, can)).map((item) => (
             <NavLink
               key={item.href}
               item={item}

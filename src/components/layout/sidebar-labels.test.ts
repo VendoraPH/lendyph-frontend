@@ -21,9 +21,9 @@ test("countLabel pluralises and is absent with nothing to count", () => {
   assert.equal(countLabel(undefined, "registration", "awaiting review"), undefined);
 });
 
-test("newLabel names a section's unviewed notifications, and nothing at zero", () => {
-  assert.equal(newLabel(1), "1 new notification");
-  assert.equal(newLabel(4), "4 new notifications");
-  assert.equal(newLabel(0), undefined);
-  assert.equal(newLabel(undefined), undefined);
+test("newLabel says how many are new in the section, in words, and nothing at zero", () => {
+  assert.equal(newLabel(1, "Loans"), "1 new in Loans");
+  assert.equal(newLabel(4, "Savings Approvals"), "4 new in Savings Approvals");
+  assert.equal(newLabel(0, "Loans"), undefined);
+  assert.equal(newLabel(undefined, "Loans"), undefined);
 });
