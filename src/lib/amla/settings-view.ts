@@ -1,5 +1,5 @@
 import { PAYMENT_METHOD_OPTIONS } from "@/constants/payment-methods";
-import { formatDate, formatDateTime } from "@/lib/format";
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import type {
   AmlaCalendar,
   AmlaChangeRequest,
@@ -122,6 +122,71 @@ export function amlaChangeRequestLines(request: AmlaChangeRequest): { summary: s
     if (request.decision_note) decided += ` Note: ${request.decision_note}`;
   }
   return { summary: request.summary, asked, decided };
+}
+
+/**
+ * `AmlaSettings::DEFINITIONS`: each setting's short name (as the server's
+ * change summary words it) and unit, in the server's order.
+ */
+const SETTING_WORDS: readonly { key: string; short: string; unit: string }[] = [
+  { key: "ctr_threshold", short: "CTR threshold", unit: "peso" },
+  { key: "ctr_cash_channels", short: "CTR cash channels", unit: "channels" },
+  { key: "ctr_deadline_working_days", short: "CTR deadline", unit: "working_days" },
+  { key: "str_deadline_working_days", short: "STR deadline", unit: "working_days" },
+  { key: "review_years_high", short: "High risk review cycle", unit: "years" },
+  { key: "review_years_medium", short: "Medium risk review cycle", unit: "years" },
+  { key: "review_years_low", short: "Low risk review cycle", unit: "years" },
+];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** A stored value in words, as `AmlaSettings::valueWords` words it: the server's ₱ figure to two decimals, never worked out. */
+function storedValueWords(unit: string, value: unknown): string {
+  if (value === null || value === undefined) return "—";
+  if (unit === "peso") return formatCurrency(String(value));
+  if (unit === "channels") {
+    const list = Array.isArray(value) ? value.map(String) : [];
+    return list.map((c) => AMLA_CHANNEL_OPTIONS.find((o) => o.value === c)?.label ?? "Another channel").join(", ") || "—";
+  }
+  const count = Number(value);
+  if (unit === "working_days") return workingDays(count);
+  return `${count} ${count === 1 ? "year" : "years"}`;
+}
+
+/**
+ * What a settings change would do, line by line, from what the server recorded
+ * when it was asked for (`changed`, `verified`, `unverified`,
+ * `sources_changed`): each value in force then → proposed, each setting
+ * confirmed (and by what) or marked to verify again. Calendar requests add
+ * nothing, since their summary says it all. Stored keys never show.
+ */
+export function amlaChangeRequestChanges(request: Pick<AmlaChangeRequest, "type" | "payload">): string[] {
+  const payload = request.payload;
+  if (request.type !== "settings" || !isRecord(payload)) return [];
+  const changed = isRecord(payload.changed) ? payload.changed : {};
+  const sourcesChanged = isRecord(payload.sources_changed) ? payload.sources_changed : {};
+  const verified = Array.isArray(payload.verified) ? payload.verified : [];
+  const unverified = Array.isArray(payload.unverified) ? payload.unverified : [];
+  const lines: string[] = [];
+
+  for (const { key, short, unit } of SETTING_WORDS) {
+    const change = changed[key];
+    if (isRecord(change)) lines.push(`${short}: ${storedValueWords(unit, change.from)} → ${storedValueWords(unit, change.to)}`);
+    const source = isRecord(sourcesChanged[key]) ? (sourcesChanged[key] as Record<string, unknown>).to : null;
+    if (verified.includes(key)) {
+      lines.push(typeof source === "string" && source !== "" ? `${short}: confirmed by ${source}` : `${short}: confirmed`);
+    } else if (unverified.includes(key)) {
+      lines.push(`${short}: marked to verify again`);
+    } else if (typeof source === "string" && source !== "") {
+      lines.push(`${short}: what confirmed it changes to ${source}`);
+    }
+  }
+
+  const known = new Set(SETTING_WORDS.map((s) => s.key));
+  if (Object.keys(changed).some((key) => !known.has(key))) lines.push("Another setting: changed");
+  return lines;
 }
 
 export type AmlaSettingCheck = "keep" | "confirm" | "to_verify";

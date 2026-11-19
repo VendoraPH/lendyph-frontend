@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useMemo, useState } from "react";
 import { DataState } from "@/components/common/data-state";
 import { ScrollBox } from "@/components/common/page-fill";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useApiResource } from "@/hooks";
 import { amlaApi, type AmlaLogFilters } from "@/lib/amla/api";
+import { once } from "@/lib/amla/once";
 import { AMLA_LOG_ACTION_OPTIONS, amlaLogRow } from "@/lib/amla/settings-view";
 import { AmlaPager } from "./amla-pager";
 
@@ -22,7 +23,9 @@ const NO_FILTERS: AmlaLogFilters = { action: "", from: "", to: "", page: 1 };
 export function AmlaLogTab() {
   const [draft, setDraft] = useState(NO_FILTERS);
   const [applied, setApplied] = useState(NO_FILTERS);
-  const fetcher = useCallback(() => amlaApi.log(applied), [applied]);
+  // One read per Show or page (each sets a new `applied`), even when React
+  // runs the effect twice in development: every read writes a log row.
+  const fetcher = useMemo(() => once(() => amlaApi.log(applied)), [applied]);
   const resource = useApiResource(fetcher);
 
   return (

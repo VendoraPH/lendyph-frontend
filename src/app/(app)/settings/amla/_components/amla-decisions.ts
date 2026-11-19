@@ -1,4 +1,5 @@
 import { amlaApi } from "@/lib/amla/api";
+import { amlaChangeRequestChanges } from "@/lib/amla/settings-view";
 import type { AmlaChangeRequest } from "@/types/amla";
 import type { AmlaNoteAction } from "./amla-note-dialog";
 
@@ -6,6 +7,10 @@ export type AmlaDecision = "approve" | "reject" | "withdraw";
 
 /** The note dialog for a decision on a change request: reject needs a note, approve and withdraw take one optionally. */
 export function amlaDecisionAction(request: AmlaChangeRequest, decision: AmlaDecision): AmlaNoteAction {
+  return { ...decisionText(request, decision), details: amlaChangeRequestChanges(request) };
+}
+
+function decisionText(request: AmlaChangeRequest, decision: AmlaDecision): AmlaNoteAction {
   switch (decision) {
     case "approve":
       return {

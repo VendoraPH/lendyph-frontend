@@ -21,6 +21,8 @@ import { notifyError, notifySuccess } from "@/lib/notify";
 export interface AmlaNoteAction {
   title: string;
   description: string;
+  /** What is being decided, line by line (a settings change's values, in force → proposed). */
+  details?: string[];
   /** "Reason" for a new request, "Note" for a decision. */
   label: string;
   required: boolean;
@@ -68,6 +70,13 @@ export function AmlaNoteDialog({ action, onClose, onDone }: { action: AmlaNoteAc
           <DialogTitle>{action?.title}</DialogTitle>
           <DialogDescription>{action?.description}</DialogDescription>
         </DialogHeader>
+        {action?.details && action.details.length > 0 && (
+          <ul aria-label="The change" className="list-disc space-y-1 rounded-md border bg-muted/40 py-2 pr-3 pl-7 text-sm">
+            {action.details.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        )}
         <div className="space-y-2">
           <Label htmlFor="amla-note">
             {action?.label}

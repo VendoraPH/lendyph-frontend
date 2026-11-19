@@ -8,6 +8,7 @@ import {
   AMLA_LOG_ACTION_OPTIONS,
   amlaCalendarAddBody,
   amlaCalendarHeadline,
+  amlaChangeRequestChanges,
   amlaChangeRequestLines,
   amlaDeadlineLines,
   amlaLogRow,
@@ -301,4 +302,47 @@ test("the log filter offers the server's actions in words", () => {
 
 test("the year picker offers the year shown and the years either side", () => {
   assert.deepEqual(amlaYearChoices(2026), [2025, 2026, 2027]);
+});
+
+const SETTINGS_PAYLOAD = {
+  base_version: 1,
+  values: {},
+  to_verify: [],
+  sources: { ctr_deadline_working_days: "AMLC RI No. 2, s. 2024", str_deadline_working_days: "AMLC advisory" },
+  changed: {
+    ctr_cash_channels: { from: ["cash"], to: ["cash", "gcash"] },
+    ctr_threshold: { from: "500000.00", to: "450000.50" },
+    review_years_high: { from: 1, to: 2 },
+    ctr_deadline_working_days: { from: 5, to: 1 },
+  },
+  sources_changed: {
+    ctr_deadline_working_days: { from: null, to: "AMLC RI No. 2, s. 2024" },
+    str_deadline_working_days: { from: "Old memo", to: "AMLC advisory" },
+    review_years_low: { from: "Board policy", to: null },
+  },
+  verified: ["ctr_deadline_working_days"],
+  unverified: ["review_years_low"],
+};
+
+test("a settings change lists each change in words, in force when asked → proposed, in the server's settings order", () => {
+  assert.deepEqual(amlaChangeRequestChanges({ ...REQUEST, payload: SETTINGS_PAYLOAD }), [
+    "CTR threshold: ₱500,000.00 → ₱450,000.50",
+    "CTR cash channels: Cash → Cash, GCash",
+    "CTR deadline: 5 working days → 1 working day",
+    "CTR deadline: confirmed by AMLC RI No. 2, s. 2024",
+    "STR deadline: what confirmed it changes to AMLC advisory",
+    "High risk review cycle: 1 year → 2 years",
+    "Low risk review cycle: marked to verify again",
+  ]);
+});
+
+test("calendar requests and unreadable payloads add nothing: the summary already says it", () => {
+  assert.deepEqual(amlaChangeRequestChanges({ ...REQUEST, type: "calendar_add", payload: { date: "2026-12-30" } }), []);
+  assert.deepEqual(amlaChangeRequestChanges({ ...REQUEST, payload: null }), []);
+  assert.deepEqual(amlaChangeRequestChanges({ ...REQUEST, payload: { changed: [] } }), []);
+});
+
+test("a setting this screen doesn't know yet never shows its stored key", () => {
+  const lines = amlaChangeRequestChanges({ ...REQUEST, payload: { changed: { new_rule: { from: 1, to: 2 } } } });
+  assert.deepEqual(lines, ["Another setting: changed"]);
 });

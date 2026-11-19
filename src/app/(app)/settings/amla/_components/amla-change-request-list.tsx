@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { amlaChangeRequestActions } from "@/lib/amla/access";
-import { amlaChangeRequestLines } from "@/lib/amla/settings-view";
+import { amlaChangeRequestChanges, amlaChangeRequestLines } from "@/lib/amla/settings-view";
 import type { Permission } from "@/types";
 import type { AmlaChangeRequest } from "@/types/amla";
 import type { AmlaDecision } from "./amla-decisions";
@@ -37,10 +37,18 @@ export function AmlaChangeRequestList({ requests, userId, can, onDecide, compact
         {requests.map((request) => {
           const lines = amlaChangeRequestLines(request);
           const actions = amlaChangeRequestActions(request, userId, can);
+          const changes = amlaChangeRequestChanges(request);
           return (
             <TableRow key={request.id}>
               <TableCell className="whitespace-normal">
                 <div className="font-medium">{lines.summary}</div>
+                {changes.length > 0 && (
+                  <ul aria-label="The change" className="my-1 list-disc pl-5 text-sm">
+                    {changes.map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
+                )}
                 <div className="text-xs text-muted-foreground">
                   #{request.id} · {request.type_words} · {lines.asked}
                 </div>
