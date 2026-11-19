@@ -702,6 +702,33 @@ export const API_ENDPOINTS = {
     CTR_CANDIDATE: (id: number) => `/amla/ctr-candidates/${id}`,
     DETECTION_RULES: "/amla/detection-rules",
     DETECTION_RULE_VERSIONS: "/amla/detection-rules/versions",
+    /**
+     * AMLA-B6: cases need `amla:cases` with every branch (deciding also
+     * `amla:approve`, the STR `amla:str`); reports and deadlines any reporting
+     * key (an STR also every branch). Every view, download and export is logged.
+     */
+    ALERT_ASSIGN: (id: number) => `/amla/alerts/${id}/assign`,
+    ALERT_REVIEW: (id: number) => `/amla/alerts/${id}/review`,
+    ALERT_CLOSE: (id: number) => `/amla/alerts/${id}/close`,
+    ALERT_HISTORY: (id: number) => `/amla/alerts/${id}/history`,
+    ALERT_ESCALATE: (id: number) => `/amla/alerts/${id}/escalate`,
+    CASES: "/amla/cases",
+    CASE: (id: number) => `/amla/cases/${id}`,
+    CASE_ASSIGN: (id: number) => `/amla/cases/${id}/assign`,
+    CASE_NOTES: (id: number) => `/amla/cases/${id}/notes`,
+    CASE_EVIDENCE: (id: number) => `/amla/cases/${id}/evidence`,
+    CASE_EVIDENCE_FILE: (id: number, evidenceId: number) => `/amla/cases/${id}/evidence/${evidenceId}`,
+    CASE_DECISION: (id: number) => `/amla/cases/${id}/decision`,
+    CASE_STR: (id: number) => `/amla/cases/${id}/str`,
+    CTR_CANDIDATE_REPORT: (id: number) => `/amla/ctr-candidates/${id}/report`,
+    REPORTS: "/amla/reports",
+    REPORT: (id: number) => `/amla/reports/${id}`,
+    REPORT_APPROVE: (id: number) => `/amla/reports/${id}/approve`,
+    REPORT_RETURN: (id: number) => `/amla/reports/${id}/return`,
+    REPORT_SUBMISSIONS: (id: number) => `/amla/reports/${id}/submissions`,
+    REPORT_SUBMISSION_EVIDENCE: (id: number, submissionId: number) => `/amla/reports/${id}/submissions/${submissionId}/evidence`,
+    REPORT_EXPORT: (id: number) => `/amla/reports/${id}/export`,
+    FILING_DEADLINES: "/amla/filing-deadlines",
   },
   /**
    * CDA Compliance (CDA design §3). Every route needs `branches:view_all` plus

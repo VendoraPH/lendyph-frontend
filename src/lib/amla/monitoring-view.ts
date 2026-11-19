@@ -16,6 +16,7 @@ import { AMLA_CHANNEL_OPTIONS, amlaReasonError, type AmlaOption } from "@/lib/am
 import type { AmlaChangeRequestBody, AmlaPage } from "@/types/amla";
 import type {
   AmlaAlertDetail,
+  AmlaAlertHistoryStep,
   AmlaAlertRow,
   AmlaCtrRow,
   AmlaDetectionRulesVersion,
@@ -36,11 +37,49 @@ import type {
 
 type Result<T> = { body: T } | { error: string };
 
-/** `AmlaAlert::STATUS_WORDS`. */
+/** `AmlaAlert::STATUS_WORDS`, with the alert workflow's statuses (AMLA-B6). */
 export const AMLA_ALERT_STATUS_OPTIONS: readonly AmlaOption[] = [
   { value: "open", label: "Open" },
+  { value: "assigned", label: "Assigned" },
+  { value: "under_review", label: "Under review" },
+  { value: "escalated", label: "Escalated to a case" },
+  { value: "closed", label: "Closed with a documented reason" },
   { value: "cleared", label: "Cleared by a rerun" },
 ];
+
+/** A workflow step answers the alert's row; it updates the open alert without reading it again. */
+export function amlaAlertWithRow(detail: AmlaAlertDetail, row: AmlaAlertRow): AmlaAlertDetail {
+  return { ...detail, ...row };
+}
+
+/** One workflow step in words: its action (to whom), its new status only when that says more, and its reason or note. */
+export function amlaAlertHistoryLine(step: AmlaAlertHistoryStep): { title: string; note: string | null } {
+  let title = step.assignee ? `${step.action_words} to ${step.assignee.name}` : step.action_words;
+  if (step.to_status_words !== step.action_words) title += ` · ${step.to_status_words}`;
+  const note = step.note ? `${step.action === "closed" ? "Reason" : "Note"}: ${step.note}` : null;
+  return { title, note };
+}
+
+/** The notes typed when the alert was escalated into this case: the server keeps them on the alert's history. */
+export function amlaEscalationNotes(history: AmlaAlertHistoryStep[], caseId: number): AmlaAlertHistoryStep[] {
+  return history.filter((step) => step.action === "escalated" && step.case_id === caseId && step.note);
+}
+
+/** Closing needs the reason the server keeps (3 to 2,000 characters). */
+export function amlaCloseReasonBody(reason: string): Result<string> {
+  const trimmed = reason.trim();
+  if (trimmed === "") return { error: "Say why the alert is closed." };
+  if (trimmed.length < 3) return { error: "Give a reason of at least 3 characters." };
+  if (trimmed.length > 2000) return { error: "Keep the reason to 2,000 characters." };
+  return { body: trimmed };
+}
+
+/** Assigning and starting a review take an optional note, up to 2,000 characters. */
+export function amlaAlertStepNote(note: string): Result<string> {
+  const trimmed = note.trim();
+  if (trimmed.length > 2000) return { error: "Keep the note to 2,000 characters." };
+  return { body: trimmed };
+}
 
 /** `DetectionRules::PRIORITIES`, most urgent first. */
 export const AMLA_PRIORITY_OPTIONS: readonly AmlaOption[] = ["critical", "high", "medium", "low"].map((value) => ({

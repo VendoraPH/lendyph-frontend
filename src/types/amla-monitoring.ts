@@ -39,7 +39,26 @@ export interface AmlaAlertRow {
   amount: string;
   transactions_count: number;
   from_history: boolean;
+  /** Since the alert workflow (AMLA-B6): who works it, and the case it went to (head-office case holders only). */
+  assigned_to?: AmlaUserRef | null;
+  case?: { id: number; reference: string } | null;
+  closed_at?: string | null;
   detected_at: string | null;
+}
+
+/** `GET /amla/alerts/{id}/history`: one workflow step, with its note or close reason. */
+export interface AmlaAlertHistoryStep {
+  id: number;
+  action: string;
+  action_words: string;
+  from_status: string | null;
+  to_status: string;
+  to_status_words: string;
+  by: AmlaUserRef | null;
+  assignee: AmlaUserRef | null;
+  case_id: number | null;
+  note: string | null;
+  at: string | null;
 }
 
 export interface AmlaIndicator {

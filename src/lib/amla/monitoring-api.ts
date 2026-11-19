@@ -10,6 +10,7 @@ import { only, paged } from "@/lib/amla/api";
 import type { AmlaPage } from "@/types/amla";
 import type {
   AmlaAlertDetail,
+  AmlaAlertHistoryStep,
   AmlaAlertRow,
   AmlaCtrDetail,
   AmlaCtrRow,
@@ -56,6 +57,13 @@ export const amlaMonitoringApi = {
       }),
     ),
   alert: (id: number) => api.get<AmlaAlertDetail>(A.ALERT(id)),
+  /** The alert workflow (AMLA-B6): each step answers the alert's row. A note is sent only when there is one. */
+  assignAlert: (id: number, assigneeId: number, note: string) =>
+    api.post<AmlaAlertRow>(A.ALERT_ASSIGN(id), { assignee_id: assigneeId, ...(note === "" ? {} : { note }) }),
+  reviewAlert: (id: number, note: string) => api.post<AmlaAlertRow>(A.ALERT_REVIEW(id), note === "" ? {} : { note }),
+  closeAlert: (id: number, reason: string) => api.post<AmlaAlertRow>(A.ALERT_CLOSE(id), { reason }),
+  /** Logged by the server, so it is read once per "Show history". */
+  alertHistory: (id: number) => api.get<AmlaAlertHistoryStep[]>(A.ALERT_HISTORY(id)),
   ctrCandidates: (f: AmlaCtrFilters) =>
     paged(
       api.getRaw<AmlaPage<AmlaCtrRow>>(A.CTR_CANDIDATES, {

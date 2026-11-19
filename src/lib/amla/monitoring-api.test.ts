@@ -15,7 +15,7 @@ const META = { current_page: 1, per_page: 25, total: 7, last_page: 1 };
 
 before(async () => {
   server = createServer((req, res) => {
-    seen.push(req.url ?? "");
+    seen.push(req.method === "POST" ? `POST ${req.url ?? ""}` : req.url ?? "");
     res.setHeader("Content-Type", "application/json");
     const path = (req.url ?? "").split("?")[0];
     if (path === "/api/amla/alerts" || path === "/api/amla/ctr-candidates") {
@@ -58,5 +58,19 @@ test("each record and the rules have their own route", async () => {
     "/api/amla/detection-rules",
     "/api/amla/detection-rules/versions",
     "/api/amla/risk-rules",
+  ]);
+});
+
+test("the alert workflow posts to the alert's own routes, and its history is its own read", async () => {
+  seen = [];
+  await amlaMonitoringApi.assignAlert(9, 4, "");
+  await amlaMonitoringApi.reviewAlert(9, "Checking");
+  await amlaMonitoringApi.closeAlert(9, "Known salary");
+  await amlaMonitoringApi.alertHistory(9);
+  assert.deepEqual(seen, [
+    "POST /api/amla/alerts/9/assign",
+    "POST /api/amla/alerts/9/review",
+    "POST /api/amla/alerts/9/close",
+    "/api/amla/alerts/9/history",
   ]);
 });

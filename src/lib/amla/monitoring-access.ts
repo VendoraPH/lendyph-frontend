@@ -45,3 +45,37 @@ export function amlaMonitoringAccess(can: Can): AmlaMonitoringAccess {
     customerLinks: view && can("amla:cdd"),
   };
 }
+
+/** `AmlaAlert::WORKABLE`: the statuses a person can still act on. */
+const WORKABLE_ALERT = ["open", "assigned", "under_review"];
+
+export interface AmlaAlertActions {
+  assignToMe: boolean;
+  /** Starting a review: from open or assigned only. */
+  review: boolean;
+  /** Closing with a documented reason. */
+  close: boolean;
+  /** The alert's workflow history. */
+  history: boolean;
+}
+
+/**
+ * The alert workflow's steps (AMLA-B6), as the server allows them: each needs
+ * `amla:alerts`, and only an open, assigned or under-review alert changes.
+ * Assigning is to yourself until AMLA has a staff list. The server applies no
+ * second-person rule to these steps; a 409 or 422 still wins, in its words.
+ */
+export function amlaAlertActions(
+  alert: { status: string; assigned_to?: { id: number } | null },
+  userId: number | null,
+  can: Can,
+): AmlaAlertActions {
+  const alerts = amlaMonitoringAccess(can).alerts;
+  const workable = alerts && WORKABLE_ALERT.includes(alert.status);
+  return {
+    assignToMe: workable && userId !== null && alert.assigned_to?.id !== userId,
+    review: alerts && ["open", "assigned"].includes(alert.status),
+    close: workable,
+    history: alerts,
+  };
+}
