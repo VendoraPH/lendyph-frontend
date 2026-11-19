@@ -30,9 +30,10 @@ test("the menu lists it only while the flag is on", () => {
   assert.match(read("src/constants/navigation.ts"), /env\.features\.executiveDashboard \? \[EXECUTIVE_DASHBOARD_NAV\]/);
 });
 
-test("a card's tooltip shows its API source in development builds only", () => {
+test("a card's tooltip says how its figure is worked out in words, never an API path", () => {
   const card = read("src/app/(app)/dashboard/executive/_components/kpi-card.tsx");
-  assert.match(card, /process\.env\.NODE_ENV === "development" \? \(\s*<p className="mt-1 font-mono text-\[10px\] opacity-80">\{m\.source\}<\/p>/);
+  assert.match(card, /<p>\{card\.formula\}<\/p>/);
+  assert.doesNotMatch(card, /\{[\w.]*source\}|font-mono/);
 });
 
 test("the page fits the screen: sections scroll inside their own box, full width", () => {
@@ -41,5 +42,5 @@ test("the page fits the screen: sections scroll inside their own box, full width
   assert.match(page, /<ScrollBox className=\{L\.scrollBox\}>/);
   assert.doesNotMatch(page, /max-w-\[/);
   // Only the header and filter bar stay pinned: the KPI cards scroll with the sections.
-  assert.ok(page.indexOf("<ScrollBox ") < page.indexOf("kpis.map("), "the KPI cards are inside the scroll box");
+  assert.ok(page.indexOf("<ScrollBox ") < page.indexOf("cards.map("), "the KPI cards are inside the scroll box");
 });

@@ -29,6 +29,7 @@ import { env } from "@/config/env";
 import { MODULE_ALSO_REQUIRES } from "@/lib/permission-module-names";
 import { meetsPermission } from "@/lib/permission-requirement";
 import { AMLA_SETTINGS_PAGE_PERMISSIONS } from "@/lib/amla/access";
+import { AMLA_RISK_RULES_PERMISSIONS } from "@/lib/amla/monitoring-access";
 import { EXECUTIVE_DASHBOARD_PERMISSION } from "@/app/(app)/dashboard/_lib/executive-access";
 
 export interface NavSubItem {
@@ -195,7 +196,9 @@ export const AMLA_SETTINGS_NAV: NavSubItem = {
 
 /**
  * AMLA Compliance. The /amla pages need `amla:view` (amla/layout.tsx) and each
- * its own key, as its endpoints do: Customers needs `amla:cdd`. The section
+ * its own key, as its endpoints do: Alerts `amla:alerts`, CTR Candidates
+ * `amla:ctr`, Customers `amla:cdd`; Transaction Monitoring and Risk Rules are
+ * head office only. The section
  * also carries an "AMLA Settings" link, opening as Settings → AMLA does, so a
  * Compliance Officer (who holds no `settings:view`) has a menu path to it.
  * Later Phase 6 slices add their pages here. Shown only when
@@ -208,7 +211,18 @@ export const AMLA_NAV: NavItem = {
   permission: "amla:view",
   anyOf: [...AMLA_SETTINGS_PAGE_PERMISSIONS],
   children: [
+    { title: "AMLA Dashboard", href: "/amla", permission: "amla:view" },
+    { title: "Alerts", href: "/amla/alerts", permission: "amla:alerts", alsoRequires: ["amla:view"] },
+    { title: "CTR Candidates", href: "/amla/ctr-candidates", permission: "amla:ctr", alsoRequires: ["amla:view"] },
+    // The rules in force, and how detection runs: head office only, as its endpoint is.
+    { title: "Transaction Monitoring", href: "/amla/monitoring", permission: "amla:view", alsoRequires: ["branches:view_all"] },
     { title: "Customers", href: "/amla/customers", permission: "amla:cdd", alsoRequires: ["amla:view"] },
+    {
+      title: "Risk Rules",
+      href: "/amla/risk-rules",
+      permission: [...AMLA_RISK_RULES_PERMISSIONS],
+      alsoRequires: ["amla:view", "branches:view_all"],
+    },
     { ...AMLA_SETTINGS_NAV, title: "AMLA Settings" },
   ],
 };

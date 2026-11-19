@@ -49,7 +49,13 @@ export interface AmlaSettingsInForce extends AmlaSettingsVersion {
   pending_request_id: number | null;
 }
 
-export type AmlaChangeRequestType = "settings" | "calendar_add" | "calendar_remove" | "calendar_confirm_year";
+export type AmlaChangeRequestType =
+  | "settings"
+  | "calendar_add"
+  | "calendar_remove"
+  | "calendar_confirm_year"
+  | "risk_rules"
+  | "detection_rules";
 export type AmlaChangeRequestStatus = "pending" | "approved" | "rejected" | "withdrawn";
 
 export interface AmlaChangeRequest {
@@ -146,4 +152,6 @@ export type AmlaChangeRequestBody =
     }
   | { type: "calendar_add"; reason: string; date: string; kind: string; name: string; source: string }
   | { type: "calendar_remove"; reason: string; entry_id: number }
-  | { type: "calendar_confirm_year"; reason: string; year: number };
+  | { type: "calendar_confirm_year"; reason: string; year: number }
+  | { type: "detection_rules"; reason: string; definition: Record<string, { active: boolean; priority: string; params: Record<string, string | number | string[]> }> }
+  | { type: "risk_rules"; reason: string; definition: { factors: Record<string, Record<string, number>>; thresholds: { medium: number; high: number }; high_risk_countries: string[] } };

@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { amlaChangeRequestActions } from "@/lib/amla/access";
-import { amlaChangeRequestChanges, amlaChangeRequestLines } from "@/lib/amla/settings-view";
+import { amlaChangeRequestChanges, amlaChangeRequestLines, type AmlaRuleBaselines } from "@/lib/amla/settings-view";
 import type { Permission } from "@/types";
 import type { AmlaChangeRequest } from "@/types/amla";
 import type { AmlaDecision } from "./amla-decisions";
@@ -16,10 +16,12 @@ interface Props {
   onDecide: (request: AmlaChangeRequest, decision: AmlaDecision) => void;
   /** The calendar tab lists its year's waiting requests without the decision column. */
   compact?: boolean;
+  /** The rule versions a rule change is compared with (current → proposed). */
+  baselines?: AmlaRuleBaselines;
 }
 
 /** Change requests in words, with only the steps the server would allow this user. */
-export function AmlaChangeRequestList({ requests, userId, can, onDecide, compact = false }: Props) {
+export function AmlaChangeRequestList({ requests, userId, can, onDecide, compact = false, baselines }: Props) {
   return (
     <Table>
       <TableHeader className="sticky top-0 z-10 bg-background">
@@ -37,7 +39,7 @@ export function AmlaChangeRequestList({ requests, userId, can, onDecide, compact
         {requests.map((request) => {
           const lines = amlaChangeRequestLines(request);
           const actions = amlaChangeRequestActions(request, userId, can);
-          const changes = amlaChangeRequestChanges(request);
+          const changes = amlaChangeRequestChanges(request, baselines);
           return (
             <TableRow key={request.id}>
               <TableCell className="whitespace-normal">
