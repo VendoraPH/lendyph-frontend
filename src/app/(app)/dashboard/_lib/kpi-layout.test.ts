@@ -1,6 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DASHBOARD_PAGE_CLASS, dashboardKpiClasses } from "./kpi-layout";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import {
+  DASHBOARD_PAGE_CLASS,
+  DUES_DONUT_COLUMN_CLASS,
+  DUES_TABLE_PANEL_CLASS,
+  TRANSACTIONS_TABLE_PANEL_CLASS,
+  dashboardKpiClasses,
+} from "./kpi-layout";
 
 const tokens = (classes: string) => classes.split(/\s+/).filter(Boolean);
 
@@ -40,4 +48,49 @@ test("every card's figure row is as tall as a sparkline, so a card without one k
   // figure sat about 2px higher than the others at 1920 wide.
   const { row } = dashboardKpiClasses();
   for (const t of ["flex", "items-center", "justify-between", "min-h-10"]) assert.ok(tokens(row).includes(t), t);
+});
+
+test("the collections ring sits in its own bordered panel at the top, level with the table's headings", () => {
+  // Centred in a column as tall as the card, the ring floated below the
+  // table's headings whenever the list was short ("Nothing due today"), with
+  // nothing around it to show where its section ends.
+  const c = tokens(DUES_DONUT_COLUMN_CLASS);
+  for (const t of ["rounded-lg", "border", "p-4", "@xl:self-start"]) assert.ok(c.includes(t), t);
+  for (const t of ["justify-center", "@xl:self-stretch"]) assert.ok(!c.includes(t), t);
+  // Its left edge lines up with the tabs above it (mx-4); beside the table, the row's gap spaces it.
+  for (const t of ["mx-4", "@xl:mr-0"]) assert.ok(c.includes(t), t);
+  // Still its own fixed-width column beside the table on a wide card.
+  for (const t of ["flex", "flex-col", "items-center", "shrink-0", "@xl:w-60"]) assert.ok(c.includes(t), t);
+});
+
+test("both tables sit in the same bordered panel as the ring, so the boxes share one top line", () => {
+  // With only the ring boxed, its top edge lined up with the table's invisible top,
+  // about 18px above "Member" and 38px above the line under the headings, so it
+  // still read as out of line (Arvin, 2026-11-19, on staging).
+  const ring = tokens(DUES_DONUT_COLUMN_CLASS);
+  for (const cls of [DUES_TABLE_PANEL_CLASS, TRANSACTIONS_TABLE_PANEL_CLASS]) {
+    const c = tokens(cls);
+    for (const t of ["rounded-lg", "border", "mx-4"]) {
+      assert.ok(c.includes(t), `${t} in ${cls}`);
+      assert.ok(ring.includes(t), `${t} in the ring's panel too`);
+    }
+  }
+  // Beside the ring on a wide card, the row's gap spaces the two boxes and the table takes the rest.
+  assert.ok(tokens(DUES_TABLE_PANEL_CLASS).includes("@xl:ml-0"), "@xl:ml-0");
+});
+
+test("each table's panel wraps its scroll box and clips its own corners, so the expand dialog can't notch them", () => {
+  // The expand dialog turns a scroll box's overflow off, so a border on the scroll
+  // box itself lost its rounded clip there and the square heading row painted over
+  // the top corners. The panel is now a wrapper that clips with overflow-clip: unlike
+  // overflow-hidden it is no scroll container, so headings still pin to whichever
+  // box scrolls (the table's on the page, the dialog's when expanded).
+  for (const cls of [DUES_TABLE_PANEL_CLASS, TRANSACTIONS_TABLE_PANEL_CLASS]) {
+    const c = tokens(cls);
+    for (const t of ["overflow-clip", "flex", "flex-col", "flex-1", "min-h-0"]) assert.ok(c.includes(t), `${t} in ${cls}`);
+    assert.ok(!c.includes("overflow-hidden"), `no overflow-hidden in ${cls}`);
+  }
+  const page = readFileSync(join(import.meta.dirname, "..", "page.tsx"), "utf8");
+  assert.match(page, /<div className=\{DUES_TABLE_PANEL_CLASS\}>\s*<ScrollBox>\s*<DuesTable/);
+  assert.match(page, /<div className=\{TRANSACTIONS_TABLE_PANEL_CLASS\}>\s*<ScrollBox>\s*<TransactionsTable/);
 });

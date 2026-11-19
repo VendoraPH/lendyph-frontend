@@ -1,11 +1,13 @@
 import { PieChart, Pie, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { formatCurrency } from "@/lib/format";
 import type { CollectionPieSlice } from "../_lib/collection-pie";
+import { DUES_DONUT_COLUMN_CLASS } from "../_lib/kpi-layout";
 
 /**
  * Today's expected against actual collection, as the server's summary states
  * it. The ring scales with the window's height (7–11rem), so it never clips
- * on a 768px-tall screen, and it sits centred in its column beside the table.
+ * on a 768px-tall screen. It sits in its own bordered panel at the top of its
+ * column beside the table, level with the table's headings.
  */
 export function DuesDonut({
   rate,
@@ -20,7 +22,7 @@ export function DuesDonut({
   mounted: boolean;
 }) {
   return (
-    <div className="flex shrink-0 flex-col items-center justify-center gap-2 px-4 @xl:w-60 @xl:self-stretch">
+    <div className={DUES_DONUT_COLUMN_CLASS}>
       <div className="relative size-[clamp(7rem,22dvh,11rem)]">
         {rate === null ? (
           // Nothing due (or no summary yet): an empty ring, since a pie of zeros draws nothing.

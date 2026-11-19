@@ -39,10 +39,17 @@ import type { Action, Module } from "@/types";
  * `penalties` is offered too (Phase 4, Settings → Penalties): the backend
  * seeds `penalties:view|create|update|delete` for admin and super_admin.
  *
+ * `loan_origination` is left out until the backend seeds its permissions
+ * (`docs/LOAN_ORIGINATION_BACKEND_HANDOFF.md`); offering it now would 422
+ * every save of the role.
+ *
  * `linda` is offered too (Linda v1): the backend seeds `linda:use|settings`
  * for admin and super_admin. `settings` works only with `branches:view_all`.
  */
-export type UIModule = Exclude<Module, "collections" | "loan_adjustments" | "auto_credit">;
+export type UIModule = Exclude<
+  Module,
+  "collections" | "loan_adjustments" | "auto_credit" | "loan_origination"
+>;
 
 // Applicable actions per module — only the actions that make sense for each area
 export const MODULE_ACTIONS: Record<UIModule, Action[]> = {

@@ -12,8 +12,9 @@ import { useIsClient, usePermission } from "@/hooks";
 import { AreaChart, Area } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Wallet, FileText, PhilippinePeso, AlertTriangle, TrendingUp, Landmark } from "lucide-react";
+import { Wallet, FileText, PhilippinePeso, AlertTriangle, TrendingUp, Landmark, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { env } from "@/config/env";
 import { formatCurrency, formatDateFull } from "@/lib/format";
 import { shareCapitalService } from "@/services";
 import { dashboardService } from "@/services/dashboard.service";
@@ -22,7 +23,7 @@ import { shareCapitalBookBalance } from "./_lib/share-capital-kpi";
 import { collectionPieSlices, collectionRateTone, shownCollectionRate } from "./_lib/collection-pie";
 import { DuesDonut } from "./_components/dues-donut";
 import { DuesTable, TransactionsTable, type DueItemView, type LoadState } from "./_components/dashboard-tables";
-import { DASHBOARD_PAGE_CLASS, dashboardKpiClasses } from "./_lib/kpi-layout";
+import { DASHBOARD_PAGE_CLASS, DUES_TABLE_PANEL_CLASS, TRANSACTIONS_TABLE_PANEL_CLASS, dashboardKpiClasses } from "./_lib/kpi-layout";
 import { insuranceCollected } from "./_lib/insurance-collected";
 import { recentTransactionRows, type RecentTransactionRow } from "./_lib/recent-transactions";
 import {
@@ -334,16 +335,20 @@ function DashboardContent() {
                 slices={pieData}
                 mounted={mounted}
               />
-              <ScrollBox className="@xl:flex-1">
-                <DuesTable items={dueItems} state={duesStatus} />
-              </ScrollBox>
+              <div className={DUES_TABLE_PANEL_CLASS}>
+                <ScrollBox>
+                  <DuesTable items={dueItems} state={duesStatus} />
+                </ScrollBox>
+              </div>
             </div>
           </TabsContent>
 
           <TabsContent value="transactions" className={FIT_CLASSES.section}>
-            <ScrollBox>
-              <TransactionsTable rows={transactions} state={txStatus} />
-            </ScrollBox>
+            <div className={TRANSACTIONS_TABLE_PANEL_CLASS}>
+              <ScrollBox>
+                <TransactionsTable rows={transactions} state={txStatus} />
+              </ScrollBox>
+            </div>
           </TabsContent>
         </Tabs>
       </ExpandableCard>
@@ -364,6 +369,17 @@ function DashboardPageFill() {
   return (
     <PageFill className={cn(DASHBOARD_PAGE_CLASS, "gap-4")}>
       <NoBranchBanner />
+      {env.features.executiveDashboard ? (
+        <div className="flex shrink-0 justify-end">
+          <Link
+            href="/dashboard/executive"
+            className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium hover:bg-muted"
+          >
+            <BarChart3 className="size-3.5" aria-hidden="true" />
+            Executive Dashboard
+          </Link>
+        </div>
+      ) : null}
       <DashboardContent />
     </PageFill>
   );
