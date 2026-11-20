@@ -41,9 +41,14 @@ export function OpenPeriodForm({ onOpened, compact = false }: { onOpened: () => 
   }
 
   return (
-    <div className="flex flex-wrap items-end gap-2">
-      <div className={compact ? "space-y-1" : "space-y-2"}>
-        <Label htmlFor="cda-open-year" className={compact ? "text-xs" : undefined}>
+    // Compact sits in the page header beside "Reporting year", so it takes the
+    // same inline label and 32px row height; the stacked form is the empty state.
+    <div className={compact ? "flex flex-wrap items-center gap-2" : "flex flex-wrap items-end gap-2"}>
+      <div className={compact ? "flex items-center gap-2" : "space-y-2"}>
+        <Label
+          htmlFor="cda-open-year"
+          className={compact ? "font-normal whitespace-nowrap text-muted-foreground" : undefined}
+        >
           Year to open
         </Label>
         <Input
@@ -55,7 +60,7 @@ export function OpenPeriodForm({ onOpened, compact = false }: { onOpened: () => 
           onChange={(e) => setRaw(e.target.value)}
         />
       </div>
-      <PermissionButton permission="cda:prepare" size="sm" onClick={open} disabled={busy}>
+      <PermissionButton permission="cda:prepare" onClick={open} disabled={busy}>
         <CalendarPlus className="mr-1 h-4 w-4" />
         {busy ? "Opening…" : "Open reporting period"}
       </PermissionButton>

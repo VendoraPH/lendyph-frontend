@@ -580,7 +580,7 @@ function AuditTrailContent() {
               />
             </div>
             <Select value={moduleFilter} onValueChange={changeModuleFilter} items={MODULE_FILTER_ITEMS}>
-              <SelectTrigger>
+              <SelectTrigger className="h-9">
                 <SelectValue placeholder="Module" />
               </SelectTrigger>
               <SelectContent>
@@ -592,7 +592,7 @@ function AuditTrailContent() {
               </SelectContent>
             </Select>
             <Select value={actionFilter} onValueChange={changeActionFilter} items={ACTION_FILTER_ITEMS}>
-              <SelectTrigger>
+              <SelectTrigger className="h-9">
                 <SelectValue placeholder="Action" />
               </SelectTrigger>
               <SelectContent>
