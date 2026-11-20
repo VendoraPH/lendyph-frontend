@@ -496,8 +496,11 @@ function ReportDetailContent({
                 </p>
                 {/* At fit one row that scrolls sideways. Its right edge fades
                     while more presets lie beyond it; the trailing padding lets
-                    the last one scroll clear of the fade. */}
-                <div className="flex flex-wrap gap-1.5 fit:flex-nowrap fit:overflow-x-auto fit:pb-0.5 fit:pr-8 fit:scroll-pe-8 fit:[mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)]">
+                    the last one scroll clear of the fade. The vertical padding
+                    keeps the focus outline inside the scroll box, and the
+                    matching negative margin keeps the presets on the date
+                    fields' line. */}
+                <div className="flex flex-wrap gap-1.5 fit:flex-nowrap fit:overflow-x-auto fit:-my-0.5 fit:py-0.5 fit:pr-8 fit:scroll-pe-8 fit:[mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)]">
                   {PRESETS.map((p) => (
                     <button
                       key={p.id}
@@ -537,7 +540,7 @@ function ReportDetailContent({
                         setRange({ ...activeRange, from: e.target.value });
                         setDoc(null);
                       }}
-                      className="h-9 w-40"
+                      className="w-40"
                     />
                   </div>
                   <div className="space-y-1">
@@ -553,7 +556,7 @@ function ReportDetailContent({
                         setRange({ ...activeRange, to: e.target.value });
                         setDoc(null);
                       }}
-                      className="h-9 w-40"
+                      className="w-40"
                     />
                   </div>
                 </>
@@ -561,7 +564,7 @@ function ReportDetailContent({
               <Button
                 onClick={handleGenerate}
                 disabled={generating || missingSubject || spanTooWide || branchPending}
-                className="h-9 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
               >
                 {generating ? (
                   <>
@@ -606,7 +609,7 @@ function ReportDetailContent({
                       setDoc(null);
                     }}
                   >
-                    <SelectTrigger id={branchFieldId} className="h-9 w-56">
+                    <SelectTrigger id={branchFieldId} className="w-56">
                       {/* A preset branch waits on the list: never "All Branches" first. */}
                       <SelectValue>{() => (branchPending ? LOADING_BRANCHES : branchLabel)}</SelectValue>
                     </SelectTrigger>
@@ -648,7 +651,7 @@ function ReportDetailContent({
                       setDoc(null);
                     }}
                     options={report.groupBy.options}
-                    className="h-9 w-40"
+                    className="w-40"
                   />
                 </div>
               )}

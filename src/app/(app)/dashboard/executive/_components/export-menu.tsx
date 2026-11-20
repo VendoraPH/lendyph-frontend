@@ -66,7 +66,7 @@ export function ExportMenu({
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="outline" size="sm" disabled={disabled || !input || busy !== null} />}>
+      <DropdownMenuTrigger render={<Button variant="outline" size="sm" className="h-8" disabled={disabled || !input || busy !== null} />}>
         {busy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
         Export
       </DropdownMenuTrigger>

@@ -319,7 +319,6 @@ export function CollateralForm({ initial, mode }: Props) {
               onChange={setMember}
               canSearch={canListMembers}
               placeholder="Search member…"
-              className="h-10"
             />
           </div>
 
@@ -332,7 +331,7 @@ export function CollateralForm({ initial, mode }: Props) {
               value={typeId ? String(typeId) : ""}
               onValueChange={(v) => setTypeId(Number(v))}
             >
-              <SelectTrigger id="collateral-type" className="h-10 w-full">
+              <SelectTrigger id="collateral-type" className="w-full">
                 {/* Base UI's <Select.Value> renders the raw selected `value`
                     (the id) by default — pass a children render fn so we
                     display the human-readable type name instead of "3". */}
@@ -375,7 +374,6 @@ export function CollateralForm({ initial, mode }: Props) {
               </Label>
               <Input
                 id="collateral-detail"
-                className="h-10"
                 value={detailValue}
                 onChange={(e) => setDetailValue(e.target.value)}
                 placeholder={`Enter ${selectedType.detail_field_label.toLowerCase()}`}
@@ -429,7 +427,7 @@ export function CollateralForm({ initial, mode }: Props) {
                   inputMode="decimal"
                   min={0}
                   step="0.01"
-                  className="h-10 tabular-nums"
+                  className="tabular-nums"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="0.00"

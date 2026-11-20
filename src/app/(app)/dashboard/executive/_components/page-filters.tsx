@@ -31,7 +31,7 @@ export function PageFilters({ value, onChange }: Props) {
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Popover>
-        <PopoverTrigger render={<Button variant="outline" size="sm" />}>
+        <PopoverTrigger render={<Button variant="outline" size="sm" className="h-8" />}>
           <SlidersHorizontal className="size-4" aria-hidden="true" />
           More filters
           {chips.length > 0 ? (

@@ -852,7 +852,7 @@ function PledgeEntryContent() {
                                   step="0.01"
                                   placeholder="0"
                                   autoFocus
-                                  className="w-40 h-9"
+                                  className="w-40"
                                   value={manualAmount}
                                   onChange={(e) => setManualAmount(e.target.value)}
                                   onKeyDown={(e) => {
@@ -863,10 +863,10 @@ function PledgeEntryContent() {
                               </div>
                               <div className="space-y-1.5">
                                 <p className="text-xs text-muted-foreground">Transaction</p>
-                                <div className="flex rounded-md border overflow-hidden">
+                                <div className="flex h-8 overflow-hidden rounded-md border">
                                   <button
                                     type="button"
-                                    className={`px-4 py-2 text-xs font-medium transition-colors ${
+                                    className={`px-4 text-xs font-medium transition-colors ${
                                       manualTransaction === "credit"
                                         ? "bg-green-600 text-white"
                                         : "bg-background text-muted-foreground hover:bg-muted"
@@ -877,7 +877,7 @@ function PledgeEntryContent() {
                                   </button>
                                   <button
                                     type="button"
-                                    className={`px-4 py-2 text-xs font-medium border-l transition-colors ${
+                                    className={`px-4 text-xs font-medium border-l transition-colors ${
                                       manualTransaction === "debit"
                                         ? "bg-red-600 text-white"
                                         : "bg-background text-muted-foreground hover:bg-muted"
@@ -904,7 +904,7 @@ function PledgeEntryContent() {
                               <div className="flex gap-2">
                                 <Button
                                   size="sm"
-                                  className="h-9 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                                  className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
                                   disabled={manualSubmitting || !manualAmount || manualReferenceProblem !== null}
                                   onClick={() => handleManualEntry(pledge.id)}
                                 >
@@ -913,7 +913,6 @@ function PledgeEntryContent() {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  className="h-9"
                                   onClick={() => setManualEntryId(null)}
                                 >
                                   Cancel

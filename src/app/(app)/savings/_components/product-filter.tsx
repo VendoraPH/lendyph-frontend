@@ -40,7 +40,7 @@ export function ProductFilter({ value, onChange, kind, className }: ProductFilte
         value={value}
         onChange={(next) => onChange(next, options.find((o) => o.value === next)?.label ?? "")}
         options={options}
-        className={className ?? "h-9 w-56"}
+        className={className ?? "w-56"}
       />
     </div>
   );

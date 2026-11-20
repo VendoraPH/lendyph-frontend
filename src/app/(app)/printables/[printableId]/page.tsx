@@ -293,7 +293,7 @@ function RepaymentPicker({
         }}
         onOpen={() => setEverOpened(true)}
         aria-label="Payment"
-        className="h-9 w-72"
+        className="w-72"
       />
     </div>
   );

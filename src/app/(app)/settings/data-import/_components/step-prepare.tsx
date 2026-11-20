@@ -191,7 +191,7 @@ function BranchGate({
             onChange(next ? Number(next) : null)
           }
         >
-          <SelectTrigger id="import-branch" className="h-9 w-full sm:w-72">
+          <SelectTrigger id="import-branch" className="w-full sm:w-72">
             <SelectValue>
               {() => selected?.name ?? "Choose a branch…"}
             </SelectValue>

@@ -91,7 +91,8 @@ export function FilterBar({
       {filtersSlot}
 
       <div className="ml-auto flex items-center gap-2">
-        <Button variant="outline" size="sm" onClick={onRefresh} disabled={refreshing}>
+        {/* Compact buttons raised to the fields' 32 px, so the bar keeps its width. */}
+        <Button variant="outline" size="sm" className="h-8" onClick={onRefresh} disabled={refreshing}>
           <RefreshCw className={refreshing ? "size-4 animate-spin" : "size-4"} />
           Refresh
         </Button>

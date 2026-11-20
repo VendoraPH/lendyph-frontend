@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cdaService } from "@/services";
 import { notifyError, notifySuccess, notifyValidation } from "@/lib/notify";
+import { cn } from "@/lib/utils";
 import { useCdaYearPicker } from "../_hooks/use-cda-year-picker";
 import { parseYear } from "../_lib/year";
 
@@ -41,9 +42,11 @@ export function OpenPeriodForm({ onOpened, compact = false }: { onOpened: () => 
   }
 
   return (
-    <div className="flex flex-wrap items-end gap-2">
-      <div className={compact ? "space-y-1" : "space-y-2"}>
-        <Label htmlFor="cda-open-year" className={compact ? "text-xs" : undefined}>
+    // In the page header (compact) the label sits beside its field, like the
+    // "Reporting year" picker next to it, so the header's controls share a line.
+    <div className={cn("flex flex-wrap gap-2", compact ? "items-center" : "items-end")}>
+      <div className={compact ? "flex items-center gap-2" : "space-y-2"}>
+        <Label htmlFor="cda-open-year" className={compact ? "font-normal text-muted-foreground" : undefined}>
           Year to open
         </Label>
         <Input
@@ -55,7 +58,7 @@ export function OpenPeriodForm({ onOpened, compact = false }: { onOpened: () => 
           onChange={(e) => setRaw(e.target.value)}
         />
       </div>
-      <PermissionButton permission="cda:prepare" size="sm" onClick={open} disabled={busy}>
+      <PermissionButton permission="cda:prepare" onClick={open} disabled={busy}>
         <CalendarPlus className="mr-1 h-4 w-4" />
         {busy ? "Opening…" : "Open reporting period"}
       </PermissionButton>
