@@ -29,7 +29,7 @@ export function StatusTabs<S extends string>({
       aria-pressed={value === key}
       onClick={() => onChange(key)}
       className={cn(
-        "rounded-full border px-3 py-1 text-xs font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange/40",
+        "inline-flex h-8 items-center rounded-full border px-3 text-xs font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange/40",
         value === key
           ? "border-brand-orange bg-brand-orange/10 text-brand-orange"
           : "text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -40,7 +40,7 @@ export function StatusTabs<S extends string>({
     </button>
   );
   return (
-    <div className="flex gap-1.5 overflow-x-auto pb-1" role="group" aria-label="Filter by status">
+    <div className="flex gap-1.5 overflow-x-auto py-0.5" role="group" aria-label="Filter by status">
       {chip(undefined, "All", total)}
       {statuses.map((s) => chip(s, labels[s], stats?.[s] ?? (stats ? 0 : undefined)))}
     </div>

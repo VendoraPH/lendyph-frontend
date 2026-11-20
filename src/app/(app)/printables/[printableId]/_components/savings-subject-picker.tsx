@@ -75,7 +75,7 @@ export function SavingsSubjectPicker({
         }}
         onOpen={() => setEverOpened(true)}
         aria-label={meta.label}
-        className="h-9 w-72"
+        className="w-72"
       />
     </div>
   );

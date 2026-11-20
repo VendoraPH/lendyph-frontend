@@ -103,7 +103,7 @@ export function ForwardToPicker({
       >
         <SelectTrigger
           id={fieldId}
-          className="h-9 w-full sm:w-[280px] text-xs"
+          className="w-full sm:w-[280px] text-xs"
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? errorId : undefined}
         >

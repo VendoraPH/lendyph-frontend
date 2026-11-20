@@ -74,7 +74,7 @@ export function ApprovalBranchField({ branch, disabled }: Props) {
       >
         <SelectTrigger
           id={id}
-          className="h-9 w-full"
+          className="w-full"
           aria-required="true"
           aria-invalid={message ? true : undefined}
           aria-describedby={message ? `${errorId} ${hintId}` : hintId}
