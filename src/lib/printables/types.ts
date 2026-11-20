@@ -179,6 +179,13 @@ export interface PrintableDocument {
    * label.
    */
   copies?: string[];
+  /**
+   * `"passbook"` prints the blocks alone: no letterhead, heading or footer, in
+   * the passbook's typewriter face. A passbook page is a ledger the member
+   * keeps, not a letter from the cooperative, so it carries no masthead and no
+   * signature lines.
+   */
+  layout?: "document" | "passbook";
   blocks: PrintBlock[];
   /** Replaces the default "system-generated document" footer line. */
   footerNote?: string;

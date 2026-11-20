@@ -167,4 +167,24 @@ export const PRINT_STYLES = `
      of a 12-month schedule, where it reads as a per-page subtotal. Flowing it
      as an ordinary row group puts it once, at the end, where it belongs. */
   tfoot { display: table-row-group; }
+
+  /* Passbook: the page is a ledger in the passbook-printer face. Ruled lines
+     only, no shaded header, nothing a teller signs. */
+  .passbook { font-family: "Courier New", Courier, monospace; font-size: 9.5pt; }
+  .passbook .field-row { font-size: 9.5pt; margin-bottom: 1pt; }
+  .passbook .field-label { min-width: 80pt; color: #000; text-transform: uppercase; }
+  .passbook .field-grid { margin-bottom: 8pt; }
+  .passbook .field-grid .field-label { min-width: 80pt; }
+  .passbook table { font-size: 9pt; }
+  .passbook th {
+    background: none; border: none;
+    border-top: 1.5px solid #000; border-bottom: 1.5px solid #000;
+    padding: 3pt 4pt; font-size: 8pt; letter-spacing: 0.5px;
+  }
+  .passbook td {
+    border: none; border-bottom: 1px solid #ccc;
+    padding: 3pt 4pt; white-space: nowrap;
+  }
+  .passbook td.num { font-size: 9pt; }
+  .passbook .note { font-style: normal; font-size: 7.5pt; color: #333; }
 `;
