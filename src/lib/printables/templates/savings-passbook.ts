@@ -2,6 +2,12 @@
  * Savings passbook: one account's ledger, oldest first, as the member's
  * printed record.
  *
+ * Laid out the way a Philippine bank or cooperative passbook page is: the
+ * account number and name, then numbered lines of Date, Code, Withdrawal,
+ * Deposit, Balance and the teller's initials. No letterhead, title, account
+ * summary or signature lines (`layout: "passbook"`): the passbook is the
+ * depositor's ledger, not a certified statement.
+ *
  * Built from a loaded `SavingsAccount` and its transactions
  * (`GET /savings/accounts/{id}/transactions`), not through the `/printables`
  * catalog. The running balance on every line, and the balances in the header,
@@ -11,17 +17,10 @@
  */
 
 import type { SavingsAccount, SavingsTransaction, SavingsTransactionType } from "@/types";
+import { formatCurrency } from "@/lib/format";
 import { isNilAmount } from "@/lib/savings/amount-text";
 import type { PrintableDocument, PrintBlock } from "../types";
-import {
-  BLANK_ORG,
-  currencyOrDash,
-  dateOrBlank,
-  field,
-  generatedAt,
-  presentFields,
-  type PrintableBuildOptions,
-} from "./shared";
+import { BLANK_ORG, field, generatedAt, presentFields, type PrintableBuildOptions } from "./shared";
 
 const TYPE_CODES: Record<SavingsTransactionType, string> = {
   deposit: "DEP",
@@ -41,9 +40,31 @@ export interface SavingsPassbookOptions extends PrintableBuildOptions {
   truncated?: boolean;
 }
 
-/** A debit or credit cell: blank, not a dash, on the side a line doesn't touch. */
+/**
+ * The teller column of a passbook carries initials, not names: "Teller One"
+ * prints TO. A line the system posted (interest, tax, a batch) prints SYS.
+ */
+export function tellerInitials(name: string | null | undefined): string {
+  const words = (name ?? "").trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "SYS";
+  return words
+    .slice(0, 3)
+    .map((w) => w[0]!.toUpperCase())
+    .join("");
+}
+
+/**
+ * A passbook figure: the server's amount with two decimals and no peso sign,
+ * as a passbook printer writes it. Pre-formatted here as text, because the
+ * table's `currency` format reads a blank cell as zero and printed "₱0.00".
+ */
+function passbookAmount(value: string): string {
+  return formatCurrency(value).replace("₱", "");
+}
+
+/** A debit or credit cell: blank, not 0.00, on the side a line doesn't touch. */
 function amountCell(value: string): string {
-  return isNilAmount(value) ? " " : value;
+  return isNilAmount(value) ? " " : passbookAmount(value);
 }
 
 export function buildSavingsPassbookDoc(
@@ -56,48 +77,38 @@ export function buildSavingsPassbookDoc(
   const ordered = [...transactions].sort((a, b) =>
     a.date === b.date ? a.id - b.id : a.date < b.date ? -1 : 1,
   );
-  const rows = ordered.map((t) => ({
+  const rows = ordered.map((t, i) => ({
+    line: String(i + 1),
     date: t.date,
     code: TYPE_CODES[t.type] ?? "OTH",
-    reference: t.reference,
     withdrawal: amountCell(t.debit),
     deposit: amountCell(t.credit),
-    balance: t.balance_after,
-    teller: t.created_by?.name ?? "System",
+    balance: passbookAmount(t.balance_after),
+    teller: tellerInitials(t.created_by?.name),
   }));
 
   const blocks: PrintBlock[] = [
-    { kind: "title", text: "Savings Passbook", subtitle: `Account No. ${account.account_number}` },
     {
       kind: "fields",
       columns: 2,
       items: presentFields([
         field("Account No.", account.account_number),
-        field("Depositor", account.borrower_name),
-        field("Member No.", account.borrower_code),
-        field("Product", account.product.name),
-        field("Branch", account.branch_name),
-        field("Opened", dateOrBlank(account.opened_on)),
-        field("Balance", currencyOrDash(account.balance)),
-        field("Available to withdraw", currencyOrDash(account.available_balance)),
-        field("On hold", currencyOrDash(account.hold_amount)),
+        field("Account Name", account.borrower_name),
       ]),
     },
     {
       kind: "table",
-      title: "Transactions",
       columns: [
-        { key: "date", header: "Date", format: "date", width: "13%" },
-        { key: "code", header: "Code", width: "7%" },
-        { key: "reference", header: "Reference", width: "18%" },
-        { key: "withdrawal", header: "Withdrawal", format: "currency", align: "right", width: "15%" },
-        { key: "deposit", header: "Deposit", format: "currency", align: "right", width: "15%" },
-        { key: "balance", header: "Balance", format: "currency", align: "right", width: "16%" },
-        { key: "teller", header: "Teller", width: "16%" },
+        { key: "line", header: "No.", align: "right", width: "6%" },
+        { key: "date", header: "Date", format: "date", width: "16%" },
+        { key: "code", header: "Code", align: "center", width: "8%" },
+        { key: "withdrawal", header: "Withdrawal", align: "right", width: "20%" },
+        { key: "deposit", header: "Deposit", align: "right", width: "20%" },
+        { key: "balance", header: "Balance", align: "right", width: "20%" },
+        { key: "teller", header: "Teller", align: "center", width: "10%" },
       ],
       rows,
       emptyText: "No transactions on this account yet.",
-      compact: true,
     },
   ];
 
@@ -110,23 +121,13 @@ export function buildSavingsPassbookDoc(
     });
   }
 
-  blocks.push(
-    {
-      kind: "note",
-      text:
-        "Codes: DEP deposit, WDL withdrawal, TRI transfer in, TRO transfer out, INT interest, " +
-        "TAX withholding tax, CLS closing payout, REV reversal, FEE excess withdrawal fee, " +
-        "SCT transfer to share capital. Report any entry you don't recognise to the branch.",
-    },
-    {
-      kind: "signatures",
-      columns: 2,
-      blocks: [
-        { label: "Depositor", name: account.borrower_name ?? null },
-        { label: "Verified by", detail: "Teller" },
-      ],
-    },
-  );
+  blocks.push({
+    kind: "note",
+    text:
+      "Codes: DEP deposit, WDL withdrawal, TRI transfer in, TRO transfer out, INT interest, " +
+      "TAX withholding tax, CLS closing payout, REV reversal, FEE excess withdrawal fee, " +
+      "SCT transfer to share capital, SYS posted by the system.",
+  });
 
   return {
     id: "savings_passbook",
@@ -135,7 +136,7 @@ export function buildSavingsPassbookDoc(
     title: "Savings Passbook",
     reference: account.account_number,
     generatedAt: generatedAt(options.now),
+    layout: "passbook",
     blocks,
-    footerNote: `Savings Passbook • ${account.account_number}`,
   };
 }

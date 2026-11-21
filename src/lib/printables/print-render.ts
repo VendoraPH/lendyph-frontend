@@ -308,10 +308,26 @@ const TOOLBAR = `
 
 /** One complete copy: letterhead, title, blocks, footer. */
 function renderCopy(doc: PrintableDocument, label: string | null, index: number): string {
-  const classes = index === 0 ? "copy" : "copy page-break";
+  const passbook = doc.layout === "passbook";
+  const classes = [
+    "copy",
+    index === 0 ? null : "page-break",
+    passbook ? "passbook" : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
   const copyLabel = label
     ? `<div class="copy-label"><span>${escapeHtml(label)}</span></div>`
     : "";
+
+  if (passbook) {
+    return (
+      `<section class="${classes}">` +
+      copyLabel +
+      doc.blocks.map(renderBlock).join("\n") +
+      `</section>`
+    );
+  }
 
   // A template that needs a subtitle or a legal citation emits its own `title`
   // block; when it does, that one wins and `doc.title` is left to the tab
