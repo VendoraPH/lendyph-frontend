@@ -323,6 +323,8 @@ export const API_ENDPOINTS = {
     LEDGER_LIST: "/share-capital/ledger",
     LEDGER_CREATE: "/share-capital/ledger",
     MEMBERS: "/share-capital/members",
+    // Preview of the next CSH-[admin id]-[year]-[0001] cash reference.
+    NEXT_CASH_REFERENCE: "/share-capital/cash-reference/next",
   },
   PLEDGES: {
     LIST: "/pledges",
@@ -530,6 +532,8 @@ export const API_ENDPOINTS = {
     TIME_DEPOSITS: "/savings/time-deposits",
     TIME_DEPOSIT: (id: number) => `/savings/time-deposits/${id}`,
     TIME_DEPOSIT_QUOTE: "/savings/time-deposits/quote",
+    // Preview of the next TD-[admin id]-[year]-[0001] cash placement reference.
+    TIME_DEPOSIT_NEXT_CASH_REFERENCE: "/savings/time-deposits/cash-reference/next",
     TIME_DEPOSIT_SETTLE: (id: number) => `/savings/time-deposits/${id}/settle`,
     TIME_DEPOSIT_PRETERMINATE: (id: number) => `/savings/time-deposits/${id}/preterminate`,
     TIME_DEPOSIT_PRETERMINATION_QUOTE: (id: number) =>

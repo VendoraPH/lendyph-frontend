@@ -574,6 +574,8 @@ export type MaturityInstruction = "payout" | "rollover_principal" | "rollover_al
 export interface TimeDeposit {
   id: number;
   certificate_number: string;
+  /** The payment reference; the server's TD-… number for a cash placement once it numbers them. */
+  reference?: string | null;
   borrower_id: number;
   borrower_name: string | null;
   borrower_code: string | null;
