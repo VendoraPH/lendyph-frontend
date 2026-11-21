@@ -20,6 +20,8 @@ export interface ShareCapitalLedgerEntry {
   date: string;
   description: string;
   reference: string;
+  /** How the money moved; a cash entry's is the server's CSH number. */
+  reference_number?: string | null;
   debit: number;
   credit: number;
   /**
