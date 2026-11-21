@@ -14,14 +14,15 @@ import { amlaAlertRow, amlaCtrRow, amlaListTotalText } from "@/lib/amla/monitori
 import { once } from "@/lib/amla/once";
 import { amlaStatusLines } from "@/lib/amla/settings-view";
 import type { AmlaPageMeta } from "@/types/amla";
+import { AmlaCountsCard } from "./amla-counts-card";
 
 const SHORT = 10;
 
 /**
- * The AMLA dashboard. The server has no counts endpoint yet (AMLA-B7 brings
- * KPIs and charts), so it shows the monitoring status and the latest open
- * alerts and CTR candidates, each with the total the server's list sends.
- * Nothing is counted here, and each part reads once.
+ * The AMLA dashboard: the monitoring status, the server's counts for each
+ * area the caller holds a key for, and the latest open alerts and CTR
+ * candidates with the total the server's list sends. Nothing is counted
+ * here, and each part reads once.
  */
 export function AmlaDashboard() {
   const { can } = usePermission();
@@ -31,12 +32,17 @@ export function AmlaDashboard() {
       <div className="shrink-0">
         <h1 className="text-2xl font-semibold tracking-tight">AMLA Dashboard</h1>
         <p className="text-sm text-muted-foreground">
-          Monitoring at a glance. Counts by priority and charts come with the AMLA reports; until then the lists below give
-          the server&apos;s totals.
+          Monitoring at a glance: the server&apos;s counts, then the latest open alerts and CTR candidates. The full figures
+          are in{" "}
+          <Link href="/amla/reports" className="underline underline-offset-4">
+            AMLA Reports
+          </Link>
+          .
         </p>
       </div>
       <ScrollBox className="space-y-4 p-px">
         {access.status && <StatusCard />}
+        <AmlaCountsCard />
         <div className="grid gap-4 xl:grid-cols-2">
           {access.alerts && <OpenAlertsCard />}
           {access.ctr && <CtrCard />}
