@@ -61,7 +61,10 @@ describe("a receipt's build-up and overpayment rows", () => {
   });
 
   test("the on-screen receipt reads its rows from the same helper", () => {
-    const page = readFileSync(join(process.cwd(), "src/app/(app)/payments/[id]/page.tsx"), "utf8");
-    assert.match(page, /receiptExtraLines\(/);
+    // The staff page and the public shared receipt both map through receipt-data.
+    const mapper = readFileSync(join(process.cwd(), "src/app/(app)/payments/_lib/receipt-data.ts"), "utf8");
+    assert.match(mapper, /receiptExtraLines\(/);
+    const card = readFileSync(join(process.cwd(), "src/app/(app)/payments/_components/receipt-card.tsx"), "utf8");
+    assert.match(card, /receipt\.extras\.map\(/);
   });
 });

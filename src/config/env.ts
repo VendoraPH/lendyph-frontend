@@ -197,6 +197,10 @@ export const env = {
     // interbranch transfers and the branch selector). Off by default until the
     // backend serves them. Literal reference, as above.
     multiBranch: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_MULTI_BRANCH),
+    // Share Link on a payment receipt and the public /receipts/{token} page.
+    // Off by default until the backend serves the share-link and public
+    // receipt routes. Literal reference, as above.
+    receiptShareLinks: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_RECEIPT_SHARE_LINKS),
   },
   debug: {
     enabled: getBoolEnvVar("NEXT_PUBLIC_DEBUG", false),
