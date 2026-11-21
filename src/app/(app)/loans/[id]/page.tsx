@@ -3844,7 +3844,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
         <CreditAssessmentCard loanId={loan.id} status={loan.status} />
 
         {/* Reminders need a schedule, so only released loans have any. */}
-        {hasServerLoanData && <LoanRemindersCard loanId={loan.id} />}
+        {hasServerLoanData && env.features.loanReminders && <LoanRemindersCard loanId={loan.id} />}
 
         {/* Ledger — shown for every status that has server-side repayment data
             (incl. current / past_due), matching the Adjustments & History card. */}

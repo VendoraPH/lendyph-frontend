@@ -5,6 +5,7 @@
  * figures; it puts them in words.
  */
 
+import { env } from "@/config/env";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import type {
   ExecutiveBranchColumn,
@@ -131,9 +132,15 @@ export const CARD_STATE_TEXT = {
   no_access: "Not available",
 } as const;
 
+/**
+ * Accounting's dashboard, or nowhere on a deployment that hides Accounting
+ * (NEXT_PUBLIC_ENABLE_ACCOUNTING=false), whose routes answer not found.
+ */
+const ACCOUNTING_HREF = env.features.accounting ? "/accounting" : null;
+
 interface CardMeta {
-  /** Where the card drills to; `par` opens the PAR loans. */
-  href: string | "par";
+  /** Where the card drills to; `par` opens the PAR loans, null nowhere. */
+  href: string | "par" | null;
   /** A balance on a date ("As of"), or a flow over the period ("Through"). */
   kind: "balance" | "flow";
   lowerIsBetter?: boolean;
@@ -183,11 +190,11 @@ export const CARD_META: Record<string, CardMeta> = {
     formula: "Principal and interest collected on the periods due in the range, as a share of what was due.",
   },
   interest_income: {
-    href: "/accounting",
+    href: ACCOUNTING_HREF,
     kind: "flow",
     formula: "Interest posted to the interest income account in the period, counted when the money is received (cash basis).",
   },
-  net_income: { href: "/accounting", kind: "flow", formula: "Posted income less posted expenses in the period, from the income statement." },
+  net_income: { href: ACCOUNTING_HREF, kind: "flow", formula: "Posted income less posted expenses in the period, from the income statement." },
   share_capital: {
     href: "/reports/share_capital",
     kind: "balance",
@@ -225,7 +232,7 @@ export interface CardView {
   previousText: string | null;
   asOfText: string | null;
   filterNote: string | null;
-  href: string | "par";
+  href: string | "par" | null;
   formula: string;
 }
 

@@ -69,6 +69,20 @@ jobs:
         echo "=== Checking pm2 app '$APP' exists ==="
         pm2 describe "$APP" > /dev/null || echo "WARNING: pm2 app '$APP' not found; deploy.sh will recreate it"
 
+        # app.lendyph.com hides these modules (ClickUp "Hide or Disable Selected
+        # Features and Settings in app.lendyph.com"). NEXT_PUBLIC_* is inlined at
+        # build time and `next build` keeps an exported value over .env, so the
+        # build deploy.sh runs sees them. Off hides the menu, the routes and the
+        # links into them; no code is removed, so flipping one to true and
+        # redeploying brings that module back.
+        export NEXT_PUBLIC_ENABLE_LINDA=false
+        export NEXT_PUBLIC_ENABLE_SAVINGS=false
+        export NEXT_PUBLIC_ENABLE_CDA=false
+        export NEXT_PUBLIC_ENABLE_ACCOUNTING=false
+        export NEXT_PUBLIC_ENABLE_MEMBER_PORTAL=false
+        export NEXT_PUBLIC_ENABLE_LOAN_REMINDERS=false
+        export NEXT_PUBLIC_ENABLE_SHARE_CAPITAL_AUTO_CREDIT=false
+
         flock -w 2400 /var/lock/lendyph-frontend-build.lock bash /var/www/lendyph-com-frontend/deploy.sh
 
         # Fail loudly if the app did not come back up — a half-restarted Next

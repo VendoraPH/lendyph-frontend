@@ -336,6 +336,45 @@ export const EXECUTIVE_DASHBOARD_NAV: NavItem = {
   permission: EXECUTIVE_DASHBOARD_PERMISSION,
 };
 
+const ACCOUNTING_NAV: NavItem = {
+  title: "Accounting",
+  href: "/accounting",
+  icon: BookOpenCheck,
+  icon3d: "empty-ledger",
+  permission: "accounting:view",
+  /**
+   * Fifteen children, which is the most any menu here has. Two of them —
+   * Financial Statements and Accounting Books — have a third level in the
+   * spec (Balance Sheet, Income Statement, … / General Journal, Cash
+   * Receipts, …). `NavSubItem` has no `children`, and rather than grow the
+   * nav model for two entries, each of those pages carries its own tabs.
+   * Same destinations, one less level of chrome to collapse and expand.
+   *
+   * Children that need a stricter permission than the parent's
+   * `accounting:view` say so; the rest inherit it.
+   */
+  children: [
+    { title: "Dashboard", href: "/accounting" },
+    { title: "Chart of Accounts", href: "/accounting/chart-of-accounts", permission: "chart_of_accounts:view" },
+    { title: "Journal Entries", href: "/accounting/journals", permission: "journals:view" },
+    { title: "Cash & Bank", href: "/accounting/cash-bank", permission: "cash_accounts:view" },
+    ...(env.features.multiBranch ? [INTERBRANCH_TRANSFERS_NAV] : []),
+    { title: "Expenses & Payables", href: "/accounting/expenses", permission: "expenses:view" },
+    { title: "Loan Accounting", href: "/accounting/loans" },
+    { title: "General Ledger", href: "/accounting/general-ledger" },
+    { title: "Trial Balance", href: "/accounting/trial-balance" },
+    { title: "Reconciliation", href: "/accounting/reconciliation", permission: "accounting:reconcile" },
+    { title: "Financial Statements", href: "/accounting/statements" },
+    { title: "Accounting Books", href: "/accounting/books" },
+    { title: "Period Closing", href: "/accounting/period-closing", permission: "accounting:close" },
+    // The page itself opens on `accounting:view` (+ `branches:view_all`);
+    // the menu shows it to those who set the entry up.
+    { title: "Opening Balances", href: "/accounting/opening-balances", permission: "accounting:settings" },
+    { title: "Allowance for Credit Losses", href: "/accounting/allowance", permission: "accounting:view" },
+    { title: "Settings", href: "/accounting/settings", permission: "accounting:settings" },
+  ],
+};
+
 export const SIDEBAR_NAV: NavItem[] = [
   {
     title: "Dashboard",
@@ -376,7 +415,10 @@ export const SIDEBAR_NAV: NavItem[] = [
       // Shown with `reminders:view`, which the server grants to admin and
       // super_admin (other roles only through the roles screen). The six
       // reminder screens are tabs inside /loans/reminders, not menu items.
-      { title: "Reminders", href: "/loans/reminders", permission: "reminders:view" },
+      // NEXT_PUBLIC_ENABLE_LOAN_REMINDERS (on unless a deployment turns it off).
+      ...(env.features.loanReminders
+        ? [{ title: "Reminders", href: "/loans/reminders", permission: "reminders:view" as const }]
+        : []),
       // NEXT_PUBLIC_ENABLE_LOAN_ORIGINATION only. Its six screens are tabs
       // inside /loans/origination, not menu items.
       ...(env.features.loanOrigination
@@ -405,7 +447,10 @@ export const SIDEBAR_NAV: NavItem[] = [
     children: [
       { title: "Subsidiary Ledger", href: "/share-capital/ledger" },
       { title: "Pledge Entry", href: "/share-capital/pledges" },
-      { title: "Auto-Credit", href: "/share-capital/auto-credit", permission: "share_capital:create" },
+      // NEXT_PUBLIC_ENABLE_SHARE_CAPITAL_AUTO_CREDIT (on unless a deployment turns it off).
+      ...(env.features.shareCapitalAutoCredit
+        ? [{ title: "Auto-Credit", href: "/share-capital/auto-credit", permission: "share_capital:create" as const }]
+        : []),
     ],
   },
   // Savings & Deposits: hidden unless NEXT_PUBLIC_ENABLE_SAVINGS is on (staging
@@ -456,44 +501,9 @@ export const SIDEBAR_NAV: NavItem[] = [
   ...(env.features.cda ? [CDA_NAV] : []),
   ...(env.features.memberPortal ? [MEMBER_PORTAL_NAV] : []),
   ...(env.features.amla ? [AMLA_NAV] : []),
-  {
-    title: "Accounting",
-    href: "/accounting",
-    icon: BookOpenCheck,
-    icon3d: "empty-ledger",
-    permission: "accounting:view",
-    /**
-     * Fifteen children, which is the most any menu here has. Two of them —
-     * Financial Statements and Accounting Books — have a third level in the
-     * spec (Balance Sheet, Income Statement, … / General Journal, Cash
-     * Receipts, …). `NavSubItem` has no `children`, and rather than grow the
-     * nav model for two entries, each of those pages carries its own tabs.
-     * Same destinations, one less level of chrome to collapse and expand.
-     *
-     * Children that need a stricter permission than the parent's
-     * `accounting:view` say so; the rest inherit it.
-     */
-    children: [
-      { title: "Dashboard", href: "/accounting" },
-      { title: "Chart of Accounts", href: "/accounting/chart-of-accounts", permission: "chart_of_accounts:view" },
-      { title: "Journal Entries", href: "/accounting/journals", permission: "journals:view" },
-      { title: "Cash & Bank", href: "/accounting/cash-bank", permission: "cash_accounts:view" },
-      ...(env.features.multiBranch ? [INTERBRANCH_TRANSFERS_NAV] : []),
-      { title: "Expenses & Payables", href: "/accounting/expenses", permission: "expenses:view" },
-      { title: "Loan Accounting", href: "/accounting/loans" },
-      { title: "General Ledger", href: "/accounting/general-ledger" },
-      { title: "Trial Balance", href: "/accounting/trial-balance" },
-      { title: "Reconciliation", href: "/accounting/reconciliation", permission: "accounting:reconcile" },
-      { title: "Financial Statements", href: "/accounting/statements" },
-      { title: "Accounting Books", href: "/accounting/books" },
-      { title: "Period Closing", href: "/accounting/period-closing", permission: "accounting:close" },
-      // The page itself opens on `accounting:view` (+ `branches:view_all`);
-      // the menu shows it to those who set the entry up.
-      { title: "Opening Balances", href: "/accounting/opening-balances", permission: "accounting:settings" },
-      { title: "Allowance for Credit Losses", href: "/accounting/allowance", permission: "accounting:view" },
-      { title: "Settings", href: "/accounting/settings", permission: "accounting:settings" },
-    ],
-  },
+  // NEXT_PUBLIC_ENABLE_ACCOUNTING (on unless a deployment turns it off). The
+  // routes also answer not found when it is off (accounting/layout.tsx).
+  ...(env.features.accounting ? [ACCOUNTING_NAV] : []),
   {
     title: "User Management",
     href: "/users",
