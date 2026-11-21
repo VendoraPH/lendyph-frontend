@@ -242,6 +242,7 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
                     value={form.instruction}
                     onChange={(v) => set("instruction", v as MaturityInstruction)}
                     options={MATURITY_INSTRUCTION_OPTIONS}
+                    wrap
                   />
                 </FormField>
                 <FormField id="td-method" field="payment_method" label="Paid by">
