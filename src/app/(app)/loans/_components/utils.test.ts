@@ -14,6 +14,7 @@ import {
   numOrNull,
   clampOneOf,
   offersAutoPay,
+  loanOutstandingText,
 } from "./utils";
 
 // The loans screen keeps its entire state in the URL, so `?tab=` is a public,
@@ -229,4 +230,16 @@ test("every Current loan offers auto-pay, released or ongoing", () => {
   for (const status of ["draft", "for_review", "approved", "completed", "defaulted", "restructured", "void", "current", "", null, undefined]) {
     assert.equal(offersAutoPay(status), false, String(status));
   }
+});
+
+test("loanOutstandingText: N/A before release, the server's figure after, ₱0.00 once paid", () => {
+  for (const status of ["draft", "for_review", "approved", "rejected", "void"] as const) {
+    assert.equal(loanOutstandingText({ status, total_outstanding: 5000 }), "N/A", status);
+  }
+  for (const status of ["completed", "closed"] as const) {
+    assert.equal(loanOutstandingText({ status, total_outstanding: 12 }), "₱0.00", status);
+  }
+  assert.equal(loanOutstandingText({ status: "current", total_outstanding: 12345.5 }), "₱12,345.50");
+  assert.equal(loanOutstandingText({ status: "past_due", total_outstanding: "800" }), "₱800.00");
+  assert.equal(loanOutstandingText({ status: "released", total_outstanding: null }), "—");
 });
