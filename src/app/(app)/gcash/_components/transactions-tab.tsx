@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import {
@@ -35,6 +35,7 @@ import type {
 } from "@/types";
 import { PaidButton } from "./paid-button";
 import { PartyCell } from "./party-cell";
+import { TransactionsReportActions } from "./transactions-report-actions";
 import { gcashCanMarkPaid } from "../_lib/row-actions";
 import { gcashRowBranchLabel } from "../_lib/walk-in-branch";
 import { DataState } from "@/components/common/data-state";
@@ -87,6 +88,11 @@ export function TransactionsTab() {
   const [loading, setLoading] = useState(true);
   const [reloadToken, setReloadToken] = useState(0);
 
+  const branchOf = useCallback((row: GCashTransaction) => gcashRowBranchLabel(row, branches), [branches]);
+  const reportFilters = useMemo(
+    () => ({ from: filters.start_date, to: filters.end_date, type: filters.type, status: filters.status }),
+    [filters],
+  );
   const refresh = useCallback(() => setReloadToken((n) => n + 1), []);
   // Whether the empty list is down to the filters (a "no results" picture) or there is nothing yet.
   const filtersActive =
@@ -172,20 +178,22 @@ export function TransactionsTab() {
         </div>
 
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">From</label>
+          <label className="text-xs text-muted-foreground">Date From</label>
           <Input
             type="date"
             value={filters.start_date}
+            max={filters.end_date || undefined}
             onChange={(e) =>
               setFilters((p) => ({ ...p, start_date: e.target.value }))
             }
           />
         </div>
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">To</label>
+          <label className="text-xs text-muted-foreground">Date To</label>
           <Input
             type="date"
             value={filters.end_date}
+            min={filters.start_date || undefined}
             onChange={(e) =>
               setFilters((p) => ({ ...p, end_date: e.target.value }))
             }
@@ -195,6 +203,10 @@ export function TransactionsTab() {
         <Button variant="ghost" onClick={refresh}>
           Refresh
         </Button>
+
+        <div className="ml-auto">
+          <TransactionsReportActions filters={reportFilters} branchOf={branchOf} />
+        </div>
       </div>
 
       {!loading && rows.length === 0 ? (

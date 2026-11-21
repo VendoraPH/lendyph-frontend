@@ -27,6 +27,20 @@ export const gcashService = {
       { params },
     ),
 
+  /**
+   * Every transaction the filters match, across as many pages as it takes, for
+   * the tab's report export. Returns a `DrainResult`: a `truncated` drain
+   * must not be exported, since its totals would cover part of the range.
+   */
+  listAllTransactions: (
+    params?: Omit<GCashListFilters, "page" | "per_page">,
+    options?: { maxPages?: number },
+  ): Promise<DrainResult<GCashTransaction>> =>
+    fetchAllPages<GCashTransaction>(
+      ({ page, per_page }) => gcashService.listTransactions({ ...params, page, per_page }),
+      options,
+    ),
+
   createTransaction: (data: CreateGCashTransactionData) =>
     api.post<GCashTransaction>(API_ENDPOINTS.GCASH.TRANSACTIONS_CREATE, data),
 
