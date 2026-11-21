@@ -3,6 +3,7 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CASH_REFERENCE_PLACEHOLDER, type AutoReference } from "@/lib/cash-reference";
 import { referenceAfterMethodChange } from "@/lib/payment-reference";
 
 /**
@@ -10,7 +11,8 @@ import { referenceAfterMethodChange } from "@/lib/payment-reference";
  * money screen asks for (release, extension, share capital entries,
  * auto-credit). Changing the method clears a reference typed for the old one.
  * Whether the reference is required, and what to say when it's missing, are
- * the caller's (`paymentReferenceError`).
+ * the caller's (`paymentReferenceError`). With `autoReference` the server
+ * numbers the entry: the field is read-only and shows its preview.
  */
 export function MethodReferenceFields<M extends string>({
   idPrefix,
@@ -21,6 +23,7 @@ export function MethodReferenceFields<M extends string>({
   onChange,
   referenceRequired,
   problem,
+  autoReference = null,
   disabled = false,
   className = "grid gap-3 sm:grid-cols-2",
 }: {
@@ -32,11 +35,13 @@ export function MethodReferenceFields<M extends string>({
   onChange: (next: { method: M; reference: string }) => void;
   referenceRequired: boolean;
   problem: string | null;
+  autoReference?: AutoReference | null;
   disabled?: boolean;
   className?: string;
 }) {
   const labelOf = (value: unknown) => options.find((o) => o.value === value)?.label ?? "";
   const hintId = `${idPrefix}-reference-hint`;
+  const hint = autoReference?.hint ?? problem;
   return (
     <div className={className}>
       <div className="space-y-1.5 min-w-0">
@@ -70,18 +75,25 @@ export function MethodReferenceFields<M extends string>({
         </Label>
         <Input
           id={`${idPrefix}-reference`}
-          placeholder={referenceRequired ? "Required for this method" : "Optional"}
+          placeholder={
+            autoReference !== null
+              ? CASH_REFERENCE_PLACEHOLDER
+              : referenceRequired
+                ? "Required for this method"
+                : "Optional"
+          }
           maxLength={100}
-          value={reference}
+          value={autoReference?.value ?? reference}
           disabled={disabled}
+          readOnly={autoReference !== null}
           onChange={(e) => onChange({ method, reference: e.target.value })}
-          required={referenceRequired}
-          aria-describedby={problem !== null ? hintId : undefined}
-          className="w-full"
+          required={autoReference === null && referenceRequired}
+          aria-describedby={hint !== null ? hintId : undefined}
+          className={autoReference !== null ? "w-full bg-muted font-mono text-muted-foreground" : "w-full"}
         />
-        {problem !== null && (
+        {hint !== null && (
           <p id={hintId} className="text-xs text-muted-foreground">
-            {problem}
+            {hint}
           </p>
         )}
       </div>

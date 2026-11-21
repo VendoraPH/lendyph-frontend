@@ -323,6 +323,8 @@ export const API_ENDPOINTS = {
     LEDGER_LIST: "/share-capital/ledger",
     LEDGER_CREATE: "/share-capital/ledger",
     MEMBERS: "/share-capital/members",
+    // Preview of the next CSH-[admin id]-[year]-[0001] cash reference.
+    NEXT_CASH_REFERENCE: "/share-capital/cash-reference/next",
   },
   PLEDGES: {
     LIST: "/pledges",
