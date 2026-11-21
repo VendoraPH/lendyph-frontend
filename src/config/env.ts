@@ -156,6 +156,10 @@ export const env = {
     // POST /linda/chat, so production never offers an assistant that can only
     // answer "not available". Literal reference for the same reason as above.
     linda: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_LINDA),
+    // Cash share capital entries numbered by the server (CSH-[admin id]-[year]-
+    // [0001]): the Reference Number field locks on Cash and shows the next one.
+    // Off until the backend assigns them. Literal reference, as above.
+    cashPledgeReference: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_CASH_PLEDGE_REFERENCE),
     // Savings & Deposits (staff side). Off by default: the menu and every
     // /savings route stay hidden. Turned on for staging only, where the
     // backend serves the /savings endpoints. Literal reference, as above.
