@@ -240,6 +240,8 @@ export const AMLA_NAV: NavItem = {
     },
     { title: "Covered Transactions (CTR)", href: "/amla/ctr", permission: [...AMLA_CTR_READ], alsoRequires: ["amla:view"] },
     { title: "Regulatory Submissions", href: "/amla/submissions", permission: [...AMLA_REPORT_READ], alsoRequires: ["amla:view"] },
+    // The server lists only the reports the caller may open (each needs its own key).
+    { title: "AMLA Reports", href: "/amla/reports", permission: "amla:view" },
     { title: "Audit & Compliance History", href: "/amla/history", permission: "amla:audit", alsoRequires: ["amla:view", "branches:view_all"] },
     { ...AMLA_SETTINGS_NAV, title: "AMLA Settings" },
   ],
