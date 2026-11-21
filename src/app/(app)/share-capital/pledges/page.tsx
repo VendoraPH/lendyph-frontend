@@ -65,7 +65,7 @@ import { PAYMENT_METHOD_OPTIONS, type RecordPaymentMethod } from "@/constants/pa
 import { paymentReferenceError } from "@/lib/payment-reference";
 import { cashAutoReference } from "@/lib/cash-reference";
 import { env } from "@/config/env";
-import { useCashReferencePreview } from "./_hooks/use-cash-reference-preview";
+import { useCashReferencePreview } from "@/hooks/use-cash-reference-preview";
 import { useDialogOpening } from "@/hooks/use-dialog-opening";
 import { createLatestGate, drainPledgesWithTotal, readPledgeTotalAmount } from "./_lib/pledge-totals";
 
@@ -214,6 +214,7 @@ function PledgeEntryContent() {
   const [entriesSaved, setEntriesSaved] = useState(0);
   const cashNumbering = env.features.cashPledgeReference;
   const cashPreview = useCashReferencePreview(
+    shareCapitalService.nextCashReference,
     cashNumbering &&
       ((manualEntryId !== null && manualMethod === "cash") || (bulkDialogOpen && bulkMethod === "cash")),
     entriesSaved,

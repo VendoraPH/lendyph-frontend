@@ -34,7 +34,12 @@ export interface PlacementCheck {
  * amount is sent exactly as typed; the server checks the minimum and works
  * out every figure.
  */
-export function checkPlacement(form: PlacementForm, product: Pick<SavingsProduct, "id" | "term_options_days"> | null): PlacementCheck {
+export function checkPlacement(
+  form: PlacementForm,
+  product: Pick<SavingsProduct, "id" | "term_options_days"> | null,
+  /** The server numbers cash placements (TD-…): a cash body carries no reference. */
+  { serverNumbersCash = false }: { serverNumbersCash?: boolean } = {},
+): PlacementCheck {
   const terms = product?.term_options_days ?? [];
   const term = terms.includes(Number(form.term)) ? Number(form.term) : null;
   const amount = parseMoneyInput(form.amount, { label: "Amount placed" });
@@ -68,7 +73,9 @@ export function checkPlacement(form: PlacementForm, product: Pick<SavingsProduct
           placement_date: quote.placement_date,
           maturity_instruction: form.instruction,
           payment_method: form.method,
-          ...(form.reference.trim() ? { reference: form.reference.trim() } : {}),
+          ...(form.reference.trim() && !(serverNumbersCash && form.method === "cash")
+            ? { reference: form.reference.trim() }
+            : {}),
           ...(funding ? { funding_account_id: funding } : {}),
           ...(Number(form.payoutAccountId) ? { payout_account_id: Number(form.payoutAccountId) } : {}),
         }
