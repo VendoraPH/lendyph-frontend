@@ -7,6 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 export interface Option {
   value: string;
@@ -23,10 +24,15 @@ interface OptionSelectProps {
   placeholder?: string;
   className?: string;
   disabled?: boolean;
+  /**
+   * Long labels wrap, in the list and in the field, instead of being cut off;
+   * the field grows to fit the chosen one.
+   */
+  wrap?: boolean;
 }
 
 /** A plain value/label select, the shape every savings form uses. */
-export function OptionSelect({ id, value, onChange, options, placeholder, className, disabled }: OptionSelectProps) {
+export function OptionSelect({ id, value, onChange, options, placeholder, className, disabled, wrap = false }: OptionSelectProps) {
   return (
     <Select
       value={value}
@@ -34,12 +40,15 @@ export function OptionSelect({ id, value, onChange, options, placeholder, classN
       items={options as Option[]}
       disabled={disabled}
     >
-      <SelectTrigger id={id} className={className ?? "w-full"}>
-        <SelectValue placeholder={placeholder} />
+      <SelectTrigger
+        id={id}
+        className={cn(className ?? "w-full", wrap && "min-h-8 py-1.5 whitespace-normal data-[size=default]:h-auto")}
+      >
+        <SelectValue placeholder={placeholder} className={cn(wrap && "overflow-visible! break-words whitespace-normal!")} />
       </SelectTrigger>
       <SelectContent>
         {options.map((o) => (
-          <SelectItem key={o.value} value={o.value} disabled={o.disabled}>
+          <SelectItem key={o.value} value={o.value} disabled={o.disabled} wrap={wrap}>
             {o.label}
           </SelectItem>
         ))}
