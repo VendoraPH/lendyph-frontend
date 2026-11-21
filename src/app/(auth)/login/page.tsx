@@ -131,7 +131,7 @@ export default function LoginPage() {
             {/* Organization logo — <BrandLogo> resolves the admin-configured
                 logo, so this is the tenant's mark, not the Lendy one. The
                 Lendy attribution lives in the footer below. */}
-            <div className="inline-flex items-center rounded-2xl bg-white px-6 py-4 shadow-lg shadow-black/10">
+            <div className="inline-flex max-w-full items-center rounded-2xl bg-white px-6 py-4 shadow-lg shadow-black/10">
               <BrandLogo className="h-40 w-auto drop-shadow-sm" />
             </div>
             <p className="mt-3 text-sm font-medium text-white/80 tracking-wide">
