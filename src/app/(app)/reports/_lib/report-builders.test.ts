@@ -2465,6 +2465,7 @@ const ALL_REPORT_IDS: Record<DocumentId, true> = {
   savings_member_statement: true,
   executive_dashboard: true,
   share_capital_ledger: true,
+  gcash_transactions: true,
 };
 
 test("every report id has its own reference prefix", () => {
