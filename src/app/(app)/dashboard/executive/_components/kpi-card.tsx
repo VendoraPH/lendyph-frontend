@@ -40,10 +40,12 @@ export function KpiCard({ card, onOpenPar }: { card: CardView; onOpenPar: (() =>
             ) : (
               <span className="text-xs font-medium text-muted-foreground">{card.label}</span>
             )
-          ) : (
+          ) : card.href ? (
             <Link href={card.href} className={TITLE_CLASS} aria-describedby={describedBy}>
               {card.label}
             </Link>
+          ) : (
+            <span className="text-xs font-medium text-muted-foreground">{card.label}</span>
           )}
           {card.formula ? (
             <TooltipProvider>

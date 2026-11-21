@@ -197,6 +197,21 @@ export const env = {
     // interbranch transfers and the branch selector). Off by default until the
     // backend serves them. Literal reference, as above.
     multiBranch: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_MULTI_BRANCH),
+    // Modules every deployment has, which one deployment can switch off
+    // (app.lendyph.com: deploy-production.yml). ON by default, so an unset
+    // flag changes nothing; only "false" (or anything but "true"/"1") hides
+    // the menu, the routes and the links into them. Nothing is removed, so
+    // setting the flag back on restores the module as it was. Literal
+    // references, as above.
+    //
+    // Accounting: the Accounting menu and every /accounting route.
+    accounting: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_ACCOUNTING, true),
+    // Loan Reminders: Loans → Reminders, every /loans/reminders route
+    // (queue, rules, templates, history, settings) and the loan page's card.
+    loanReminders: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_LOAN_REMINDERS, true),
+    // Share Capital Auto-Credit: Share Capital → Auto-Credit, its route, and
+    // the auto-credit switch, count and filter on Pledge Entry.
+    shareCapitalAutoCredit: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_SHARE_CAPITAL_AUTO_CREDIT, true),
   },
   debug: {
     enabled: getBoolEnvVar("NEXT_PUBLIC_DEBUG", false),
