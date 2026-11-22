@@ -196,6 +196,40 @@ export const AMLA_SETTINGS_NAV: NavSubItem = {
 };
 
 /**
+ * Each module's own settings, under Settings rather than in the module's menu,
+ * so every configuration screen is in one place. Each keeps its module's
+ * feature flag and its page's permission; the old module URLs redirect here
+ * (next.config.ts).
+ */
+export const MODULE_SETTINGS_NAV: NavSubItem[] = [
+  { title: "Accounting", href: "/settings/accounting", permission: "accounting:settings" },
+  ...(env.features.savings
+    ? [
+        { title: "Savings Products", href: "/settings/savings-products", permission: "savings:settings" as const },
+        { title: "Savings", href: "/settings/savings", permission: "savings:settings" as const },
+      ]
+    : []),
+  ...(env.features.cda
+    ? [{ title: "CDA", href: "/settings/cda", permission: "cda:view" as const, alsoRequires: ["branches:view_all" as const] }]
+    : []),
+  ...(env.features.creditScoring
+    ? [
+        { title: "Scorecard Configuration", href: "/settings/scorecard-configuration", permission: "credit_scoring:settings" as const },
+        { title: "Credit Scoring", href: "/settings/credit-scoring", permission: "credit_scoring:settings" as const },
+      ]
+    : []),
+];
+
+/** Any one of these opens Settings: its own key, or a module's settings key. */
+const SETTINGS_SECTION_PERMISSIONS: Permission[] = [
+  "settings:view",
+  "accounting:settings",
+  ...(env.features.savings ? (["savings:settings"] as const) : []),
+  ...(env.features.cda ? (["cda:view"] as const) : []),
+  ...(env.features.creditScoring ? (["credit_scoring:settings"] as const) : []),
+];
+
+/**
  * AMLA Compliance. The /amla pages need `amla:view` (amla/layout.tsx) and each
  * its own key, as its endpoints do: Alerts `amla:alerts`, CTR Candidates
  * `amla:ctr`, Customers `amla:cdd`; Transaction Monitoring and Risk Rules are
@@ -267,7 +301,6 @@ export const CDA_NAV: NavItem = {
     { title: "ATIR & ABR", href: "/cda/tax-reports", permission: "cda:view_tax" },
     { title: "Compliance Documents", href: "/cda/documents" },
     { title: "Submission History", href: "/cda/submissions" },
-    { title: "CDA Settings", href: "/cda/settings" },
   ],
 };
 
@@ -303,10 +336,8 @@ const CREDIT_SCORING_NAV: NavItem = {
     { title: "Dashboard", href: "/credit-scoring", permission: "credit_scoring:view" },
     { title: "Member Scores", href: "/credit-scoring/borrowers", permission: "credit_scoring:view" },
     { title: "Credit Assessment", href: "/credit-scoring/assessment", permission: "credit_scoring:view" },
-    { title: "Scorecard Configuration", href: "/credit-scoring/scorecard-configuration", permission: "credit_scoring:settings" },
     { title: "Risk Monitoring", href: "/credit-scoring/risk-monitoring", permission: "credit_scoring:view" },
     { title: "Score History", href: "/credit-scoring/score-history", permission: "credit_scoring:view" },
-    { title: "Settings", href: "/credit-scoring/settings", permission: "credit_scoring:settings" },
   ],
 };
 
@@ -427,8 +458,6 @@ export const SIDEBAR_NAV: NavItem[] = [
             { title: "Savings Interest", href: "/savings/interest" },
             { title: "Savings Auto-Credit", href: "/savings/auto-credit" },
             { title: "Dormant Accounts", href: "/savings/dormant", permission: "reports:view" as const },
-            { title: "Savings Products", href: "/savings/products", permission: "savings:settings" as const },
-            { title: "Savings Settings", href: "/savings/settings", permission: "savings:settings" as const },
           ],
         },
       ]
@@ -491,7 +520,6 @@ export const SIDEBAR_NAV: NavItem[] = [
       // the menu shows it to those who set the entry up.
       { title: "Opening Balances", href: "/accounting/opening-balances", permission: "accounting:settings" },
       { title: "Allowance for Credit Losses", href: "/accounting/allowance", permission: "accounting:view" },
-      { title: "Settings", href: "/accounting/settings", permission: "accounting:settings" },
     ],
   },
   {
@@ -530,19 +558,27 @@ export const SIDEBAR_NAV: NavItem[] = [
     icon: Settings,
     icon3d: "icon-settings",
     permission: "settings:view",
+    /**
+     * Every module's settings live here, each behind its own permission, so
+     * the section also opens for someone who holds only a module's settings
+     * key (an accountant with `accounting:settings`). Children therefore name
+     * their permission: one left blank would be offered to all of them.
+     */
+    anyOf: SETTINGS_SECTION_PERMISSIONS,
     children: [
-      { title: "Profile", href: "/settings/profile" },
-      { title: "Branding", href: "/settings/branding" },
-      { title: "Branches", href: "/settings/branches" },
-      { title: "Loan Products", href: "/settings/loan-products" },
+      { title: "Profile", href: "/settings/profile", permission: "settings:view" },
+      { title: "Branding", href: "/settings/branding", permission: "settings:view" },
+      { title: "Branches", href: "/settings/branches", permission: "settings:view" },
+      { title: "Loan Products", href: "/settings/loan-products", permission: "settings:view" },
       { title: "Fees", href: "/settings/fees", permission: "fees:view" },
       // Gated on NEXT_PUBLIC_ENABLE_PENALTY_CONFIGS at build time; the route
       // answers not found when it is off (settings/penalties/layout.tsx).
       ...(env.features.penaltyConfigs ? [PENALTIES_SETTINGS_NAV] : []),
-      { title: "Collateral Types", href: "/settings/collateral-types" },
-      { title: "Role and Permissions", href: "/settings/user-roles" },
-      { title: "Approval Workflow", href: "/settings/approval-workflow" },
-      { title: "GCash", href: "/settings/gcash" },
+      { title: "Collateral Types", href: "/settings/collateral-types", permission: "settings:view" },
+      { title: "Role and Permissions", href: "/settings/user-roles", permission: "settings:view" },
+      { title: "Approval Workflow", href: "/settings/approval-workflow", permission: "settings:view" },
+      { title: "GCash", href: "/settings/gcash", permission: "settings:view" },
+      ...MODULE_SETTINGS_NAV,
       // Company-wide, so it also needs branches:view_all, as the server does.
       ...(env.features.memberPortal
         ? [

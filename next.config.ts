@@ -104,6 +104,17 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // Module settings now live under Settings; old links and bookmarks follow.
+  async redirects() {
+    return [
+      ["/accounting/settings", "/settings/accounting"],
+      ["/cda/settings", "/settings/cda"],
+      ["/credit-scoring/settings", "/settings/credit-scoring"],
+      ["/credit-scoring/scorecard-configuration", "/settings/scorecard-configuration"],
+      ["/savings/settings", "/settings/savings"],
+      ["/savings/products", "/settings/savings-products"],
+    ].map(([source, destination]) => ({ source, destination, permanent: false }));
+  },
   async rewrites() {
     return [
       {

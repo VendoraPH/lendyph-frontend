@@ -52,8 +52,8 @@ export interface ProductChoice {
 }
 
 const BOOKS_FIRST = "Set up savings in the books first (Savings → Settings). It needs the chart of accounts.";
-const SETTINGS_LINK = { href: "/savings/settings", label: "Open Savings Settings" };
-const PRODUCTS_LINK = { href: "/savings/products", label: "Open Savings Products" };
+const SETTINGS_LINK = { href: "/settings/savings", label: "Open Savings Settings" };
+const PRODUCTS_LINK = { href: "/settings/savings-products", label: "Open Savings Products" };
 
 const KIND_WORDS: Record<SavingsProductKind, string> = {
   regular: "savings product",

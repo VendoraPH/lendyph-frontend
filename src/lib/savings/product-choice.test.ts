@@ -29,13 +29,13 @@ test("with only inactive products and the books not set up, it says why and wher
   assert.equal(choice.selectable, 0);
   assert.deepEqual(choice.options, [{ value: "2", label: "Kiddie Savings (KS) · Not active yet", disabled: true }]);
   assert.equal(choice.empty?.message, `No savings product is turned on yet. ${BOOKS_FIRST}`);
-  assert.deepEqual(choice.empty?.link, { href: "/savings/settings", label: "Open Savings Settings" });
+  assert.deepEqual(choice.empty?.link, { href: "/settings/savings", label: "Open Savings Settings" });
 });
 
 test("with the books set up, it points to the products screen to turn one on", () => {
   const choice = productChoice({ products: [TD2], kind: "time_deposit", booksReady: true, canManage: true });
   assert.equal(choice.empty?.message, "No time deposit product is turned on yet. Turn a product on in Savings → Products.");
-  assert.deepEqual(choice.empty?.link, { href: "/savings/products", label: "Open Savings Products" });
+  assert.deepEqual(choice.empty?.link, { href: "/settings/savings-products", label: "Open Savings Products" });
 });
 
 test("a user who can't fix it gets the reason without a link", () => {
@@ -57,7 +57,7 @@ test("no product of the kind at all asks for one to be added", () => {
   const regular = productChoice({ products: [TD], kind: "regular", booksReady: true, canManage: true });
   assert.equal(regular.options.length, 0);
   assert.equal(regular.empty?.message, "No savings product has been set up yet. Add one in Savings → Products.");
-  assert.deepEqual(regular.empty?.link, { href: "/savings/products", label: "Open Savings Products" });
+  assert.deepEqual(regular.empty?.link, { href: "/settings/savings-products", label: "Open Savings Products" });
   const td = productChoice({ products: [], kind: "time_deposit", booksReady: false, canManage: false });
   assert.equal(td.empty?.message, `No time deposit product has been set up yet. ${BOOKS_FIRST}`);
 });
