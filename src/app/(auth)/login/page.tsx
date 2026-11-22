@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { BrandLogo, PoweredByLendy } from "@/components/common";
+import { PoweredByLendy } from "@/components/common";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks";
 import { authService } from "@/services";
@@ -128,11 +128,12 @@ export default function LoginPage() {
 
         <div className="relative z-10 flex flex-col justify-between p-12 text-white">
           <div>
-            {/* Organization logo — <BrandLogo> resolves the admin-configured
-                logo, so this is the tenant's mark, not the Lendy one. The
-                Lendy attribution lives in the footer below. */}
+            {/* Always the Lendy.ph wordmark, on every deployment: the login is
+                Lendy's front door, so it does not use <BrandLogo> (the
+                organization's uploaded logo). */}
             <div className="inline-flex max-w-full items-center rounded-2xl bg-white px-6 py-4 shadow-lg shadow-black/10">
-              <BrandLogo className="h-40 w-auto drop-shadow-sm" />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/Logo/Lendy_logo.png" alt="Lendy.ph" className="h-40 w-auto max-w-full object-contain drop-shadow-sm" />
             </div>
             <p className="mt-3 text-sm font-medium text-white/80 tracking-wide">
               Lending Management Platform
@@ -164,7 +165,8 @@ export default function LoginPage() {
         <div className="w-full max-w-md space-y-8">
           {/* Mobile logo */}
           <div className="flex flex-col items-center lg:hidden">
-            <BrandLogo className="h-24 w-auto" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/Logo/Lendy_logo.png" alt="Lendy.ph" className="h-24 w-auto max-w-full object-contain" />
             <p className="text-sm text-muted-foreground mt-1">
               Lending Management Platform
             </p>
