@@ -208,17 +208,14 @@ export function loanTerm(loan: Loan): number | null {
 
 /** Not released yet, or never will be: the balance column reads N/A. */
 const UNRELEASED_STATUSES: ReadonlySet<string> = new Set(["draft", "for_review", "approved", "rejected", "void"]);
-/** Fully paid: the balance column reads ₱0.00 whatever the row carries. */
-const PAID_STATUSES: ReadonlySet<string> = new Set(["completed", "closed"]);
 
 /**
  * The Outstanding Balance cell: the server's `total_outstanding` (everything
- * still owed, the figure the loan page shows) for a released loan, N/A before
- * release, ₱0.00 once paid. Nothing is computed here.
+ * still owed, the figure the loan page shows) for every released loan,
+ * completed ones included, and N/A before release. Nothing is computed here.
  */
 export function loanOutstandingText(loan: Pick<Loan, "status" | "total_outstanding">): string {
   if (UNRELEASED_STATUSES.has(loan.status)) return "N/A";
-  if (PAID_STATUSES.has(loan.status)) return formatCurrency(0);
   return loan.total_outstanding == null ? "—" : formatCurrency(loan.total_outstanding);
 }
 
