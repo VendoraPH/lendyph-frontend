@@ -123,6 +123,7 @@ import {
 import { MethodReferenceFields } from "@/components/common/method-reference-fields";
 import { releaseConflictOf } from "./_lib/release-conflict";
 import { stepConflictMessage } from "./_lib/step-conflict";
+import { signOffRefusal, signOffRefusalFor, type KeptRefusal } from "./_lib/sign-off-refusal";
 import { oncePerKey } from "./_lib/once-per-key";
 import { useReleasePreview } from "./_hooks/use-release-preview";
 import { useDeductionsPreview } from "./_hooks/use-deductions-preview";
@@ -1182,6 +1183,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
     userId: ANYONE_WITH_THE_ROLE,
   });
   const [forwardError, setForwardError] = useState<{ key: string; message: string } | null>(null);
+  // A sign-off the server refused because a step the chain left out by its
+  // minimum now applies (422 on `approval`), kept beside that step's actions.
+  const [signOffError, setSignOffError] = useState<KeptRefusal | null>(null);
   // The "Forward to" candidates, read once per pending step for this page.
   const [readForwardCandidates] = useState(() => oncePerKey<ForwardCandidates>());
   // Index of the step an approver is sending the loan back to. Defaults to
@@ -1656,6 +1660,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
   const forwardKey = currentStep ? String(currentStep.id) : "draft";
   const forwardTo = forwardPickFor(forwardPick, forwardKey);
   const forwardErrorMessage = forwardError?.key === forwardKey ? forwardError.message : null;
+  const signOffErrorMessage = signOffRefusalFor(signOffError, forwardKey);
   const handleForwardChange = (userId: string, name: string) => {
     setForwardPick({ key: forwardKey, userId, name });
     setForwardError(null);
@@ -1813,6 +1818,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
       : undefined;
     try {
       setStepActionLoading(true);
+      setSignOffError(null);
       await loanApprovalService.approve(
         loan.id,
         currentStep.id,
@@ -1833,6 +1839,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
         return;
       }
       rememberForwardError(err, key);
+      const refusal = signOffRefusal(err);
+      if (refusal) setSignOffError({ key, message: refusal });
       notifyError(err, "We couldn't record this approval. Please try again.");
     } finally {
       setStepActionLoading(false);
@@ -2866,6 +2874,16 @@ function LoanDetail({ loanId }: { loanId: number }) {
                             onChange={(e) => setStepRemarks(e.target.value)}
                             className="min-h-[80px] text-sm bg-background"
                           />
+                        </div>
+                      )}
+
+                      {currentStep.kind === "approve" && signOffErrorMessage && (
+                        <div
+                          className="rounded-md border border-red-200 bg-red-50 p-2.5 flex items-start gap-2 text-xs text-red-700 dark:border-red-800/40 dark:bg-red-900/10 dark:text-red-400"
+                          role="alert"
+                        >
+                          <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                          <p>{signOffErrorMessage}</p>
                         </div>
                       )}
 
