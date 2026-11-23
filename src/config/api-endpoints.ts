@@ -614,19 +614,22 @@ export const API_ENDPOINTS = {
    * `routes/api/public-apply/intake.php`): no Lendy account, a link token and,
    * after the code step, an `X-Application-Session` header. Every route
    * answers 404 while the server switch (LOAN_ORIGINATION_ENABLED) is off.
-   * Document ids are the documents' random public ids.
+   * Document ids are the documents' random public ids. The token comes from
+   * the page address (decoded, so `%2F` arrives as `/`) and is encoded back,
+   * like the document id, so each stays one path segment.
    */
   PUBLIC_APPLY: {
-    PORTAL: (token: string) => `/public-apply/${token}`,
-    OTP_REQUEST: (token: string) => `/public-apply/${token}/otp`,
-    OTP_VERIFY: (token: string) => `/public-apply/${token}/otp/verify`,
-    DRAFT: (token: string) => `/public-apply/${token}/draft`,
-    ESTIMATE: (token: string) => `/public-apply/${token}/estimate`,
-    DOCUMENTS: (token: string) => `/public-apply/${token}/documents`,
-    DOCUMENT: (token: string, documentId: string) => `/public-apply/${token}/documents/${documentId}`,
-    SUBMIT: (token: string) => `/public-apply/${token}/submit`,
-    LOGOUT: (token: string) => `/public-apply/${token}/logout`,
-    TRACK: (token: string) => `/public-apply/${token}/track`,
+    PORTAL: (token: string) => `/public-apply/${encodeURIComponent(token)}`,
+    OTP_REQUEST: (token: string) => `/public-apply/${encodeURIComponent(token)}/otp`,
+    OTP_VERIFY: (token: string) => `/public-apply/${encodeURIComponent(token)}/otp/verify`,
+    DRAFT: (token: string) => `/public-apply/${encodeURIComponent(token)}/draft`,
+    ESTIMATE: (token: string) => `/public-apply/${encodeURIComponent(token)}/estimate`,
+    DOCUMENTS: (token: string) => `/public-apply/${encodeURIComponent(token)}/documents`,
+    DOCUMENT: (token: string, documentId: string) =>
+      `/public-apply/${encodeURIComponent(token)}/documents/${encodeURIComponent(documentId)}`,
+    SUBMIT: (token: string) => `/public-apply/${encodeURIComponent(token)}/submit`,
+    LOGOUT: (token: string) => `/public-apply/${encodeURIComponent(token)}/logout`,
+    TRACK: (token: string) => `/public-apply/${encodeURIComponent(token)}/track`,
   },
   /**
    * Automated due-date reminders. None of these exist yet: the scheduler,

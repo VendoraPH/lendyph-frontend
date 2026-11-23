@@ -77,3 +77,16 @@ test("a 422's fields keep their first message each", () => {
   });
   assert.equal(fieldErrors(reply(409, { message: "x" })), null);
 });
+
+// Laravel's model-binding 404 is technical text with spaces; it must never
+// reach the applicant (security review of #657).
+const MODEL_NOT_FOUND = "No query results for model [App\\Models\\LoanProduct] 7";
+
+test("a technical server message never reaches the applicant", () => {
+  assert.equal(publicErrorMessage(reply(404, { message: MODEL_NOT_FOUND }), "fallback"), NOT_AVAILABLE);
+  assert.equal(publicErrorMessage(reply(401, { message: MODEL_NOT_FOUND }), "fallback"), SESSION_ENDED);
+  assert.equal(
+    publicErrorMessage(reply(503, { message: MODEL_NOT_FOUND }), "fallback"),
+    "Something went wrong on our end. Please try again in a moment.",
+  );
+});

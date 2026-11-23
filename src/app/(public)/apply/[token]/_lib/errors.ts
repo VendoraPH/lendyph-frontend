@@ -1,4 +1,4 @@
-import { getErrorMessage, httpStatusOf, validationErrors } from "@/lib/api-error";
+import { getErrorMessage, httpStatusOf, looksHuman, validationErrors } from "@/lib/api-error";
 
 /** An unknown link, or the server switch off: every public route answers a bare 404. */
 export const NOT_AVAILABLE = "Online applications are not available. Please contact the office.";
@@ -15,15 +15,19 @@ function bodyOf(err: unknown): RefusalBody | undefined {
   return (err as { response?: { data?: RefusalBody } } | null)?.response?.data;
 }
 
-/** Laravel's own bodies ("Not Found", an empty 404) aren't words for an applicant. */
-const FRAMEWORK = /^(?:not found|too many attempts|unauthenticated|server error)\.?$|^the route /i;
+/** Laravel's "The route … could not be found." isn't for an applicant either. */
+const ROUTE_NOT_FOUND = /^the route /i;
 
-/** The server's own sentence, or null when it sent none. */
+/**
+ * The server's own sentence, or null when it sent none. An empty 404, the
+ * framework's stock words and technical text (a model binding's "No query
+ * results for model […]") never reach the applicant (`looksHuman`).
+ */
 function serverWords(err: unknown): string | null {
   const message = bodyOf(err)?.message;
   if (typeof message !== "string") return null;
   const text = message.trim();
-  return text !== "" && /\s/.test(text) && !FRAMEWORK.test(text) ? text : null;
+  return /\s/.test(text) && looksHuman(text) && !ROUTE_NOT_FOUND.test(text) ? text : null;
 }
 
 /**

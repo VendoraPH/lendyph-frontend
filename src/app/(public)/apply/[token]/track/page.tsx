@@ -139,6 +139,7 @@ export default function TrackPage() {
     if (!tracked) return;
     void publicApplicationService.logout(token, tracked.sessionToken);
     setTracked(null);
+    setReference("");
     setNotice("You signed out.");
   };
 
