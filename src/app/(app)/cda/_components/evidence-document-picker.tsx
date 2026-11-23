@@ -44,8 +44,8 @@ function UploadAndLink({
     if (!file) return Promise.reject(new Error("No file"));
     return cdaService.uploadDocument(report.year, toUpload(values), file).then(
       (document) => {
+        docs.uploaded(document);
         onLink(document.id);
-        docs.reload();
         notifySuccess("Document uploaded and linked. Save the report to keep the link.");
       },
       (err: unknown) => {

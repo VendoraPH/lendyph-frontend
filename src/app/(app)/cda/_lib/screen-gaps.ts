@@ -176,6 +176,15 @@ export function evidenceDocumentOptions(
   return options;
 }
 
+/**
+ * The year's documents with those uploaded here since the list was read, as
+ * the upload answered them, so a new one is offered by title at once. The
+ * server's own row wins once its list holds it.
+ */
+export function withUploaded<T extends { id: number }>(listed: readonly T[], uploaded: readonly T[]): T[] {
+  return [...listed, ...uploaded.filter((u) => !listed.some((d) => d.id === u.id))];
+}
+
 /** The picked document's id as the API takes it; "No document linked" is null. */
 export function documentIdOf(raw: string): number | null {
   return /^\d+$/.test(raw) ? Number(raw) : null;

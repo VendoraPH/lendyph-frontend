@@ -21,6 +21,7 @@ import {
   showsFor,
   snapshotStatus,
   withDeadline,
+  withUploaded,
   type EvidenceDocument,
 } from "./screen-gaps";
 import { toUpload } from "../documents/_lib/document-form";
@@ -276,6 +277,14 @@ describe("evidence documents (a Compliance Document linked by its id)", () => {
     assert.deepEqual(evidenceDocumentOptions(year, 99).at(-1), { value: "99", label: "A filed document (not in this year's list)" });
     assert.deepEqual(evidenceDocumentOptions(null, 7), [{ value: "7", label: "A filed document" }]);
     assert.equal(evidenceDocumentOptions(year, 7).length, 2);
+  });
+
+  test("a document uploaded here is offered at once, by title, without reading the list again", () => {
+    const uploaded = doc({ id: 12, title: "Board minutes, April 2026" });
+    const documents = withUploaded(year, [uploaded]);
+    assert.deepEqual(evidenceDocumentOptions(documents, 12).at(-1), { value: "12", label: "Board minutes, April 2026 · Minutes of meetings" });
+    assert.equal(withUploaded([...year, uploaded], [uploaded]).length, 4, "listed once when the server's list already holds it");
+    assert.deepEqual(withUploaded(year, []), year);
   });
 
   test("a pick is the document's id; No document linked is null", () => {
