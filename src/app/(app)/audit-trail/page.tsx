@@ -573,14 +573,17 @@ function AuditTrailContent() {
 
       {/* Logs Table */}
       <Card className={FIT_CLASSES.section}>
-        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        {/* The Loans list's layout: the title and the filters share a row only
+            when every filter fits beside the title. Otherwise the filters move
+            together onto their own row under it, left-aligned, and wrap there,
+            so no single filter is left beside the title on a second line. */}
+        <CardHeader className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-6">
           <CardTitle className="text-sm font-medium">
             {/* The count of every matching row, not of the visible page — the
                 paginator underneath says which slice of it is on screen. */}
             Activity Log ({total.toLocaleString()})
           </CardTitle>
-          {/* items-end: the branch filter's label sits above its select. */}
-          <div className="flex flex-wrap items-end gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="relative w-56">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
