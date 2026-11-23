@@ -2,7 +2,69 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { FILE_LABELS, FILE_SLOTS, FILES_RULE, fileNameInSentence, filesProblem } from "./import-files";
+import {
+  FILE_LABELS,
+  FILE_SLOTS,
+  FILES_RULE,
+  fileNameInSentence,
+  filesPhrase,
+  filesProblem,
+  runFileKinds,
+} from "./import-files";
+
+const STEPS = "src/app/(app)/settings/data-import/_components";
+
+test("a run's own files are read off whatever map it keeps them in", () => {
+  assert.deepEqual(runFileKinds({ customers: { id: 1 } }), ["customers"]);
+  assert.deepEqual(runFileKinds({ loans: { id: 2 }, customers: { id: 1 } }), ["customers", "loans"]);
+  assert.deepEqual(runFileKinds(undefined), []);
+});
+
+test("the run's files are spoken of as the one file, both, or, before they are known, yours", () => {
+  assert.deepEqual(filesPhrase(["customers"]), {
+    verified: "The members file is on the server and verified",
+    announced: "The members file is uploaded and verified.",
+    sent: "of the members file sent",
+    copies: "the copy on your computer is",
+    everyRow: "Every row in the members file",
+    stillRead: "the members file is still being read",
+    again: "the members file",
+  });
+  assert.deepEqual(filesPhrase(["customers", "loans"]), {
+    verified: "Both files are on the server and verified",
+    announced: "Both files uploaded and verified.",
+    sent: "of both files sent",
+    copies: "the copies on your computer are",
+    everyRow: "Every row in both files",
+    stillRead: "the files are still being read",
+    again: "the files",
+  });
+  assert.equal(filesPhrase([]).verified, "Your files are on the server and verified");
+  assert.doesNotMatch(Object.values(filesPhrase([])).join(" "), /[Bb]oth/);
+});
+
+test("Processing, the result and a resumed check speak of the run's own files", () => {
+  const read = (file: string) => readFileSync(join(process.cwd(), STEPS, file), "utf8");
+
+  const processing = read("step-processing.tsx");
+  assert.match(processing, /filesPhrase\(runFileKinds\(status\?\.files\)\)/);
+  assert.doesNotMatch(processing, /Both files are on the server/);
+  assert.doesNotMatch(processing, /the files are still being read/);
+
+  const result = read("step-result.tsx");
+  assert.match(result, /const kinds = runFileKinds\(status\.files\)/);
+  assert.match(result, /filesPhrase\(kinds\)/);
+  assert.doesNotMatch(result, /Every row in both files/);
+  // Counted separately is only worth saying when there are two files to count.
+  assert.match(result, /kinds\.length > 1 \? \(\s*<p/);
+
+  const check = read("step-check.tsx");
+  assert.match(check, /const storedKinds = runFileKinds\(stored\.files\)/);
+  assert.match(check, /filesPhrase\(storedKinds\)/);
+  assert.doesNotMatch(check, /Choose the files again/);
+  // The loan product count only for a run that has a loans file.
+  assert.match(check, /storedKinds\.includes\("loans"\) \? \(/);
+});
 
 const MEMBERS = { name: "members.csv" };
 const LOANS = { name: "loans.csv" };

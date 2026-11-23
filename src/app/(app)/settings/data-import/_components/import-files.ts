@@ -25,6 +25,65 @@ export function fileNameInSentence(kind: ImportFileKind): string {
   return FILE_LABELS[kind].toLowerCase();
 }
 
+const KIND_ORDER: readonly ImportFileKind[] = ["customers", "loans"];
+
+/**
+ * A run's own files, in the order the import reads them, off any map keyed by
+ * kind: the status's `files`, or a saved session's.
+ */
+export function runFileKinds(files: Partial<Record<ImportFileKind, unknown>> | null | undefined): ImportFileKind[] {
+  return KIND_ORDER.filter((kind) => files?.[kind] != null);
+}
+
+/**
+ * How Upload, Processing, the result and a resumed check speak of every file
+ * of the run at once: the one file by its name, or both. A members-only run
+ * is never told about "both files". Before the run's files are known, the
+ * words claim no number.
+ */
+export function filesPhrase(kinds: readonly ImportFileKind[]): {
+  verified: string;
+  announced: string;
+  sent: string;
+  copies: string;
+  everyRow: string;
+  stillRead: string;
+  again: string;
+} {
+  if (kinds.length === 1) {
+    const name = fileNameInSentence(kinds[0]);
+    return {
+      verified: `The ${name} is on the server and verified`,
+      announced: `The ${name} is uploaded and verified.`,
+      sent: `of the ${name} sent`,
+      copies: "the copy on your computer is",
+      everyRow: `Every row in the ${name}`,
+      stillRead: `the ${name} is still being read`,
+      again: `the ${name}`,
+    };
+  }
+  if (kinds.length > 1) {
+    return {
+      verified: "Both files are on the server and verified",
+      announced: "Both files uploaded and verified.",
+      sent: "of both files sent",
+      copies: "the copies on your computer are",
+      everyRow: "Every row in both files",
+      stillRead: "the files are still being read",
+      again: "the files",
+    };
+  }
+  return {
+    verified: "Your files are on the server and verified",
+    announced: "Your files are uploaded and verified.",
+    sent: "of your files sent",
+    copies: "the copies on your computer are",
+    everyRow: "Every row in your files",
+    stillRead: "your files are still being read",
+    again: "your files",
+  };
+}
+
 /** The rule in one sentence, for the Prepare step. */
 export const FILES_RULE =
   "The members file is required; the loans file is optional (it needs its members in the same import).";

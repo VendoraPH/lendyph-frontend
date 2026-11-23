@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * The upload step: open the run, send both CSVs a piece at a time, resume.
+ * The upload step: open the run, send its CSVs a piece at a time, resume.
  *
  * The engine lives in ../_hooks/use-chunk-upload; this is the screen over it.
  * What it has to get right, beyond drawing a bar:
@@ -18,7 +18,7 @@
  *    as real members and loans.
  *  - **A digest mismatch is not a restart.** The server keeps the chunks
  *    precisely so specific pieces can be re-sent, so that is what is offered.
- *  - **Once both files are assembled the file stops mattering.** The import
+ *  - **Once every file is assembled the file stops mattering.** The import
  *    continues on the server whether or not this tab is open.
  */
 
@@ -67,7 +67,7 @@ import {
 // compiled on its own branch; now that both are on one branch they are imported,
 // so there is one definition rather than two that agree until someone edits one.
 import type { ImportFiles, PrecheckOutcome } from "./data-import-view";
-import { FILE_LABELS, fileNameInSentence } from "./import-files";
+import { FILE_LABELS, fileNameInSentence, filesPhrase } from "./import-files";
 
 export interface StepUploadProps {
   /** The branch the members and loans are created under. Null on a resume. */
@@ -82,7 +82,7 @@ export interface StepUploadProps {
   onRunCreated: (id: number) => void;
   /** Back to the pre-check step. */
   onBack: () => void;
-  /** Both files are on the server and verified. */
+  /** Every file of the run is on the server and verified. */
   onUploaded: () => void;
   className?: string;
 }
@@ -133,27 +133,6 @@ export function declaredFiles(
     if (file && sha256) declared[kind] = { filename: file.name, size_bytes: file.size, sha256 };
   }
   return declared;
-}
-
-/** How the screen speaks of every file at once: the one file, or both. */
-export function filesPhrase(kinds: readonly ImportFileKind[]): {
-  verified: string;
-  announced: string;
-  sent: string;
-} {
-  if (kinds.length === 1) {
-    const name = fileNameInSentence(kinds[0]);
-    return {
-      verified: `The ${name} is on the server and verified`,
-      announced: `The ${name} is uploaded and verified.`,
-      sent: `of the ${name} sent`,
-    };
-  }
-  return {
-    verified: "Both files are on the server and verified",
-    announced: "Both files uploaded and verified.",
-    sent: "of both files sent",
-  };
 }
 
 /** The create-run body, as `StoreCsvImportRunRequest` validates it. */

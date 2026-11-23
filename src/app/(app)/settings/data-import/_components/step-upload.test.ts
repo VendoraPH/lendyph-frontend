@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { chunkLabel, declaredFiles, filesPhrase, formatBytes } from "./step-upload";
+import { chunkLabel, declaredFiles, formatBytes } from "./step-upload";
 
 const MEMBERS = { name: "members.csv", size: 2048 };
 const LOANS = { name: "loans.csv", size: 4096 };
@@ -29,17 +29,13 @@ test("the upload step opens a run without waiting for a loans file", () => {
   assert.match(source, /files: declaredFiles\(/);
 });
 
-test("the screen speaks of one file or both, never both when there is one", () => {
-  assert.deepEqual(filesPhrase(["customers"]), {
-    verified: "The members file is on the server and verified",
-    announced: "The members file is uploaded and verified.",
-    sent: "of the members file sent",
-  });
-  assert.deepEqual(filesPhrase(["customers", "loans"]), {
-    verified: "Both files are on the server and verified",
-    announced: "Both files uploaded and verified.",
-    sent: "of both files sent",
-  });
+test("the screen speaks of one file or both, from the run's own files (./import-files)", () => {
+  const source = readFileSync(
+    join(process.cwd(), "src/app/(app)/settings/data-import/_components/step-upload.tsx"),
+    "utf8",
+  );
+  assert.match(source, /filesPhrase\(state\.files\.map\(\(file\) => file\.kind\)\)/);
+  assert.doesNotMatch(source, /export function filesPhrase/, "one phrase book, shared with Processing and the result");
 });
 
 test("pieces are numbered from one on screen, and from zero on the wire", () => {

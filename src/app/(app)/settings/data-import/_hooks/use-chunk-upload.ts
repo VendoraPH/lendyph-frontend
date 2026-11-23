@@ -452,7 +452,7 @@ export type ChunkUploadPhase =
 export interface ChunkUploadState {
   phase: ChunkUploadPhase;
   files: ChunkUploadFileState[];
-  /** Whole-run percentage across both files, by bytes. */
+  /** Whole-run percentage across the run's files, by bytes. */
   overallPercent: number;
   /** Friendly copy, always through `getErrorMessage`. */
   error: string | null;
@@ -479,7 +479,7 @@ export interface UseChunkUploadOptions {
   autoStart?: boolean;
   /** Fired per acknowledged chunk so the shell can persist progress. */
   onChunkAcknowledged?: (kind: ImportFileKind, index: number) => void;
-  /** Fired once both files are assembled, with a freshly read status. */
+  /** Fired once every file of the run is assembled, with a freshly read status. */
   onAssembled?: (status: ImportRunStatus) => void;
 }
 
