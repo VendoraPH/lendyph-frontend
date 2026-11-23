@@ -2,18 +2,20 @@
 
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import { useBranches } from "@/hooks";
-import { ASSESSMENT_LABELS } from "@/lib/loan-origination";
+import { useBranches, usePermission } from "@/hooks";
 import { branchPicker } from "@/lib/user-branches";
 import { useAuthStore } from "@/store";
-import type { ApplicationListFilters, AssessmentResult } from "@/types/loan-origination";
+import type { ApplicationListFilters } from "@/types/loan-origination";
 import { SearchInput } from "./search-input";
 import { useLoanProducts } from "../../reminders/_hooks/use-loan-products";
 
-const RESULTS = Object.keys(ASSESSMENT_LABELS) as AssessmentResult[];
 const idOrUndefined = (v: string) => (v ? Number(v) : undefined);
 
-/** Search, branch, product, assessment and date filters for the Applications tab. */
+/**
+ * The filters `GET /loan-origination/applications` takes: search, the start
+ * date range, branch, product and the officer. The server's `meta.stats`
+ * counts every one of them but the status.
+ */
 export function ApplicationFilters({
   value,
   onChange,
@@ -26,25 +28,29 @@ export function ApplicationFilters({
   const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
   const picker = branchPicker(branches, caller, viewAll);
   const { products, error: productsError } = useLoanProducts();
+  // The server matches a mobile number only for borrowers:view holders.
+  const searchesMobile = usePermission().can("borrowers:view");
   const set = (patch: Partial<ApplicationListFilters>) => onChange({ ...value, ...patch, page: 1 });
 
   return (
-    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+    <div className="grid shrink-0 gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
       <SearchInput
         className="sm:col-span-2 sm:w-full"
         value={value.search}
-        placeholder="Name, reference or mobile, then Enter"
+        placeholder={searchesMobile ? "Name, reference or mobile, then Enter" : "Name or reference, then Enter"}
         onChange={(search) => set({ search })}
       />
       <Input
         type="date"
-        aria-label="Submitted from"
+        aria-label="Started from"
+        title="Started from"
         value={value.date_from ?? ""}
         onChange={(e) => set({ date_from: e.target.value || undefined })}
       />
       <Input
         type="date"
-        aria-label="Submitted to"
+        aria-label="Started to"
+        title="Started to"
         value={value.date_to ?? ""}
         onChange={(e) => set({ date_to: e.target.value || undefined })}
       />
@@ -77,17 +83,14 @@ export function ApplicationFilters({
         ))}
       </NativeSelect>
       <NativeSelect
-        aria-label="Assessment result"
+        aria-label="Officer"
         className="w-full"
-        value={value.assessment_result ?? ""}
-        onChange={(e) => set({ assessment_result: (e.target.value || undefined) as AssessmentResult | undefined })}
+        value={value.assigned ?? ""}
+        onChange={(e) => set({ assigned: (e.target.value || undefined) as ApplicationListFilters["assigned"] })}
       >
-        <NativeSelectOption value="">Any assessment</NativeSelectOption>
-        {RESULTS.map((r) => (
-          <NativeSelectOption key={r} value={r}>
-            {ASSESSMENT_LABELS[r]}
-          </NativeSelectOption>
-        ))}
+        <NativeSelectOption value="">Any officer</NativeSelectOption>
+        <NativeSelectOption value="me">Assigned to me</NativeSelectOption>
+        <NativeSelectOption value="none">Not assigned</NativeSelectOption>
       </NativeSelect>
     </div>
   );

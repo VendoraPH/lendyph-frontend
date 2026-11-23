@@ -10,8 +10,8 @@ type AssessmentRules = OriginationSettings["assessment"];
 const SOURCES = Object.keys(INCOME_SOURCE_LABELS) as IncomeSource[];
 
 /**
- * The thresholds the server's affordability check uses. The browser never
- * computes a result from these; they are only stored.
+ * The limits the server's capacity assessment uses. Each change is saved as a
+ * new revision of the rules; the browser never works out a result from them.
  */
 export function AssessmentSection({ value, onChange }: { value: AssessmentRules; onChange: (next: AssessmentRules) => void }) {
   const set = (patch: Partial<AssessmentRules>) => onChange({ ...value, ...patch });
@@ -52,8 +52,8 @@ export function AssessmentSection({ value, onChange }: { value: AssessmentRules;
             label="Shortest time employed or in business"
             suffix="years"
             nullable
-            step={0.5}
-            hint="Leave empty for no minimum."
+            step={1}
+            hint="Whole years, 0 to 60. Leave empty for no minimum."
             value={value.min_employment_years}
             onChange={(min_employment_years) => set({ min_employment_years })}
           />
@@ -71,8 +71,8 @@ export function AssessmentSection({ value, onChange }: { value: AssessmentRules;
           </div>
         </div>
         <ToggleField
-          label="Count only verified income"
-          hint="Income without a verified payslip, ITR or business record is left out of eligible income."
+          label="Require a verified income"
+          hint="Without a verified monthly income the result is at best Further review needed, or Insufficient information under the rule above."
           checked={value.require_verified_income}
           onChange={(require_verified_income) => set({ require_verified_income })}
         />

@@ -4,7 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { useBranches } from "@/hooks";
-import type { OriginationSettings } from "@/types/loan-origination";
+import { formatDateTime } from "@/lib/format";
+import type { OriginationSettings, StaffRef } from "@/types/loan-origination";
 import { NumberField, SettingsCard, ToggleField } from "./fields";
 
 type General = OriginationSettings["general"];
@@ -21,6 +22,12 @@ export function GeneralSection({ value, onChange }: { value: General; onChange: 
         checked={value.online_applications_enabled}
         onChange={(online_applications_enabled) => set({ online_applications_enabled })}
       />
+      <ToggleField
+        label="Release a loan only to an approved member"
+        hint="On by default. Any loan, online or not, is released only once its member's registration is approved, so the pending member an online application creates is approved first."
+        checked={value.require_approved_member}
+        onChange={(require_approved_member) => set({ require_approved_member })}
+      />
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="default-branch">Default branch</Label>
@@ -30,14 +37,14 @@ export function GeneralSection({ value, onChange }: { value: General; onChange: 
             value={value.default_branch_id ?? ""}
             onChange={(e) => set({ default_branch_id: e.target.value ? Number(e.target.value) : null })}
           >
-            <NativeSelectOption value="">Head office</NativeSelectOption>
+            <NativeSelectOption value="">No default branch</NativeSelectOption>
             {branches.map((b) => (
               <NativeSelectOption key={b.id} value={b.id}>
                 {b.name}
               </NativeSelectOption>
             ))}
           </NativeSelect>
-          <p className="text-xs text-muted-foreground">Used when a link names no branch.</p>
+          <p className="text-xs text-muted-foreground">Used when neither the link nor the applicant names a branch.</p>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="reference-format">Reference format</Label>
@@ -45,9 +52,11 @@ export function GeneralSection({ value, onChange }: { value: General; onChange: 
             id="reference-format"
             value={value.reference_format}
             onChange={(e) => set({ reference_format: e.target.value })}
-            placeholder="APP-{YYYY}-{SEQ:6}"
+            placeholder="OA-YYYY-NNNNNN"
           />
-          <p className="text-xs text-muted-foreground">Given to an application when it is submitted.</p>
+          <p className="text-xs text-muted-foreground">
+            2 to 5 capital letters, then -YYYY-NNNNNN. Given to an application when it is submitted.
+          </p>
         </div>
         <NumberField
           label="Delete unsubmitted drafts after"
@@ -69,18 +78,60 @@ export function GeneralSection({ value, onChange }: { value: General; onChange: 
   );
 }
 
+/** What the server reports about itself: read-only, set on the server. */
+export function ServerSection({
+  server,
+  rulesVersion,
+  updatedBy,
+  updatedAt,
+}: {
+  server: OriginationSettings["server"];
+  rulesVersion: number;
+  updatedBy: StaffRef | null;
+  updatedAt: string | null;
+}) {
+  const rows: [string, string][] = [
+    ["Online applications on the server", server.enabled ? "On" : "Off"],
+    ["Public address for links", server.public_url ?? server.public_url_problem ?? "Not set up"],
+    ["Uploaded PDFs", server.pdf_check],
+    ["Virus scanning", server.scanner],
+    ["Assessment rules", `Revision ${rulesVersion}`],
+  ];
+  return (
+    <SettingsCard title="On the server" description="Set by an administrator on the server, not here.">
+      <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+        {rows.map(([label, text]) => (
+          <div key={label}>
+            <dt className="text-xs text-muted-foreground">{label}</dt>
+            <dd className="break-words">{text}</dd>
+          </div>
+        ))}
+      </dl>
+      {updatedAt && (
+        <p className="text-xs text-muted-foreground">
+          Last saved {formatDateTime(updatedAt)}
+          {updatedBy && <> by {updatedBy.name}</>}
+        </p>
+      )}
+    </SettingsCard>
+  );
+}
+
 const NOTICES: { key: Exclude<keyof Notifications, "incomplete_reminder_after_days">; label: string; hint: string }[] = [
-  { key: "application_confirmation", label: "Confirmation", hint: "Sent with the reference number when an application is submitted." },
-  { key: "incomplete_reminder", label: "Unfinished application reminder", hint: "Sent once to applicants who stopped part way." },
-  { key: "document_request", label: "Document requests", hint: "Sent when staff ask for a document or more information." },
-  { key: "status_change", label: "Progress updates", hint: "Sent when the application moves to a new stage." },
-  { key: "decision", label: "Decision", hint: "Sent when the application is approved or declined." },
+  { key: "application_confirmation", label: "Confirmation", hint: "With the reference number when an application is submitted." },
+  { key: "incomplete_reminder", label: "Unfinished application reminder", hint: "Once, to applicants who stopped part way." },
+  { key: "document_request", label: "Document requests", hint: "When staff ask for a document or more information." },
+  { key: "status_change", label: "Progress updates", hint: "When the application moves to a new stage." },
+  { key: "decision", label: "Decision", hint: "When the application is approved or declined." },
 ];
 
 export function NotificationsSection({ value, onChange }: { value: Notifications; onChange: (next: Notifications) => void }) {
   const set = (patch: Partial<Notifications>) => onChange({ ...value, ...patch });
   return (
-    <SettingsCard title="Applicant messages" description="Text messages and emails sent to the applicant's verified mobile and email.">
+    <SettingsCard
+      title="Applicant messages"
+      description="Which messages the applicant gets. Text messages and email aren't switched on yet: messages are logged, not sent, and the applicant sees them when they track the application."
+    >
       {NOTICES.map((n) => (
         <ToggleField key={n.key} label={n.label} hint={n.hint} checked={value[n.key]} onChange={(on) => set({ [n.key]: on })} />
       ))}

@@ -4,9 +4,10 @@ import { useState } from "react";
 import QRCode from "react-qr-code";
 import { Copy, Pencil, Plus, QrCode } from "lucide-react";
 import { DataState } from "@/components/common/data-state";
+import { DisabledReason } from "@/components/common/disabled-reason";
 import { ScrollBox } from "@/components/common/page-fill";
 import { PermissionButton } from "@/components/common/permission-button";
-import { ToneBadge } from "@/components/loan-origination/badges";
+import { TestBadge, ToneBadge } from "@/components/loan-origination/badges";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -18,6 +19,7 @@ import { FIT_CLASSES } from "@/lib/page-fill";
 import { cn } from "@/lib/utils";
 import { loanOriginationService } from "@/services";
 import type { ApplicationLink } from "@/types/loan-origination";
+import { NO_ADDRESS } from "../_lib/links";
 import { LinkFormDialog } from "./_components/link-form-dialog";
 
 const copy = (url: string) =>
@@ -26,15 +28,19 @@ const copy = (url: string) =>
     .then(() => notifySuccess("Link copied"))
     .catch((err) => notifyError(err, "Could not copy the link"));
 
-/** Shareable public links that open the online application, each with its own QR code. */
+/**
+ * Shareable public links that open the online application, each with its own
+ * QR code. The server builds each link's address; while its public address
+ * isn't set up a link has none, and the page says so instead of copying.
+ */
 export default function ApplicationLinksPage() {
   const links = useApiResource(loanOriginationService.listLinks);
   const [editing, setEditing] = useState<{ link: ApplicationLink | null } | null>(null);
-  const [qr, setQr] = useState<ApplicationLink | null>(null);
+  const [qr, setQr] = useState<(ApplicationLink & { url: string }) | null>(null);
 
   return (
     <div className={cn(FIT_CLASSES.section, "gap-3")}>
-      <div className="flex justify-end">
+      <div className="flex shrink-0 justify-end">
         <PermissionButton permission="loan_origination:settings" size="sm" onClick={() => setEditing({ link: null })}>
           <Plus className="mr-1 h-4 w-4" /> New link
         </PermissionButton>
@@ -68,11 +74,12 @@ export default function ApplicationLinksPage() {
                     <TableRow key={l.id}>
                       <TableCell className="min-w-48">
                         <span className="font-medium">{l.name}</span>
-                        <span className="block max-w-72 truncate text-xs text-muted-foreground" title={l.url}>
-                          {l.url}
+                        {l.is_test && <span className="ml-1"><TestBadge /></span>}
+                        <span className="block max-w-72 truncate text-xs text-muted-foreground" title={l.url ?? NO_ADDRESS}>
+                          {l.url ?? "No link to share yet"}
                         </span>
                       </TableCell>
-                      <TableCell>{l.branch_name ?? "Default"}</TableCell>
+                      <TableCell>{l.branch_name ?? "Every branch"}</TableCell>
                       <TableCell className="max-w-56 text-sm">
                         {l.loan_product_names.length ? l.loan_product_names.join(", ") : "All online products"}
                       </TableCell>
@@ -80,19 +87,35 @@ export default function ApplicationLinksPage() {
                       <TableCell className="text-right tabular-nums">{l.started}</TableCell>
                       <TableCell className="text-right tabular-nums">{l.submitted}</TableCell>
                       <TableCell className="whitespace-nowrap">
-                        <ToneBadge tone={l.active ? "success" : "neutral"}>{l.active ? "Active" : "Off"}</ToneBadge>
+                        <ToneBadge tone={l.status === "active" ? "success" : "neutral"}>{l.status_label}</ToneBadge>
                         {l.expires_at && (
                           <span className="block text-xs text-muted-foreground">until {formatDate(l.expires_at)}</span>
                         )}
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-1">
-                          <Button size="icon-sm" variant="ghost" aria-label={`Copy ${l.name}`} onClick={() => copy(l.url)}>
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                          <Button size="icon-sm" variant="ghost" aria-label={`QR code for ${l.name}`} onClick={() => setQr(l)}>
-                            <QrCode className="h-4 w-4" />
-                          </Button>
+                          <DisabledReason reason={l.url === null ? NO_ADDRESS : null}>
+                            <Button
+                              size="icon-sm"
+                              variant="ghost"
+                              aria-label={`Copy ${l.name}`}
+                              disabled={l.url === null}
+                              onClick={() => l.url && copy(l.url)}
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                          </DisabledReason>
+                          <DisabledReason reason={l.url === null ? NO_ADDRESS : null}>
+                            <Button
+                              size="icon-sm"
+                              variant="ghost"
+                              aria-label={`QR code for ${l.name}`}
+                              disabled={l.url === null}
+                              onClick={() => l.url && setQr({ ...l, url: l.url })}
+                            >
+                              <QrCode className="h-4 w-4" />
+                            </Button>
+                          </DisabledReason>
                           <PermissionButton
                             permission="loan_origination:settings"
                             size="icon-sm"

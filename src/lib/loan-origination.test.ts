@@ -2,13 +2,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as lib from "./loan-origination";
 import {
-  APPLICATION_STATUSES,
+  ASSESSMENT_SHORT_LABELS,
+  STATUS_LABELS,
   EMPLOYMENT_TYPES,
   MEMBER_DOCUMENT_MAX_MB,
   RELEASE_METHODS,
-  STAFF_TRANSITIONS,
   ageOn,
-  allowedTransitions,
   borrowerFacingStatus,
   completedSteps,
   completionPercent,
@@ -23,13 +22,10 @@ import {
   mergeDraft,
   otpSentMessage,
   parseAmount,
-  percentChange,
-  ratioTone,
   reminderNotice,
   settingsSaveBlocker,
   allStatusCount,
   uploadRules,
-  uploadSettingsProblems,
   validateContact,
   validateEmployment,
   validateExpenses,
@@ -56,18 +52,23 @@ const product: PublicLoanProduct = {
   instructions: null,
 };
 
-test("staff can never move an application into approved, converted or a pre-submission status", () => {
-  for (const from of APPLICATION_STATUSES) {
-    for (const to of STAFF_TRANSITIONS[from]) {
-      assert.ok(!["approved", "converted", "draft", "incomplete", "submitted"].includes(to), `${from} → ${to}`);
-    }
+test("the staff moves are the server's: the browser keeps no transition table", () => {
+  for (const name of ["STAFF_TRANSITIONS", "allowedTransitions", "ratioTone", "documentAwaitsReview", "ASSESSMENT_LABELS"]) {
+    assert.equal((lib as Record<string, unknown>)[name], undefined, `${name} is still exported`);
   }
 });
 
-test("closed and unsubmitted applications offer no manual moves", () => {
-  for (const s of ["draft", "incomplete", "approved", "rejected", "withdrawn", "converted", "expired"] as const) {
-    assert.deepEqual(allowedTransitions(s), []);
-  }
+test("statuses and results read in the server's words", () => {
+  // ApplicationTransitions::LABELS: "Pending Approval" reads "For Approval".
+  assert.equal(STATUS_LABELS.pending_approval, "For Approval");
+  assert.equal(STATUS_LABELS.converted, "Converted to Loan");
+  // OriginationAssessment::RESULT_LABELS.
+  assert.deepEqual(ASSESSMENT_SHORT_LABELS, {
+    within_capacity: "Within capacity",
+    further_review: "Further review needed",
+    above_capacity: "Above capacity",
+    insufficient_information: "Insufficient information",
+  });
 });
 
 test("applicants see Under Review for every internal processing step", () => {
@@ -88,7 +89,7 @@ test("parseAmount accepts commas and the peso sign, and refuses negatives", () =
 });
 
 test("the browser never adds up income, expenses or debts: the server's assessment does", () => {
-  for (const name of ["toMonthly", "PERIODS_PER_YEAR", "declaredMonthlyIncome", "monthlyExpenses", "monthlyDebtPayments"]) {
+  for (const name of ["toMonthly", "PERIODS_PER_YEAR", "declaredMonthlyIncome", "monthlyExpenses", "monthlyDebtPayments", "percentChange"]) {
     assert.equal((lib as Record<string, unknown>)[name], undefined, `${name} is still exported`);
   }
 });
@@ -181,16 +182,7 @@ test("mergeDraft fills fields an older draft lacks", () => {
   assert.deepEqual(merged.expenses.existing_loans, []);
 });
 
-test("ratioTone compares against the configured limit only", () => {
-  assert.equal(ratioTone(35, 40, "max"), "success");
-  assert.equal(ratioTone(45, 40, "max"), "danger");
-  assert.equal(ratioTone(1.1, 1.25, "min"), "danger");
-  assert.equal(ratioTone(null, 40, "max"), "neutral");
-});
-
 test("small helpers", () => {
-  assert.equal(percentChange(120, 100), 20);
-  assert.equal(percentChange(5, 0), null);
   assert.equal(formatDuration(36), "36 hours");
   assert.equal(formatDuration(72), "3 days");
   assert.equal(formatDuration(null), "—");
@@ -211,13 +203,6 @@ test("uploads follow the member document rules, whatever the link allows", () =>
   assert.equal(fileProblem({ name: "scan.jfif", size: 1000, type: "" }, [], 0), null);
 });
 
-test("upload settings outside the member document rules are refused before saving", () => {
-  assert.deepEqual(uploadSettingsProblems({ accepted_file_types: ["pdf", "jpg"], max_upload_mb: 10 }), []);
-  assert.equal(uploadSettingsProblems({ accepted_file_types: ["pdf", "exe", "heic"], max_upload_mb: 10 }).length, 1);
-  assert.match(uploadSettingsProblems({ accepted_file_types: ["pdf", "exe"], max_upload_mb: 10 })[0], /EXE/);
-  assert.equal(uploadSettingsProblems({ accepted_file_types: ["pdf"], max_upload_mb: 20 }).length, 1);
-});
-
 test("an OTP screen says a code was sent only when the server says it went out", () => {
   const base = { resend_after: 60, expires_in: 300, channel: "sms" as const, destination: "0917•••4567" };
   assert.match(otpSentMessage({ ...base, delivered: true }), /^We sent a code to 0917•••4567\. It expires in 5 minutes\.$/);
@@ -228,10 +213,25 @@ test("an OTP screen says a code was sent only when the server says it went out",
   }
 });
 
-test("a reminder reads sent only when the server sent it", () => {
-  assert.equal(reminderNotice({ channel: "sms", sent_at: "2026-11-19T01:00:00Z", delivered: true }), "Reminder sent to the applicant");
-  assert.match(reminderNotice({ channel: "sms", sent_at: null, delivered: false }), /^Reminder logged/);
-  assert.match(reminderNotice({ channel: "sms", sent_at: null }), /^Reminder logged/);
+test("a reminder reads sent only when the server sent it, else in the server's delivery words", () => {
+  const logged = {
+    id: 1,
+    kind: "resume_reminder",
+    kind_label: "Reminder to finish the application",
+    channel: "sms" as const,
+    channel_label: "Text message",
+    body: "Your loan application isn't finished yet.",
+    document_types: [],
+    delivery: "logged" as const,
+    delivery_label: "Logged, not sent",
+    delivered: false,
+    sent_at: null,
+    author_name: "Ana",
+    created_at: "2026-11-19T01:00:00Z",
+    logged_at: "2026-11-19T01:00:00Z",
+  };
+  assert.equal(reminderNotice(logged), "Reminder recorded: Logged, not sent.");
+  assert.equal(reminderNotice({ ...logged, delivery: "sent", delivery_label: "Sent", delivered: true }), "Reminder sent to the applicant");
 });
 
 test("consent texts read as a draft until the server marks every one final", () => {

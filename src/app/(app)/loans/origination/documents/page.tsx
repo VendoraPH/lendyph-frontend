@@ -14,26 +14,31 @@ import { DOCUMENT_STATUS_LABELS, formatFileSize } from "@/lib/loan-origination";
 import { FIT_CLASSES } from "@/lib/page-fill";
 import { cn } from "@/lib/utils";
 import { loanOriginationService, type DocumentQueueFilters } from "@/services/loan-origination.service";
-import type { ApplicationDocument, DocumentStatus } from "@/types/loan-origination";
-import { DocumentReviewDialog, type DocumentReview } from "../_components/document-review-dialog";
+import type { DocumentStatus, StaffDocument } from "@/types/loan-origination";
+import { DocumentReviewDialog } from "../_components/document-review-dialog";
 import { DocumentRowActions } from "../_components/document-row-actions";
 import { SearchInput } from "../_components/search-input";
 import { StatusTabs } from "../_components/status-tabs";
+import { DEFAULT_QUEUE_STATUS, fileLine, type DocumentReview } from "../_lib/document-review";
 
 const PER_PAGE_OPTIONS = [20, 50, 100] as const;
 // "Not submitted" is a gap in an application, not something to review here.
 const STATUSES = (Object.keys(DOCUMENT_STATUS_LABELS) as DocumentStatus[]).filter((s) => s !== "not_submitted");
 
+/**
+ * Files of submitted applications in the caller's branches, oldest change
+ * first, with the server's per-status counts. It opens on Uploaded, where new
+ * files land.
+ */
 export default function DocumentQueuePage() {
-  // Opens on what needs a decision.
-  const [filters, setFilters] = useState<DocumentQueueFilters>({ page: 1, per_page: 20, status: "pending_verification" });
+  const [filters, setFilters] = useState<DocumentQueueFilters>({ page: 1, per_page: 20, status: DEFAULT_QUEUE_STATUS });
   const fetcher = useCallback(() => loanOriginationService.listDocuments(filters), [filters]);
   const list = useApiResource(fetcher);
-  const [review, setReview] = useState<{ doc: ApplicationDocument; kind: DocumentReview } | null>(null);
+  const [review, setReview] = useState<{ doc: StaffDocument; kind: DocumentReview } | null>(null);
 
   return (
     <div className={cn(FIT_CLASSES.section, "gap-3")}>
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex shrink-0 flex-wrap items-center gap-3">
         <SearchInput
           value={filters.search}
           placeholder="Applicant or reference, then Enter"
@@ -84,14 +89,17 @@ export default function DocumentQueuePage() {
                         </TableCell>
                         <TableCell className="min-w-32">{d.label}</TableCell>
                         <TableCell className="min-w-32 text-sm">
-                          <span className="break-all">{d.file_name ?? "—"}</span>
-                          <span className="block text-xs text-muted-foreground">{formatFileSize(d.size_bytes)}</span>
+                          <span className={cn("break-all", fileLine(d).hidden && "text-muted-foreground")}>{fileLine(d).text}</span>
+                          <span className="block text-xs text-muted-foreground">
+                            {formatFileSize(d.size_bytes)}
+                            {d.scan_label && <> · {d.scan_label}</>}
+                          </span>
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-sm">
                           {d.uploaded_at ? formatDateTime(d.uploaded_at) : "—"}
                         </TableCell>
                         <TableCell>
-                          <DocumentStatusBadge status={d.status} />
+                          <DocumentStatusBadge status={d.status} label={d.status_label} />
                         </TableCell>
                         <TableCell>
                           <DocumentRowActions doc={d} onReview={(doc, kind) => setReview({ doc, kind })} />
