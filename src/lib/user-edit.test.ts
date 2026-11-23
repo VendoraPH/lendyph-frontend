@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { userEditChanges, userEditPayload, type UserEditForm } from "./user-edit";
+import { userEditChanges, userEditForm, userEditPayload, withoutUnchangedPrimary, type UserEditForm } from "./user-edit";
 import type { User } from "@/types";
 
 const user = {
@@ -172,4 +172,92 @@ test("the payload sends both branch shapes, so either merge order works", () => 
   const payload = userEditPayload({ ...untouched, branch_ids: [9, 3] });
   assert.deepEqual(payload.branch_ids, [9, 3]);
   assert.equal(payload.branch_id, 3);
+});
+
+// ── The chosen primary branch (Phase 6 MB-BE6) ──
+
+const twoBranches = {
+  ...user,
+  branches: [{ id: 3, name: "Main" }, { id: 9, name: "North" }],
+  primary_branch_id: 3,
+} as unknown as User;
+const bothBranches: UserEditForm = { ...untouched, branch_ids: [3, 9] };
+
+test("a primary branch the user already has is no change", () => {
+  assert.deepEqual(userEditChanges(twoBranches, { ...bothBranches, primary_branch_id: 3 }), []);
+});
+
+test("choosing another of the user's branches is a change, and it is sent", () => {
+  const form = { ...bothBranches, primary_branch_id: 9 };
+  assert.deepEqual(userEditChanges(twoBranches, form), ["primary_branch_id"]);
+  assert.equal(userEditPayload(form).primary_branch_id, 9);
+});
+
+test("Organisation-wide is a value of its own: null is sent, never dropped", () => {
+  const form = { ...bothBranches, primary_branch_id: null };
+  assert.deepEqual(userEditChanges(twoBranches, form), ["primary_branch_id"]);
+  assert.equal(JSON.parse(JSON.stringify(userEditPayload(form))).primary_branch_id, null);
+
+  const organisationWide = { ...twoBranches, primary_branch_id: null } as unknown as User;
+  assert.deepEqual(userEditChanges(organisationWide, form), []);
+});
+
+test("no primary branch chosen sends no key, so the server keeps what it has", () => {
+  assert.equal("primary_branch_id" in userEditPayload(bothBranches), false);
+});
+
+test("a user whose payload doesn't carry a primary branch: a pick is a change", () => {
+  const unknown = { ...twoBranches } as Record<string, unknown>;
+  delete unknown.primary_branch_id;
+  assert.deepEqual(userEditChanges(unknown as unknown as User, { ...bothBranches, primary_branch_id: 3 }), [
+    "primary_branch_id",
+  ]);
+});
+
+test("the PUT leaves out a primary branch the user already has, and keeps a new one", () => {
+  const same = withoutUnchangedPrimary(userEditPayload({ ...bothBranches, first_name: "Juanito", primary_branch_id: 3 }), twoBranches);
+  assert.equal("primary_branch_id" in same, false);
+  assert.equal(same.first_name, "Juanito");
+
+  const moved = withoutUnchangedPrimary(userEditPayload({ ...bothBranches, primary_branch_id: null }), twoBranches);
+  assert.equal(moved.primary_branch_id, null);
+});
+
+// ── Filling the form as the dialog opens ──
+
+test("the form is filled from the user, so a form nobody touched changes nothing", () => {
+  assert.deepEqual(userEditForm(twoBranches), {
+    first_name: "Juan",
+    last_name: "Dela Cruz",
+    email: "juan@coop.ph",
+    mobile_number: "09171234567",
+    role: "loan_officer",
+    branch_ids: [3, 9],
+    primary_branch_id: 3,
+  });
+  assert.deepEqual(userEditChanges(twoBranches, userEditForm(twoBranches)), []);
+});
+
+test("a user with no mobile number or role fills those fields empty", () => {
+  const bare = { ...user, mobile_number: null, roles: [] } as unknown as User;
+  const form = userEditForm(bare);
+  assert.equal(form.mobile_number, "");
+  assert.equal(form.role, "");
+});
+
+test("Organisation-wide fills null, and a payload with no primary branch fills none chosen", () => {
+  assert.equal(userEditForm({ ...twoBranches, primary_branch_id: null } as unknown as User).primary_branch_id, null);
+  const unknown = { ...twoBranches } as Record<string, unknown>;
+  delete unknown.primary_branch_id;
+  assert.equal(userEditForm(unknown as unknown as User).primary_branch_id, undefined);
+});
+
+test("each fill is a fresh copy, so values left unsaved are gone when it opens again", () => {
+  const first = userEditForm(twoBranches);
+  first.branch_ids.push(12);
+  first.primary_branch_id = 12;
+  first.first_name = "Unsaved";
+  assert.deepEqual(userEditForm(twoBranches).branch_ids, [3, 9]);
+  assert.equal(userEditForm(twoBranches).primary_branch_id, 3);
+  assert.equal(userEditForm(twoBranches).first_name, "Juan");
 });

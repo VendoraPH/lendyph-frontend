@@ -12,6 +12,31 @@ export interface UserEditForm {
   mobile_number: string;
   role: string;
   branch_ids: number[];
+  /**
+   * The chosen primary branch (Phase 6 MB-BE6): a branch id, null for
+   * Organisation-wide, or undefined while none is chosen, which sends no key
+   * and leaves the stored one as it is.
+   */
+  primary_branch_id?: number | null;
+}
+
+/**
+ * The form as the Edit User dialog opens on `user`: every field from the
+ * record as it is now. The dialog fills it each time it opens, so values left
+ * unsaved by a Cancel are thrown away, and a primary branch picked and then
+ * cancelled can't ride along with a later edit. A fresh object (and branch
+ * list) each time, so nothing edited in one opening reaches the next.
+ */
+export function userEditForm(user: User): UserEditForm {
+  return {
+    first_name: user.first_name,
+    last_name: user.last_name,
+    email: user.email,
+    mobile_number: user.mobile_number ?? "",
+    role: user.roles?.[0] ?? "",
+    branch_ids: userBranchIds(user),
+    primary_branch_id: storedPrimaryBranch(user),
+  };
 }
 
 /**
@@ -43,7 +68,16 @@ export function userEditPayload(form: UserEditForm): UpdateUserData {
     branch_ids: form.branch_ids,
     branch_id: primaryBranchId(form.branch_ids),
     role: form.role,
+    ...(form.primary_branch_id === undefined ? {} : { primary_branch_id: form.primary_branch_id }),
   };
+}
+
+/**
+ * The user's stored primary branch: an id, null for Organisation-wide, or
+ * undefined when the payload doesn't carry it (it comes with `branches`).
+ */
+export function storedPrimaryBranch(user: User): number | null | undefined {
+  return "primary_branch_id" in user ? (user.primary_branch_id ?? null) : undefined;
 }
 
 /**
@@ -98,5 +132,26 @@ export function userEditChanges(user: User, form: UserEditForm): string[] {
   }
   if (payload.role !== (user.roles?.[0] ?? "")) changed.push("role");
 
+  // Null is Organisation-wide, a value like any other; only a missing key
+  // (nothing chosen) says nothing.
+  if (payload.primary_branch_id !== undefined && payload.primary_branch_id !== storedPrimaryBranch(user)) {
+    changed.push("primary_branch_id");
+  }
+
   return changed;
+}
+
+/**
+ * The edit payload without `primary_branch_id` when it's the one the user
+ * already has, as `withoutUnchangedRole` does for the role. Absent, the server
+ * keeps the stored one and doesn't check it again, so the PUT decides only
+ * what the admin changed.
+ */
+export function withoutUnchangedPrimary(payload: UpdateUserData, user: User): UpdateUserData {
+  if (payload.primary_branch_id === undefined || payload.primary_branch_id !== storedPrimaryBranch(user)) {
+    return payload;
+  }
+  const rest = { ...payload };
+  delete rest.primary_branch_id;
+  return rest;
 }

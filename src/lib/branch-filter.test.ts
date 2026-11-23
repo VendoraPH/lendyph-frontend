@@ -1,6 +1,13 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { ALL_BRANCHES, LOADING_BRANCHES, branchFilterOptions, branchIdParam, shownBranchValue } from "./branch-filter";
+import {
+  ALL_BRANCHES,
+  LOADING_BRANCHES,
+  branchFilterLabelClass,
+  branchFilterOptions,
+  branchIdParam,
+  shownBranchValue,
+} from "./branch-filter";
 
 const branches = [
   { id: 1, name: "Main", code: "MN" },
@@ -63,5 +70,16 @@ describe("shownBranchValue: a branch filter never shows a raw id or a wrong All"
 
   test("a branch the loaded list doesn't offer reads Select a branch, never its id", () => {
     assert.deepEqual(shownBranchValue("3", items, false), { value: null, placeholder: "Select a branch" });
+  });
+});
+
+describe("branchFilterLabelClass", () => {
+  test("in a row of unlabelled filters the Branch label is for screen readers only", () => {
+    // A visible label above the field pushed the Audit Trail's filter bar onto a second row.
+    assert.equal(branchFilterLabelClass(true), "sr-only");
+  });
+
+  test("elsewhere the label shows above the field, as before", () => {
+    assert.equal(branchFilterLabelClass(false), "text-xs text-muted-foreground");
   });
 });

@@ -1,7 +1,7 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { fetchAllPages, type DrainResult } from "@/lib/paginate";
-import type { PaginatedResponse, User, UserStatus } from "@/types";
+import type { PaginatedResponse, User, UserBranchHistoryEntry, UserStatus } from "@/types";
 
 /**
  * The query `UserController::index()` accepts — its `validate()` list, plus the
@@ -35,6 +35,12 @@ export interface CreateUserData {
    * `branch_id`. Build it with `primaryBranchId()` — see @/lib/user-branches.
    */
   branch_id?: number;
+  /**
+   * The chosen primary branch (Phase 6 MB-BE6): one of `branch_ids`, or null
+   * for Organisation-wide, which only a role that sees every branch may have.
+   * Absent: the server takes the first assigned branch.
+   */
+  primary_branch_id?: number | null;
   role: string;
 }
 
@@ -51,7 +57,16 @@ export interface UpdateUserData {
   branch_ids?: number[];
   /** @see CreateUserData.branch_id — same dual-contract reason. */
   branch_id?: number;
+  /** @see CreateUserData.primary_branch_id. Absent: unchanged while it stays assigned. */
+  primary_branch_id?: number | null;
   role?: string;
+}
+
+/** One page of a user's branch history. */
+export interface UserBranchHistoryQuery {
+  page: number;
+  /** At most 100 (the server clamps it). */
+  per_page: number;
 }
 
 export interface ResetPasswordData {
@@ -118,4 +133,13 @@ export const userService = {
 
   resetPassword: (id: number, data: ResetPasswordData) =>
     api.post<void>(API_ENDPOINTS.USERS.RESET_PASSWORD(id), data),
+
+  /**
+   * One page of a user's branch history (Phase 6 MB-BE6), newest first. A raw
+   * paginator like `list`, so `getRaw` keeps its `meta`. Needs `users:view`
+   * and the caller's reach; a user out of reach answers 404, the same as one
+   * that doesn't exist.
+   */
+  branchHistory: (id: number, params: UserBranchHistoryQuery) =>
+    api.getRaw<PaginatedResponse<UserBranchHistoryEntry>>(API_ENDPOINTS.USERS.BRANCH_HISTORY(id), { params }),
 };

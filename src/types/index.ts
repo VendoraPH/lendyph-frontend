@@ -1,4 +1,4 @@
-export type { User, UserStatus, UserBranch, UserRoleDetail } from "./user";
+export type { User, UserStatus, UserBranch, UserRoleDetail, UserBranchHistoryEntry } from "./user";
 export type { StaffMember } from "./staff";
 export type { Loan, LoanCoMaker, AmortizationCalculatorRequest, AmortizationCalculatorResult, AmortizationCalculatorSchedule, AmortizationMethod, LoanFormPreview, LoanFormPreviewRequest, LoanFormPreviewRow, LoanReleasePreview, LoanStatus, InterestType, LoanSchedule, AmortizationPreviewResponse, LoanExtensionPreview, ExtensionInterestOption, LoanAmortizationBalances, AmortizationBalancePeriod, LoanProduct, LoanLedgerEntry } from "./loan";
 export type { Borrower, BorrowerLedgerEntry, BorrowerLoanSummary, CivilStatus, Gender, BorrowerStatus, ValidIdType, EmploymentType } from "./borrower";
@@ -17,6 +17,7 @@ export type {
   LoanApprovalStep,
   LoanApprovalRound,
   LoanApprovalState,
+  LoanApprovalLeftOutStep,
   ApproveStepPayload,
   SendBackStepPayload,
 } from "./loan-approval";

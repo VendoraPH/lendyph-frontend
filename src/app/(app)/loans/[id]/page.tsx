@@ -126,6 +126,9 @@ import {
 import { MethodReferenceFields } from "@/components/common/method-reference-fields";
 import { releaseConflictOf } from "./_lib/release-conflict";
 import { stepConflictMessage } from "./_lib/step-conflict";
+import { signOffRefusal, signOffRefusalFor, type KeptRefusal } from "./_lib/sign-off-refusal";
+import { approvalChainItems } from "./_lib/left-out-steps";
+import { LeftOutStepChip } from "./_components/left-out-step-chip";
 import { oncePerKey } from "./_lib/once-per-key";
 import { useReleasePreview } from "./_hooks/use-release-preview";
 import { useDeductionsPreview } from "./_hooks/use-deductions-preview";
@@ -1187,6 +1190,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
   const {
     steps: approvalSteps,
     rounds: approvalRounds,
+    leftOut: approvalLeftOut,
     loading: approvalLoading,
     unavailable: approvalUnavailable,
     refresh: refreshApproval,
@@ -1201,6 +1205,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
     userId: ANYONE_WITH_THE_ROLE,
   });
   const [forwardError, setForwardError] = useState<{ key: string; message: string } | null>(null);
+  // A sign-off the server refused because a step the chain left out by its
+  // minimum now applies (422 on `approval`), kept beside that step's actions.
+  const [signOffError, setSignOffError] = useState<KeptRefusal | null>(null);
   // The "Forward to" candidates, read once per pending step for this page.
   const [readForwardCandidates] = useState(() => oncePerKey<ForwardCandidates>());
   // Index of the step an approver is sending the loan back to. Defaults to
@@ -1645,6 +1652,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // used for exactly one thing: the `target_step_order` a send-back carries.
   const currentStepIndex = approvalSteps.findIndex((s) => s.status === "pending");
   const currentStep = currentStepIndex >= 0 ? approvalSteps[currentStepIndex] : null;
+  // The tracker's chain: the round's steps, with any step the server says it
+  // left out by its minimum principal in its place, muted (none before the
+  // server sends `left_out_steps`). Positions still count only the kept steps.
+  const approvalChain = approvalChainItems(approvalSteps, approvalLeftOut);
+  const leftOutSteps = approvalChain.flatMap((item) => (item.type === "left_out" ? [item] : []));
   const nextStep =
     currentStepIndex >= 0 ? approvalSteps[currentStepIndex + 1] ?? null : null;
   // Confirmation step = the last approve step (next step is release). Its button
@@ -1675,6 +1687,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
   const forwardKey = currentStep ? String(currentStep.id) : "draft";
   const forwardTo = forwardPickFor(forwardPick, forwardKey);
   const forwardErrorMessage = forwardError?.key === forwardKey ? forwardError.message : null;
+  const signOffErrorMessage = signOffRefusalFor(signOffError, forwardKey);
   const handleForwardChange = (userId: string, name: string) => {
     setForwardPick({ key: forwardKey, userId, name });
     setForwardError(null);
@@ -1832,6 +1845,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
       : undefined;
     try {
       setStepActionLoading(true);
+      setSignOffError(null);
       await loanApprovalService.approve(
         loan.id,
         currentStep.id,
@@ -1852,6 +1866,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
         return;
       }
       rememberForwardError(err, key);
+      const refusal = signOffRefusal(err);
+      if (refusal) setSignOffError({ key, message: refusal });
       notifyError(err, "We couldn't record this approval. Please try again.");
     } finally {
       setStepActionLoading(false);
@@ -2629,14 +2645,23 @@ function LoanDetail({ loanId }: { loanId: number }) {
               {approvalSteps.length > 0 && (
               <div className="rounded-lg border bg-muted/20 p-3">
                 <div className="flex items-center gap-1 overflow-x-auto pb-1">
-                  {approvalSteps.map((step, i) => {
+                  {approvalChain.map((item, itemIndex) => {
+                    const isLast = itemIndex === approvalChain.length - 1;
+                    if (item.type === "left_out") {
+                      return (
+                        <div key={item.key} className="flex items-center shrink-0">
+                          <LeftOutStepChip name={item.name} description={item.description} />
+                          {!isLast && <div className="h-0.5 w-4 mx-0.5 shrink-0 bg-muted" />}
+                        </div>
+                      );
+                    }
+                    const { step, position: i } = item;
                     const state = approvalStepState(step.status);
                     const isCurrent = state === "current";
                     const isDone = state === "done";
                     const isSentBack = state === "sent_back";
                     // Closed when the loan was voided: neutral, never the waiting circle.
                     const isCancelled = state === "cancelled";
-                    const isLast = i === approvalSteps.length - 1;
                     return (
                       <div
                         key={`mini-${step.index}`}
@@ -2705,6 +2730,13 @@ function LoanDetail({ loanId }: { loanId: number }) {
                     );
                   })}
                 </div>
+                {leftOutSteps.length > 0 && (
+                  <ul className="mt-2 space-y-0.5 border-t pt-2 text-[11px] text-muted-foreground">
+                    {leftOutSteps.map((item) => (
+                      <li key={item.key}>{item.description}</li>
+                    ))}
+                  </ul>
+                )}
               </div>
               )}
 
@@ -2887,6 +2919,16 @@ function LoanDetail({ loanId }: { loanId: number }) {
                             onChange={(e) => setStepRemarks(e.target.value)}
                             className="min-h-[80px] text-sm bg-background"
                           />
+                        </div>
+                      )}
+
+                      {currentStep.kind === "approve" && signOffErrorMessage && (
+                        <div
+                          className="rounded-md border border-red-200 bg-red-50 p-2.5 flex items-start gap-2 text-xs text-red-700 dark:border-red-800/40 dark:bg-red-900/10 dark:text-red-400"
+                          role="alert"
+                        >
+                          <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                          <p>{signOffErrorMessage}</p>
                         </div>
                       )}
 
