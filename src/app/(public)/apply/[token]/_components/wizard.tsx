@@ -10,6 +10,7 @@ import type { ApplicationDraft } from "@/types/loan-origination";
 import type { ApplicantSession, Consents, PublicApplicationState, PublicDocument, PublicPortal, Submitted } from "@/types/public-application";
 import { useDraftAutosave } from "../_hooks/use-draft-autosave";
 import { useLoanEstimate } from "../_hooks/use-loan-estimate";
+import { missingForSource, NOTHING_REQUIRED, rememberRequired, type RequiredMemory } from "../_lib/employment-fields";
 import { fieldErrors, publicErrorMessage, sessionProblem } from "../_lib/errors";
 import { uploadRules } from "../_lib/uploads";
 import { draftAfterVerify, estimateRequest, missingDocumentsMessage, resumeStepIndex, stepErrors } from "../_lib/wizard-state";
@@ -69,6 +70,9 @@ export function Wizard({
   const [session, setSession] = useState(initialSession);
   const [mobile, setMobile] = useState(initialMobile);
   const [application, setApplication] = useState<PublicApplicationState | null>(initialSession?.application ?? null);
+  const [required, setRequired] = useState<RequiredMemory>(() =>
+    initialSession?.application ? rememberRequired(NOTHING_REQUIRED, initialSession.application) : NOTHING_REQUIRED,
+  );
   const [draft, setDraft] = useState<ApplicationDraft>(() => mergeDraft(initialSession?.application?.draft));
   const [index, setIndex] = useState(() => (initialSession ? resumeStepIndex(initialSession.application?.last_completed_step ?? null) : 0));
   const [errors, setErrors] = useState<WizardErrors>({});
@@ -85,6 +89,12 @@ export function Wizard({
   const sessionToken = session?.session_token ?? null;
   const product = portal.products.find((p) => p.id === draft.loan.loan_product_id);
   const rules = uploadRules(portal);
+
+  /** The server's latest view, and the product's required fields it named. */
+  const take = (state: PublicApplicationState) => {
+    setApplication(state);
+    setRequired((memory) => rememberRequired(memory, state));
+  };
 
   /** The submit already went through: a retried submit answers the same reference. */
   const recoverSubmitted = () => {
@@ -114,7 +124,7 @@ export function Wizard({
     token,
     sessionToken,
     draft,
-    onSaved: setApplication,
+    onSaved: take,
     onFailed: (err) => void handleSessionError(err),
   });
   const estimate = useLoanEstimate(token, sessionToken, estimateRequest(draft.loan, product), handleSessionError);
@@ -142,7 +152,7 @@ export function Wizard({
   /** The server's view again, after a file changed. */
   const refresh = () => {
     if (!sessionToken) return;
-    publicApplicationService.getDraft(token, sessionToken).then(setApplication, (err) => void handleSessionError(err));
+    publicApplicationService.getDraft(token, sessionToken).then(take, (err) => void handleSessionError(err));
   };
 
   const next = () => {
@@ -179,7 +189,7 @@ export function Wizard({
     const merged = draftAfterVerify(draft, started.application?.draft, portal.branches);
     setSession(started);
     setMobile(typedMobile);
-    setApplication(started.application);
+    if (started.application) take(started.application);
     setDraft(merged);
     go(resumeStepIndex(started.application?.last_completed_step ?? null));
   };
@@ -250,7 +260,15 @@ export function Wizard({
       case "personal":
         return <StepPersonal value={draft.personal} errors={errors} onChange={patch("personal")} branches={portal.branches} />;
       case "employment":
-        return <StepEmployment value={draft.employment} errors={errors} onChange={patch("employment")} />;
+        return (
+          <StepEmployment
+            value={draft.employment}
+            errors={errors}
+            onChange={patch("employment")}
+            requiredFields={required.fields}
+            missingFields={missingForSource(application, draft.employment.income_source)}
+          />
+        );
       case "expenses":
         return <StepExpenses value={draft.expenses} errors={errors} onChange={patch("expenses")} />;
       case "loan":
