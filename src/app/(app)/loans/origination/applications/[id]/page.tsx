@@ -7,12 +7,13 @@ import { ArrowLeft, ExternalLink } from "lucide-react";
 import { DataState } from "@/components/common/data-state";
 import { ScrollBox } from "@/components/common/page-fill";
 import { ApplicationStatusBadge, AssessmentBadge, TestBadge, ToneBadge } from "@/components/loan-origination/badges";
+import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useApiResource, usePermission } from "@/hooks";
 import { formatDateTime } from "@/lib/format";
 import { loanOriginationService } from "@/services";
 import type { ApplicationDetail } from "@/types/loan-origination";
-import { missingFieldLabel } from "../../_lib/application-view";
+import { NOT_FOUND, isMissing, missingFieldLabel, orMissing } from "../../_lib/application-view";
 import { ActivityPanel } from "./_components/activity-panel";
 import { ApplicantOverview } from "./_components/applicant-overview";
 import { ApplicationActions } from "./_components/application-actions";
@@ -74,9 +75,68 @@ function Missing({ a }: { a: ApplicationDetail }) {
   );
 }
 
+/** A 404: no such application, or another branch's. Not "not connected yet", which is a 501. */
+function NotFound() {
+  return (
+    <Card>
+      <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
+        <p className="font-medium">{NOT_FOUND}</p>
+        <Link href="/loans/origination/applications" className="inline-flex items-center gap-1 text-sm font-medium text-brand-orange hover:underline">
+          <ArrowLeft className="h-4 w-4" /> Back to Applications
+        </Link>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** The loaded application. The tab lives in the page, so a reload after an action keeps it. */
+function ApplicationView({
+  a,
+  tab,
+  onTab,
+  onChanged,
+}: {
+  a: ApplicationDetail;
+  tab: string;
+  onTab: (tab: string) => void;
+  onChanged: () => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <Header a={a} />
+      <ApplicationActions application={a} onChanged={onChanged} />
+      <Missing a={a} />
+      <Tabs value={tab} onValueChange={(v) => onTab(String(v))}>
+        <TabsList className="max-w-full justify-start overflow-x-auto">
+          <TabsTrigger value="overview">Application</TabsTrigger>
+          <TabsTrigger value="documents">Documents ({a.documents.length})</TabsTrigger>
+          <TabsTrigger value="assessment">Assessment</TabsTrigger>
+          <TabsTrigger value="messages">Messages ({a.applicant_messages.length})</TabsTrigger>
+          <TabsTrigger value="activity">Notes and history</TabsTrigger>
+        </TabsList>
+        <TabsContent value="overview">
+          <ApplicantOverview application={a} />
+        </TabsContent>
+        <TabsContent value="documents">
+          <DocumentsPanel application={a} onChanged={onChanged} />
+        </TabsContent>
+        <TabsContent value="assessment">
+          <AssessmentPanel application={a} onChanged={onChanged} />
+        </TabsContent>
+        <TabsContent value="messages">
+          <MessagesPanel messages={a.applicant_messages} />
+        </TabsContent>
+        <TabsContent value="activity">
+          <ActivityPanel notes={a.notes} history={a.history} />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
 export default function ApplicationDetailPage() {
   const id = Number(useParams<{ id: string }>().id);
-  const fetcher = useCallback(() => loanOriginationService.getApplication(id), [id]);
+  const fetcher = useCallback(() => orMissing(loanOriginationService.getApplication(id)), [id]);
   const resource = useApiResource(fetcher);
   const [tab, setTab] = useState("overview");
 
@@ -84,40 +144,10 @@ export default function ApplicationDetailPage() {
     <ScrollBox className="space-y-4">
       <DataState
         resource={resource}
-        summary="This application can't be shown: it may not exist, or it belongs to a branch you can't see."
+        summary="The full application, with its documents, assessment, messages, notes and history, will show here once online applications are connected."
         endpoints={[`GET /loan-origination/applications/${id}`]}
       >
-        {(a) => (
-          <div className="space-y-4">
-            <Header a={a} />
-            <ApplicationActions application={a} onChanged={resource.refetch} />
-            <Missing a={a} />
-            <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
-              <TabsList className="max-w-full justify-start overflow-x-auto">
-                <TabsTrigger value="overview">Application</TabsTrigger>
-                <TabsTrigger value="documents">Documents ({a.documents.length})</TabsTrigger>
-                <TabsTrigger value="assessment">Assessment</TabsTrigger>
-                <TabsTrigger value="messages">Messages ({a.applicant_messages.length})</TabsTrigger>
-                <TabsTrigger value="activity">Notes and history</TabsTrigger>
-              </TabsList>
-              <TabsContent value="overview">
-                <ApplicantOverview application={a} />
-              </TabsContent>
-              <TabsContent value="documents">
-                <DocumentsPanel application={a} onChanged={resource.refetch} />
-              </TabsContent>
-              <TabsContent value="assessment">
-                <AssessmentPanel application={a} onChanged={resource.refetch} />
-              </TabsContent>
-              <TabsContent value="messages">
-                <MessagesPanel messages={a.applicant_messages} />
-              </TabsContent>
-              <TabsContent value="activity">
-                <ActivityPanel notes={a.notes} history={a.history} />
-              </TabsContent>
-            </Tabs>
-          </div>
-        )}
+        {(a) => (isMissing(a) ? <NotFound /> : <ApplicationView a={a} tab={tab} onTab={setTab} onChanged={resource.refetch} />)}
       </DataState>
     </ScrollBox>
   );

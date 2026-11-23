@@ -12,6 +12,7 @@ import {
   limitWords,
   ratioText,
   rerunPayload,
+  type RerunForm,
 } from "./assessment-view";
 import type { Assessment, AssessmentFigures } from "@/types/loan-origination";
 
@@ -88,27 +89,46 @@ test("limits read as the server stores them, decimals kept", () => {
   assert.equal(limitWords("dti", { ...limits, max_dti: 37.5 }), "at most 37.5%");
 });
 
+const form = (patch: Partial<RerunForm> = {}): RerunForm => ({
+  verifiedIncome: "",
+  clearIncome: false,
+  verifiedDebt: "",
+  clearDebt: false,
+  startDate: "",
+  ...patch,
+});
+
 test("a run sends only the figures entered: blank keeps the last run's, and amounts stay exact strings", () => {
-  assert.deepEqual(rerunPayload({ verifiedIncome: "", verifiedDebt: "", startDate: "" }), { payload: {}, problems: [] });
-  assert.deepEqual(rerunPayload({ verifiedIncome: "₱25,000.50", verifiedDebt: " 1500 ", startDate: "2026-12-01" }), {
+  assert.deepEqual(rerunPayload(form()), { payload: {}, problems: [] });
+  assert.deepEqual(rerunPayload(form({ verifiedIncome: "₱25,000.50", verifiedDebt: " 1500 ", startDate: "2026-12-01" })), {
     payload: { verified_monthly_income: "25000.50", verified_debt_payments: "1500", start_date: "2026-12-01" },
     problems: [],
   });
   // Never through a float, which can't hold 9999999999999.99 exactly.
-  assert.equal(rerunPayload({ verifiedIncome: "9999999999999.99", verifiedDebt: "", startDate: "" }).payload.verified_monthly_income, "9999999999999.99");
+  assert.equal(rerunPayload(form({ verifiedIncome: "9999999999999.99" })).payload.verified_monthly_income, "9999999999999.99");
+});
+
+test("clearing a verified figure sends null, which the server reads as not verified", () => {
+  assert.deepEqual(rerunPayload(form({ clearIncome: true })), { payload: { verified_monthly_income: null }, problems: [] });
+  assert.deepEqual(rerunPayload(form({ clearDebt: true, verifiedIncome: "30000" })), {
+    payload: { verified_monthly_income: "30000", verified_debt_payments: null },
+    problems: [],
+  });
+  // A cleared field ignores what was typed in it, even text that isn't an amount.
+  assert.deepEqual(rerunPayload(form({ clearIncome: true, verifiedIncome: "abc" })), { payload: { verified_monthly_income: null }, problems: [] });
 });
 
 test("an amount that isn't pesos with at most two decimals is caught before the round trip", () => {
-  assert.deepEqual(rerunPayload({ verifiedIncome: "25000.505", verifiedDebt: "", startDate: "" }).problems, [
+  assert.deepEqual(rerunPayload(form({ verifiedIncome: "25000.505" })).problems, [
     "Enter the verified monthly income with at most two decimals.",
   ]);
-  assert.deepEqual(rerunPayload({ verifiedIncome: "", verifiedDebt: "abc", startDate: "" }).problems, [
+  assert.deepEqual(rerunPayload(form({ verifiedDebt: "abc" })).problems, [
     "Enter the verified monthly debt payments as an amount in pesos, like 25000.",
   ]);
-  assert.deepEqual(rerunPayload({ verifiedIncome: "-5", verifiedDebt: "", startDate: "" }).problems, [
+  assert.deepEqual(rerunPayload(form({ verifiedIncome: "-5" })).problems, [
     "The verified monthly income can't be below ₱0.00.",
   ]);
-  assert.deepEqual(rerunPayload({ verifiedIncome: "", verifiedDebt: "", startDate: "12/01/2026" }).problems, [
+  assert.deepEqual(rerunPayload(form({ startDate: "12/01/2026" })).problems, [
     "Enter the start date as a date, like 2026-11-19.",
   ]);
 });

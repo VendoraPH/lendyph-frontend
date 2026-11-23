@@ -15,6 +15,7 @@ import type {
   AssessmentThresholds,
   RerunAssessmentInput,
 } from "@/types/loan-origination";
+import { padDecimals } from "./server-number";
 
 /** The statuses an application can be assessed in (AssessmentService::ASSESSABLE_STATUSES). */
 export const ASSESSABLE_STATUSES: readonly ApplicationStatus[] = [
@@ -66,10 +67,7 @@ function withheld(a: Shown, key: keyof AssessmentFigures): boolean {
  */
 export function ratioText(value: number | null | undefined): string | null {
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
-  const text = String(value);
-  if (/e/i.test(text)) return text;
-  const [whole, decimals = ""] = text.split(".");
-  return decimals.length >= 2 ? text : `${whole}.${decimals.padEnd(2, "0")}`;
+  return padDecimals(value, 2);
 }
 
 export function dtiText(a: Shown): string {
@@ -114,7 +112,10 @@ export function limitWords(check: "dti" | "coverage" | "remaining_income", limit
 export interface RerunForm {
   /** Blank keeps the last run's figure. */
   verifiedIncome: string;
+  /** Clear the last run's verified income: the declared income counts again. */
+  clearIncome: boolean;
   verifiedDebt: string;
+  clearDebt: boolean;
   /** `YYYY-MM-DD`; blank is today. */
   startDate: string;
 }
@@ -137,18 +138,24 @@ function pesos(raw: string, label: string): { value: string } | { problem: strin
 }
 
 /**
- * `POST …/assessment/rerun`: only the figures entered (left out, the server
- * keeps the last run's), and the start date when chosen. Problems are the
- * server's own words (RunAssessmentRequest).
+ * `POST …/assessment/rerun`: a figure entered is sent as an exact string; a
+ * cleared one as null, which the server reads as not verified (the declared
+ * figure counts again); a blank one is left out, so the server keeps the last
+ * run's. The start date goes when chosen. Problems are the server's own words
+ * (RunAssessmentRequest).
  */
 export function rerunPayload(form: RerunForm): { payload: RerunAssessmentInput; problems: string[] } {
   const payload: RerunAssessmentInput = {};
   const problems: string[] = [];
   const amounts = [
-    ["verified_monthly_income", form.verifiedIncome, "verified monthly income"],
-    ["verified_debt_payments", form.verifiedDebt, "verified monthly debt payments"],
+    ["verified_monthly_income", form.verifiedIncome, form.clearIncome, "verified monthly income"],
+    ["verified_debt_payments", form.verifiedDebt, form.clearDebt, "verified monthly debt payments"],
   ] as const;
-  for (const [field, raw, label] of amounts) {
+  for (const [field, raw, clear, label] of amounts) {
+    if (clear) {
+      payload[field] = null;
+      continue;
+    }
     if (raw.trim() === "") continue;
     const read = pesos(raw, label);
     if ("problem" in read) problems.push(read.problem);

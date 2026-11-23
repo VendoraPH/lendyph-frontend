@@ -8,7 +8,8 @@
 
 import { formatCurrency } from "@/lib/format";
 import { formatDuration } from "@/lib/loan-origination";
-import type { OriginationKpis } from "@/types/loan-origination";
+import type { OriginationKpis, OriginationTurnaround } from "@/types/loan-origination";
+import { padDecimals } from "./server-number";
 
 export type KpiKind = "count" | "money" | "percent" | "hours";
 
@@ -47,4 +48,36 @@ export function kpiText(value: number | string | null | undefined, kind: KpiKind
 
 export function previousText(value: number | string | null | undefined, kind: KpiKind): string {
   return `Previous period: ${kpiText(value, kind)}`;
+}
+
+const STRETCHES: readonly [keyof OriginationTurnaround, string][] = [
+  ["submitted_to_approved", "Submitted to approved"],
+  ["approved_to_released", "Approved to released"],
+  ["submitted_to_released", "Submitted to released"],
+];
+
+const days = (value: number | null) => (value === null ? "—" : `${padDecimals(value, 1)} days`);
+
+const loans = (count: number) => (count === 0 ? "No loans" : `${countFmt.format(count)} ${count === 1 ? "loan" : "loans"}`);
+
+/**
+ * The server's turnaround on the loans the applications became, each stretch
+ * in words with its average and median days as sent (one decimal), the loans
+ * measured, and those with no start to measure from.
+ */
+export function turnaroundRows(turnaround: OriginationTurnaround) {
+  return STRETCHES.map(([key, label]) => {
+    const stretch = turnaround[key];
+    return {
+      key,
+      label,
+      average: days(stretch.average_days),
+      median: days(stretch.median_days),
+      loans: loans(stretch.loans),
+      note:
+        stretch.not_measured > 0
+          ? `${stretch.not_measured} ${stretch.not_measured === 1 ? "loan had" : "loans had"} no start to measure from.`
+          : null,
+    };
+  });
 }

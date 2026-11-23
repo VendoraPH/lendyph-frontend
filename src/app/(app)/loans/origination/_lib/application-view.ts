@@ -5,9 +5,16 @@
  * action it refuses comes back in its own words.
  */
 
+import { httpStatusOf } from "@/lib/api-error";
 import { isClosed, isUnsubmitted } from "@/lib/loan-origination";
 import type { Permission } from "@/types";
-import type { ApplicationDetail, ApplicationStatus, TransitionInput } from "@/types/loan-origination";
+import type {
+  ApplicationDetail,
+  ApplicationStatus,
+  DocumentRequirement,
+  StaffDocument,
+  TransitionInput,
+} from "@/types/loan-origination";
 
 export type ApplicationAction =
   | "open_loan"
@@ -158,4 +165,53 @@ export function missingFieldLabel(key: string): string {
     return loan[2] ? `Existing loan ${number}: ${EXISTING_LOAN_WORDS[loan[2]] ?? words(loan[2]).toLowerCase()}` : `Existing loan ${number}`;
   }
   return words(key.split(".").at(-1) ?? key);
+}
+
+/** What a 404 on one application means: no such application, or another branch's. */
+export const NOT_FOUND = "This application doesn't exist or you can't see it.";
+
+/** An application the server answered 404 for. */
+export interface MissingApplication {
+  missing: true;
+}
+
+const MISSING: MissingApplication = { missing: true };
+
+export function isMissing(value: unknown): value is MissingApplication {
+  return value === MISSING;
+}
+
+/**
+ * One application, or `MissingApplication` when the server answers 404 (it
+ * doesn't exist, or it is another branch's). Any other failure stays an
+ * error, so only a 501 reads as "not connected yet".
+ */
+export function orMissing<T>(load: Promise<T>): Promise<T | MissingApplication> {
+  return load.catch((err: unknown) => {
+    if (httpStatusOf(err) === 404) return MISSING;
+    throw err;
+  });
+}
+
+export interface RequestableDocument {
+  type: string;
+  label: string;
+  /** The application's own copy, in the server's words; null when it has none. */
+  status: string | null;
+}
+
+/**
+ * The document types an information request can ask for: every type in the
+ * module's settings, in their order, the only ones the server accepts. Each
+ * says where the application's own copy stands.
+ */
+export function requestableDocumentTypes(
+  types: readonly DocumentRequirement[],
+  documents: readonly Pick<StaffDocument, "type" | "status_label">[],
+): RequestableDocument[] {
+  return types.map((t) => ({
+    type: t.type,
+    label: t.label,
+    status: documents.find((d) => d.type === t.type)?.status_label ?? null,
+  }));
 }

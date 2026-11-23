@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { KPI_TILES, kpiText, previousText } from "./dashboard-view";
+import { KPI_TILES, kpiText, previousText, turnaroundRows } from "./dashboard-view";
 
 test("money tiles read the server's two-decimal strings in pesos", () => {
   assert.equal(kpiText("125000.50", "money"), "₱125,000.50");
@@ -28,4 +28,30 @@ test("the tiles cover the server's figures, For Approval in its words", () => {
   assert.ok(!labels.some((l) => /pending approval/i.test(l)));
   const keys = KPI_TILES.map((t) => t.key);
   for (const key of ["amount_requested", "amount_approved", "withdrawn", "converted"]) assert.ok(keys.includes(key as never), key);
+});
+
+const stretch = (average: number | null, median: number | null, loans: number, notMeasured = 0) => ({
+  loans,
+  average_days: average,
+  median_days: median,
+  not_measured: notMeasured,
+});
+
+test("turnaround reads the server's days as sent, one decimal, labelled in words", () => {
+  const rows = turnaroundRows({
+    submitted_to_approved: stretch(2, 1.5, 4),
+    approved_to_released: stretch(0.4, 0.4, 1, 1),
+    submitted_to_released: stretch(null, null, 0, 2),
+  });
+  assert.deepEqual(
+    rows.map((r) => [r.label, r.average, r.median, r.loans]),
+    [
+      ["Submitted to approved", "2.0 days", "1.5 days", "4 loans"],
+      ["Approved to released", "0.4 days", "0.4 days", "1 loan"],
+      ["Submitted to released", "—", "—", "No loans"],
+    ],
+  );
+  assert.equal(rows[0].note, null);
+  assert.equal(rows[1].note, "1 loan had no start to measure from.");
+  assert.equal(rows[2].note, "2 loans had no start to measure from.");
 });

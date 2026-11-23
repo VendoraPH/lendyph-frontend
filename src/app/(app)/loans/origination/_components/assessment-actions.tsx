@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { FileDown, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -34,12 +35,61 @@ export function AssessmentPdfButton({ assessment }: { assessment: Assessment }) 
   );
 }
 
-const EMPTY: RerunForm = { verifiedIncome: "", verifiedDebt: "", startDate: "" };
+const EMPTY: RerunForm = { verifiedIncome: "", clearIncome: false, verifiedDebt: "", clearDebt: false, startDate: "" };
+
+/**
+ * One verified figure: blank keeps the last run's, a figure replaces it, and
+ * "Clear" sends null, which the server reads as not verified (the declared
+ * figure counts again). Clearing is offered once there is a last run.
+ */
+function VerifiedField({
+  id,
+  label,
+  placeholder,
+  value,
+  cleared,
+  canClear,
+  hint,
+  onValue,
+  onClear,
+}: {
+  id: string;
+  label: string;
+  placeholder: string;
+  value: string;
+  cleared: boolean;
+  canClear: boolean;
+  hint: string;
+  onValue: (value: string) => void;
+  onClear: (cleared: boolean) => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
+        inputMode="decimal"
+        placeholder={cleared ? "Not verified" : placeholder}
+        disabled={cleared}
+        value={cleared ? "" : value}
+        onChange={(e) => onValue(e.target.value)}
+      />
+      <p className="text-xs text-muted-foreground">{cleared ? "Cleared: the declared figure counts." : hint}</p>
+      {canClear && (
+        <label className="flex items-center gap-2 text-xs">
+          <Checkbox checked={cleared} onCheckedChange={(on) => onClear(on)} />
+          Clear the verified figure
+        </label>
+      )}
+    </div>
+  );
+}
 
 /**
  * Runs the assessment on the server with the verified figures staff enter.
- * A figure left blank keeps the last run's; the start date is today when
- * blank. The server works out every figure and stores a new revision.
+ * A figure left blank keeps the last run's, a cleared one counts the declared
+ * figure again, and the start date is today when blank. The server works out
+ * every figure and stores a new revision.
  */
 export function RunAssessmentDialog({
   applicationId,
@@ -59,12 +109,13 @@ export function RunAssessmentDialog({
   const { payload, problems } = rerunPayload(form);
   const set = (patch: Partial<RerunForm>) => setForm((f) => ({ ...f, ...patch }));
   const verifiedIncome = current?.figures.verified_monthly_income ?? null;
+  const rerun = current !== null;
 
   return (
     <ActionDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={current ? "Run the assessment again" : "Run the assessment"}
+      title={rerun ? "Run the assessment again" : "Run the assessment"}
       description="The server works out the income, debts, instalment and limits, and keeps each run as a new version."
       confirmLabel="Run assessment"
       successMessage="Assessment saved"
@@ -75,38 +126,38 @@ export function RunAssessmentDialog({
       size="md"
     >
       <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label htmlFor="verified-income">Verified monthly income</Label>
-          <Input
-            id="verified-income"
-            inputMode="decimal"
-            placeholder="25000"
-            value={form.verifiedIncome}
-            onChange={(e) => set({ verifiedIncome: e.target.value })}
-          />
-          <p className="text-xs text-muted-foreground">
-            {current === null
+        <VerifiedField
+          id="verified-income"
+          label="Verified monthly income"
+          placeholder="25000"
+          value={form.verifiedIncome}
+          cleared={form.clearIncome}
+          canClear={rerun && verifiedIncome !== null}
+          hint={
+            !rerun
               ? "From the payslip, ITR or business records. Blank: the declared income counts."
               : verifiedIncome === null
-                ? "Blank keeps the last run's: not entered."
-                : `Blank keeps the last run's: ${formatCurrency(verifiedIncome)}.`}
-          </p>
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="verified-debt">Verified monthly debt payments</Label>
-          <Input
-            id="verified-debt"
-            inputMode="decimal"
-            placeholder="3500"
-            value={form.verifiedDebt}
-            onChange={(e) => set({ verifiedDebt: e.target.value })}
-          />
-          <p className="text-xs text-muted-foreground">
-            {current === null
+                ? "Leave blank to keep the last run's figure: not entered."
+                : `Leave blank to keep the last run's figure: ${formatCurrency(verifiedIncome)}.`
+          }
+          onValue={(verifiedIncome) => set({ verifiedIncome })}
+          onClear={(clearIncome) => set({ clearIncome })}
+        />
+        <VerifiedField
+          id="verified-debt"
+          label="Verified monthly debt payments"
+          placeholder="3500"
+          value={form.verifiedDebt}
+          cleared={form.clearDebt}
+          canClear={rerun}
+          hint={
+            !rerun
               ? "Payments to other lenders. Blank: the declared debts count."
-              : "Blank keeps the last run's. Lendy loans of a linked member are added by the server."}
-          </p>
-        </div>
+              : "Leave blank to keep the last run's figure. A linked member's Lendy loans are added by the server."
+          }
+          onValue={(verifiedDebt) => set({ verifiedDebt })}
+          onClear={(clearDebt) => set({ clearDebt })}
+        />
         <div className="space-y-1.5 sm:col-span-2">
           <Label htmlFor="assessment-start">Loan start date (optional)</Label>
           <Input id="assessment-start" type="date" value={form.startDate} onChange={(e) => set({ startDate: e.target.value })} />

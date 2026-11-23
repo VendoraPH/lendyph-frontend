@@ -13,6 +13,7 @@ import { loanOriginationService } from "@/services";
 import { ApplicationsTable } from "./_components/applications-table";
 import { KpiGrid } from "./_components/dashboard/kpi-grid";
 import { OriginationCharts } from "./_components/dashboard/origination-charts";
+import { TurnaroundCard } from "./_components/dashboard/turnaround-card";
 import { useBranchFilter } from "@/hooks/use-working-branch";
 
 function thirtyDaysAgo(): string {
@@ -64,6 +65,7 @@ export default function OriginationDashboardPage() {
               {formatDate(data.previous_period.from)} to {formatDate(data.previous_period.to)}. Test links are left out.
             </p>
             <KpiGrid kpis={data.kpis} previous={data.previous} canViewLoans={canViewLoans} />
+            <TurnaroundCard turnaround={data.turnaround} />
             <OriginationCharts data={data} />
             <Card>
               <CardHeader className="pb-2">

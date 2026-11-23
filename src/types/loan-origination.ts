@@ -12,6 +12,7 @@
  */
 
 import type { PaginatedResponse } from "./api";
+import type { TurnaroundStretch } from "./executive-dashboard";
 import type { MoneyString } from "./savings";
 
 // ── Statuses ────────────────────────────────────────────────────────────────
@@ -581,10 +582,14 @@ export interface Assessment {
   assessed_at: string | null;
 }
 
-/** `POST …/assessment/rerun`: each figure left out keeps the last run's; `start_date` is today when left out. */
+/**
+ * `POST …/assessment/rerun`: a figure left out keeps the last run's, and null
+ * clears it (not verified: the declared figure counts). `start_date` is today
+ * when left out.
+ */
 export interface RerunAssessmentInput {
-  verified_monthly_income?: string;
-  verified_debt_payments?: string;
+  verified_monthly_income?: string | null;
+  verified_debt_payments?: string | null;
   start_date?: string;
 }
 
@@ -705,8 +710,16 @@ export interface OriginationDashboard {
   decisions: { date: string; approved: number; rejected: number }[];
   /** Average hours spent in each stage left during the period. */
   stage_times: { status: ApplicationStatus; label: string; avg_hours: number; stays: number }[];
+  /** The executive dashboard's turnaround on the loans the applications became; null without `loans:view`. */
+  turnaround: OriginationTurnaround | null;
   recent: ApplicationSummary[];
 }
+
+/** `ApplicationTurnaround::build()`, as the executive dashboard reads it. */
+export type OriginationTurnaround = Record<
+  "submitted_to_approved" | "approved_to_released" | "submitted_to_released",
+  TurnaroundStretch
+>;
 
 /** `OriginationLinkResource`. */
 export interface ApplicationLink {

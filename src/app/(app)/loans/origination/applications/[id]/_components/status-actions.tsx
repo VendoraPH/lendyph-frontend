@@ -5,12 +5,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
+import { useApiResource } from "@/hooks";
 import { useDialogOpening } from "@/hooks/use-dialog-opening";
 import { STATUS_LABELS } from "@/lib/loan-origination";
 import { loanOriginationService } from "@/services";
 import type { ApplicationDetail, ApplicationStatus } from "@/types/loan-origination";
 import { ActionDialog } from "../../../_components/action-dialog";
-import { transitionNeedsNote, transitionPayload } from "../../../_lib/application-view";
+import { requestableDocumentTypes, transitionNeedsNote, transitionPayload } from "../../../_lib/application-view";
 
 export interface ApplicationDialogProps {
   application: ApplicationDetail;
@@ -83,7 +84,12 @@ export function TransitionDialog({ application, open, onOpenChange, onDone, onFa
   );
 }
 
-/** Asks the applicant for more; the application reads Additional Information Required. */
+/**
+ * Asks the applicant for more; the application reads Additional Information
+ * Required. Any document type in the module's settings can be asked for, the
+ * ones the applicant hasn't handed in included; each says where the
+ * application's own copy stands.
+ */
 export function RequestInfoDialog({ application, open, onOpenChange, onDone, onFailed }: ApplicationDialogProps) {
   const [message, setMessage] = useState("");
   const [types, setTypes] = useState<string[]>([]);
@@ -91,6 +97,8 @@ export function RequestInfoDialog({ application, open, onOpenChange, onDone, onF
     setMessage("");
     setTypes([]);
   }
+  const settings = useApiResource(loanOriginationService.getSettings, open);
+  const offered = settings.data ? requestableDocumentTypes(settings.data.documents.types, application.documents) : [];
   const toggle = (type: string, on: boolean) => setTypes((t) => (on ? [...t, type] : t.filter((x) => x !== type)));
 
   return (
@@ -125,17 +133,24 @@ export function RequestInfoDialog({ application, open, onOpenChange, onDone, onF
           placeholder="For example: please upload your two most recent payslips."
         />
       </div>
-      {application.documents.length > 0 && (
-        <fieldset className="space-y-2">
-          <legend className="text-sm font-medium">Documents to upload again (optional)</legend>
-          {application.documents.map((d) => (
-            <label key={d.id} className="flex items-center gap-2 text-sm">
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-medium">Documents to ask for (optional)</legend>
+        {settings.loading ? (
+          <p className="text-sm text-muted-foreground">Loading the document types…</p>
+        ) : settings.data === null ? (
+          <p className="text-sm text-muted-foreground">The document types couldn&apos;t be loaded. The message can still be saved.</p>
+        ) : offered.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No document types are set up in the online application settings.</p>
+        ) : (
+          offered.map((d) => (
+            <label key={d.type} className="flex items-center gap-2 text-sm">
               <Checkbox checked={types.includes(d.type)} onCheckedChange={(on) => toggle(d.type, on)} />
               {d.label}
+              <span className="text-xs text-muted-foreground">{d.status ?? "Not handed in"}</span>
             </label>
-          ))}
-        </fieldset>
-      )}
+          ))
+        )}
+      </fieldset>
     </ActionDialog>
   );
 }

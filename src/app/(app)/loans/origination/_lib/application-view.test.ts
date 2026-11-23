@@ -2,13 +2,17 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   INFORMATION_STATUSES,
+  NOT_FOUND,
   applicationActions,
+  isMissing,
   linkMemberBlocker,
   missingFieldLabel,
+  orMissing,
+  requestableDocumentTypes,
   transitionNeedsNote,
   transitionPayload,
 } from "./application-view";
-import type { ApplicationStatus } from "@/types/loan-origination";
+import type { ApplicationStatus, DocumentRequirement, StaffDocument } from "@/types/loan-origination";
 import type { Permission } from "@/types";
 
 const app = (status: ApplicationStatus, extra: { loan_id?: number | null; allowed_transitions?: ApplicationStatus[] } = {}) => ({
@@ -92,4 +96,39 @@ test("the server's missing field keys read in words", () => {
   assert.equal(missingFieldLabel("expenses.existing_loans"), "Existing loans");
   // A key the screen doesn't know still reads as words, never as a raw key.
   assert.equal(missingFieldLabel("personal.some_new_field"), "Some new field");
+});
+
+const httpError = (status: number) => ({ isAxiosError: true, response: { status, data: { message: "No." } } });
+
+test("a 404 reads as an application that doesn't exist or can't be seen, never as not built", async () => {
+  assert.equal(NOT_FOUND, "This application doesn't exist or you can't see it.");
+  assert.equal(isMissing(await orMissing(Promise.reject(httpError(404)))), true);
+  const found = { id: 3 };
+  assert.equal(await orMissing(Promise.resolve(found)), found);
+  assert.equal(isMissing(found), false);
+});
+
+test("a 501 or any other failure stays an error: only 501 reads as not connected yet", async () => {
+  for (const status of [501, 403, 500]) {
+    const err = httpError(status);
+    await assert.rejects(orMissing(Promise.reject(err)), (thrown) => thrown === err);
+  }
+});
+
+const type = (key: string, label: string): DocumentRequirement => ({ type: key, label, description: null, required: false });
+const held = (key: string, statusLabel: string) => ({ type: key, status_label: statusLabel }) as StaffDocument;
+
+test("an information request offers every document type in the settings, in their order", () => {
+  const types = [type("government_id", "Government ID"), type("payslip", "Latest payslip"), type("itr", "Income tax return")];
+  assert.deepEqual(requestableDocumentTypes(types, [held("payslip", "Verified")]), [
+    { type: "government_id", label: "Government ID", status: null },
+    { type: "payslip", label: "Latest payslip", status: "Verified" },
+    { type: "itr", label: "Income tax return", status: null },
+  ]);
+});
+
+test("a type no longer in the settings isn't offered: the server would refuse it", () => {
+  assert.deepEqual(requestableDocumentTypes([type("itr", "Income tax return")], [held("old_type", "Uploaded")]), [
+    { type: "itr", label: "Income tax return", status: null },
+  ]);
 });
