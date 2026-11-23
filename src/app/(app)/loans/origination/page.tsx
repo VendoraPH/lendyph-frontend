@@ -64,7 +64,7 @@ export default function OriginationDashboardPage() {
               {formatDate(data.period.from)} to {formatDate(data.period.to)}, beside the previous period,{" "}
               {formatDate(data.previous_period.from)} to {formatDate(data.previous_period.to)}. Test links are left out.
             </p>
-            <KpiGrid kpis={data.kpis} previous={data.previous} canViewLoans={canViewLoans} />
+            <KpiGrid data={data} canViewLoans={canViewLoans} />
             <TurnaroundCard turnaround={data.turnaround} />
             <OriginationCharts data={data} />
             <Card>

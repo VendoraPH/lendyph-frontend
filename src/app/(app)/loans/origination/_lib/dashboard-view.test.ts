@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { KPI_TILES, kpiText, previousText, turnaroundRows } from "./dashboard-view";
+import { KPI_TILES, kpiChange, kpiText, previousText, turnaroundRows } from "./dashboard-view";
 
 test("money tiles read the server's two-decimal strings in pesos", () => {
   assert.equal(kpiText("125000.50", "money"), "₱125,000.50");
@@ -54,4 +54,23 @@ test("turnaround reads the server's days as sent, one decimal, labelled in words
   assert.equal(rows[0].note, null);
   assert.equal(rows[1].note, "1 loan had no start to measure from.");
   assert.equal(rows[2].note, "2 loans had no start to measure from.");
+});
+
+test("each tile shows the server's change in the executive dashboard's format, never one worked out here", () => {
+  const changes = {
+    new: { change: 12.5, change_unit: "percent" as const },
+    rejected: { change: -40, change_unit: "percent" as const },
+    approval_rate: { change: -3, change_unit: "points" as const },
+    completion_rate: { change: 200, change_unit: "points" as const },
+    amount_approved: { change: null, change_unit: "percent" as const },
+  };
+  assert.equal(kpiChange(changes, "new"), "+12.5% vs previous period");
+  assert.equal(kpiChange(changes, "rejected"), "−40.0% vs previous period");
+  assert.equal(kpiChange(changes, "approval_rate"), "−3.00 pts vs previous period");
+  assert.equal(kpiChange(changes, "completion_rate"), "+200.00 pts vs previous period");
+  // Null (a figure missing or withheld, or a zero before) shows nothing, as the executive dashboard does.
+  assert.equal(kpiChange(changes, "amount_approved"), null);
+  // A KPI the server sent no change for, or a server that sends no changes yet.
+  assert.equal(kpiChange(changes, "total"), null);
+  assert.equal(kpiChange(undefined, "new"), null);
 });

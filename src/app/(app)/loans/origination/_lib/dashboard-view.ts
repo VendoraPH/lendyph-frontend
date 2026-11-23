@@ -2,13 +2,14 @@
  * The online applications dashboard's tiles (`GET /loan-origination/dashboard`).
  * Every figure is the server's: money as its two-decimal strings, rates and
  * hours to the one decimal it rounded them to. The previous period's figure
- * is shown as the server sent it; no change is worked out in the browser
- * (the server sends none yet).
+ * and its change (`changes`, LO-B5) are shown as the server sent them; no
+ * change is worked out in the browser.
  */
 
 import { formatCurrency } from "@/lib/format";
 import { formatDuration } from "@/lib/loan-origination";
-import type { OriginationKpis, OriginationTurnaround } from "@/types/loan-origination";
+import type { OriginationDashboard, OriginationKpis, OriginationTurnaround } from "@/types/loan-origination";
+import { changeText } from "../../../dashboard/_lib/executive-overview";
 import { padDecimals } from "./server-number";
 
 export type KpiKind = "count" | "money" | "percent" | "hours";
@@ -48,6 +49,17 @@ export function kpiText(value: number | string | null | undefined, kind: KpiKind
 
 export function previousText(value: number | string | null | undefined, kind: KpiKind): string {
   return `Previous period: ${kpiText(value, kind)}`;
+}
+
+/**
+ * A KPI's change as the server worked it out, in the executive dashboard's
+ * format ("+12.5% vs previous period", "−3.00 pts vs previous period"); null
+ * when it sent none, which shows nothing, as on the executive dashboard.
+ */
+export function kpiChange(changes: OriginationDashboard["changes"], key: keyof OriginationKpis): string | null {
+  const change = changes?.[key];
+  const text = change ? changeText(change.change, change.change_unit) : null;
+  return text === null ? null : `${text} vs previous period`;
 }
 
 const STRETCHES: readonly [keyof OriginationTurnaround, string][] = [

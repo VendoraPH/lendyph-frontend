@@ -110,14 +110,29 @@ export function limitWords(check: "dti" | "coverage" | "remaining_income", limit
 }
 
 export interface RerunForm {
-  /** Blank keeps the last run's figure. */
   verifiedIncome: string;
-  /** Clear the last run's verified income: the declared income counts again. */
-  clearIncome: boolean;
+  /**
+   * The last run's verified figure the field opened on ("" when it wasn't
+   * verified), or null when the server didn't say (a server before LO-B5).
+   */
+  lastIncome: string | null;
   verifiedDebt: string;
-  clearDebt: boolean;
+  lastDebt: string | null;
   /** `YYYY-MM-DD`; blank is today. */
   startDate: string;
+}
+
+/** The run dialog, opened on the current run's verified figures (`verified_inputs`). */
+export function rerunFormFrom(current: Assessment | null): RerunForm {
+  if (current === null) return { verifiedIncome: "", lastIncome: "", verifiedDebt: "", lastDebt: "", startDate: "" };
+  const inputs = current.verified_inputs;
+  return {
+    verifiedIncome: inputs?.monthly_income ?? "",
+    lastIncome: inputs ? (inputs.monthly_income ?? "") : null,
+    verifiedDebt: inputs?.debt_payments ?? "",
+    lastDebt: inputs ? (inputs.debt_payments ?? "") : null,
+    startDate: "",
+  };
 }
 
 /** The largest amount the server takes (`decimal(15,2)`). */
@@ -138,25 +153,29 @@ function pesos(raw: string, label: string): { value: string } | { problem: strin
 }
 
 /**
- * `POST …/assessment/rerun`: a figure entered is sent as an exact string; a
- * cleared one as null, which the server reads as not verified (the declared
- * figure counts again); a blank one is left out, so the server keeps the last
- * run's. The start date goes when chosen. Problems are the server's own words
- * (RunAssessmentRequest).
+ * `POST …/assessment/rerun`. Each verified figure:
+ * - left as the field opened: nothing is sent, so the server keeps the last
+ *   run's;
+ * - emptied where the last run had one: null, which the server reads as not
+ *   verified (the declared figure counts again);
+ * - entered or changed: sent as an exact string.
+ * With the last figure unknown, a blank field sends nothing. The start date
+ * goes when chosen. Problems are the server's own words (RunAssessmentRequest).
  */
 export function rerunPayload(form: RerunForm): { payload: RerunAssessmentInput; problems: string[] } {
   const payload: RerunAssessmentInput = {};
   const problems: string[] = [];
   const amounts = [
-    ["verified_monthly_income", form.verifiedIncome, form.clearIncome, "verified monthly income"],
-    ["verified_debt_payments", form.verifiedDebt, form.clearDebt, "verified monthly debt payments"],
+    ["verified_monthly_income", form.verifiedIncome, form.lastIncome, "verified monthly income"],
+    ["verified_debt_payments", form.verifiedDebt, form.lastDebt, "verified monthly debt payments"],
   ] as const;
-  for (const [field, raw, clear, label] of amounts) {
-    if (clear) {
-      payload[field] = null;
+  for (const [field, raw, last, label] of amounts) {
+    const typed = raw.trim();
+    if (last !== null && typed === last.trim()) continue;
+    if (typed === "") {
+      if (last !== null && last.trim() !== "") payload[field] = null;
       continue;
     }
-    if (raw.trim() === "") continue;
     const read = pesos(raw, label);
     if ("problem" in read) problems.push(read.problem);
     else payload[field] = read.value;

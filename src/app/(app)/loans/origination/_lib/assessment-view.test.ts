@@ -11,6 +11,7 @@ import {
   figureText,
   limitWords,
   ratioText,
+  rerunFormFrom,
   rerunPayload,
   type RerunForm,
 } from "./assessment-view";
@@ -91,14 +92,14 @@ test("limits read as the server stores them, decimals kept", () => {
 
 const form = (patch: Partial<RerunForm> = {}): RerunForm => ({
   verifiedIncome: "",
-  clearIncome: false,
+  lastIncome: "",
   verifiedDebt: "",
-  clearDebt: false,
+  lastDebt: "",
   startDate: "",
   ...patch,
 });
 
-test("a run sends only the figures entered: blank keeps the last run's, and amounts stay exact strings", () => {
+test("a run sends only the figures entered, as exact strings", () => {
   assert.deepEqual(rerunPayload(form()), { payload: {}, problems: [] });
   assert.deepEqual(rerunPayload(form({ verifiedIncome: "₱25,000.50", verifiedDebt: " 1500 ", startDate: "2026-12-01" })), {
     payload: { verified_monthly_income: "25000.50", verified_debt_payments: "1500", start_date: "2026-12-01" },
@@ -108,14 +109,39 @@ test("a run sends only the figures entered: blank keeps the last run's, and amou
   assert.equal(rerunPayload(form({ verifiedIncome: "9999999999999.99" })).payload.verified_monthly_income, "9999999999999.99");
 });
 
-test("clearing a verified figure sends null, which the server reads as not verified", () => {
-  assert.deepEqual(rerunPayload(form({ clearIncome: true })), { payload: { verified_monthly_income: null }, problems: [] });
-  assert.deepEqual(rerunPayload(form({ clearDebt: true, verifiedIncome: "30000" })), {
+const verified = (income: string | null, debt: string | null) =>
+  ({ verified_inputs: { monthly_income: income, debt_payments: debt } }) as Assessment;
+
+test("the run dialog opens on the last run's verified figures, as the server sent them", () => {
+  assert.deepEqual(rerunFormFrom(verified("25000.50", null)), {
+    verifiedIncome: "25000.50",
+    lastIncome: "25000.50",
+    verifiedDebt: "",
+    lastDebt: "",
+    startDate: "",
+  });
+  // A first run has nothing to keep.
+  assert.deepEqual(rerunFormFrom(null), form());
+  // A server that doesn't send verified_inputs yet: the last figures are unknown.
+  assert.deepEqual(rerunFormFrom({} as Assessment), form({ lastIncome: null, lastDebt: null }));
+});
+
+test("a prefilled figure left as it is keeps the last run's: nothing is sent for it", () => {
+  assert.deepEqual(rerunPayload(rerunFormFrom(verified("25000.50", "1500.00"))), { payload: {}, problems: [] });
+});
+
+test("emptying a prefilled figure clears it: null, so the declared figure counts again", () => {
+  const last = rerunFormFrom(verified("25000.50", "1500.00"));
+  assert.deepEqual(rerunPayload({ ...last, verifiedIncome: "  " }), { payload: { verified_monthly_income: null }, problems: [] });
+  assert.deepEqual(rerunPayload({ ...last, verifiedDebt: "", verifiedIncome: "30000" }), {
     payload: { verified_monthly_income: "30000", verified_debt_payments: null },
     problems: [],
   });
-  // A cleared field ignores what was typed in it, even text that isn't an amount.
-  assert.deepEqual(rerunPayload(form({ clearIncome: true, verifiedIncome: "abc" })), { payload: { verified_monthly_income: null }, problems: [] });
+});
+
+test("a blank figure with nothing verified before, or with the last one unknown, sends nothing", () => {
+  assert.deepEqual(rerunPayload(form({ lastIncome: "", lastDebt: "" })), { payload: {}, problems: [] });
+  assert.deepEqual(rerunPayload(form({ lastIncome: null, lastDebt: null })), { payload: {}, problems: [] });
 });
 
 test("an amount that isn't pesos with at most two decimals is caught before the round trip", () => {

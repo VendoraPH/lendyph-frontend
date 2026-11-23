@@ -3,17 +3,15 @@
 import { useState } from "react";
 import { FileDown, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useDialogOpening } from "@/hooks/use-dialog-opening";
-import { formatCurrency } from "@/lib/format";
 import { notifyError } from "@/lib/notify";
 import { saveBlob } from "@/lib/save-blob";
 import { loanOriginationService } from "@/services";
 import type { Assessment } from "@/types/loan-origination";
-import { rerunPayload, type RerunForm } from "../_lib/assessment-view";
+import { rerunFormFrom, rerunPayload, type RerunForm } from "../_lib/assessment-view";
 import { ActionDialog } from "./action-dialog";
 
 /** Downloads the server-rendered assessment PDF; each download is audited. */
@@ -35,61 +33,29 @@ export function AssessmentPdfButton({ assessment }: { assessment: Assessment }) 
   );
 }
 
-const EMPTY: RerunForm = { verifiedIncome: "", clearIncome: false, verifiedDebt: "", clearDebt: false, startDate: "" };
-
 /**
- * One verified figure: blank keeps the last run's, a figure replaces it, and
- * "Clear" sends null, which the server reads as not verified (the declared
- * figure counts again). Clearing is offered once there is a last run.
+ * What a verified field says, by where it stands against the figure it opened
+ * on: kept, cleared (the declared figure counts again) or entered.
  */
-function VerifiedField({
-  id,
-  label,
-  placeholder,
-  value,
-  cleared,
-  canClear,
-  hint,
-  onValue,
-  onClear,
-}: {
-  id: string;
-  label: string;
-  placeholder: string;
-  value: string;
-  cleared: boolean;
-  canClear: boolean;
-  hint: string;
-  onValue: (value: string) => void;
-  onClear: (cleared: boolean) => void;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <Label htmlFor={id}>{label}</Label>
-      <Input
-        id={id}
-        inputMode="decimal"
-        placeholder={cleared ? "Not verified" : placeholder}
-        disabled={cleared}
-        value={cleared ? "" : value}
-        onChange={(e) => onValue(e.target.value)}
-      />
-      <p className="text-xs text-muted-foreground">{cleared ? "Cleared: the declared figure counts." : hint}</p>
-      {canClear && (
-        <label className="flex items-center gap-2 text-xs">
-          <Checkbox checked={cleared} onCheckedChange={(on) => onClear(on)} />
-          Clear the verified figure
-        </label>
-      )}
-    </div>
-  );
+function verifiedHint(kind: "income" | "debts", value: string, last: string | null, firstRun: boolean): string {
+  const declared = kind === "income" ? "the declared income counts" : "the declared debts count";
+  if (firstRun) {
+    return kind === "income" ? `From the payslip, ITR or business records. Blank: ${declared}.` : `Blank: ${declared}.`;
+  }
+  if (last === null) return "Leave blank to keep the last run's figure.";
+  const typed = value.trim();
+  if (last !== "" && typed === "") return `Cleared: ${declared} again.`;
+  if (last !== "" && typed === last.trim()) return "The last run's verified figure. Empty it to clear it.";
+  if (last === "" && typed === "") return `Not verified in the last run: ${declared}.`;
+  return "Replaces the last run's figure.";
 }
 
 /**
  * Runs the assessment on the server with the verified figures staff enter.
- * A figure left blank keeps the last run's, a cleared one counts the declared
- * figure again, and the start date is today when blank. The server works out
- * every figure and stores a new revision.
+ * The fields open on the last run's verified figures (`verified_inputs`):
+ * left as they are they're kept, emptied they're cleared (sent as null, so the
+ * declared figure counts again), and the start date is today when blank. The
+ * server works out every figure and stores a new revision.
  */
 export function RunAssessmentDialog({
   applicationId,
@@ -104,18 +70,17 @@ export function RunAssessmentDialog({
   onOpenChange: (open: boolean) => void;
   onDone: () => void;
 }) {
-  const [form, setForm] = useState<RerunForm>(EMPTY);
-  if (useDialogOpening(open, applicationId)) setForm(EMPTY);
+  const [form, setForm] = useState<RerunForm>(() => rerunFormFrom(current));
+  if (useDialogOpening(open, applicationId)) setForm(rerunFormFrom(current));
   const { payload, problems } = rerunPayload(form);
   const set = (patch: Partial<RerunForm>) => setForm((f) => ({ ...f, ...patch }));
-  const verifiedIncome = current?.figures.verified_monthly_income ?? null;
-  const rerun = current !== null;
+  const firstRun = current === null;
 
   return (
     <ActionDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={rerun ? "Run the assessment again" : "Run the assessment"}
+      title={firstRun ? "Run the assessment" : "Run the assessment again"}
       description="The server works out the income, debts, instalment and limits, and keeps each run as a new version."
       confirmLabel="Run assessment"
       successMessage="Assessment saved"
@@ -126,38 +91,31 @@ export function RunAssessmentDialog({
       size="md"
     >
       <div className="grid gap-3 sm:grid-cols-2">
-        <VerifiedField
-          id="verified-income"
-          label="Verified monthly income"
-          placeholder="25000"
-          value={form.verifiedIncome}
-          cleared={form.clearIncome}
-          canClear={rerun && verifiedIncome !== null}
-          hint={
-            !rerun
-              ? "From the payslip, ITR or business records. Blank: the declared income counts."
-              : verifiedIncome === null
-                ? "Leave blank to keep the last run's figure: not entered."
-                : `Leave blank to keep the last run's figure: ${formatCurrency(verifiedIncome)}.`
-          }
-          onValue={(verifiedIncome) => set({ verifiedIncome })}
-          onClear={(clearIncome) => set({ clearIncome })}
-        />
-        <VerifiedField
-          id="verified-debt"
-          label="Verified monthly debt payments"
-          placeholder="3500"
-          value={form.verifiedDebt}
-          cleared={form.clearDebt}
-          canClear={rerun}
-          hint={
-            !rerun
-              ? "Payments to other lenders. Blank: the declared debts count."
-              : "Leave blank to keep the last run's figure. A linked member's Lendy loans are added by the server."
-          }
-          onValue={(verifiedDebt) => set({ verifiedDebt })}
-          onClear={(clearDebt) => set({ clearDebt })}
-        />
+        <div className="space-y-1.5">
+          <Label htmlFor="verified-income">Verified monthly income</Label>
+          <Input
+            id="verified-income"
+            inputMode="decimal"
+            placeholder="Not verified"
+            value={form.verifiedIncome}
+            onChange={(e) => set({ verifiedIncome: e.target.value })}
+          />
+          <p className="text-xs text-muted-foreground">{verifiedHint("income", form.verifiedIncome, form.lastIncome, firstRun)}</p>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="verified-debt">Verified monthly debt payments</Label>
+          <Input
+            id="verified-debt"
+            inputMode="decimal"
+            placeholder="Not verified"
+            value={form.verifiedDebt}
+            onChange={(e) => set({ verifiedDebt: e.target.value })}
+          />
+          <p className="text-xs text-muted-foreground">{verifiedHint("debts", form.verifiedDebt, form.lastDebt, firstRun)}</p>
+        </div>
+        <p className="text-xs text-muted-foreground sm:col-span-2">
+          Debt payments to other lenders; a linked member&apos;s Lendy loans are added by the server.
+        </p>
         <div className="space-y-1.5 sm:col-span-2">
           <Label htmlFor="assessment-start">Loan start date (optional)</Label>
           <Input id="assessment-start" type="date" value={form.startDate} onChange={(e) => set({ startDate: e.target.value })} />

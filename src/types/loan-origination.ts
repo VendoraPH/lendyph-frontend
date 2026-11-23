@@ -567,6 +567,12 @@ export interface Assessment {
   figures: AssessmentFigures;
   /** The figures that count a linked member's loans are withheld from this viewer. */
   member_figures_hidden: boolean;
+  /**
+   * The verified figures staff entered for this run (two-decimal strings; null
+   * when not verified), so the run dialog can open on them. LO-B5; a server
+   * before it leaves them out.
+   */
+  verified_inputs?: { monthly_income: MoneyString | null; debt_payments: MoneyString | null };
   thresholds: AssessmentThresholds;
   checks: AssessmentChecks;
   /** How the instalment was taken, in words. */
@@ -698,12 +704,25 @@ export interface OriginationKpis {
   approval_rate: number | null;
 }
 
+/**
+ * A KPI's change from the period before, worked out on the server by the
+ * executive dashboard's rule: a percentage of the previous figure, or points
+ * for a rate; null when either figure is missing or withheld, or the previous
+ * one is zero.
+ */
+export interface KpiChange {
+  change: number | null;
+  change_unit: "percent" | "points";
+}
+
 export interface OriginationDashboard {
   period: { from: string; to: string };
   /** The period of the same length just before, which `previous` covers. */
   previous_period: { from: string; to: string };
   kpis: OriginationKpis;
   previous: OriginationKpis;
+  /** Each KPI's change from `previous` (LO-B5; a server before it leaves them out). */
+  changes?: Partial<Record<keyof OriginationKpis, KpiChange>>;
   trends: { date: string; completed: number; incomplete: number }[];
   by_status: { status: ApplicationStatus; label: string; count: number }[];
   by_product: { product_id: number | null; product: string; count: number }[];
