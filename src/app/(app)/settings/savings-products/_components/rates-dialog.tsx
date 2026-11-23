@@ -182,7 +182,13 @@ export function RatesDialog({ product, onOpenChange, onAdded }: RatesDialogProps
                     disabled={!canEdit}
                   />
                 </FormField>
-                <ActionButton permission="savings:settings" onClick={add} disabled={submitting} blockedReason={blocker}>
+                <ActionButton
+                  permission="savings:settings"
+                  onClick={add}
+                  disabled={submitting}
+                  blockedReason={blocker}
+                  tooltip={blocker ?? undefined}
+                >
                   {submitting ? "Adding…" : "Add rate"}
                 </ActionButton>
               </div>

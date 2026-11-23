@@ -98,7 +98,13 @@ export function ApprovalSettingsCard({ settings, onSaved }: ApprovalSettingsCard
         </div>
         <div className="flex flex-wrap items-center justify-end gap-3">
           {blocker && <p className="text-xs text-muted-foreground">{blocker}</p>}
-          <ActionButton permission="savings:settings" onClick={save} disabled={submitting} blockedReason={blocker}>
+          <ActionButton
+            permission="savings:settings"
+            onClick={save}
+            disabled={submitting}
+            blockedReason={blocker}
+            tooltip={blocker ?? undefined}
+          >
             {submitting ? "Saving…" : "Save settings"}
           </ActionButton>
         </div>

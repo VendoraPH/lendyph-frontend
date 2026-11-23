@@ -100,7 +100,13 @@ export function TaxRulesCard({ settings, onAdded }: TaxRulesCardProps) {
               disabled={!canEdit}
             />
           </FormField>
-          <ActionButton permission="savings:settings" onClick={add} disabled={submitting} blockedReason={blocker}>
+          <ActionButton
+            permission="savings:settings"
+            onClick={add}
+            disabled={submitting}
+            blockedReason={blocker}
+            tooltip={blocker ?? undefined}
+          >
             {submitting ? "Adding…" : "Add rule"}
           </ActionButton>
         </div>

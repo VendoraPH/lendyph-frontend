@@ -66,6 +66,12 @@ function attribute(node: ts.JsxOpeningLikeElement, name: string): ts.JsxAttribut
   );
 }
 
+/** The text of an attribute's `{…}` expression ("blocker ?? undefined"), or null. */
+function expressionText(attr: ts.JsxAttribute | undefined, file: ts.SourceFile): string | null {
+  const init = attr?.initializer;
+  return init && ts.isJsxExpression(init) && init.expression ? init.expression.getText(file) : null;
+}
+
 function stringValue(attr: ts.JsxAttribute | undefined): string | null {
   const init = attr?.initializer;
   if (!init) return null;
@@ -74,7 +80,13 @@ function stringValue(attr: ts.JsxAttribute | undefined): string | null {
   return null;
 }
 
-/** Lines of a savings:settings button that doesn't give the company-wide reason (an ActionButton with blockedReason). */
+/**
+ * Lines of a savings:settings button that doesn't give the company-wide
+ * reason: an ActionButton with blockedReason (a role holding savings:settings
+ * without all branches), and the same reason as its tooltip (a role without
+ * savings:settings, which gets the permission button and would otherwise read
+ * the generic "Your role doesn't have permission to do this").
+ */
 function writesWithoutReason(source: string, fileName = "file.tsx"): number[] {
   const file = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const lines: number[] = [];
@@ -82,7 +94,10 @@ function writesWithoutReason(source: string, fileName = "file.tsx"): number[] {
     if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
       const tag = node.tagName.getText(file);
       const gated = (tag === "PermissionButton" || tag === "ActionButton") && stringValue(attribute(node, "permission")) === "savings:settings";
-      if (gated && (tag !== "ActionButton" || !attribute(node, "blockedReason"))) {
+      const reason = expressionText(attribute(node, "blockedReason"), file);
+      const tooltip = expressionText(attribute(node, "tooltip"), file);
+      const givesReason = tag === "ActionButton" && reason !== null && tooltip !== null && tooltip.includes(reason);
+      if (gated && !givesReason) {
         lines.push(file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1);
       }
     }
@@ -92,14 +107,16 @@ function writesWithoutReason(source: string, fileName = "file.tsx"): number[] {
   return lines;
 }
 
-test("the guard flags a savings:settings button that doesn't give the company-wide reason", () => {
+test("the guard flags a savings:settings button that doesn't give the company-wide reason, as its tooltip too", () => {
   const source = `
     const a = <PermissionButton permission="savings:settings" onClick={add}>Add</PermissionButton>;
     const b = <ActionButton permission={"savings:settings"} onClick={add}>Add</ActionButton>;
     const c = <ActionButton permission="savings:settings" blockedReason={blocker} onClick={add}>Add</ActionButton>;
-    const d = <PermissionButton permission="savings:view" onClick={open}>Open</PermissionButton>;
+    const d = <ActionButton permission="savings:settings" blockedReason={blocker} tooltip="Not allowed">Add</ActionButton>;
+    const e = <ActionButton permission="savings:settings" blockedReason={blocker} tooltip={blocker ?? undefined}>Add</ActionButton>;
+    const f = <PermissionButton permission="savings:view" onClick={open}>Open</PermissionButton>;
   `;
-  assert.deepEqual(writesWithoutReason(source), [2, 3]);
+  assert.deepEqual(writesWithoutReason(source), [2, 3, 4, 5]);
 });
 
 test("every change on the savings settings and products screens gives the company-wide reason", () => {
@@ -113,6 +130,6 @@ test("every change on the savings settings and products screens gives the compan
   assert.deepEqual(
     offenders,
     [],
-    `Use ActionButton with blockedReason={companyWideBlocker(…)} for these:\n${offenders.join("\n")}`,
+    `Use ActionButton with blockedReason={blocker} and tooltip={blocker ?? undefined} (blocker from companyWideBlocker) for these:\n${offenders.join("\n")}`,
   );
 });

@@ -93,7 +93,12 @@ export function ProductsScreen() {
           </p>
           {blocker && <p className="mt-1 text-xs text-muted-foreground">{blocker}</p>}
         </div>
-        <ActionButton permission="savings:settings" onClick={() => edit(null)} blockedReason={blocker}>
+        <ActionButton
+          permission="savings:settings"
+          onClick={() => edit(null)}
+          blockedReason={blocker}
+          tooltip={blocker ?? undefined}
+        >
           <Plus className="h-4 w-4" /> Add product
         </ActionButton>
       </div>
@@ -183,6 +188,7 @@ export function ProductsScreen() {
                             aria-label={`Edit ${p.name}`}
                             onClick={() => edit(p)}
                             blockedReason={blocker}
+                            tooltip={blocker ?? undefined}
                           >
                             <Pencil className="h-4 w-4" />
                           </ActionButton>
@@ -194,6 +200,7 @@ export function ProductsScreen() {
                               aria-label={`Delete ${p.name}`}
                               onClick={() => setDeleting(p)}
                               blockedReason={blocker}
+                              tooltip={blocker ?? undefined}
                             >
                               <Trash2 className="h-4 w-4" />
                             </ActionButton>

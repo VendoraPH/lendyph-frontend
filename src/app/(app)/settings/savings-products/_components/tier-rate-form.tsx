@@ -125,7 +125,13 @@ export function TierRateForm({ product, today, onAdded, blocker }: TierRateFormP
             disabled={!canEdit}
           />
         </FormField>
-        <ActionButton permission="savings:settings" onClick={save} disabled={submitting} blockedReason={blocker}>
+        <ActionButton
+          permission="savings:settings"
+          onClick={save}
+          disabled={submitting}
+          blockedReason={blocker}
+          tooltip={blocker ?? undefined}
+        >
           {submitting ? "Adding…" : "Add rates"}
         </ActionButton>
       </div>
