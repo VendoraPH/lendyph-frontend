@@ -67,11 +67,16 @@ import { FIT_CLASSES } from "@/lib/page-fill";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
 import { completeRows } from "@/lib/paginate";
-import { storedPrimaryBranch, userEditChanges, userEditPayload, withoutUnchangedPrimary } from "@/lib/user-edit";
+import {
+  userEditChanges,
+  userEditForm,
+  userEditPayload,
+  withoutUnchangedPrimary,
+  type UserEditForm,
+} from "@/lib/user-edit";
 import {
   branchViewer,
   primaryBranchId,
-  userBranchIds,
   userBranches,
   visibleBranches,
   worksOutsideCallerBranches,
@@ -82,6 +87,7 @@ import {
   toUserList,
   type UserListShortfall,
 } from "@/lib/user-list";
+import { useDialogOpening } from "@/hooks";
 import { useAuthStore } from "@/store";
 import { userService, roleService, branchService } from "@/services";
 import type { User, UserStatus } from "@/types";
@@ -603,15 +609,11 @@ function EditUserDialog({
   const callerRoles = useAuthStore((s) => s.user?.roles);
   const callerId = useAuthStore((s) => s.user?.id);
   const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
-  const [form, setForm] = useState({
-    first_name: user.first_name,
-    last_name: user.last_name,
-    email: user.email,
-    mobile_number: user.mobile_number ?? "",
-    role: user.roles?.[0] ?? "",
-    branch_ids: userBranchIds(user),
-    primary_branch_id: storedPrimaryBranch(user),
-  });
+  const [form, setForm] = useState<UserEditForm>(() => userEditForm(user));
+  // Filled from the user each time the dialog opens, so Cancel throws away
+  // what wasn't saved: a primary branch picked and then cancelled can't ride
+  // along with a later edit.
+  if (useDialogOpening(open, user)) setForm(userEditForm(user));
 
   const update = (field: string, value: string | number | number[]) =>
     setForm((prev) => ({ ...prev, [field]: value }));

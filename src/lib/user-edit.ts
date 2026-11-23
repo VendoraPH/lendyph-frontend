@@ -21,6 +21,25 @@ export interface UserEditForm {
 }
 
 /**
+ * The form as the Edit User dialog opens on `user`: every field from the
+ * record as it is now. The dialog fills it each time it opens, so values left
+ * unsaved by a Cancel are thrown away, and a primary branch picked and then
+ * cancelled can't ride along with a later edit. A fresh object (and branch
+ * list) each time, so nothing edited in one opening reaches the next.
+ */
+export function userEditForm(user: User): UserEditForm {
+  return {
+    first_name: user.first_name,
+    last_name: user.last_name,
+    email: user.email,
+    mobile_number: user.mobile_number ?? "",
+    role: user.roles?.[0] ?? "",
+    branch_ids: userBranchIds(user),
+    primary_branch_id: storedPrimaryBranch(user),
+  };
+}
+
+/**
  * The payload the dialog sends. Kept here rather than inline in the component
  * so the "did anything change?" question below is asked of the SAME object the
  * request carries — the two cannot drift.

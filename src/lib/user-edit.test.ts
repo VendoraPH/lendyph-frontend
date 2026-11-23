@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { userEditChanges, userEditPayload, withoutUnchangedPrimary, type UserEditForm } from "./user-edit";
+import { userEditChanges, userEditForm, userEditPayload, withoutUnchangedPrimary, type UserEditForm } from "./user-edit";
 import type { User } from "@/types";
 
 const user = {
@@ -221,4 +221,43 @@ test("the PUT leaves out a primary branch the user already has, and keeps a new 
 
   const moved = withoutUnchangedPrimary(userEditPayload({ ...bothBranches, primary_branch_id: null }), twoBranches);
   assert.equal(moved.primary_branch_id, null);
+});
+
+// ── Filling the form as the dialog opens ──
+
+test("the form is filled from the user, so a form nobody touched changes nothing", () => {
+  assert.deepEqual(userEditForm(twoBranches), {
+    first_name: "Juan",
+    last_name: "Dela Cruz",
+    email: "juan@coop.ph",
+    mobile_number: "09171234567",
+    role: "loan_officer",
+    branch_ids: [3, 9],
+    primary_branch_id: 3,
+  });
+  assert.deepEqual(userEditChanges(twoBranches, userEditForm(twoBranches)), []);
+});
+
+test("a user with no mobile number or role fills those fields empty", () => {
+  const bare = { ...user, mobile_number: null, roles: [] } as unknown as User;
+  const form = userEditForm(bare);
+  assert.equal(form.mobile_number, "");
+  assert.equal(form.role, "");
+});
+
+test("Organisation-wide fills null, and a payload with no primary branch fills none chosen", () => {
+  assert.equal(userEditForm({ ...twoBranches, primary_branch_id: null } as unknown as User).primary_branch_id, null);
+  const unknown = { ...twoBranches } as Record<string, unknown>;
+  delete unknown.primary_branch_id;
+  assert.equal(userEditForm(unknown as unknown as User).primary_branch_id, undefined);
+});
+
+test("each fill is a fresh copy, so values left unsaved are gone when it opens again", () => {
+  const first = userEditForm(twoBranches);
+  first.branch_ids.push(12);
+  first.primary_branch_id = 12;
+  first.first_name = "Unsaved";
+  assert.deepEqual(userEditForm(twoBranches).branch_ids, [3, 9]);
+  assert.equal(userEditForm(twoBranches).primary_branch_id, 3);
+  assert.equal(userEditForm(twoBranches).first_name, "Juan");
 });
