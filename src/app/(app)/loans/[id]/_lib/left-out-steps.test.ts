@@ -88,3 +88,101 @@ describe("approvalChainItems", () => {
     assert.equal(new Set(keys).size, keys.length);
   });
 });
+
+describe("approvalChainItems with after_step_id: where the server says each one goes", () => {
+  // Processor, A, C, Release kept; B (and D) left out.
+  const kept = [step(0, "submit", "Processor"), step(1, "approve", "A"), step(2, "approve", "C"), step(3, "release", "Release")];
+  const left = (name: string, after: string | number | null | undefined): LoanApprovalLeftOutStep => {
+    const entry: LoanApprovalLeftOutStep = {
+      step_id: name.toLowerCase(),
+      name,
+      min_principal: "50000.00",
+      description: `Step "${name}" left out.`,
+    };
+    return after === undefined ? entry : { ...entry, after_step_id: after };
+  };
+
+  test("A, B (skipped), C, Release: B sits right after A, the kept step the server names", () => {
+    assert.deepEqual(shape(approvalChainItems(kept, [left("B", "a")])), [
+      "Processor#0",
+      "A#1",
+      "skipped:B",
+      "C#2",
+      "Release#3",
+    ]);
+  });
+
+  test("the same chain without after_step_id still puts B before Release, as before", () => {
+    assert.deepEqual(shape(approvalChainItems(kept, [left("B", undefined)])), [
+      "Processor#0",
+      "A#1",
+      "C#2",
+      "skipped:B",
+      "Release#3",
+    ]);
+  });
+
+  test("null puts it before the first kept approval step", () => {
+    assert.deepEqual(shape(approvalChainItems(kept, [left("B", null)])), [
+      "Processor#0",
+      "skipped:B",
+      "A#1",
+      "C#2",
+      "Release#3",
+    ]);
+  });
+
+  test("several after the same kept step keep the server's order", () => {
+    assert.deepEqual(shape(approvalChainItems(kept, [left("B", "a"), left("D", "a")])), [
+      "Processor#0",
+      "A#1",
+      "skipped:B",
+      "skipped:D",
+      "C#2",
+      "Release#3",
+    ]);
+  });
+
+  test("each goes to its own place when they follow different steps", () => {
+    assert.deepEqual(shape(approvalChainItems(kept, [left("B", "a"), left("D", "c"), left("E", null)])), [
+      "Processor#0",
+      "skipped:E",
+      "A#1",
+      "skipped:B",
+      "C#2",
+      "skipped:D",
+      "Release#3",
+    ]);
+  });
+
+  test("a step id the round didn't keep falls back to before Release", () => {
+    assert.deepEqual(shape(approvalChainItems(kept, [left("B", "gone")])), [
+      "Processor#0",
+      "A#1",
+      "C#2",
+      "skipped:B",
+      "Release#3",
+    ]);
+  });
+
+  test("a step id matches whether it comes as a number or as text", () => {
+    const afterA = ["Processor#0", "A#1", "skipped:B", "C#2", "Release#3"];
+    const numbered = kept.map((s, i) => ({ ...s, step_id: i + 1 }));
+    assert.deepEqual(shape(approvalChainItems(numbered, [left("B", "2")])), afterA);
+    const textual = kept.map((s, i) => ({ ...s, step_id: String(i + 1) }));
+    assert.deepEqual(shape(approvalChainItems(textual, [left("B", 2)])), afterA);
+  });
+
+  test("null with no kept approval step falls back to before Release", () => {
+    const bare = [step(0, "submit", "Processor"), step(1, "release", "Release")];
+    assert.deepEqual(shape(approvalChainItems(bare, [left("B", null)])), ["Processor#0", "skipped:B", "Release#1"]);
+  });
+
+  test("the kept steps keep their numbers wherever the left-out ones go", () => {
+    const items = approvalChainItems(kept, [left("B", "a"), left("D", null)]);
+    assert.deepEqual(
+      items.flatMap((item) => (item.type === "step" ? [item.position] : [])),
+      [0, 1, 2, 3],
+    );
+  });
+});

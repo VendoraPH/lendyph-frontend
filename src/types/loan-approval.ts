@@ -93,6 +93,12 @@ export interface LoanApprovalLeftOutStep {
   min_principal: string;
   /** The server's sentence, shown as it is. */
   description: string;
+  /**
+   * The `step_id` of the kept step it follows in the loan's chain, or null
+   * (it comes before the first kept approval step). Absent on an API from
+   * before it: the card then puts it just before Release.
+   */
+  after_step_id?: number | string | null;
 }
 
 export interface LoanApprovalState {
