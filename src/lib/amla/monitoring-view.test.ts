@@ -26,12 +26,15 @@ import {
   amlaDetectionDraft,
   amlaDetectionRuleRows,
   amlaListTotalText,
-  amlaPendingRequestId,
   amlaPublicText,
   amlaPriorityTone,
   amlaRiskChangeBody,
   amlaRiskDraft,
   amlaRiskRulesView,
+  amlaParamFieldLabel,
+  amlaRuleParamKind,
+  amlaRuleParamLabel,
+  amlaRuleVersionLine,
   amlaTransactionRow,
 } from "./monitoring-view";
 
@@ -102,7 +105,7 @@ test("an alert row reads in words, with the server's ₱ total", () => {
 });
 
 test("a window over several days, one transaction, history screening and a head-office alert read as such", () => {
-  const row = amlaAlertRow({ ...ALERT, window_start: "2026-11-14", window_end: "2026-11-20", transactions_count: 1, from_history: true, branch: { id: null, name: "Head office" }, detected_at: null });
+  const row = amlaAlertRow({ ...ALERT, window_start: "2026-11-14", window_end: "2026-11-20", transactions_count: 1, from_history: true, branch: { id: null, name: "Organisation-wide" }, detected_at: null });
   assert.equal(row.window, `${formatDate("2026-11-14")} to ${formatDate("2026-11-20")}`);
   assert.equal(row.transactions, "1 transaction");
   assert.equal(row.history, "From history screening");
@@ -189,7 +192,7 @@ const CTR: AmlaCtrRow = {
   direction_words: "Money in",
   channel_words: "Cash",
   subject: { type: "walk_in", id: 4, name: "Pedro Santos", code: NA, account: NA },
-  branch: { id: null, name: "Head office" },
+  branch: { id: null, name: "Organisation-wide" },
   occurred_on: "2026-11-20",
   from_history: false,
   event_reversed_at: null,
@@ -392,9 +395,82 @@ test("server notes never show internal build codes", () => {
   assert.equal(amlaPublicText("Not available: Lendy records no payer or counterparty."), "Not available: Lendy records no payer or counterparty.");
 });
 
-test("a waiting rule change is the first pending request the server lists, if any", () => {
-  assert.equal(amlaPendingRequestId({ data: [{ id: 12 }, { id: 11 }], meta: { current_page: 1, per_page: 25, total: 2, last_page: 1 } }), 12);
-  assert.equal(amlaPendingRequestId({ data: [], meta: { current_page: 1, per_page: 25, total: 0, last_page: 1 } }), null);
+test("a branch reads the server's own words, never rewritten here", () => {
+  assert.equal(amlaAlertRow({ ...ALERT, branch: { id: null, name: "Organisation-wide" } }).branch, "Organisation-wide");
+  assert.equal(amlaCtrRow({ ...CTR, branch: { id: null, name: "Organisation-wide (no branch)" } }).branch, "Organisation-wide (no branch)");
+});
+
+const WITH_PARAMETERS: AmlaDetectionRulesVersion = {
+  ...RULES,
+  rules: [
+    {
+      code: "H",
+      rule: "GCash and digital payment anomalies",
+      description: "Many…",
+      active: true,
+      priority: "medium",
+      priority_words: "Medium",
+      params: { min_transactions: 5, min_total: "100000.00", min_new: "2500.50" },
+      parameters: [
+        { name: "min_transactions", label: "Fewest GCash transactions in a day", kind: "count", value: 5 },
+        { name: "min_total", label: "Smallest day's GCash total", kind: "peso", value: "100000.00" },
+        { name: "min_new", label: "A parameter added later", kind: "peso", value: "2500.50" },
+      ],
+      availability: "Available",
+    },
+  ],
+};
+
+test("each rule parameter reads the server's own label and kind", () => {
+  assert.deepEqual(amlaDetectionRuleRows(WITH_PARAMETERS)[0].params, [
+    "Fewest GCash transactions in a day: 5",
+    "Smallest day's GCash total: ₱100,000.00",
+    "A parameter added later: ₱2,500.50",
+  ]);
+});
+
+test("the change form types each parameter by the server's kind, a new one included", () => {
+  const draft = amlaDetectionDraft(WITH_PARAMETERS);
+  draft.H.params.min_new = "3000";
+  const result = amlaDetectionChangeBody(WITH_PARAMETERS, draft, "Review");
+  assert.ok("body" in result);
+  assert.deepEqual(result.body.definition.H.params, { min_transactions: 5, min_total: "100000.00", min_new: "3000" });
+  draft.H.params.min_new = "3,000";
+  assert.deepEqual(amlaDetectionChangeBody(WITH_PARAMETERS, draft, "Review"), {
+    error: "Rule H, A parameter added later: give an amount in pesos with up to two decimals.",
+  });
+});
+
+test("a rules version says which version it was asked from", () => {
+  assert.equal(amlaRuleVersionLine({ ...RULES, version: 3, base_version: 2 }), "Rules version 3, asked from version 2");
+  assert.equal(amlaRuleVersionLine({ ...RULES, version: 1, base_version: null }), "Rules version 1, the starting rules");
+  assert.equal(amlaRuleVersionLine({ ...RULES, version: 2 }), "Rules version 2");
+});
+
+test("rule L's note reads as the server words it", () => {
+  const note = "Not available yet: no watchlist match has been found to raise.";
+  const rows = amlaDetectionRuleRows({ ...RULES, rules: [{ ...RULES.rules[2], code: "L", availability: note }] });
+  assert.equal(rows[0].availability, note);
+});
+
+test("the change dialog labels and types each parameter as the server does, its own copy only as a fallback", () => {
+  const rule = WITH_PARAMETERS.rules[0];
+  assert.equal(amlaRuleParamLabel(rule, "min_transactions"), "Fewest GCash transactions in a day");
+  assert.equal(amlaRuleParamKind(rule, "min_new"), "peso");
+  const older = { ...rule, parameters: undefined };
+  assert.equal(amlaRuleParamLabel(older, "min_transactions"), "Fewest transactions");
+  assert.equal(amlaRuleParamKind(older, "min_total"), "peso");
+});
+
+test("a parameter field adds its unit only when the server's label doesn't already carry it", () => {
+  assert.equal(amlaParamFieldLabel("Share that leaves again (%)", "percent"), "Share that leaves again (%)");
+  assert.equal(amlaParamFieldLabel("Minimum share of the release (%)", "percent"), "Minimum share of the release (%)");
+  assert.equal(amlaParamFieldLabel("Within days", "days"), "Within days");
+  assert.equal(amlaParamFieldLabel("Smallest amount (₱)", "peso"), "Smallest amount (₱)");
+  assert.equal(amlaParamFieldLabel("Share that leaves again", "percent"), "Share that leaves again (%)");
+  assert.equal(amlaParamFieldLabel("Within", "days"), "Within (days)");
+  assert.equal(amlaParamFieldLabel("Smallest amount", "peso"), "Smallest amount (₱)");
+  assert.equal(amlaParamFieldLabel("Fewest transactions", "count"), "Fewest transactions");
 });
 
 test("closing an alert needs a reason of 3 to 2,000 characters, as the server checks", () => {
