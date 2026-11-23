@@ -38,7 +38,7 @@ export default function DocumentQueuePage() {
 
   return (
     <div className={cn(FIT_CLASSES.section, "gap-3")}>
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex shrink-0 flex-wrap items-center gap-3">
         <SearchInput
           value={filters.search}
           placeholder="Applicant or reference, then Enter"

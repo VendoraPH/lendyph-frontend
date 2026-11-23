@@ -40,7 +40,7 @@ export default function ApplicationLinksPage() {
 
   return (
     <div className={cn(FIT_CLASSES.section, "gap-3")}>
-      <div className="flex justify-end">
+      <div className="flex shrink-0 justify-end">
         <PermissionButton permission="loan_origination:settings" size="sm" onClick={() => setEditing({ link: null })}>
           <Plus className="mr-1 h-4 w-4" /> New link
         </PermissionButton>

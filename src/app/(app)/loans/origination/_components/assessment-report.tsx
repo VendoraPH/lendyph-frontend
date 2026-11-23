@@ -16,6 +16,7 @@ import {
   figureText,
   limitWords,
 } from "../_lib/assessment-view";
+import { termText } from "../_lib/term";
 
 function Limit({ label, display, limit, passed }: { label: string; display: string; limit: string; passed: boolean | null }) {
   return (
@@ -52,10 +53,10 @@ function Flags({ title, items, tone }: { title: string; items: string[]; tone: T
  * as sent. Figures that count a linked member's loans read "Withheld" for a
  * viewer the server withholds them from. A guide for staff, never a decision.
  */
-export function AssessmentReport({ assessment: a }: { assessment: Assessment }) {
+export function AssessmentReport({ assessment: a, termUnit }: { assessment: Assessment; termUnit?: string }) {
   const request: [string, string | null][] = [
     ["Amount requested", a.requested_amount === null ? null : formatCurrency(a.requested_amount)],
-    ["Term", a.requested_term === null ? null : String(a.requested_term)],
+    ["Term", termText(a.requested_term, termUnit)],
     ["Payment schedule", inWords(a.frequency)],
     ["Loan start date", a.start_date ? formatDate(a.start_date) : null],
     ["Instalment taken as", a.instalment_basis],

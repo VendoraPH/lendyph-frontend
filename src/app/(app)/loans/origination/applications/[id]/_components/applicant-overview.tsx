@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { EMPLOYMENT_TYPES, FREQUENCY_LABELS, INCOME_SOURCE_LABELS, RELEASE_METHODS, inWords } from "@/lib/loan-origination";
 import type { ApplicationDetail, DeclaredLine, IncomeFrequency } from "@/types/loan-origination";
+import { termText } from "../../../_lib/term";
 
 type Row = [label: string, value: string | null | undefined];
 
@@ -56,7 +57,7 @@ const frequency = (f: IncomeFrequency | "") => (f ? FREQUENCY_LABELS[f] : null);
  * the server. Without `borrowers:view` and the branch, contacts are masked and
  * address lines read "On file".
  */
-export function ApplicantOverview({ application: a }: { application: ApplicationDetail }) {
+export function ApplicantOverview({ application: a, termUnit }: { application: ApplicationDetail; termUnit?: string }) {
   const { personal: p, employment: e, expenses: x, loan: l } = a.draft;
   const totals = a.declared_totals;
   const name = [p.first_name, p.middle_name, p.last_name, p.suffix].filter(Boolean).join(" ");
@@ -96,7 +97,7 @@ export function ApplicantOverview({ application: a }: { application: Application
           rows={[
             ["Loan product", a.loan_product_name],
             ["Amount", a.requested_amount === null ? null : formatCurrency(a.requested_amount)],
-            ["Term", a.requested_term === null ? null : String(a.requested_term)],
+            ["Term", termText(a.requested_term, termUnit)],
             ["Payment frequency", inWords(l.frequency)],
             ["Purpose", l.purpose],
             ["Release method", inWords(l.release_method, RELEASE_METHODS)],

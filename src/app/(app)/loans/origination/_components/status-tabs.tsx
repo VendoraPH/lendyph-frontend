@@ -40,7 +40,7 @@ export function StatusTabs<S extends string>({
     </button>
   );
   return (
-    <div className="flex gap-1.5 overflow-x-auto py-0.5" role="group" aria-label="Filter by status">
+    <div className="flex shrink-0 gap-1.5 overflow-x-auto py-0.5" role="group" aria-label="Filter by status">
       {chip(undefined, "All", total)}
       {statuses.map((s) => chip(s, labels[s], stats?.[s] ?? (stats ? 0 : undefined)))}
     </div>

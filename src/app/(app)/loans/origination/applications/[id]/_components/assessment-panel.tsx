@@ -14,7 +14,16 @@ import { canRunAssessment } from "../../../_lib/assessment-view";
  * see it. Running it and saving notes need `loan_origination:assess`, while
  * the application is under review and not handed off.
  */
-export function AssessmentPanel({ application: a, onChanged }: { application: ApplicationDetail; onChanged: () => void }) {
+export function AssessmentPanel({
+  application: a,
+  onChanged,
+  termUnitFor,
+}: {
+  application: ApplicationDetail;
+  onChanged: () => void;
+  /** The unit of a loan product's term, when the page could read the products. */
+  termUnitFor: (productId: number | null) => string | undefined;
+}) {
   const [open, setOpen] = useState<"run" | "findings" | null>(null);
   const assessment = a.assessment;
   const assessable = canRunAssessment(a);
@@ -44,7 +53,7 @@ export function AssessmentPanel({ application: a, onChanged }: { application: Ap
               {runButton}
               <AssessmentPdfButton assessment={assessment} />
             </div>
-            <AssessmentReport assessment={assessment} />
+            <AssessmentReport assessment={assessment} termUnit={termUnitFor(assessment.loan_product_id)} />
             {(assessment.officer_findings || assessment.recommendations) && (
               <div className="grid gap-3 rounded-lg border p-3 text-sm sm:grid-cols-2">
                 <div>

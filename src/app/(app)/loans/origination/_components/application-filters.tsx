@@ -33,7 +33,7 @@ export function ApplicationFilters({
   const set = (patch: Partial<ApplicationListFilters>) => onChange({ ...value, ...patch, page: 1 });
 
   return (
-    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+    <div className="grid shrink-0 gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
       <SearchInput
         className="sm:col-span-2 sm:w-full"
         value={value.search}
