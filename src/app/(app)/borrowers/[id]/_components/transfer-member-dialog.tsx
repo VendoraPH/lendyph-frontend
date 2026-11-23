@@ -128,7 +128,7 @@ export function TransferMemberDialog({ borrower, open, onOpenChange, onTransferr
               >
                 <SelectTrigger
                   id={`${id}-branch`}
-                  className="h-9 w-full"
+                  className="w-full"
                   aria-required="true"
                   aria-invalid={branchMessage ? true : undefined}
                   aria-describedby={branchMessage ? `${id}-branch-error` : undefined}
