@@ -42,7 +42,7 @@ export function OptionSelect({ id, value, onChange, options, placeholder, classN
     >
       <SelectTrigger
         id={id}
-        className={cn(className ?? "w-full", wrap && "min-h-8 py-1.5 whitespace-normal data-[size=default]:h-auto")}
+        className={cn(className ?? "w-full", wrap && "min-h-8 py-[5px] whitespace-normal data-[size=default]:h-auto")}
       >
         <SelectValue placeholder={placeholder} className={cn(wrap && "overflow-visible! break-words whitespace-normal!")} />
       </SelectTrigger>
