@@ -151,6 +151,8 @@ test("the Prepare step says valid IDs and photos are not imported, and that old 
   assert.match(MEMBERS_TEMPLATE_NOTE, /Valid IDs and member photos are files/);
   assert.match(MEMBERS_TEMPLATE_NOTE, /member's profile/);
   assert.match(MEMBERS_TEMPLATE_NOTE, /made before Date Hired and the membership columns/);
+  assert.match(MEMBERS_TEMPLATE_NOTE, /Member Type reads Regular, the default/);
+  assert.doesNotMatch(MEMBERS_TEMPLATE_NOTE, /those fields left blank/, "Member Type is not left blank");
   assert.doesNotMatch(MEMBERS_TEMPLATE_NOTE, /[Bb]orrower/, "Member, never Borrower");
 
   const source = readFileSync(

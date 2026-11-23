@@ -103,6 +103,12 @@ export interface ImportColumn {
   readonly serverRepair?: "contact-number" | "member-number";
   /** Required only when `field` resolves to `equals`. */
   readonly requiredWhen?: { readonly field: string; readonly equals: string };
+  /**
+   * What the app stores when the cell is blank or the column is absent, in
+   * words: the column's own default (Member Type: Regular). Absent, a blank
+   * stays blank.
+   */
+  readonly defaultWhenBlank?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -161,7 +167,7 @@ export const CUSTOMER_COLUMNS = [
   // "not set", exactly as in a file made before them.
   { key: "date_hired", label: "Date Hired", required: false, type: "date" },
   { key: "membership_date", label: "Membership Date", required: false, type: "date" },
-  { key: "member_type", label: "Member Type", required: false, type: "enum", options: MEMBER_TYPE_OPTIONS },
+  { key: "member_type", label: "Member Type", required: false, type: "enum", options: MEMBER_TYPE_OPTIONS, defaultWhenBlank: "Regular" },
   { key: "membership_number", label: "Membership Number", required: false, type: "text", maxLength: 30, serverRepair: "member-number" },
 ] as const satisfies readonly ImportColumn[];
 
@@ -266,12 +272,24 @@ export function expectedWidthWords(shape: ImportShape): string {
   return `${current}, or ${earlier} in the earlier layout without ${listWords(appendedColumns(shape).map((column) => column.label))}`;
 }
 
-/** What a file in the earlier layout is told about the columns it lacks. */
+/**
+ * What a file in the earlier layout is told about the columns it lacks, and
+ * truthfully: a column with a default (Member Type) is not left blank, it
+ * reads as that default.
+ */
 export function earlierLayoutNote(shape: ImportShape, width: number): string | null {
   if (!isEarlierLayout(shape, width)) return null;
+  const appended = appendedColumns(shape);
+  const blank = appended.filter((column) => column.defaultWhenBlank === undefined).map((column) => column.label);
+  const outcomes = [
+    ...(blank.length > 0 ? [`with ${listWords(blank)} left blank`] : []),
+    ...appended
+      .filter((column) => column.defaultWhenBlank !== undefined)
+      .map((column) => `${column.label} read as ${column.defaultWhenBlank}, the default`),
+  ];
   return `This file is in the earlier ${width}-column layout, without ${listWords(
-    appendedColumns(shape).map((column) => column.label),
-  )}. Its rows import as before, with those fields left blank.`;
+    appended.map((column) => column.label),
+  )}. Its rows import as before, ${outcomes.join(", and ")}.`;
 }
 
 /**

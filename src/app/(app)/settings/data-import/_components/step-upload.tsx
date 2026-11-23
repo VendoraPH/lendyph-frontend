@@ -37,7 +37,7 @@ import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress
 import { Spinner } from "@/components/ui/spinner";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { api } from "@/lib/api-client";
-import { getErrorMessage } from "@/lib/api-error";
+import { getErrorMessage, httpStatusOf } from "@/lib/api-error";
 import { CSV_FILE_ACCEPT } from "@/lib/csv-file";
 import { todayISO } from "@/lib/format";
 import {
@@ -57,6 +57,7 @@ import {
   type ChunkUploadFileState,
   type DigestMismatch,
 } from "../_hooks/use-chunk-upload";
+import { keepsRunForUpload } from "../_hooks/use-import-reattach";
 
 /* ------------------------------------------------------------------ */
 /* The seam                                                             */
@@ -80,6 +81,12 @@ export interface StepUploadProps {
   runId: number | null;
   /** Fired once, with the id of the run this step opened. */
   onRunCreated: (id: number) => void;
+  /**
+   * The run turned out to be finished (completed, failed or cancelled). A
+   * finished run never takes another upload: the wizard forgets it, and this
+   * step opens a new run with the same files.
+   */
+  onRunFinished: () => void;
   /** Back to the pre-check step. */
   onBack: () => void;
   /** Every file of the run is on the server and verified. */
@@ -152,6 +159,7 @@ export function StepUpload({
   precheck,
   runId,
   onRunCreated,
+  onRunFinished,
   onBack,
   onUploaded,
   className,
@@ -285,7 +293,7 @@ export function StepUpload({
     onUploaded();
   }, [onUploaded]);
 
-  const { state, start, resend } = useChunkUpload({
+  const { state, serverStatus, start, resend } = useChunkUpload({
     runId,
     files: merged,
     advertisedChunkSize: chunkSize,
@@ -299,6 +307,15 @@ export function StepUpload({
     setRepicked((current) => ({ ...current, [kind]: file }));
   }, []);
 
+  // A run the server says has finished is never uploaded into: it is handed
+  // back to be forgotten, and this step opens a new run. Only this run's own
+  // status counts, never one read for the run before it.
+  useEffect(() => {
+    if (runId !== null && serverStatus?.id === runId && !keepsRunForUpload(serverStatus)) {
+      onRunFinished();
+    }
+  }, [runId, serverStatus, onRunFinished]);
+
   const cancelAndGoBack = useCallback(async () => {
     if (runId === null) {
       onBack();
@@ -308,12 +325,19 @@ export function StepUpload({
     try {
       await dataImportService.cancel(runId);
     } catch (err) {
-      notifyError(err, "Could not cancel this run.");
+      // A finished run cannot be cancelled (409), and never takes another
+      // upload: forget it, so going back and on opens a new run instead of
+      // landing in this one again.
+      const finished =
+        httpStatusOf(err) === 409 &&
+        !keepsRunForUpload(await dataImportService.status(runId).catch(() => null));
+      if (finished) onRunFinished();
+      else notifyError(err, "Could not cancel this run.");
     } finally {
       setCancelling(false);
       onBack();
     }
-  }, [runId, onBack]);
+  }, [runId, onBack, onRunFinished]);
 
   const assembled = state.phase === "assembled";
   const busy =

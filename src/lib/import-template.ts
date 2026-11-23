@@ -31,7 +31,7 @@ export const IMPORT_TEMPLATES: readonly ImportTemplate[] = [
  * so they have no column.
  */
 export const MEMBERS_TEMPLATE_NOTE =
-  "Valid IDs and member photos are files, so the import can't carry them: add them on each member's profile after the import. A members file made before Date Hired and the membership columns were added still imports, with those fields left blank.";
+  "Valid IDs and member photos are files, so the import can't carry them: add them on each member's profile after the import. A members file made before Date Hired and the membership columns were added still imports: its members get no date hired, membership date or membership number, and Member Type reads Regular, the default.";
 
 /**
  * The template's text: one header row, quoted per RFC 4180 where a label holds

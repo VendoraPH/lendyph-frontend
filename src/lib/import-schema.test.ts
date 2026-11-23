@@ -86,8 +86,12 @@ test("the four new columns are optional and typed as the app stores them", () =>
   assert.equal(column("customer", "membership_number").maxLength, 30);
 });
 
-test("only a file in the earlier layout gets the note that its new fields stay blank", () => {
-  assert.match(earlierLayoutNote("customer", 22) ?? "", /Date Hired, Membership Date, Member Type and Membership Number/);
+test("only a file in the earlier layout gets the note, and it says what its rows get", () => {
+  // Member Type is not left blank: the column's default, Regular, is stored.
+  assert.equal(
+    earlierLayoutNote("customer", 22),
+    "This file is in the earlier 22-column layout, without Date Hired, Membership Date, Member Type and Membership Number. Its rows import as before, with Date Hired, Membership Date and Membership Number left blank, and Member Type read as Regular, the default.",
+  );
   assert.equal(earlierLayoutNote("customer", 26), null);
   assert.equal(earlierLayoutNote("customer", 24), null);
   assert.equal(earlierLayoutNote("loans", 18), null);

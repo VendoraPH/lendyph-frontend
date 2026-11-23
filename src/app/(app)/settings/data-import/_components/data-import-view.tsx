@@ -36,6 +36,7 @@ import type { ImportRunStatus } from "@/types/data-import";
 
 import {
   reattachProbeLabel,
+  seededRunId,
   useImportReattach,
   type ImportReattachHit,
   type ReattachProbe,
@@ -269,7 +270,9 @@ export function DataImportView() {
   // paints the intermediate result.
   if (!checking && hit && seededHit !== hit) {
     setSeededHit(hit);
-    setRunId(hit.runId);
+    // A finished run is kept only to show its result; on step 1 it is the
+    // prior-import notice, and the next Continue opens a new run.
+    setRunId(seededRunId(hit));
     setBranchId(hit.status.branch_id ?? null);
     setStep(hit.step);
   }
@@ -290,6 +293,15 @@ export function DataImportView() {
     setPrecheck(null);
     setFiles(NO_FILES);
     setStep("prepare");
+  }, []);
+
+  /**
+   * A finished run never takes another upload. Forgotten here, the files and
+   * the answers stay, and the upload opens a new run.
+   */
+  const forgetRun = useCallback(() => {
+    clearImportSession();
+    setRunId(null);
   }, []);
 
   const currentIndex = IMPORT_STEPS.indexOf(step);
@@ -381,6 +393,7 @@ export function DataImportView() {
             precheck={precheck}
             runId={runId}
             onRunCreated={setRunId}
+            onRunFinished={forgetRun}
             onBack={() => setStep("check")}
             onUploaded={() => setStep("processing")}
           />
