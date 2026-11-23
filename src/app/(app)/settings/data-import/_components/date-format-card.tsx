@@ -26,7 +26,7 @@
 import { AlertTriangle, CalendarDays, Check, HelpCircle, XCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { formatCount } from "@/lib/report-format";
+import { formatCount, formatCountOf } from "@/lib/report-format";
 import type { DateColumnStats, DateOrder } from "@/lib/import-date";
 import type { DateColumnFinding } from "../_hooks/use-file-precheck";
 import { describeIsoDate } from "../_hooks/use-file-precheck";
@@ -75,7 +75,7 @@ function StatsLine({ stats }: { stats: DateColumnStats }) {
 
   return (
     <p className="text-xs text-muted-foreground">
-      {formatCount(stats.total)} values: {parts.length > 0 ? parts.join(", ") : "none"}.
+      {formatCountOf(stats.total, "value")}: {parts.length > 0 ? parts.join(", ") : "none"}.
     </p>
   );
 }

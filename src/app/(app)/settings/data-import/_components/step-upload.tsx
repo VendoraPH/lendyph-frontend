@@ -112,6 +112,54 @@ export function chunkLabel(currentIndex: number | null, totalChunks: number): st
   return `Piece ${currentIndex + 1} of ${totalChunks}`;
 }
 
+/** One file as the create-run request declares it. */
+interface DeclaredFile {
+  filename: string;
+  size_bytes: number;
+  sha256: string;
+}
+
+const DECLARED_ORDER: readonly ImportFileKind[] = ["customers", "loans"];
+
+/**
+ * The create-run `files`: the members file, and the loans file only when one
+ * was picked. The server refuses a loans file without its members file, and
+ * accepts members alone (`StoreCsvImportRunRequest`).
+ */
+export function declaredFiles(
+  picked: Partial<Record<ImportFileKind, { name: string; size: number } | null>>,
+  digests: Partial<Record<ImportFileKind, string | undefined>>,
+): Partial<Record<ImportFileKind, DeclaredFile>> {
+  const declared: Partial<Record<ImportFileKind, DeclaredFile>> = {};
+  for (const kind of DECLARED_ORDER) {
+    const file = picked[kind];
+    const sha256 = digests[kind];
+    if (file && sha256) declared[kind] = { filename: file.name, size_bytes: file.size, sha256 };
+  }
+  return declared;
+}
+
+/** How the screen speaks of every file at once: the one file, or both. */
+export function filesPhrase(kinds: readonly ImportFileKind[]): {
+  verified: string;
+  announced: string;
+  sent: string;
+} {
+  if (kinds.length === 1) {
+    const name = `${KIND_LABEL[kinds[0]].toLowerCase()} file`;
+    return {
+      verified: `The ${name} is on the server and verified`,
+      announced: `The ${name} is uploaded and verified.`,
+      sent: `of the ${name} sent`,
+    };
+  }
+  return {
+    verified: "Both files are on the server and verified",
+    announced: "Both files uploaded and verified.",
+    sent: "of both files sent",
+  };
+}
+
 /** The create-run body, as `StoreCsvImportRunRequest` validates it. */
 interface CreateRunBody {
   message?: string;
@@ -165,8 +213,10 @@ export function StepUpload({
   useEffect(() => {
     if (runId !== null || openingRef.current) return;
     const customers = merged.customers;
-    const loans = merged.loans;
-    if (branchId === null || !customers || !loans || !precheck) return;
+    const loans = merged.loans ?? null;
+    // The members file is what a run needs; the loans file comes along only
+    // when one was picked (./import-files).
+    if (branchId === null || !customers || !precheck) return;
 
     openingRef.current = true;
     setOpening(true);
@@ -176,7 +226,7 @@ export function StepUpload({
       try {
         const [customersSha, loansSha] = await Promise.all([
           sha256Hex(customers),
-          sha256Hex(loans),
+          loans ? sha256Hex(loans) : Promise.resolve(undefined),
         ]);
 
         /**
@@ -197,14 +247,7 @@ export function StepUpload({
         const created = await api.rawPost<CreateRunBody>(API_ENDPOINTS.DATA_IMPORT.RUNS, {
           branch_id: branchId,
           as_of_date: todayISO(),
-          files: {
-            customers: {
-              filename: customers.name,
-              size_bytes: customers.size,
-              sha256: customersSha,
-            },
-            loans: { filename: loans.name, size_bytes: loans.size, sha256: loansSha },
-          },
+          files: declaredFiles({ customers, loans }, { customers: customersSha, loans: loansSha }),
         });
 
         const id = created?.run?.id;
@@ -213,6 +256,14 @@ export function StepUpload({
         }
 
         setChunkSize(created.chunk_size);
+
+        const sessionFile = (file: File) => ({
+          name: file.name,
+          size: file.size,
+          lastModified: file.lastModified,
+          totalChunks: Math.ceil(file.size / created.chunk_size),
+          uploadedChunks: [],
+        });
 
         // Persisted immediately, because everything after this point depends on
         // being able to find the run again — and the tab can die at any moment.
@@ -227,22 +278,9 @@ export function StepUpload({
           hasHeaderRow: precheck.hasHeaderRow,
           dateFormat: precheck.dateFormat,
           chunkSize: created.chunk_size,
-          files: {
-            customers: {
-              name: customers.name,
-              size: customers.size,
-              lastModified: customers.lastModified,
-              totalChunks: Math.ceil(customers.size / created.chunk_size),
-              uploadedChunks: [],
-            },
-            loans: {
-              name: loans.name,
-              size: loans.size,
-              lastModified: loans.lastModified,
-              totalChunks: Math.ceil(loans.size / created.chunk_size),
-              uploadedChunks: [],
-            },
-          },
+          files: loans
+            ? { customers: sessionFile(customers), loans: sessionFile(loans) }
+            : { customers: sessionFile(customers) },
           startedAt: Date.now(),
         };
         saveImportSession(stored);
@@ -309,6 +347,7 @@ export function StepUpload({
     state.phase === "assembling" ||
     state.phase === "checking";
   const refused = state.files.some((file) => file.blocked?.kind === "refuse");
+  const phrase = filesPhrase(state.files.map((file) => file.kind));
 
   return (
     <div className={cn("space-y-6", className)}>
@@ -324,7 +363,7 @@ export function StepUpload({
       {/* The one place a screen reader is told what is happening. */}
       <p role="status" aria-live="polite" className="sr-only">
         {assembled
-          ? "Both files uploaded and verified."
+          ? phrase.announced
           : state.phase === "paused"
             ? "Upload paused, waiting for the connection."
             : state.phase === "uploading"
@@ -423,9 +462,7 @@ export function StepUpload({
         >
           <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-green-600" aria-hidden="true" />
           <div>
-            <p className="font-medium text-green-900 dark:text-green-200">
-              Both files are on the server and verified
-            </p>
+            <p className="font-medium text-green-900 dark:text-green-200">{phrase.verified}</p>
             <p className="mt-0.5 text-muted-foreground">
               The file on your computer no longer matters. The import runs on the
               server from here — you can close this page, switch devices, or come
@@ -447,7 +484,7 @@ export function StepUpload({
         ) : null}
         {busy && state.files.length > 0 ? (
           <span className="text-sm text-muted-foreground tabular-nums">
-            {Math.round(state.overallPercent)}% of both files sent
+            {Math.round(state.overallPercent)}% {phrase.sent}
           </span>
         ) : null}
       </div>

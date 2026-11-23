@@ -312,7 +312,9 @@ export function DataImportView() {
     );
   }
 
-  const hasAnyFile = Boolean(files.customers || files.loans);
+  // The members file is what an import needs; a loans file only rides along
+  // with it (./import-files).
+  const hasMembersFile = Boolean(files.customers);
 
   function renderStep() {
     switch (step) {
@@ -352,7 +354,7 @@ export function DataImportView() {
       // requirements apply. A reload that lands here with neither gets a panel
       // rather than a crash on a null the child was promised would not be one.
       case "check":
-        if (runId === null && (branchId === null || !hasAnyFile)) {
+        if (runId === null && (branchId === null || !hasMembersFile)) {
           return <LostThreadPanel onStartOver={startOver} />;
         }
         return (
@@ -369,7 +371,7 @@ export function DataImportView() {
         );
 
       case "upload":
-        if (runId === null && (branchId === null || !hasAnyFile || !precheck)) {
+        if (runId === null && (branchId === null || !hasMembersFile || !precheck)) {
           return <LostThreadPanel onStartOver={startOver} />;
         }
         return (

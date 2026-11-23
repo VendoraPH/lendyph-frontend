@@ -504,7 +504,7 @@ test("a 22-column header over 26-column rows is caught, as the server holds a he
   assert.ok(findings);
   assert.equal(findings.totalRows, 2);
   assert.deepEqual(findings.blockers, [
-    "Row 1 is the header, but it leaves 4 columns unnamed: Date Hired, Membership Date, Member Type and Membership Number. The import holds the header to every column the rows have, so it would refuse this file. Add the missing labels; the members template has them all.",
+    "Customer Profile file (members.csv): Row 1 is the header, but it leaves 4 columns unnamed: Date Hired, Membership Date, Member Type and Membership Number. The import holds the header to every column the rows have, so it would refuse this file. Add the missing labels; the members template has them all.",
   ]);
 });
 
@@ -519,6 +519,54 @@ test("a full header over rows in the earlier layout is read against those rows' 
   const findings = computeFindings({ customers: inspection }, {}, {}).customers;
   assert.deepEqual(findings?.blockers, []);
   assert.equal(findings?.errorCount, 0);
+});
+
+test("a refusal names the file it is about, and an empty loans file says it can be left out", async () => {
+  const loans = new File(
+    ["Account No.,Loan No.,Loan Amount,Loan Balance,Interest Rate,Interest Amount,Interest Balance,Purpose,Loan Product,Term in Months,Payment Frequency,Interest Type,Date Released,Maturity Date,Processing Fee,Service Fee,Other Fee Detail,Other Fee Amount\r\n"],
+    "loans.csv",
+    { type: "text/csv" },
+  );
+  const inspection = await inspectFile("loans", loans);
+
+  const findings = computeFindings({ loans: inspection }, {}, {}).loans;
+
+  assert.deepEqual(findings?.blockers, [
+    "Loans file (loans.csv): The only row in this file is the header row, so there is nothing to import. The loans file is optional: leave it out when there are no loans to bring over.",
+  ]);
+});
+
+test("a file in the earlier layout lists only the date columns it has", () => {
+  const earlier = computeFindings({ customers: inspectionStub() }, {}, {}).customers;
+  assert.deepEqual(earlier?.dates.map((date) => date.key), ["birthdate"], "Date Hired and Membership Date are not in a 22-column file");
+
+  const current = computeFindings(
+    { customers: inspectionStub({ records: customerRows([CUSTOMER_26]), expectedColumns: 26, widths: [{ columns: 26, rows: 1 }] }) },
+    {},
+    {},
+  ).customers;
+  assert.deepEqual(current?.dates.map((date) => date.key), ["birthdate", "date_hired", "membership_date"]);
+});
+
+test("a date column of one unreadable value says 1 value, not 1 values", () => {
+  const unusable: DateColumnFinding = {
+    key: "birthdate",
+    label: "Birthdate",
+    inference: {
+      status: "unusable",
+      stats: {
+        total: 1, blank: 0, iso: 0, pair: 0, serial: 0, shortYear: 0, invalid: 0, unrecognised: 1,
+        shortYearSamples: [], invalidSamples: [], unrecognisedSamples: ["soon"],
+      } as never,
+    },
+    order: undefined,
+    chosen: false,
+    blocked: true,
+  };
+
+  const [blocker] = fileBlockers(inspectionStub(), customerRows([CUSTOMER]), [unusable]);
+
+  assert.match(blocker, /Of 1 value, 1 is not a date at all \(soon\)\./);
 });
 
 test("a members file at neither layout's width is blocked, and the blocker names both", () => {

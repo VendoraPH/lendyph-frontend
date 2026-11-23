@@ -70,7 +70,7 @@ import {
   type DateFormatInference,
   type DateOrder,
 } from "@/lib/import-date";
-import { formatCount } from "@/lib/report-format";
+import { formatCount, formatCountOf } from "@/lib/report-format";
 import type { ImportFileKind, ImportIssueSeverity } from "@/types/data-import";
 
 // ---------------------------------------------------------------------------
@@ -399,7 +399,12 @@ function settleDates(
   chosen: Readonly<Partial<Record<string, DateOrder>>>,
 ): DateColumnFinding[] {
   const columns = columnsFor(inspection.shape);
-  return dateColumns(inspection.shape).map((column) => {
+  // Only the columns the file's own layout has: an old 22-column members file
+  // has no Date Hired or Membership Date to settle, rather than two blank ones.
+  const present = dateColumns(inspection.shape).filter(
+    (column) => columns.indexOf(column) < inspection.expectedColumns,
+  );
+  return present.map((column) => {
     const index = columns.indexOf(column);
     const values = rows.map((row) => String(row.fields[index] ?? ""));
     const inference = inferDateFormat(values);
@@ -773,10 +778,15 @@ export function fileBlockers(
   }
 
   if (rows.length === 0) {
-    blockers.push(
+    const empty =
       inspection.records.length === 0
         ? "No rows were found in this file."
-        : "The only row in this file is the header row, so there is nothing to import.",
+        : "The only row in this file is the header row, so there is nothing to import.";
+    // A members-only import is allowed, so an empty loans file is one to drop.
+    blockers.push(
+      inspection.kind === "loans"
+        ? `${empty} The loans file is optional: leave it out when there are no loans to bring over.`
+        : empty,
     );
   }
 
@@ -836,15 +846,21 @@ function describeUnusable(inference: DateFormatInference): string {
   const stats = inference.stats;
   const bits: string[] = [];
   if (stats.shortYear > 0) {
-    bits.push(`${formatCount(stats.shortYear)} have a two-digit year (${stats.shortYearSamples.join(", ")})`);
+    bits.push(
+      `${formatCount(stats.shortYear)} ${stats.shortYear === 1 ? "has" : "have"} a two-digit year (${stats.shortYearSamples.join(", ")})`,
+    );
   }
   if (stats.invalid > 0) {
-    bits.push(`${formatCount(stats.invalid)} are not real dates (${stats.invalidSamples.join(", ")})`);
+    bits.push(
+      `${formatCount(stats.invalid)} ${stats.invalid === 1 ? "is not a real date" : "are not real dates"} (${stats.invalidSamples.join(", ")})`,
+    );
   }
   if (stats.unrecognised > 0) {
-    bits.push(`${formatCount(stats.unrecognised)} are not dates at all (${stats.unrecognisedSamples.join(", ")})`);
+    bits.push(
+      `${formatCount(stats.unrecognised)} ${stats.unrecognised === 1 ? "is not a date at all" : "are not dates at all"} (${stats.unrecognisedSamples.join(", ")})`,
+    );
   }
-  return bits.length > 0 ? `Of ${formatCount(stats.total)} values, ${bits.join("; ")}.` : "";
+  return bits.length > 0 ? `Of ${formatCountOf(stats.total, "value")}, ${bits.join("; ")}.` : "";
 }
 
 function pendingFor(dates: readonly DateColumnFinding[]): string[] {
@@ -899,7 +915,10 @@ export function computeFindings(
       rowsNotChecked: rows.length - checked.length,
       dates,
       ...totals,
-      blockers: fileBlockers(inspection, rows, dates, skip),
+      // Both files' blockers share one list on screen, so each names its file.
+      blockers: fileBlockers(inspection, rows, dates, skip).map(
+        (blocker) => `${inspection.label} file (${inspection.fileName}): ${blocker}`,
+      ),
       pendingDecisions: pendingFor(dates),
     };
   }
