@@ -13,6 +13,8 @@
 export interface SignOutDeps {
   getAccessToken: () => string | null;
   clearTokens: () => void;
+  /** Forgets the signed-out user's working branch (`@/lib/working-branch`). */
+  forgetWorkingBranch: () => void;
   /** Revokes `token` on the server. */
   logout: (token: string) => Promise<unknown>;
 }
@@ -20,6 +22,7 @@ export interface SignOutDeps {
 export async function signOut(deps: SignOutDeps): Promise<void> {
   const token = deps.getAccessToken();
   deps.clearTokens();
+  deps.forgetWorkingBranch();
   if (token === null) return;
   try {
     await deps.logout(token);

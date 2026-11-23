@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { BranchFilter, ALL_BRANCHES, branchIdParam } from "@/components/common/branch-filter";
+import { useCallback } from "react";
+import { BranchFilter, branchIdParam } from "@/components/common/branch-filter";
 import { DataState } from "@/components/common/data-state";
 import { portalAdminService } from "@/services/portal-admin.service";
 import type { PortalStats } from "@/types/portal-admin";
@@ -10,6 +10,7 @@ import { usePortalResource } from "../_hooks/use-portal-resource";
 import { PortalAccountsTable } from "./portal-accounts-table";
 import { PageFill } from "@/components/common/page-fill";
 import { cn } from "@/lib/utils";
+import { useBranchFilter } from "@/hooks/use-working-branch";
 
 // At fit the counts' cards drop their extra padding, so the members list
 // below keeps most of the screen. Every count stays.
@@ -33,7 +34,7 @@ const STAT_CARDS: { key: keyof PortalStats; label: string }[] = [
  * so codes are issued one member at a time from the member's page.
  */
 export function PortalAccessScreen() {
-  const [branch, setBranch] = useState(ALL_BRANCHES);
+  const [branch, setBranch] = useBranchFilter();
   const branchId = branchIdParam(branch);
   const fetchStats = useCallback(() => portalAdminService.stats(branchId), [branchId]);
   const stats = usePortalResource(fetchStats);

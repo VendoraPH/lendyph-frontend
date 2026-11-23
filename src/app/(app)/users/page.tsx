@@ -1182,7 +1182,7 @@ function UsersContent() {
               placeholder="Search users..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 h-9"
+              className="pl-9"
             />
           </div>
         </CardHeader>

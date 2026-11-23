@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { DataState } from "@/components/common/data-state";
 import { ScrollBox } from "@/components/common/page-fill";
 import { TablePagination } from "@/components/common/table-pagination";
@@ -14,11 +14,12 @@ import type { ApplicationListFilters } from "@/types/loan-origination";
 import { ApplicationFilters } from "../_components/application-filters";
 import { ApplicationsTable } from "../_components/applications-table";
 import { StatusTabs } from "../_components/status-tabs";
+import { useBranchScopedFilters } from "@/hooks/use-working-branch";
 
 const PER_PAGE_OPTIONS = [20, 50, 100] as const;
 
 export default function ApplicationsPage() {
-  const [filters, setFilters] = useState<ApplicationListFilters>({ page: 1, per_page: 20 });
+  const [filters, setFilters] = useBranchScopedFilters<ApplicationListFilters>(() => ({ page: 1, per_page: 20 }));
   const fetcher = useCallback(() => loanOriginationService.listApplications(filters), [filters]);
   const list = useApiResource(fetcher);
 

@@ -21,12 +21,16 @@ import {
   ClipboardCheck,
   MonitorSmartphone,
   Sparkles,
+  ShieldAlert,
   TrendingUp,
 } from "lucide-react";
 import { GCashIcon } from "@/components/icons/gcash-icon";
 import { env } from "@/config/env";
 import { MODULE_ALSO_REQUIRES } from "@/lib/permission-module-names";
 import { meetsPermission } from "@/lib/permission-requirement";
+import { AMLA_SETTINGS_PAGE_PERMISSIONS } from "@/lib/amla/access";
+import { AMLA_RISK_RULES_PERMISSIONS } from "@/lib/amla/monitoring-access";
+import { AMLA_CTR_READ, AMLA_REPORT_READ, AMLA_STR_READ } from "@/lib/amla/case-access";
 import { EXECUTIVE_DASHBOARD_PERMISSION } from "@/app/(app)/dashboard/_lib/executive-access";
 
 export interface NavSubItem {
@@ -144,6 +148,18 @@ export const MEMBER_PORTAL_NAV: NavItem = {
  * mediation, audit and tax reports also need their restricted view, and the
  * menu hides them without it. Shown only when NEXT_PUBLIC_ENABLE_CDA is on.
  */
+/**
+ * Accounting → Interbranch Transfers (Phase 6 MB-BE5), beside Cash & Bank, for
+ * `interbranch_transfers:view`. Shown only while NEXT_PUBLIC_ENABLE_MULTI_BRANCH
+ * is on; the route answers not found otherwise
+ * (accounting/interbranch-transfers/layout.tsx).
+ */
+export const INTERBRANCH_TRANSFERS_NAV: NavSubItem = {
+  title: "Interbranch Transfers",
+  href: "/accounting/interbranch-transfers",
+  permission: "interbranch_transfers:view",
+};
+
 /** Settings → Penalties, for `penalties:view`, shown only while its flag is on. */
 export const PENALTIES_SETTINGS_NAV: NavSubItem = {
   title: "Penalties",
@@ -162,6 +178,71 @@ export const LINDA_SETTINGS_NAV: NavSubItem = {
   href: "/settings/linda",
   permission: "linda:settings",
   alsoRequires: ["branches:view_all"],
+};
+
+/**
+ * Settings → AMLA: monitoring status, the settings in force and their history,
+ * change requests, the working-day calendar and the AMLA log. Each part needs
+ * its own AMLA key (most also every branch), so the link shows for any key one
+ * part needs, as its page guard does. Shown only when NEXT_PUBLIC_ENABLE_AMLA
+ * is set at build time; the route answers not found otherwise
+ * (settings/amla/layout.tsx). The AMLA pages themselves (dashboard, alerts,
+ * cases, …) come with later Phase 6 slices, each adding its own menu items.
+ */
+export const AMLA_SETTINGS_NAV: NavSubItem = {
+  title: "AMLA",
+  href: "/settings/amla",
+  permission: [...AMLA_SETTINGS_PAGE_PERMISSIONS],
+};
+
+/**
+ * AMLA Compliance. The /amla pages need `amla:view` (amla/layout.tsx) and each
+ * its own key, as its endpoints do: Alerts `amla:alerts`, CTR Candidates
+ * `amla:ctr`, Customers `amla:cdd`; Transaction Monitoring and Risk Rules are
+ * head office only. Compliance Cases needs `amla:cases`, the STR and CTR pages
+ * their reading keys, Regulatory Submissions any reporting key and Audit &
+ * Compliance History `amla:audit`; cases, STRs and the history are head
+ * office only. The section
+ * also carries an "AMLA Settings" link, opening as Settings → AMLA does, so a
+ * Compliance Officer (who holds no `settings:view`) has a menu path to it.
+ * Later Phase 6 slices add their pages here. Shown only when
+ * NEXT_PUBLIC_ENABLE_AMLA is set at build time.
+ */
+export const AMLA_NAV: NavItem = {
+  title: "AMLA Compliance",
+  href: "/amla",
+  icon: ShieldAlert,
+  permission: "amla:view",
+  anyOf: [...AMLA_SETTINGS_PAGE_PERMISSIONS],
+  children: [
+    { title: "AMLA Dashboard", href: "/amla", permission: "amla:view" },
+    { title: "Alerts", href: "/amla/alerts", permission: "amla:alerts", alsoRequires: ["amla:view"] },
+    { title: "CTR Candidates", href: "/amla/ctr-candidates", permission: "amla:ctr", alsoRequires: ["amla:view"] },
+    // The rules in force, and how detection runs: head office only, as its endpoint is.
+    { title: "Transaction Monitoring", href: "/amla/monitoring", permission: "amla:view", alsoRequires: ["branches:view_all"] },
+    { title: "Customers", href: "/amla/customers", permission: "amla:cdd", alsoRequires: ["amla:view"] },
+    // Screening and the orders register cover the whole cooperative, as their endpoints do.
+    { title: "Screening", href: "/amla/screening", permission: "amla:screening", alsoRequires: ["amla:view", "branches:view_all"] },
+    { title: "Orders Register", href: "/amla/orders", permission: "amla:sanctions", alsoRequires: ["amla:view", "branches:view_all"] },
+    {
+      title: "Risk Rules",
+      href: "/amla/risk-rules",
+      permission: [...AMLA_RISK_RULES_PERMISSIONS],
+      alsoRequires: ["amla:view", "branches:view_all"],
+    },
+    // Cases and filings, each gated as its routes are: cases and STRs are head office's.
+    { title: "Compliance Cases", href: "/amla/cases", permission: "amla:cases", alsoRequires: ["amla:view", "branches:view_all"] },
+    {
+      title: "Suspicious Transactions (STR)",
+      href: "/amla/str",
+      permission: [...AMLA_STR_READ],
+      alsoRequires: ["amla:view", "branches:view_all"],
+    },
+    { title: "Covered Transactions (CTR)", href: "/amla/ctr", permission: [...AMLA_CTR_READ], alsoRequires: ["amla:view"] },
+    { title: "Regulatory Submissions", href: "/amla/submissions", permission: [...AMLA_REPORT_READ], alsoRequires: ["amla:view"] },
+    { title: "Audit & Compliance History", href: "/amla/history", permission: "amla:audit", alsoRequires: ["amla:view", "branches:view_all"] },
+    { ...AMLA_SETTINGS_NAV, title: "AMLA Settings" },
+  ],
 };
 
 export const CDA_NAV: NavItem = {
@@ -374,6 +455,7 @@ export const SIDEBAR_NAV: NavItem[] = [
   ...(env.features.creditScoring ? [CREDIT_SCORING_NAV] : []),
   ...(env.features.cda ? [CDA_NAV] : []),
   ...(env.features.memberPortal ? [MEMBER_PORTAL_NAV] : []),
+  ...(env.features.amla ? [AMLA_NAV] : []),
   {
     title: "Accounting",
     href: "/accounting",
@@ -396,6 +478,7 @@ export const SIDEBAR_NAV: NavItem[] = [
       { title: "Chart of Accounts", href: "/accounting/chart-of-accounts", permission: "chart_of_accounts:view" },
       { title: "Journal Entries", href: "/accounting/journals", permission: "journals:view" },
       { title: "Cash & Bank", href: "/accounting/cash-bank", permission: "cash_accounts:view" },
+      ...(env.features.multiBranch ? [INTERBRANCH_TRANSFERS_NAV] : []),
       { title: "Expenses & Payables", href: "/accounting/expenses", permission: "expenses:view" },
       { title: "Loan Accounting", href: "/accounting/loans" },
       { title: "General Ledger", href: "/accounting/general-ledger" },
@@ -472,6 +555,7 @@ export const SIDEBAR_NAV: NavItem[] = [
           ]
         : []),
       ...(env.features.linda ? [LINDA_SETTINGS_NAV] : []),
+      ...(env.features.amla ? [AMLA_SETTINGS_NAV] : []),
       // Lives under Settings because it is admin-only, org-wide, one-time
       // config — and because it belongs to neither Members nor Loans: a single
       // run writes both.

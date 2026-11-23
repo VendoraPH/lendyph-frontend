@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import Link from "next/link";
-import { ALL_BRANCHES, branchIdParam } from "@/components/common/branch-filter";
+import { branchIdParam } from "@/components/common/branch-filter";
 import { AlignedBranchFilter } from "../../_components/aligned-branch-filter";
 import { DataState } from "@/components/common/data-state";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
@@ -19,6 +19,7 @@ import type { ApproachingDormancyRow, DormancyList, DormantAccountRow } from "@/
 import { Kpi } from "../../_components/kpi";
 import { DORMANCY_TABS, approachingNote, daysLeftText, dormancyCards } from "../_lib/dormant-view";
 import { DormantActions } from "./dormant-actions";
+import { useBranchFilter, useBranchFollowingPage } from "@/hooks/use-working-branch";
 
 type Row = DormantAccountRow | ApproachingDormancyRow;
 
@@ -32,8 +33,8 @@ function isApproaching(row: Row): row is ApproachingDormancyRow {
  */
 export function DormantScreen() {
   const [list, setList] = useState<DormancyList>("dormant");
-  const [branch, setBranch] = useState(ALL_BRANCHES);
-  const [page, setPage] = useState(1);
+  const [branch, setBranch] = useBranchFilter();
+  const [page, setPage] = useBranchFollowingPage();
   const [perPage, setPerPage] = useState(20);
 
   const fetcher = useCallback(

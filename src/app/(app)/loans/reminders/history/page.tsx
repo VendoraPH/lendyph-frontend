@@ -31,11 +31,12 @@ import type { ReminderHistoryFilters, ReminderMessage } from "@/types/reminder";
 import { ReminderFilters, StatusSelect } from "../_components/reminder-filters";
 import { MessageDetailSheet } from "./_components/message-detail-sheet";
 import { emptyArt, filtersActive } from "@/lib/illustrations";
+import { useBranchScopedFilters } from "@/hooks/use-working-branch";
 
 const PER_PAGE_OPTIONS = [20, 50, 100] as const;
 
 export default function ReminderHistoryPage() {
-  const [filters, setFilters] = useState<ReminderHistoryFilters>({ page: 1, per_page: 20 });
+  const [filters, setFilters] = useBranchScopedFilters<ReminderHistoryFilters>(() => ({ page: 1, per_page: 20 }));
   const fetcher = useCallback(() => reminderService.listHistory(filters), [filters]);
   const history = useApiResource(fetcher);
   const [selected, setSelected] = useState<ReminderMessage | null>(null);

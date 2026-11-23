@@ -11,6 +11,7 @@ import { useDialogOpening } from "@/hooks/use-dialog-opening";
 import { calendarDate, formatDateISO } from "@/lib/format";
 import { branchPicker } from "@/lib/user-branches";
 import { loanOriginationService } from "@/services";
+import { useWorkingBranch } from "@/hooks/use-working-branch";
 import { useAuthStore } from "@/store";
 import type { ApplicationLink, ApplicationLinkInput } from "@/types/loan-origination";
 import { useLoanProducts } from "../../../reminders/_hooks/use-loan-products";
@@ -59,13 +60,15 @@ export function LinkFormDialog({
   const caller = useAuthStore((s) => s.user);
   const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
   const picker = branchPicker(branches, caller, viewAll);
+  const { branchId: working } = useWorkingBranch();
   const [form, setForm] = useState<ApplicationLinkInput>(EMPTY);
   const [logo, setLogo] = useState<File | null>(null);
   // Without branches:view_all a link belongs to one of the caller's branches:
   // "Default branch" (the company setting) may be a branch they can't see.
   const ownBranchOnly = !viewAll;
   if (useDialogOpening(open, link)) {
-    setForm(link ? fromLink(link) : { ...EMPTY, branch_id: ownBranchOnly ? (picker.branches[0]?.id ?? null) : null });
+    // A new link starts in the working branch (multi-branch flag), else as before.
+    setForm(link ? fromLink(link) : { ...EMPTY, branch_id: working ?? (ownBranchOnly ? (picker.branches[0]?.id ?? null) : null) });
     setLogo(null);
   }
   const set = (patch: Partial<ApplicationLinkInput>) => setForm((f) => ({ ...f, ...patch }));

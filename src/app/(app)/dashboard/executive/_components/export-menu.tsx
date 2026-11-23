@@ -13,9 +13,7 @@ import { notifyError, notifySuccess } from "@/lib/notify";
 import { useAuthStore } from "@/store";
 import { useBrandingStore } from "@/store/branding-store";
 import { applyChrome, loadLogoDataUrl } from "@/app/(app)/reports/_lib/report-chrome";
-import { executiveDocument } from "../../_lib/executive-export";
-import type { ExecutiveData } from "../../_lib/executive-data";
-import type { Period } from "../../_lib/periods";
+import { executiveDocument, type ExecutiveExportInput } from "../../_lib/executive-export";
 
 type Format = "pdf" | "excel" | "csv";
 
@@ -25,13 +23,12 @@ type Format = "pdf" | "excel" | "csv";
  * ships jspdf or exceljs to someone who only looks.
  */
 export function ExportMenu({
-  data,
-  period,
+  input,
   branchLabel,
   disabled,
 }: {
-  data: ExecutiveData;
-  period: Period;
+  /** Null until the server has worked out the period. */
+  input: ExecutiveExportInput | null;
   branchLabel: string | null;
   disabled?: boolean;
 }) {
@@ -40,9 +37,10 @@ export function ExportMenu({
   const logoUrl = useBrandingStore((s) => s.logoUrl);
 
   async function run(format: Format) {
+    if (!input) return;
     setBusy(format);
     try {
-      const doc = await applyChrome(executiveDocument(data, period), {
+      const doc = await applyChrome(executiveDocument(input), {
         logoUrl,
         logoData: format === "csv" ? null : await loadLogoDataUrl(logoUrl),
         preparedBy: user?.full_name ?? user?.username ?? null,
@@ -68,7 +66,7 @@ export function ExportMenu({
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="outline" size="sm" disabled={disabled || busy !== null} />}>
+      <DropdownMenuTrigger render={<Button variant="outline" size="sm" className="h-8" disabled={disabled || !input || busy !== null} />}>
         {busy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
         Export
       </DropdownMenuTrigger>

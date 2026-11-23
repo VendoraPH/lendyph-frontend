@@ -140,7 +140,7 @@ export function PortalSettingsForm({ settings, onSaved }: { settings: PortalSett
             <CardTitle className="text-base">Signing in</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">{SECURITY.map(numberInput)}</div>
+            <div className="grid items-end gap-4 sm:grid-cols-2">{SECURITY.map(numberInput)}</div>
             <SwitchRow
               id="mp-otp"
               label="Ask for a one-time password by text message"
@@ -196,7 +196,7 @@ export function PortalSettingsForm({ settings, onSaved }: { settings: PortalSett
               ))}
               {submitted && problems.withdrawal_methods && <p className="text-xs text-destructive">{problems.withdrawal_methods}</p>}
             </fieldset>
-            <div className="grid gap-4 sm:grid-cols-2">{REQUESTS.map(numberInput)}</div>
+            <div className="grid items-end gap-4 sm:grid-cols-2">{REQUESTS.map(numberInput)}</div>
           </CardContent>
         </Card>
       </div>

@@ -2,7 +2,7 @@
 
 import { useId } from "react";
 import { useBranches } from "@/hooks";
-import { ALL_BRANCHES, branchFilterOptions } from "@/lib/branch-filter";
+import { ALL_BRANCHES, branchFilterOptions, shownBranchValue } from "@/lib/branch-filter";
 import { useAuthStore } from "@/store";
 import { Label } from "@/components/ui/label";
 import {
@@ -32,10 +32,12 @@ interface BranchFilterProps {
  */
 export function BranchFilter({ value, onChange, className }: BranchFilterProps) {
   const id = useId();
-  const { branches } = useBranches();
+  const { branches, loading } = useBranches();
   const caller = useAuthStore((s) => s.user);
   const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
   const options = branchFilterOptions(branches, caller, viewAll);
+  // A preset branch the list hasn't brought yet reads "Loading branches…", never its id.
+  const shown = shownBranchValue(value, options.items, loading);
 
   return (
     // gap, not space-y: the select renders a hidden input after its trigger,
@@ -45,12 +47,12 @@ export function BranchFilter({ value, onChange, className }: BranchFilterProps) 
         Branch
       </Label>
       <Select
-        value={value}
+        value={shown.value}
         onValueChange={(v) => onChange(v ?? ALL_BRANCHES)}
         items={options.items}
       >
         <SelectTrigger id={id} className={className ?? "w-[180px]"}>
-          <SelectValue />
+          <SelectValue placeholder={shown.placeholder} />
         </SelectTrigger>
         <SelectContent>
           {options.items.map((item) => (

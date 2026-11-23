@@ -113,7 +113,7 @@ export function BorrowerFilters({
             placeholder="Search name, ID, phone..."
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="pl-9 h-9"
+            className="pl-9"
           />
         </div>
         {hasFilters && (

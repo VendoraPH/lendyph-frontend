@@ -38,6 +38,7 @@ import {
   humanizeSegment,
   menuTitles,
   nestedPageTitle,
+  nestedSegment,
   rootPageTitle,
   subPageTitle,
 } from "@/lib/page-titles";
@@ -49,6 +50,8 @@ import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { NotificationBell } from "./notification-bell";
 import { accountMenuLabel } from "./account-menu-label";
+import { WorkingBranchSelector } from "./working-branch-selector";
+import { forgetUserWorkingBranch } from "@/hooks/use-working-branch";
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -75,13 +78,13 @@ function Breadcrumb({ editParam }: { editParam: string | null }) {
   if (segments.length === 1) {
     const rootLabel = rootPageTitle(firstSegment);
     if (rootLabel === undefined) {
-      return <span className="text-sm font-medium text-foreground">{pageTitle}</span>;
+      return <span className="truncate text-sm font-medium text-foreground">{pageTitle}</span>;
     }
     return (
-      <div className="flex items-center gap-1.5 text-sm">
-        <span className="text-muted-foreground">{pageTitle}</span>
-        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/60" />
-        <span className="font-medium text-foreground">{rootLabel}</span>
+      <div className="flex min-w-0 items-center gap-1.5 text-sm">
+        <span className="truncate text-muted-foreground">{pageTitle}</span>
+        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+        <span className="truncate font-medium text-foreground">{rootLabel}</span>
       </div>
     );
   }
@@ -94,20 +97,23 @@ function Breadcrumb({ editParam }: { editParam: string | null }) {
   // A page a level further down (`/accounting/journals/new`) adds its own part.
   const nestedLabel =
     !isId && segments.length > 2
-      ? nestedPageTitle(firstSegment, subSegment, segments[2], menuTitle)
+      ? nestedPageTitle(firstSegment, subSegment, nestedSegment(segments), menuTitle)
       : null;
 
+  // On a narrow screen a three-part trail keeps only its last part, and any
+  // part truncates, so the header never pushes the account menu off-screen.
+  const narrowHidden = nestedLabel === null ? "" : "max-sm:hidden";
   return (
-    <div className="flex items-center gap-1.5 text-sm">
-      <span className="text-muted-foreground">{pageTitle}</span>
-      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/60" />
+    <div className="flex min-w-0 items-center gap-1.5 text-sm">
+      <span className={`truncate text-muted-foreground ${narrowHidden}`}>{pageTitle}</span>
+      <ChevronRight className={`h-3.5 w-3.5 shrink-0 text-muted-foreground/60 ${narrowHidden}`} />
       {nestedLabel === null ? (
-        <span className="font-medium text-foreground">{subLabel}</span>
+        <span className="truncate font-medium text-foreground">{subLabel}</span>
       ) : (
         <>
-          <span className="text-muted-foreground">{subLabel}</span>
-          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/60" />
-          <span className="font-medium text-foreground">{nestedLabel}</span>
+          <span className="truncate text-muted-foreground max-sm:hidden">{subLabel}</span>
+          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60 max-sm:hidden" />
+          <span className="truncate font-medium text-foreground">{nestedLabel}</span>
         </>
       )}
     </div>
@@ -159,6 +165,7 @@ export function Header({ onMenuClick }: HeaderProps) {
     await signOut({
       getAccessToken: tokenManager.getAccessToken,
       clearTokens: tokenManager.clearTokens,
+      forgetWorkingBranch: () => forgetUserWorkingBranch(user?.id),
       logout: authService.logout,
     });
     localStorage.removeItem("lendy_remember_me");
@@ -176,9 +183,9 @@ export function Header({ onMenuClick }: HeaderProps) {
 
   return (
     <>
-      <header className="flex h-14 items-center justify-between border-b border-border px-4 sm:px-6">
-        {/* Left side: hamburger (mobile) + breadcrumb */}
-        <div className="flex items-center gap-3">
+      <header className="flex h-14 items-center justify-between gap-3 border-b border-border px-4 sm:px-6">
+        {/* Left side: hamburger (mobile) + breadcrumb; it gives way first */}
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           <Button
             variant="ghost"
             size="icon-sm"
@@ -193,8 +200,11 @@ export function Header({ onMenuClick }: HeaderProps) {
           </Suspense>
         </div>
 
-        {/* Right side: notifications + avatar */}
-        <div className="flex items-center gap-2">
+        {/* Right side: notifications + avatar; never shrinks off-screen */}
+        <div className="flex shrink-0 items-center gap-2">
+          {/* Working branch (multi-branch flag only) */}
+          <WorkingBranchSelector />
+
           {/* Theme toggle */}
           <ThemeToggle />
 

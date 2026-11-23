@@ -36,24 +36,32 @@ export function SourceGate({
   empty,
   emptyText = "No records for this selection.",
   height = "h-[220px]",
+  notice = null,
   children,
 }: {
   source: Source<unknown>;
+  /**
+   * Shown instead of the figures whatever the source holds: "No snapshot for
+   * this date" for a balance on a past period, "Requires configuration" for
+   * books that aren't set up.
+   */
+  notice?: string | null;
   /** True when the source arrived but has nothing to draw. */
   empty?: boolean;
   emptyText?: string;
   height?: string;
   children: ReactNode;
 }) {
-  if (source.state === "loading") return <Skeleton className={`${height} w-full`} />;
+  if (notice === null && source.state === "loading") return <Skeleton className={`${height} w-full`} />;
   const message =
-    source.state === "denied"
+    notice ??
+    (source.state === "denied"
       ? "No access: your role cannot view this data."
       : source.state === "error"
         ? DATA_UNAVAILABLE
         : empty
           ? emptyText
-          : null;
+          : null);
   if (message) {
     return (
       <div className={`flex ${height} items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground`}>
@@ -76,12 +84,14 @@ export function figureText(source: Source<unknown>, value: number | null, format
 }
 
 /** A small labelled figure, for the section tiles. */
-export function Figure({ label, value, hint }: { label: string; value: string; hint?: string }) {
+export function Figure({ label, value, hint, note }: { label: string; value: string; hint?: string; note?: string | null }) {
   return (
     <div className="rounded-lg border bg-muted/30 px-3 py-2">
       <p className="text-[11px] text-muted-foreground">{label}</p>
       <p className="text-base font-semibold tabular-nums">{value}</p>
       {hint ? <p className="text-[10px] text-muted-foreground">{hint}</p> : null}
+      {/* A page filter this figure doesn't follow. */}
+      {note ? <p className="text-[10px] text-amber-700 dark:text-amber-400">{note}</p> : null}
     </div>
   );
 }

@@ -28,7 +28,7 @@ interface SubjectPickerProps {
   presetMember?: MemberOption | null;
 }
 
-const TRIGGER_CLASS = "h-9 w-64";
+const TRIGGER_CLASS = "w-64";
 
 /**
  * Loan / member selector for the two subject-scoped reports and for every

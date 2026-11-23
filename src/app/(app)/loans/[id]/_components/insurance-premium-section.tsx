@@ -83,7 +83,7 @@ export function InsurancePremiumSection({
                 }
                 onBlur={handlePercentageBlur}
                 disabled={disabled}
-                className="h-9 pr-8"
+                className="pr-8"
               />
               <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground">
                 %
@@ -93,7 +93,7 @@ export function InsurancePremiumSection({
 
           <div className="space-y-1.5">
             <Label className="text-xs">Insurance Premium Amount</Label>
-            <div className="flex h-9 items-center rounded-md border border-input bg-muted/50 px-3 text-sm font-medium tabular-nums">
+            <div className="flex h-8 items-center rounded-md border border-input bg-muted/50 px-3 text-sm font-medium tabular-nums">
               {currencyOrDash(insurance?.premium_amount ?? premiumAmount)}
             </div>
           </div>
@@ -139,7 +139,6 @@ export function InsurancePremiumSection({
                     setField("partialAmount", partialAmountOnBlur(value.partialAmount, premiumAmount))
                   }
                   disabled={disabled || noInsurance}
-                  className="h-9"
                 />
                 {partialExceedsPremium(value.partialAmount, premiumAmount) && (
                   <p className="text-xs text-amber-600">
@@ -151,7 +150,7 @@ export function InsurancePremiumSection({
 
               <div className="space-y-1.5">
                 <Label className="text-xs">Remaining Balance</Label>
-                <div className="flex h-9 items-center rounded-md border border-input bg-muted/50 px-3 text-sm font-medium tabular-nums">
+                <div className="flex h-8 items-center rounded-md border border-input bg-muted/50 px-3 text-sm font-medium tabular-nums">
                   {currencyOrDash(insurance?.remaining_balance)}
                 </div>
                 <p className="text-xs text-muted-foreground">

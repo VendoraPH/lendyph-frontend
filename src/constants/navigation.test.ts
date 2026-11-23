@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { env } from "@/config/env";
-import { CDA_NAV, EXECUTIVE_DASHBOARD_NAV, LINDA_SETTINGS_NAV, MEMBER_PORTAL_NAV, PENALTIES_SETTINGS_NAV, SIDEBAR_NAV, navChildAllowed, navItemAllowed, navItemHref, navItemMatches } from "./navigation";
+import { CDA_NAV, EXECUTIVE_DASHBOARD_NAV, INTERBRANCH_TRANSFERS_NAV, LINDA_SETTINGS_NAV, MEMBER_PORTAL_NAV, PENALTIES_SETTINGS_NAV, SIDEBAR_NAV, navChildAllowed, navItemAllowed, navItemHref, navItemMatches } from "./navigation";
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
 const LAYOUT = "src/app/(app)/credit-scoring/layout.tsx";
@@ -214,6 +214,20 @@ test("Settings → Linda needs linda:settings and every branch, as its page and 
   assert.match(page, /<RouteGuard permission="branches:view_all"/);
 });
 
+test("AMLA is off when the flag isn't set: no Settings link, and its routes answer not found", () => {
+  assert.equal(env.features.amla, false);
+  const settings = SIDEBAR_NAV.find((item) => item.href === "/settings");
+  assert.equal(settings?.children?.some((c) => c.href === "/settings/amla"), false);
+  assert.equal(SIDEBAR_NAV.some((item) => item.href.startsWith("/amla")), false);
+  assert.match(read("src/constants/navigation.ts"), /env\.features\.amla \? \[AMLA_SETTINGS_NAV\]/);
+  assert.match(read("src/constants/navigation.ts"), /env\.features\.amla \? \[AMLA_NAV\]/);
+  for (const path of ["src/app/(app)/amla/layout.tsx", "src/app/(app)/settings/amla/layout.tsx"]) {
+    const layout = read(path);
+    assert.match(layout, /if \(!env\.features\.amla\) notFound\(\);/, path);
+    assert.doesNotMatch(layout, /"use client"/, path);
+  }
+});
+
 test("Executive Dashboard is its own menu item right below Dashboard, behind its flag", () => {
   assert.equal(EXECUTIVE_DASHBOARD_NAV.title, "Executive Dashboard");
   assert.equal(EXECUTIVE_DASHBOARD_NAV.href, "/dashboard/executive");
@@ -243,4 +257,30 @@ test("on the Executive Dashboard only its own item is highlighted, not Dashboard
   assert.equal(navItemMatches("/loans/12", "/loans", menu), true);
   assert.equal(navItemMatches("/loansx", "/loans", menu), false);
   assert.match(read("src/components/layout/sidebar.tsx"), /navItemMatches\(pathname, item\.href\)/);
+});
+
+test("Accounting → Interbranch Transfers sits under Cash & Bank, only while the multi-branch flag is on", () => {
+  assert.equal(env.features.multiBranch, false);
+  const accounting = SIDEBAR_NAV.find((item) => item.href === "/accounting");
+  assert.equal(accounting?.children?.some((c) => c.href === "/accounting/interbranch-transfers"), false);
+  const nav = read("src/constants/navigation.ts");
+  assert.match(
+    nav,
+    /\{ title: "Cash & Bank", href: "\/accounting\/cash-bank", permission: "cash_accounts:view" \},\s*\.\.\.\(env\.features\.multiBranch \? \[INTERBRANCH_TRANSFERS_NAV\] : \[\]\),/,
+  );
+  const layout = read("src/app/(app)/accounting/interbranch-transfers/layout.tsx");
+  assert.match(layout, /env\.features\.multiBranch/);
+  assert.match(layout, /notFound\(\)/);
+  assert.doesNotMatch(layout, /"use client"/);
+});
+
+test("Interbranch Transfers needs interbranch_transfers:view, as its page does", () => {
+  const holds = (...held: string[]) => (p: string) => held.includes(p);
+  assert.equal(INTERBRANCH_TRANSFERS_NAV.title, "Interbranch Transfers");
+  assert.equal(navChildAllowed(INTERBRANCH_TRANSFERS_NAV, holds()), false);
+  assert.equal(navChildAllowed(INTERBRANCH_TRANSFERS_NAV, holds("interbranch_transfers:view")), true);
+  assert.match(
+    read("src/app/(app)/accounting/interbranch-transfers/page.tsx"),
+    /<RouteGuard permission="interbranch_transfers:view"/,
+  );
 });

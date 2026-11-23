@@ -99,7 +99,10 @@ export const HEAD_OFFICE_ROW_LABEL = "Head office";
 export interface GCashBranchRow {
   borrower?: unknown;
   non_member?: unknown;
-  /** Absent on answers from before backend #283; null for none. */
+  /**
+   * Absent on answers from before backend #283; null for none. A member's row
+   * carries it since backend #334 (null on an older row).
+   */
   branch_id?: number | null;
   /**
    * Sent by the pending report since backend B-FU. Not shown: the cell names
@@ -110,13 +113,15 @@ export interface GCashBranchRow {
 
 /**
  * The Branch cell of a GCash list, one rule for both tabs, so they agree on
- * the same transaction. A member's row posts in the member's branch, which
- * the Transactions row doesn't name. A walk-in row reads its branch's name
- * when the user can list it, "Another branch" when they can't, and "Head
- * office" with none. An answer that leaves the branch out reads a dash.
+ * the same transaction. A row that carries the branch it posts in, a walk-in's
+ * or (since backend #334) a member's, reads that branch's name when the user
+ * can list it and "Another branch" when they can't, so a member who moved
+ * still reads their old branch on earlier rows. An older member's row with no
+ * branch of its own posts in the member's branch and says so. A walk-in row
+ * with none is head office's. An answer that leaves the branch out reads a dash.
  */
 export function gcashRowBranchLabel(row: GCashBranchRow, branches: readonly NamedBranch[]): string {
-  if (row.borrower) return MEMBERS_BRANCH_LABEL;
+  if (row.borrower) return gcashBranchLabel(row.branch_id, branches) ?? MEMBERS_BRANCH_LABEL;
   if (!("branch_id" in row) || row.branch_id === undefined) return "—";
   return gcashBranchLabel(row.branch_id, branches) ?? HEAD_OFFICE_ROW_LABEL;
 }

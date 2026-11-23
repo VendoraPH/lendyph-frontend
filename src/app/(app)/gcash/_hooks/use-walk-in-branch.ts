@@ -1,6 +1,8 @@
 import { useId, useState } from "react";
 import { toast } from "sonner";
 import { useBranchChoiceSource } from "@/hooks/use-branch-choice-source";
+import { useWorkingBranch } from "@/hooks/use-working-branch";
+import { workingBranchPreset } from "@/lib/working-branch";
 import type { GCashParty } from "@/types";
 import {
   gcashSaveFailure,
@@ -43,7 +45,13 @@ export function useWalkInBranch(party: GCashParty): WalkInBranch {
   const [picked, setPicked] = useState<{ value: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const reasonId = useId();
-  const value = picked ? picked.value : choice.kind === "pick" ? choice.preselected : null;
+  // The working branch when the form offers it (multi-branch flag), else the form's own.
+  const { branchId: working } = useWorkingBranch();
+  const preselected =
+    choice.kind === "pick"
+      ? workingBranchPreset(working, choice.items.map((i) => i.value), choice.preselected)
+      : null;
+  const value = picked ? picked.value : preselected;
 
   return {
     choice,

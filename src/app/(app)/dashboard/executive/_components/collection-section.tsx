@@ -8,6 +8,7 @@ import { readyData, type ExecutiveData } from "../../_lib/executive-data";
 import { agingPoints, collectionTrend, hasActivity, monthLabel } from "../../_lib/executive-sections";
 import { EXECUTIVE_LAYOUT as L } from "../../_lib/executive-layout";
 import { compactPeso, formatMetric, toNumber } from "../../_lib/metrics";
+import { CARD_STATE_TEXT, balanceHeading } from "../../_lib/executive-overview";
 import { Figure, SectionShell, SourceGate, figureText } from "./section-shell";
 
 const trendConfig = {
@@ -19,7 +20,8 @@ const agingConfig = { amount: { label: "Past due", color: "var(--chart-4)" } } s
 
 const money = (v: unknown) => formatCurrency(Number(v));
 
-export function CollectionSection({ data }: { data: ExecutiveData }) {
+/** `pastPeriod`: the aging is today's, so a past period shows "No snapshot for this date" instead (No backfill). */
+export function CollectionSection({ data, pastPeriod }: { data: ExecutiveData; pastPeriod: boolean }) {
   const trend = collectionTrend(readyData(data.efficiency)).map((p) => ({ ...p, label: monthLabel(p.period) }));
   const aging = agingPoints(readyData(data.aging));
   const totals = readyData(data.efficiency);
@@ -29,7 +31,7 @@ export function CollectionSection({ data }: { data: ExecutiveData }) {
     <SectionShell
       title="Collection & Delinquency"
       icon={<HandCoins className="size-4" />}
-      note="Due and collected cover the selected period. Aging is as of the period's last day."
+      note="Due and collected cover the selected period. Aging is as of today, so a past period has none."
     >
       <div className={`mb-4 ${L.tiles}`}>
         <Figure label="Due in period" value={figureText(data.efficiency, toNumber(totals?.total_due), "currency")} />
@@ -72,8 +74,13 @@ export function CollectionSection({ data }: { data: ExecutiveData }) {
         </div>
 
         <div className={L.cell}>
-          <h3 className="mb-2 text-sm font-medium">Past due aging</h3>
-          <SourceGate source={data.aging} empty={!hasActivity(aging, ["amount"])} emptyText="Nothing past due.">
+          <h3 className="mb-2 text-sm font-medium">{balanceHeading("Past due aging", pastPeriod)}</h3>
+          <SourceGate
+            source={data.aging}
+            empty={!hasActivity(aging, ["amount"])}
+            emptyText="Nothing past due."
+            notice={pastPeriod ? CARD_STATE_TEXT.no_snapshot : null}
+          >
             <ChartContainer config={agingConfig} className="h-[220px] w-full min-w-0" aria-hidden="true">
               <BarChart data={aging} layout="vertical" margin={{ left: 4, right: 12 }}>
                 <CartesianGrid horizontal={false} />

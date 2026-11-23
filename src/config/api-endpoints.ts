@@ -251,6 +251,18 @@ export const API_ENDPOINTS = {
     COLLECTIONS_TREND: "/dashboard/collections-trend",
     DAILY_DUES: "/dashboard/daily-dues",
     RECENT_TRANSACTIONS: "/dashboard/recent-transactions",
+    // The executive dashboard (Phase 6 EB-D1): dashboard:analytics, plus each
+    // figure's source permission. PAR loans also need reports:view and loans:view.
+    EXECUTIVE_OVERVIEW: "/dashboard/executive/overview",
+    EXECUTIVE_BRANCHES: "/dashboard/executive/branches",
+    EXECUTIVE_PAR_LOANS: "/dashboard/executive/par-loans",
+    // EB-D2: trends and turnaround need reports:view; the share capital
+    // control needs accounting:view and share_capital:view. These take a
+    // custom range as `from` and `to`.
+    EXECUTIVE_TRENDS: "/dashboard/executive/trends",
+    EXECUTIVE_ATTENTION: "/dashboard/executive/attention",
+    EXECUTIVE_TURNAROUND: "/dashboard/executive/turnaround",
+    EXECUTIVE_SHARE_CAPITAL_CONTROL: "/dashboard/executive/share-capital-control",
   },
   USERS: {
     LIST: "/users",
@@ -284,6 +296,30 @@ export const API_ENDPOINTS = {
     DETAIL: (id: number) => `/branches/${id}`,
     CREATE: "/branches",
     UPDATE: (id: number) => `/branches/${id}`,
+    // Suspend or reactivate, with a reason (Phase 6 MB-BE1). `PUT UPDATE`
+    // refuses a changed `is_active` (422). branches:manage plus view_all.
+    STATUS: (id: number) => `/branches/${id}/status`,
+    // Multi-branch (MB-BE1), each needing branches:manage plus view_all:
+    // move the main-office flag (with a reason), and the closure: GET the
+    // checklist and waiting request, POST to ask, DELETE to cancel, and
+    // approve or reject by a different user.
+    MAIN_OFFICE: (id: number) => `/branches/${id}/main-office`,
+    CLOSURE: (id: number) => `/branches/${id}/closure`,
+    CLOSURE_APPROVE: (id: number) => `/branches/${id}/closure/approve`,
+    CLOSURE_REJECT: (id: number) => `/branches/${id}/closure/reject`,
+  },
+  // Money moved between branches through 1190 (Phase 6 MB-BE5). Each step's
+  // permission is checked by the server; approve, receive and reverse take an
+  // Idempotency-Key.
+  INTERBRANCH_TRANSFERS: {
+    LIST: "/interbranch-transfers",
+    CREATE: "/interbranch-transfers",
+    IN_TRANSIT: "/interbranch-transfers/in-transit",
+    DETAIL: (id: number) => `/interbranch-transfers/${id}`,
+    ACTION: (id: number, action: "approve" | "reject" | "cancel" | "receive" | "reverse") =>
+      `/interbranch-transfers/${id}/${action}`,
+    // The §15 branch counts (dashboard:analytics; each figure null without its source's permission).
+    BRANCH_COUNTS: "/branch-counts",
   },
   SHARE_CAPITAL: {
     LEDGER_LIST: "/share-capital/ledger",
@@ -626,6 +662,82 @@ export const API_ENDPOINTS = {
   LINDA: {
     CHAT: "/linda/chat",
     SETTINGS: "/linda/settings",
+  },
+  /**
+   * AMLA foundation (Phase 6, AMLA-B1). `STATUS`, `CALENDAR` and
+   * `DEADLINE_PREVIEW` need `amla:view`; `SETTINGS` needs `amla:view` or
+   * `amla:settings`, `SETTINGS_VERSIONS` `amla:settings` or `amla:audit`,
+   * change requests `amla:settings` and `LOG` `amla:audit`, each of those
+   * with `branches:view_all`. The maker of a change can't approve or reject it.
+   */
+  AMLA: {
+    STATUS: "/amla/status",
+    SETTINGS: "/amla/settings",
+    SETTINGS_VERSIONS: "/amla/settings/versions",
+    CALENDAR: "/amla/calendar",
+    DEADLINE_PREVIEW: "/amla/deadlines/preview",
+    CHANGE_REQUESTS: "/amla/change-requests",
+    CHANGE_REQUEST_APPROVE: (id: number) => `/amla/change-requests/${id}/approve`,
+    CHANGE_REQUEST_REJECT: (id: number) => `/amla/change-requests/${id}/reject`,
+    CHANGE_REQUEST_WITHDRAW: (id: number) => `/amla/change-requests/${id}/withdraw`,
+    LOG: "/amla/log",
+    /** AMLA-B4: every CDD route needs `amla:cdd`; a walk-in also needs `branches:view_all`. */
+    CDD_SUBJECTS: "/amla/cdd/subjects",
+    CDD_SUBJECT: (segment: string, id: number) => `/amla/cdd/${segment}/${id}`,
+    CDD_ID_VERIFICATIONS: (segment: string, id: number) => `/amla/cdd/${segment}/${id}/id-verifications`,
+    CDD_RISK_ASSESSMENTS: (segment: string, id: number) => `/amla/cdd/${segment}/${id}/risk-assessments`,
+    CDD_REVIEWS: (segment: string, id: number) => `/amla/cdd/${segment}/${id}/reviews`,
+    /** AMLA-B5: a subject's IDs on record, by type and last four only (`amla:cdd`). */
+    CDD_VALID_IDS: (segment: string, id: number) => `/amla/cdd/${segment}/${id}/valid-ids`,
+    /** AMLA-B5: screening needs `amla:screening`, orders `amla:sanctions`; both with every branch. */
+    SCREENING_LISTS: "/amla/screening/lists",
+    SCREENING_LIST_UPLOAD: (source: string) => `/amla/screening/lists/${source}/versions`,
+    SCREENING_RESCREEN: "/amla/screening/rescreen",
+    SCREENING_MATCHES: "/amla/screening/matches",
+    SCREENING_MATCH: (id: number) => `/amla/screening/matches/${id}`,
+    SCREENING_MATCH_CONFIRM: (id: number) => `/amla/screening/matches/${id}/confirm`,
+    SCREENING_MATCH_CLEAR: (id: number) => `/amla/screening/matches/${id}/clear`,
+    ORDERS: "/amla/orders",
+    ORDER: (id: number) => `/amla/orders/${id}`,
+    ORDER_RELEASE: (id: number) => `/amla/orders/${id}/release`,
+    ORDER_RELEASE_APPROVE: (id: number) => `/amla/orders/${id}/release/approve`,
+    ORDER_RELEASE_REJECT: (id: number) => `/amla/orders/${id}/release/reject`,
+    ORDER_RELEASE_WITHDRAW: (id: number) => `/amla/orders/${id}/release/withdraw`,
+    RISK_RULES: "/amla/risk-rules",
+    /** AMLA-B3: alerts need `amla:alerts`, candidates `amla:ctr`; both branch-scoped. Rules are head office. */
+    ALERTS: "/amla/alerts",
+    ALERT: (id: number) => `/amla/alerts/${id}`,
+    CTR_CANDIDATES: "/amla/ctr-candidates",
+    CTR_CANDIDATE: (id: number) => `/amla/ctr-candidates/${id}`,
+    DETECTION_RULES: "/amla/detection-rules",
+    DETECTION_RULE_VERSIONS: "/amla/detection-rules/versions",
+    /**
+     * AMLA-B6: cases need `amla:cases` with every branch (deciding also
+     * `amla:approve`, the STR `amla:str`); reports and deadlines any reporting
+     * key (an STR also every branch). Every view, download and export is logged.
+     */
+    ALERT_ASSIGN: (id: number) => `/amla/alerts/${id}/assign`,
+    ALERT_REVIEW: (id: number) => `/amla/alerts/${id}/review`,
+    ALERT_CLOSE: (id: number) => `/amla/alerts/${id}/close`,
+    ALERT_HISTORY: (id: number) => `/amla/alerts/${id}/history`,
+    ALERT_ESCALATE: (id: number) => `/amla/alerts/${id}/escalate`,
+    CASES: "/amla/cases",
+    CASE: (id: number) => `/amla/cases/${id}`,
+    CASE_ASSIGN: (id: number) => `/amla/cases/${id}/assign`,
+    CASE_NOTES: (id: number) => `/amla/cases/${id}/notes`,
+    CASE_EVIDENCE: (id: number) => `/amla/cases/${id}/evidence`,
+    CASE_EVIDENCE_FILE: (id: number, evidenceId: number) => `/amla/cases/${id}/evidence/${evidenceId}`,
+    CASE_DECISION: (id: number) => `/amla/cases/${id}/decision`,
+    CASE_STR: (id: number) => `/amla/cases/${id}/str`,
+    CTR_CANDIDATE_REPORT: (id: number) => `/amla/ctr-candidates/${id}/report`,
+    REPORTS: "/amla/reports",
+    REPORT: (id: number) => `/amla/reports/${id}`,
+    REPORT_APPROVE: (id: number) => `/amla/reports/${id}/approve`,
+    REPORT_RETURN: (id: number) => `/amla/reports/${id}/return`,
+    REPORT_SUBMISSIONS: (id: number) => `/amla/reports/${id}/submissions`,
+    REPORT_SUBMISSION_EVIDENCE: (id: number, submissionId: number) => `/amla/reports/${id}/submissions/${submissionId}/evidence`,
+    REPORT_EXPORT: (id: number) => `/amla/reports/${id}/export`,
+    FILING_DEADLINES: "/amla/filing-deadlines",
   },
   /**
    * CDA Compliance (CDA design §3). Every route needs `branches:view_all` plus

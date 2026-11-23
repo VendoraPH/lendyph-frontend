@@ -196,7 +196,7 @@ export function ReleaseCoMakers({ loan, onLoanChange }: ReleaseCoMakersProps) {
                 items={pickItems}
                 disabled={adding}
               >
-                <SelectTrigger id="new-cm-pick" className="w-full h-9">
+                <SelectTrigger id="new-cm-pick" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -217,7 +217,6 @@ export function ReleaseCoMakers({ loan, onLoanChange }: ReleaseCoMakersProps) {
                 </Label>
                 <Input
                   id="new-cm-first"
-                  className="h-9"
                   autoFocus
                   required
                   value={form.first_name}
@@ -231,7 +230,6 @@ export function ReleaseCoMakers({ loan, onLoanChange }: ReleaseCoMakersProps) {
                 </Label>
                 <Input
                   id="new-cm-last"
-                  className="h-9"
                   required
                   value={form.last_name}
                   onChange={(e) => update("last_name", e.target.value)}
@@ -245,7 +243,6 @@ export function ReleaseCoMakers({ loan, onLoanChange }: ReleaseCoMakersProps) {
                 <Input
                   id="new-cm-contact"
                   type="tel"
-                  className="h-9"
                   placeholder="09171234567"
                   value={form.contact_number}
                   onChange={(e) => update("contact_number", e.target.value)}
@@ -258,7 +255,6 @@ export function ReleaseCoMakers({ loan, onLoanChange }: ReleaseCoMakersProps) {
                 </Label>
                 <Input
                   id="new-cm-rel"
-                  className="h-9"
                   placeholder="e.g. Sibling, Spouse"
                   value={form.relationship_to_borrower}
                   onChange={(e) => update("relationship_to_borrower", e.target.value)}

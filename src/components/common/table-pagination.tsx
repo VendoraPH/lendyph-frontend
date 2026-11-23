@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -42,6 +43,8 @@ export function TablePagination({
   onPageChange,
   onPerPageChange,
 }: TablePaginationProps) {
+  // Names the rows-per-page picker for screen readers.
+  const rowsLabelId = useId();
   const totalPages = Math.max(1, Math.ceil(total / perPage));
   const safePage = Math.min(Math.max(1, page), totalPages);
   const startIndex = (safePage - 1) * perPage;
@@ -61,7 +64,7 @@ export function TablePagination({
       className="flex shrink-0 items-center justify-between pt-4 border-t mt-4"
     >
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <span>Rows per page</span>
+        <span id={rowsLabelId}>Rows per page</span>
         <Select
           items={perPageItems}
           value={String(perPage)}
@@ -69,7 +72,7 @@ export function TablePagination({
             if (val != null) onPerPageChange(Number(val));
           }}
         >
-          <SelectTrigger size="sm" className="w-16">
+          <SelectTrigger size="sm" className="w-16" aria-labelledby={rowsLabelId}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

@@ -7,12 +7,13 @@ import { DateRangeFilter } from "@/components/common/date-range-filter";
 import { ScrollBox } from "@/components/common/page-fill";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useApiResource } from "@/hooks";
-import { ALL_BRANCHES, branchIdParam } from "@/lib/branch-filter";
+import { branchIdParam } from "@/lib/branch-filter";
 import { formatDateISO, todayDate, todayISO } from "@/lib/format";
 import { loanOriginationService } from "@/services";
 import { ApplicationsTable } from "./_components/applications-table";
 import { KpiGrid } from "./_components/dashboard/kpi-grid";
 import { OriginationCharts } from "./_components/dashboard/origination-charts";
+import { useBranchFilter } from "@/hooks/use-working-branch";
 
 function thirtyDaysAgo(): string {
   const d = todayDate();
@@ -22,7 +23,7 @@ function thirtyDaysAgo(): string {
 
 export default function OriginationDashboardPage() {
   const [range, setRange] = useState(() => ({ from: thirtyDaysAgo(), to: todayISO() }));
-  const [branch, setBranch] = useState(ALL_BRANCHES);
+  const [branch, setBranch] = useBranchFilter();
   const fetcher = useCallback(
     () =>
       loanOriginationService.dashboard({

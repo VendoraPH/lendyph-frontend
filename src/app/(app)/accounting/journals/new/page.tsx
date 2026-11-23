@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { RouteGuard } from "@/components/common";
+import { useWorkingBranch } from "@/hooks/use-working-branch";
 import { PageFill } from "@/components/common/page-fill";
 import { Button } from "@/components/ui/button";
 import { accountingService } from "@/services";
@@ -17,10 +18,12 @@ import { JournalEntryForm } from "../_components/journal-entry-form";
 
 function NewJournalEntryContent() {
   const router = useRouter();
+  // A new entry starts in the working branch (multi-branch flag), else as before.
+  const { branchId: working } = useWorkingBranch();
   const [initial] = useState<JournalEntryDraft>(() => ({
     date: todayISO(),
     reference: "",
-    branch_id: null,
+    branch_id: working,
     description: "",
     lines: [emptyLine(), emptyLine()],
   }));

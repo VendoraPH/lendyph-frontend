@@ -1,6 +1,7 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useId, useState } from "react";
+import { LOADING_BRANCHES } from "@/lib/branch-filter";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -21,6 +22,7 @@ import {
 } from "../_lib/report-subject";
 import { toMemberOption, type MemberOption } from "@/hooks/use-member-search";
 import { useAuth, useBranches } from "@/hooks";
+import { useWorkingBranchPreset } from "@/hooks/use-working-branch";
 import { useBrandingStore } from "@/store/branding-store";
 import { branchPicker, pickedBranchLabel } from "@/lib/user-branches";
 import { Button } from "@/components/ui/button";
@@ -172,9 +174,10 @@ function ReportDetailContent({
     linkedPeriod ?? presetRange(defaultPreset, { from: "", to: "" })
   );
   // A link's `?branch=<id>` presets the picker on reports that filter by
-  // branch. It counts only once the picker offers it (see `pickedBranchId`).
-  const [branchChoice, setBranchChoice] = useState<number | null>(
-    report?.supportsBranch ? branchParam : null
+  // branch, else the working branch (multi-branch flag). Either counts only
+  // once the picker offers it (see `linkedBranchId`).
+  const [branchChoice, setBranchChoice] = useWorkingBranchPreset<number | null>((working) =>
+    report?.supportsBranch ? (branchParam ?? working) : null
   );
   // The savings product filter, and its words for the report's subtitle.
   const [product, setProduct] = useState<{ value: string; label: string }>({ value: ALL_PRODUCTS, label: "" });
@@ -203,6 +206,7 @@ function ReportDetailContent({
   // A linked branch still waiting on the list holds Generate, so the first run
   // can't go out for every branch while the link asked for one.
   const branchPending = branchChoice !== null && branchesLoading;
+  const branchFieldId = useId();
   const logoUrl = useBrandingStore((s) => s.logoUrl);
   const loadBranding = useBrandingStore((s) => s.load);
 
@@ -492,8 +496,11 @@ function ReportDetailContent({
                 </p>
                 {/* At fit one row that scrolls sideways. Its right edge fades
                     while more presets lie beyond it; the trailing padding lets
-                    the last one scroll clear of the fade. */}
-                <div className="flex flex-wrap gap-1.5 fit:flex-nowrap fit:overflow-x-auto fit:pb-0.5 fit:pr-8 fit:scroll-pe-8 fit:[mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)]">
+                    the last one scroll clear of the fade. The vertical padding
+                    keeps the focus outline inside the scroll box, and the
+                    matching negative margin keeps the presets on the date
+                    fields' line. */}
+                <div className="flex flex-wrap gap-1.5 fit:flex-nowrap fit:overflow-x-auto fit:-my-0.5 fit:py-0.5 fit:pr-8 fit:scroll-pe-8 fit:[mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)]">
                   {PRESETS.map((p) => (
                     <button
                       key={p.id}
@@ -533,7 +540,7 @@ function ReportDetailContent({
                         setRange({ ...activeRange, from: e.target.value });
                         setDoc(null);
                       }}
-                      className="h-9 w-40"
+                      className="w-40"
                     />
                   </div>
                   <div className="space-y-1">
@@ -549,7 +556,7 @@ function ReportDetailContent({
                         setRange({ ...activeRange, to: e.target.value });
                         setDoc(null);
                       }}
-                      className="h-9 w-40"
+                      className="w-40"
                     />
                   </div>
                 </>
@@ -557,7 +564,7 @@ function ReportDetailContent({
               <Button
                 onClick={handleGenerate}
                 disabled={generating || missingSubject || spanTooWide || branchPending}
-                className="h-9 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
               >
                 {generating ? (
                   <>
@@ -590,7 +597,9 @@ function ReportDetailContent({
             <div className="mt-4 flex flex-wrap items-end gap-4 border-t pt-4 fit:mt-3 fit:gap-3 fit:pt-3">
               {report.supportsBranch && (
                 <div className="space-y-1">
-                  <Label className="text-xs">Branch</Label>
+                  <Label htmlFor={branchFieldId} className="text-xs">
+                    Branch
+                  </Label>
                   <Select
                     value={branchId === null ? ALL_BRANCHES : String(branchId)}
                     onValueChange={(v: string | null) => {
@@ -600,8 +609,9 @@ function ReportDetailContent({
                       setDoc(null);
                     }}
                   >
-                    <SelectTrigger className="h-9 w-56">
-                      <SelectValue>{() => branchLabel}</SelectValue>
+                    <SelectTrigger id={branchFieldId} className="w-56">
+                      {/* A preset branch waits on the list: never "All Branches" first. */}
+                      <SelectValue>{() => (branchPending ? LOADING_BRANCHES : branchLabel)}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value={ALL_BRANCHES}>
@@ -641,7 +651,7 @@ function ReportDetailContent({
                       setDoc(null);
                     }}
                     options={report.groupBy.options}
-                    className="h-9 w-40"
+                    className="w-40"
                   />
                 </div>
               )}

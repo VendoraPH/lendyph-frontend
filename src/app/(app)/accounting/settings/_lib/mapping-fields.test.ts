@@ -70,6 +70,16 @@ test("the Phase 2 roles can be re-pointed, each to the account type it must be",
   }
 });
 
+test("the interbranch clearing role can be mapped, to an asset account, in its own group", () => {
+  const group = GROUPS.find((g) => g.fields.some((f) => f.key === "interbranch_clearing"));
+  assert.ok(group, "interbranch clearing is on the screen");
+  assert.equal(group.title, "Between branches");
+  const field = group.fields.find((f) => f.key === "interbranch_clearing")!;
+  assert.equal(field.label, "Interbranch clearing");
+  assert.deepEqual(field.types, ["asset"]);
+  assert.match(field.hint, /1190/);
+});
+
 test("every label and hint reads in plain words: Member, never Borrower, and no dollar sign", () => {
   for (const field of FIELDS) {
     for (const text of [field.label, field.hint]) {
