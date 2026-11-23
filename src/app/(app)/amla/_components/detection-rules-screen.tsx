@@ -7,10 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useApiResource, usePermission } from "@/hooks";
-import { amlaApi } from "@/lib/amla/api";
 import { amlaMonitoringAccess } from "@/lib/amla/monitoring-access";
 import { amlaMonitoringApi } from "@/lib/amla/monitoring-api";
-import { amlaDetectionRuleRows, amlaPendingRequestId } from "@/lib/amla/monitoring-view";
+import { amlaDetectionRuleRows, amlaRuleVersionLine } from "@/lib/amla/monitoring-view";
 import { once } from "@/lib/amla/once";
 import { formatDateTime } from "@/lib/format";
 import type { AmlaDetectionRulesVersion } from "@/types/amla-monitoring";
@@ -29,12 +28,6 @@ export function DetectionRulesScreen() {
   const resource = useApiResource(fetcher);
   const [asking, setAsking] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-  // The rules endpoint sends no waiting request, so settings holders read it from the change requests.
-  const [pendingFetcher, setPendingFetcher] = useState(() => once(() => readPending()));
-  const pending = useApiResource(pendingFetcher, access.askRuleChange);
-  const pendingId = pending.data ?? null;
-  // Ask is offered only once the server says nothing is waiting.
-  const canAsk = access.askRuleChange && !pending.loading && pending.error === null && pendingId === null;
 
   return (
     <PageFill>
@@ -48,12 +41,15 @@ export function DetectionRulesScreen() {
       <ScrollBox className="space-y-4 p-px">
         <Card>
           <CardContent className="py-4 text-sm text-muted-foreground">
-            The list of monitored transactions and the nightly coverage check aren&apos;t offered by the server yet. Alerts and
-            CTR candidates show the transactions behind each one.
+            Volumes by branch and channel, with what was screened and flagged, are in AMLA Reports, Transaction Monitoring.
+            Alerts and CTR candidates show the transactions behind each one.
           </CardContent>
         </Card>
         <DataState resource={resource} summary="The detection rules in force." endpoints={["GET /amla/detection-rules"]}>
-          {(version) => (
+          {(version) => {
+            // The rules carry the waiting change (AMLA-B7); Ask is offered only while none waits.
+            const pendingId = version.pending_change_request_id ?? null;
+            return (
             <>
               {pendingId !== null && (
                 <p className="rounded-md border bg-muted/40 p-3 text-sm">
@@ -61,7 +57,7 @@ export function DetectionRulesScreen() {
                   wait at a time.
                 </p>
               )}
-              <RulesCard version={version} canAsk={canAsk} onAsk={() => setAsking(true)} />
+              <RulesCard version={version} canAsk={access.askRuleChange && pendingId === null} onAsk={() => setAsking(true)} />
               {access.askRuleChange && (
                 <DetectionRulesChangeDialog
                   open={asking}
@@ -70,12 +66,12 @@ export function DetectionRulesScreen() {
                   onAsked={() => {
                     setAsking(false);
                     setFetcher(() => once(() => amlaMonitoringApi.detectionRules()));
-                    setPendingFetcher(() => once(() => readPending()));
                   }}
                 />
               )}
             </>
-          )}
+            );
+          }}
         </DataState>
         {access.ruleHistory &&
           (showHistory ? (
@@ -90,18 +86,13 @@ export function DetectionRulesScreen() {
   );
 }
 
-/** The waiting detection rules change's id, or null. */
-function readPending(): Promise<number | null> {
-  return amlaApi.changeRequests({ status: "pending", type: "detection_rules", page: 1 }).then(amlaPendingRequestId);
-}
-
 function RulesCard({ version, canAsk, onAsk }: { version: AmlaDetectionRulesVersion; canAsk: boolean; onAsk?: () => void }) {
   return (
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2">
         <div className="space-y-1">
           <CardTitle className="flex items-center gap-2 text-base">
-            Rules version {version.version}
+            {amlaRuleVersionLine(version)}
             {version.to_verify && <Badge variant="outline">To verify</Badge>}
           </CardTitle>
           <CardDescription>
