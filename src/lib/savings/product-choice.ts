@@ -51,8 +51,8 @@ export interface ProductChoice {
   empty: ProductChoiceEmpty | null;
 }
 
-const BOOKS_FIRST = "Set up savings in the books first (Savings → Settings). It needs the chart of accounts.";
-const SETTINGS_LINK = { href: "/settings/savings", label: "Open Savings Settings" };
+const BOOKS_FIRST = "Set up savings in the books first (Settings → Savings). It needs the chart of accounts.";
+const SETTINGS_LINK = { href: "/settings/savings", label: "Open Settings → Savings" };
 const PRODUCTS_LINK = { href: "/settings/savings-products", label: "Open Savings Products" };
 
 const KIND_WORDS: Record<SavingsProductKind, string> = {
@@ -73,11 +73,11 @@ function notActiveYet(kind: SavingsProductKind, input: ProductChoiceInput, noneA
     return { message: `${lead} ${BOOKS_FIRST}`, link: input.canManage ? SETTINGS_LINK : null };
   }
   if (input.booksReady === true) {
-    const fix = noneAtAll ? "Add one in Savings → Products." : "Turn a product on in Savings → Products.";
+    const fix = noneAtAll ? "Add one in Settings → Savings Products." : "Turn a product on in Settings → Savings Products.";
     return { message: `${lead} ${fix}`, link: input.canManage ? PRODUCTS_LINK : null };
   }
   return {
-    message: `${lead} A product can be turned on once savings is set up in the books (Savings → Settings), in Savings → Products.`,
+    message: `${lead} A product can be turned on once savings is set up in the books (Settings → Savings), in Settings → Savings Products.`,
     link: input.canManage ? SETTINGS_LINK : null,
   };
 }

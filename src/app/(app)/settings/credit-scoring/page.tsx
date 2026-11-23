@@ -192,7 +192,7 @@ function CreditScoringSettingsContent() {
   return (
     <PageFill>
       <CreditScoringPageHeader
-        title="Settings"
+        title="Credit Scoring"
         description="The privacy notice, the policy figures behind capacity and flags, and the definitions shown to staff."
       />
 
@@ -228,7 +228,7 @@ function CreditScoringSettingsContent() {
 
 export default function CreditScoringSettingsPage() {
   return (
-    <RouteGuard permission="credit_scoring:settings" pageName="Credit Scoring Settings">
+    <RouteGuard permission="credit_scoring:settings" pageName="Credit Scoring">
       <CreditScoringSettingsContent />
     </RouteGuard>
   );

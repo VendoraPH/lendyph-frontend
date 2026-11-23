@@ -25,7 +25,7 @@ export function SettingsScreen() {
   return (
     <PageFill>
       <div className="shrink-0">
-        <h1 className="text-2xl font-semibold tracking-tight">Savings Settings</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Savings</h1>
         <p className="text-sm text-muted-foreground">
           When a withdrawal or payout needs approval, when an account turns dormant, and the tax on deposit interest.
         </p>

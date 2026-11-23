@@ -24,7 +24,7 @@ export default function Page() {
   const [tab, setTab] = useState("profile");
   return (
     <CdaPage
-      title="CDA Settings"
+      title="CDA"
       description="The cooperative's regulatory profile, deadlines, reminders and report templates."
       yearless
     >

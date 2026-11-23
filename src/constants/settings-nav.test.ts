@@ -51,6 +51,20 @@ test("each moved page lives under /settings, keeps its module's flag gate, and i
   }
 });
 
+test("each moved page is titled with its Settings menu name, not its old module path", () => {
+  const titled: [file: string, words: string[]][] = [
+    ["src/app/(app)/settings/accounting/page.tsx", ['title="Accounting"', 'pageName="Accounting"']],
+    ["src/app/(app)/settings/cda/page.tsx", ['title="CDA"']],
+    ["src/app/(app)/settings/credit-scoring/page.tsx", ['title="Credit Scoring"', 'pageName="Credit Scoring"']],
+    ["src/app/(app)/settings/savings/page.tsx", ['pageName="Savings"']],
+    ["src/app/(app)/settings/savings/_components/settings-screen.tsx", [">Savings</h1>"]],
+  ];
+  for (const [file, words] of titled) {
+    const page = read(file);
+    for (const word of words) assert.ok(page.includes(word), `${file}: ${word}`);
+  }
+});
+
 test("the flag-gated entries are built only with their module's flag", () => {
   const nav = read("src/constants/navigation.ts");
   assert.match(nav, /env\.features\.savings\s*\?\s*\[\s*\{ title: "Savings Products", href: "\/settings\/savings-products"/);

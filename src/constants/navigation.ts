@@ -313,7 +313,7 @@ const CREDIT_SCORING_NAV: NavItem = {
   /**
    * The backend seeds `credit_scoring:view|override|settings` for admin and
    * super_admin only (lendyph-backend #174, 2026-10-02), and every endpoint
-   * behind these seven destinations answers 501 until it is built. Each
+   * behind these five destinations answers 501 until it is built. Each
    * screen then shows its "Not connected yet" panel: `useApiResource` treats
    * 404 and 501 as "not built yet" and anything else as an error, so a real
    * endpoint must not ship as a 403/500 stub.
@@ -322,8 +322,8 @@ const CREDIT_SCORING_NAV: NavItem = {
    * `user.permissions` from the auth store as the sidebar, so granting
    * `credit_scoring:view` to another role shows it this menu at once.
    *
-   * Note the name: the two admin screens gate on `credit_scoring:settings`,
-   * NOT `:configure`. The design spec originally said `configure` and has
+   * Note the name: the settings key is `credit_scoring:settings`, NOT
+   * `:configure`. The design spec originally said `configure` and has
    * since been corrected; older copies of it have not. The code is
    * authoritative, and it mirrors `accounting:settings`.
    *

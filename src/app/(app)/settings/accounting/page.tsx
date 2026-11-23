@@ -47,7 +47,7 @@ function AccountingSettingsContent() {
   return (
     <PageFill>
       <AccountingPageHeader
-        title="Accounting Settings"
+        title="Accounting"
         description="Which account each automatic entry posts to."
         actions={
           <PermissionGate permission="accounting:settings">
@@ -119,7 +119,7 @@ function AccountingSettingsContent() {
 
 export default function AccountingSettingsPage() {
   return (
-    <RouteGuard permission="accounting:settings" pageName="Accounting Settings">
+    <RouteGuard permission="accounting:settings" pageName="Accounting">
       <AccountingSettingsContent />
     </RouteGuard>
   );
