@@ -69,7 +69,6 @@ function BorrowerDetailContent() {
   const { can } = usePermission();
   const canListLoans = can("loans:view");
   const canListPayments = can("payments:view");
-  const holdsTransfer = can("borrowers:transfer");
   const [transferOpen, setTransferOpen] = useState(false);
   // One read of the server's loan totals for the Overview and Payments tabs.
   const loanSummary = useBorrowerLoanSummary(borrower?.id, loans);
@@ -217,15 +216,18 @@ function BorrowerDetailContent() {
     );
   }
 
+  // Needs borrowers:view and borrowers:transfer, for a member with a branch.
+  const transferable = canTransferMember(can, borrower);
+
   return (
     <PageFill className="fit:gap-4">
       <BorrowerHeader
         borrower={borrower}
         onEdit={() => router.push(`/borrowers/${borrowerId}/edit`)}
         onPhotoUpdate={reload}
-        onTransfer={canTransferMember(holdsTransfer, borrower) ? () => setTransferOpen(true) : undefined}
+        onTransfer={transferable ? () => setTransferOpen(true) : undefined}
       />
-      {canTransferMember(holdsTransfer, borrower) && (
+      {transferable && (
         <TransferMemberDialog
           borrower={borrower}
           open={transferOpen}

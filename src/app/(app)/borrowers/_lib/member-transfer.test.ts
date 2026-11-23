@@ -23,6 +23,16 @@ function refusal(status: number, errors?: Record<string, string[]>, message?: st
   return { isAxiosError: true, response: { status, data: { message, ...(errors ? { errors } : {}) } } };
 }
 
+/** A `can()` that answers yes only for the keys given. */
+function holds(...keys: string[]) {
+  return (permission: string) => keys.includes(permission);
+}
+
+/** A 422 the way MemberTransfer refuses: the words under `branch_id` and as the message. */
+function refusedInWords(words: string) {
+  return refusal(422, { branch_id: [words] }, words);
+}
+
 // ── Edit Member's branch picker ──
 
 test("Edit Member's branch picker is read-only once the member has a branch", () => {
@@ -49,13 +59,15 @@ test("the member's branch is read from the relation, else the bare id", () => {
 
 // ── Who sees Transfer member ──
 
-test("Transfer member shows for holders of the member transfer permission, for a member with a branch", () => {
-  assert.equal(canTransferMember(true, { branch_id: 1 }), true);
-  assert.equal(canTransferMember(false, { branch_id: 1 }), false);
+test("Transfer member needs both the member view and the member transfer permission", () => {
+  assert.equal(canTransferMember(holds("borrowers:view", "borrowers:transfer"), { branch_id: 1 }), true);
+  assert.equal(canTransferMember(holds("borrowers:transfer"), { branch_id: 1 }), false);
+  assert.equal(canTransferMember(holds("borrowers:view"), { branch_id: 1 }), false);
+  assert.equal(canTransferMember(holds(), { branch_id: 1 }), false);
 });
 
 test("a member with no branch gets a branch by editing, so Transfer member isn't offered", () => {
-  assert.equal(canTransferMember(true, { branch: null, branch_id: null }), false);
+  assert.equal(canTransferMember(holds("borrowers:view", "borrowers:transfer"), { branch: null, branch_id: null }), false);
 });
 
 // ── The destination list ──
@@ -107,23 +119,69 @@ test("a reason longer than 500 characters is refused before sending", () => {
 
 // ── A refusal ──
 
-test("the server's refusal listing what's still open is shown in its words", () => {
+/** Neither a retry nor a member out of reach: the form or the member's records need changing first. */
+const noRetry = { retry: false, outOfReach: false };
+
+test("422: what's still open is shown in the server's words, with no retry", () => {
   const words =
-    "This member can't be transferred while they have 1 loan still being paid and 2 open savings accounts. " +
+    "This member can't be transferred while they have 1 loan still being paid, 1 loan application not yet released, " +
+    "2 open savings accounts, 1 open time deposit, 1 open portal request and 1 GCash Cash In not yet paid. " +
     "Loans, savings, time deposits, portal requests and GCash Cash Ins stay in the branch where they were opened, so close or settle them first.";
-  assert.deepEqual(transferFailure(refusal(422, { branch_id: [words] }, words)), { reason: null, general: words });
+  assert.deepEqual(transferFailure(refusedInWords(words)), { reason: null, general: words, ...noRetry });
 });
 
-test("a refusal of the reason shows under the reason", () => {
+test("422: a hidden or invalid destination, a suspended or closed one, or the member's own branch reads in the server's words", () => {
+  for (const words of [
+    "Choose one of your branches.",
+    "North (NTH) is suspended, so it can't receive members.",
+    "South (STH) is closed, so it can't receive members.",
+    "This member is already in North (NTH).",
+    "This member has no branch yet. Assign one by editing the member.",
+  ]) {
+    assert.deepEqual(transferFailure(refusedInWords(words)), { reason: null, general: words, ...noRetry });
+  }
+});
+
+test("422: a refusal of the reason shows under the reason", () => {
   const failure = transferFailure(refusal(422, { reason: ["Give a reason for the transfer."] }));
-  assert.deepEqual(failure, { reason: "Give a reason for the transfer.", general: null });
+  assert.deepEqual(failure, { reason: "Give a reason for the transfer.", general: null, ...noRetry });
 });
 
-test("any other failure reads in words, never a key or a status code alone", () => {
-  const failure = transferFailure(
-    refusal(403, undefined, "Transferring a member to another branch needs the member transfer permission."),
-  );
-  assert.equal(failure.reason, null);
-  assert.match(failure.general ?? "", /member transfer permission/);
-  assert.doesNotMatch(failure.general ?? "", /borrowers:transfer/);
+test("409: the member busy or changed at the same moment reads in the server's words, with a way to try again", () => {
+  for (const words of [
+    "This member's branch is being changed. Try again in a moment.",
+    "This member changed at the same moment. Reload and try again.",
+  ]) {
+    assert.deepEqual(transferFailure(refusal(409, undefined, words)), {
+      reason: null,
+      general: words,
+      retry: true,
+      outOfReach: false,
+    });
+  }
+});
+
+test("409 with no readable words still says what happened, never the generic conflict copy", () => {
+  for (const err of [refusal(409), refusal(409, undefined, "SQLSTATE[40001]: Serialization failure: 1213 Deadlock")]) {
+    const failure = transferFailure(err);
+    assert.equal(failure.general, "This member is busy or was changed at the same moment. Try again in a moment.");
+    assert.equal(failure.retry, true);
+  }
+});
+
+test("404: a member outside the caller's branches reads in words, never the framework's text, and offers no retry", () => {
+  const failure = transferFailure(refusal(404, undefined, "No query results for model [App\\Models\\Borrower] 7"));
+  assert.deepEqual(failure, {
+    reason: null,
+    general: "This member is outside your branches now, or no longer exists, so they can't be transferred.",
+    retry: false,
+    outOfReach: true,
+  });
+});
+
+test("403: a missing permission reads in the server's words, never the permission keys", () => {
+  const words = "Transferring a member to another branch needs the member transfer and member view permissions.";
+  const failure = transferFailure(refusal(403, undefined, words));
+  assert.deepEqual(failure, { reason: null, general: words, ...noRetry });
+  assert.doesNotMatch(failure.general ?? "", /borrowers:/);
 });

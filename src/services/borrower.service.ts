@@ -77,8 +77,11 @@ export const borrowerService = {
     api.patch<Borrower>(API_ENDPOINTS.BORROWERS.REACTIVATE(id)),
 
   /**
-   * Move the member to another branch with a reason (`borrowers:transfer`,
-   * Phase 6 MB-BE4). Refused in words (422) while anything is still open.
+   * Move the member to another branch with a reason (`borrowers:view` and
+   * `borrowers:transfer`, Phase 6 MB-BE4). Refused in words with 422 while
+   * anything is still open or the destination can't receive members; 409 when
+   * the member is busy or changed at the same moment; 404 for a member outside
+   * the caller's branches. The answer is the member in the new branch.
    */
   transfer: (id: number, body: { branch_id: number; reason: string }) =>
     api.post<Borrower>(API_ENDPOINTS.BORROWERS.TRANSFER(id), body),

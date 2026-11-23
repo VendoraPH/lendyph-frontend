@@ -37,11 +37,23 @@ interface TransferMemberDialogProps {
   onTransferred: () => void;
 }
 
+/** The form's messages, and what a refused transfer leaves the user to do (`transferFailure`). */
+interface DialogErrors {
+  branch_id?: string;
+  reason?: string;
+  general?: string;
+  retry?: boolean;
+  outOfReach?: boolean;
+}
+
 /**
  * Moves the member to another branch (Phase 6 MB-BE4). The server refuses it,
- * in words, while the member still has a loan, savings account, time deposit,
- * portal request or GCash Cash In open; the refusal shows here as sent. Past
- * records stay in the branch where they were posted.
+ * in words, while the member still has a loan or loan application, savings
+ * account, time deposit, portal request or unpaid GCash Cash In open; the
+ * refusal shows here as sent. A 409 (the member busy or changed at the same
+ * moment) offers Try again; after a 404 (the member outside the caller's
+ * branches now) Transfer member stays disabled. Past records stay in the
+ * branch where they were posted.
  */
 export function TransferMemberDialog({ borrower, open, onOpenChange, onTransferred }: TransferMemberDialogProps) {
   const id = useId();
@@ -57,7 +69,7 @@ export function TransferMemberDialog({ borrower, open, onOpenChange, onTransferr
 
   const [branchValue, setBranchValue] = useState<string | null>(null);
   const [reason, setReason] = useState("");
-  const [errors, setErrors] = useState<{ branch_id?: string; reason?: string; general?: string }>({});
+  const [errors, setErrors] = useState<DialogErrors>({});
   const [busy, setBusy] = useState(false);
   if (useDialogOpening(open, null)) {
     setBranchValue(null);
@@ -89,7 +101,12 @@ export function TransferMemberDialog({ borrower, open, onOpenChange, onTransferr
       onTransferred();
     } catch (err) {
       const failure = transferFailure(err);
-      setErrors({ reason: failure.reason ?? undefined, general: failure.general ?? undefined });
+      setErrors({
+        reason: failure.reason ?? undefined,
+        general: failure.general ?? undefined,
+        retry: failure.retry,
+        outOfReach: failure.outOfReach,
+      });
     } finally {
       setBusy(false);
     }
@@ -102,8 +119,9 @@ export function TransferMemberDialog({ borrower, open, onOpenChange, onTransferr
           <DialogTitle>Transfer member</DialogTitle>
           <DialogDescription>
             Moves {borrower.full_name} from {borrower.branch?.name ?? "their branch"} to another branch. Their
-            earlier records stay in the branch where they were posted. A member with a loan, savings account, time
-            deposit, portal request or GCash Cash In still open can&apos;t be moved.
+            earlier records stay in the branch where they were posted. A member with a loan or loan application,
+            savings account, time deposit or portal request still open, or a GCash Cash In not yet paid, can&apos;t be
+            moved.
           </DialogDescription>
         </DialogHeader>
 
@@ -182,9 +200,17 @@ export function TransferMemberDialog({ borrower, open, onOpenChange, onTransferr
           </div>
 
           {errors.general ? (
-            <p className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive" role="alert">
-              {errors.general}
-            </p>
+            <div
+              role="alert"
+              className="flex flex-col gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-3 sm:flex-row sm:items-start sm:justify-between"
+            >
+              <p className="text-sm text-destructive">{errors.general}</p>
+              {errors.retry ? (
+                <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={submit}>
+                  Try again
+                </Button>
+              ) : null}
+            </div>
           ) : null}
         </div>
 
@@ -194,7 +220,7 @@ export function TransferMemberDialog({ borrower, open, onOpenChange, onTransferr
           </Button>
           <Button
             onClick={submit}
-            disabled={busy || loading || destinations.length === 0}
+            disabled={busy || loading || destinations.length === 0 || errors.outOfReach}
             className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
           >
             {busy ? "Transferring…" : "Transfer member"}

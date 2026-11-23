@@ -7,8 +7,9 @@
  * `tsx --test`; the server decides every refusal.
  */
 
-import { getErrorMessage, validationErrors } from "@/lib/api-error";
+import { getErrorMessage, httpStatusOf, validationErrors } from "@/lib/api-error";
 import { pickableBranches } from "@/lib/branch-choice";
+import type { Permission } from "@/types";
 
 /** What these rules read of a member. */
 export interface MemberBranchSource {
@@ -40,6 +41,17 @@ const PICK_DESTINATION = "Choose the branch to move this member to.";
 const GIVE_REASON = "Give a reason for the transfer.";
 const REASON_TOO_LONG = `The reason can be at most ${REASON_MAX} characters.`;
 const FAILED = "We couldn't transfer this member. Please try again.";
+const BUSY = "This member is busy or was changed at the same moment. Try again in a moment.";
+const OUT_OF_REACH = "This member is outside your branches now, or no longer exists, so they can't be transferred.";
+
+/** The fixed copy `getErrorMessage` gives a 409 without readable words; BUSY replaces it. */
+const GENERIC_CONFLICT = getErrorMessage({ response: { status: 409, data: {} } });
+
+/**
+ * What the transfer needs (TransferBorrowerRequest): `borrowers:transfer`, and
+ * `borrowers:view` because the answer is the member's full record.
+ */
+const TRANSFER_PERMISSIONS: readonly Permission[] = ["borrowers:view", "borrowers:transfer"];
 
 /** The member's branch id: the relation's, else the bare id; null when there's none. */
 export function memberBranchId(member: MemberBranchSource): number | null {
@@ -52,12 +64,15 @@ export function editBranchLocked(member: MemberBranchSource): boolean {
 }
 
 /**
- * Transfer member is offered to holders of `borrowers:transfer`, for a member
- * who has a branch (one with none gets it by editing; the server refuses a
- * transfer then).
+ * Transfer member is offered to holders of both `borrowers:view` and
+ * `borrowers:transfer`, for a member who has a branch (one with none gets it
+ * by editing; the server refuses a transfer then).
  */
-export function canTransferMember(holdsTransfer: boolean, member: MemberBranchSource): boolean {
-  return holdsTransfer && memberBranchId(member) !== null;
+export function canTransferMember(
+  can: (permission: Permission) => boolean,
+  member: MemberBranchSource,
+): boolean {
+  return TRANSFER_PERMISSIONS.every((permission) => can(permission)) && memberBranchId(member) !== null;
 }
 
 /** Active: `status` when the answer carries it, else `is_active`. */
@@ -95,12 +110,38 @@ export function transferRequest(branchValue: string | null, reason: string): Tra
   return { ok: true, body: { branch_id: branchId, reason: trimmed } };
 }
 
+/** What the dialog shows after a refused or failed transfer. */
+export interface TransferFailure {
+  /** A refusal of the reason: shown under the reason. */
+  reason: string | null;
+  /** Anything else: above the buttons, in the server's words or ours. */
+  general: string | null;
+  /** 409: nothing was saved, so the same transfer can be sent again. */
+  retry: boolean;
+  /** 404: the member is outside the caller's branches now, so sending again can't help. */
+  outOfReach: boolean;
+}
+
 /**
- * Where a refused transfer is shown: a refusal of the reason under the reason;
- * anything else (what the member still has open, a closed branch, a missing
- * permission) above the buttons, in the server's words.
+ * Where a refused transfer is shown, by the server's answer:
+ * - 422: a refusal of the reason under the reason; anything else (what the
+ *   member still has open, a hidden, suspended or closed destination, the
+ *   member's own branch) above the buttons, in the server's words.
+ * - 409: the member was busy (another write held their branch lock) or
+ *   changed at the same moment, and nothing was saved: the server's words,
+ *   with a way to try again.
+ * - 404: the member is outside the caller's branches now, or gone. The
+ *   framework's text never shows.
+ * - Anything else (a missing permission, a failure): its words.
  */
-export function transferFailure(err: unknown): { reason: string | null; general: string | null } {
+export function transferFailure(err: unknown): TransferFailure {
+  const status = httpStatusOf(err);
+  if (status === 409) {
+    const words = getErrorMessage(err, BUSY);
+    return { reason: null, general: words === GENERIC_CONFLICT ? BUSY : words, retry: true, outOfReach: false };
+  }
+  if (status === 404) return { reason: null, general: OUT_OF_REACH, retry: false, outOfReach: true };
+
   const errors = validationErrors(err);
   const reason = errors?.reason?.[0] ?? null;
   const other = errors
@@ -108,6 +149,6 @@ export function transferFailure(err: unknown): { reason: string | null; general:
         .filter(([key]) => key !== "reason")
         .flatMap(([, messages]) => messages)[0]
     : undefined;
-  if (reason !== null && other === undefined) return { reason, general: null };
-  return { reason, general: other ?? getErrorMessage(err, FAILED) };
+  if (reason !== null && other === undefined) return { reason, general: null, retry: false, outOfReach: false };
+  return { reason, general: other ?? getErrorMessage(err, FAILED), retry: false, outOfReach: false };
 }
