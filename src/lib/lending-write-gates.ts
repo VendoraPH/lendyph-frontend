@@ -40,6 +40,21 @@ export const LOAN_ADJUSTMENT_CREATE_GATE: PermissionGate = {
 };
 
 /**
+ * PATCH /loan-adjustments/{id}/approve and /reject: both check
+ * loan_adjustments:approve (ApproveLoanAdjustmentRequest).
+ */
+export const LOAN_ADJUSTMENT_DECIDE_GATE: PermissionGate = {
+  permission: "loan_adjustments:approve",
+  tooltip: "Your role doesn't have permission to approve or reject loan adjustments",
+};
+
+/** PATCH /loan-adjustments/{id}/apply: the controller checks loan_adjustments:approve too. */
+export const LOAN_ADJUSTMENT_APPLY_GATE: PermissionGate = {
+  permission: "loan_adjustments:approve",
+  tooltip: "Your role doesn't have permission to apply loan adjustments",
+};
+
+/**
  * Pledge Entry's row Entry, POST /share-capital/ledger
  * (StoreShareCapitalLedgerRequest), and its bulk Manual Entry, POST
  * /pledges/bulk-entries (ShareCapitalBulkEntryRequest).

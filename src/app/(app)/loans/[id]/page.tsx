@@ -186,7 +186,13 @@ import type { ExtensionInterestOption, LoanAdjustment, LoanAdjustmentType, Repay
 import { isApprovalChainHidden, loanShouldHaveAChain, type LoanApprovalStep } from "@/types";
 import { useLoanApproval } from "@/hooks/use-loan-approval";
 import { usePermission } from "@/hooks/use-permission";
-import { LOAN_ADJUSTMENT_CREATE_GATE, recordPaymentGate } from "@/lib/lending-write-gates";
+import {
+  LOAN_ADJUSTMENT_APPLY_GATE,
+  LOAN_ADJUSTMENT_CREATE_GATE,
+  LOAN_ADJUSTMENT_DECIDE_GATE,
+  LOAN_EXTEND_GATE,
+  recordPaymentGate,
+} from "@/lib/lending-write-gates";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { CollapsibleCard } from "@/components/common/collapsible-card";
@@ -2409,10 +2415,15 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 Send back for approval
               </Button>
             )}
+            {/* Shown to everyone on a loan that can be extended; disabled, with
+                the reason, for a role without loans:extend, as Void is. */}
             {isOneMonthTermLoan &&
               ["released", "ongoing", "current", "past_due"].includes(loan.status) &&
               (loanTotalOutstanding ?? 0) > 0 && (
-                <Button
+                <PermissionButton
+                  permission={LOAN_EXTEND_GATE.permission}
+                  tooltip={LOAN_EXTEND_GATE.tooltip}
+                  wrapperClassName="w-full sm:w-auto"
                   onClick={() => {
                     setExtendInterestOption("pay");
                     setExtendPreviewRound((round) => round + 1);
@@ -2422,7 +2433,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 >
                   <CalendarPlus className="mr-2 h-4 w-4" />
                   Extend Loan
-                </Button>
+                </PermissionButton>
               )}
           </div>
         </div>
@@ -3969,17 +3980,23 @@ function LoanDetail({ loanId }: { loanId: number }) {
                           </p>
                         )}
                       </div>
+                      {/* Disabled, with the reason, for a role without the
+                          permission each request checks, as Void is. */}
                       {adj.adjustment_type !== "extension" && adj.status === "pending" && (
                         <div className="flex shrink-0 items-center gap-2">
-                          <Button
+                          <PermissionButton
+                            permission={LOAN_ADJUSTMENT_DECIDE_GATE.permission}
+                            tooltip={LOAN_ADJUSTMENT_DECIDE_GATE.tooltip}
                             size="sm"
                             variant="outline"
                             disabled={actionLoading}
                             onClick={() => askAdjustmentDecision({ adjustment: adj, action: "approve" })}
                           >
                             Approve
-                          </Button>
-                          <Button
+                          </PermissionButton>
+                          <PermissionButton
+                            permission={LOAN_ADJUSTMENT_DECIDE_GATE.permission}
+                            tooltip={LOAN_ADJUSTMENT_DECIDE_GATE.tooltip}
                             size="sm"
                             variant="outline"
                             className="text-destructive hover:text-destructive"
@@ -3987,19 +4004,21 @@ function LoanDetail({ loanId }: { loanId: number }) {
                             onClick={() => askAdjustmentDecision({ adjustment: adj, action: "reject" })}
                           >
                             Reject
-                          </Button>
+                          </PermissionButton>
                         </div>
                       )}
                       {adj.adjustment_type !== "extension" && adj.status === "approved" && (
                         <div className="flex shrink-0 items-center gap-2">
-                          <Button
+                          <PermissionButton
+                            permission={LOAN_ADJUSTMENT_APPLY_GATE.permission}
+                            tooltip={LOAN_ADJUSTMENT_APPLY_GATE.tooltip}
                             size="sm"
                             className="bg-brand-blue text-brand-blue-foreground hover:bg-brand-blue-dark"
                             disabled={actionLoading}
                             onClick={() => handleApplyAdjustment(adj.id)}
                           >
                             Apply
-                          </Button>
+                          </PermissionButton>
                         </div>
                       )}
                     </div>

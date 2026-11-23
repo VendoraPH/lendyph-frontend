@@ -5,7 +5,9 @@ import { join } from "node:path";
 import type { Permission } from "@/types";
 import {
   AUTO_PAY_TOGGLE_GATE,
+  LOAN_ADJUSTMENT_APPLY_GATE,
   LOAN_ADJUSTMENT_CREATE_GATE,
+  LOAN_ADJUSTMENT_DECIDE_GATE,
   LOAN_EXTEND_GATE,
   ONE_MONTH_PREVIEW_GATE,
   PAYMENT_CREATE_GATE,
@@ -28,10 +30,16 @@ test("each lending write is gated by the permission the server checks", () => {
   assert.equal(AUTO_PAY_TOGGLE_GATE.permission, "auto_pay:toggle");
   assert.equal(PLEDGE_UPDATE_GATE.permission, "share_capital:update");
   assert.equal(LOAN_EXTEND_GATE.permission, "loans:extend");
+  // Approve and Reject (ApproveLoanAdjustmentRequest) and Apply (authorized in
+  // the controller) all check loan_adjustments:approve.
+  assert.equal(LOAN_ADJUSTMENT_DECIDE_GATE.permission, "loan_adjustments:approve");
+  assert.equal(LOAN_ADJUSTMENT_APPLY_GATE.permission, "loan_adjustments:approve");
   for (const gate of [
     PLEDGE_UPDATE_GATE,
     PAYMENT_CREATE_GATE,
     LOAN_ADJUSTMENT_CREATE_GATE,
+    LOAN_ADJUSTMENT_DECIDE_GATE,
+    LOAN_ADJUSTMENT_APPLY_GATE,
     LOAN_EXTEND_GATE,
     PLEDGE_ENTRY_CREATE_GATE,
     AUTO_PAY_TOGGLE_GATE,
@@ -69,6 +77,29 @@ test("the loan page gates Record Payment and New Adjustment", () => {
   );
   // payments:view is needed exactly where the "Extend loan?" check reads the preview.
   assert.match(page, /const recordPayment = recordPaymentGate\(offersExtendOnPartialPayment\(loan\), can\)/);
+});
+
+test("the loan page's Extend Loan stays visible and needs loans:extend, with the reason in words", () => {
+  const page = read("src/app/(app)/loans/[id]/page.tsx");
+  assert.match(
+    page,
+    /\(loanTotalOutstanding \?\? 0\) > 0 && \(\s*<PermissionButton\s+permission=\{LOAN_EXTEND_GATE\.permission\}\s+tooltip=\{LOAN_EXTEND_GATE\.tooltip\}[\s\S]*?Extend Loan\s*<\/PermissionButton>/,
+  );
+});
+
+test("the Adjustments card's Approve, Reject and Apply need loan_adjustments:approve, with the reason in words", () => {
+  const page = read("src/app/(app)/loans/[id]/page.tsx");
+  const start = page.indexOf("title={<>Adjustments &amp; History</>}");
+  const card = page.slice(start, page.indexOf("{/* ── Dialogs ── */}", start));
+  assert.ok(start > -1 && card.length > 0);
+  assert.doesNotMatch(card, /<Button\b/, "every action on the card is a PermissionButton");
+  const gated = (gate: string, label: string) =>
+    new RegExp(
+      `<PermissionButton\\s+permission=\\{${gate}\\.permission\\}\\s+tooltip=\\{${gate}\\.tooltip\\}[^<]*?>\\s*${label}\\s*</PermissionButton>`,
+    );
+  assert.match(card, gated("LOAN_ADJUSTMENT_DECIDE_GATE", "Approve"));
+  assert.match(card, gated("LOAN_ADJUSTMENT_DECIDE_GATE", "Reject"));
+  assert.match(card, gated("LOAN_ADJUSTMENT_APPLY_GATE", "Apply"));
 });
 
 test("Payment Entry's Pay needs payments:create", () => {
