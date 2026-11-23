@@ -40,7 +40,7 @@ describe("the AMLA dashboard counts", () => {
     );
   });
 
-  test("statuses read in words, and a status the server adds later still shows", () => {
+  test("statuses read in words, and a status the server adds later still shows, as another status", () => {
     const [ctr] = amlaCountBlocks({ ...NONE, ctr_candidates: { detected: 5, report_prepared: 1, set_aside_pending: 0, not_reportable: 2, merged: 1 } });
     assert.deepEqual(
       ctr.lines.map((l) => [l.label, l.value]),
@@ -49,7 +49,19 @@ describe("the AMLA dashboard counts", () => {
         ["CTR prepared", 1],
         ["Not reportable, waiting for a second approver", 0],
         ["Not reportable, with a documented reason", 2],
-        ["merged", 1],
+        ["Another status", 1],
+      ],
+    );
+  });
+
+  test("a known status the server didn't send reads —, never 0, and is never urgent", () => {
+    const [filings] = amlaCountBlocks({ ...NONE, filings: { upcoming: 3, overdue: 2 } });
+    assert.deepEqual(
+      filings.lines.map((l) => [l.label, l.value, l.text, l.urgent]),
+      [
+        ["Overdue", 2, "2", true],
+        ["Due today", null, "—", false],
+        ["Due soon", 3, "3", false],
       ],
     );
   });

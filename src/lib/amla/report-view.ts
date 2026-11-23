@@ -27,7 +27,10 @@ export const AMLA_FILING_STANDING_OPTIONS: readonly AmlaOption[] = [
 export interface AmlaCountLine {
   key: string;
   label: string;
-  value: number;
+  /** The server's count; null when it didn't send this status. */
+  value: number | null;
+  /** The count as shown: "—" when the server didn't send it, never 0. */
+  text: string;
   /** A figure that needs someone now: an overdue filing, a critical alert. */
   urgent: boolean;
 }
@@ -59,10 +62,14 @@ const BLOCKS: readonly BlockSpec[] = [
   { key: "cdd", title: "Customer due diligence", href: "/amla/customers", linkText: "Worklist", options: AMLA_CDD_STATUS_OPTIONS, urgent: ["review_overdue"] },
 ];
 
+/** A status the server adds later, until this screen has words for it. */
+const ANOTHER_STATUS = "Another status";
+
 /**
  * The dashboard's count blocks, only those the server sent (a block is null
  * without its key). Lines follow the known order; a key the server adds later
- * still shows, under its own name, so no count is dropped.
+ * still shows, as "Another status", so no count is dropped. A known status the
+ * server didn't send reads "—", never 0.
  */
 export function amlaCountBlocks(counts: AmlaDashboardCounts): AmlaCountBlock[] {
   return BLOCKS.flatMap((spec) => {
@@ -70,14 +77,21 @@ export function amlaCountBlocks(counts: AmlaDashboardCounts): AmlaCountBlock[] {
     if (block === null || block === undefined) return [];
     const known = new Set(spec.options.map((o) => o.value));
     const line = (key: string, label: string): AmlaCountLine => {
-      const value = Number(block[key] ?? 0);
-      return { key, label, value, urgent: value > 0 && spec.urgent.includes(key) };
+      const sent = block[key];
+      const value = typeof sent === "number" ? sent : null;
+      return {
+        key,
+        label,
+        value,
+        text: value === null ? "—" : String(value),
+        urgent: value !== null && value > 0 && spec.urgent.includes(key),
+      };
     };
     const lines = [
       ...spec.options.map((o) => line(o.value, o.label)),
       ...Object.keys(block)
         .filter((key) => key !== "total" && !known.has(key))
-        .map((key) => line(key, key)),
+        .map((key) => line(key, ANOTHER_STATUS)),
     ];
     const total = typeof block.total === "number" ? block.total : null;
     return [{ key: spec.key, title: spec.title, href: spec.href, linkText: spec.linkText, total, lines }];

@@ -42,7 +42,7 @@ export function AmlaCountsCard() {
                   {block.lines.map((line) => (
                     <div key={line.key} className="flex items-baseline justify-between gap-3">
                       <dt className="text-muted-foreground">{line.label}</dt>
-                      <dd className={line.urgent ? "font-semibold text-destructive tabular-nums" : "font-medium tabular-nums"}>{line.value}</dd>
+                      <dd className={line.urgent ? "font-semibold text-destructive tabular-nums" : "font-medium tabular-nums"}>{line.text}</dd>
                     </div>
                   ))}
                 </dl>
