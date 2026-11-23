@@ -17,7 +17,7 @@ import {
   withDeadline,
 } from "./screen-gaps";
 import { fieldInputs } from "./report-fields";
-import { PROFILE_REP_FIELD, toProfile } from "../settings/_lib/settings-forms";
+import { PROFILE_REP_FIELD, toProfile } from "@/app/(app)/settings/cda/_lib/settings-forms";
 
 const holding =
   (...held: Permission[]) =>
