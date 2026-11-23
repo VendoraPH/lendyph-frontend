@@ -4041,16 +4041,44 @@ const PROVISIONING_PAYLOAD = {
 };
 
 test("provisioning states the overdue book and what must be set aside against it", () => {
-  const doc = buildProvisioningDoc(PROVISIONING_PAYLOAD, RANGE);
+  const doc = buildProvisioningDoc(
+    { ...PROVISIONING_PAYLOAD, principal_basis: { totals: { required_allowance: 184500.08 } } },
+    RANGE
+  );
 
   assertNoDashes(doc);
   assert.equal(doc.reportId, "provisioning");
   assert.equal(kpiValue(doc, "Total Overdue"), "₱451,861.50");
-  assert.equal(kpiValue(doc, "Required Allowance"), "₱140,932.95");
+  // The headline is the posted basis: past-due principal, as the allowance posting books it.
+  assert.equal(kpiValue(doc, "Required Allowance"), "₱184,500.08");
+  // The overdue amount's own provision, under its own name.
+  assert.equal(kpiValue(doc, "Provision on Overdue Amount"), "₱140,932.95");
   // The server's own weighted figure, not the mean of 5 / 15 / 25 / 50.
   assert.equal(kpiValue(doc, "Effective Provision Rate"), "31.2%");
   // Distinct delinquent loans, so 21 rather than the 27 bucket counts sum to.
   assert.equal(kpiValue(doc, "Delinquent Loans"), "21");
+});
+
+test("Required Allowance is the principal basis, never the overdue amount's provision", () => {
+  const doc = buildProvisioningDoc(PROVISIONING_PAYLOAD, RANGE);
+
+  // No principal basis sent: a dash, never ₱140,932.95 borrowed from the other basis.
+  assert.equal(kpiValue(doc, "Required Allowance"), DASH);
+  assert.equal(kpiValue(doc, "Provision on Overdue Amount"), "₱140,932.95");
+});
+
+test("the overdue schedule calls its figure Provision on Overdue Amount", () => {
+  const doc = buildProvisioningDoc(PROVISIONING_PAYLOAD, RANGE);
+  const table = namedTable(doc, "Provisioning Schedule");
+
+  assert.equal(
+    table.columns.find((c) => c.key === "required_allowance")?.header,
+    "Provision on Overdue Amount"
+  );
+  assert.match(
+    noteText(doc) ?? "",
+    /Provision on overdue amount is the overdue amount in each bucket multiplied by that bucket's provisioning rate\. The Required Allowance is worked out on past-due principal/
+  );
 });
 
 test("provisioning displays the whole-percent rate, not the fraction", () => {
@@ -4194,7 +4222,7 @@ test("provisioning adds the principal basis: buckets, loans, principal, rate and
       ["count", "Loans"],
       ["principal", "Principal"],
       ["rate", "Rate"],
-      ["required_allowance", "Required"],
+      ["required_allowance", "Required Allowance"],
     ]
   );
   assert.deepEqual(
@@ -4280,16 +4308,21 @@ test("the principal basis carries the server's basis note as its caption", () =>
   );
 });
 
-test("the principal basis leaves the overdue schedule and its figures as they were", () => {
+test("the principal basis sets the headline; the overdue schedule and its note stay as they were", () => {
   const before = buildProvisioningDoc(PROVISIONING_PAYLOAD, RANGE);
   const after = buildProvisioningDoc(PROVISIONING_WITH_BASIS, RANGE);
 
   const basisAt = (doc: ReportDocument) =>
     doc.sections.findIndex((s) => s.kind === "table" && s.title === "Principal Basis");
 
-  // The KPIs, the schedule and its note come first, exactly as before.
   assert.equal(basisAt(after), basisAt(before));
-  assert.deepEqual(after.sections.slice(0, basisAt(after)), before.sections.slice(0, basisAt(before)));
+  // Only the headline moves: Required Allowance is the basis's own total.
+  assert.equal(kpiValue(before, "Required Allowance"), DASH);
+  assert.equal(kpiValue(after, "Required Allowance"), "₱184,500.08");
+  assert.equal(kpiValue(after, "Provision on Overdue Amount"), kpiValue(before, "Provision on Overdue Amount"));
+  // The schedule and its note follow the KPIs, exactly as before.
+  assert.equal(after.sections[0].kind, "kpi_grid");
+  assert.deepEqual(after.sections.slice(1, basisAt(after)), before.sections.slice(1, basisAt(before)));
   assert.equal(noteText(after), noteText(before));
 });
 
