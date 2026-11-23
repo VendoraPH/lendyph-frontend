@@ -282,6 +282,22 @@ test("a REORDERED header is flagged rather than mistaken for data", () => {
   assert.equal(result.reordered, true);
 });
 
+test("a header is held to the file's width, as the server holds it", () => {
+  // The workbook's 22 labels over 26-column rows: still the header, but the
+  // four appended columns have no label, which the server refuses.
+  const short = detectHeaderRow(WORKBOOK_HEADER, "customer", 26);
+  assert.equal(short.isHeader, true);
+  assert.deepEqual(
+    short.mismatched.map((m) => [m.index, m.expected, m.found]),
+    [[22, "Date Hired", ""], [23, "Membership Date", ""], [24, "Member Type", ""], [25, "Membership Number", ""]],
+  );
+
+  // Today's 26 labels over rows in the earlier layout: read against their 22.
+  const full = detectHeaderRow(CUSTOMER_HEADER, "customer", 22);
+  assert.equal(full.positionalScore, 1);
+  assert.deepEqual(full.mismatched, []);
+});
+
 test("the loans header is detected against its own label set", () => {
   assert.equal(detectHeaderRow(LOANS_HEADER, "loans").positionalScore, 1);
 });

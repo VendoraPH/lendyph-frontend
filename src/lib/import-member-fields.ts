@@ -41,8 +41,14 @@ const MEMBERSHIP_KEYS = ["membership_date", "member_type", "membership_number"] 
 /** Plain keyboard characters, once the spaces are gone (the portal's own rule). */
 const PLAIN = /^[\x21-\x7E]+$/;
 
-/** The member-code form the app gives out itself, `BRW-000123`. */
-const MEMBER_CODE = /^BRW-\d+$/;
+/**
+ * Anything that starts like a member code, which the app gives out itself
+ * (`BRW-000123`), look-alikes included (`BRW000123`, `BRW-00O123`).
+ */
+const MEMBER_CODE = /^BRW/i;
+
+/** Digits all zero and no letters, once normalised: `0`, `000`, `00-00`. */
+const ONLY_ZEROS = /^[^A-Z1-9]+$/;
 
 function labelOf(key: string): string {
   return columnsFor("customer").find((column) => column.key === key)?.label ?? key;
@@ -90,10 +96,16 @@ export function memberFieldProblems(row: ImportRow, context: MemberFieldContext)
   const number = cell("membership_number");
   if (number) {
     const stored = canonicalMemberNumber(number);
+    // A spreadsheet placeholder (`-`, `N/A`, `0`) would become the member's
+    // sign-in number, so a number needs a digit and can't be only zeros.
     if (!PLAIN.test(stored)) {
       add("membership_number", "error", "value", `Membership Number "${number}" holds a character outside plain letters, numbers and punctuation, which a membership number can't hold.`);
     } else if (MEMBER_CODE.test(stored)) {
-      add("membership_number", "error", "value", `Membership Number "${number}" reads as a member code, which the app gives out itself. Leave it blank and the member's own code is used.`);
+      add("membership_number", "error", "value", `Membership Number "${number}" starts like a member code (BRW), which the app gives out itself. Leave it blank and the member's own code is used.`);
+    } else if (!/\d/.test(stored)) {
+      add("membership_number", "error", "value", `Membership Number "${number}" has no digits, so it reads as a spreadsheet placeholder rather than a membership number. Leave the cell blank if the member has none.`);
+    } else if (ONLY_ZEROS.test(stored)) {
+      add("membership_number", "error", "value", `Membership Number "${number}" is nothing but zeros, so it reads as a spreadsheet placeholder rather than a membership number. Leave the cell blank if the member has none.`);
     } else if (stored !== number.toUpperCase()) {
       add("membership_number", "warning", "value", `Membership Number "${number}" will be stored as ${stored}: members sign in with their number without spaces.`);
     }

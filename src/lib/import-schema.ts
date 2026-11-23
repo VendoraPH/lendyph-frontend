@@ -252,7 +252,7 @@ export function isEarlierLayout(shape: ImportShape, width: number): boolean {
 }
 
 /** `["A", "B", "C"]` → `A, B and C`. */
-function listWords(words: readonly string[]): string {
+export function listWords(words: readonly string[]): string {
   return words.length < 2 ? words.join("") : `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`;
 }
 
@@ -760,15 +760,18 @@ export interface HeaderDetection {
  * column, and a positional-only check would have called it "not a header" and
  * imported the labels as a borrower instead.
  *
- * A record in the shape's earlier layout (the workbook's own 22 columns) is
- * scored against that layout's columns, so an old header is a clean, complete
- * header rather than one missing the four columns appended since.
+ * It is scored against the columns of the FILE's layout, which is how the
+ * server checks it (`CsvImportReader::rejectMismatchedHeader()`): pass the
+ * file's width, and the record's own length stands in when there is none. An
+ * old file's 22-label header is then a clean header, while the same 22 labels
+ * over 26-column rows leave four columns unnamed (`mismatched`, found blank).
  */
 export function detectHeaderRow(
   record: readonly string[],
   shape: ImportShape,
+  fileWidth: number = record.length,
 ): HeaderDetection {
-  const columns = columnsFor(shape).slice(0, layoutWidth(shape, record.length));
+  const columns = columnsFor(shape).slice(0, layoutWidth(shape, fileWidth));
   const cells = record.map((cell) => headerKey(String(cell ?? "")));
   const present = new Set(cells.filter(Boolean));
 

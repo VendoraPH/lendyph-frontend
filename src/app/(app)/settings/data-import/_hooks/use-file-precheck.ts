@@ -54,6 +54,7 @@ import {
   identifyShape,
   isEarlierLayout,
   layoutWidth,
+  listWords,
   missingRequiredFields,
   normaliseRow,
   resolveRowEnums,
@@ -336,8 +337,12 @@ export async function inspectFile(
       options.onProgress?.({ kind, fileName: file.name, ratio, records }),
   });
 
-  const header = result.records.length > 0 ? detectHeaderRow(result.records[0].fields, shape) : null;
   const widths = widthHistogram(result.records);
+  // Held to the rows' layout, as the server holds it, never to its own length.
+  const header =
+    result.records.length > 0
+      ? detectHeaderRow(result.records[0].fields, shape, layoutWidth(shape, widths[0]?.columns))
+      : null;
 
   return {
     kind,
@@ -759,6 +764,7 @@ export function fileBlockers(
   inspection: FileInspection,
   rows: readonly CsvRecord[],
   dates: readonly DateColumnFinding[],
+  headerSkipped = false,
 ): string[] {
   const blockers: string[] = [];
 
@@ -789,6 +795,24 @@ export function fileBlockers(
   if (!wrongSlot && modal && rows.length > 0 && modal.columns !== inspection.expectedColumns) {
     blockers.push(
       `Most rows have ${modal.columns} columns, but the ${inspection.label} file needs ${expectedWidthWords(inspection.shape)}. Check the file was exported whole and that no columns were added or removed.`,
+    );
+  }
+
+  // The server holds a header to every column of the rows' layout, and a
+  // blank label matches no column, so a header that leaves one unnamed is a
+  // file it refuses. A label that merely differs may be one of the server's
+  // accepted spellings, which this check cannot know, so only blanks block.
+  const widthFits = Boolean(modal && modal.columns === inspection.expectedColumns);
+  const unnamed =
+    headerSkipped && widthFits && inspection.header?.isHeader
+      ? inspection.header.mismatched.filter((mismatch) => mismatch.found.trim() === "")
+      : [];
+  if (!wrongSlot && unnamed.length > 0) {
+    const named = listWords(unnamed.map((mismatch) => mismatch.expected));
+    blockers.push(
+      `Row 1 is the header, but it leaves ${unnamed.length === 1 ? "a column" : `${unnamed.length} columns`} unnamed: ${named}. The import holds the header to every column the rows have, so it would refuse this file. Add the missing labels; the ${
+        inspection.shape === "customer" ? "members" : "loans"
+      } template has them all.`,
     );
   }
 
@@ -875,7 +899,7 @@ export function computeFindings(
       rowsNotChecked: rows.length - checked.length,
       dates,
       ...totals,
-      blockers: fileBlockers(inspection, rows, dates),
+      blockers: fileBlockers(inspection, rows, dates, skip),
       pendingDecisions: pendingFor(dates),
     };
   }

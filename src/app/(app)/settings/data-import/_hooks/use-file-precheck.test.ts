@@ -298,9 +298,17 @@ test("a bad value in a new column fails the row, in words", () => {
     [{ date_hired: "last year" }, "Date Hired", /is not a date/],
     [{ membership_date: "2026-11-25" }, "Membership Date", /after today, and a membership date can't be in the future/],
     [{ member_type: "Premium" }, "Member Type", /Expected one of: Regular, Associate/],
-    [{ membership_number: "brw-000123" }, "Membership Number", /reads as a member code/],
+    [{ membership_number: "brw-000123" }, "Membership Number", /starts like a member code \(BRW\)/],
+    // Look-alikes of a member code are refused the same way.
+    [{ membership_number: "BRW000123" }, "Membership Number", /starts like a member code \(BRW\)/],
+    [{ membership_number: "BRW-00O123" }, "Membership Number", /starts like a member code \(BRW\)/],
     [{ membership_number: "NIÑO-01" }, "Membership Number", /plain letters, numbers and punctuation/],
     [{ membership_number: "7".repeat(31) }, "Membership Number", /31 characters; this field holds 30/],
+    // A spreadsheet placeholder would become the member's sign-in number.
+    [{ membership_number: "-" }, "Membership Number", /has no digits, so it reads as a spreadsheet placeholder/],
+    [{ membership_number: "N/A" }, "Membership Number", /has no digits, so it reads as a spreadsheet placeholder/],
+    [{ membership_number: "0" }, "Membership Number", /is nothing but zeros/],
+    [{ membership_number: "00-00" }, "Membership Number", /is nothing but zeros/],
   ];
 
   for (const [override, label, words] of cases) {
@@ -313,6 +321,16 @@ test("a bad value in a new column fails the row, in words", () => {
     assert.match(result.issues[0].message, words, summary);
     assert.doesNotMatch(result.issues[0].message, /\b[a-z]+_[a-z_]+\b/, `${summary}: words, never field keys`);
   }
+});
+
+test("a real membership number may hold zeros, and letters other than a member code's", () => {
+  const rows = customerRows(
+    ["BC-000", "A1", "10", "BR-0007"].map((number, i) => memberRow({ membership_number: number }, `2019-0020${i}`)),
+  );
+
+  const result = checkRows(rows, CURRENT_CONTEXT);
+
+  assert.equal(result.errorCount, 0, result.issues.map((issue) => issue.message).join(" | "));
 });
 
 test("spaces in a membership number are a warning: it is stored without them", () => {
@@ -455,6 +473,52 @@ test("a file whose rows are systematically the wrong width is blocked once", () 
 
   assert.equal(blockers.length, 1);
   assert.match(blockers[0], /Most rows have 18 columns/);
+});
+
+/** A members file from records, comma-joined (no cell here holds a comma). */
+function membersFile(records: readonly (readonly string[])[]): File {
+  return new File([records.map((fields) => fields.join(",")).join("\r\n") + "\r\n"], "members.csv", {
+    type: "text/csv",
+  });
+}
+
+const OLD_LABELS = [
+  "Account No.", "Last Name", "First Name", "Middle Name", "Suffix", "Birthdate", "Gender",
+  "Civil Status", "Contact Number", "email", "Street Address", "Barangay", "City/Municipality",
+  "Province", "Employer/Business Name", "Monthly Income", "Pledge Amt(If Applicable)",
+  "Spouse FName (If Married)", "Spouse MName (If Married)", "Spouse LName (If Married)",
+  "Spouse Contact No (If Married)", "Spouse Occupation (If Married)",
+];
+
+test("a 22-column header over 26-column rows is caught, as the server holds a header to the rows' width", async () => {
+  const inspection = await inspectFile("customers", membersFile([
+    OLD_LABELS,
+    memberRow({}, "2019-00101"),
+    memberRow({}, "2019-00102"),
+  ]));
+
+  assert.equal(inspection.expectedColumns, 26);
+  assert.equal(inspection.header?.isHeader, true, "it is still the header row, and is not imported as a member");
+
+  const findings = computeFindings({ customers: inspection }, {}, {}).customers;
+  assert.ok(findings);
+  assert.equal(findings.totalRows, 2);
+  assert.deepEqual(findings.blockers, [
+    "Row 1 is the header, but it leaves 4 columns unnamed: Date Hired, Membership Date, Member Type and Membership Number. The import holds the header to every column the rows have, so it would refuse this file. Add the missing labels; the members template has them all.",
+  ]);
+});
+
+test("a full header over rows in the earlier layout is read against those rows' 22 columns", async () => {
+  const fullHeader = [...OLD_LABELS, "Date Hired", "Membership Date", "Member Type", "Membership Number"];
+  const inspection = await inspectFile("customers", membersFile([fullHeader, CUSTOMER, ["2019-00102", ...CUSTOMER.slice(1)]]));
+
+  assert.equal(inspection.expectedColumns, 22);
+  assert.equal(inspection.header?.isHeader, true);
+  assert.deepEqual(inspection.header?.mismatched, []);
+
+  const findings = computeFindings({ customers: inspection }, {}, {}).customers;
+  assert.deepEqual(findings?.blockers, []);
+  assert.equal(findings?.errorCount, 0);
 });
 
 test("a members file at neither layout's width is blocked, and the blocker names both", () => {
