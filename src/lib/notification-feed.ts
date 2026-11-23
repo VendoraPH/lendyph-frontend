@@ -168,6 +168,8 @@ export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
   savings_time_deposit_maturing: "Time deposit maturing",
   savings_dormancy_warning: "Savings account dormant soon",
   savings_account_dormant: "Savings account dormant",
+  savings_account_opened: "Savings account opened",
+  savings_time_deposit_placed: "Time deposit placed",
   cda_approval_needed: "CDA report awaiting approval",
   cda_report_returned: "CDA report returned",
   cda_report_finalized: "CDA report finalized",
@@ -203,6 +205,10 @@ const KIND_IN_TITLE: ReadonlySet<string> = new Set([
   "savings_time_deposit_maturing",
   "savings_dormancy_warning",
   "savings_account_dormant",
+  // Savings openings (backend #356): "Savings account opened", and "Time
+  // deposit placed" or "Time deposit rolled over".
+  "savings_account_opened",
+  "savings_time_deposit_placed",
 ]);
 
 /** The kind in words, or "Notification" for a kind added on the server later. */
@@ -224,6 +230,8 @@ export function notificationTone(type: string): NotificationTone {
       return "approval";
     case "loan_approved":
     case "loan_released":
+    case "savings_account_opened":
+    case "savings_time_deposit_placed":
     case "cda_report_finalized":
     case "cda_submission_recorded":
       return "success";

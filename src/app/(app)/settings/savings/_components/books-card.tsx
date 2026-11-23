@@ -100,6 +100,7 @@ export function BooksCard({ settings, result, onPrepared }: BooksCardProps) {
             onClick={prepare}
             disabled={submitting}
             blockedReason={blocker}
+            tooltip={blocker ?? undefined}
           >
             <BookCheck className="h-4 w-4" /> {submitting ? "Setting up…" : "Set up savings in the books"}
           </ActionButton>
