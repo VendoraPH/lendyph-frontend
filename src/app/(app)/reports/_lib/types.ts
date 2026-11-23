@@ -45,7 +45,7 @@ export type ReportId =
  * a report without being one (the executive dashboard). Kept apart from
  * `ReportId` so the dashboard is not offered as a `/reports/[reportId]` route.
  */
-export type DocumentId = ReportId | "executive_dashboard";
+export type DocumentId = ReportId | "executive_dashboard" | "share_capital_ledger";
 
 export type ReportCategory =
   | "operations"
