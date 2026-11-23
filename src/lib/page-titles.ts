@@ -10,6 +10,7 @@
 import type { ReportId } from "@/app/(app)/reports/_lib/types";
 import type { PrintableId } from "@/lib/printables/types";
 import { parseEditLoanId } from "@/app/(app)/loans/new/_lib/edit-loan-id";
+import { AMLA_REPORT_TITLES } from "@/lib/amla/report-titles";
 
 /** The loan form's own title in edit mode (`/loans/new?edit={id}`). */
 export const EDIT_LOAN_TITLE = "Edit Loan Application";
@@ -147,6 +148,8 @@ const ID_TITLES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
 const NESTED_PAGE_TITLES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   "accounting/journals": { new: "New Journal Entry" },
   "loans/reminders": { history: "Message History" },
+  // Each AMLA report reads the server's title for it (`/amla/reports/<key>`).
+  "amla/reports": AMLA_REPORT_TITLES,
 };
 
 /**

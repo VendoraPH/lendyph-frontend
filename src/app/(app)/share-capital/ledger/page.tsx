@@ -31,26 +31,26 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
 import {
   Landmark,
   Search,
   ArrowLeft,
   ChevronRight,
   ChevronLeft,
-  CalendarIcon,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
 } from "lucide-react";
 import { startOfMonth, endOfMonth, subMonths, startOfYear } from "date-fns";
-import type { DateRange } from "react-day-picker";
+import { DateRangeFilter } from "@/components/common/date-range-filter";
 import { shareCapitalService } from "@/services";
-import { formatCurrency, formatDate, formatDateISO, formatDateObj, todayDate } from "@/lib/format";
+import { formatCurrency, formatDate, formatDateISO, todayDate } from "@/lib/format";
 import { FIT_CLASSES } from "@/lib/page-fill";
 import { ledgerAmounts } from "@/utils/share-capital";
 import { useAuthStore } from "@/store";
 import { bookTotalsLabels } from "./_lib/book-totals-labels";
+import { LedgerDocumentActions } from "./_components/ledger-document-actions";
+import type { SubsidiaryLedgerInput } from "./_lib/subsidiary-ledger-document";
 import type {
   ShareCapitalBookTotals,
   ShareCapitalLedgerEntry,
@@ -87,11 +87,17 @@ function toLedgerEntry(raw: ShareCapitalLedgerEntry): LedgerEntry {
 // ── Date range presets ──
 // Counted from Manila's today, held as the picker holds a day (`todayDate`).
 
+const NO_RANGE = { from: null, to: null };
+
+function isoRange(from: Date, to: Date) {
+  return { from: formatDateISO(from), to: formatDateISO(to) };
+}
+
 const DATE_PRESETS = [
-  { label: "This Month", getValue: () => ({ from: startOfMonth(todayDate()), to: endOfMonth(todayDate()) }) },
-  { label: "Last Month", getValue: () => ({ from: startOfMonth(subMonths(todayDate(), 1)), to: endOfMonth(subMonths(todayDate(), 1)) }) },
-  { label: "Last 3 Months", getValue: () => ({ from: startOfMonth(subMonths(todayDate(), 2)), to: endOfMonth(todayDate()) }) },
-  { label: "Year to Date", getValue: () => ({ from: startOfYear(todayDate()), to: todayDate() }) },
+  { label: "This Month", getValue: () => isoRange(startOfMonth(todayDate()), endOfMonth(todayDate())) },
+  { label: "Last Month", getValue: () => isoRange(startOfMonth(subMonths(todayDate(), 1)), endOfMonth(subMonths(todayDate(), 1))) },
+  { label: "Last 3 Months", getValue: () => isoRange(startOfMonth(subMonths(todayDate(), 2)), endOfMonth(todayDate())) },
+  { label: "Year to Date", getValue: () => isoRange(startOfYear(todayDate()), todayDate()) },
 ];
 
 const PAGE_SIZES = [10, 25, 50];
@@ -154,12 +160,15 @@ function SubsidiaryLedgerContent() {
   const [detail, setDetail] = useState<{
     key: string;
     entries: LedgerEntry[];
+    /** As the server sent them, for the PDF and print document. */
+    rows: ShareCapitalLedgerEntry[];
     period: ShareCapitalMemberPeriod | null;
     // Set only when the drain gave up with pages outstanding: some entries are
     // missing from the table, though every figure shown is still the server's.
     shortfall: { shown: number; total: number | null } | null;
   } | null>(null);
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+  // Inclusive `YYYY-MM-DD` ends (the API filters date >= from and <= to); null is open.
+  const [range, setRange] = useState<{ from: string | null; to: string | null }>(NO_RANGE);
   const [detailSort, setDetailSort] = useState<DetailSortField>("date");
   const [detailSortDir, setDetailSortDir] = useState<SortDir>("asc");
 
@@ -206,7 +215,7 @@ function SubsidiaryLedgerContent() {
   const failed = membersPage?.failed ?? false;
   // The module's picture while nothing is searched or filtered.
   const membersPicture = emptyArt("emptyShareCapital", Boolean(debouncedSearch));
-  const entriesPicture = emptyArt("emptyShareCapital", Boolean(dateRange?.from));
+  const entriesPicture = emptyArt("emptyShareCapital", Boolean(range.from || range.to));
   const members = membersPage?.members ?? [];
   const memberTotal = membersPage?.total ?? 0;
   const bookTotals = membersPage?.totals ?? null;
@@ -218,8 +227,8 @@ function SubsidiaryLedgerContent() {
 
   // ── Fetch one member's entries ──
   const selectedMemberId = selectedMember?.borrower_id ?? null;
-  const rangeFrom = dateRange?.from ? formatDateISO(dateRange.from) : undefined;
-  const rangeTo = dateRange?.from ? formatDateISO(dateRange.to ?? dateRange.from) : undefined;
+  const rangeFrom = range.from ?? undefined;
+  const rangeTo = range.to ?? undefined;
   const detailKey = JSON.stringify([selectedMemberId, rangeFrom, rangeTo]);
 
   useEffect(() => {
@@ -235,13 +244,14 @@ function SubsidiaryLedgerContent() {
         setDetail({
           key: detailKey,
           entries: rows.map(toLedgerEntry),
+          rows,
           period: summary,
           shortfall: truncated ? { shown: rows.length, total } : null,
         });
       })
       .catch(() => {
         if (cancelled) return;
-        setDetail({ key: detailKey, entries: [], period: null, shortfall: null });
+        setDetail({ key: detailKey, entries: [], rows: [], period: null, shortfall: null });
         toast.error("We couldn't load this member's entries. Please try again.");
       });
     return () => {
@@ -254,6 +264,18 @@ function SubsidiaryLedgerContent() {
   const entries = useMemo(() => currentDetail?.entries ?? [], [currentDetail]);
   const period = currentDetail?.period ?? null;
   const shortfall = currentDetail?.shortfall ?? null;
+  const documentInput = useMemo<SubsidiaryLedgerInput | null>(() => {
+    if (!selectedMember || !currentDetail?.period) return null;
+    return {
+      member: {
+        name: selectedMember.full_name ?? "—",
+        code: selectedMember.borrower_code || String(selectedMember.borrower_id),
+      },
+      range: { from: rangeFrom, to: rangeTo },
+      entries: currentDetail.rows,
+      period: currentDetail.period,
+    };
+  }, [selectedMember, currentDetail, rangeFrom, rangeTo]);
 
   // ── Computed ──
 
@@ -295,7 +317,7 @@ function SubsidiaryLedgerContent() {
 
   function openMember(member: ShareCapitalMember) {
     setSelectedMember(member);
-    setDateRange(undefined);
+    setRange(NO_RANGE);
     setDetailSort("date");
     setDetailSortDir("asc");
   }
@@ -649,56 +671,46 @@ function SubsidiaryLedgerContent() {
                   <span className="text-muted-foreground font-normal ml-1">({displayedEntries.length})</span>
                 </CardTitle>
                 <div className="flex flex-wrap items-center gap-2">
-                  {/* Date Range Picker */}
+                  <DateRangeFilter
+                    label="Date"
+                    from={range.from}
+                    to={range.to}
+                    onChange={(from, to) => setRange({ from, to })}
+                  />
                   <Popover>
                     <PopoverTrigger
-                      render={
-                        <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" />
-                      }
+                      render={<Button variant="outline" size="sm" className="h-8 text-xs" />}
                     >
-                      <CalendarIcon className="h-3.5 w-3.5" />
-                      {dateRange?.from ? (
-                        dateRange.to ? (
-                          <>
-                            {formatDateObj(dateRange.from)} – {formatDateObj(dateRange.to)}
-                          </>
-                        ) : (
-                          formatDateObj(dateRange.from)
-                        )
-                      ) : (
-                        "All dates"
-                      )}
+                      {range.from || range.to ? "Presets" : "All dates"}
                     </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="end">
-                      <div className="flex">
-                        <div className="border-r p-3 space-y-1">
-                          <button
-                            type="button"
-                            className="block w-full text-left px-3 py-1.5 text-xs rounded hover:bg-muted"
-                            onClick={() => setDateRange(undefined)}
-                          >
-                            All dates
-                          </button>
-                          {DATE_PRESETS.map((preset) => (
-                            <button
-                              key={preset.label}
-                              type="button"
-                              className="block w-full text-left px-3 py-1.5 text-xs rounded hover:bg-muted"
-                              onClick={() => setDateRange(preset.getValue())}
-                            >
-                              {preset.label}
-                            </button>
-                          ))}
-                        </div>
-                        <Calendar
-                          mode="range"
-                          selected={dateRange}
-                          onSelect={setDateRange}
-                          numberOfMonths={2}
-                        />
-                      </div>
+                    <PopoverContent className="w-44 p-2" align="end">
+                      <button
+                        type="button"
+                        className="block w-full text-left px-3 py-1.5 text-xs rounded hover:bg-muted"
+                        onClick={() => setRange(NO_RANGE)}
+                      >
+                        All dates
+                      </button>
+                      {DATE_PRESETS.map((preset) => (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          className="block w-full text-left px-3 py-1.5 text-xs rounded hover:bg-muted"
+                          onClick={() => setRange(preset.getValue())}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
                     </PopoverContent>
                   </Popover>
+                  <LedgerDocumentActions
+                    input={detailLoading ? null : documentInput}
+                    disabledReason={
+                      shortfall
+                        ? "Some entries could not be loaded, so the document would be incomplete. Narrow the date range and try again."
+                        : null
+                    }
+                  />
                 </div>
               </div>
             </CardHeader>
@@ -725,11 +737,11 @@ function SubsidiaryLedgerContent() {
                   </TableHeader>
                   <TableBody>
                     {/* Opening Balance Row */}
-                    {(dateRange?.from || (openingBalance !== null && openingBalance !== 0)) && (
+                    {(range.from || (openingBalance !== null && openingBalance !== 0)) && (
                       <TableRow className="bg-muted/30">
                         <TableCell colSpan={3} className="text-sm font-medium italic text-muted-foreground">
-                          {dateRange?.from
-                            ? `Opening Balance as of ${formatDateObj(dateRange.from)}`
+                          {range.from
+                            ? `Opening Balance as of ${formatDate(range.from)}`
                             : "Opening Balance"}
                         </TableCell>
                         <TableCell />
@@ -767,7 +779,7 @@ function SubsidiaryLedgerContent() {
                           {hasIllustration(entriesPicture) && (
                             <Illustration name={entriesPicture} className="mx-auto mb-3 block" />
                           )}
-                          <p>No entries found{dateRange?.from ? " for this period" : ""}.</p>
+                          <p>No entries found{range.from || range.to ? " for this period" : ""}.</p>
                           <p className="text-xs mt-1">Create entries via Pledge Entry → Entry button</p>
                         </TableCell>
                       </TableRow>

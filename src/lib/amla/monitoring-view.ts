@@ -1,24 +1,27 @@
 import { formatDate, formatDateTime } from "@/lib/format";
 import { amlaSubjectHref } from "@/lib/amla/cdd-access";
-import { NO_BRANCH, type AmlaBadgeTone } from "@/lib/amla/cdd-view";
+import type { AmlaBadgeTone } from "@/lib/amla/cdd-view";
 import {
   AMLA_DETECTION_RULE_WORDS,
   AMLA_PRIORITY_WORDS,
   amlaParamKind,
   amlaParamLabel,
   amlaParamLine,
+  amlaParamValueWords,
+  type AmlaParamKind,
   amlaPoints,
   amlaRuleTitle,
   amlaSortedList,
   amlaThresholdsLine,
 } from "@/lib/amla/rule-words";
 import { AMLA_CHANNEL_OPTIONS, amlaReasonError, type AmlaOption } from "@/lib/amla/settings-view";
-import type { AmlaChangeRequestBody, AmlaPage } from "@/types/amla";
+import type { AmlaChangeRequestBody } from "@/types/amla";
 import type {
   AmlaAlertDetail,
   AmlaAlertHistoryStep,
   AmlaAlertRow,
   AmlaCtrRow,
+  AmlaDetectionRule,
   AmlaDetectionRulesVersion,
   AmlaIndicator,
   AmlaMonitoredTransaction,
@@ -103,9 +106,9 @@ export function amlaPriorityTone(priority: string): AmlaBadgeTone {
   return Object.hasOwn(PRIORITY_TONES, priority) ? PRIORITY_TONES[priority] : "outline";
 }
 
-/** Multi-branch decision 6: no branch reads "Organisation-wide" (the server words it "Head office"). */
+/** The server's own words for the branch: "Organisation-wide" where there is none (AMLA-B7). */
 function branchWords(branch: AmlaMonitoringBranch): string {
-  return branch.id === null ? NO_BRANCH : branch.name;
+  return branch.name;
 }
 
 const HISTORY = "From history screening";
@@ -206,14 +209,44 @@ export function amlaPublicText(text: string): string {
     .replace(new RegExp(`\\b${CODE}\\b`, "g"), "a later release");
 }
 
-/** The waiting change of one type: the first pending request the server lists for it, or none. */
-export function amlaPendingRequestId(page: AmlaPage<{ id: number }>): number | null {
-  return page.data[0]?.id ?? null;
+const KINDS: readonly string[] = ["count", "days", "multiplier", "percent", "peso", "channels"];
+
+/** A parameter's kind: the server's own (AMLA-B7), else this screen's copy. */
+export function amlaRuleParamKind(rule: AmlaDetectionRule, name: string): AmlaParamKind {
+  const sent = rule.parameters?.find((p) => p.name === name)?.kind;
+  return sent && KINDS.includes(sent) ? (sent as AmlaParamKind) : amlaParamKind(name, rule.params[name]);
+}
+
+/** A parameter's label: the server's own (AMLA-B7), else this screen's copy. */
+export function amlaRuleParamLabel(rule: AmlaDetectionRule, name: string): string {
+  return rule.parameters?.find((p) => p.name === name)?.label ?? amlaParamLabel(name);
+}
+
+const UNITS: Partial<Record<AmlaParamKind, { suffix: string; carried: RegExp }>> = {
+  peso: { suffix: " (₱)", carried: /₱/ },
+  percent: { suffix: " (%)", carried: /%/ },
+  days: { suffix: " (days)", carried: /\bdays?\b/i },
+};
+
+/** A parameter field's label: the server's, with its unit added only when the label doesn't already carry it. */
+export function amlaParamFieldLabel(label: string, kind: AmlaParamKind): string {
+  const unit = UNITS[kind];
+  return unit && !unit.carried.test(label) ? `${label}${unit.suffix}` : label;
+}
+
+/** "Rules version 3, asked from version 2"; version 1 is the starting rules. */
+export function amlaRuleVersionLine(version: Pick<AmlaDetectionRulesVersion, "version" | "base_version">): string {
+  if (version.base_version === undefined) return `Rules version ${version.version}`;
+  return version.base_version === null
+    ? `Rules version ${version.version}, the starting rules`
+    : `Rules version ${version.version}, asked from version ${version.base_version}`;
 }
 
 export function amlaDetectionRuleRows(version: AmlaDetectionRulesVersion) {
   return version.rules.map((rule) => {
-    const params = Object.entries(rule.params).map(([name, value]) => amlaParamLine(name, value));
+    const params = rule.parameters
+      ? rule.parameters.map((p) => `${p.label}: ${amlaParamValueWords(amlaRuleParamKind(rule, p.name), p.value ?? rule.params[p.name])}`)
+      : Object.entries(rule.params).map(([name, value]) => amlaParamLine(name, value));
     return {
       code: rule.code,
       rule: amlaRuleTitle(rule.code, rule.rule),
@@ -278,8 +311,8 @@ export function amlaDetectionChangeBody(
     if (!entry) continue;
     const params: StoredParams = {};
     for (const [name, raw] of Object.entries(entry.params)) {
-      const kind = amlaParamKind(name, rule.params[name]);
-      const where = `Rule ${rule.code}, ${amlaParamLabel(name)}`;
+      const kind = amlaRuleParamKind(rule, name);
+      const where = `Rule ${rule.code}, ${amlaRuleParamLabel(rule, name)}`;
       if (kind === "channels") {
         const picked = inChannelOrder(Array.isArray(raw) ? raw : []);
         if (picked.length === 0) return { error: `${where}: pick at least one channel.` };

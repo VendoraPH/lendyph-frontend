@@ -2,6 +2,7 @@ import axios, { type AxiosRequestConfig, type AxiosResponse, type InternalAxiosR
 import { env } from "@/config/env";
 import { parseTokenLifetime, tokenLifetime, type TokenLifetime } from "@/lib/session-token";
 import { PORTAL_ENDPOINTS, PORTAL_PUBLIC_PATHS } from "./endpoints";
+import { filenameFrom } from "@/lib/content-disposition";
 
 /**
  * The member portal's own HTTP client (carried over from #511 by Augustin,
@@ -182,20 +183,7 @@ export interface DownloadedFile {
   filename: string | null;
 }
 
-/** The file name in a `Content-Disposition` header, if any. */
-export function filenameFrom(disposition: unknown): string | null {
-  if (typeof disposition !== "string") return null;
-  const star = /filename[*]=(?:UTF-8'')?([^;]+)/i.exec(disposition);
-  if (star) {
-    try {
-      return decodeURIComponent(star[1].trim().replace(/^"|"$/g, ""));
-    } catch {
-      return null;
-    }
-  }
-  const plain = /filename="?([^";]+)"?/i.exec(disposition);
-  return plain ? plain[1].trim() : null;
-}
+export { filenameFrom };
 
 const unwrap = <T>(response: AxiosResponse<Envelope<T>>): T => response.data.data;
 

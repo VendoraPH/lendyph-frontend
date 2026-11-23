@@ -90,6 +90,8 @@ jobs:
         # Staging only: Linda, the AI assistant (Arvin, 2026-11-16). Its AI model stays off on
         # the backend until the owner signs off on privacy, so it answers with its matcher.
         export NEXT_PUBLIC_ENABLE_LINDA=true
+        # Staging only: the executive dashboard (Arvin, 2026-11-19, Phase 6 plan "Yes GO!").
+        export NEXT_PUBLIC_ENABLE_EXECUTIVE_DASHBOARD=true
 
         # The proxy secret, delivered by the step before this one (staging only).
         # Exported so deploy.sh's children inherit it: never echoed, never on a
