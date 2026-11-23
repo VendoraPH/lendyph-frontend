@@ -399,7 +399,19 @@ export interface Loan {
   application_number?: string;
   loan_account_number?: string;
   // Nested relations from API
-  borrower?: { id: number; full_name?: string; name?: string; address?: string; borrower_code?: string };
+  borrower?: {
+    id: number;
+    full_name?: string;
+    name?: string;
+    address?: string;
+    borrower_code?: string;
+    /**
+     * The member's status ("withdrawn", "deceased", …). Sent only to a caller
+     * holding borrowers:view who can see the member's branch; others get the
+     * id, name and code alone.
+     */
+    status?: string;
+  };
   loan_product?: { id: number; name?: string; description?: string };
   branch?: { id: number; name?: string };
   /** Exactly the co-makers linked to this loan; `GET /loans/{id}` always loads them. */

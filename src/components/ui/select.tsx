@@ -111,8 +111,12 @@ function SelectLabel({
 function SelectItem({
   className,
   children,
+  wrap = false,
   ...props
-}: SelectPrimitive.Item.Props) {
+}: SelectPrimitive.Item.Props & {
+  /** Long labels wrap onto more lines instead of being cut off. */
+  wrap?: boolean
+}) {
   return (
     <SelectPrimitive.Item
       data-slot="select-item"
@@ -122,7 +126,13 @@ function SelectItem({
       )}
       {...props}
     >
-      <SelectPrimitive.ItemText className="flex flex-1 shrink-0 gap-2 whitespace-nowrap">
+      <SelectPrimitive.ItemText
+        className={
+          wrap
+            ? "flex min-w-0 flex-1 gap-2 break-words whitespace-normal"
+            : "flex flex-1 shrink-0 gap-2 whitespace-nowrap"
+        }
+      >
         {children}
       </SelectPrimitive.ItemText>
       <SelectPrimitive.ItemIndicator
