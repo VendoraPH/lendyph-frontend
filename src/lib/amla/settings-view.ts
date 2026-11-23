@@ -269,9 +269,11 @@ function detectionRuleChanges(
     for (const [name, value] of Object.entries(params)) {
       const old = before.params[name];
       if (sameValue(old, value)) continue;
-      const kind = amlaParamKind(name, value);
+      // The server's own label and kind for the parameter (AMLA-B7), else this screen's copy.
+      const sent = before.parameters?.find((p) => p.name === name);
+      const kind = (sent?.kind as ReturnType<typeof amlaParamKind> | undefined) ?? amlaParamKind(name, value);
       const from = old === undefined ? "—" : amlaParamValueWords(kind, old);
-      lines.push(`${title}, ${amlaParamLabel(name)}: ${from}${now} → ${amlaParamValueWords(kind, value)}`);
+      lines.push(`${title}, ${sent?.label ?? amlaParamLabel(name)}: ${from}${now} → ${amlaParamValueWords(kind, value)}`);
     }
     return lines;
   });

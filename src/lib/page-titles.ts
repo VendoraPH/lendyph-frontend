@@ -10,6 +10,7 @@
 import type { ReportId } from "@/app/(app)/reports/_lib/types";
 import type { PrintableId } from "@/lib/printables/types";
 import { parseEditLoanId } from "@/app/(app)/loans/new/_lib/edit-loan-id";
+import { AMLA_REPORT_TITLES } from "@/lib/amla/report-titles";
 
 /** The loan form's own title in edit mode (`/loans/new?edit={id}`). */
 export const EDIT_LOAN_TITLE = "Edit Loan Application";
@@ -99,9 +100,18 @@ const ID_TITLES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   "credit-scoring": {
     borrowers: "Member Scores",
     assessment: "Credit Assessment",
-    "scorecard-configuration": "Scorecard Configuration",
     "risk-monitoring": "Risk Monitoring",
     "score-history": "Score History",
+  },
+  // Each module's settings, as Settings lists them (MODULE_SETTINGS_NAV),
+  // whether or not the module's menu entry is built in.
+  settings: {
+    accounting: "Accounting",
+    "savings-products": "Savings Products",
+    savings: "Savings",
+    cda: "CDA",
+    "scorecard-configuration": "Scorecard Configuration",
+    "credit-scoring": "Credit Scoring",
   },
   dashboard: { executive: "Executive Dashboard" },
   payments: { history: "Payment History" },
@@ -119,8 +129,6 @@ const ID_TITLES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     interest: "Savings Interest",
     "auto-credit": "Savings Auto-Credit",
     dormant: "Dormant Accounts",
-    products: "Savings Products",
-    settings: "Savings Settings",
   },
   cda: {
     calendar: "Compliance Calendar",
@@ -136,7 +144,6 @@ const ID_TITLES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     "tax-reports": "ATIR & ABR",
     documents: "Compliance Documents",
     submissions: "Submission History",
-    settings: "CDA Settings",
   },
 };
 
@@ -147,6 +154,8 @@ const ID_TITLES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
 const NESTED_PAGE_TITLES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   "accounting/journals": { new: "New Journal Entry" },
   "loans/reminders": { history: "Message History" },
+  // Each AMLA report reads the server's title for it (`/amla/reports/<key>`).
+  "amla/reports": AMLA_REPORT_TITLES,
 };
 
 /**

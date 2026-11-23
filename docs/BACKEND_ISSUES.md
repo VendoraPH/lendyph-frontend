@@ -88,7 +88,7 @@ still shows the id rather than an empty cell.
 
 **Status:** Decided 2026-09-19 — frontend shipped, backend rule pending
 **Reported:** 2026-09-19
-**Affects:** `/credit-scoring/settings` — the Score Model Version card and its Save
+**Affects:** `/settings/credit-scoring` — the Score Model Version card and its Save
 **Frontend branch:** `fix/credit-scoring-polish`
 
 ### Problem

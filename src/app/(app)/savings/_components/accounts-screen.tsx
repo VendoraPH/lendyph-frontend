@@ -69,7 +69,7 @@ export function AccountsScreen() {
         </div>
         <div className="flex gap-2">
           <PermissionGate permission="savings:settings">
-            <Button variant="outline" nativeButton={false} render={<Link href="/savings/products" />}>
+            <Button variant="outline" nativeButton={false} render={<Link href="/settings/savings-products" />}>
               <Settings2 className="h-4 w-4" /> Products
             </Button>
           </PermissionGate>
