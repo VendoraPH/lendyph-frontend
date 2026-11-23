@@ -26,7 +26,7 @@ export function trainingFields(officers: CdaOfficer[]): RecordField[] {
       label: "Meets requirement",
       type: "text",
       placeholder: "e.g. basic_coop_course",
-      help: "The training key from CDA settings that this training meets.",
+      help: "The training key from Settings → CDA that this training meets.",
     },
     { key: "is_mandatory", label: "Mandatory", type: "checkbox" },
     { key: "provider", label: "Provider", type: "text" },

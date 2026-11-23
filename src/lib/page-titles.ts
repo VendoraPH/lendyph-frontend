@@ -100,9 +100,18 @@ const ID_TITLES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   "credit-scoring": {
     borrowers: "Member Scores",
     assessment: "Credit Assessment",
-    "scorecard-configuration": "Scorecard Configuration",
     "risk-monitoring": "Risk Monitoring",
     "score-history": "Score History",
+  },
+  // Each module's settings, as Settings lists them (MODULE_SETTINGS_NAV),
+  // whether or not the module's menu entry is built in.
+  settings: {
+    accounting: "Accounting",
+    "savings-products": "Savings Products",
+    savings: "Savings",
+    cda: "CDA",
+    "scorecard-configuration": "Scorecard Configuration",
+    "credit-scoring": "Credit Scoring",
   },
   dashboard: { executive: "Executive Dashboard" },
   payments: { history: "Payment History" },
@@ -120,8 +129,6 @@ const ID_TITLES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     interest: "Savings Interest",
     "auto-credit": "Savings Auto-Credit",
     dormant: "Dormant Accounts",
-    products: "Savings Products",
-    settings: "Savings Settings",
   },
   cda: {
     calendar: "Compliance Calendar",
@@ -137,7 +144,6 @@ const ID_TITLES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     "tax-reports": "ATIR & ABR",
     documents: "Compliance Documents",
     submissions: "Submission History",
-    settings: "CDA Settings",
   },
 };
 
