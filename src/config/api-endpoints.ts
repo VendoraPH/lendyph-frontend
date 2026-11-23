@@ -40,6 +40,8 @@ export const API_ENDPOINTS = {
       `/borrowers/${id}/valid-ids/${validIdId}`,
     LEDGER: (id: number) => `/borrowers/${id}/ledger`,
     LOAN_SUMMARY: (id: number) => `/borrowers/${id}/loan-summary`,
+    // Phase 6 MB-BE4: moving a member to another branch (borrowers:view and borrowers:transfer).
+    TRANSFER: (id: number) => `/borrowers/${id}/transfer`,
   },
   REGISTRATIONS: {
     LIST: "/borrowers",
@@ -270,6 +272,7 @@ export const API_ENDPOINTS = {
     DEACTIVATE: (id: number) => `/users/${id}/deactivate`,
     REACTIVATE: (id: number) => `/users/${id}/reactivate`,
     RESET_PASSWORD: (id: number) => `/users/${id}/reset-password`,
+    BRANCH_HISTORY: (id: number) => `/users/${id}/branch-history`,
   },
   STAFF: {
     LIST: "/staff",
@@ -532,6 +535,8 @@ export const API_ENDPOINTS = {
     TIME_DEPOSITS: "/savings/time-deposits",
     TIME_DEPOSIT: (id: number) => `/savings/time-deposits/${id}`,
     TIME_DEPOSIT_QUOTE: "/savings/time-deposits/quote",
+    // Preview of the next TD-[admin id]-[year]-[0001] cash placement reference.
+    TIME_DEPOSIT_NEXT_CASH_REFERENCE: "/savings/time-deposits/cash-reference/next",
     TIME_DEPOSIT_SETTLE: (id: number) => `/savings/time-deposits/${id}/settle`,
     TIME_DEPOSIT_PRETERMINATE: (id: number) => `/savings/time-deposits/${id}/preterminate`,
     TIME_DEPOSIT_PRETERMINATION_QUOTE: (id: number) =>

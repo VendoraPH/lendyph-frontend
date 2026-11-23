@@ -103,6 +103,27 @@ export type GCashListFilters = {
   per_page?: number;
 };
 
+/**
+ * `GET /gcash/transactions` `meta.totals`: the server's figures over every
+ * transaction the list's scope and filters match, across all pages. Money is a
+ * 2-decimal string, shown as sent and never added up here.
+ */
+export interface GCashTransactionTotals {
+  count: number;
+  /** Every transaction's amount, Cash In and Cash Out together. */
+  amount: string;
+  cash_in: string;
+  cash_out: string;
+  charges: string;
+  /** Every transaction's total (Cash In adds the charge, Cash Out takes it off). */
+  total: string;
+  /**
+   * The part of the figures above on pending transactions, counted whenever the
+   * status filter lets them in. Their charge isn't income until they're paid.
+   */
+  pending: { count: number; amount: string; charges: string; total: string };
+}
+
 export type GCashTierInput = Omit<GCashTier, "id">;
 
 /**

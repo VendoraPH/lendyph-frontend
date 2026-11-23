@@ -57,3 +57,12 @@ test("the quote can be asked for before the member is chosen", () => {
   assert.equal("borrower_id" in (quote ?? {}), false);
   assert.equal(body, null);
 });
+
+test("when the server numbers cash placements, a cash body carries no reference; other methods keep theirs", () => {
+  const cash = checkPlacement({ ...FORM, reference: "TD-0012-2026-0006" }, PRODUCT, { serverNumbersCash: true });
+  assert.equal(cash.body && "reference" in cash.body, false);
+  const gcash = checkPlacement({ ...FORM, method: "gcash", reference: " GC-123 " }, PRODUCT, { serverNumbersCash: true });
+  assert.equal(gcash.body?.reference, "GC-123");
+  const off = checkPlacement({ ...FORM, reference: "OR-9" }, PRODUCT);
+  assert.equal(off.body?.reference, "OR-9");
+});

@@ -57,3 +57,12 @@ export function shownBranchValue(
   if (items.some((i) => i.value === value)) return { value, placeholder: undefined };
   return { value: null, placeholder: loading ? LOADING_BRANCHES : "Select a branch" };
 }
+
+/**
+ * The Branch filter's label: shown above the field, or kept for screen readers
+ * only when the filter sits in a row of unlabelled filters (the Audit Trail's),
+ * so the row stays on one line.
+ */
+export function branchFilterLabelClass(hidden: boolean): string {
+  return hidden ? "sr-only" : "text-xs text-muted-foreground";
+}
