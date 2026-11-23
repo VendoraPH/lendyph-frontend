@@ -1,15 +1,17 @@
 "use client";
 
 import { useEffect } from "react";
-import { ReportPrintSheet } from "@/app/(app)/reports/_components/report-print-sheet";
-import type { ReportDocument } from "@/app/(app)/reports/_lib/types";
+import { ReportPrintSheet } from "./report-print-sheet";
+import type { ReportDocument } from "../_lib/types";
 
 /**
  * Mounts the print sheet, opens the browser's print dialog once it is in the
  * page, and reports back when the dialog closes. Loaded on the Print click, so
- * the report preview stays out of the ledger's bundle.
+ * the report preview stays out of the calling page's bundle:
+ *
+ *   const ReportPrintJob = dynamic(() => import(".../report-print-job"), { ssr: false });
  */
-export default function LedgerPrintJob({ doc, onDone }: { doc: ReportDocument; onDone: () => void }) {
+export default function ReportPrintJob({ doc, onDone }: { doc: ReportDocument; onDone: () => void }) {
   useEffect(() => {
     // `print()` blocks until the dialog closes; the sheet must already be painted.
     const frame = requestAnimationFrame(() => {

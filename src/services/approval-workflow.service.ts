@@ -39,6 +39,16 @@ export interface ApprovalChainStep {
   kind: ChainStepKind;
   /** Shown as the loan's status while it waits at this step; null when unset. */
   status?: string | null;
+  /**
+   * The step's minimum principal (Phase 6 MB-BE6), pesos as the server stores
+   * them ("50000.00"). A loan whose principal is below it has this step left
+   * out when it is submitted or re-submitted; a restructure counts the larger
+   * of its new principal and the amount it restructures. No key: the step
+   * applies to every loan. The Submit step, the first approval step and the
+   * Release step can't carry one; the server refuses it in words (422 on
+   * `steps.{i}.min_principal`).
+   */
+  min_principal?: string | null;
 }
 
 type ChainType = "normal" | "policy_exception";

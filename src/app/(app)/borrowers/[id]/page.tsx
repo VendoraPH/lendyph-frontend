@@ -24,6 +24,8 @@ import {
 } from "@/lib/co-maker-save";
 import { coMakerIdFormData, type ReadyCoMakerId } from "@/lib/co-maker-valid-id";
 import { BorrowerHeader } from "./_components/borrower-header";
+import { TransferMemberDialog } from "./_components/transfer-member-dialog";
+import { canTransferMember } from "../_lib/member-transfer";
 import { OverviewTab } from "./_components/overview-tab";
 import { LoansTab } from "./_components/loans-tab";
 import { PaymentsTab } from "./_components/payments-tab";
@@ -67,6 +69,7 @@ function BorrowerDetailContent() {
   const { can } = usePermission();
   const canListLoans = can("loans:view");
   const canListPayments = can("payments:view");
+  const [transferOpen, setTransferOpen] = useState(false);
   // One read of the server's loan totals for the Overview and Payments tabs.
   const loanSummary = useBorrowerLoanSummary(borrower?.id, loans);
 
@@ -213,13 +216,25 @@ function BorrowerDetailContent() {
     );
   }
 
+  // Needs borrowers:view and borrowers:transfer, for a member with a branch.
+  const transferable = canTransferMember(can, borrower);
+
   return (
     <PageFill className="fit:gap-4">
       <BorrowerHeader
         borrower={borrower}
         onEdit={() => router.push(`/borrowers/${borrowerId}/edit`)}
         onPhotoUpdate={reload}
+        onTransfer={transferable ? () => setTransferOpen(true) : undefined}
       />
+      {transferable && (
+        <TransferMemberDialog
+          borrower={borrower}
+          open={transferOpen}
+          onOpenChange={setTransferOpen}
+          onTransferred={reload}
+        />
+      )}
 
       {/* Member documents — the same catalog `/printables` serves, opened for
           the member already on screen instead of re-picking them there. */}

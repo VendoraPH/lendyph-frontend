@@ -66,11 +66,13 @@ export function AccessDenied({ pageName = "this page" }: AccessDeniedProps) {
         </div>
 
         <div className="flex gap-3">
+          {/* The dashboard route: it sends a user without the dashboard on to
+              the first page the menu offers them. */}
           <Button
             className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
             onClick={() => router.push("/dashboard")}
           >
-            Go to Dashboard
+            Go to home page
           </Button>
           <Button variant="outline" onClick={() => router.back()}>
             Go Back

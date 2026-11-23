@@ -298,8 +298,8 @@ test("borrower report reads total_active_borrowers", () => {
   assert.equal(kpiValue(doc, "Repeat Members"), "96");
 });
 
-// GET /reports/borrowers/list: every member who is active or new, with the
-// server's own flags and figures. `meta.counts` equals the cards.
+// GET /reports/borrowers/list: every member who is active, new or repeat, with
+// the server's own flags and figures. `meta.counts` equals the cards.
 const MEMBER_LIST = {
   data: [
     { borrower_id: 5, borrower_code: "MB-0005", borrower_name: "Ana Cruz", branch_name: "Butuan", is_active: true, is_new: true, is_repeat: true, active_loans: 2, loans_released: 3, outstanding: 130000.5, last_release_date: "2026-08-05" },
@@ -310,7 +310,7 @@ const MEMBER_LIST = {
   meta: { current_page: 1, last_page: 1, per_page: 200, total: 4, counts: { active: 3, new: 2, repeat: 2 } },
 };
 
-const MEMBERS_TABLE = "Active and New Members";
+const MEMBERS_TABLE = "Active, New and Repeat Members";
 
 test("member report lists the accounts behind the cards, as the server sent them", () => {
   const doc = buildBorrowerDoc({ total_active_borrowers: 3, new_borrowers: 2, repeat_borrowers: 2 }, RANGE, MEMBER_LIST);
@@ -360,6 +360,23 @@ test("member list shows the server's outstanding, with ₱0.00 for a real zero a
   assert.equal(formatCell(table.rows[1], lastRelease), DASH);
 });
 
+test("a repeat member who is neither active nor new is listed, marked Repeat", () => {
+  const repeatOnly = {
+    borrower_id: 13, borrower_code: "MB-0013", borrower_name: "Eva Tan", branch_name: "Butuan",
+    is_active: false, is_new: false, is_repeat: true, active_loans: 0, loans_released: 2, outstanding: 0, last_release_date: "2025-12-01",
+  };
+  const table = namedTable(
+    buildBorrowerDoc(null, RANGE, { data: [...MEMBER_LIST.data, repeatOnly], meta: { total: 5, counts: { active: 3, new: 2, repeat: 3 } } }),
+    MEMBERS_TABLE,
+  );
+  const markers = table.columns.find((c) => c.key === "markers")!;
+  const eva = table.rows.find((r) => r.borrower_code === "MB-0013");
+
+  assert.ok(eva, "the repeat-only member is a row");
+  assert.equal(formatCell(eva, markers), "Repeat");
+  assert.equal(table.rows.length, 5);
+});
+
 test("member list has no footer: the server sends no column totals, and rows are never added up", () => {
   const table = namedTable(buildBorrowerDoc(null, RANGE, MEMBER_LIST), MEMBERS_TABLE);
   assert.equal(table.totals, undefined);
@@ -383,7 +400,7 @@ test("member list shows no truncation note when every row is listed", () => {
   assert.ok(notes.every((n) => !/Showing the first/.test(n)), notes.join(" | "));
 });
 
-test("member list says, under the table, how each mark is defined and who a card can count unlisted", () => {
+test("member list says, under the table, how each mark is defined and that it lists every member the cards count", () => {
   const doc = buildBorrowerDoc(null, RANGE, MEMBER_LIST);
   const tableAt = doc.sections.findIndex((s) => s.kind === "table" && s.title === MEMBERS_TABLE);
   const after = doc.sections[tableAt + 1];
@@ -393,7 +410,9 @@ test("member list says, under the table, how each mark is defined and who a card
   assert.match(after.text, /each loan's current status, not its status back then/);
   assert.match(after.text, /New: registered in the period/);
   assert.match(after.text, /Repeat: at least 2 loans released/);
-  assert.match(after.text, /neither active nor new/);
+  // The list now holds repeat members too, so no card counts anyone it leaves out.
+  assert.match(after.text, /lists every active, new and repeat member/);
+  assert.doesNotMatch(after.text, /neither active nor new|not listed/);
   assert.doesNotMatch(after.text, /need not match/);
   assert.doesNotMatch(after.text, /Borrower|borrower/);
 });
@@ -401,7 +420,7 @@ test("member list says, under the table, how each mark is defined and who a card
 test("member list's empty state says so, in the Member wording", () => {
   const table = namedTable(buildBorrowerDoc(null, RANGE, { data: [], meta: { total: 0 } }), MEMBERS_TABLE);
   assert.equal(table.rows.length, 0);
-  assert.equal(table.emptyText, "No member was active or new in the selected period.");
+  assert.equal(table.emptyText, "No active, new or repeat members for the selected period.");
 });
 
 test("member report omits the member list when its read failed", () => {
@@ -2465,6 +2484,7 @@ const ALL_REPORT_IDS: Record<DocumentId, true> = {
   savings_member_statement: true,
   executive_dashboard: true,
   share_capital_ledger: true,
+  gcash_transactions: true,
 };
 
 test("every report id has its own reference prefix", () => {
@@ -4021,16 +4041,44 @@ const PROVISIONING_PAYLOAD = {
 };
 
 test("provisioning states the overdue book and what must be set aside against it", () => {
-  const doc = buildProvisioningDoc(PROVISIONING_PAYLOAD, RANGE);
+  const doc = buildProvisioningDoc(
+    { ...PROVISIONING_PAYLOAD, principal_basis: { totals: { required_allowance: 184500.08 } } },
+    RANGE
+  );
 
   assertNoDashes(doc);
   assert.equal(doc.reportId, "provisioning");
   assert.equal(kpiValue(doc, "Total Overdue"), "₱451,861.50");
-  assert.equal(kpiValue(doc, "Required Allowance"), "₱140,932.95");
+  // The headline is the posted basis: past-due principal, as the allowance posting books it.
+  assert.equal(kpiValue(doc, "Required Allowance"), "₱184,500.08");
+  // The overdue amount's own provision, under its own name.
+  assert.equal(kpiValue(doc, "Provision on Overdue Amount"), "₱140,932.95");
   // The server's own weighted figure, not the mean of 5 / 15 / 25 / 50.
   assert.equal(kpiValue(doc, "Effective Provision Rate"), "31.2%");
   // Distinct delinquent loans, so 21 rather than the 27 bucket counts sum to.
   assert.equal(kpiValue(doc, "Delinquent Loans"), "21");
+});
+
+test("Required Allowance is the principal basis, never the overdue amount's provision", () => {
+  const doc = buildProvisioningDoc(PROVISIONING_PAYLOAD, RANGE);
+
+  // No principal basis sent: a dash, never ₱140,932.95 borrowed from the other basis.
+  assert.equal(kpiValue(doc, "Required Allowance"), DASH);
+  assert.equal(kpiValue(doc, "Provision on Overdue Amount"), "₱140,932.95");
+});
+
+test("the overdue schedule calls its figure Provision on Overdue Amount", () => {
+  const doc = buildProvisioningDoc(PROVISIONING_PAYLOAD, RANGE);
+  const table = namedTable(doc, "Provisioning Schedule");
+
+  assert.equal(
+    table.columns.find((c) => c.key === "required_allowance")?.header,
+    "Provision on Overdue Amount"
+  );
+  assert.match(
+    noteText(doc) ?? "",
+    /Provision on overdue amount is the overdue amount in each bucket multiplied by that bucket's provisioning rate\. The Required Allowance is worked out on past-due principal/
+  );
 });
 
 test("provisioning displays the whole-percent rate, not the fraction", () => {
@@ -4174,7 +4222,7 @@ test("provisioning adds the principal basis: buckets, loans, principal, rate and
       ["count", "Loans"],
       ["principal", "Principal"],
       ["rate", "Rate"],
-      ["required_allowance", "Required"],
+      ["required_allowance", "Required Allowance"],
     ]
   );
   assert.deepEqual(
@@ -4260,16 +4308,21 @@ test("the principal basis carries the server's basis note as its caption", () =>
   );
 });
 
-test("the principal basis leaves the overdue schedule and its figures as they were", () => {
+test("the principal basis sets the headline; the overdue schedule and its note stay as they were", () => {
   const before = buildProvisioningDoc(PROVISIONING_PAYLOAD, RANGE);
   const after = buildProvisioningDoc(PROVISIONING_WITH_BASIS, RANGE);
 
   const basisAt = (doc: ReportDocument) =>
     doc.sections.findIndex((s) => s.kind === "table" && s.title === "Principal Basis");
 
-  // The KPIs, the schedule and its note come first, exactly as before.
   assert.equal(basisAt(after), basisAt(before));
-  assert.deepEqual(after.sections.slice(0, basisAt(after)), before.sections.slice(0, basisAt(before)));
+  // Only the headline moves: Required Allowance is the basis's own total.
+  assert.equal(kpiValue(before, "Required Allowance"), DASH);
+  assert.equal(kpiValue(after, "Required Allowance"), "₱184,500.08");
+  assert.equal(kpiValue(after, "Provision on Overdue Amount"), kpiValue(before, "Provision on Overdue Amount"));
+  // The schedule and its note follow the KPIs, exactly as before.
+  assert.equal(after.sections[0].kind, "kpi_grid");
+  assert.deepEqual(after.sections.slice(1, basisAt(after)), before.sections.slice(1, basisAt(before)));
   assert.equal(noteText(after), noteText(before));
 });
 

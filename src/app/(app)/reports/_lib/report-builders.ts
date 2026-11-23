@@ -890,18 +890,19 @@ export function buildBorrowerDoc(
     if (scope) sections.push({ kind: "note", text: scope });
 
     // No footer: the server sends counts for the cards, not column totals, and
-    // rows are never added up here.
+    // rows are never added up here. The list holds every member a card
+    // counts: active, new and repeat.
     sections.push({
       kind: "table",
-      title: "Active and New Members",
+      title: "Active, New and Repeat Members",
       columns: MEMBER_LIST_COLUMNS,
       rows,
-      emptyText: "No member was active or new in the selected period.",
+      emptyText: "No active, new or repeat members for the selected period.",
     });
     sections.push({
       kind: "note",
       text:
-        "Active: at least one collectible loan as of the end of the period, going by each loan's current status, not its status back then. New: registered in the period. Repeat: at least 2 loans released. A repeat member who is neither active nor new counts on the Repeat card but is not listed here.",
+        "Active: at least one collectible loan as of the end of the period, going by each loan's current status, not its status back then. New: registered in the period. Repeat: at least 2 loans released. This table lists every active, new and repeat member, so each member a card counts has a row here.",
     });
   }
 
@@ -2790,7 +2791,7 @@ const PROVISIONING_COLUMNS: ReportColumn[] = [
   { key: "rate", header: "Provision Rate", format: "percent", align: "right", width: 150 },
   {
     key: "required_allowance",
-    header: "Required Allowance",
+    header: "Provision on Overdue Amount",
     format: "currency",
     align: "right",
     width: 190,
@@ -2805,7 +2806,7 @@ const PROVISIONING_BASIS_COLUMNS: ReportColumn[] = [
   { key: "rate", header: "Rate", format: "text", align: "right", width: 100 },
   {
     key: "required_allowance",
-    header: "Required",
+    header: "Required Allowance",
     format: "currency",
     align: "right",
     width: 170,
@@ -2900,15 +2901,25 @@ export function buildProvisioningDoc(raw: unknown, range: DateRange): ReportDocu
   const delinquentLoans = serverFigure(totals, "count");
   const effectiveRate = serverFigure(totals, "effective_rate");
   const asOf = pick(obj, ["as_of_date", "as_of"]);
+  // The headline Required Allowance is the posted basis: past-due principal in
+  // each bucket at its rate, the figure the allowance posting books (Arvin,
+  // 2026-11-19). The overdue amount's own provision keeps its place under its
+  // own name. Both are the server's; a missing one is "—", never the other.
+  const basisTotals = asRecord(pick(asRecord(pick(obj, ["principal_basis"])), ["totals"]));
+  const requiredAllowance = serverFigure(basisTotals, "required_allowance");
 
   const sections: ReportSection[] = [
     {
       kind: "kpi_grid",
       items: [
         kpi("Total Overdue", currencyOrDash(totalAmount), { tone: "negative" }),
-        kpi("Required Allowance", currencyOrDash(totalAllowance), { tone: "negative" }),
+        kpi("Required Allowance", currencyOrDash(requiredAllowance), {
+          tone: "negative",
+          hint: "On past-due principal, the basis the allowance posting uses",
+        }),
+        kpi("Provision on Overdue Amount", currencyOrDash(totalAllowance), { tone: "negative" }),
         kpi("Effective Provision Rate", percentOrDash(effectiveRate), {
-          hint: "Required allowance over total overdue",
+          hint: "Provision on overdue amount over total overdue",
         }),
         kpi("Delinquent Loans", countOrDash(delinquentLoans)),
       ],
@@ -2930,8 +2941,9 @@ export function buildProvisioningDoc(raw: unknown, range: DateRange): ReportDocu
       kind: "note",
       text:
         `${asOf ? `Computed as of ${formatValue(asOf, "date")}. ` : ""}` +
-        "Required allowance is the overdue amount in each bucket multiplied by that bucket's " +
-        "provisioning rate. " +
+        "Provision on overdue amount is the overdue amount in each bucket multiplied by that bucket's " +
+        "provisioning rate. The Required Allowance is worked out on past-due principal (the Principal " +
+        "Basis below), the basis the allowance posting uses. " +
         // The server carries its own wording for why the ladder is a constant;
         // prefer it, so a board that changes the policy changes one place.
         String(

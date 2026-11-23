@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { loanApprovalService } from "@/services/loan-approval.service";
-import type { LoanApprovalRound, LoanApprovalStep } from "@/types";
+import type { LoanApprovalLeftOutStep, LoanApprovalRound, LoanApprovalStep } from "@/types";
 import { readsApprovalChain } from "@/types/loan-approval";
 
 interface UseLoanApprovalResult {
   steps: LoanApprovalStep[];
   rounds: LoanApprovalRound[];
+  /** The steps the current round left out by their minimum; none when the server doesn't say. */
+  leftOut: LoanApprovalLeftOutStep[];
   /** First load only — a `refresh()` after an action does not blank the chain. */
   loading: boolean;
   /**
@@ -35,6 +37,7 @@ export function useLoanApproval(
 ): UseLoanApprovalResult {
   const [steps, setSteps] = useState<LoanApprovalStep[]>([]);
   const [rounds, setRounds] = useState<LoanApprovalRound[]>([]);
+  const [leftOut, setLeftOut] = useState<LoanApprovalLeftOutStep[]>([]);
   const [loading, setLoading] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
   // Guards against an in-flight read landing after a newer one (or after the
@@ -49,6 +52,7 @@ export function useLoanApproval(
         requestRef.current++;
         setSteps([]);
         setRounds([]);
+        setLeftOut([]);
         setUnavailable(false);
         setLoading(false);
         return;
@@ -60,6 +64,7 @@ export function useLoanApproval(
         if (token !== requestRef.current) return;
         setSteps(Array.isArray(state?.current_steps) ? state.current_steps : []);
         setRounds(Array.isArray(state?.rounds) ? state.rounds : []);
+        setLeftOut(Array.isArray(state?.left_out_steps) ? state.left_out_steps : []);
         setUnavailable(false);
       } catch {
         if (token !== requestRef.current) return;
@@ -67,6 +72,7 @@ export function useLoanApproval(
         // seeded. Either way there is nothing trustworthy to show.
         setSteps([]);
         setRounds([]);
+        setLeftOut([]);
         setUnavailable(true);
       } finally {
         if (token === requestRef.current && showSpinner) setLoading(false);
@@ -84,5 +90,5 @@ export function useLoanApproval(
 
   const refresh = useCallback(() => load(false), [load]);
 
-  return { steps, rounds, loading, unavailable, refresh };
+  return { steps, rounds, leftOut, loading, unavailable, refresh };
 }

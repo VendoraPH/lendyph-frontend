@@ -188,6 +188,18 @@ export interface ActiveLoan {
   /** The loan summary's "Penalty: N month(s) late"; null until it is read, or with none. */
   penalty_note: string | null;
   /**
+   * Whether the loan can be extended (`is_one_month_term`, the server's rule
+   * behind Extend Loan), which decides whether a partial payment asks
+   * "Extend loan?" first; null when not sent (a summary row).
+   */
+  is_one_month_term: boolean | null;
+  /**
+   * The member's status on the full loan, which decides whether "Yes, extend"
+   * may defer; null on a summary row, and for a caller the server sends only
+   * the member's name to.
+   */
+  member_status: string | null;
+  /**
    * Whether the loan carries a Share Capital Build-Up (its `scb_amount` above
    * zero), which decides where a payment's excess goes; null when not sent.
    */
@@ -248,6 +260,8 @@ export function mapLoanToActiveLoan(loan: Loan): ActiveLoan {
     amount_due_now: readAmountDueNow(l.amount_due_now),
     schedule_penalties: schedulePenalties(l.amortization_schedules),
     penalty_note: null,
+    is_one_month_term: typeof l.is_one_month_term === "boolean" ? l.is_one_month_term : null,
+    member_status: typeof l.borrower?.status === "string" ? l.borrower.status : null,
     has_build_up: loanHasBuildUp(l.scb_amount),
   };
 }
