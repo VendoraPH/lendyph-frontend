@@ -236,15 +236,6 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
                     onChange={(e) => set("placementDate", e.target.value)}
                   />
                 </FormField>
-                <FormField id="td-instruction" field="maturity_instruction" label="At maturity">
-                  <OptionSelect
-                    id="td-instruction"
-                    value={form.instruction}
-                    onChange={(v) => set("instruction", v as MaturityInstruction)}
-                    options={MATURITY_INSTRUCTION_OPTIONS}
-                    wrap
-                  />
-                </FormField>
                 <FormField id="td-method" field="payment_method" label="Paid by">
                   <OptionSelect
                     id="td-method"
@@ -279,6 +270,23 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
                     />
                   </FormField>
                 )}
+                {/* Two columns wide beside the reference, so its longest option reads on
+                    one 32 px line on a desktop dialog; it wraps only where even that
+                    is too narrow. Next to the payout account, the other maturity field. */}
+                <FormField
+                  id="td-instruction"
+                  field="maturity_instruction"
+                  label="At maturity"
+                  className={FORM_STEP_GRID.wide}
+                >
+                  <OptionSelect
+                    id="td-instruction"
+                    value={form.instruction}
+                    onChange={(v) => set("instruction", v as MaturityInstruction)}
+                    options={MATURITY_INSTRUCTION_OPTIONS}
+                    wrap
+                  />
+                </FormField>
                 <FormField
                   id="td-payout"
                   field="payout_account_id"
