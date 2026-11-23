@@ -11,11 +11,18 @@ import type {
   GCashPendingItem,
   CreateGCashTransactionData,
   GCashListFilters,
+  GCashTransactionTotals,
   GCashNonMember,
   GCashNonMemberInput,
   GCashNonMemberFilters,
   PaginatedResponse,
 } from "@/types";
+
+/** `meta.totals` off a transactions page, or null when it carried none (PHP sends an empty one as `[]`). */
+function transactionTotals(res: unknown): GCashTransactionTotals | null {
+  const totals = (res as { meta?: { totals?: unknown } } | null | undefined)?.meta?.totals;
+  return totals && typeof totals === "object" && !Array.isArray(totals) ? (totals as GCashTransactionTotals) : null;
+}
 
 export const gcashService = {
   // Backend returns a raw Laravel paginator ({data, links, meta}) for this
@@ -26,6 +33,36 @@ export const gcashService = {
       API_ENDPOINTS.GCASH.TRANSACTIONS_LIST,
       { params },
     ),
+
+  /**
+   * Every transaction the filters match, across as many pages as it takes, for
+   * the tab's report export, with the server's `meta.totals` off the first and
+   * the last page (null when one sent none). The pages are read one after
+   * another, so a transaction recorded or marked paid meanwhile can shift them
+   * or change the totals: the export checks the rows and both totals
+   * (`transactionsExportRefusal`) and refuses a `truncated` drain.
+   */
+  listAllTransactions: async (
+    params?: Omit<GCashListFilters, "page" | "per_page">,
+    options?: { maxPages?: number },
+  ): Promise<
+    DrainResult<GCashTransaction> & {
+      totals: GCashTransactionTotals | null;
+      lastPageTotals: GCashTransactionTotals | null;
+    }
+  > => {
+    let totals: GCashTransactionTotals | null = null;
+    let lastPageTotals: GCashTransactionTotals | null = null;
+    const drained = await fetchAllPages<GCashTransaction>(async ({ page, per_page }) => {
+      const res = await gcashService.listTransactions({ ...params, page, per_page });
+      // The drain keeps rows and paging only. The server works `meta.totals` out on every
+      // request: page 1's are the report's, and the last page's show whether the list moved.
+      lastPageTotals = transactionTotals(res);
+      if (page === 1) totals = lastPageTotals;
+      return res;
+    }, options);
+    return { ...drained, totals, lastPageTotals };
+  },
 
   createTransaction: (data: CreateGCashTransactionData) =>
     api.post<GCashTransaction>(API_ENDPOINTS.GCASH.TRANSACTIONS_CREATE, data),
