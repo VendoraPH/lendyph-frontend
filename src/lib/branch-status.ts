@@ -29,6 +29,8 @@ export interface BranchStatusFields {
   status?: BranchStatus;
   is_active: boolean;
   is_main_office?: boolean;
+  /** A closure request is waiting; sent to status managers only (`BranchResource`). */
+  closure_pending?: boolean;
 }
 
 /** The server's status; a backend before MB-BE1 sends only `is_active` (and MB-BE1 turns inactive into suspended). */
@@ -54,6 +56,10 @@ export const MAIN_OFFICE_STAYS_ACTIVE = "The main office stays active. Make anot
 /** With the multi-branch flag off there is no Make main office to point to. */
 const MAIN_OFFICE_STAYS_ACTIVE_ONLY = "The main office stays active.";
 
+/** `BranchStatus::change()`'s refusal while a closure request waits (backend #354). */
+export const CLOSURE_WAITING =
+  "A request to close this branch is waiting. Reject or cancel it before reactivating the branch.";
+
 /**
  * Suspend for an active branch, Reactivate for a suspended one, nothing for a
  * closed one (a closed branch stays closed). The main office stays active, so
@@ -63,7 +69,9 @@ const MAIN_OFFICE_STAYS_ACTIVE_ONLY = "The main office stays active.";
 export function branchStatusAction(branch: BranchStatusFields, multiBranch = false): BranchStatusAction | null {
   const status = branchStatusOf(branch);
   if (status === "closed") return null;
-  if (status === "suspended") return { target: "active", label: "Reactivate", disabledReason: null };
+  if (status === "suspended") {
+    return { target: "active", label: "Reactivate", disabledReason: branch.closure_pending ? CLOSURE_WAITING : null };
+  }
   return {
     target: "suspended",
     label: "Suspend",
