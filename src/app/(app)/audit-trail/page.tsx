@@ -6,6 +6,8 @@ import { RouteGuard, TablePagination } from "@/components/common";
 // barrel is not tree-shaken and is pulled in by nearly every page, so
 // re-exporting a calendar there would ship react-day-picker to all of them.
 import { DateRangeFilter } from "@/components/common/date-range-filter";
+// By path, like the date filter: it loads the branch list.
+import { BranchFilter } from "@/components/common/branch-filter";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +18,17 @@ import { toast } from "sonner";
 import { getInitials } from "@/lib/initials";
 import { auditService } from "@/services";
 import { usePermission } from "@/hooks";
+import { useBranchFilter, useBranchFollowingPage } from "@/hooks/use-working-branch";
+import { ALL_BRANCHES, branchIdParam } from "@/lib/branch-filter";
 import { auditLoadRestriction, auditTrailRestriction } from "./_lib/audit-access";
+import {
+  AUDIT_BRANCH_NOTE,
+  auditBranchFilterShown,
+  auditExportParams,
+  auditFiltersActive,
+  auditListParams,
+  type AuditFilters,
+} from "./_lib/audit-query";
 import {
   Table,
   TableBody,
@@ -305,10 +317,15 @@ function AuditTrailContent() {
   // re-trigger the fetch forever.
   const [dateFrom, setDateFrom] = useState<string | null>(null);
   const [dateTo, setDateTo] = useState<string | null>(null);
+  // The audited record's branch (Phase 6 MB-BE6), through the shared branch
+  // filter: shown only with every branch, which the trail itself needs.
+  const viewAll = usePermission().can("branches:view_all");
+  const [branch, setBranch] = useBranchFilter();
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
+  // Back to page 1 when the header's working branch moves the branch filter.
+  const [page, setPage] = useBranchFollowingPage();
   const [perPage, setPerPage] = useState<number>(DEFAULT_PER_PAGE);
   const [meta, setMeta] = useState<{ current_page: number; last_page: number; per_page: number; total: number } | null>(null);
   // Set when the list answers 403: the table says why instead of "No audit logs found".
@@ -326,22 +343,19 @@ function AuditTrailContent() {
     let clamping = false;
     try {
       setLoading(true);
-      const params: Record<string, unknown> = { page, per_page: perPage };
-      if (actionFilter !== "all") params.action = actionFilter;
-      if (moduleFilter !== "all") params.module = moduleFilter;
-      // Whole-day bounds on `created_at`, applied by `buildQuery()`. Sent as
-      // the calendar strings themselves — shifting either end by a day here to
-      // reinterpret the window would put the screen and the CSV, which sends
-      // the same two values, one day apart.
-      if (dateFrom) params.date_from = dateFrom;
-      if (dateTo) params.date_to = dateTo;
-      // Sent to the server, not applied here. Filtering the fetched page
-      // client-side would search one page of an unbounded log and report
-      // "no results" for events that exist — the same truncation as the table,
-      // one layer along. `buildQuery()` searches action, auditable_type,
-      // description and the user's name; the export already relied on it.
-      if (search) params.search = search;
-      const res = await auditService.list(params);
+      // Whole-day bounds on `created_at`, applied by `buildQuery()`, sent as
+      // the calendar strings themselves: shifting either end by a day here
+      // would put the screen and the CSV, which sends the same two values, one
+      // day apart. The search goes to the server too; filtering the fetched
+      // page here would search one page of an unbounded log.
+      const res = await auditService.list(
+        auditListParams(
+          { search, module: moduleFilter, action: actionFilter, dateFrom, dateTo, branch },
+          viewAll,
+          page,
+          perPage,
+        ),
+      );
       if (requestId !== requestIdRef.current) return;
       const rows = res?.data ?? [];
       const nextMeta = res?.meta ?? null;
@@ -374,7 +388,7 @@ function AuditTrailContent() {
     } finally {
       if (requestId === requestIdRef.current && !clamping) setLoading(false);
     }
-  }, [actionFilter, moduleFilter, dateFrom, dateTo, search, page, perPage]);
+  }, [actionFilter, moduleFilter, dateFrom, dateTo, search, branch, viewAll, page, perPage, setPage]);
 
   useEffect(() => {
     fetchLogs();
@@ -388,7 +402,7 @@ function AuditTrailContent() {
       setPage(1);
     }, 250);
     return () => clearTimeout(t);
-  }, [searchDraft, search]);
+  }, [searchDraft, search, setPage]);
 
   const todayStr = todayISO();
 
@@ -409,17 +423,19 @@ function AuditTrailContent() {
     setDateTo(to);
     setPage(1);
   };
+  const changeBranch = (value: string) => {
+    setBranch(value);
+    setPage(1);
+  };
   const changePerPage = (next: number) => {
     setPerPage(next);
     setPage(1);
   };
 
-  const hasFilters =
-    searchDraft !== "" ||
-    moduleFilter !== "all" ||
-    actionFilter !== "all" ||
-    dateFrom !== null ||
-    dateTo !== null;
+  const filters: AuditFilters = { search, module: moduleFilter, action: actionFilter, dateFrom, dateTo, branch };
+  const hasFilters = auditFiltersActive({ ...filters, search: searchDraft });
+  const showBranchFilter = auditBranchFilterShown(viewAll);
+  const branchPicked = showBranchFilter && branchIdParam(branch) !== undefined;
 
   const clearFilters = () => {
     setSearchDraft("");
@@ -428,6 +444,7 @@ function AuditTrailContent() {
     setActionFilter("all");
     setDateFrom(null);
     setDateTo(null);
+    setBranch(ALL_BRANCHES);
     setPage(1);
   };
 
@@ -450,13 +467,7 @@ function AuditTrailContent() {
   const handleExport = async () => {
     setExporting(true);
     try {
-      const params: Record<string, unknown> = {};
-      if (search) params.search = search;
-      if (actionFilter !== "all") params.action = actionFilter;
-      if (moduleFilter !== "all") params.module = moduleFilter;
-      if (dateFrom) params.date_from = dateFrom;
-      if (dateTo) params.date_to = dateTo;
-      const blob = await auditService.export(params);
+      const blob = await auditService.export(auditExportParams(filters, viewAll));
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -568,7 +579,8 @@ function AuditTrailContent() {
                 paginator underneath says which slice of it is on screen. */}
             Activity Log ({total.toLocaleString()})
           </CardTitle>
-          <div className="flex flex-wrap items-center gap-2">
+          {/* items-end: the branch filter's label sits above its select. */}
+          <div className="flex flex-wrap items-end gap-2">
             <div className="relative w-56">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -609,6 +621,7 @@ function AuditTrailContent() {
               to={dateTo}
               onChange={changeDateRange}
             />
+            {showBranchFilter && <BranchFilter value={branch} onChange={changeBranch} />}
             {hasFilters && (
               <Button
                 variant="ghost"
@@ -623,6 +636,9 @@ function AuditTrailContent() {
           </div>
         </CardHeader>
         <CardContent className={FIT_CLASSES.section}>
+          {branchPicked && (
+            <p className="shrink-0 text-xs text-muted-foreground">{AUDIT_BRANCH_NOTE}</p>
+          )}
           {loading ? (
             <div className="flex items-center justify-center h-32">
               <Spinner className="size-6 text-muted-foreground" />
