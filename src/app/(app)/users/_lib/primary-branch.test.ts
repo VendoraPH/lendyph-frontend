@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   ORGANISATION_WIDE,
   OWN_PRIMARY_LOCK_REASON,
+  organisationWideAllowed,
   PRIMARY_BRANCH_REQUIRED,
   ownPrimaryBranchLock,
   primaryBranchFromValue,
@@ -156,5 +157,45 @@ describe("primaryBranchOptionsFor", () => {
     const options = primaryBranchOptionsFor(all, [5], { name: "manager", permissions: ["branches:view_all"] });
     assert.deepEqual(options.map((o) => o.value), ["5", ORGANISATION_WIDE]);
     assert.deepEqual(primaryBranchOptionsFor(all, [5], undefined).map((o) => o.value), ["5"]);
+  });
+});
+
+describe("organisationWideAllowed: branches:view_all given to the user directly counts, as the server counts it", () => {
+  const loanOfficer = { name: "loan_officer", permissions: ["loans:view"] };
+  const cashier = { name: "cashier", permissions: ["payments:create"] };
+  const manager = { name: "manager", permissions: ["loans:view", "branches:view_all"] };
+  // `permissions` on a user is everything they hold, their role's and their own together.
+  const givenDirectly = ["loans:view", "branches:view_all"];
+
+  test("a role that sees every branch is enough, with or without the user's permissions", () => {
+    assert.equal(organisationWideAllowed(manager), true);
+    assert.equal(organisationWideAllowed(manager, { heldRole: loanOfficer, permissions: ["loans:view"] }), true);
+  });
+
+  test("a user who holds it while keeping their role may be Organisation-wide", () => {
+    assert.equal(organisationWideAllowed(loanOfficer, { heldRole: loanOfficer, permissions: givenDirectly }), true);
+  });
+
+  test("a grant their current role doesn't give is their own, so it carries over to a new role", () => {
+    assert.equal(organisationWideAllowed(cashier, { heldRole: loanOfficer, permissions: givenDirectly }), true);
+  });
+
+  test("one that came with the role they're leaving doesn't carry over", () => {
+    assert.equal(
+      organisationWideAllowed(loanOfficer, { heldRole: manager, permissions: ["loans:view", "branches:view_all"] }),
+      false,
+    );
+  });
+
+  test("without the user's permissions in the payload, only the role decides", () => {
+    assert.equal(organisationWideAllowed(loanOfficer, { heldRole: loanOfficer }), false);
+    assert.equal(organisationWideAllowed(loanOfficer, { heldRole: loanOfficer, permissions: null }), false);
+    assert.equal(organisationWideAllowed(loanOfficer), false);
+  });
+
+  test("the edit form offers Organisation-wide for such a user", () => {
+    const all = [north, south];
+    const options = primaryBranchOptionsFor(all, [3], loanOfficer, { heldRole: loanOfficer, permissions: givenDirectly });
+    assert.deepEqual(options.map((o) => o.value), ["3", ORGANISATION_WIDE]);
   });
 });

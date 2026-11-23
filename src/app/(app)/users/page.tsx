@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { RouteGuard, PermissionButton } from "@/components/common";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { PageFill, PageLoader, ScrollBox } from "@/components/common/page-fill";
+import { DisabledReason } from "@/components/common/disabled-reason";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -627,6 +628,10 @@ function EditUserDialog({
     branches,
     form.branch_ids,
     roles.find((r) => r.name === form.role),
+    // A branches:view_all given to the user directly counts too, when the
+    // payload lists their permissions (GET /users sends them only to a caller
+    // without every branch).
+    { heldRole: roles.find((r) => r.name === user.roles?.[0]), permissions: user.permissions },
   );
   const primary = shownPrimaryBranch(form.primary_branch_id, primaryOptions);
   const sent = { ...form, primary_branch_id: primaryLock ? undefined : primary };
@@ -1082,14 +1087,18 @@ function UserActionsCell({
             <KeyRound className="mr-2 h-4 w-4" />
             Reset Password
           </DropdownMenuItem>
-          <DropdownMenuItem
-            disabled={historyLock.locked}
-            title={historyLock.reason ?? undefined}
-            onClick={() => setOpenDialog("history")}
-          >
-            <History className="mr-2 h-4 w-4" />
-            Branch History
-          </DropdownMenuItem>
+          {/* Its own lock, not the row's: why it's off shows on hover and
+              focus, the way the page's other disabled actions say it. */}
+          <DisabledReason reason={historyLock.reason} wrapperClassName="flex w-full">
+            <DropdownMenuItem
+              disabled={historyLock.locked}
+              onClick={() => setOpenDialog("history")}
+              className="w-full"
+            >
+              <History className="mr-2 h-4 w-4" />
+              Branch History
+            </DropdownMenuItem>
+          </DisabledReason>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             disabled={cannotManageTarget}
