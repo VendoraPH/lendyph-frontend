@@ -30,17 +30,20 @@ const rows = [
 ];
 
 /**
- * `meta.totals` as the server sends it. Deliberately not the sum of `rows`, so
- * a document that adds up its own rows can't pass for one that shows these.
+ * `meta.totals` exactly as the server sends it. Deliberately not the sum or
+ * the count of `rows`, so a document that works its own figures out from the
+ * rows can't pass for one that shows these.
  */
 const SERVER_TOTALS: GCashTransactionTotals = {
-  count: 3,
-  amount: "12845.70",
-  cash_in: "12345.60",
-  cash_out: "500.10",
-  charges: "45.25",
-  total: "12891.00",
+  count: 12,
+  amount: "23000.00",
+  cash_in: "15000.00",
+  cash_out: "8000.00",
+  charges: "240.00",
+  total: "23140.00",
+  pending: { count: 2, amount: "3000.00", charges: "40.00", total: "3040.00" },
 };
+const NONE_PENDING = { count: 0, amount: "0.00", charges: "0.00", total: "0.00" };
 
 function build(over: Partial<Parameters<typeof gcashTransactionsReport>[0]> = {}) {
   return gcashTransactionsReport({
@@ -62,10 +65,18 @@ function table(doc: ReturnType<typeof build>) {
   return s;
 }
 
-function summary(doc: ReturnType<typeof build>) {
+function tiles(doc: ReturnType<typeof build>) {
   const s = doc.sections.find((x) => x.kind === "kpi_grid");
   assert.ok(s && s.kind === "kpi_grid");
-  return s.items.map((k) => [k.label, k.value]);
+  return s.items;
+}
+
+function summary(doc: ReturnType<typeof build>) {
+  return tiles(doc).map((k) => [k.label, k.value]);
+}
+
+function chargesHint(doc: ReturnType<typeof build>) {
+  return tiles(doc).find((k) => k.label === "Charges")?.hint;
 }
 
 describe("the GCash transactions report", () => {
@@ -111,19 +122,21 @@ describe("the GCash transactions report", () => {
   test("totals show the server's figures when sent", () => {
     const doc = build();
     assert.deepEqual(summary(doc), [
-      ["Transactions", "3"],
-      ["Cash In", formatCurrency(12345.6)],
-      ["Cash Out", formatCurrency(500.1)],
-      ["Charges", formatCurrency(45.25)],
+      ["Transactions", "12"],
+      ["Cash In", formatCurrency(15000)],
+      ["Cash Out", formatCurrency(8000)],
+      ["Charges", formatCurrency(240)],
     ]);
     assert.deepEqual(table(doc).totals, [
-      { column: "amount", value: formatCurrency(12845.7) },
-      { column: "charge", value: formatCurrency(45.25) },
-      { column: "total", value: formatCurrency(12891) },
+      { column: "amount", value: formatCurrency(23000) },
+      { column: "charge", value: formatCurrency(240) },
+      { column: "total", value: formatCurrency(23140) },
     ]);
-    // A figure left out of the totals is a dash, never the column added up.
-    const noAmount = build({ totals: { ...SERVER_TOTALS, amount: undefined } });
-    assert.equal(table(noAmount).totals?.[0].value, "—");
+  });
+
+  test("the charges say how much is on pending Cash Ins, not yet income", () => {
+    assert.equal(chargesHint(build()), `${formatCurrency(40)} pending, not yet income`);
+    assert.equal(chargesHint(build({ totals: { ...SERVER_TOTALS, pending: NONE_PENDING } })), undefined);
   });
 
   test("totals read — when the server sends none", () => {
@@ -139,12 +152,21 @@ describe("the GCash transactions report", () => {
       { column: "charge", value: "—" },
       { column: "total", value: "—" },
     ]);
+    assert.equal(chargesHint(doc), undefined);
     // No count either: a dash, not the rows counted here.
     assert.equal(summary(build({ totals: null, total: null }))[0][1], "—");
   });
 
   test("no range and no rows: All time, and the server's zero totals read ₱0.00", () => {
-    const zero: GCashTransactionTotals = { count: 0, amount: "0.00", cash_in: "0.00", cash_out: "0.00", charges: "0.00", total: "0.00" };
+    const zero: GCashTransactionTotals = {
+      count: 0,
+      amount: "0.00",
+      cash_in: "0.00",
+      cash_out: "0.00",
+      charges: "0.00",
+      total: "0.00",
+      pending: NONE_PENDING,
+    };
     const doc = build({ rows: [], total: 0, totals: zero, from: "", to: "" });
     assert.equal(doc.meta.period, "All time");
     assert.equal(table(doc).rows.length, 0);

@@ -21,7 +21,8 @@ const TOTALS = {
   cash_in: "150000.00",
   cash_out: "25000.50",
   charges: "3150.25",
-  total: "175150.75",
+  total: "178150.25",
+  pending: { count: 2, amount: "3000.00", charges: "40.00", total: "3040.00" },
 };
 
 let server: Server;

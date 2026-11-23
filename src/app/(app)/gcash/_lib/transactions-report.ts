@@ -43,6 +43,13 @@ export interface GCashTransactionsReportInput {
   generatedAt?: Date;
 }
 
+/** The Charges tile's qualifier: a pending Cash In's charge isn't income until it's paid. */
+function pendingChargesHint(totals: GCashTransactionTotals | null): string | undefined {
+  const pending = totals?.pending;
+  if (!pending || !(Number(pending.count) > 0)) return undefined;
+  return `${currencyOrDash(pending.charges)} pending, not yet income`;
+}
+
 function customer(row: GCashTransaction): string {
   if (row.non_member) return `${row.non_member.full_name} (Walk-in)`;
   return row.borrower?.full_name ?? "—";
@@ -75,7 +82,12 @@ export function gcashTransactionsReport(input: GCashTransactionsReportInput): Re
           { label: "Transactions", value: countOrDash(totals?.count ?? input.total) },
           { label: "Cash In", value: currencyOrDash(totals?.cash_in) },
           { label: "Cash Out", value: currencyOrDash(totals?.cash_out) },
-          { label: "Charges", value: currencyOrDash(totals?.charges), tone: "positive" },
+          {
+            label: "Charges",
+            value: currencyOrDash(totals?.charges),
+            hint: pendingChargesHint(totals),
+            tone: "positive",
+          },
         ],
       },
       {
