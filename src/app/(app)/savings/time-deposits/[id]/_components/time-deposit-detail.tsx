@@ -30,6 +30,7 @@ import { printTimeDepositCertificate } from "../_lib/print-certificate";
 import { postMaturityLabel } from "../../_lib/settle-form";
 import { PreterminateDialog } from "./preterminate-dialog";
 import { SettleDialog } from "./settle-dialog";
+import { referenceRow } from "../../_lib/detail-rows";
 
 export function TimeDepositDetail({ depositId }: { depositId: number }) {
   const router = useRouter();
@@ -177,6 +178,8 @@ function Terms({ td }: { td: TimeDeposit }) {
   // A rollover has no funding method: the earlier placement funded it.
   if (td.funding_method) rows.push(["Paid by", labelOf(METHOD_LABELS, td.funding_method)]);
   else if (td.rolled_over_from_id) rows.push(["Paid by", "Rolled over from the previous placement"]);
+  const reference = referenceRow(td);
+  if (reference) rows.push(reference);
   if (td.post_maturity_interest !== "0.00")
     rows.push([
       postMaturityLabel(td),

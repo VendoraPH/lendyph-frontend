@@ -160,6 +160,10 @@ export const env = {
     // [0001]): the Reference Number field locks on Cash and shows the next one.
     // Off until the backend assigns them. Literal reference, as above.
     cashPledgeReference: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_CASH_PLEDGE_REFERENCE),
+    // Cash time deposit placements numbered by the server (TD-[admin id]-[year]-
+    // [0001]): Place Time Deposit locks the Reference field on Cash and shows
+    // the next one. Off until the backend assigns them. Literal reference.
+    timeDepositCashReference: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_TD_CASH_REFERENCE),
     // Savings & Deposits (staff side). Off by default: the menu and every
     // /savings route stay hidden. Turned on for staging only, where the
     // backend serves the /savings endpoints. Literal reference, as above.

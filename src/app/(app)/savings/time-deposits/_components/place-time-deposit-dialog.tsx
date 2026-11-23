@@ -12,9 +12,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FormStep, FormStepper, type FormStepperHandle } from "@/components/common/form-stepper";
 import { MemberSearchPicker } from "@/components/common/member-search-picker";
+import { env } from "@/config/env";
 import { useApiResource, useDialogOpening, usePermission } from "@/hooks";
+import { useCashReferencePreview } from "@/hooks/use-cash-reference-preview";
 import type { MemberOption } from "@/hooks/use-member-search";
 import { useSubmitGuard } from "@/hooks/use-submit-guard";
+import { CASH_REFERENCE_PLACEHOLDER, TIME_DEPOSIT_CASH_SERIES, seriesAutoReference } from "@/lib/cash-reference";
 import { cn } from "@/lib/utils";
 import { FORM_STEP_GRID } from "@/lib/form-stepper";
 import { formatCurrency, todayISO } from "@/lib/format";
@@ -67,6 +70,17 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
   const [checkedSteps, setCheckedSteps] = useState<ReadonlySet<string>>(new Set());
   const stepperRef = useRef<FormStepperHandle>(null);
   const { submitting, run } = useSubmitGuard();
+  // Cash placements are numbered by the server (TD-…): while Cash is chosen
+  // the Reference field shows its next number, read-only, and moves on after
+  // each placement.
+  const [placedCount, setPlacedCount] = useState(0);
+  const serverNumbersCash = env.features.timeDepositCashReference;
+  const cashPreview = useCashReferencePreview(
+    timeDepositService.nextCashReference,
+    open && serverNumbersCash && form.method === "cash",
+    placedCount,
+  );
+  const autoReference = seriesAutoReference(TIME_DEPOSIT_CASH_SERIES, serverNumbersCash, form.method, cashPreview);
   if (useDialogOpening(open, null)) {
     setForm({ ...EMPTY, placementDate: todayISO() });
     setSubmitted(false);
@@ -104,7 +118,7 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
       label: `${a.account_number} · available ${formatCurrency(a.available_balance)}`,
     }));
 
-  const { errors, quote, body } = checkPlacement({ ...form, memberId }, product);
+  const { errors, quote, body } = checkPlacement({ ...form, memberId }, product, { serverNumbersCash });
   const keyedErrors = placementErrors(errors);
   const show = (stepId: string, error: string | null) => (submitted || checkedSteps.has(stepId) ? error : null);
 
@@ -115,7 +129,8 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
     if (!body) return;
     run((key) => timeDepositService.place(body, key))
       ?.then((td) => {
-        notifySuccess("Time deposit placed", td.certificate_number);
+        setPlacedCount((n) => n + 1);
+        notifySuccess("Time deposit placed", [td.certificate_number, td.reference].filter(Boolean).join(" · "));
         onOpenChange(false);
         onPlaced(td);
       })
@@ -240,7 +255,11 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
                   <OptionSelect
                     id="td-method"
                     value={form.method}
-                    onChange={(v) => set("method", v as SavingsMethod)}
+                    onChange={(v) => {
+                      set("method", v as SavingsMethod);
+                      // A number typed for one method never carries over to another.
+                      if (serverNumbersCash) set("reference", "");
+                    }}
                     options={FUNDING_OPTIONS}
                   />
                 </FormField>
@@ -261,13 +280,29 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
                     />
                   </FormField>
                 ) : (
-                  <FormField id="td-ref" field="reference" label="Reference (optional)">
-                    <Input
-                      id="td-ref"
-                      value={form.reference}
-                      onChange={(e) => set("reference", e.target.value)}
-                      placeholder="OR / transfer no."
-                    />
+                  <FormField
+                    id="td-ref"
+                    field="reference"
+                    label={autoReference ? "Reference" : "Reference (optional)"}
+                    hint={autoReference?.hint}
+                  >
+                    {autoReference ? (
+                      <Input
+                        id="td-ref"
+                        value={autoReference.value}
+                        readOnly
+                        placeholder={CASH_REFERENCE_PLACEHOLDER}
+                        className="bg-muted font-mono text-muted-foreground"
+                      />
+                    ) : (
+                      <Input
+                        id="td-ref"
+                        value={form.reference}
+                        onChange={(e) => set("reference", e.target.value)}
+                        placeholder="OR / transfer no."
+                        maxLength={100}
+                      />
+                    )}
                   </FormField>
                 )}
                 {/* Two columns wide beside the reference, so its longest option reads on

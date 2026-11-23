@@ -1,6 +1,11 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { CASH_REFERENCE_PATTERN, cashAutoReference } from "./cash-reference";
+import {
+  CASH_REFERENCE_PATTERN,
+  TIME_DEPOSIT_CASH_SERIES,
+  cashAutoReference,
+  seriesAutoReference,
+} from "./cash-reference";
 
 describe("a cash entry's automatic reference number", () => {
   test("cash shows the server's next CSH number, read-only", () => {
@@ -35,5 +40,27 @@ describe("a cash entry's automatic reference number", () => {
     assert.match("CSH-7-2027-10000", CASH_REFERENCE_PATTERN);
     assert.doesNotMatch("CSH-1002325-26-0001", CASH_REFERENCE_PATTERN);
     assert.doesNotMatch("CSH-1002325-2026-001", CASH_REFERENCE_PATTERN);
+  });
+});
+
+describe("a cash time deposit placement's automatic reference number", () => {
+  test("cash shows the server's next TD number, read-only", () => {
+    const field = seriesAutoReference(TIME_DEPOSIT_CASH_SERIES, true, "cash", "TD-0012-2026-0006");
+    assert.equal(field?.value, "TD-0012-2026-0006");
+    assert.match(field?.hint ?? "", /next TD reference number\. It is confirmed when the placement saves/);
+  });
+
+  test("with no preview, or a number from another series, the field locks empty", () => {
+    const empty = seriesAutoReference(TIME_DEPOSIT_CASH_SERIES, true, "cash", null);
+    assert.equal(empty?.value, "");
+    assert.match(empty?.hint ?? "", /Cash placements get the next TD reference number when saved/);
+    assert.equal(seriesAutoReference(TIME_DEPOSIT_CASH_SERIES, true, "cash", "CSH-1-2026-0001")?.value, "");
+  });
+
+  test("other methods, paying from savings, and a build without the feature keep the typed field", () => {
+    for (const method of ["gcash", "maya", "bank_transfer", "savings"]) {
+      assert.equal(seriesAutoReference(TIME_DEPOSIT_CASH_SERIES, true, method, "TD-1-2026-0001"), null);
+    }
+    assert.equal(seriesAutoReference(TIME_DEPOSIT_CASH_SERIES, false, "cash", "TD-1-2026-0001"), null);
   });
 });
