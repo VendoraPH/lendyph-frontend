@@ -11,7 +11,7 @@ import { applyChrome, loadLogoDataUrl } from "@/app/(app)/reports/_lib/report-ch
 import type { ReportDocument } from "@/app/(app)/reports/_lib/types";
 import { subsidiaryLedgerDocument, type SubsidiaryLedgerInput } from "../_lib/subsidiary-ledger-document";
 
-const LedgerPrintJob = dynamic(() => import("./ledger-print-job"), { ssr: false });
+const ReportPrintJob = dynamic(() => import("@/app/(app)/reports/_components/report-print-job"), { ssr: false });
 
 type Action = "pdf" | "print";
 
@@ -76,7 +76,7 @@ export function LedgerDocumentActions({
         {busy === "print" ? <Loader2 className="size-4 animate-spin" /> : <Printer className="size-4" />}
         Print Document
       </Button>
-      {printDoc && <LedgerPrintJob doc={printDoc} onDone={printDone} />}
+      {printDoc && <ReportPrintJob doc={printDoc} onDone={printDone} />}
     </div>
   );
 }

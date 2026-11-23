@@ -59,6 +59,7 @@ const REFERENCE_PREFIX: Record<DocumentId, string> = {
   savings_member_statement: "MDS",
   executive_dashboard: "EXD",
   share_capital_ledger: "SCL",
+  gcash_transactions: "GCT",
 };
 
 /** The prefixes of savings records' own numbers, which no report reference may start with. */

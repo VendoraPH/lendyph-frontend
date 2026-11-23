@@ -79,9 +79,36 @@ export interface LoanApprovalRound {
   steps: LoanApprovalStep[];
 }
 
+/**
+ * A step the loan's chain left out because its minimum principal is above the
+ * amount the loan is measured by (Phase 6 MB-BE6): a restructure counts the
+ * larger of its new principal and the amount it restructures. The server
+ * lists them for the current round; the browser never works one out.
+ */
+export interface LoanApprovalLeftOutStep {
+  /** The chain-config slug, as on `LoanApprovalStep.step_id`. */
+  step_id: number | string;
+  name: string;
+  /** Pesos with two decimals, as the server stores the minimum ("50000.00"). */
+  min_principal: string;
+  /** The server's sentence, shown as it is. */
+  description: string;
+  /**
+   * The `step_id` of the kept step it follows in the loan's chain, or null
+   * (it comes before the first kept approval step). Absent on an API from
+   * before it: the card then puts it just before Release.
+   */
+  after_step_id?: number | string | null;
+}
+
 export interface LoanApprovalState {
   current_steps: LoanApprovalStep[];
   rounds: LoanApprovalRound[];
+  /**
+   * The steps the current round left out by their minimum; an empty list when
+   * nothing was skipped. Absent on an API from before it: read it as none.
+   */
+  left_out_steps?: LoanApprovalLeftOutStep[];
 }
 
 /** Forward the step this action makes pending to one named user. */
