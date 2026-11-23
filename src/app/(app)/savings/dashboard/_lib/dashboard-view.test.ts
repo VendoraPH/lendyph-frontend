@@ -22,6 +22,7 @@ const KPIS: SavingsDashboardKpis = {
   deposits: { count: 1, amount: "5000.00" },
   withdrawals: { count: 4, amount: "7000.25" },
   net_deposit_movement: "-2000.25",
+  accrued_interest: "345.67",
   interest_credited: { gross: "120.00", tax: "0.00", net: "120.00" },
   fees_charged: { count: 1, amount: "15.00" },
   share_capital_transfers: { count: 2, amount: "1700.00" },
@@ -55,6 +56,22 @@ test("each card shows the server's figure with ₱ and two decimals, counts in w
   assert.equal(card("fees_charged").value, "₱15.00");
   assert.equal(card("dormant_accounts").value, "3");
   assert.match(card("active_accounts").caption ?? "", /As of Nov 12, 2026/);
+});
+
+test("Accrued Interest shows the server's figure as of today, after Deposits less Withdrawals and before Interest Paid (TASK 35)", () => {
+  const accrued = card("accrued_interest");
+  assert.equal(accrued.label, "Accrued Interest");
+  assert.equal(accrued.value, "₱345.67");
+  assert.equal(accrued.caption, "Earned, not yet credited · As of Nov 12, 2026");
+  const keys = kpiCards(KPIS).map((c) => c.key);
+  assert.equal(keys.indexOf("accrued_interest"), keys.indexOf("net_deposit_movement") + 1);
+  assert.equal(keys.indexOf("interest_credited"), keys.indexOf("accrued_interest") + 1);
+});
+
+test("Accrued Interest shows a dash when the server sends none", () => {
+  const value = (kpis: SavingsDashboardKpis) => kpiCards(kpis).find((c) => c.key === "accrued_interest")?.value;
+  assert.equal(value({ ...KPIS, accrued_interest: undefined }), "—");
+  assert.equal(value({ ...KPIS, accrued_interest: null }), "—");
 });
 
 test("the period card says it is deposits less withdrawals, and transfers to share capital have their own card", () => {
