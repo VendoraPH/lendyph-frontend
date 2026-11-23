@@ -49,6 +49,7 @@ import type {
   ImportRowIssue,
   ImportIssueSeverity,
 } from "@/types/data-import";
+import { categoryWords, fieldWords } from "./import-issue-words";
 
 /* ------------------------------------------------------------------ */
 /* Contract widening                                                    */
@@ -276,7 +277,7 @@ export function ImportErrorsTable({
                           {stat.severity}
                         </Badge>
                       ) : null}
-                      {stat.category}
+                      {categoryWords(stat.category)}
                     </span>
                     <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
                       {stat.count.toLocaleString()}{" "}
@@ -364,7 +365,7 @@ export function ImportErrorsTable({
                         viewport and clips it. The message column is the one
                         thing this screen exists to show, so it wraps. */}
                     <TableCell className="min-w-64 max-w-md whitespace-normal">
-                      <span className="text-xs text-muted-foreground">{issue.category}</span>
+                      <span className="text-xs text-muted-foreground">{categoryWords(issue.category)}</span>
                       <br />
                       {issue.message}
                     </TableCell>
@@ -375,7 +376,7 @@ export function ImportErrorsTable({
                       {[issue.account_no, issue.loan_no].filter(Boolean).join(" · ") || "—"}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {issue.field || "—"}
+                      {fieldWords(issue)}
                     </TableCell>
                     <TableCell className="max-w-48 whitespace-normal break-words font-mono text-xs">
                       {issue.original_value || "—"}

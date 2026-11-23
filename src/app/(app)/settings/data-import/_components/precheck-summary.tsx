@@ -23,6 +23,7 @@
  */
 
 import { AlertTriangle, CircleAlert, FileSpreadsheet, HelpCircle, Info, ShieldCheck } from "lucide-react";
+import { isEarlierLayout } from "@/lib/import-schema";
 import { formatCount } from "@/lib/report-format";
 import { cn } from "@/lib/utils";
 import type { FileFindings, FileInspection } from "../_hooks/use-file-precheck";
@@ -120,7 +121,13 @@ function FileSummary({ inspection, findings }: PrecheckFileSummary) {
         <Stat
           label="Columns"
           value={`${found} of ${expectedColumns}`}
-          hint={found === expectedColumns ? "as expected" : "does not match"}
+          hint={
+            found !== expectedColumns
+              ? "does not match"
+              : isEarlierLayout(inspection.shape, found)
+                ? "earlier layout"
+                : "as expected"
+          }
         />
         <Stat
           label="Separator"

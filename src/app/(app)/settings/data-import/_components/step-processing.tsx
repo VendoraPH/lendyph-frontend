@@ -34,6 +34,7 @@ import { cn } from "@/lib/utils";
 import { dataImportService } from "@/services/data-import.service";
 import type { ImportCounts, ImportRunStatus } from "@/types/data-import";
 import { useImportStatus } from "../_hooks/use-import-status";
+import { filesPhrase, runFileKinds } from "./import-files";
 import { ProductMappingGate } from "./product-mapping-table";
 
 /* ------------------------------------------------------------------ */
@@ -210,6 +211,8 @@ export function StepProcessing({
   });
 
   const progress = useMemo(() => rowProgress(status?.files), [status?.files]);
+  // The run's own files: a members-only run has one, and is told so.
+  const phrase = filesPhrase(runFileKinds(status?.files));
   const stale = showsStaleWarning(status);
   const waitingOnMapping = awaitsMapping(status?.phase);
   const elapsed = formatElapsed(status?.seconds_since_last_advance);
@@ -261,10 +264,9 @@ export function StepProcessing({
       <div>
         <h2 className="font-heading text-lg font-medium">Importing</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Both files are on the server and verified, so the copies on your computer
-          are no longer needed. Rows are processed in batches, about once a minute.
-          It is safe to close this page — the import keeps running on the server,
-          and you can come back to it any time.
+          {phrase.verified}, so {phrase.copies} no longer needed. Rows are processed
+          in batches, about once a minute. It is safe to close this page — the import
+          keeps running on the server, and you can come back to it any time.
         </p>
       </div>
 
@@ -309,7 +311,7 @@ export function StepProcessing({
           <p className="mt-3 text-sm text-muted-foreground">
             {loading
               ? "Reading the run…"
-              : "No rows have been counted yet — the files are still being read."}
+              : `No rows have been counted yet — ${phrase.stillRead}.`}
           </p>
         )}
       </div>

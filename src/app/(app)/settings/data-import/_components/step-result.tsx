@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import type { ImportFileKind } from "@/types/data-import";
 import { useImportStatus } from "../_hooks/use-import-status";
 import { ImportErrorsTable } from "./import-errors-table";
+import { filesPhrase, runFileKinds } from "./import-files";
 import { OutcomeTiles } from "./outcome-tiles";
 import { phaseLabel } from "./step-processing";
 
@@ -67,6 +68,9 @@ export function StepResult({ runId, onStartOver, className }: StepResultProps) {
   const failed = status.phase === "failed";
   const cancelled = status.phase === "cancelled";
   const settledWell = !failed && !cancelled;
+  // The run's own files: a members-only run has one, and is told so.
+  const kinds = runFileKinds(status.files);
+  const phrase = filesPhrase(kinds);
 
   return (
     <div className={cn("space-y-8", className)}>
@@ -97,7 +101,7 @@ export function StepResult({ runId, onStartOver, className }: StepResultProps) {
                 ? (status.failure_reason ??
                   "This import was cancelled before anything was written to your members or loans.")
                 : status.is_closed
-                  ? "Every row in both files has been decided. The figures below account for all of them."
+                  ? `${phrase.everyRow} has been decided. The figures below account for all of them.`
                   : "This import is still running. The figures below are what has been decided so far."}
           </p>
         </div>
@@ -117,12 +121,14 @@ export function StepResult({ runId, onStartOver, className }: StepResultProps) {
         ))}
       </div>
 
-      <p className="text-sm text-muted-foreground">
-        The two files are counted separately on purpose. A member can be matched
-        to somebody who already existed while their loans still fail — so each
-        file&apos;s figures add up on their own, and neither total explains the
-        other.
-      </p>
+      {kinds.length > 1 ? (
+        <p className="text-sm text-muted-foreground">
+          The two files are counted separately on purpose. A member can be matched
+          to somebody who already existed while their loans still fail — so each
+          file&apos;s figures add up on their own, and neither total explains the
+          other.
+        </p>
+      ) : null}
 
       <ImportErrorsTable
         runId={runId}

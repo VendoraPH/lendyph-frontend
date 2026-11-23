@@ -142,6 +142,11 @@ export function formatCount(value: number): string {
   return countFmt.format(value);
 }
 
+/** A count with its noun in the right number: "1 value", "2,500 values". */
+export function formatCountOf(value: number, one: string, many = `${one}s`): string {
+  return `${formatCount(value)} ${value === 1 ? one : many}`;
+}
+
 export function formatPercent(value: number): string {
   return percentFmt.format(value / 100);
 }

@@ -36,6 +36,7 @@ import type { ImportRunStatus } from "@/types/data-import";
 
 import {
   reattachProbeLabel,
+  seededRunId,
   useImportReattach,
   type ImportReattachHit,
   type ReattachProbe,
@@ -269,7 +270,9 @@ export function DataImportView() {
   // paints the intermediate result.
   if (!checking && hit && seededHit !== hit) {
     setSeededHit(hit);
-    setRunId(hit.runId);
+    // A finished run is kept only to show its result; on step 1 it is the
+    // prior-import notice, and the next Continue opens a new run.
+    setRunId(seededRunId(hit));
     setBranchId(hit.status.branch_id ?? null);
     setStep(hit.step);
   }
@@ -292,6 +295,15 @@ export function DataImportView() {
     setStep("prepare");
   }, []);
 
+  /**
+   * A finished run never takes another upload. Forgotten here, the files and
+   * the answers stay, and the upload opens a new run.
+   */
+  const forgetRun = useCallback(() => {
+    clearImportSession();
+    setRunId(null);
+  }, []);
+
   const currentIndex = IMPORT_STEPS.indexOf(step);
   const stepLabels = useMemo(
     () => IMPORT_STEPS.map((key) => STEP_LABELS[key]),
@@ -312,7 +324,9 @@ export function DataImportView() {
     );
   }
 
-  const hasAnyFile = Boolean(files.customers || files.loans);
+  // The members file is what an import needs; a loans file only rides along
+  // with it (./import-files).
+  const hasMembersFile = Boolean(files.customers);
 
   function renderStep() {
     switch (step) {
@@ -352,7 +366,7 @@ export function DataImportView() {
       // requirements apply. A reload that lands here with neither gets a panel
       // rather than a crash on a null the child was promised would not be one.
       case "check":
-        if (runId === null && (branchId === null || !hasAnyFile)) {
+        if (runId === null && (branchId === null || !hasMembersFile)) {
           return <LostThreadPanel onStartOver={startOver} />;
         }
         return (
@@ -369,7 +383,7 @@ export function DataImportView() {
         );
 
       case "upload":
-        if (runId === null && (branchId === null || !hasAnyFile || !precheck)) {
+        if (runId === null && (branchId === null || !hasMembersFile || !precheck)) {
           return <LostThreadPanel onStartOver={startOver} />;
         }
         return (
@@ -379,6 +393,7 @@ export function DataImportView() {
             precheck={precheck}
             runId={runId}
             onRunCreated={setRunId}
+            onRunFinished={forgetRun}
             onBack={() => setStep("check")}
             onUploaded={() => setStep("processing")}
           />

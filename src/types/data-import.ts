@@ -290,6 +290,8 @@ export interface ImportRowIssue {
   severity: ImportIssueSeverity;
   category: string;
   field: string | null;
+  /** The column's label for a column's field; blank for a whole-row problem. */
+  field_label?: string;
   message: string;
   original_value: string | null;
 }
