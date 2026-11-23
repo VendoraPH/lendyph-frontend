@@ -7,6 +7,7 @@ import {
   readNoticeDays,
   readSettingsDraft,
   readTaxRule,
+  settingsEditBlocker,
   toSettingsDraft,
 } from "./settings-form";
 
@@ -121,4 +122,12 @@ test("the set-up button needs savings:settings and branches:view_all, and says w
   assert.equal(prepareBooksBlocker(holding("savings:settings", "branches:view_all")), null);
   assert.match(prepareBooksBlocker(holding("savings:settings")) ?? "", /all branches/);
   assert.match(prepareBooksBlocker(holding("branches:view_all")) ?? "", /configure/);
+});
+
+test("the settings card takes edits only with savings:settings and branches:view_all, as the server's PUT does, and says which is missing", () => {
+  const holding = (...held: string[]) => (p: string) => held.includes(p);
+  assert.equal(settingsEditBlocker(holding("savings:settings", "branches:view_all")), null);
+  assert.match(settingsEditBlocker(holding("savings:settings", "savings:view")) ?? "", /every branch, so changing them needs access to all branches/);
+  assert.match(settingsEditBlocker(holding("savings:view", "branches:view_all")) ?? "", /needs the Savings configure permission/);
+  assert.match(settingsEditBlocker(holding("savings:view")) ?? "", /needs the Savings configure permission/);
 });

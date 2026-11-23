@@ -123,6 +123,17 @@ export function prepareBooksSummary(result: Partial<PrepareBooksResult>): Array<
     .filter((g) => g.lines.length > 0);
 }
 
+/**
+ * Why the settings card is read-only, or null when it takes edits. The
+ * settings apply to every branch, so `PUT /savings/settings` needs
+ * savings:settings and branches:view_all (AuthorizesCompanyWideSavings).
+ */
+export function settingsEditBlocker(can: (permission: Permission) => boolean): string | null {
+  if (!can("savings:settings")) return "Changing the savings settings needs the Savings configure permission.";
+  if (!can("branches:view_all")) return "The savings settings apply to every branch, so changing them needs access to all branches.";
+  return null;
+}
+
 /** Why the set-up button is disabled, or null: it needs savings:settings and branches:view_all. */
 export function prepareBooksBlocker(can: (permission: Permission) => boolean): string | null {
   if (!can("savings:settings")) return "Setting up the books needs the Savings configure permission.";

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { PermissionButton } from "@/components/common/permission-button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useSubmitGuard } from "@/hooks/use-submit-guard";
@@ -9,8 +8,9 @@ import { usePermission } from "@/hooks";
 import { notifyError, notifySuccess, notifyValidation } from "@/lib/notify";
 import { savingsService } from "@/services";
 import type { SavingsSettings } from "@/types";
+import { ActionButton } from "../../_components/action-button";
 import { FormField } from "../../_components/field";
-import { readSettingsDraft, toSettingsDraft, type SettingsDraft } from "../_lib/settings-form";
+import { readSettingsDraft, settingsEditBlocker, toSettingsDraft, type SettingsDraft } from "../_lib/settings-form";
 
 interface ApprovalSettingsCardProps {
   settings: SavingsSettings;
@@ -18,7 +18,9 @@ interface ApprovalSettingsCardProps {
 }
 
 export function ApprovalSettingsCard({ settings, onSaved }: ApprovalSettingsCardProps) {
-  const canEdit = usePermission().can("savings:settings");
+  // Company-wide: read-only, with the reason, without savings:settings and branches:view_all.
+  const blocker = settingsEditBlocker(usePermission().can);
+  const canEdit = blocker === null;
   const [draft, setDraft] = useState<SettingsDraft>(() => toSettingsDraft(settings));
   const [source, setSource] = useState(settings);
   const { submitting, run } = useSubmitGuard();
@@ -94,10 +96,11 @@ export function ApprovalSettingsCard({ settings, onSaved }: ApprovalSettingsCard
             true,
           )}
         </div>
-        <div className="flex justify-end">
-          <PermissionButton permission="savings:settings" onClick={save} disabled={submitting}>
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          {blocker && <p className="text-xs text-muted-foreground">{blocker}</p>}
+          <ActionButton permission="savings:settings" onClick={save} disabled={submitting} blockedReason={blocker}>
             {submitting ? "Saving…" : "Save settings"}
-          </PermissionButton>
+          </ActionButton>
         </div>
       </CardContent>
     </Card>
