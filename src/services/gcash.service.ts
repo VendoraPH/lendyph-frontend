@@ -36,23 +36,32 @@ export const gcashService = {
 
   /**
    * Every transaction the filters match, across as many pages as it takes, for
-   * the tab's report export, with the server's `meta.totals` (null when it
-   * sent none). The pages are read one after another, so a transaction
-   * recorded meanwhile can shift them: the export checks the rows against the
-   * totals (`transactionsExportRefusal`) and refuses a `truncated` drain.
+   * the tab's report export, with the server's `meta.totals` off the first and
+   * the last page (null when one sent none). The pages are read one after
+   * another, so a transaction recorded or marked paid meanwhile can shift them
+   * or change the totals: the export checks the rows and both totals
+   * (`transactionsExportRefusal`) and refuses a `truncated` drain.
    */
   listAllTransactions: async (
     params?: Omit<GCashListFilters, "page" | "per_page">,
     options?: { maxPages?: number },
-  ): Promise<DrainResult<GCashTransaction> & { totals: GCashTransactionTotals | null }> => {
+  ): Promise<
+    DrainResult<GCashTransaction> & {
+      totals: GCashTransactionTotals | null;
+      lastPageTotals: GCashTransactionTotals | null;
+    }
+  > => {
     let totals: GCashTransactionTotals | null = null;
+    let lastPageTotals: GCashTransactionTotals | null = null;
     const drained = await fetchAllPages<GCashTransaction>(async ({ page, per_page }) => {
       const res = await gcashService.listTransactions({ ...params, page, per_page });
-      // The drain keeps rows and paging only. `meta.totals` covers every page, so page 1's is read.
-      if (page === 1) totals = transactionTotals(res);
+      // The drain keeps rows and paging only. The server works `meta.totals` out on every
+      // request: page 1's are the report's, and the last page's show whether the list moved.
+      lastPageTotals = transactionTotals(res);
+      if (page === 1) totals = lastPageTotals;
       return res;
     }, options);
-    return { ...drained, totals };
+    return { ...drained, totals, lastPageTotals };
   },
 
   createTransaction: (data: CreateGCashTransactionData) =>

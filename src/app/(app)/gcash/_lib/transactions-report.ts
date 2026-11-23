@@ -56,16 +56,32 @@ function pendingChargesHint(totals: GCashTransactionTotals | null): string | und
 
 /** What `gcashService.listAllTransactions` hands back for the export. */
 export type DrainedTransactions = Pick<DrainResult<GCashTransaction>, "rows" | "total" | "truncated"> & {
+  /** Page 1's `meta.totals`, which the report shows. */
   totals: GCashTransactionTotals | null;
+  /** The last page's, worked out again by the server when that page was asked for. */
+  lastPageTotals: GCashTransactionTotals | null;
 };
+
+/** The same JSON value, whatever the order of its keys. */
+function sameJson(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== "object" || typeof b !== "object" || Array.isArray(a) !== Array.isArray(b)) {
+    return false;
+  }
+  const left = a as Record<string, unknown>;
+  const right = b as Record<string, unknown>;
+  const keys = Object.keys(left);
+  return keys.length === Object.keys(right).length && keys.every((key) => key in right && sameJson(left[key], right[key]));
+}
 
 /**
  * Why the drained transactions can't be made into one report, or null when
  * they can. A list cut short is refused. So is one that moved while its pages
- * were read: the totals come from page 1, and a transaction recorded or marked
- * paid before a later page shifts the pages, so a row repeats or goes missing
- * and the rows no longer match the totals. Without totals only the repeat can
- * be seen.
+ * were read. A transaction recorded or marked paid before a later page can
+ * shift the pages, so a row repeats or goes missing and the rows no longer
+ * match page 1's count. Or it changes the totals: the last page's then differ
+ * from page 1's (a status change keeps every row in its place, so only the
+ * totals show it). Without totals only the repeat can be seen.
  */
 export function transactionsExportRefusal(drain: DrainedTransactions): string | null {
   if (drain.truncated) {
@@ -74,7 +90,8 @@ export function transactionsExportRefusal(drain: DrainedTransactions): string | 
   const repeated = new Set(drain.rows.map((row) => row.id)).size !== drain.rows.length;
   const count = toNumber(drain.totals?.count);
   const countOff = count !== null && count !== drain.rows.length;
-  return repeated || countOff ? TRANSACTIONS_CHANGED : null;
+  const totalsMoved = !sameJson(drain.totals, drain.lastPageTotals);
+  return repeated || countOff || totalsMoved ? TRANSACTIONS_CHANGED : null;
 }
 
 function customer(row: GCashTransaction): string {

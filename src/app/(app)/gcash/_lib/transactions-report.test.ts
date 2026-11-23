@@ -186,7 +186,10 @@ describe("the GCash transactions report", () => {
 });
 
 describe("whether the drained transactions can be exported", () => {
-  const whole = { rows, total: 3, truncated: false, totals: { ...SERVER_TOTALS, count: 3 } };
+  const three = { ...SERVER_TOTALS, count: 3 };
+  const whole = { rows, total: 3, truncated: false, totals: three, lastPageTotals: three };
+  /** The first and the last page agree on these totals; only the rows can disagree. */
+  const steady = (totals: GCashTransactionTotals | null) => ({ ...whole, totals, lastPageTotals: totals });
 
   test("a whole list that matches the server's count can", () => {
     assert.equal(transactionsExportRefusal(whole), null);
@@ -202,8 +205,8 @@ describe("whether the drained transactions can be exported", () => {
   test("rows that no longer match the server's count are refused: the transactions changed", () => {
     assert.equal(TRANSACTIONS_CHANGED, "The transactions changed while the report was being made. Please try again.");
     // One recorded or marked paid after page 1: a row missing, or a row too many.
-    assert.equal(transactionsExportRefusal({ ...whole, totals: { ...SERVER_TOTALS, count: 4 } }), TRANSACTIONS_CHANGED);
-    assert.equal(transactionsExportRefusal({ ...whole, totals: { ...SERVER_TOTALS, count: 2 } }), TRANSACTIONS_CHANGED);
+    assert.equal(transactionsExportRefusal(steady({ ...SERVER_TOTALS, count: 4 })), TRANSACTIONS_CHANGED);
+    assert.equal(transactionsExportRefusal(steady({ ...SERVER_TOTALS, count: 2 })), TRANSACTIONS_CHANGED);
   });
 
   test("a repeated row is refused even when the count matches", () => {
@@ -212,10 +215,25 @@ describe("whether the drained transactions can be exported", () => {
   });
 
   test("without totals the count isn't checked, but a repeated row still is", () => {
-    assert.equal(transactionsExportRefusal({ ...whole, totals: null, total: null }), null);
-    assert.equal(
-      transactionsExportRefusal({ ...whole, totals: null, rows: [...rows, rows[2]] }),
-      TRANSACTIONS_CHANGED,
-    );
+    assert.equal(transactionsExportRefusal({ ...steady(null), total: null }), null);
+    assert.equal(transactionsExportRefusal({ ...steady(null), rows: [...rows, rows[2]] }), TRANSACTIONS_CHANGED);
+  });
+
+  test("totals that moved between the first and the last page are refused", () => {
+    // Marked paid mid-way: the same rows in the same places, but fewer pending.
+    const onePaid = { ...three, pending: { count: 1, amount: "1500.00", charges: "20.00", total: "1520.00" } };
+    assert.equal(transactionsExportRefusal({ ...whole, lastPageTotals: onePaid }), TRANSACTIONS_CHANGED);
+    assert.equal(transactionsExportRefusal({ ...whole, lastPageTotals: { ...three, cash_in: "15000.01" } }), TRANSACTIONS_CHANGED);
+  });
+
+  test("the same totals sent in another key order still match", () => {
+    const { pending, ...money } = three;
+    const reordered = { pending: { total: pending.total, charges: pending.charges, amount: pending.amount, count: pending.count }, ...money };
+    assert.equal(transactionsExportRefusal({ ...whole, lastPageTotals: reordered }), null);
+  });
+
+  test("totals sent on one end of the drain only are refused", () => {
+    assert.equal(transactionsExportRefusal({ ...whole, lastPageTotals: null }), TRANSACTIONS_CHANGED);
+    assert.equal(transactionsExportRefusal({ ...whole, totals: null }), TRANSACTIONS_CHANGED);
   });
 });
