@@ -37,7 +37,6 @@ import { formatCount } from "@/lib/report-format";
 import { useAuthStore } from "@/store";
 import type { ImportFileKind } from "@/types/data-import";
 import {
-  FILE_LABELS,
   SHAPE_BY_KIND,
   sessionAnswers,
   useFilePrecheck,
@@ -47,6 +46,7 @@ import {
 } from "../_hooks/use-file-precheck";
 import { DateFormatCard } from "./date-format-card";
 import { HeaderDetectionCard } from "./header-detection-card";
+import { FILE_LABELS } from "./import-files";
 import { PrecheckErrorsTable } from "./precheck-errors-table";
 import { PrecheckSummary } from "./precheck-summary";
 import { ProductMappingGate } from "./product-mapping-table";

@@ -32,7 +32,7 @@ import type { DateColumnFinding } from "../_hooks/use-file-precheck";
 import { describeIsoDate } from "../_hooks/use-file-precheck";
 
 export interface DateFormatCardProps {
-  /** "Customer Profile" / "Loans" — names the file the columns belong to. */
+  /** "Members file" / "Loans file" — names the file the columns belong to. */
   fileLabel: string;
   dates: readonly DateColumnFinding[];
   /** Called when the admin settles an ambiguous column. */

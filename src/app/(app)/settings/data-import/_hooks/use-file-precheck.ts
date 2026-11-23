@@ -72,6 +72,7 @@ import {
 } from "@/lib/import-date";
 import { formatCount, formatCountOf } from "@/lib/report-format";
 import type { ImportFileKind, ImportIssueSeverity } from "@/types/data-import";
+import { FILE_LABELS, fileNameInSentence } from "../_components/import-files";
 
 // ---------------------------------------------------------------------------
 // Ceilings
@@ -117,14 +118,6 @@ const SLOT_SAMPLE_ROWS = 5;
 export const SHAPE_BY_KIND: Record<ImportFileKind, ImportShape> = {
   customers: "customer",
   loans: "loans",
-};
-
-/** What each slot is CALLED, in the admin's own workbook vocabulary. Exported
- *  for the same reason: `FileInspection.label` is this map, and a resumed run
- *  has no inspection to take it from. */
-export const FILE_LABELS: Record<ImportFileKind, string> = {
-  customers: "Customer Profile",
-  loans: "Loans",
 };
 
 export type PrecheckCategory =
@@ -570,7 +563,7 @@ export function checkRows(
   const memberNumberAt = new Map<string, number>();
   const today = context.today ?? todayISO();
   const membershipAllowed = context.membershipAllowed ?? true;
-  const fileLabel = context.shape === "customer" ? "Customer Profile" : "Loans";
+  const fileLabel = fileNameInSentence(context.kind);
   let sequence = 0;
   let rowHasError = false;
 
@@ -608,8 +601,8 @@ export function checkRows(
 
     if (fields.length !== context.expectedColumns) {
       const needs = isEarlierLayout(context.shape, context.expectedColumns)
-        ? `this ${fileLabel} file is in the earlier ${context.expectedColumns}-column layout, so every row needs ${context.expectedColumns}`
-        : `the ${fileLabel} file needs ${context.expectedColumns}`;
+        ? `this ${fileLabel} is in the earlier ${context.expectedColumns}-column layout, so every row needs ${context.expectedColumns}`
+        : `the ${fileLabel} needs ${context.expectedColumns}`;
       add(line, reference, {
         column: null,
         severity: "error",
@@ -793,9 +786,9 @@ export function fileBlockers(
   const wrongSlot = inspection.slot?.shape && inspection.slot.shape !== inspection.shape;
   if (wrongSlot) {
     blockers.push(
-      `This looks like the ${
-        inspection.slot?.shape === "customer" ? "Customer Profile" : "Loans"
-      } file, but it was chosen as the ${inspection.label} file. Importing it here would write each value into the wrong field.`,
+      `This looks like the ${fileNameInSentence(
+        inspection.slot?.shape === "customer" ? "customers" : "loans",
+      )}, but it was chosen as the ${fileNameInSentence(inspection.kind)}. Importing it here would write each value into the wrong field.`,
     );
   }
 
@@ -804,7 +797,7 @@ export function fileBlockers(
   const modal = inspection.widths[0];
   if (!wrongSlot && modal && rows.length > 0 && modal.columns !== inspection.expectedColumns) {
     blockers.push(
-      `Most rows have ${modal.columns} columns, but the ${inspection.label} file needs ${expectedWidthWords(inspection.shape)}. Check the file was exported whole and that no columns were added or removed.`,
+      `Most rows have ${modal.columns} columns, but the ${fileNameInSentence(inspection.kind)} needs ${expectedWidthWords(inspection.shape)}. Check the file was exported whole and that no columns were added or removed.`,
     );
   }
 
@@ -917,7 +910,7 @@ export function computeFindings(
       ...totals,
       // Both files' blockers share one list on screen, so each names its file.
       blockers: fileBlockers(inspection, rows, dates, skip).map(
-        (blocker) => `${inspection.label} file (${inspection.fileName}): ${blocker}`,
+        (blocker) => `${inspection.label} (${inspection.fileName}): ${blocker}`,
       ),
       pendingDecisions: pendingFor(dates),
     };

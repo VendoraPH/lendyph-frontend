@@ -67,6 +67,7 @@ import {
 // compiled on its own branch; now that both are on one branch they are imported,
 // so there is one definition rather than two that agree until someone edits one.
 import type { ImportFiles, PrecheckOutcome } from "./data-import-view";
+import { FILE_LABELS, fileNameInSentence } from "./import-files";
 
 export interface StepUploadProps {
   /** The branch the members and loans are created under. Null on a resume. */
@@ -85,11 +86,6 @@ export interface StepUploadProps {
   onUploaded: () => void;
   className?: string;
 }
-
-const KIND_LABEL: Record<ImportFileKind, string> = {
-  customers: "Members",
-  loans: "Loans",
-};
 
 /* ------------------------------------------------------------------ */
 /* Pure — unit tested in ./step-upload.test.ts                          */
@@ -146,7 +142,7 @@ export function filesPhrase(kinds: readonly ImportFileKind[]): {
   sent: string;
 } {
   if (kinds.length === 1) {
-    const name = `${KIND_LABEL[kinds[0]].toLowerCase()} file`;
+    const name = fileNameInSentence(kinds[0]);
     return {
       verified: `The ${name} is on the server and verified`,
       announced: `The ${name} is uploaded and verified.`,
@@ -511,7 +507,7 @@ function FileProgress({
     <div className="rounded-lg border p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-medium">{KIND_LABEL[file.kind]}</p>
+          <p className="font-medium">{FILE_LABELS[file.kind]}</p>
           <p className="truncate text-sm text-muted-foreground" title={file.filename}>
             {file.filename}
             {file.totalBytes > 0 ? ` · ${formatBytes(file.totalBytes)}` : ""}
@@ -551,7 +547,7 @@ function FileProgress({
           <p className="mt-0.5 text-muted-foreground">{file.blocked.reason}</p>
 
           <label htmlFor={inputId} className="sr-only">
-            Choose the {KIND_LABEL[file.kind].toLowerCase()} CSV
+            Choose the {fileNameInSentence(file.kind)}
           </label>
           <input
             id={inputId}
@@ -575,7 +571,7 @@ function FileProgress({
           <Progress
             value={percent}
             className="mt-3"
-            aria-label={`${KIND_LABEL[file.kind]} upload progress`}
+            aria-label={`${FILE_LABELS[file.kind]} upload progress`}
           >
             <ProgressLabel>{file.assembled ? "Uploaded" : (piece ?? "Waiting")}</ProgressLabel>
             <ProgressValue />

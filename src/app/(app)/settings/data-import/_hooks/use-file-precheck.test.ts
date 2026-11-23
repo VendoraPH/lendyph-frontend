@@ -18,7 +18,7 @@ import {
 // Fixtures
 // ---------------------------------------------------------------------------
 
-/** A complete, valid Customer Profile row. Mutate a copy to make one bad. */
+/** A complete, valid members file row. Mutate a copy to make one bad. */
 const CUSTOMER: string[] = [
   "2019-00101",
   "Dela Cruz",
@@ -381,7 +381,7 @@ test("each layout holds its rows to its own width", () => {
   const short = checkRows(customerRows([CUSTOMER]), CURRENT_CONTEXT);
   const shortIssue = short.issues.find((issue) => issue.category === "columns");
   assert.ok(shortIssue);
-  assert.match(shortIssue.message, /22 columns; the Customer Profile file needs 26/);
+  assert.match(shortIssue.message, /22 columns; the members file needs 26/);
 });
 
 // ---------------------------------------------------------------------------
@@ -415,7 +415,7 @@ function inspectionStub(overrides: Partial<FileInspection> = {}): FileInspection
   return {
     kind: "customers",
     shape: "customer",
-    label: "Customer Profile",
+    label: "Members file",
     fileName: "customers.csv",
     sizeBytes: 100,
     delimiter: ",",
@@ -463,7 +463,7 @@ test("the loans file dropped into the customers slot is a blocker, not a row err
   const blockers = fileBlockers(inspection, customerRows([CUSTOMER]), NO_DATES);
 
   assert.equal(blockers.length, 1);
-  assert.match(blockers[0], /looks like the Loans file/);
+  assert.match(blockers[0], /looks like the loans file, but it was chosen as the members file/);
 });
 
 test("a file whose rows are systematically the wrong width is blocked once", () => {
@@ -504,7 +504,7 @@ test("a 22-column header over 26-column rows is caught, as the server holds a he
   assert.ok(findings);
   assert.equal(findings.totalRows, 2);
   assert.deepEqual(findings.blockers, [
-    "Customer Profile file (members.csv): Row 1 is the header, but it leaves 4 columns unnamed: Date Hired, Membership Date, Member Type and Membership Number. The import holds the header to every column the rows have, so it would refuse this file. Add the missing labels; the members template has them all.",
+    "Members file (members.csv): Row 1 is the header, but it leaves 4 columns unnamed: Date Hired, Membership Date, Member Type and Membership Number. The import holds the header to every column the rows have, so it would refuse this file. Add the missing labels; the members template has them all.",
   ]);
 });
 
@@ -575,7 +575,7 @@ test("a members file at neither layout's width is blocked, and the blocker names
   const blockers = fileBlockers(inspection, customerRows([CUSTOMER]), NO_DATES);
 
   assert.equal(blockers.length, 1);
-  assert.match(blockers[0], /Most rows have 24 columns, but the Customer Profile file needs 26, or 22 in the earlier layout/);
+  assert.match(blockers[0], /Most rows have 24 columns, but the members file needs 26, or 22 in the earlier layout/);
 });
 
 test("an unbalanced quote is carried through as a blocker, in the reader's own words", () => {
