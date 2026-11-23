@@ -61,10 +61,8 @@ describe("subPageTitle (the breadcrumb's second part)", () => {
 
   test("every credit scoring page reads its menu title", () => {
     assert.equal(subPageTitle("credit-scoring", "assessment"), "Credit Assessment");
-    assert.equal(subPageTitle("credit-scoring", "scorecard-configuration"), "Scorecard Configuration");
     assert.equal(subPageTitle("credit-scoring", "risk-monitoring"), "Risk Monitoring");
     assert.equal(subPageTitle("credit-scoring", "score-history"), "Score History");
-    assert.equal(subPageTitle("credit-scoring", "settings"), "Settings");
   });
 
   test("the Executive Dashboard reads its own title", () => {
@@ -235,11 +233,9 @@ describe("nestedPageTitle (a page a level further down)", () => {
 });
 
 test("savings sub-pages read as savings, not loan, pages", () => {
-  assert.equal(subPageTitle("savings", "products"), "Savings Products");
   assert.equal(subPageTitle("savings", "time-deposits"), "Time Deposits");
   assert.equal(subPageTitle("savings", "approvals"), "Savings Approvals");
   assert.equal(subPageTitle("savings", "interest"), "Savings Interest");
-  assert.equal(subPageTitle("savings", "settings"), "Savings Settings");
   assert.equal(subPageTitle("savings", "transactions"), "Savings Transactions");
   assert.equal(subPageTitle("savings", "auto-credit"), "Savings Auto-Credit");
   assert.equal(subPageTitle("savings", "dormant"), "Dormant Accounts");
@@ -253,7 +249,17 @@ test("CDA pages read their menu titles, whether or not the CDA menu is built in"
     if (!segment) continue;
     assert.equal(subPageTitle("cda", segment), child.title, child.href);
   }
-  assert.equal(subPageTitle("cda", "settings"), "CDA Settings");
+});
+
+test("each module's settings, now under Settings, read their menu titles with or without the module built in", async () => {
+  const { MODULE_SETTINGS_NAV } = await import("@/constants/navigation");
+  for (const child of MODULE_SETTINGS_NAV) {
+    assert.equal(subPageTitle("settings", child.href.split("/")[2]), child.title, child.href);
+  }
+  assert.equal(subPageTitle("settings", "savings-products"), "Savings Products");
+  assert.equal(subPageTitle("settings", "cda"), "CDA");
+  assert.equal(subPageTitle("settings", "scorecard-configuration"), "Scorecard Configuration");
+  assert.equal(subPageTitle("settings", "credit-scoring"), "Credit Scoring");
 });
 
 test("Settings → Linda's breadcrumb reads its menu title, with the menu entry or without it", async () => {
@@ -282,5 +288,20 @@ describe("nestedSegment (which part a page further down reads its title from)", 
     assert.equal(nestedSegment(["loans", "origination", "applications", "5"]), "applications");
     assert.equal(nestedSegment(["amla", "customers", "members"]), "members");
     assert.equal(nestedSegment(["amla", "customers", "members", "x"]), "members");
+  });
+});
+
+describe("AMLA report breadcrumbs", () => {
+  test("an AMLA report's page reads the server's title for it", () => {
+    assert.equal(nestedPageTitle("amla", "reports", "covered_transactions"), "Covered Transactions");
+    assert.equal(nestedPageTitle("amla", "reports", "risk_assessment"), "Customer AML Risk Assessment");
+    assert.equal(nestedPageTitle("amla", "reports", "management_summary"), "AMLA Management Summary");
+  });
+
+  test("the Reports page's AMLA section and the breadcrumb share one title per report", async () => {
+    const { AMLA_REPORT_CATALOG } = await import("@/app/(app)/reports/_lib/report-catalog");
+    for (const report of AMLA_REPORT_CATALOG) {
+      assert.equal(nestedPageTitle("amla", "reports", report.key), report.title, report.key);
+    }
   });
 });

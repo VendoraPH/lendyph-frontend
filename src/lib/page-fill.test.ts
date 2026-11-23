@@ -112,3 +112,8 @@ test("a pinned heading sticks 1px above the box top, so a box at a fractional y 
   }
 });
 
+
+test("a scroll box contains what is absolutely positioned inside it, so an sr-only table can't stretch the page", () => {
+  assert.ok(has(scrollBoxClass(), "relative"));
+  assert.ok(has(scrollBoxClass({ always: true }), "relative"));
+});

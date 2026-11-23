@@ -75,8 +75,12 @@ import {
   buildSavingsWithdrawalsDoc,
 } from "./savings-insight-report-builders";
 import type { Permission } from "@/types";
+import { AMLA_ROUTE_PERMISSION } from "@/lib/amla/access";
+import { AMLA_REPORT_TITLES, type AmlaReportKey } from "@/lib/amla/report-titles";
+import { amlaReportAccess } from "@/lib/amla/reports-access";
 import { CATEGORY_META } from "./types";
 import type {
+  AmlaReportDefinition,
   DateRange,
   ReportCategory,
   ReportContext,
@@ -667,6 +671,57 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     ),
   },
 ];
+
+// ---------------------------------------------------------------------------
+// AMLA Compliance (Phase 6, AMLA-B7): made, totalled and exported by the
+// server, each on its own page under /amla/reports
+// ---------------------------------------------------------------------------
+
+/** `Filings::CTR_READ` and `STR_READ`: who reads CTR and STR records. */
+const FILING_READERS: Permission[] = ["amla:ctr", "amla:approve", "amla:submit", "amla:export", "amla:str"];
+
+const amlaReport = (
+  key: AmlaReportKey,
+  description: string,
+  icon: AmlaReportDefinition["icon"],
+  permissions: Permission[],
+  headOffice: boolean,
+): AmlaReportDefinition => ({
+  key,
+  // One title for the catalog and the page's breadcrumb.
+  title: AMLA_REPORT_TITLES[key],
+  description,
+  icon,
+  accent: ACCENT.red,
+  href: `/amla/reports/${key}`,
+  permissions,
+  headOffice,
+  available: env.features.amla,
+});
+
+/** The ten AMLA reports, by the server's keys, titles and descriptions, each gated as the server gates it. */
+export const AMLA_REPORT_CATALOG: AmlaReportDefinition[] = [
+  amlaReport("covered_transactions", "Each covered transaction (CTR) candidate, why it qualified, its filing status and deadline.", Banknote, ["amla:ctr"], false),
+  amlaReport("suspicious_transactions", "Cases where suspicion was established, their related transactions, deadline and STR status. Never the narrative.", ShieldAlert, ["amla:str"], true),
+  amlaReport("transaction_monitoring", "Customer transactions by branch and channel: volume, screened, unscreened and flagged, with alert categories and rule versions.", Activity, ["amla:alerts"], false),
+  amlaReport("risk_assessment", "Each customer's AML risk level, its scored factors, changes and review dates.", Gauge, ["amla:cdd"], false),
+  amlaReport("customer_due_diligence", "Each customer's identification status, missing KYC details and documents, enhanced due diligence and review dates.", UserRound, ["amla:cdd"], false),
+  amlaReport("watchlist_screening", "Possible watchlist matches, their list version, review status, reviewer and resolution date.", Scale, ["amla:screening"], true),
+  amlaReport("case_register", "Every case opened in the period or still open: its alerts, owner, priority, age, history and decision.", FileText, ["amla:cases"], true),
+  amlaReport("submissions_register", "Each CTR and STR record: its period, status, deadline, submission and the facility's responses.", ClipboardList, FILING_READERS, false),
+  amlaReport("audit_history", "Every AMLA action in the period: changes, decisions, approvals, files, submissions, access and exports.", BookOpen, ["amla:audit"], true),
+  amlaReport("management_summary", "Transactions monitored, alerts, investigations, filings, missed deadlines, KYC and watchlist reviews, as totals only.", PieChart, ["amla:view"], true),
+];
+
+/**
+ * The AMLA reports this user may open, for the Reports page: none while the
+ * AMLA switch is off, and none without `amla:view`, since their pages sit
+ * under /amla.
+ */
+export function visibleAmlaReports(can: (permission: Permission) => boolean): AmlaReportDefinition[] {
+  if (!can(AMLA_ROUTE_PERMISSION)) return [];
+  return AMLA_REPORT_CATALOG.filter((r) => amlaReportAccess(r, can) === "open");
+}
 
 /**
  * The reports this user may open: their module is switched on for this

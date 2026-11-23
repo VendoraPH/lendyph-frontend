@@ -332,7 +332,7 @@ export function buildSavingsLargeTransactionsDoc(raw: unknown, range: DateRange)
     extraKpis: (totals) => [
       kpi("Money In", currencyOrDash(pick(totals, ["total_credit"])), { tone: "positive" }),
       kpi("Money Out", currencyOrDash(pick(totals, ["total_debit"]))),
-      kpi("Alert Amount", currencyOrDash(threshold), { hint: "From Savings Settings" }),
+      kpi("Alert Amount", currencyOrDash(threshold), { hint: "From Settings → Savings" }),
     ],
   });
 }

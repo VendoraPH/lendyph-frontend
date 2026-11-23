@@ -1,3 +1,4 @@
+import { formatCurrency } from "@/lib/format";
 import type { LoanStatus, Loan } from "@/types/loan";
 
 // ── Tabs / status filtering ──
@@ -201,6 +202,21 @@ export function loanProductId(loan: Loan): number | null {
 
 export function loanTerm(loan: Loan): number | null {
   return loan.term ?? loan.term_months ?? null;
+}
+
+// ── Outstanding balance ──
+
+/** Not released yet, or never will be: the balance column reads N/A. */
+const UNRELEASED_STATUSES: ReadonlySet<string> = new Set(["draft", "for_review", "approved", "rejected", "void"]);
+
+/**
+ * The Outstanding Balance cell: the server's `total_outstanding` (everything
+ * still owed, the figure the loan page shows) for every released loan,
+ * completed ones included, and N/A before release. Nothing is computed here.
+ */
+export function loanOutstandingText(loan: Pick<Loan, "status" | "total_outstanding">): string {
+  if (UNRELEASED_STATUSES.has(loan.status)) return "N/A";
+  return loan.total_outstanding == null ? "—" : formatCurrency(loan.total_outstanding);
 }
 
 // ── Sorting ──
