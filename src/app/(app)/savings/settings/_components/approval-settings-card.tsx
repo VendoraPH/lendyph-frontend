@@ -57,10 +57,11 @@ export function ApprovalSettingsCard({ settings, onSaved }: ApprovalSettingsCard
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Approvals and dormancy</CardTitle>
+        <CardTitle className="text-base">Approvals, dormancy and notices</CardTitle>
         <CardDescription>
           A withdrawal, closing payout or time deposit payout up to the first amount posts at once. Above it, another
-          user approves; above the second, that many different approvers do.
+          user approves; above the second, that many different approvers do. Maturity notices and the dormancy warning
+          go to staff and the member in the app.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -72,6 +73,26 @@ export function ApprovalSettingsCard({ settings, onSaved }: ApprovalSettingsCard
           </FormField>
           {field("dormancy", "ss-dormancy", "Dormant after (months)", "With no deposit, withdrawal or transfer.", true)}
           {field("alert", "ss-alert", "Large transaction alert (₱)", "Transactions at or above this are flagged.")}
+          <FormField
+            id="ss-notice-days"
+            label="Maturity notices (days before)"
+            hint="Commas between days; 0 is the maturity day. Up to 10, or blank for none."
+          >
+            <Input
+              id="ss-notice-days"
+              placeholder="30, 15, 7, 3, 0"
+              value={draft.noticeDays}
+              onChange={set("noticeDays")}
+              disabled={!canEdit}
+            />
+          </FormField>
+          {field(
+            "warningDays",
+            "ss-warning-days",
+            "Dormancy warning (days before)",
+            "Accounts this close to turning dormant are listed and warned. 0 to 365.",
+            true,
+          )}
         </div>
         <div className="flex justify-end">
           <PermissionButton permission="savings:settings" onClick={save} disabled={submitting}>
