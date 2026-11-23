@@ -68,7 +68,7 @@ export function visibleFields(
   return new Set([...ownFields(incomeSource), ...askedFields(requiredFields, missingFields)]);
 }
 
-type ServerView = { draft: ApplicationDraft; missing_fields: Record<string, string> };
+type ServerView = { draft: ApplicationDraft; missing_fields: Record<string, string>; required_fields?: string[] };
 
 /** The server's missing fields describe the draft it saved: while the source has changed since, they wait for the next save. */
 export function missingForSource(state: ServerView | null, incomeSource: IncomeSource | ""): Record<string, string> {
@@ -85,13 +85,27 @@ export interface RequiredMemory {
 export const NOTHING_REQUIRED: RequiredMemory = { productId: null, fields: [] };
 
 /**
- * The public API doesn't send a product's required fields; the server names
- * one in `missing_fields` only while it's blank. A field it names outside the
- * saved source's own fields can only be the product's (the source's own rules
- * never ask for it), so it is kept after it's filled, until the product
- * changes, and its field doesn't vanish once typed in.
+ * The product's required fields: the server's `required_fields` (LO-B5) for
+ * the product it saved, filled or not, so a resumed session shows a filled one
+ * the source would hide. While the applicant's product differs from the saved
+ * one they wait for the next save. An older API that doesn't send them falls
+ * back to the fields remembered from `missing_fields`.
+ */
+export function productRequiredFields(state: ServerView | null, productId: number | null, memory: RequiredMemory): readonly string[] {
+  if (state?.required_fields === undefined) return memory.fields;
+  return state.draft.loan.loan_product_id === productId ? state.required_fields : [];
+}
+
+/**
+ * The fallback for an older API that doesn't send `required_fields`: the
+ * server names a required field in `missing_fields` only while it's blank. A
+ * field it names outside the saved source's own fields can only be the
+ * product's (the source's own rules never ask for it), so it is kept after
+ * it's filled, until the product changes, and its field doesn't vanish once
+ * typed in. Nothing is remembered once the server sends `required_fields`.
  */
 export function rememberRequired(memory: RequiredMemory, state: ServerView): RequiredMemory {
+  if (state.required_fields !== undefined) return memory;
   const productId = state.draft.loan.loan_product_id;
   const own = ownFields(state.draft.employment.income_source);
   const fields = productId === memory.productId ? [...memory.fields] : [];

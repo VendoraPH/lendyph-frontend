@@ -10,7 +10,7 @@ import type { ApplicationDraft } from "@/types/loan-origination";
 import type { ApplicantSession, Consents, PublicApplicationState, PublicDocument, PublicPortal, Submitted } from "@/types/public-application";
 import { useDraftAutosave } from "../_hooks/use-draft-autosave";
 import { useLoanEstimate } from "../_hooks/use-loan-estimate";
-import { missingForSource, NOTHING_REQUIRED, rememberRequired, type RequiredMemory } from "../_lib/employment-fields";
+import { missingForSource, NOTHING_REQUIRED, productRequiredFields, rememberRequired, type RequiredMemory } from "../_lib/employment-fields";
 import { fieldErrors, publicErrorMessage, sessionProblem } from "../_lib/errors";
 import { uploadRules } from "../_lib/uploads";
 import { draftAfterVerify, estimateRequest, missingDocumentsMessage, resumeStepIndex, stepErrors } from "../_lib/wizard-state";
@@ -90,7 +90,7 @@ export function Wizard({
   const product = portal.products.find((p) => p.id === draft.loan.loan_product_id);
   const rules = uploadRules(portal);
 
-  /** The server's latest view, and the product's required fields it named. */
+  /** The server's latest view, and (from an older API) the product's required fields it named. */
   const take = (state: PublicApplicationState) => {
     setApplication(state);
     setRequired((memory) => rememberRequired(memory, state));
@@ -265,7 +265,7 @@ export function Wizard({
             value={draft.employment}
             errors={errors}
             onChange={patch("employment")}
-            requiredFields={required.fields}
+            requiredFields={productRequiredFields(application, draft.loan.loan_product_id, required)}
             missingFields={missingForSource(application, draft.employment.income_source)}
           />
         );

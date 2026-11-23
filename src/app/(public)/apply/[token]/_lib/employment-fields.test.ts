@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { emptyDraft } from "@/lib/loan-origination";
 import type { IncomeSource } from "@/types/loan-origination";
-import { askedFields, missingForSource, NOTHING_REQUIRED, rememberRequired, visibleFields } from "./employment-fields";
+import { askedFields, missingForSource, NOTHING_REQUIRED, productRequiredFields, rememberRequired, visibleFields } from "./employment-fields";
 
 // The Income step shows each income source's own fields. A product's settings
 // can require any field of the form (`required_fields`), and the server names
@@ -84,4 +84,43 @@ test("the server's missing fields count only for the source it saved", () => {
   assert.deepEqual(missingForSource({ draft: saved("employed"), missing_fields: missing }, "employed"), missing);
   assert.deepEqual(missingForSource({ draft: saved("employed"), missing_fields: missing }, "farmer"), {});
   assert.deepEqual(missingForSource(null, "farmer"), {});
+});
+
+// LO-B5 (backend #361): the state names the chosen product's required fields,
+// filled or not (`required_fields`, keyed as `missing_fields` is). What was
+// remembered from `missing_fields` is only for an older API that doesn't.
+
+const REQUIRES_EMPLOYER = ["draft.employment.employer_name"];
+
+test("a resumed session shows an already-filled required field that the source hides", () => {
+  const state = { draft: saved("farmer", 7), missing_fields: {}, required_fields: REQUIRES_EMPLOYER };
+  const required = productRequiredFields(state, 7, NOTHING_REQUIRED);
+  assert.equal(visibleFields("farmer", required, missingForSource(state, "farmer")).has("employer_name"), true);
+  assert.equal(askedFields(required, {}).has("employer_name"), true);
+});
+
+test("the server's required fields win over anything remembered", () => {
+  const remembered = { productId: 7, fields: ["employment.business_type"] };
+  const state = { draft: saved("farmer", 7), missing_fields: {}, required_fields: [] };
+  assert.deepEqual(productRequiredFields(state, 7, remembered), []);
+  assert.equal(visibleFields("farmer", productRequiredFields(state, 7, remembered), {}).has("business_type"), false);
+});
+
+test("an older API without required_fields falls back to what was remembered from missing_fields", () => {
+  const remembered = { productId: 7, fields: ["employment.employer_name"] };
+  assert.deepEqual(productRequiredFields({ draft: saved("farmer", 7), missing_fields: {} }, 7, remembered), ["employment.employer_name"]);
+});
+
+test("another product's required fields wait for the next save", () => {
+  const state = { draft: saved("farmer", 7), missing_fields: {}, required_fields: REQUIRES_EMPLOYER };
+  assert.deepEqual(productRequiredFields(state, 8, NOTHING_REQUIRED), []);
+});
+
+test("before the code step there is nothing to require", () => {
+  assert.deepEqual(productRequiredFields(null, null, NOTHING_REQUIRED), []);
+});
+
+test("nothing is remembered once the server sends required_fields", () => {
+  const state = { draft: saved("farmer", 7), missing_fields: { "draft.employment.employer_name": EMPLOYER }, required_fields: REQUIRES_EMPLOYER };
+  assert.equal(rememberRequired(NOTHING_REQUIRED, state), NOTHING_REQUIRED);
 });

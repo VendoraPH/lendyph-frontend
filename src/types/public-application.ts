@@ -148,6 +148,12 @@ export interface PublicApplicationState {
   declared_totals: DeclaredTotals;
   /** What still blocks a submit: `draft.<section>.<field>` => what to do, in words. */
   missing_fields: Record<string, string>;
+  /**
+   * The chosen product's required fields, filled or not, keyed as
+   * `missing_fields` is (`draft.employment.employer_name`); [] with no product
+   * or none required (LO-B5, backend #361). Absent from an older API.
+   */
+  required_fields?: string[];
 }
 
 /** `POST …/otp/verify`: the session, and the application unless it is a tracking session. */
