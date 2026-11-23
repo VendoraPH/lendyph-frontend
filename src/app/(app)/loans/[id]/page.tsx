@@ -85,6 +85,8 @@ import {
   type PartialExtendChoice,
 } from "@/lib/partial-extend";
 import { PartialExtendPrompt } from "@/components/loans/partial-extend-prompt";
+import { ReasonDialog } from "@/components/common/reason-dialog";
+import { LOAN_DECISION_NOTE_MAX, adjustmentDecisionDialog, voidPaymentDialog } from "./_lib/decision-dialogs";
 import {
   RestructuredBalanceFigures,
   ScheduleNotice,
@@ -826,6 +828,16 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // Loan Adjustments state
   const [adjustments, setAdjustments] = useState<LoanAdjustment[]>([]);
   const [adjustmentsLoading, setAdjustmentsLoading] = useState(false);
+  // The pending adjustment and the decision its dialog asks for, and the
+  // payment the Void dialog asks about. Each stays set once its dialog
+  // closes, so the dialog keeps its words while it animates out.
+  const [adjustmentDecision, setAdjustmentDecision] = useState<{
+    adjustment: LoanAdjustment;
+    action: "approve" | "reject";
+  } | null>(null);
+  const [adjustmentDecisionOpen, setAdjustmentDecisionOpen] = useState(false);
+  const [voidTarget, setVoidTarget] = useState<number | null>(null);
+  const [voidOpen, setVoidOpen] = useState(false);
   const [createAdjustmentOpen, setCreateAdjustmentOpen] = useState(false);
   const [adjType, setAdjType] = useState<LoanAdjustmentType>("balance_adjustment");
   const [adjDescription, setAdjDescription] = useState("");
@@ -2135,30 +2147,29 @@ function LoanDetail({ loanId }: { loanId: number }) {
   };
 
 
-  const handleVoidRepayment = async (repaymentId: number) => {
-    const reason = prompt("Reason for voiding this payment:");
-    if (!reason?.trim()) return;
-    try {
-      setActionLoading(true);
-      await repaymentService.void(repaymentId, { void_reason: reason });
-      setShareCapitalVersion((v) => v + 1);
-      toast.success("Payment voided");
-      // A void undoes a payment, so re-read what recording one re-reads.
-      // Settled rather than thrown, since the void already stands and a failed
-      // re-read must not be reported as a failed void.
-      await Promise.allSettled([
-        loadLoan(loan.id, loan).then(setLoan),
-        fetchSchedule(loan.id),
-        fetchLoanSummary(loan.id),
-        fetchRepayments(loan.id),
-        fetchLedger(loan.id),
-      ]);
-    } catch (err) {
-      // The server explains a refusal (e.g. a payment on a restructured loan).
-      toast.error(getErrorMessage(err, "We couldn't void the payment. Please try again."));
-    } finally {
-      setActionLoading(false);
-    }
+  // A Ledger row's Void asks for the reason in its dialog.
+  const handleVoidRepayment = (repaymentId: number) => {
+    setVoidTarget(repaymentId);
+    setVoidOpen(true);
+  };
+
+  // The Void dialog's confirm, with the reason the server requires. A refusal
+  // (e.g. a payment made before an extension) rejects, so the dialog keeps it
+  // on screen in the server's words, beside the reason typed.
+  const voidPayment = async (repaymentId: number, reason: string) => {
+    await repaymentService.void(repaymentId, { void_reason: reason });
+    setShareCapitalVersion((v) => v + 1);
+    toast.success("Payment voided");
+    // A void undoes a payment, so re-read what recording one re-reads.
+    // Settled rather than thrown, since the void already stands and a failed
+    // re-read must not be reported as a failed void.
+    await Promise.allSettled([
+      loadLoan(loan.id, loan).then(setLoan),
+      fetchSchedule(loan.id),
+      fetchLoanSummary(loan.id),
+      fetchRepayments(loan.id),
+      fetchLedger(loan.id),
+    ]);
   };
 
   const handleVoidLoan = async () => {
@@ -2236,36 +2247,46 @@ function LoanDetail({ loanId }: { loanId: number }) {
     }
   };
 
-  const handleAdjustmentAction = async (adjId: number, action: "approve" | "reject" | "apply") => {
+  // Approve and Reject ask for remarks in their dialog.
+  const askAdjustmentDecision = (decision: { adjustment: LoanAdjustment; action: "approve" | "reject" }) => {
+    setAdjustmentDecision(decision);
+    setAdjustmentDecisionOpen(true);
+  };
+
+  // The dialog's confirm: remarks are optional on an approval and asked for
+  // on a rejection (adjustmentDecisionDialog). A refusal (e.g. a request
+  // decided by someone else meanwhile) rejects, so the dialog keeps it on
+  // screen in the server's words.
+  const decideAdjustment = async (adjId: number, action: "approve" | "reject", remarks: string) => {
+    if (action === "approve") {
+      await loanAdjustmentService.approve(adjId, { remarks: remarks || undefined });
+      toast.success("Adjustment approved");
+    } else {
+      await loanAdjustmentService.reject(adjId, { remarks: remarks || undefined });
+      toast.success("Adjustment rejected");
+    }
+    await fetchAdjustments(loan.id);
+  };
+
+  const handleApplyAdjustment = async (adjId: number) => {
     try {
       setActionLoading(true);
-      if (action === "approve") {
-        const remarks = prompt("Approval remarks (optional):");
-        await loanAdjustmentService.approve(adjId, { remarks: remarks || undefined });
-        toast.success("Adjustment approved");
-      } else if (action === "reject") {
-        const remarks = prompt("Rejection remarks:");
-        if (!remarks?.trim()) return;
-        await loanAdjustmentService.reject(adjId, { remarks });
-        toast.success("Adjustment rejected");
-      } else {
-        await loanAdjustmentService.apply(adjId);
-        toast.success("Adjustment applied");
-        // Applying rewrites the loan's open schedule rows, and with them its
-        // balances, and adds its row to the Ledger. Settled rather than
-        // thrown: a failed re-read is not a failed apply.
-        await Promise.allSettled([
-          loadLoan(loan.id, loan).then(setLoan),
-          fetchSchedule(loan.id),
-          fetchLoanSummary(loan.id),
-          fetchLedger(loan.id),
-        ]);
-      }
+      await loanAdjustmentService.apply(adjId);
+      toast.success("Adjustment applied");
+      // Applying rewrites the loan's open schedule rows, and with them its
+      // balances, and adds its row to the Ledger. Settled rather than
+      // thrown: a failed re-read is not a failed apply.
+      await Promise.allSettled([
+        loadLoan(loan.id, loan).then(setLoan),
+        fetchSchedule(loan.id),
+        fetchLoanSummary(loan.id),
+        fetchLedger(loan.id),
+      ]);
       fetchAdjustments(loan.id);
     } catch (err) {
       // The server explains a refusal (e.g. a reduction larger than the unpaid
       // principal); show it rather than a bare "try again" that can't succeed.
-      toast.error(getErrorMessage(err, `We couldn't ${action} the adjustment. Please try again.`));
+      toast.error(getErrorMessage(err, "We couldn't apply the adjustment. Please try again."));
     } finally {
       setActionLoading(false);
     }
@@ -3954,7 +3975,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                             size="sm"
                             variant="outline"
                             disabled={actionLoading}
-                            onClick={() => handleAdjustmentAction(adj.id, "approve")}
+                            onClick={() => askAdjustmentDecision({ adjustment: adj, action: "approve" })}
                           >
                             Approve
                           </Button>
@@ -3963,7 +3984,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                             variant="outline"
                             className="text-destructive hover:text-destructive"
                             disabled={actionLoading}
-                            onClick={() => handleAdjustmentAction(adj.id, "reject")}
+                            onClick={() => askAdjustmentDecision({ adjustment: adj, action: "reject" })}
                           >
                             Reject
                           </Button>
@@ -3975,7 +3996,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                             size="sm"
                             className="bg-brand-blue text-brand-blue-foreground hover:bg-brand-blue-dark"
                             disabled={actionLoading}
-                            onClick={() => handleAdjustmentAction(adj.id, "apply")}
+                            onClick={() => handleApplyAdjustment(adj.id)}
                           >
                             Apply
                           </Button>
@@ -5470,6 +5491,31 @@ function LoanDetail({ loanId }: { loanId: number }) {
         open={partialExtendOpen}
         busy={actionLoading}
         onChoice={(choice) => void handlePartialExtendChoice(choice)}
+      />
+
+      {/* Void a payment: the reason is required, as the server requires it */}
+      <ReasonDialog
+        open={voidOpen}
+        onOpenChange={setVoidOpen}
+        {...voidPaymentDialog(voidTarget === null ? undefined : repaymentsById.get(voidTarget))}
+        maxLength={LOAN_DECISION_NOTE_MAX}
+        onConfirm={(reason) => (voidTarget === null ? Promise.resolve() : voidPayment(voidTarget, reason))}
+      />
+
+      {/* Approve or reject a pending adjustment, with remarks */}
+      <ReasonDialog
+        open={adjustmentDecisionOpen}
+        onOpenChange={setAdjustmentDecisionOpen}
+        {...adjustmentDecisionDialog(
+          adjustmentDecision?.action ?? "approve",
+          adjustmentDecision ? ADJUSTMENT_TYPE_LABELS[adjustmentDecision.adjustment.adjustment_type] : undefined,
+        )}
+        maxLength={LOAN_DECISION_NOTE_MAX}
+        onConfirm={(remarks) =>
+          adjustmentDecision === null
+            ? Promise.resolve()
+            : decideAdjustment(adjustmentDecision.adjustment.id, adjustmentDecision.action, remarks)
+        }
       />
 
       {/* Create Adjustment Dialog */}
