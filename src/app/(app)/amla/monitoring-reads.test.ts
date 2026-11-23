@@ -31,3 +31,25 @@ test("the dashboard never counts rows itself: it shows the server's totals", () 
   assert.doesNotMatch(dashboard, /\.length\b/);
   assert.doesNotMatch(dashboard, /\.reduce\(/);
 });
+
+test("Transaction Monitoring reads the waiting rule change from the rules, never from a second read", () => {
+  const [, screen] = sources.find(([name]) => name === "detection-rules-screen.tsx") ?? [];
+  assert.ok(screen);
+  assert.match(screen, /pending_change_request_id/);
+  assert.doesNotMatch(screen, /changeRequests\(/);
+});
+
+test("the rule-change dialog uses the server's parameter labels and kinds", () => {
+  const [, dialog] = sources.find(([name]) => name === "detection-rules-change-dialog.tsx") ?? [];
+  assert.ok(dialog);
+  assert.match(dialog, /amlaRuleParamLabel\(rule, name\)/);
+  assert.match(dialog, /amlaRuleParamKind\(rule, name\)/);
+  assert.doesNotMatch(dialog, /amlaParamLabel\(|amlaParamKind\(/);
+});
+
+test("the rule-change dialog labels each field through the unit-aware helper, never appending a unit itself", () => {
+  const [, dialog] = sources.find(([name]) => name === "detection-rules-change-dialog.tsx") ?? [];
+  assert.ok(dialog);
+  assert.match(dialog, /amlaParamFieldLabel\(label, kind\)/);
+  assert.doesNotMatch(dialog, /" \(%\)"|" \(days\)"|" \(₱\)"/);
+});

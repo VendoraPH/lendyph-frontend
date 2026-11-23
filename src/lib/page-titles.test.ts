@@ -284,3 +284,18 @@ describe("nestedSegment (which part a page further down reads its title from)", 
     assert.equal(nestedSegment(["amla", "customers", "members", "x"]), "members");
   });
 });
+
+describe("AMLA report breadcrumbs", () => {
+  test("an AMLA report's page reads the server's title for it", () => {
+    assert.equal(nestedPageTitle("amla", "reports", "covered_transactions"), "Covered Transactions");
+    assert.equal(nestedPageTitle("amla", "reports", "risk_assessment"), "Customer AML Risk Assessment");
+    assert.equal(nestedPageTitle("amla", "reports", "management_summary"), "AMLA Management Summary");
+  });
+
+  test("the Reports page's AMLA section and the breadcrumb share one title per report", async () => {
+    const { AMLA_REPORT_CATALOG } = await import("@/app/(app)/reports/_lib/report-catalog");
+    for (const report of AMLA_REPORT_CATALOG) {
+      assert.equal(nestedPageTitle("amla", "reports", report.key), report.title, report.key);
+    }
+  });
+});

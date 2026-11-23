@@ -61,7 +61,7 @@ const child = (href: string) => {
   return found;
 };
 
-test("it holds the monitoring pages, Customers, Screening, the Orders Register, Risk Rules, the cases and filings pages and an AMLA Settings link, in that order", () => {
+test("it holds the monitoring pages, Customers, Screening, the Orders Register, Risk Rules, the cases and filings pages, the reports and an AMLA Settings link, in that order", () => {
   assert.deepEqual(
     (nav.AMLA_NAV.children ?? []).map((c) => [c.title, c.href]),
     [
@@ -77,6 +77,7 @@ test("it holds the monitoring pages, Customers, Screening, the Orders Register, 
       ["Suspicious Transactions (STR)", "/amla/str"],
       ["Covered Transactions (CTR)", "/amla/ctr"],
       ["Regulatory Submissions", "/amla/submissions"],
+      ["AMLA Reports", "/amla/reports"],
       ["Audit & Compliance History", "/amla/history"],
       ["AMLA Settings", "/settings/amla"],
     ],
@@ -178,4 +179,9 @@ test("every AMLA Compliance link has a page", () => {
 
 test("the AMLA settings link has a page", () => {
   assert.equal(existsSync(resolve(process.cwd(), "src/app/(app)/settings/amla/page.tsx")), true);
+});
+
+test("AMLA Reports shows under amla:view; the server lists only the reports the caller may open", () => {
+  assert.equal(nav.navChildAllowed(child("/amla/reports"), holds("amla:view")), true);
+  assert.equal(nav.navChildAllowed(child("/amla/reports"), holds("amla:export")), false);
 });

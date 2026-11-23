@@ -24,6 +24,7 @@ import { loanDisplayStatus, loanRowStatusLabel } from "@/constants/loan-status";
 import type { Loan } from "@/types/loan";
 import {
   loanBorrowerName,
+  loanOutstandingText,
   loanProductName,
   loanTerm,
   offersAutoPay,
@@ -99,6 +100,7 @@ export function LoanTable({
               </TableHead>
             );
           })}
+          <TableHead className="text-right">Outstanding Balance</TableHead>
           <TableHead>Auto-Pay</TableHead>
         </TableRow>
       </TableHeader>
@@ -138,6 +140,9 @@ export function LoanTable({
             <TableCell className="text-muted-foreground">
               {formatDate(loan.created_at)}
             </TableCell>
+            <TableCell className="text-right font-medium tabular-nums">
+              {loanOutstandingText(loan)}
+            </TableCell>
             <TableCell onClick={(e) => e.stopPropagation()}>
               {offersAutoPay(loan.status) ? (
                 <PermissionButton
@@ -175,7 +180,7 @@ export function LoanTable({
         {loans.length === 0 && (
           <TableRow>
             <TableCell
-              colSpan={COLUMNS.length + 1}
+              colSpan={COLUMNS.length + 2}
               className="h-24 text-center text-muted-foreground"
             >
               {emptyIllustration && hasIllustration(emptyIllustration) && (
