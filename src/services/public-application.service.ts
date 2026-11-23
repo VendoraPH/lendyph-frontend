@@ -2,18 +2,20 @@ import axios, { type AxiosRequestConfig } from "axios";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { env } from "@/config/env";
 import { API_BASE_URL } from "@/lib/axios-client";
+import type { ApplicationDraft } from "@/types/loan-origination";
 import type {
-  ApplicationDocument,
-  ApplicationDraft,
-  ApplicationSession,
-  ConsentAcceptance,
-  LoanEstimate,
-  OtpRequestResult,
-  PublicApplicationPortal,
+  ApplicantSession,
+  CodeSent,
+  Consents,
+  EstimateRequest,
+  OtpTarget,
   PublicApplicationState,
-  PublicTrackingResult,
-  SubmitResult,
-} from "@/types/loan-origination";
+  PublicDocument,
+  PublicEstimate,
+  PublicPortal,
+  Submitted,
+  Tracking,
+} from "@/types/public-application";
 
 const P = API_ENDPOINTS.PUBLIC_APPLY;
 export const APPLICATION_SESSION_HEADER = "X-Application-Session";
@@ -45,81 +47,72 @@ function session(sessionToken: string): AxiosRequestConfig {
   return { headers: { [APPLICATION_SESSION_HEADER]: sessionToken } };
 }
 
-/** Why a code is asked for: a new application, resuming a draft, or tracking one. */
-export type OtpPurpose = "apply" | "resume" | "track";
-
-export interface OtpTarget {
-  channel: "sms" | "email";
-  mobile?: string;
-  email?: string;
-  purpose: OtpPurpose;
-  /** Tracking also names the application; never enough on its own. */
-  reference_number?: string;
-}
-
+/**
+ * The public application on LO-B2's `/api/public-apply/{token}` routes. Codes
+ * go by text message only. Every refusal comes back in the server's words.
+ */
 export const publicApplicationService = {
-  portal: (token: string) => get<PublicApplicationPortal>(P.PORTAL(token)),
+  portal: (token: string) => get<PublicPortal>(P.PORTAL(token)),
 
-  /** Throttled by the server; a 429 says when to try again. */
-  requestOtp: (token: string, target: OtpTarget) => post<OtpRequestResult>(P.OTP_REQUEST(token), target),
-  verifyOtp: (token: string, target: OtpTarget, code: string) =>
-    post<ApplicationSession>(P.OTP_VERIFY(token), { ...target, code }),
+  /** Throttled by the server: one a minute and five an hour per mobile. */
+  requestCode: (token: string, target: OtpTarget) => post<CodeSent>(P.OTP_REQUEST(token), { channel: "sms", ...target }),
 
-  getDraft: (token: string, sessionToken: string) =>
-    get<PublicApplicationState>(P.DRAFT(token), session(sessionToken)),
-  saveDraft: (token: string, sessionToken: string, draft: ApplicationDraft, lastStep: string) =>
+  /** A new application also acknowledges the privacy notice it was shown, by version. */
+  verifyCode: (token: string, target: OtpTarget, code: string, privacyNoticeVersion?: string) =>
+    post<ApplicantSession>(P.OTP_VERIFY(token), {
+      channel: "sms",
+      ...target,
+      code,
+      ...(privacyNoticeVersion ? { privacy_notice_version: privacyNoticeVersion } : {}),
+    }),
+
+  getDraft: (token: string, sessionToken: string) => get<PublicApplicationState>(P.DRAFT(token), session(sessionToken)),
+
+  /** Autosave. The server works out the completion and the last completed step itself. */
+  saveDraft: (token: string, sessionToken: string, draft: ApplicationDraft) =>
     publicClient
-      .put<Envelope<PublicApplicationState>>(
-        P.DRAFT(token),
-        { draft, last_completed_step: lastStep },
-        session(sessionToken),
-      )
+      .put<Envelope<PublicApplicationState>>(P.DRAFT(token), { draft }, session(sessionToken))
       .then((r) => r.data.data),
 
-  /** Runs the product's own amortization engine on the server. */
-  estimate: (
-    token: string,
-    sessionToken: string,
-    data: { loan_product_id: number; amount: number; term: number; frequency: string | null },
-    signal?: AbortSignal,
-  ) => post<LoanEstimate>(P.ESTIMATE(token), data, { ...session(sessionToken), signal }),
+  /** The loan form's own preview, worked out on the server. Saves nothing. */
+  estimate: (token: string, sessionToken: string, request: EstimateRequest, signal?: AbortSignal) =>
+    post<PublicEstimate>(P.ESTIMATE(token), request, { ...session(sessionToken), signal }),
 
   uploadDocument: (
     token: string,
     sessionToken: string,
     type: string,
     file: File,
-    onProgress?: (percent: number) => void,
+    onProgress?: (sent: number, size: number | undefined) => void,
   ) => {
     const form = new FormData();
     form.append("type", type);
     form.append("file", file);
     return publicClient
-      .post<Envelope<ApplicationDocument>>(P.DOCUMENTS(token), form, {
+      .post<Envelope<PublicDocument>>(P.DOCUMENTS(token), form, {
         headers: { [APPLICATION_SESSION_HEADER]: sessionToken, "Content-Type": "multipart/form-data" },
-        onUploadProgress: (e) => {
-          if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100));
-        },
+        onUploadProgress: (event) => onProgress?.(event.loaded, event.total),
       })
       .then((r) => r.data.data);
   },
-  removeDocument: (token: string, sessionToken: string, docId: number) =>
-    publicClient.delete(P.DOCUMENT(token, docId), session(sessionToken)).then(() => undefined),
 
-  /** Idempotent per session: a repeated submit returns the first reference. */
-  submit: (token: string, sessionToken: string, consent: ConsentAcceptance) =>
-    post<SubmitResult>(P.SUBMIT(token), consent, session(sessionToken)),
+  /** By the document's public id, while the draft is open. */
+  removeDocument: (token: string, sessionToken: string, documentId: string) =>
+    publicClient.delete(P.DOCUMENT(token, documentId), session(sessionToken)).then(() => undefined),
 
-  track: (token: string, sessionToken: string) =>
-    get<PublicTrackingResult>(P.TRACK(token), session(sessionToken)),
+  /** Idempotent: a retried submit answers the same reference. */
+  submit: (token: string, sessionToken: string, consents: Consents) =>
+    post<Submitted>(P.SUBMIT(token), consents, session(sessionToken)),
+
+  /**
+   * Ends the session on the server. It always works in the browser: whatever
+   * the server answers (an ended session, a closed link, no reply), it resolves.
+   */
+  logout: (token: string, sessionToken: string) =>
+    publicClient.post(P.LOGOUT(token), null, session(sessionToken)).then(
+      () => undefined,
+      () => undefined,
+    ),
+
+  track: (token: string, sessionToken: string) => get<Tracking>(P.TRACK(token), session(sessionToken)),
 };
-
-/** The server's message on a failed request, or `fallback`. */
-export function publicErrorMessage(err: unknown, fallback: string): string {
-  const res = (err as { response?: { status?: number; data?: { message?: string } } })?.response;
-  if (res?.status === 404 || res?.status === 501) {
-    return "Online applications are not available yet. Please contact the office.";
-  }
-  if (res?.status === 429) return res.data?.message ?? "Too many attempts. Please wait a moment and try again.";
-  return res?.data?.message ?? fallback;
-}

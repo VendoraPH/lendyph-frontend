@@ -1,9 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/format";
-import { STATUS_LABELS } from "@/lib/loan-origination";
 import type { ApplicationNote, StatusHistoryEntry } from "@/types/loan-origination";
 
-/** Staff notes and the status history, newest first as the server sends them. */
+/** Staff notes and the status history, as the server sends them (history newest first, in its words). */
 export function ActivityPanel({ notes, history }: { notes: ApplicationNote[]; history: StatusHistoryEntry[] }) {
   return (
     <div className="grid gap-4 xl:grid-cols-2">
@@ -20,7 +19,8 @@ export function ActivityPanel({ notes, history }: { notes: ApplicationNote[]; hi
                 <li key={n.id} className="border-l-2 border-brand-orange/40 pl-3">
                   <p className="text-sm whitespace-pre-wrap">{n.body}</p>
                   <p className="text-xs text-muted-foreground">
-                    {n.author_name} · {formatDateTime(n.created_at)}
+                    {n.author_name ?? "Staff"}
+                    {n.created_at && <> · {formatDateTime(n.created_at)}</>}
                   </p>
                 </li>
               ))}
@@ -40,12 +40,13 @@ export function ActivityPanel({ notes, history }: { notes: ApplicationNote[]; hi
               {history.map((h) => (
                 <li key={h.id} className="border-l-2 border-muted pl-3">
                   <p className="text-sm font-medium">
-                    {h.from_status ? `${STATUS_LABELS[h.from_status]} → ` : ""}
-                    {STATUS_LABELS[h.to_status]}
+                    {h.from_label ? `${h.from_label} → ` : ""}
+                    {h.to_label}
                   </p>
                   {h.note && <p className="text-sm whitespace-pre-wrap text-muted-foreground">{h.note}</p>}
                   <p className="text-xs text-muted-foreground">
-                    {h.changed_by_name ?? "Applicant or system"} · {formatDateTime(h.changed_at)}
+                    {h.changed_by_name}
+                    {h.changed_at && <> · {formatDateTime(h.changed_at)}</>}
                   </p>
                 </li>
               ))}

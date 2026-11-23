@@ -1,4 +1,5 @@
 import { parseMoneyInput } from "@/lib/money-input";
+import { companyWideBlocker, companyWideMissing } from "@/lib/savings/company-wide";
 import type {
   Permission,
   PrepareBooksResult,
@@ -15,6 +16,9 @@ export interface SettingsDraft {
   checkers: string;
   dormancy: string;
   alert: string;
+  /** The maturity notice days as typed ("30, 15, 7, 3, 0"). */
+  noticeDays: string;
+  warningDays: string;
 }
 
 export function toSettingsDraft(s: SavingsSettings): SettingsDraft {
@@ -24,16 +28,48 @@ export function toSettingsDraft(s: SavingsSettings): SettingsDraft {
     checkers: String(s.tier3_checkers),
     dormancy: String(s.dormancy_months),
     alert: s.large_transaction_alert,
+    noticeDays: s.notice_days.join(", "),
+    warningDays: String(s.dormancy_warning_days),
   };
 }
 
 const WHOLE = /^\d+$/;
 
+/** The server's limits (UpdateSavingsSettingsRequest): a notice day or the dormancy warning is 0 to 365 days; up to 10 notice days. */
+const MAX_DAYS = 365;
+const MAX_NOTICE_DAYS = 10;
+
+/** Whole days from 0 to 365 as typed, or null. */
+function wholeDays(raw: string): number | null {
+  const text = raw.trim();
+  if (!WHOLE.test(text)) return null;
+  const days = Number(text);
+  return days <= MAX_DAYS ? days : null;
+}
+
+/**
+ * The maturity notice days as typed, separated by commas or spaces: whole
+ * days from 0 (the maturity day) to 365, each once, up to 10, as the server
+ * checks them. Blank is none (the server takes []). Null when one is off.
+ */
+export function readNoticeDays(raw: string): number[] | null {
+  const parts = raw.split(/[\s,]+/).filter((part) => part !== "");
+  if (parts.length > MAX_NOTICE_DAYS) return null;
+  const days: number[] = [];
+  for (const part of parts) {
+    const day = wholeDays(part);
+    if (day === null || days.includes(day)) return null;
+    days.push(day);
+  }
+  return days;
+}
+
 /**
  * `PUT /savings/settings`, or the labels to fix. Amounts are sent as typed
  * (two-decimal text). The server checks that the second tier is above the
  * first and answers 422 in words if it isn't. Above the second tier, v1 always
- * needs two different approvers, so that number is shown, never edited.
+ * needs two different approvers, so that number is shown, never edited. The
+ * notice days and the dormancy warning are checked as the server checks them.
  */
 export function readSettingsDraft(d: SettingsDraft): { input: SavingsSettingsInput; problems: string[] } {
   const problems: string[] = [];
@@ -42,15 +78,21 @@ export function readSettingsDraft(d: SettingsDraft): { input: SavingsSettingsInp
     if (!parsed.ok) problems.push(label);
     return parsed.ok ? parsed.value : "";
   };
+  const noticeDays = readNoticeDays(d.noticeDays);
+  const warningDays = wholeDays(d.warningDays);
   const input = {
     tier1_limit: money(d.tier1, "Approval needed above"),
     tier2_limit: money(d.tier2, "Two approvers needed above"),
     tier3_checkers: WHOLE.test(d.checkers.trim()) ? Number(d.checkers) : 0,
     dormancy_months: WHOLE.test(d.dormancy.trim()) ? Number(d.dormancy) : 0,
     large_transaction_alert: money(d.alert, "Large transaction alert"),
+    notice_days: noticeDays ?? [],
+    dormancy_warning_days: warningDays ?? 0,
   };
   if (input.tier3_checkers !== 2) problems.push("Approvers above the second amount (2)");
   if (input.dormancy_months < 1) problems.push("Dormant after (months)");
+  if (noticeDays === null) problems.push("Maturity notice days (0 to 365, each once, up to 10)");
+  if (warningDays === null) problems.push("Dormancy warning days (0 to 365)");
   return { input, problems };
 }
 
@@ -82,9 +124,19 @@ export function prepareBooksSummary(result: Partial<PrepareBooksResult>): Array<
     .filter((g) => g.lines.length > 0);
 }
 
-/** Why the set-up button is disabled, or null: it needs savings:settings and branches:view_all. */
+/**
+ * Why the settings card is read-only, or null when it takes edits: the
+ * company-wide savings rule (`PUT /savings/settings` needs savings:settings
+ * and branches:view_all).
+ */
+export function settingsEditBlocker(can: (permission: Permission) => boolean): string | null {
+  return companyWideBlocker(can, "settings");
+}
+
+/** Why the set-up button is disabled, or null: the same company-wide rule, in the books' own words. */
 export function prepareBooksBlocker(can: (permission: Permission) => boolean): string | null {
-  if (!can("savings:settings")) return "Setting up the books needs the Savings configure permission.";
-  if (!can("branches:view_all")) return "Setting up the books changes the whole chart, so it needs access to all branches.";
+  const missing = companyWideMissing(can);
+  if (missing === "savings:settings") return "Setting up the books needs the Savings configure permission.";
+  if (missing === "branches:view_all") return "Setting up the books changes the whole chart, so it needs access to all branches.";
   return null;
 }

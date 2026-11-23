@@ -59,7 +59,7 @@ const FRAMEWORK_BOILERPLATE =
 // called out explicitly: Laravel emits them for a failed route-model binding,
 // and they read as plausible prose to a naive filter while meaning nothing to a
 // user. They must never reach the UI now that 404 can surface a server message.
-function looksHuman(msg: string | undefined): msg is string {
+export function looksHuman(msg: string | undefined): msg is string {
   if (!msg || typeof msg !== "string") return false;
   const text = msg.trim();
   if (!text) return false;

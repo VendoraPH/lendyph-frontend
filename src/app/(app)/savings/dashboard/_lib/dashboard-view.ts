@@ -76,6 +76,12 @@ export function kpiCards(k: SavingsDashboardKpis | null | undefined): KpiCard[] 
       signed: signOf(k.net_deposit_movement),
     },
     {
+      key: "accrued_interest",
+      label: "Accrued Interest",
+      value: currencyOrDash(k.accrued_interest),
+      caption: `Earned, not yet credited · ${asOfToday}`,
+    },
+    {
       key: "interest_credited",
       label: "Interest Paid",
       value: currencyOrDash(k.interest_credited?.net),

@@ -179,9 +179,16 @@ describe("the picker's purpose", () => {
     assert.deepEqual(STAFF_PICKER_PURPOSES.savings.permissions, ["savings:create"]);
   });
 
+  test("the online applications' assign picker sends for=origination and needs loan_origination:update", () => {
+    assert.deepEqual(staffListParams("origination", ""), { for: "origination", per_page: 20 });
+    assert.deepEqual(staffListParams("origination", "ben"), { for: "origination", search: "ben", per_page: 20 });
+    assert.deepEqual(STAFF_PICKER_PURPOSES.origination.permissions, ["loan_origination:update"]);
+  });
+
   test("the locked note names the permission each purpose needs", () => {
     assert.match(STAFF_PICKER_PURPOSES.loans.lockedNote, /create, edit or\s+restructure loans/);
     assert.match(STAFF_PICKER_PURPOSES.savings.lockedNote, /open savings accounts/);
     assert.doesNotMatch(STAFF_PICKER_PURPOSES.savings.lockedNote, /loan/);
+    assert.match(STAFF_PICKER_PURPOSES.origination.lockedNote, /update online applications/);
   });
 });

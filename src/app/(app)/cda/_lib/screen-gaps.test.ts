@@ -9,13 +9,22 @@ import {
   cleanEvidence,
   currentEvidence,
   deadlineRequest,
+  documentIdOf,
+  evidenceDocumentOptions,
+  evidenceDocumentsNeeded,
   evidenceEditable,
+  evidenceUploadDefaults,
+  evidenceWords,
+  linkEvidence,
   officerIdOf,
   officerOptions,
   showsFor,
   snapshotStatus,
   withDeadline,
+  withUploaded,
+  type EvidenceDocument,
 } from "./screen-gaps";
+import { toUpload } from "../documents/_lib/document-form";
 import { fieldInputs } from "./report-fields";
 import { PROFILE_REP_FIELD, toProfile } from "@/app/(app)/settings/cda/_lib/settings-forms";
 
@@ -69,9 +78,18 @@ describe("who sees each new action (the permission its route needs)", () => {
       deadline: "cda:settings",
       snapshots: "cda:view",
       evidence: "cda:prepare",
+      evidenceDocuments: "cda:view",
+      evidenceUpload: "cda:upload",
       responsibleOfficer: "cda:manage_social",
       authorisedRep: "cda:settings",
     });
+  });
+
+  test("the evidence picker lists documents as the documents register does (cda:view); Upload and link needs its Upload's cda:upload", () => {
+    assert.equal(showsFor("evidenceDocuments", holding("cda:view")), true);
+    assert.equal(showsFor("evidenceDocuments", holding("cda:prepare", "cda:upload")), false);
+    assert.equal(showsFor("evidenceUpload", holding("cda:upload")), true);
+    assert.equal(showsFor("evidenceUpload", holding("cda:view", "cda:prepare")), false);
   });
 
   test("the deadline override shows only with cda:settings", () => {
@@ -229,6 +247,96 @@ describe("field evidence (PUT /cda/reports/{id} fields[].evidence)", () => {
     assert.equal(getErrorMessage(err, "Could not save the report"), "A field takes up to 20 pieces of evidence.");
     const locked = refusal(409, "This report is for review, so it can't be changed. Return it to draft first.");
     assert.match(getErrorMessage(locked, "Could not save the report"), /Return it to draft first/);
+  });
+});
+
+describe("evidence documents (a Compliance Document linked by its id)", () => {
+  const doc = (overrides: Partial<EvidenceDocument>): EvidenceDocument => ({
+    id: 7,
+    title: "Board minutes, March 2026",
+    category: "minutes",
+    category_label: "Minutes of meetings",
+    status: "active",
+    ...overrides,
+  });
+  const year = [
+    doc({}),
+    doc({ id: 8, title: "Old credit policy", category: "other", category_label: "Other", status: "withdrawn" }),
+    doc({ id: 9, title: "Committee roster", category: "other", category_label: "" }),
+  ];
+
+  test("the picker offers the year's active documents by title and category, never by id", () => {
+    assert.deepEqual(evidenceDocumentOptions(year, null), [
+      { value: "7", label: "Board minutes, March 2026 · Minutes of meetings" },
+      { value: "9", label: "Committee roster · Other" },
+    ]);
+  });
+
+  test("an entry's own link stays offered: a withdrawn document says so, one outside the list is kept in words", () => {
+    assert.deepEqual(evidenceDocumentOptions(year, 8)[1], { value: "8", label: "Old credit policy · Other (withdrawn)" });
+    assert.deepEqual(evidenceDocumentOptions(year, 99).at(-1), { value: "99", label: "A filed document (not in this year's list)" });
+    assert.deepEqual(evidenceDocumentOptions(null, 7), [{ value: "7", label: "A filed document" }]);
+    assert.equal(evidenceDocumentOptions(year, 7).length, 2);
+  });
+
+  test("a document uploaded here is offered at once, by title, without reading the list again", () => {
+    const uploaded = doc({ id: 12, title: "Board minutes, April 2026" });
+    const documents = withUploaded(year, [uploaded]);
+    assert.deepEqual(evidenceDocumentOptions(documents, 12).at(-1), { value: "12", label: "Board minutes, April 2026 · Minutes of meetings" });
+    assert.equal(withUploaded([...year, uploaded], [uploaded]).length, 4, "listed once when the server's list already holds it");
+    assert.deepEqual(withUploaded(year, []), year);
+  });
+
+  test("a pick is the document's id; No document linked is null", () => {
+    assert.equal(documentIdOf("7"), 7);
+    assert.equal(documentIdOf(""), null);
+    assert.equal(documentIdOf("seven"), null);
+  });
+
+  test("linking keeps the typed reference and note, and unlinking drops only the document", () => {
+    const linked = linkEvidence([{ label: "Minutes", note: "Page 4" }, { label: "Roster", note: null }], 0, 7);
+    assert.deepEqual(linked[0], { label: "Minutes", note: "Page 4", document_id: 7 });
+    assert.deepEqual(cleanEvidence(linked), [
+      { document_id: 7, label: "Minutes", note: "Page 4" },
+      { label: "Roster", note: null },
+    ]);
+    assert.deepEqual(cleanEvidence(linkEvidence(linked, 0, null)), [
+      { label: "Minutes", note: "Page 4" },
+      { label: "Roster", note: null },
+    ]);
+  });
+
+  test("Upload and link starts on this report and the typed reference, and leaves the category to staff", () => {
+    const defaults = evidenceUploadDefaults({ id: 4 }, { label: "  Board minutes, March 2026 ", note: "Page 4" });
+    assert.deepEqual(defaults, { title: "Board minutes, March 2026", report_id: "4" });
+    // The report's own category would settle its required document (the signed audit report) with any evidence.
+    assert.equal("category" in defaults, false);
+    assert.equal(toUpload({ ...defaults, category: "minutes", final: false }).report_id, 4);
+    assert.deepEqual(evidenceUploadDefaults({ id: 4 }, { document_id: 7 }), { title: "", report_id: "4" });
+  });
+
+  test("the read-only list names a linked document by its title, beside the reference and note", () => {
+    assert.equal(evidenceWords({ label: "Board resolution 12", note: "Signed" }, year), "Board resolution 12 · Signed");
+    assert.equal(evidenceWords({ document_id: 7, label: null, note: null }, year), "Board minutes, March 2026");
+    assert.equal(
+      evidenceWords({ document_id: 7, label: "Minutes", note: "Page 4" }, year),
+      "Minutes · Page 4 · linked to Board minutes, March 2026",
+    );
+    assert.equal(evidenceWords({ document_id: 8, label: null, note: null }, year), "Old credit policy (withdrawn)");
+    assert.equal(evidenceWords({ document_id: 99, label: "Minutes", note: null }, year), "Minutes · linked to a filed document");
+    assert.equal(evidenceWords({ document_id: 7 }, null), "A filed document");
+    assert.equal(evidenceWords({ label: " ", note: "" }, year), "Evidence");
+  });
+
+  test("the year's documents are read only where evidence can link one, or already links one", () => {
+    const manual = field({});
+    const fixed = field({ field_key: "membership.loans", editable: false, source_key: "loans.released" });
+    assert.equal(evidenceDocumentsNeeded(sections(manual), true), true);
+    assert.equal(evidenceDocumentsNeeded(sections(manual), false), false);
+    assert.equal(evidenceDocumentsNeeded(sections(fixed), true), false);
+    assert.equal(evidenceDocumentsNeeded(sections(field({ evidence: [{ document_id: 7 }] })), false), true);
+    assert.equal(evidenceDocumentsNeeded(sections(field({ evidence: [{ label: "Typed only" }] })), false), false);
+    assert.equal(evidenceDocumentsNeeded([{ kind: "table", key: "t", title: "T", description: null } as unknown as CdaSection], true), false);
   });
 });
 

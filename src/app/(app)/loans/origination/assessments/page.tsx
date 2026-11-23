@@ -8,7 +8,7 @@ import { TablePagination } from "@/components/common/table-pagination";
 import { AssessmentBadge, ToneBadge } from "@/components/loan-origination/badges";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { useApiResource } from "@/hooks";
+import { useApiResource, usePermission } from "@/hooks";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { emptyArt, filtersActive } from "@/lib/illustrations";
 import { ASSESSMENT_SHORT_LABELS } from "@/lib/loan-origination";
@@ -19,26 +19,29 @@ import type { Assessment, AssessmentResult } from "@/types/loan-origination";
 import { AssessmentPdfButton } from "../_components/assessment-actions";
 import { AssessmentReport } from "../_components/assessment-report";
 import { StatusTabs } from "../_components/status-tabs";
-import { SearchInput } from "../_components/search-input";
+import { dtiText, figureText } from "../_lib/assessment-view";
+import { termUnitOf } from "../_lib/term";
+import { useLoanProducts } from "../../reminders/_hooks/use-loan-products";
 
 const PER_PAGE_OPTIONS = [20, 50, 100] as const;
 const RESULTS = Object.keys(ASSESSMENT_SHORT_LABELS) as AssessmentResult[];
-const pct = (v: number | null) => (v === null ? "—" : `${Math.round(v * 10) / 10}%`);
 
+/**
+ * The current assessment of each application in the caller's branches, newest
+ * first, with the server's counts by result. Figures read as the server sends
+ * them, withheld ones included.
+ */
 export default function AssessmentsPage() {
   const [filters, setFilters] = useState<AssessmentListFilters>({ page: 1, per_page: 20 });
   const fetcher = useCallback(() => loanOriginationService.listAssessments(filters), [filters]);
   const list = useApiResource(fetcher);
   const [open, setOpen] = useState<Assessment | null>(null);
+  // A term is a number in its loan product's unit; listing products needs loans:view.
+  const { products } = useLoanProducts(usePermission().can("loans:view"));
 
   return (
     <div className={cn(FIT_CLASSES.section, "gap-3")}>
-      <div className="flex flex-wrap items-center gap-3">
-        <SearchInput
-          value={filters.search}
-          placeholder="Name or reference, then Enter"
-          onChange={(search) => setFilters((f) => ({ ...f, search, page: 1 }))}
-        />
+      <div className="flex shrink-0 flex-wrap items-center gap-3">
         <StatusTabs
           value={filters.result}
           statuses={RESULTS}
@@ -89,15 +92,13 @@ export default function AssessmentsPage() {
                         <TableCell className="text-right tabular-nums">
                           {a.requested_amount === null ? "—" : formatCurrency(a.requested_amount)}
                         </TableCell>
-                        <TableCell className="text-right tabular-nums">{pct(a.figures.dti_ratio)}</TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {a.figures.remaining_income === null ? "—" : formatCurrency(a.figures.remaining_income)}
-                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{dtiText(a)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{figureText(a, "remaining_income")}</TableCell>
                         <TableCell className="whitespace-nowrap">
-                          <AssessmentBadge result={a.result} />
+                          <AssessmentBadge result={a.result} label={a.result_label} />
                           {a.provisional && <ToneBadge tone="warning" className="ml-1">Provisional</ToneBadge>}
                         </TableCell>
-                        <TableCell className="whitespace-nowrap text-sm">{formatDateTime(a.assessed_at)}</TableCell>
+                        <TableCell className="whitespace-nowrap text-sm">{a.assessed_at ? formatDateTime(a.assessed_at) : "—"}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -133,7 +134,7 @@ export default function AssessmentsPage() {
                     Open the application
                   </Link>
                 </div>
-                <AssessmentReport assessment={open} />
+                <AssessmentReport assessment={open} termUnit={termUnitOf(products, open.loan_product_id)} />
               </div>
             </>
           )}
