@@ -79,11 +79,14 @@ import {
   totalPayableFigures,
 } from "./_lib/loan-figures";
 import {
-  PARTIAL_EXTEND_LABELS,
   dispatchPartialExtend,
-  partialExtendOnOpenChange,
+  offersExtendOnPartialPayment,
+  partialExtendPayload,
   type PartialExtendChoice,
-} from "./_lib/partial-extend";
+} from "@/lib/partial-extend";
+import { PartialExtendPrompt } from "@/components/loans/partial-extend-prompt";
+import { ReasonDialog } from "@/components/common/reason-dialog";
+import { LOAN_DECISION_NOTE_MAX, adjustmentDecisionDialog, voidPaymentDialog } from "./_lib/decision-dialogs";
 import {
   RestructuredBalanceFigures,
   ScheduleNotice,
@@ -183,7 +186,13 @@ import type { ExtensionInterestOption, LoanAdjustment, LoanAdjustmentType, Repay
 import { isApprovalChainHidden, loanShouldHaveAChain, type LoanApprovalStep } from "@/types";
 import { useLoanApproval } from "@/hooks/use-loan-approval";
 import { usePermission } from "@/hooks/use-permission";
-import { LOAN_ADJUSTMENT_CREATE_GATE, recordPaymentGate } from "@/lib/lending-write-gates";
+import {
+  LOAN_ADJUSTMENT_APPLY_GATE,
+  LOAN_ADJUSTMENT_CREATE_GATE,
+  LOAN_ADJUSTMENT_DECIDE_GATE,
+  LOAN_EXTEND_GATE,
+  recordPaymentGate,
+} from "@/lib/lending-write-gates";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { CollapsibleCard } from "@/components/common/collapsible-card";
@@ -269,7 +278,7 @@ import { currencyOrDash } from "@/lib/report-format";
 import { penaltyMonthsNote } from "@/lib/penalty-months";
 import { PenaltyMonthsNote } from "@/components/common/penalty-months-note";
 import { RecoveryPaymentNote } from "@/components/common/recovery-payment-note";
-import { canRecordPaymentOn, isRecoveryPayment } from "@/lib/recovery-payment";
+import { canRecordPaymentOn } from "@/lib/recovery-payment";
 import {
   formatCurrency,
   formatCurrencyExact,
@@ -825,6 +834,16 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // Loan Adjustments state
   const [adjustments, setAdjustments] = useState<LoanAdjustment[]>([]);
   const [adjustmentsLoading, setAdjustmentsLoading] = useState(false);
+  // The pending adjustment and the decision its dialog asks for, and the
+  // payment the Void dialog asks about. Each stays set once its dialog
+  // closes, so the dialog keeps its words while it animates out.
+  const [adjustmentDecision, setAdjustmentDecision] = useState<{
+    adjustment: LoanAdjustment;
+    action: "approve" | "reject";
+  } | null>(null);
+  const [adjustmentDecisionOpen, setAdjustmentDecisionOpen] = useState(false);
+  const [voidTarget, setVoidTarget] = useState<number | null>(null);
+  const [voidOpen, setVoidOpen] = useState(false);
   const [createAdjustmentOpen, setCreateAdjustmentOpen] = useState(false);
   const [adjType, setAdjType] = useState<LoanAdjustmentType>("balance_adjustment");
   const [adjDescription, setAdjDescription] = useState("");
@@ -1891,18 +1910,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
 
   // ── Repayment Handlers ──
 
-  // Whether the current loan qualifies for "Upon Maturity" extension flows.
-  // Mirrors the predicate storedSchedule passes as `isUponMaturity`.
-  const isUponMaturityLoan = (() => {
-    if (!loan) return false;
-    const freq = loan.frequency ?? loan.payment_frequency ?? "";
-    return (
-      freq === "upon_maturity" ||
-      loan.interest_method === "upon_maturity" ||
-      loan.interest_type === "upon_maturity"
-    );
-  })();
-  const recordPayment = recordPaymentGate(isUponMaturityLoan, can);
+  // A partial payment asks "Extend loan?" only on a loan that can be extended
+  // (offersExtendOnPartialPayment), and only then does it wait for the
+  // server's preview, which needs payments:view.
+  const recordPayment = recordPaymentGate(offersExtendOnPartialPayment(loan), can);
 
   // Loan Extension is offered only on one-month-term loans, whatever the
   // product. The API decides: eligibility depends on the loan's ORIGINAL term,
@@ -1983,13 +1994,13 @@ function LoanDetail({ loanId }: { loanId: number }) {
       ...paymentMethodFields(paymentMethod, paymentReference),
     };
 
-    // Upon Maturity loans: if the server's preview for this amount and date
-    // calls it partial (premium owed counted), prompt to extend instead of
-    // silently posting a partial payment. Until that preview has answered
-    // for exactly this amount and date, the payment is not posted at all.
-    // A defaulted loan can't be extended, so its partial payment is simply
-    // recorded.
-    if (isUponMaturityLoan && paymentMode === "regular" && !isRecoveryPayment(loan.status)) {
+    // A loan that can be extended (a one-month loan, as the server says): if
+    // the server's preview for this amount and date calls it partial
+    // (premium owed counted), prompt to extend instead of silently posting a
+    // partial payment. Until that preview has answered for exactly this
+    // amount and date, the payment is not posted at all. Any other loan's
+    // payment, a defaulted loan's included, is simply recorded.
+    if (paymentMode === "regular" && offersExtendOnPartialPayment(loan)) {
       const decision = shouldPromptExtend({
         hasOpenPeriod: amountDueNow === null || dueNowHasOpenPeriod(amountDueNow),
         preview: paymentPreview,
@@ -2084,13 +2095,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
     if (!paid) return;
     setActionLoading(true);
     try {
-      await loanService.extend(loan.id, {
-        remarks: `Auto-extend on partial payment of ${payload.amount_paid}`,
-        // The cashier's payment was just posted on the line above, so the API
-        // must not collect interest again — whatever remains unpaid carries
-        // into the new period, which is how this flow has always behaved.
-        interest_option: "defer",
-      });
+      // On "defer": the cashier's payment was just posted on the line above,
+      // so the API must not collect interest again (partialExtendPayload).
+      await loanService.extend(loan.id, partialExtendPayload(payload.amount_paid));
       toast.success("Loan extended");
     } catch (err) {
       notifyError(err, "We couldn't extend this loan. Please try again.");
@@ -2146,30 +2153,29 @@ function LoanDetail({ loanId }: { loanId: number }) {
   };
 
 
-  const handleVoidRepayment = async (repaymentId: number) => {
-    const reason = prompt("Reason for voiding this payment:");
-    if (!reason?.trim()) return;
-    try {
-      setActionLoading(true);
-      await repaymentService.void(repaymentId, { void_reason: reason });
-      setShareCapitalVersion((v) => v + 1);
-      toast.success("Payment voided");
-      // A void undoes a payment, so re-read what recording one re-reads.
-      // Settled rather than thrown, since the void already stands and a failed
-      // re-read must not be reported as a failed void.
-      await Promise.allSettled([
-        loadLoan(loan.id, loan).then(setLoan),
-        fetchSchedule(loan.id),
-        fetchLoanSummary(loan.id),
-        fetchRepayments(loan.id),
-        fetchLedger(loan.id),
-      ]);
-    } catch (err) {
-      // The server explains a refusal (e.g. a payment on a restructured loan).
-      toast.error(getErrorMessage(err, "We couldn't void the payment. Please try again."));
-    } finally {
-      setActionLoading(false);
-    }
+  // A Ledger row's Void asks for the reason in its dialog.
+  const handleVoidRepayment = (repaymentId: number) => {
+    setVoidTarget(repaymentId);
+    setVoidOpen(true);
+  };
+
+  // The Void dialog's confirm, with the reason the server requires. A refusal
+  // (e.g. a payment made before an extension) rejects, so the dialog keeps it
+  // on screen in the server's words, beside the reason typed.
+  const voidPayment = async (repaymentId: number, reason: string) => {
+    await repaymentService.void(repaymentId, { void_reason: reason });
+    setShareCapitalVersion((v) => v + 1);
+    toast.success("Payment voided");
+    // A void undoes a payment, so re-read what recording one re-reads.
+    // Settled rather than thrown, since the void already stands and a failed
+    // re-read must not be reported as a failed void.
+    await Promise.allSettled([
+      loadLoan(loan.id, loan).then(setLoan),
+      fetchSchedule(loan.id),
+      fetchLoanSummary(loan.id),
+      fetchRepayments(loan.id),
+      fetchLedger(loan.id),
+    ]);
   };
 
   const handleVoidLoan = async () => {
@@ -2247,36 +2253,46 @@ function LoanDetail({ loanId }: { loanId: number }) {
     }
   };
 
-  const handleAdjustmentAction = async (adjId: number, action: "approve" | "reject" | "apply") => {
+  // Approve and Reject ask for remarks in their dialog.
+  const askAdjustmentDecision = (decision: { adjustment: LoanAdjustment; action: "approve" | "reject" }) => {
+    setAdjustmentDecision(decision);
+    setAdjustmentDecisionOpen(true);
+  };
+
+  // The dialog's confirm: remarks are optional on an approval and asked for
+  // on a rejection (adjustmentDecisionDialog). A refusal (e.g. a request
+  // decided by someone else meanwhile) rejects, so the dialog keeps it on
+  // screen in the server's words.
+  const decideAdjustment = async (adjId: number, action: "approve" | "reject", remarks: string) => {
+    if (action === "approve") {
+      await loanAdjustmentService.approve(adjId, { remarks: remarks || undefined });
+      toast.success("Adjustment approved");
+    } else {
+      await loanAdjustmentService.reject(adjId, { remarks: remarks || undefined });
+      toast.success("Adjustment rejected");
+    }
+    await fetchAdjustments(loan.id);
+  };
+
+  const handleApplyAdjustment = async (adjId: number) => {
     try {
       setActionLoading(true);
-      if (action === "approve") {
-        const remarks = prompt("Approval remarks (optional):");
-        await loanAdjustmentService.approve(adjId, { remarks: remarks || undefined });
-        toast.success("Adjustment approved");
-      } else if (action === "reject") {
-        const remarks = prompt("Rejection remarks:");
-        if (!remarks?.trim()) return;
-        await loanAdjustmentService.reject(adjId, { remarks });
-        toast.success("Adjustment rejected");
-      } else {
-        await loanAdjustmentService.apply(adjId);
-        toast.success("Adjustment applied");
-        // Applying rewrites the loan's open schedule rows, and with them its
-        // balances, and adds its row to the Ledger. Settled rather than
-        // thrown: a failed re-read is not a failed apply.
-        await Promise.allSettled([
-          loadLoan(loan.id, loan).then(setLoan),
-          fetchSchedule(loan.id),
-          fetchLoanSummary(loan.id),
-          fetchLedger(loan.id),
-        ]);
-      }
+      await loanAdjustmentService.apply(adjId);
+      toast.success("Adjustment applied");
+      // Applying rewrites the loan's open schedule rows, and with them its
+      // balances, and adds its row to the Ledger. Settled rather than
+      // thrown: a failed re-read is not a failed apply.
+      await Promise.allSettled([
+        loadLoan(loan.id, loan).then(setLoan),
+        fetchSchedule(loan.id),
+        fetchLoanSummary(loan.id),
+        fetchLedger(loan.id),
+      ]);
       fetchAdjustments(loan.id);
     } catch (err) {
       // The server explains a refusal (e.g. a reduction larger than the unpaid
       // principal); show it rather than a bare "try again" that can't succeed.
-      toast.error(getErrorMessage(err, `We couldn't ${action} the adjustment. Please try again.`));
+      toast.error(getErrorMessage(err, "We couldn't apply the adjustment. Please try again."));
     } finally {
       setActionLoading(false);
     }
@@ -2399,10 +2415,15 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 Send back for approval
               </Button>
             )}
+            {/* Shown to everyone on a loan that can be extended; disabled, with
+                the reason, for a role without loans:extend, as Void is. */}
             {isOneMonthTermLoan &&
               ["released", "ongoing", "current", "past_due"].includes(loan.status) &&
               (loanTotalOutstanding ?? 0) > 0 && (
-                <Button
+                <PermissionButton
+                  permission={LOAN_EXTEND_GATE.permission}
+                  tooltip={LOAN_EXTEND_GATE.tooltip}
+                  wrapperClassName="w-full sm:w-auto"
                   onClick={() => {
                     setExtendInterestOption("pay");
                     setExtendPreviewRound((round) => round + 1);
@@ -2412,7 +2433,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 >
                   <CalendarPlus className="mr-2 h-4 w-4" />
                   Extend Loan
-                </Button>
+                </PermissionButton>
               )}
           </div>
         </div>
@@ -3959,37 +3980,45 @@ function LoanDetail({ loanId }: { loanId: number }) {
                           </p>
                         )}
                       </div>
+                      {/* Disabled, with the reason, for a role without the
+                          permission each request checks, as Void is. */}
                       {adj.adjustment_type !== "extension" && adj.status === "pending" && (
                         <div className="flex shrink-0 items-center gap-2">
-                          <Button
+                          <PermissionButton
+                            permission={LOAN_ADJUSTMENT_DECIDE_GATE.permission}
+                            tooltip={LOAN_ADJUSTMENT_DECIDE_GATE.tooltip}
                             size="sm"
                             variant="outline"
                             disabled={actionLoading}
-                            onClick={() => handleAdjustmentAction(adj.id, "approve")}
+                            onClick={() => askAdjustmentDecision({ adjustment: adj, action: "approve" })}
                           >
                             Approve
-                          </Button>
-                          <Button
+                          </PermissionButton>
+                          <PermissionButton
+                            permission={LOAN_ADJUSTMENT_DECIDE_GATE.permission}
+                            tooltip={LOAN_ADJUSTMENT_DECIDE_GATE.tooltip}
                             size="sm"
                             variant="outline"
                             className="text-destructive hover:text-destructive"
                             disabled={actionLoading}
-                            onClick={() => handleAdjustmentAction(adj.id, "reject")}
+                            onClick={() => askAdjustmentDecision({ adjustment: adj, action: "reject" })}
                           >
                             Reject
-                          </Button>
+                          </PermissionButton>
                         </div>
                       )}
                       {adj.adjustment_type !== "extension" && adj.status === "approved" && (
                         <div className="flex shrink-0 items-center gap-2">
-                          <Button
+                          <PermissionButton
+                            permission={LOAN_ADJUSTMENT_APPLY_GATE.permission}
+                            tooltip={LOAN_ADJUSTMENT_APPLY_GATE.tooltip}
                             size="sm"
                             className="bg-brand-blue text-brand-blue-foreground hover:bg-brand-blue-dark"
                             disabled={actionLoading}
-                            onClick={() => handleAdjustmentAction(adj.id, "apply")}
+                            onClick={() => handleApplyAdjustment(adj.id)}
                           >
                             Apply
-                          </Button>
+                          </PermissionButton>
                         </div>
                       )}
                     </div>
@@ -5476,64 +5505,38 @@ function LoanDetail({ loanId }: { loanId: number }) {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Partial-Payment Extend Prompt (Upon Maturity — Process 2) */}
-      <AlertDialog
+      {/* Partial-payment "Extend loan?" prompt (Process 2), shared with Payment Entry */}
+      <PartialExtendPrompt
         open={partialExtendOpen}
-        onOpenChange={(open) => {
-          const choice = partialExtendOnOpenChange(open);
-          if (choice !== null) void handlePartialExtendChoice(choice);
-        }}
-      >
-        {/* Three buttons don't fit the default width: widen it from sm up and
-            let the row wrap; below sm the footer stacks them full width. */}
-        <AlertDialogContent className="data-[size=default]:sm:max-w-lg">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Extend loan?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Payment is not enough to fully settle this loan.{" "}
-              <span className="font-medium">{PARTIAL_EXTEND_LABELS.extend}</span> records the
-              payment and extends the loan: the remaining principal and interest carry
-              over to the next cycle.{" "}
-              <span className="font-medium">{PARTIAL_EXTEND_LABELS.record}</span> records the
-              payment without extending.{" "}
-              <span className="font-medium">{PARTIAL_EXTEND_LABELS.cancel}</span> records
-              nothing and takes you back to the payment form.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="sm:flex-wrap">
-            <AlertDialogCancel
-              disabled={actionLoading}
-              onClick={() => void handlePartialExtendChoice("cancel")}
-            >
-              {PARTIAL_EXTEND_LABELS.cancel}
-            </AlertDialogCancel>
-            <Button
-              variant="outline"
-              disabled={actionLoading}
-              onClick={() => void handlePartialExtendChoice("record")}
-            >
-              {PARTIAL_EXTEND_LABELS.record}
-            </Button>
-            <AlertDialogAction
-              disabled={actionLoading}
-              onClick={() => void handlePartialExtendChoice("extend")}
-              className="bg-brand-blue text-brand-blue-foreground shadow-sm hover:bg-brand-blue-dark hover:shadow-md transition-all"
-            >
-              {actionLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Extending...
-                </>
-              ) : (
-                <>
-                  <CalendarPlus className="mr-2 h-4 w-4" />
-                  {PARTIAL_EXTEND_LABELS.extend}
-                </>
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        busy={actionLoading}
+        memberStatus={loan.borrower?.status ?? null}
+        onChoice={(choice) => void handlePartialExtendChoice(choice)}
+      />
+
+      {/* Void a payment: the reason is required, as the server requires it */}
+      <ReasonDialog
+        open={voidOpen}
+        onOpenChange={setVoidOpen}
+        {...voidPaymentDialog(voidTarget === null ? undefined : repaymentsById.get(voidTarget))}
+        maxLength={LOAN_DECISION_NOTE_MAX}
+        onConfirm={(reason) => (voidTarget === null ? Promise.resolve() : voidPayment(voidTarget, reason))}
+      />
+
+      {/* Approve or reject a pending adjustment, with remarks */}
+      <ReasonDialog
+        open={adjustmentDecisionOpen}
+        onOpenChange={setAdjustmentDecisionOpen}
+        {...adjustmentDecisionDialog(
+          adjustmentDecision?.action ?? "approve",
+          adjustmentDecision ? ADJUSTMENT_TYPE_LABELS[adjustmentDecision.adjustment.adjustment_type] : undefined,
+        )}
+        maxLength={LOAN_DECISION_NOTE_MAX}
+        onConfirm={(remarks) =>
+          adjustmentDecision === null
+            ? Promise.resolve()
+            : decideAdjustment(adjustmentDecision.adjustment.id, adjustmentDecision.action, remarks)
+        }
+      />
 
       {/* Create Adjustment Dialog */}
       <Dialog open={createAdjustmentOpen} onOpenChange={setCreateAdjustmentOpen}>

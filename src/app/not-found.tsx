@@ -36,7 +36,7 @@ export default function NotFound() {
             render={<Link href={inPortal ? "/member" : "/dashboard"} />}
             nativeButton={false}
           >
-            {inPortal ? "Go to the member portal" : "Go to Dashboard"}
+            {inPortal ? "Go to the member portal" : "Go to home page"}
           </Button>
           <Button variant="outline" onClick={() => router.back()}>
             Go Back

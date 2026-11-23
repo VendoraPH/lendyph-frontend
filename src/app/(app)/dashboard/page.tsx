@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { RouteGuard } from "@/components/common";
 import { ExpandableCard } from "@/components/common/expandable-card";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
@@ -9,6 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FIT_CLASSES } from "@/lib/page-fill";
 import { NoBranchBanner } from "@/components/common/no-branch-banner";
 import { useIsClient, usePermission } from "@/hooks";
+import { SIDEBAR_NAV } from "@/constants/navigation";
+import { firstAllowedPage } from "@/lib/landing-page";
 import { AreaChart, Area } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -345,6 +348,18 @@ function DashboardContent() {
 }
 
 export default function DashboardPage() {
+  const { can } = usePermission();
+  const router = useRouter();
+  // Signing in lands everyone here. A user who can't see the dashboard (the
+  // seeded loan processor, manager and board roles) goes on to the first page
+  // the side menu offers them instead of "Access Restricted", which still
+  // shows when the menu offers them nothing.
+  const landing = can("dashboard:view") ? null : firstAllowedPage(SIDEBAR_NAV, can);
+  useEffect(() => {
+    if (landing !== null) router.replace(landing);
+  }, [landing, router]);
+
+  if (landing !== null) return null;
   return (
     <RouteGuard permission="dashboard:view" pageName="Dashboard">
       <DashboardPageFill />
