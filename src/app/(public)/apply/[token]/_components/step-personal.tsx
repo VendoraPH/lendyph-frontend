@@ -1,15 +1,9 @@
 "use client";
 
 import { CIVIL_STATUS_OPTIONS, GENDER_OPTIONS } from "@/constants";
+import { RESIDENCE_OWNERSHIP } from "../_lib/options";
 import { TextField, SelectField } from "./form-field";
 import type { StepProps } from "./step-types";
-
-const OWNERSHIP = [
-  { value: "owned", label: "Owned" },
-  { value: "rented", label: "Rented" },
-  { value: "living_with_family", label: "Living with family" },
-  { value: "other", label: "Other" },
-];
 
 export function StepPersonal({
   value: p,
@@ -40,7 +34,7 @@ export function StepPersonal({
         <TextField id="province" label="Province" required autoComplete="address-level1" value={p.province} error={errors.province} onChange={(province) => onChange({ province })} />
         <TextField id="postal_code" label="Postal code" inputMode="numeric" autoComplete="postal-code" maxLength={4} value={p.postal_code} error={errors.postal_code} onChange={(postal_code) => onChange({ postal_code })} />
         <TextField id="years_at_residence" label="Years at this address" inputMode="decimal" value={p.years_at_residence} error={errors.years_at_residence} onChange={(years_at_residence) => onChange({ years_at_residence })} />
-        <SelectField id="residence_ownership" label="This home is" options={OWNERSHIP} value={p.residence_ownership} error={errors.residence_ownership} onChange={(residence_ownership) => onChange({ residence_ownership })} />
+        <SelectField id="residence_ownership" label="This home is" options={RESIDENCE_OWNERSHIP} value={p.residence_ownership} error={errors.residence_ownership} onChange={(residence_ownership) => onChange({ residence_ownership })} />
       </section>
       <section className="grid gap-4 sm:grid-cols-2">
         <h3 className="text-sm font-semibold sm:col-span-2">Membership</h3>

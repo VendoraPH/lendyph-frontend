@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { CheckCircle2, FileUp, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatFileSize } from "@/lib/loan-origination";
@@ -28,7 +28,7 @@ export interface DocumentRowProps {
 export function DocumentRow({ document: doc, description, rules, token, sessionToken, canRemove, onUploaded, onRemoved, onFailed }: DocumentRowProps) {
   const [progress, setProgress] = useState<number | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
-  const inputId = `doc-${doc.type}`;
+  const input = useRef<HTMLInputElement>(null);
   const hasFile = doc.file_name !== null;
 
   const failed = (err: unknown, fallback: string) => {
@@ -76,17 +76,20 @@ export function DocumentRow({ document: doc, description, rules, token, sessionT
         <div className="flex shrink-0 gap-2">
           {canRemove && doc.id !== null && progress === null && (
             <Button type="button" variant="ghost" size="sm" onClick={remove}>
-              <Trash2 className="mr-1 h-4 w-4" /> Remove
+              <Trash2 className="mr-1 h-4 w-4" aria-hidden /> Remove<span className="sr-only"> {doc.label}</span>
             </Button>
           )}
-          <Button type="button" variant={hasFile ? "outline" : "default"} size="sm" disabled={progress !== null} nativeButton={false} render={<label htmlFor={inputId} />}>
-            {progress !== null ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <FileUp className="mr-1 h-4 w-4" />}
+          {/* The one control a screen reader meets: it opens the hidden file picker below. */}
+          <Button type="button" variant={hasFile ? "outline" : "default"} size="sm" disabled={progress !== null} onClick={() => input.current?.click()}>
+            {progress !== null ? <Loader2 className="mr-1 h-4 w-4 animate-spin" aria-hidden /> : <FileUp className="mr-1 h-4 w-4" aria-hidden />}
             {hasFile ? "Replace" : "Upload"}
+            <span className="sr-only"> {doc.label}</span>
           </Button>
           <input
-            id={inputId}
+            ref={input}
             type="file"
-            className="sr-only"
+            hidden
+            tabIndex={-1}
             accept={uploadAccept(rules)}
             onChange={(e) => {
               upload(e.target.files?.[0]);

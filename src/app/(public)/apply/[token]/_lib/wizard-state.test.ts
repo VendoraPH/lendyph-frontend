@@ -4,6 +4,7 @@ import { emptyDraft } from "@/lib/loan-origination";
 import type { PublicDocument, PublicProduct } from "@/types/public-application";
 import {
   draftAfterVerify,
+  errorsAfterSave,
   estimateRequest,
   missingDocumentsMessage,
   problemsByStep,
@@ -182,4 +183,38 @@ test("a product with one schedule lets the server choose it", () => {
 test("the range is the server's to check: an amount outside it is still sent", () => {
   const loan = { loan_product_id: 7, amount: "900000", purpose: "", term: "60", frequency: "monthly", release_method: "" };
   assert.deepEqual(estimateRequest(loan, PRODUCT), { loan_product_id: 7, amount: "900000", term: 60, frequency: "monthly" });
+});
+
+// A step's errors follow the server once it answers again (an autosave, or a
+// file changed): one it no longer names is fixed and goes at once, one it
+// still names keeps the server's current words, and nothing new appears
+// before Next (browser check of #657: "Enter your employer name." stayed
+// after "Saved").
+
+const SAVED = (missing_fields: Record<string, string>, documents: PublicDocument[] = []) => ({ missing_fields, documents });
+
+test("a field's error goes once the server no longer names it after the autosave", () => {
+  assert.deepEqual(errorsAfterSave("employment", { employer_name: "Enter your employer name." }, SAVED({})), {});
+});
+
+test("a field still missing keeps its error, in the server's current words", () => {
+  const errors = { gross_monthly_income: "Enter your gross monthly income." };
+  const state = SAVED({ "draft.employment.gross_monthly_income": "Enter an amount in pesos, like 5000." });
+  assert.deepEqual(errorsAfterSave("employment", errors, state), { gross_monthly_income: "Enter an amount in pesos, like 5000." });
+});
+
+test("nothing new is shown before Next", () => {
+  assert.deepEqual(errorsAfterSave("employment", {}, SAVED({ "draft.employment.job_title": "Enter your job title." })), {});
+});
+
+test("one existing loan fixed drops only its own error", () => {
+  const errors = { "existing_loans.0.institution": "Enter the lender's name.", "existing_loans.1.payment_amount": "Enter the regular payment amount." };
+  const state = SAVED({ "draft.expenses.existing_loans.1.payment_amount": "Enter the regular payment amount." });
+  assert.deepEqual(errorsAfterSave("expenses", errors, state), { "existing_loans.1.payment_amount": "Enter the regular payment amount." });
+});
+
+test("the documents error stays while a required file is missing and goes once it's uploaded", () => {
+  const errors = { documents: "Upload your valid government id." };
+  assert.deepEqual(errorsAfterSave("documents", errors, SAVED({}, [DOC({})])), errors);
+  assert.deepEqual(errorsAfterSave("documents", errors, SAVED({}, [DOC({ id: "01jz0000000000000000000000", status: "uploaded", file_name: "id.png" })])), {});
 });

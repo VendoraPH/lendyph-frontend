@@ -3,17 +3,32 @@
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { CIVIL_STATUS_OPTIONS, GENDER_OPTIONS } from "@/constants";
 import { pesoOrDash } from "@/lib/credit-scoring/capacity";
-import { formatCurrency, formatDate } from "@/lib/format";
-import { INCOME_SOURCE_LABELS, inWords, RELEASE_METHODS, type WizardStepId } from "@/lib/loan-origination";
+import { formatCurrency } from "@/lib/format";
+import { inWords, RELEASE_METHODS, type WizardStepId } from "@/lib/loan-origination";
 import type { ApplicationDraft } from "@/types/loan-origination";
 import type { Consents, DeclaredLine, NoticeKey, PublicApplicationState, PublicPortal, PublicProduct } from "@/types/public-application";
 import { consentsFor, noticesAreDraft, noticesToAccept, scheduleWords } from "../_lib/portal-state";
+import { expenseRows, incomeRows, personalRows, type ReviewRow } from "../_lib/review-rows";
 import { missingDocumentsMessage, problemsByStep, typedAmount, type StepProblems } from "../_lib/wizard-state";
 import { NoticeText } from "./notice-text";
 
-function Section({ title, step, onEdit, children }: { title: string; step: WizardStepId; onEdit: (s: WizardStepId) => void; children: React.ReactNode }) {
+const GRID = "grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[minmax(0,14rem)_1fr]";
+
+/** A section of answers, and under it the server's monthly figures when it has some. */
+function Section({
+  title,
+  step,
+  onEdit,
+  children,
+  figures,
+}: {
+  title: string;
+  step: WizardStepId;
+  onEdit: (s: WizardStepId) => void;
+  children: React.ReactNode;
+  figures?: React.ReactNode;
+}) {
   return (
     <section className="rounded-xl border bg-card p-4">
       <div className="mb-2 flex items-center justify-between gap-2">
@@ -22,7 +37,13 @@ function Section({ title, step, onEdit, children }: { title: string; step: Wizar
           Edit
         </Button>
       </div>
-      <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[minmax(0,14rem)_1fr]">{children}</dl>
+      <dl className={GRID}>{children}</dl>
+      {figures && (
+        <>
+          <p className="mt-3 mb-1 text-xs font-medium text-muted-foreground">Per month, worked out by the office from your answers</p>
+          <dl className={GRID}>{figures}</dl>
+        </>
+      )}
     </section>
   );
 }
@@ -32,6 +53,17 @@ function Row({ label, value, strong = false }: { label: string; value: React.Rea
     <>
       <dt className={strong ? "font-medium" : "text-muted-foreground"}>{label}</dt>
       <dd className={strong ? "font-medium break-words tabular-nums" : "break-words tabular-nums"}>{value || "—"}</dd>
+    </>
+  );
+}
+
+/** Everything entered in a section, in words. */
+function Answers({ rows }: { rows: ReviewRow[] }) {
+  return (
+    <>
+      {rows.map((row, i) => (
+        <Row key={`${i}-${row.label}`} label={row.label} value={row.value} />
+      ))}
     </>
   );
 }
@@ -83,6 +115,7 @@ export function StepReview({
   portal,
   application,
   product,
+  incomeShown,
   submitting,
   problem,
   refusals,
@@ -93,6 +126,8 @@ export function StepReview({
   portal: PublicPortal;
   application: PublicApplicationState | null;
   product: PublicProduct | undefined;
+  /** The Income step's fields as it shows them (`visibleFields`). */
+  incomeShown: ReadonlySet<string>;
   submitting: boolean;
   problem: string | null;
   /** A refused submit's fields, in the server's words. */
@@ -126,29 +161,37 @@ export function StepReview({
         <Row label="Purpose" value={l.purpose} />
       </Section>
       <Section title="You" step="personal" onEdit={onEdit}>
-        <Row label="Name" value={[p.first_name, p.middle_name, p.last_name, p.suffix].filter(Boolean).join(" ")} />
-        <Row label="Date of birth" value={/^\d{4}-\d{2}-\d{2}$/.test(p.date_of_birth) ? formatDate(p.date_of_birth) : p.date_of_birth} />
-        <Row label="Gender" value={inWords(p.gender, GENDER_OPTIONS)} />
-        <Row label="Civil status" value={inWords(p.civil_status, CIVIL_STATUS_OPTIONS)} />
+        <Answers rows={personalRows(p, portal.branches)} />
         <Row label="Mobile" value={application?.verified_contact.mobile} />
-        <Row label="Address" value={[p.street_address, p.barangay, p.city, p.province, p.region, p.postal_code].filter(Boolean).join(", ")} />
       </Section>
-      <Section title="Income" step="employment" onEdit={onEdit}>
-        <Row label="Main source" value={e.income_source ? INCOME_SOURCE_LABELS[e.income_source] : null} />
-        {totals && <Lines lines={totals.income} />}
-        <Row label="Monthly income" value={pesoOrDash(totals?.monthly_income)} strong />
+      <Section
+        title="Income"
+        step="employment"
+        onEdit={onEdit}
+        figures={
+          <>
+            {totals && <Lines lines={totals.income} />}
+            <Row label="Monthly income" value={pesoOrDash(totals?.monthly_income)} strong />
+          </>
+        }
+      >
+        <Answers rows={incomeRows(e, incomeShown)} />
       </Section>
-      <Section title="Expenses and debts" step="expenses" onEdit={onEdit}>
-        <Row label="Loans still being paid" value={x.has_existing_loans === null ? null : x.has_existing_loans ? "Yes" : "None"} />
-        {totals && <Lines lines={totals.expenses} />}
-        <Row label="Monthly expenses" value={pesoOrDash(totals?.monthly_expenses)} strong />
-        {totals && <Lines lines={totals.debts} />}
-        <Row label="Monthly debt payments" value={pesoOrDash(totals?.monthly_debt_payments)} strong />
-        <Row label="Left each month" value={pesoOrDash(totals?.monthly_remaining)} strong />
+      <Section
+        title="Expenses and debts"
+        step="expenses"
+        onEdit={onEdit}
+        figures={
+          <>
+            <Row label="Monthly expenses" value={pesoOrDash(totals?.monthly_expenses)} strong />
+            {totals && <Lines lines={totals.debts} />}
+            <Row label="Monthly debt payments" value={pesoOrDash(totals?.monthly_debt_payments)} strong />
+            <Row label="Left each month" value={pesoOrDash(totals?.monthly_remaining)} strong />
+          </>
+        }
+      >
+        <Answers rows={expenseRows(x)} />
       </Section>
-      <p className="-mt-2 text-xs text-muted-foreground">
-        Monthly figures are worked out by the office from what you entered: an amount received weekly or yearly is shown per month.
-      </p>
       <Section title="Documents" step="documents" onEdit={onEdit}>
         {(application?.documents ?? []).filter((d) => d.file_name).length === 0 ? (
           <Row label="Files" value="None uploaded" />

@@ -2,9 +2,10 @@
 
 import { Loader2 } from "lucide-react";
 import { pesoOrDash } from "@/lib/credit-scoring/capacity";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatDate } from "@/lib/format";
 import { RELEASE_METHODS } from "@/lib/loan-origination";
 import type { PublicEstimate, PublicProduct } from "@/types/public-application";
+import { estimateHeadline } from "../_lib/estimate";
 import { amountRange, scheduleWords, termChoices, termRange } from "../_lib/portal-state";
 import { MoneyField, SelectField, TextAreaField, TextField } from "./form-field";
 import type { StepProps } from "./step-types";
@@ -29,12 +30,7 @@ function EstimateBox({ estimate, error, loading }: EstimateState) {
   return (
     <div className="space-y-3 rounded-xl border border-brand-orange/30 bg-brand-orange/5 p-4" aria-live="polite">
       <p className="text-sm text-muted-foreground">Estimated payment</p>
-      <p className="text-2xl font-semibold tabular-nums">
-        {formatCurrency(estimate.installment)}{" "}
-        <span className="text-sm font-normal text-muted-foreground">
-          {scheduleWords(estimate.frequency).toLowerCase()}, {estimate.installments_count} payments
-        </span>
-      </p>
+      <p className="text-xl font-semibold tabular-nums">{estimateHeadline(estimate)}</p>
       <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm">
         <dt className="text-muted-foreground">Interest</dt>
         <dd className="text-right tabular-nums">{formatCurrency(estimate.total_interest)}</dd>
@@ -51,6 +47,33 @@ function EstimateBox({ estimate, error, loading }: EstimateState) {
         <dt className="font-medium">You receive</dt>
         <dd className="text-right font-medium tabular-nums">{pesoOrDash(estimate.net_proceeds)}</dd>
       </dl>
+      {estimate.schedule.length > 0 && (
+        <details className="text-sm">
+          <summary className="cursor-pointer font-medium">See each payment</summary>
+          <table className="mt-2 w-full text-left tabular-nums">
+            <thead className="text-xs text-muted-foreground">
+              <tr>
+                <th className="py-1 font-medium">#</th>
+                <th className="py-1 font-medium">Due</th>
+                <th className="py-1 text-right font-medium">Principal</th>
+                <th className="py-1 text-right font-medium">Interest</th>
+                <th className="py-1 text-right font-medium">Payment</th>
+              </tr>
+            </thead>
+            <tbody>
+              {estimate.schedule.map((row) => (
+                <tr key={row.number} className="border-t border-brand-orange/10">
+                  <td className="py-1">{row.number}</td>
+                  <td className="py-1">{formatDate(row.due_date)}</td>
+                  <td className="py-1 text-right">{formatCurrency(row.principal)}</td>
+                  <td className="py-1 text-right">{formatCurrency(row.interest)}</td>
+                  <td className="py-1 text-right">{formatCurrency(row.amount)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
+      )}
       <ul className="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
         {estimate.assumptions.map((line) => (
           <li key={line}>{line}</li>

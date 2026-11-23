@@ -10,10 +10,24 @@ import type { ApplicationDraft } from "@/types/loan-origination";
 import type { ApplicantSession, Consents, PublicApplicationState, PublicDocument, PublicPortal, Submitted } from "@/types/public-application";
 import { useDraftAutosave } from "../_hooks/use-draft-autosave";
 import { useLoanEstimate } from "../_hooks/use-loan-estimate";
-import { missingForSource, NOTHING_REQUIRED, productRequiredFields, rememberRequired, type RequiredMemory } from "../_lib/employment-fields";
+import {
+  missingForSource,
+  NOTHING_REQUIRED,
+  productRequiredFields,
+  rememberRequired,
+  visibleFields,
+  type RequiredMemory,
+} from "../_lib/employment-fields";
 import { fieldErrors, publicErrorMessage, sessionProblem } from "../_lib/errors";
 import { uploadRules } from "../_lib/uploads";
-import { draftAfterVerify, estimateRequest, missingDocumentsMessage, resumeStepIndex, stepErrors } from "../_lib/wizard-state";
+import {
+  draftAfterVerify,
+  errorsAfterSave,
+  estimateRequest,
+  missingDocumentsMessage,
+  resumeStepIndex,
+  stepErrors,
+} from "../_lib/wizard-state";
 import { OtpVerify } from "./otp-verify";
 import { StepDocuments } from "./step-documents";
 import { StepEmployment } from "./step-employment";
@@ -89,10 +103,17 @@ export function Wizard({
   const sessionToken = session?.session_token ?? null;
   const product = portal.products.find((p) => p.id === draft.loan.loan_product_id);
   const rules = uploadRules(portal);
+  const productRequired = productRequiredFields(application, draft.loan.loan_product_id, required);
+  const employmentMissing = missingForSource(application, draft.employment.income_source);
 
-  /** The server's latest view, and (from an older API) the product's required fields it named. */
+  /**
+   * The server's latest view: the open step's errors follow it (one it no
+   * longer names goes), and from an older API the product's required fields
+   * it named are kept.
+   */
   const take = (state: PublicApplicationState) => {
     setApplication(state);
+    setErrors((current) => errorsAfterSave(step.id, current, state));
     setRequired((memory) => rememberRequired(memory, state));
   };
 
@@ -245,6 +266,8 @@ export function Wizard({
             error={errors.loan_product_id}
             onChange={(id) => {
               const chosen = portal.products.find((p) => p.id === id);
+              // Before the code there is no save to answer, so choosing one clears "Choose a loan product." at once.
+              setErrors({});
               patch("loan")({ loan_product_id: id, frequency: chosen?.payment_frequencies.length === 1 ? chosen.payment_frequencies[0] : "" });
             }}
           />
@@ -265,8 +288,8 @@ export function Wizard({
             value={draft.employment}
             errors={errors}
             onChange={patch("employment")}
-            requiredFields={productRequiredFields(application, draft.loan.loan_product_id, required)}
-            missingFields={missingForSource(application, draft.employment.income_source)}
+            requiredFields={productRequired}
+            missingFields={employmentMissing}
           />
         );
       case "expenses":
@@ -297,6 +320,7 @@ export function Wizard({
             portal={portal}
             application={application}
             product={product}
+            incomeShown={visibleFields(draft.employment.income_source, productRequired, employmentMissing)}
             submitting={submitting}
             problem={problem}
             refusals={refusals}

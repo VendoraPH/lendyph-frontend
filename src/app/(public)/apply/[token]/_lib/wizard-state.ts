@@ -1,6 +1,6 @@
 import { mergeDraft, WIZARD_STEPS, type WizardErrors, type WizardStepId } from "@/lib/loan-origination";
 import type { ApplicantLoanRequest, ApplicationDraft } from "@/types/loan-origination";
-import type { EstimateRequest, PublicDocument, PublicProduct } from "@/types/public-application";
+import type { EstimateRequest, PublicApplicationState, PublicDocument, PublicProduct } from "@/types/public-application";
 
 /**
  * What blocks a step is the server's to say: LO-B2 sends `missing_fields` with
@@ -70,6 +70,21 @@ export function problemsByStep(fields: Record<string, string>): StepProblems[] {
 export function missingDocumentsMessage(documents: readonly PublicDocument[]): string | null {
   const missing = documents.filter((d) => d.required && !d.file_name).map((d) => d.label.toLowerCase());
   return missing.length > 0 ? `Upload your ${missing.join(" and ")}.` : null;
+}
+
+/**
+ * The open step's errors once the server answers again (an autosave, or a
+ * file changed): each one it still names, in its current words. One it no
+ * longer names is fixed and goes at once; nothing new shows before Next.
+ */
+export function errorsAfterSave(
+  step: WizardStepId,
+  errors: WizardErrors,
+  state: Pick<PublicApplicationState, "missing_fields" | "documents">,
+): WizardErrors {
+  const documents = step === "documents" ? missingDocumentsMessage(state.documents) : null;
+  const current: WizardErrors = step === "documents" ? (documents ? { documents } : {}) : stepErrors(step, state.missing_fields);
+  return Object.fromEntries(Object.keys(errors).flatMap((field) => (current[field] ? [[field, current[field]]] : [])));
 }
 
 /** Where a resumed application opens: the step after the server's last completed one, never before Personal details. */
