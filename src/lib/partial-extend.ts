@@ -29,6 +29,26 @@ export function offersExtendOnPartialPayment(
 }
 
 /**
+ * The member statuses the server refuses "defer" for: a former member
+ * (Borrower::FORMER_MEMBER_STATUSES) gets no new credit, and deferring moves
+ * the unpaid interest into a new period (ExtendLoanRequest). Paying the
+ * interest to extend stays allowed, from Extend Loan.
+ */
+const DEFER_REFUSED_MEMBER_STATUSES: readonly string[] = ["withdrawn", "deceased"];
+
+/**
+ * Why "Yes, extend", which always defers, can't be used on this loan, in
+ * words; null when it can. Read from the member's status on the loan, which
+ * the server sends only to a caller who may read the member in full; without
+ * it the server decides, and refuses in its own words.
+ */
+export function partialExtendDeferRefusal(memberStatus: unknown): string | null {
+  return typeof memberStatus === "string" && DEFER_REFUSED_MEMBER_STATUSES.includes(memberStatus)
+    ? "A withdrawn or deceased member can't extend by deferring the interest."
+    : null;
+}
+
+/**
  * What "Yes, extend" sends once the payment is recorded: "defer", because the
  * cashier's payment has just been posted and the server must not collect the
  * interest again (whatever is still unpaid carries into the new period), and

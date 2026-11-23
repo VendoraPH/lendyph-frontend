@@ -21,6 +21,7 @@ import {
   PARTIAL_EXTEND_LABELS,
   dispatchPartialExtend,
   offersExtendOnPartialPayment,
+  partialExtendDeferRefusal,
   partialExtendOnOpenChange,
   partialExtendOutcome,
   partialExtendPayload,
@@ -52,6 +53,37 @@ test("Yes, extend extends on defer, since the payment was just recorded, and nam
     interest_option: "defer",
   });
   assert.equal(partialExtendPayload(1234.5).remarks, "Auto-extend on partial payment of ₱1,234.50");
+});
+
+// The server refuses "defer" for a former member (ExtendLoanRequest), and
+// "Yes, extend" defers, so it used to record the payment and then fail.
+test("Yes, extend says why it can't be used for a withdrawn or deceased member", () => {
+  const reason = "A withdrawn or deceased member can't extend by deferring the interest.";
+  assert.equal(partialExtendDeferRefusal("withdrawn"), reason);
+  assert.equal(partialExtendDeferRefusal("deceased"), reason);
+});
+
+test("any other member, or a status the loan didn't send, leaves Yes, extend to the server", () => {
+  for (const status of ["active", "inactive", "blacklisted", "pending", "", null, undefined, 3]) {
+    assert.equal(partialExtendDeferRefusal(status), null, String(status));
+  }
+});
+
+test("the prompt disables Yes, extend with that reason, and keeps Cancel and Record partial payment", () => {
+  const prompt = read("src/components/loans/partial-extend-prompt.tsx");
+  assert.match(prompt, /const deferRefusal = partialExtendDeferRefusal\(memberStatus\);/);
+  assert.match(
+    prompt,
+    /<DisabledReason reason=\{deferRefusal\}>\s*<Button disabled[\s\S]*?\{PARTIAL_EXTEND_LABELS\.extend\}[\s\S]*?<\/DisabledReason>/,
+  );
+  // Neither of the other two depends on the member.
+  assert.match(prompt, /<AlertDialogCancel disabled=\{busy\}/);
+  assert.match(prompt, /<Button variant="outline" disabled=\{busy\} onClick=\{\(\) => onChoice\("record"\)\}>/);
+});
+
+test("both pages hand the prompt the member's status the loan carries", () => {
+  assert.match(read("src/app/(app)/loans/[id]/page.tsx"), /memberStatus=\{loan\.borrower\?\.status \?\? null\}/);
+  assert.match(read("src/app/(app)/payments/page.tsx"), /memberStatus=\{pendingPayment\?\.loan\.member_status \?\? null\}/);
 });
 
 test("the loan page asks only by the shared rule, and extends with the shared request", () => {

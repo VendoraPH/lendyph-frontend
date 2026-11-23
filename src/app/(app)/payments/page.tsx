@@ -1200,6 +1200,7 @@ function PaymentsContent() {
     <PartialExtendPrompt
       open={pendingPayment !== null}
       busy={isSubmitting}
+      memberStatus={pendingPayment?.loan.member_status ?? null}
       onChoice={(choice) => void handlePartialExtendChoice(choice)}
     />
     </>

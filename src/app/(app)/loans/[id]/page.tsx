@@ -5509,6 +5509,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
       <PartialExtendPrompt
         open={partialExtendOpen}
         busy={actionLoading}
+        memberStatus={loan.borrower?.status ?? null}
         onChoice={(choice) => void handlePartialExtendChoice(choice)}
       />
 
