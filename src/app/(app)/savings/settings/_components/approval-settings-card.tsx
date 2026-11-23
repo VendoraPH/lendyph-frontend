@@ -90,7 +90,7 @@ export function ApprovalSettingsCard({ settings, onSaved }: ApprovalSettingsCard
             "warningDays",
             "ss-warning-days",
             "Dormancy warning (days before)",
-            "Accounts this close to turning dormant are listed and warned. 0 to 365.",
+            "Staff and the member are warned this many days before an account turns dormant. 0 to 365.",
             true,
           )}
         </div>
