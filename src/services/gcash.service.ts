@@ -37,8 +37,9 @@ export const gcashService = {
   /**
    * Every transaction the filters match, across as many pages as it takes, for
    * the tab's report export, with the server's `meta.totals` (null when it
-   * sent none). A `truncated` drain must not be exported: its rows would cover
-   * only part of the range.
+   * sent none). The pages are read one after another, so a transaction
+   * recorded meanwhile can shift them: the export checks the rows against the
+   * totals (`transactionsExportRefusal`) and refuses a `truncated` drain.
    */
   listAllTransactions: async (
     params?: Omit<GCashListFilters, "page" | "per_page">,

@@ -36,6 +36,7 @@ import type {
 import { PaidButton } from "./paid-button";
 import { PartyCell } from "./party-cell";
 import { TransactionsReportActions } from "./transactions-report-actions";
+import { DATE_RANGE_REVERSED, dateRangeReversed } from "../_lib/date-range";
 import { gcashCanMarkPaid } from "../_lib/row-actions";
 import { gcashRowBranchLabel } from "../_lib/walk-in-branch";
 import { DataState } from "@/components/common/data-state";
@@ -97,8 +98,22 @@ export function TransactionsTab() {
   // Whether the empty list is down to the filters (a "no results" picture) or there is nothing yet.
   const filtersActive =
     filters.type !== "all" || filters.status !== "all" || filters.start_date !== "" || filters.end_date !== "";
+  // Only a typed date reverses the range (the pickers bound each other), and the API answers it with a 422.
+  const rangeReversed = dateRangeReversed(filters.start_date, filters.end_date);
+
+  /** A new Date From or Date To. A reversed range asks nothing and shows none of the last filters' rows. */
+  function setDates(dates: Partial<Pick<typeof filters, "start_date" | "end_date">>) {
+    const next = { ...filters, ...dates };
+    setFilters(next);
+    if (dateRangeReversed(next.start_date, next.end_date)) {
+      setRows([]);
+      setTotalPages(1);
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
+    if (rangeReversed) return;
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -122,7 +137,7 @@ export function TransactionsTab() {
     return () => {
       cancelled = true;
     };
-  }, [filters, page, reloadToken]);
+  }, [filters, page, reloadToken, rangeReversed]);
 
   return (
     <div className={cn("gap-4", FIT_CLASSES.section)}>
@@ -183,9 +198,7 @@ export function TransactionsTab() {
             type="date"
             value={filters.start_date}
             max={filters.end_date || undefined}
-            onChange={(e) =>
-              setFilters((p) => ({ ...p, start_date: e.target.value }))
-            }
+            onChange={(e) => setDates({ start_date: e.target.value })}
           />
         </div>
         <div className="space-y-1">
@@ -194,9 +207,9 @@ export function TransactionsTab() {
             type="date"
             value={filters.end_date}
             min={filters.start_date || undefined}
-            onChange={(e) =>
-              setFilters((p) => ({ ...p, end_date: e.target.value }))
-            }
+            aria-invalid={rangeReversed || undefined}
+            aria-describedby={rangeReversed ? "gcash-date-range-error" : undefined}
+            onChange={(e) => setDates({ end_date: e.target.value })}
           />
         </div>
 
@@ -208,6 +221,12 @@ export function TransactionsTab() {
           <TransactionsReportActions filters={reportFilters} branchOf={branchOf} />
         </div>
       </div>
+
+      {rangeReversed && (
+        <p id="gcash-date-range-error" role="alert" className="shrink-0 text-sm text-destructive">
+          {DATE_RANGE_REVERSED}
+        </p>
+      )}
 
       {!loading && rows.length === 0 ? (
         <DataState

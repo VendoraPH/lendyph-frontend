@@ -8,7 +8,8 @@
  * cut short is refused before this runs). Dependency free, so it runs under
  * `tsx --test`.
  */
-import { countOrDash, currencyOrDash, formatDateRange, formatGeneratedAt } from "@/lib/report-format";
+import { countOrDash, currencyOrDash, formatDateRange, formatGeneratedAt, toNumber } from "@/lib/report-format";
+import type { DrainResult } from "@/lib/paginate";
 import type { ReportDocument } from "@/app/(app)/reports/_lib/types";
 import type {
   GCashTransaction,
@@ -18,6 +19,9 @@ import type {
 } from "@/types";
 
 export const GCASH_TRANSACTIONS_TITLE = "GCash Transactions Report";
+
+/** The refusal when the list moved under the export (see `transactionsExportRefusal`). */
+export const TRANSACTIONS_CHANGED = "The transactions changed while the report was being made. Please try again.";
 
 const TYPE_LABEL: Record<GCashTransactionType, string> = { cash_in: "Cash In", cash_out: "Cash Out" };
 const STATUS_LABEL: Record<GCashTransactionStatus, string> = {
@@ -48,6 +52,29 @@ function pendingChargesHint(totals: GCashTransactionTotals | null): string | und
   const pending = totals?.pending;
   if (!pending || !(Number(pending.count) > 0)) return undefined;
   return `${currencyOrDash(pending.charges)} pending, not yet income`;
+}
+
+/** What `gcashService.listAllTransactions` hands back for the export. */
+export type DrainedTransactions = Pick<DrainResult<GCashTransaction>, "rows" | "total" | "truncated"> & {
+  totals: GCashTransactionTotals | null;
+};
+
+/**
+ * Why the drained transactions can't be made into one report, or null when
+ * they can. A list cut short is refused. So is one that moved while its pages
+ * were read: the totals come from page 1, and a transaction recorded or marked
+ * paid before a later page shifts the pages, so a row repeats or goes missing
+ * and the rows no longer match the totals. Without totals only the repeat can
+ * be seen.
+ */
+export function transactionsExportRefusal(drain: DrainedTransactions): string | null {
+  if (drain.truncated) {
+    return `Only ${drain.rows.length}${drain.total ? ` of ${drain.total}` : ""} transactions could be loaded. Narrow the date range and try again.`;
+  }
+  const repeated = new Set(drain.rows.map((row) => row.id)).size !== drain.rows.length;
+  const count = toNumber(drain.totals?.count);
+  const countOff = count !== null && count !== drain.rows.length;
+  return repeated || countOff ? TRANSACTIONS_CHANGED : null;
 }
 
 function customer(row: GCashTransaction): string {

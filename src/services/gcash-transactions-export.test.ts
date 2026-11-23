@@ -13,6 +13,7 @@ import { test, before, after, describe } from "node:test";
 import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import { AddressInfo } from "node:net";
+import { TRANSACTIONS_CHANGED, transactionsExportRefusal } from "@/app/(app)/gcash/_lib/transactions-report";
 
 const ROWS = Array.from({ length: 150 }, (_, i) => ({ id: 150 - i, reference_no: `GC-${150 - i}` }));
 const TOTALS = {
@@ -29,6 +30,10 @@ let server: Server;
 const seen: Record<string, string>[] = [];
 /** What `meta.totals` page 1 carries; undefined leaves the key out. */
 let firstPageTotals: unknown = TOTALS;
+/** The list as the server holds it now, newest first; a test may change it between pages. */
+let listed = ROWS;
+/** Runs before each page is answered, with that page's number. */
+let beforePage: (page: number) => void = () => {};
 let gcashService: typeof import("./gcash.service").gcashService;
 
 before(async () => {
@@ -43,15 +48,16 @@ before(async () => {
     seen.push(query);
     const page = Number(query.page ?? 1);
     const perPage = Math.min(Number(query.per_page ?? 25), 100);
+    beforePage(page);
     const meta: Record<string, unknown> = {
       current_page: page,
-      last_page: Math.ceil(ROWS.length / perPage),
+      last_page: Math.ceil(listed.length / perPage),
       per_page: perPage,
-      total: ROWS.length,
+      total: listed.length,
     };
     // Only page 1 carries totals here, so a drain that kept a later page's would lose them.
     if (page === 1 && firstPageTotals !== undefined) meta.totals = firstPageTotals;
-    res.end(JSON.stringify({ data: ROWS.slice((page - 1) * perPage, page * perPage), links: {}, meta }));
+    res.end(JSON.stringify({ data: listed.slice((page - 1) * perPage, page * perPage), links: {}, meta }));
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address() as AddressInfo;
@@ -90,5 +96,21 @@ describe("gcashService.listAllTransactions", () => {
     // PHP sends an empty array as [], never {}.
     firstPageTotals = [];
     assert.equal((await gcashService.listAllTransactions(filters)).totals, null);
+  });
+
+  test("a transaction recorded between pages repeats a row, and the export is refused", async () => {
+    firstPageTotals = TOTALS;
+    // Recorded after page 1 was answered: it lands on top and pushes every row down one.
+    beforePage = (page) => {
+      if (page === 2) listed = [{ id: 151, reference_no: "GC-151" }, ...ROWS];
+    };
+    try {
+      const result = await gcashService.listAllTransactions(filters);
+      assert.equal(result.rows.filter((row) => row.id === 51).length, 2);
+      assert.equal(transactionsExportRefusal(result), TRANSACTIONS_CHANGED);
+    } finally {
+      listed = ROWS;
+      beforePage = () => {};
+    }
   });
 });

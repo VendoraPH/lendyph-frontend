@@ -18,8 +18,10 @@ import { useBrandingStore } from "@/store/branding-store";
 import { applyChrome, loadLogoDataUrl } from "@/app/(app)/reports/_lib/report-chrome";
 import type { ReportDocument } from "@/app/(app)/reports/_lib/types";
 import type { GCashListFilters, GCashTransaction } from "@/types";
+import { DATE_RANGE_REVERSED, dateRangeReversed } from "../_lib/date-range";
 import {
   gcashTransactionsReport,
+  transactionsExportRefusal,
   type GCashTransactionsReportInput,
 } from "../_lib/transactions-report";
 
@@ -36,8 +38,9 @@ export type TransactionsReportFilters = Pick<GCashTransactionsReportInput, "from
  * Download Report (PDF or Excel) and Print Report for the Transactions tab.
  * Each fetches every transaction the tab's filters match, not just the page
  * on screen, with the server's totals, and refuses to go on when the list
- * could not be fetched whole, because the document would then list only part
- * of the range.
+ * could not be fetched whole or changed while it was read
+ * (`transactionsExportRefusal`), because the document would then not match
+ * its totals.
  */
 export function TransactionsReportActions({
   filters,
@@ -51,7 +54,7 @@ export function TransactionsReportActions({
   const user = useAuthStore((s) => s.user);
   const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
   const logoUrl = useBrandingStore((s) => s.logoUrl);
-  const invalidRange = Boolean(filters.from && filters.to && filters.to < filters.from);
+  const invalidRange = dateRangeReversed(filters.from, filters.to);
 
   async function run(action: Action) {
     setBusy(action);
@@ -62,11 +65,9 @@ export function TransactionsReportActions({
       if (filters.from) params.start_date = filters.from;
       if (filters.to) params.end_date = filters.to;
       const drain = await gcashService.listAllTransactions(params, { maxPages: EXPORT_MAX_PAGES });
-      if (drain.truncated) {
-        notifyError(
-          null,
-          `Only ${drain.rows.length}${drain.total ? ` of ${drain.total}` : ""} transactions could be loaded. Narrow the date range and try again.`,
-        );
+      const refusal = transactionsExportRefusal(drain);
+      if (refusal) {
+        notifyError(null, refusal);
         setBusy(null);
         return;
       }
@@ -113,7 +114,7 @@ export function TransactionsReportActions({
   const spin = <Loader2 className="size-4 animate-spin" />;
 
   return (
-    <div className="flex items-center gap-2" title={invalidRange ? "Date To is before Date From." : undefined}>
+    <div className="flex items-center gap-2" title={invalidRange ? DATE_RANGE_REVERSED : undefined}>
       <DropdownMenu>
         <DropdownMenuTrigger render={<Button variant="outline" disabled={disabled} />}>
           {busy === "pdf" || busy === "excel" ? spin : <Download className="size-4" />}

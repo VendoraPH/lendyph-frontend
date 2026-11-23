@@ -2,7 +2,12 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { formatCurrency } from "@/lib/format";
 import type { GCashTransaction, GCashTransactionTotals } from "@/types";
-import { GCASH_TRANSACTIONS_TITLE, gcashTransactionsReport } from "./transactions-report";
+import {
+  GCASH_TRANSACTIONS_TITLE,
+  TRANSACTIONS_CHANGED,
+  gcashTransactionsReport,
+  transactionsExportRefusal,
+} from "./transactions-report";
 
 function tx(id: number, over: Partial<GCashTransaction>): GCashTransaction {
   return {
@@ -177,5 +182,40 @@ describe("the GCash transactions report", () => {
       formatCurrency(0),
     ]);
     assert.equal(table(doc).totals?.[2].value, formatCurrency(0));
+  });
+});
+
+describe("whether the drained transactions can be exported", () => {
+  const whole = { rows, total: 3, truncated: false, totals: { ...SERVER_TOTALS, count: 3 } };
+
+  test("a whole list that matches the server's count can", () => {
+    assert.equal(transactionsExportRefusal(whole), null);
+  });
+
+  test("a list cut short is refused, saying how many loaded", () => {
+    assert.equal(
+      transactionsExportRefusal({ ...whole, truncated: true, total: 250 }),
+      "Only 3 of 250 transactions could be loaded. Narrow the date range and try again.",
+    );
+  });
+
+  test("rows that no longer match the server's count are refused: the transactions changed", () => {
+    assert.equal(TRANSACTIONS_CHANGED, "The transactions changed while the report was being made. Please try again.");
+    // One recorded or marked paid after page 1: a row missing, or a row too many.
+    assert.equal(transactionsExportRefusal({ ...whole, totals: { ...SERVER_TOTALS, count: 4 } }), TRANSACTIONS_CHANGED);
+    assert.equal(transactionsExportRefusal({ ...whole, totals: { ...SERVER_TOTALS, count: 2 } }), TRANSACTIONS_CHANGED);
+  });
+
+  test("a repeated row is refused even when the count matches", () => {
+    const repeated = [rows[0], rows[1], rows[0]];
+    assert.equal(transactionsExportRefusal({ ...whole, rows: repeated }), TRANSACTIONS_CHANGED);
+  });
+
+  test("without totals the count isn't checked, but a repeated row still is", () => {
+    assert.equal(transactionsExportRefusal({ ...whole, totals: null, total: null }), null);
+    assert.equal(
+      transactionsExportRefusal({ ...whole, totals: null, rows: [...rows, rows[2]] }),
+      TRANSACTIONS_CHANGED,
+    );
   });
 });
