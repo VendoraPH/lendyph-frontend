@@ -621,7 +621,7 @@ function AuditTrailContent() {
               to={dateTo}
               onChange={changeDateRange}
             />
-            {showBranchFilter && <BranchFilter value={branch} onChange={changeBranch} />}
+            {showBranchFilter && <BranchFilter value={branch} onChange={changeBranch} hideLabel />}
             {hasFilters && (
               <Button
                 variant="ghost"

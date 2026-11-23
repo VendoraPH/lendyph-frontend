@@ -2,7 +2,7 @@
 
 import { useId } from "react";
 import { useBranches } from "@/hooks";
-import { ALL_BRANCHES, branchFilterOptions, shownBranchValue } from "@/lib/branch-filter";
+import { ALL_BRANCHES, branchFilterLabelClass, branchFilterOptions, shownBranchValue } from "@/lib/branch-filter";
 import { useAuthStore } from "@/store";
 import { Label } from "@/components/ui/label";
 import {
@@ -20,6 +20,8 @@ interface BranchFilterProps {
   value: string;
   onChange: (value: string) => void;
   className?: string;
+  /** In a row of unlabelled filters: the label is for screen readers only. */
+  hideLabel?: boolean;
 }
 
 /**
@@ -30,7 +32,7 @@ interface BranchFilterProps {
  * Import it by path: it loads the branch list, so it stays out of the
  * `components/common/index.ts` barrel.
  */
-export function BranchFilter({ value, onChange, className }: BranchFilterProps) {
+export function BranchFilter({ value, onChange, className, hideLabel = false }: BranchFilterProps) {
   const id = useId();
   const { branches, loading } = useBranches();
   const caller = useAuthStore((s) => s.user);
@@ -43,7 +45,7 @@ export function BranchFilter({ value, onChange, className }: BranchFilterProps) 
     // gap, not space-y: the select renders a hidden input after its trigger,
     // and space-y would give the trigger a bottom margin.
     <div className="flex flex-col gap-1.5">
-      <Label htmlFor={id} className="text-xs text-muted-foreground">
+      <Label htmlFor={id} className={branchFilterLabelClass(hideLabel)}>
         Branch
       </Label>
       <Select
