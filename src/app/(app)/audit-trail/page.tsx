@@ -619,7 +619,7 @@ function AuditTrailContent() {
               </SelectContent>
             </Select>
             <DateRangeFilter
-              label="Date Exclusive"
+              label="Dates"
               from={dateFrom}
               to={dateTo}
               onChange={changeDateRange}
@@ -628,7 +628,6 @@ function AuditTrailContent() {
             {hasFilters && (
               <Button
                 variant="ghost"
-                size="sm"
                 onClick={clearFilters}
                 className="gap-1 text-muted-foreground"
               >
