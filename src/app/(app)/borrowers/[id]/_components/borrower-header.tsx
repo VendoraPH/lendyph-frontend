@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Pencil, Camera, X, Maximize2 } from "lucide-react";
+import { ArrowLeft, ArrowRightLeft, Pencil, Camera, X, Maximize2 } from "lucide-react";
 import { toast } from "sonner";
 import { borrowerService } from "@/services";
 import type { Borrower } from "@/types";
@@ -30,9 +30,11 @@ interface BorrowerHeaderProps {
   borrower: Borrower;
   onEdit: () => void;
   onPhotoUpdate?: () => void;
+  /** Opens Transfer member; absent when the user can't transfer this member. */
+  onTransfer?: () => void;
 }
 
-export function BorrowerHeader({ borrower, onEdit, onPhotoUpdate }: BorrowerHeaderProps) {
+export function BorrowerHeader({ borrower, onEdit, onPhotoUpdate, onTransfer }: BorrowerHeaderProps) {
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [cropDialogOpen, setCropDialogOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -168,13 +170,21 @@ export function BorrowerHeader({ borrower, onEdit, onPhotoUpdate }: BorrowerHead
             </p>
           </div>
         </div>
-        <Button
-          onClick={onEdit}
-          className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark self-start sm:self-auto"
-        >
-          <Pencil className="mr-2 h-4 w-4" />
-          Edit Profile
-        </Button>
+        <div className="flex flex-wrap gap-2 self-start sm:self-auto">
+          {onTransfer ? (
+            <Button variant="outline" onClick={onTransfer}>
+              <ArrowRightLeft className="mr-2 h-4 w-4" />
+              Transfer member
+            </Button>
+          ) : null}
+          <Button
+            onClick={onEdit}
+            className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+          >
+            <Pencil className="mr-2 h-4 w-4" />
+            Edit Profile
+          </Button>
+        </div>
       </div>
 
       <PhotoCropDialog

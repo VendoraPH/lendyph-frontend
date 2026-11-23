@@ -40,6 +40,8 @@ export const API_ENDPOINTS = {
       `/borrowers/${id}/valid-ids/${validIdId}`,
     LEDGER: (id: number) => `/borrowers/${id}/ledger`,
     LOAN_SUMMARY: (id: number) => `/borrowers/${id}/loan-summary`,
+    // Phase 6 MB-BE4: moving a member to another branch (borrowers:view and borrowers:transfer).
+    TRANSFER: (id: number) => `/borrowers/${id}/transfer`,
   },
   REGISTRATIONS: {
     LIST: "/borrowers",
@@ -270,6 +272,7 @@ export const API_ENDPOINTS = {
     DEACTIVATE: (id: number) => `/users/${id}/deactivate`,
     REACTIVATE: (id: number) => `/users/${id}/reactivate`,
     RESET_PASSWORD: (id: number) => `/users/${id}/reset-password`,
+    BRANCH_HISTORY: (id: number) => `/users/${id}/branch-history`,
   },
   STAFF: {
     LIST: "/staff",
@@ -323,6 +326,8 @@ export const API_ENDPOINTS = {
     LEDGER_LIST: "/share-capital/ledger",
     LEDGER_CREATE: "/share-capital/ledger",
     MEMBERS: "/share-capital/members",
+    // Preview of the next CSH-[admin id]-[year]-[0001] cash reference.
+    NEXT_CASH_REFERENCE: "/share-capital/cash-reference/next",
   },
   PLEDGES: {
     LIST: "/pledges",
@@ -530,6 +535,8 @@ export const API_ENDPOINTS = {
     TIME_DEPOSITS: "/savings/time-deposits",
     TIME_DEPOSIT: (id: number) => `/savings/time-deposits/${id}`,
     TIME_DEPOSIT_QUOTE: "/savings/time-deposits/quote",
+    // Preview of the next TD-[admin id]-[year]-[0001] cash placement reference.
+    TIME_DEPOSIT_NEXT_CASH_REFERENCE: "/savings/time-deposits/cash-reference/next",
     TIME_DEPOSIT_SETTLE: (id: number) => `/savings/time-deposits/${id}/settle`,
     TIME_DEPOSIT_PRETERMINATE: (id: number) => `/savings/time-deposits/${id}/preterminate`,
     TIME_DEPOSIT_PRETERMINATION_QUOTE: (id: number) =>
@@ -736,6 +743,11 @@ export const API_ENDPOINTS = {
     REPORT_SUBMISSION_EVIDENCE: (id: number, submissionId: number) => `/amla/reports/${id}/submissions/${submissionId}/evidence`,
     REPORT_EXPORT: (id: number) => `/amla/reports/${id}/export`,
     FILING_DEADLINES: "/amla/filing-deadlines",
+    /** AMLA-B7: the ten reports (each needs its own key), their server exports and the dashboard counts. */
+    COMPLIANCE_REPORTS: "/amla/compliance-reports",
+    COMPLIANCE_REPORT: (key: string) => `/amla/compliance-reports/${encodeURIComponent(key)}`,
+    COMPLIANCE_REPORT_EXPORTS: (key: string) => `/amla/compliance-reports/${encodeURIComponent(key)}/exports`,
+    DASHBOARD_COUNTS: "/amla/dashboard/counts",
   },
   /**
    * CDA Compliance (CDA design §3). Every route needs `branches:view_all` plus

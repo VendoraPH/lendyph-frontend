@@ -63,6 +63,9 @@ import { bulkEntriesRequest, manualEntryRequest } from "./_lib/pledge-entry-requ
 import { MethodReferenceFields } from "@/components/common/method-reference-fields";
 import { PAYMENT_METHOD_OPTIONS, type RecordPaymentMethod } from "@/constants/payment-methods";
 import { paymentReferenceError } from "@/lib/payment-reference";
+import { cashAutoReference } from "@/lib/cash-reference";
+import { env } from "@/config/env";
+import { useCashReferencePreview } from "@/hooks/use-cash-reference-preview";
 import { useDialogOpening } from "@/hooks/use-dialog-opening";
 import { createLatestGate, drainPledgesWithTotal, readPledgeTotalAmount } from "./_lib/pledge-totals";
 
@@ -205,6 +208,19 @@ function PledgeEntryContent() {
     setBulkMethod("cash");
     setBulkReference("");
   }
+
+  // Cash entries are numbered by the server (CSH-…); the field shows its next
+  // number while a Cash form is open, and moves on after every save.
+  const [entriesSaved, setEntriesSaved] = useState(0);
+  const cashNumbering = env.features.cashPledgeReference;
+  const cashPreview = useCashReferencePreview(
+    shareCapitalService.nextCashReference,
+    cashNumbering &&
+      ((manualEntryId !== null && manualMethod === "cash") || (bulkDialogOpen && bulkMethod === "cash")),
+    entriesSaved,
+  );
+  const manualAutoReference = cashAutoReference(cashNumbering, manualMethod, cashPreview);
+  const bulkAutoReference = cashAutoReference(cashNumbering, bulkMethod, cashPreview);
 
   // ── Derived data ──
 
@@ -389,10 +405,12 @@ function PledgeEntryContent() {
     }
     setManualSubmitting(true);
     try {
-      await shareCapitalService.ledgerCreate(request.data);
+      const entry = await shareCapitalService.ledgerCreate(request.data);
+      const savedReference = entry?.reference_number ? ` (${entry.reference_number})` : "";
       toast.success(
-        `Manual ${manualTransaction} of ${formatCurrency(amount)} for ${pledge.borrower}`
+        `Manual ${manualTransaction} of ${formatCurrency(amount)} for ${pledge.borrower}${savedReference}`
       );
+      setEntriesSaved((n) => n + 1);
       setManualEntryId(null);
       setManualAmount("");
       setManualTransaction("credit");
@@ -489,6 +507,7 @@ function PledgeEntryContent() {
     try {
       await shareCapitalService.pledgeBulkEntries(request.data);
       toast.success(`${valid.length} ${valid.length === 1 ? "entry" : "entries"} created`);
+      setEntriesSaved((n) => n + 1);
       setSelectedIds(new Set());
       setBulkEntries({});
       return true;
@@ -899,6 +918,7 @@ function PledgeEntryContent() {
                                 }}
                                 referenceRequired={manualMethod !== "cash"}
                                 problem={manualReferenceProblem}
+                                autoReference={manualAutoReference}
                                 className="grid w-full max-w-md gap-3 sm:grid-cols-2"
                               />
                               <div className="flex gap-2">
@@ -1067,6 +1087,7 @@ function PledgeEntryContent() {
             }}
             referenceRequired={bulkMethod !== "cash"}
             problem={bulkReferenceProblem}
+            autoReference={bulkAutoReference}
             disabled={bulkSubmitting}
           />
           <div className="flex justify-end gap-2 pt-2">

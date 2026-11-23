@@ -890,18 +890,19 @@ export function buildBorrowerDoc(
     if (scope) sections.push({ kind: "note", text: scope });
 
     // No footer: the server sends counts for the cards, not column totals, and
-    // rows are never added up here.
+    // rows are never added up here. The list holds every member a card
+    // counts: active, new and repeat.
     sections.push({
       kind: "table",
-      title: "Active and New Members",
+      title: "Active, New and Repeat Members",
       columns: MEMBER_LIST_COLUMNS,
       rows,
-      emptyText: "No member was active or new in the selected period.",
+      emptyText: "No active, new or repeat members for the selected period.",
     });
     sections.push({
       kind: "note",
       text:
-        "Active: at least one collectible loan as of the end of the period, going by each loan's current status, not its status back then. New: registered in the period. Repeat: at least 2 loans released. A repeat member who is neither active nor new counts on the Repeat card but is not listed here.",
+        "Active: at least one collectible loan as of the end of the period, going by each loan's current status, not its status back then. New: registered in the period. Repeat: at least 2 loans released. This table lists every active, new and repeat member, so each member a card counts has a row here.",
     });
   }
 

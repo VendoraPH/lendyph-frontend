@@ -178,3 +178,8 @@ export interface BulkPledgeEntryData extends ShareCapitalMethodFields {
     type: "credit" | "debit";
   }[];
 }
+
+/** `GET /share-capital/cash-reference/next`: the CSH number the next cash entry would get. */
+export interface CashReferencePreview {
+  reference_number: string;
+}

@@ -31,6 +31,8 @@ interface ReasonDialogProps {
   reasonLabel?: string;
   /** False for an optional note (an approval); the reason is required otherwise. */
   reasonRequired?: boolean;
+  /** The longest reason its endpoint keeps: REASON_MAX_LENGTH unless it keeps more. */
+  maxLength?: number;
   /** A destructive action (suspend, reject) colours its confirm button. */
   destructive?: boolean;
   /** Fields above the reason (a closing date); the caller owns their state. */
@@ -65,6 +67,7 @@ export function ReasonDialog({
   confirmLabel,
   reasonLabel = "Reason",
   reasonRequired = true,
+  maxLength = REASON_MAX_LENGTH,
   destructive = false,
   children,
   missingFields = [],
@@ -135,7 +138,7 @@ export function ReasonDialog({
               id={fieldId}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              maxLength={REASON_MAX_LENGTH}
+              maxLength={maxLength}
               required={reasonRequired}
               aria-describedby={refusal ? errorId : undefined}
               className="min-h-24"

@@ -53,9 +53,10 @@ test("the loan page offers Record Payment by the shared rule and shows the note 
 
 test("the loan page doesn't offer to extend a defaulted loan on a partial payment", () => {
   const page = read("src/app/(app)/loans/[id]/page.tsx");
+  // offersExtendOnPartialPayment refuses a defaulted loan (src/lib/partial-extend.test.ts).
   assert.match(
     page,
-    /if \(isUponMaturityLoan && paymentMode === "regular" && !isRecoveryPayment\(loan\.status\)\) \{\s*const decision = shouldPromptExtend\(/,
+    /if \(paymentMode === "regular" && offersExtendOnPartialPayment\(loan\)\) \{\s*const decision = shouldPromptExtend\(/,
   );
 });
 

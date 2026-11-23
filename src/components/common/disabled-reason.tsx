@@ -2,6 +2,7 @@
 
 import { useId } from "react";
 
+import { cn } from "@/lib/utils";
 import {
   Tooltip,
   TooltipContent,
@@ -16,13 +17,17 @@ import {
  *
  * A disabled control can't be focused or hovered, so the reason sits on a
  * focusable wrapper (hover and Tab both reach it) and is read to screen
- * readers through `aria-describedby`.
+ * readers through `aria-describedby`. `wrapperClassName` lays the wrapper out
+ * where the control needs it, as `PermissionButton`'s does (for example the
+ * full width of a menu row).
  */
 export function DisabledReason({
   reason,
+  wrapperClassName,
   children,
 }: {
   reason: string | null;
+  wrapperClassName?: string;
   children: React.ReactNode;
 }) {
   const reasonId = useId();
@@ -37,7 +42,10 @@ export function DisabledReason({
             <span
               tabIndex={0}
               aria-describedby={reasonId}
-              className="inline-flex cursor-not-allowed rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+              className={cn(
+                "inline-flex cursor-not-allowed rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                wrapperClassName,
+              )}
             />
           }
         >
