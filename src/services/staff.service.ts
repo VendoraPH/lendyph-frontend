@@ -6,9 +6,11 @@ import type { PaginatedResponse, StaffMember } from "@/types";
 export interface StaffListFilters {
   /**
    * `savings`: the savings opening form's picker, also allowed with
-   * `savings:create` (gap round S4). Left out by the loan pickers.
+   * `savings:create` (gap round S4). `origination`: the online applications'
+   * assign picker, which needs and lists `loan_origination:update` holders.
+   * Left out by the loan pickers.
    */
-  for?: "savings";
+  for?: "savings" | "origination";
   /**
    * Matches first name, last name, or "first last" — never username or email.
    * More than 100 characters is a 422.

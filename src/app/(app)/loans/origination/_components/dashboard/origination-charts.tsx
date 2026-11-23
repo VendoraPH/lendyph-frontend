@@ -11,7 +11,6 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import { formatDate } from "@/lib/format";
-import { STATUS_LABELS } from "@/lib/loan-origination";
 import type { OriginationDashboard } from "@/types/loan-origination";
 
 const TREND = {
@@ -40,10 +39,10 @@ function ChartCard({ title, empty, children }: { title: string; empty: boolean; 
 
 const shortDate = (v: string) => formatDate(v);
 
-/** The dashboard's five charts. Every figure is the server's; nothing is summed here. */
+/** The dashboard's five charts. Every figure and label is the server's; nothing is summed here. */
 export function OriginationCharts({ data }: { data: OriginationDashboard }) {
-  const byStatus = data.by_status.map((s) => ({ ...s, label: STATUS_LABELS[s.status] }));
-  const stages = data.stage_times.map((s) => ({ ...s, label: STATUS_LABELS[s.status] }));
+  const byStatus = data.by_status;
+  const stages = data.stage_times;
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <ChartCard title="Completed and incomplete applications" empty={data.trends.length === 0}>

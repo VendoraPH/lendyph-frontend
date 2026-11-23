@@ -19,12 +19,16 @@ import type { Assessment, AssessmentResult } from "@/types/loan-origination";
 import { AssessmentPdfButton } from "../_components/assessment-actions";
 import { AssessmentReport } from "../_components/assessment-report";
 import { StatusTabs } from "../_components/status-tabs";
-import { SearchInput } from "../_components/search-input";
+import { dtiText, figureText } from "../_lib/assessment-view";
 
 const PER_PAGE_OPTIONS = [20, 50, 100] as const;
 const RESULTS = Object.keys(ASSESSMENT_SHORT_LABELS) as AssessmentResult[];
-const pct = (v: number | null) => (v === null ? "—" : `${Math.round(v * 10) / 10}%`);
 
+/**
+ * The current assessment of each application in the caller's branches, newest
+ * first, with the server's counts by result. Figures read as the server sends
+ * them, withheld ones included.
+ */
 export default function AssessmentsPage() {
   const [filters, setFilters] = useState<AssessmentListFilters>({ page: 1, per_page: 20 });
   const fetcher = useCallback(() => loanOriginationService.listAssessments(filters), [filters]);
@@ -34,11 +38,6 @@ export default function AssessmentsPage() {
   return (
     <div className={cn(FIT_CLASSES.section, "gap-3")}>
       <div className="flex flex-wrap items-center gap-3">
-        <SearchInput
-          value={filters.search}
-          placeholder="Name or reference, then Enter"
-          onChange={(search) => setFilters((f) => ({ ...f, search, page: 1 }))}
-        />
         <StatusTabs
           value={filters.result}
           statuses={RESULTS}
@@ -89,15 +88,13 @@ export default function AssessmentsPage() {
                         <TableCell className="text-right tabular-nums">
                           {a.requested_amount === null ? "—" : formatCurrency(a.requested_amount)}
                         </TableCell>
-                        <TableCell className="text-right tabular-nums">{pct(a.figures.dti_ratio)}</TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {a.figures.remaining_income === null ? "—" : formatCurrency(a.figures.remaining_income)}
-                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{dtiText(a)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{figureText(a, "remaining_income")}</TableCell>
                         <TableCell className="whitespace-nowrap">
-                          <AssessmentBadge result={a.result} />
+                          <AssessmentBadge result={a.result} label={a.result_label} />
                           {a.provisional && <ToneBadge tone="warning" className="ml-1">Provisional</ToneBadge>}
                         </TableCell>
-                        <TableCell className="whitespace-nowrap text-sm">{formatDateTime(a.assessed_at)}</TableCell>
+                        <TableCell className="whitespace-nowrap text-sm">{a.assessed_at ? formatDateTime(a.assessed_at) : "—"}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

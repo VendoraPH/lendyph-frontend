@@ -576,10 +576,10 @@ export const API_ENDPOINTS = {
     LOAN_ASSESSMENT: (loanId: number) => `/credit-scoring/loans/${loanId}/assessment`,
   },
   /**
-   * Loan Origination: online applications from public links. None of these
-   * exist yet; the contract is `@/types/loan-origination` and
-   * `docs/LOAN_ORIGINATION_BACKEND_HANDOFF.md`. The screens stay behind
-   * NEXT_PUBLIC_ENABLE_LOAN_ORIGINATION and show "Not connected yet" (404).
+   * Loan Origination, staff side: `routes/api/loan-origination/*` in the
+   * backend (LO-B1 to LO-B4). The screens stay behind
+   * NEXT_PUBLIC_ENABLE_LOAN_ORIGINATION. "Submit for approval" is the
+   * hand-off; there is no separate convert, and links have no logo upload.
    */
   LOAN_ORIGINATION: {
     DASHBOARD: "/loan-origination/dashboard",
@@ -592,7 +592,6 @@ export const API_ENDPOINTS = {
     REMIND: (id: number) => `/loan-origination/applications/${id}/remind`,
     LINK_MEMBER: (id: number) => `/loan-origination/applications/${id}/link-member`,
     SUBMIT_FOR_APPROVAL: (id: number) => `/loan-origination/applications/${id}/submit-for-approval`,
-    CONVERT: (id: number) => `/loan-origination/applications/${id}/convert`,
     ASSESSMENTS: "/loan-origination/assessments",
     ASSESSMENT: (id: number) => `/loan-origination/applications/${id}/assessment`,
     ASSESSMENT_RERUN: (id: number) => `/loan-origination/applications/${id}/assessment/rerun`,
@@ -606,7 +605,6 @@ export const API_ENDPOINTS = {
     DOCUMENT_DOWNLOAD: (docId: number) => `/loan-origination/documents/${docId}/download`,
     LINKS: "/loan-origination/links",
     LINK: (id: number) => `/loan-origination/links/${id}`,
-    LINK_LOGO: (id: number) => `/loan-origination/links/${id}/logo`,
     SETTINGS: "/loan-origination/settings",
   },
   /**

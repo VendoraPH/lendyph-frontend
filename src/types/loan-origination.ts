@@ -2,14 +2,17 @@
  * Loan Origination: online applications from public links, their documents,
  * the preliminary capacity assessment and the hand-off into the loan module.
  *
- * The backend for all of this is still to be built. These types are the
- * contract the screens are written against; the handoff that lists the
- * endpoints is `docs/LOAN_ORIGINATION_BACKEND_HANDOFF.md`. Money is a number
- * of pesos with centavos, as everywhere else in the app; the server computes
- * every figure with decimal precision and the browser only shows it.
+ * The staff side (from "Staff side" down) follows the merged backend (LO-B1
+ * to LO-B4): `routes/api/loan-origination/*`, the staff ApplicationPresenter,
+ * DocumentPresenter and AssessmentPresenter, whose OpenAPI descriptions are
+ * the contract. The server works out every figure with exact decimals; the
+ * browser only shows it. Money arrives as a two-decimal string where the
+ * server keeps a decimal column (`MoneyString`) and as a JSON number where a
+ * presenter converts it (the assessment, the settings).
  */
 
 import type { PaginatedResponse } from "./api";
+import type { MoneyString } from "./savings";
 
 // ── Statuses ────────────────────────────────────────────────────────────────
 
@@ -247,14 +250,6 @@ export interface OtpRequestResult {
   delivered?: boolean;
 }
 
-/** `POST …/remind`: what happened to the reminder. */
-export interface ReminderResult {
-  channel: string;
-  sent_at: string | null;
-  /** True only when a provider actually sent it; absent or false: logged only. */
-  delivered?: boolean;
-}
-
 /**
  * `POST …/otp/verify`: a session for this one application, sent back as
  * `X-Application-Session`. Resuming returns the saved draft with it.
@@ -316,43 +311,6 @@ export interface PublicTrackingResult {
   contact: { phone: string | null; email: string | null };
 }
 
-// ── Staff side ─────────────────────────────────────────────────────────────
-
-export interface ApplicationSummary {
-  id: number;
-  reference_number: string | null;
-  applicant_name: string;
-  /** Masked by the server unless the user may see contacts. */
-  mobile: string | null;
-  loan_product_name: string | null;
-  requested_amount: number | null;
-  branch_name: string | null;
-  submitted_at: string | null;
-  started_at: string;
-  updated_at: string;
-  status: ApplicationStatus;
-  assessment_result: AssessmentResult | null;
-  assigned_officer_name: string | null;
-  completion_percent: number;
-  last_completed_step: string | null;
-}
-
-export interface StatusHistoryEntry {
-  id: number;
-  from_status: ApplicationStatus | null;
-  to_status: ApplicationStatus;
-  note: string | null;
-  changed_by_name: string | null;
-  changed_at: string;
-}
-
-export interface ApplicationNote {
-  id: number;
-  body: string;
-  author_name: string;
-  created_at: string;
-}
-
 export interface DocumentVersion {
   id: number;
   file_name: string;
@@ -360,6 +318,7 @@ export interface DocumentVersion {
   status: DocumentStatus;
 }
 
+/** A document as the public application reads it. Staff screens read `StaffDocument`. */
 export interface ApplicationDocument {
   id: number;
   type: string;
@@ -379,11 +338,176 @@ export interface ApplicationDocument {
   versions: DocumentVersion[];
 }
 
-/** One row of the cross-application Documents page. */
-export interface DocumentQueueItem extends ApplicationDocument {
+// ── Staff side ─────────────────────────────────────────────────────────────
+
+/** A staff user as `SavingsUserRef` sends one. */
+export interface StaffRef {
+  id: number;
+  name: string;
+}
+
+/** `ApplicationPresenter::summary()`: a list row, and the head of the detail. */
+export interface ApplicationSummary {
+  id: number;
+  reference_number: string | null;
+  applicant_name: string;
+  /** Masked by the server without `borrowers:view` and the branch. */
+  mobile: string | null;
+  loan_product_id: number | null;
+  loan_product_name: string | null;
+  requested_amount: MoneyString | null;
+  requested_term: number | null;
+  branch_id: number | null;
+  branch_name: string | null;
+  status: ApplicationStatus;
+  /** The status in words ("For Approval"), the server's label. */
+  status_label: string;
+  /** From a link marked as a test; left out of the dashboard. */
+  is_test: boolean;
+  assessment_result: AssessmentResult | null;
+  assigned_officer_id: number | null;
+  assigned_officer_name: string | null;
+  completion_percent: number;
+  last_completed_step: string | null;
+  /** The loan the hand-off created; set from "Submit for approval" on. */
+  loan_id: number | null;
+  started_at: string | null;
+  submitted_at: string | null;
+  decided_at: string | null;
+  updated_at: string | null;
+}
+
+export interface StatusHistoryEntry {
+  id: number;
+  from_status: ApplicationStatus | null;
+  from_label: string | null;
+  to_status: ApplicationStatus;
+  to_label: string;
+  note: string | null;
+  /** "Applicant", "System", "Loan approval" or the staff member's name. */
+  changed_by_name: string;
+  changed_at: string | null;
+}
+
+export interface ApplicationNote {
+  id: number;
+  body: string;
+  author_name: string | null;
+  created_at: string | null;
+}
+
+/** One declared line, a month, worked out by the server (`DraftRules::declaredTotals()`). */
+export interface DeclaredLine {
+  key: string;
+  label: string;
+  monthly: MoneyString;
+}
+
+/** The applicant's declared income, expenses and debts, each line a month, and their totals. */
+export interface DeclaredTotals {
+  /** Null when no income was declared. */
+  monthly_income: MoneyString | null;
+  monthly_expenses: MoneyString;
+  monthly_debt_payments: MoneyString;
+  /** Income less expenses and debts; null without income. */
+  monthly_remaining: MoneyString | null;
+  income: DeclaredLine[];
+  expenses: DeclaredLine[];
+  debts: DeclaredLine[];
+}
+
+/** A message meant for the applicant, recorded and never sent (`ApplicantMessages::present()`). */
+export interface ApplicantMessage {
+  id: number;
+  kind: string;
+  kind_label: string;
+  channel: "sms" | "email" | null;
+  channel_label: string;
+  body: string;
+  document_types: string[];
+  delivery: "logged" | "sent";
+  /** "Logged, not sent" while nothing can reach an applicant. */
+  delivery_label: string;
+  delivered: boolean;
+  sent_at: string | null;
+  author_name: string | null;
+  created_at: string | null;
+}
+
+/** `POST …/remind`: the logged reminder. */
+export interface ReminderResult extends ApplicantMessage {
+  logged_at: string | null;
+}
+
+export interface MemberMatch {
+  id: number;
+  name: string;
+  member_number: string | null;
+  status: string;
+  /** "Same full name", "Same mobile number" or "Same email address". */
+  reason: string;
+}
+
+export interface StaffDocumentVersion {
+  id: number;
+  public_id: string;
+  version: number;
+  /** Null without `borrowers:view` and the branch: a file name can hold an address. */
+  file_name: string | null;
+  uploaded_at: string | null;
+  scan_label: string | null;
+  current: boolean;
+}
+
+/** `DocumentPresenter::present()`: a document as staff read it. */
+export interface StaffDocument {
+  id: number;
+  public_id: string;
+  type: string;
+  label: string;
+  required: boolean;
+  status: DocumentStatus;
+  status_label: string;
+  /** Null without `borrowers:view` and the branch (the contacts rule). */
+  file_name: string | null;
+  mime_type: string | null;
+  size_bytes: number | null;
+  /** The current file's upload time; null while there is no file. */
+  uploaded_at: string | null;
+  scan_status: string | null;
+  scan_label: string | null;
+  verified_by_name: string | null;
+  verified_at: string | null;
+  rejection_reason: string | null;
+  notes: string | null;
+  /** The hand-off files it as the member's valid ID, so verifying it records the ID type and number. */
+  id_document: boolean;
+  id_type: string | null;
+  id_type_label: string | null;
+  /** Null without the contacts rule. */
+  id_number: string | null;
+  versions: StaffDocumentVersion[];
+}
+
+/** One row of the documents queue. */
+export interface DocumentQueueItem extends StaffDocument {
   application_id: number;
   reference_number: string | null;
   applicant_name: string;
+}
+
+/** A document decision's answer: the document and its application's version now. */
+export interface DocumentDecision extends StaffDocument {
+  application_id: number;
+  application_version: number | null;
+}
+
+/** `POST …/documents/{id}/verify`. An ID also takes its type, its name for "others" and its number. */
+export interface VerifyDocumentInput {
+  notes?: string;
+  id_type?: string;
+  custom_type_name?: string;
+  id_number?: string;
 }
 
 export interface AssessmentFigures {
@@ -391,11 +515,15 @@ export interface AssessmentFigures {
   verified_monthly_income: number | null;
   eligible_monthly_income: number | null;
   monthly_expenses: number | null;
+  outside_debt_payments: number | null;
+  /** Withheld (null) with the other member loan figures; see `member_figures_hidden`. */
+  lendy_debt_payments: number | null;
   monthly_debt_payments: number | null;
   disposable_income: number | null;
   proposed_monthly_installment: number | null;
-  /** Percent, e.g. 38.5. */
+  /** Percent, two decimals rounded up, as the server sends it. */
   dti_ratio: number | null;
+  /** Two decimals rounded down, as the server sends it. */
   coverage_ratio: number | null;
   remaining_income: number | null;
 }
@@ -406,19 +534,42 @@ export interface AssessmentThresholds {
   min_remaining_income: number;
 }
 
+/** Each limit as the server judged it: true passes, false fails, null not worked out. */
+export interface AssessmentChecks {
+  dti: boolean | null;
+  coverage: boolean | null;
+  remaining_income: boolean | null;
+}
+
+/** `AssessmentPresenter::present()`: one revision of an application's assessment. */
 export interface Assessment {
   id: number;
   version: number;
+  /** `run` for a run, `notes` for an officer's notes saved on the same figures. */
+  kind: "run" | "notes";
   application_id: number;
   reference_number: string | null;
   applicant_name: string;
+  loan_product_id: number | null;
   loan_product_name: string | null;
   requested_amount: number | null;
+  requested_term: number | null;
+  frequency: string | null;
+  /** The loan's planned start date the run used. */
+  start_date: string | null;
   result: AssessmentResult;
-  /** True while income or debts are missing or unverified. */
+  result_label: string;
+  /** True while the income or the debts aren't verified. */
   provisional: boolean;
+  /** Above capacity or insufficient information: the hand-off goes to the Policy Exception chain. */
+  policy_exception: boolean;
   figures: AssessmentFigures;
+  /** The figures that count a linked member's loans are withheld from this viewer. */
+  member_figures_hidden: boolean;
   thresholds: AssessmentThresholds;
+  checks: AssessmentChecks;
+  /** How the instalment was taken, in words. */
+  instalment_basis: string | null;
   explanation: string;
   missing_information: string[];
   conflicts: string[];
@@ -426,27 +577,77 @@ export interface Assessment {
   officer_findings: string | null;
   recommendations: string | null;
   rules_version: string;
-  assessed_at: string;
+  assessed_by: StaffRef | null;
+  assessed_at: string | null;
 }
 
+/** `POST …/assessment/rerun`: each figure left out keeps the last run's; `start_date` is today when left out. */
+export interface RerunAssessmentInput {
+  verified_monthly_income?: string;
+  verified_debt_payments?: string;
+  start_date?: string;
+}
+
+/** `ApplicationPresenter::detail()`. */
 export interface ApplicationDetail extends ApplicationSummary {
+  /** The version read; every staff write sends it back (409 when it moved on). */
+  version: number;
   email: string | null;
-  branch_id: number | null;
-  loan_product_id: number | null;
-  assigned_officer_id: number | null;
+  /** True when the mobile and email are masked and the address lines read "On file". */
+  contacts_hidden: boolean;
   draft: ApplicationDraft;
-  documents: ApplicationDocument[];
+  declared_totals: DeclaredTotals;
+  /** Draft fields a submit still needs, as `section.field` keys. */
+  missing_fields: string[];
+  /** Required documents not handed in, by label. */
+  missing_documents: string[];
+  documents: StaffDocument[];
+  /** The current revision as this viewer may see it; null before the first run. */
   assessment: Assessment | null;
   notes: ApplicationNote[];
+  /** Newest first. */
   history: StatusHistoryEntry[];
-  missing_fields: string[];
-  missing_documents: string[];
-  consents: { type: string; version: string; accepted_at: string }[];
-  /** Set once converted; the loan it became. */
-  loan_id: number | null;
-  /** An existing member the server matched for review, never auto-linked. */
-  possible_member_matches: { id: number; name: string; member_number: string | null; reason: string }[];
+  consents: { type: string; version: string; accepted: boolean; accepted_at: string | null }[];
+  /** Newest first. */
+  applicant_messages: ApplicantMessage[];
   linked_borrower_id: number | null;
+  /** Suggestions only, never linked by themselves; empty when `member_matches_hidden`. */
+  possible_member_matches: MemberMatch[];
+  member_matches_hidden: boolean;
+  /** The staff moves from this status that the viewer holds every permission for. */
+  allowed_transitions: ApplicationStatus[];
+}
+
+/** `POST …/transition`. */
+export interface TransitionInput {
+  to: ApplicationStatus;
+  version: number;
+  /** Internal; stays in the history. */
+  note?: string;
+  /** For the applicant: logged, never sent. On a rejection or withdrawal it is the decision notice. */
+  applicant_message?: string;
+}
+
+/** `POST …/submit-for-approval`: the hand-off. */
+export interface HandOffInput {
+  version: number;
+  /** The loan's start date; today when left out. */
+  start_date?: string;
+  /** "Create anyway": create the member even when one on record looks the same. */
+  force_new_member?: boolean;
+}
+
+/** The hand-off's answer: the application, now For Approval, and its loan. */
+export interface HandOffResult {
+  id: number;
+  reference_number: string | null;
+  status: ApplicationStatus;
+  status_label: string;
+  version: number;
+  borrower_id: number | null;
+  loan_id: number | null;
+  loan_application_number: string | null;
+  loan: { id: number; application_number: string; status: string; policy_exception: boolean };
 }
 
 export interface ApplicationListFilters {
@@ -456,10 +657,13 @@ export interface ApplicationListFilters {
   status?: ApplicationStatus;
   branch_id?: number;
   loan_product_id?: number;
-  assessment_result?: AssessmentResult;
+  officer_id?: number;
+  assigned?: "me" | "none";
+  is_test?: boolean;
+  /** Started on or after (Manila days). */
   date_from?: string;
   date_to?: string;
-  sort?: string;
+  sort?: "submitted_at" | "started_at" | "updated_at" | "requested_amount" | "applicant_name" | "reference_number";
   direction?: "asc" | "desc";
 }
 
@@ -471,59 +675,70 @@ export interface OriginationKpis {
   incomplete: number;
   submitted: number;
   pending_documents: number;
+  additional_info_required: number;
   under_assessment: number;
   pending_approval: number;
   approved: number;
   rejected: number;
-  additional_info_required: number;
-  amount_requested: number;
-  amount_approved: number;
-  /** Hours from submission to decision. */
+  withdrawn: number;
+  converted: number;
+  expired: number;
+  amount_requested: MoneyString;
+  /** Null without `loans:view`. */
+  amount_approved: MoneyString | null;
+  /** Hours from submission to decision, one decimal. */
   avg_processing_hours: number | null;
-  /** Percent. */
+  /** Percent, one decimal. */
   completion_rate: number | null;
   approval_rate: number | null;
 }
 
 export interface OriginationDashboard {
   period: { from: string; to: string };
+  /** The period of the same length just before, which `previous` covers. */
+  previous_period: { from: string; to: string };
   kpis: OriginationKpis;
-  /** Same figures for the period before, for the comparison arrows. */
-  previous: Partial<OriginationKpis> | null;
+  previous: OriginationKpis;
   trends: { date: string; completed: number; incomplete: number }[];
-  by_status: { status: ApplicationStatus; count: number }[];
-  by_product: { product: string; count: number }[];
+  by_status: { status: ApplicationStatus; label: string; count: number }[];
+  by_product: { product_id: number | null; product: string; count: number }[];
   decisions: { date: string; approved: number; rejected: number }[];
-  /** Average hours spent in each stage. */
-  stage_times: { status: ApplicationStatus; avg_hours: number }[];
+  /** Average hours spent in each stage left during the period. */
+  stage_times: { status: ApplicationStatus; label: string; avg_hours: number; stays: number }[];
   recent: ApplicationSummary[];
 }
 
+/** `OriginationLinkResource`. */
 export interface ApplicationLink {
   id: number;
   name: string;
   token: string;
-  /** The full public URL, built by the server from the configured domain. */
-  url: string;
+  /** Null while the server's public address isn't set up. */
+  url: string | null;
   active: boolean;
+  status: "active" | "disabled" | "expired";
+  status_label: string;
+  /** Test links stay out of the dashboard, and only they show staging test codes. */
+  is_test: boolean;
   branch_id: number | null;
   branch_name: string | null;
   loan_product_ids: number[];
   loan_product_names: string[];
   expires_at: string | null;
   display_name: string | null;
-  display_logo_url: string | null;
   contact_phone: string | null;
   contact_email: string | null;
   visits: number;
   started: number;
   submitted: number;
-  created_at: string;
+  created_at: string | null;
+  updated_at: string | null;
 }
 
 export interface ApplicationLinkInput {
   name: string;
   active: boolean;
+  is_test: boolean;
   branch_id: number | null;
   loan_product_ids: number[];
   expires_at: string | null;
@@ -532,10 +747,14 @@ export interface ApplicationLinkInput {
   contact_email: string | null;
 }
 
-export interface OriginationSettings {
+/** The sections `PUT /loan-origination/settings` takes. */
+export interface OriginationSettingsInput {
   general: {
     online_applications_enabled: boolean;
+    /** Release a loan only once its member's registration is approved. On by default. */
+    require_approved_member: boolean;
     default_branch_id: number | null;
+    /** 2 to 5 capital letters, then -YYYY-NNNNNN. */
     reference_format: string;
     draft_expiration_days: number;
     estimated_minutes: number | null;
@@ -570,4 +789,20 @@ export interface OriginationSettings {
     status_change: boolean;
     decision: boolean;
   };
+}
+
+/** `GET /loan-origination/settings`: the editable sections and what the server reports. */
+export interface OriginationSettings extends OriginationSettingsInput {
+  rules_version: number;
+  server: {
+    /** LOAN_ORIGINATION_ENABLED. */
+    enabled: boolean;
+    /** The address links are built on; null with `public_url_problem` in words. */
+    public_url: string | null;
+    public_url_problem: string | null;
+    pdf_check: string;
+    scanner: string;
+  };
+  updated_by: StaffRef | null;
+  updated_at: string | null;
 }

@@ -6,9 +6,9 @@ import { DataState } from "@/components/common/data-state";
 import { DateRangeFilter } from "@/components/common/date-range-filter";
 import { ScrollBox } from "@/components/common/page-fill";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useApiResource } from "@/hooks";
+import { useApiResource, usePermission } from "@/hooks";
 import { branchIdParam } from "@/lib/branch-filter";
-import { formatDateISO, todayDate, todayISO } from "@/lib/format";
+import { formatDate, formatDateISO, todayDate, todayISO } from "@/lib/format";
 import { loanOriginationService } from "@/services";
 import { ApplicationsTable } from "./_components/applications-table";
 import { KpiGrid } from "./_components/dashboard/kpi-grid";
@@ -21,7 +21,12 @@ function thirtyDaysAgo(): string {
   return formatDateISO(d);
 }
 
+/**
+ * `GET /loan-origination/dashboard`: the period's figures beside the previous
+ * period's, for the caller's branches. Test links are left out by the server.
+ */
 export default function OriginationDashboardPage() {
+  const canViewLoans = usePermission().can("loans:view");
   const [range, setRange] = useState(() => ({ from: thirtyDaysAgo(), to: todayISO() }));
   const [branch, setBranch] = useBranchFilter();
   const fetcher = useCallback(
@@ -54,7 +59,11 @@ export default function OriginationDashboardPage() {
       >
         {(data) => (
           <div className="space-y-4">
-            <KpiGrid kpis={data.kpis} previous={data.previous} />
+            <p className="text-xs text-muted-foreground">
+              {formatDate(data.period.from)} to {formatDate(data.period.to)}, beside the previous period,{" "}
+              {formatDate(data.previous_period.from)} to {formatDate(data.previous_period.to)}. Test links are left out.
+            </p>
+            <KpiGrid kpis={data.kpis} previous={data.previous} canViewLoans={canViewLoans} />
             <OriginationCharts data={data} />
             <Card>
               <CardHeader className="pb-2">

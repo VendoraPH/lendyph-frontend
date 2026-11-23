@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ApplicationStatusBadge, AssessmentBadge } from "@/components/loan-origination/badges";
+import { ApplicationStatusBadge, AssessmentBadge, TestBadge } from "@/components/loan-origination/badges";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { isUnsubmitted, maskMobile } from "@/lib/loan-origination";
@@ -36,6 +36,7 @@ export function ApplicationsTable({ rows, compact = false }: { rows: Application
               >
                 {a.reference_number ?? `Draft #${a.id}`}
               </Link>
+              {a.is_test && <span className="ml-1"><TestBadge /></span>}
             </TableCell>
             <TableCell className="min-w-36">{a.applicant_name || "—"}</TableCell>
             {/* The server masks it for a role without contact access; masking here too keeps a full number off a shared screen. */}
@@ -49,7 +50,7 @@ export function ApplicationsTable({ rows, compact = false }: { rows: Application
               {a.submitted_at ? formatDate(a.submitted_at) : <span className="text-muted-foreground">Not submitted</span>}
             </TableCell>
             <TableCell className="whitespace-nowrap">
-              <ApplicationStatusBadge status={a.status} />
+              <ApplicationStatusBadge status={a.status} label={a.status_label} />
               {isUnsubmitted(a.status) && (
                 <span className="ml-1 text-xs text-muted-foreground">{a.completion_percent}%</span>
               )}
@@ -58,7 +59,9 @@ export function ApplicationsTable({ rows, compact = false }: { rows: Application
               <AssessmentBadge result={a.assessment_result} />
             </TableCell>
             {!compact && <TableCell>{a.assigned_officer_name ?? "—"}</TableCell>}
-            {!compact && <TableCell className="whitespace-nowrap text-sm">{formatDate(a.updated_at)}</TableCell>}
+            {!compact && (
+              <TableCell className="whitespace-nowrap text-sm">{a.updated_at ? formatDate(a.updated_at) : "—"}</TableCell>
+            )}
           </TableRow>
         ))}
       </TableBody>

@@ -33,19 +33,27 @@ export function ToneBadge({ tone, children, className }: { tone: Tone; children:
   );
 }
 
-export function ApplicationStatusBadge({ status }: { status: ApplicationStatus }) {
-  return <ToneBadge tone={STATUS_TONES[status]}>{STATUS_LABELS[status]}</ToneBadge>;
+/** `label` is the server's `status_label` where it sends one. */
+export function ApplicationStatusBadge({ status, label }: { status: ApplicationStatus; label?: string }) {
+  return <ToneBadge tone={STATUS_TONES[status] ?? "neutral"}>{label || STATUS_LABELS[status] || status}</ToneBadge>;
 }
 
 export function ApplicantStatusBadge({ status }: { status: BorrowerFacingStatus }) {
   return <ToneBadge tone={BORROWER_STATUS_TONES[status]}>{BORROWER_STATUS_LABELS[status]}</ToneBadge>;
 }
 
-export function AssessmentBadge({ result }: { result: AssessmentResult | null }) {
+/** `label` is the server's `result_label` where it sends one. */
+export function AssessmentBadge({ result, label }: { result: AssessmentResult | null; label?: string }) {
   if (!result) return <span className="text-sm text-muted-foreground">Not assessed</span>;
-  return <ToneBadge tone={ASSESSMENT_TONES[result]}>{ASSESSMENT_SHORT_LABELS[result]}</ToneBadge>;
+  return <ToneBadge tone={ASSESSMENT_TONES[result] ?? "neutral"}>{label || ASSESSMENT_SHORT_LABELS[result] || result}</ToneBadge>;
 }
 
-export function DocumentStatusBadge({ status }: { status: DocumentStatus }) {
-  return <ToneBadge tone={DOCUMENT_STATUS_TONES[status]}>{DOCUMENT_STATUS_LABELS[status]}</ToneBadge>;
+/** `label` is the server's `status_label` where it sends one. */
+export function DocumentStatusBadge({ status, label }: { status: DocumentStatus; label?: string }) {
+  return <ToneBadge tone={DOCUMENT_STATUS_TONES[status] ?? "neutral"}>{label || DOCUMENT_STATUS_LABELS[status] || status}</ToneBadge>;
+}
+
+/** An application or link marked as a test: kept out of the dashboard. */
+export function TestBadge() {
+  return <ToneBadge tone="neutral">Test</ToneBadge>;
 }

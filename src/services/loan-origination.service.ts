@@ -8,14 +8,21 @@ import type {
   ApplicationLinkInput,
   ApplicationListFilters,
   ApplicationListResponse,
-  ApplicationStatus,
+  ApplicationNote,
   Assessment,
   AssessmentResult,
+  DocumentDecision,
   DocumentQueueItem,
   DocumentStatus,
+  HandOffInput,
+  HandOffResult,
   OriginationDashboard,
   OriginationSettings,
+  OriginationSettingsInput,
   ReminderResult,
+  RerunAssessmentInput,
+  TransitionInput,
+  VerifyDocumentInput,
 } from "@/types/loan-origination";
 
 const L = API_ENDPOINTS.LOAN_ORIGINATION;
@@ -30,6 +37,9 @@ export interface DocumentQueueFilters {
   page?: number;
   per_page?: number;
   status?: DocumentStatus;
+  type?: string;
+  branch_id?: number;
+  application_id?: number;
   search?: string;
 }
 
@@ -37,13 +47,13 @@ export interface AssessmentListFilters {
   page?: number;
   per_page?: number;
   result?: AssessmentResult;
-  search?: string;
 }
 
 /**
- * Staff side of Loan Origination. Lists come back as Laravel paginators
- * (`getRaw`) so their `meta` (and `meta.stats` for the status tabs) survives.
- * Not built on the backend yet; every call answers 404 until it is.
+ * Staff side of Loan Origination (`routes/api/loan-origination/*`). Lists are
+ * Laravel paginators (`getRaw`) so their `meta.stats` survive for the tabs.
+ * Every write on an application sends the `version` the page read; the server
+ * answers 409 when it moved on. Refusals come back in words.
  */
 export const loanOriginationService = {
   dashboard: (filters: DashboardFilters) =>
@@ -54,33 +64,31 @@ export const loanOriginationService = {
       params: { per_page: MAX_PER_PAGE, ...filters },
     }),
   getApplication: (id: number) => api.get<ApplicationDetail>(L.APPLICATION(id)),
-  /** The server checks the move against its own transition table. */
-  transition: (id: number, to: ApplicationStatus, note: string) =>
-    api.post<ApplicationDetail>(L.TRANSITION(id), { to, note }),
-  assign: (id: number, officerId: number | null) =>
-    api.post<ApplicationDetail>(L.ASSIGN(id), { officer_id: officerId }),
-  addNote: (id: number, body: string) => api.post<ApplicationDetail>(L.NOTES(id), { body }),
-  /** Moves the application to Additional Information Required and tells the applicant. */
-  requestInformation: (id: number, message: string, documentTypes: string[]) =>
-    api.post<ApplicationDetail>(L.REQUEST_INFO(id), { message, document_types: documentTypes }),
-  /** Reminds an applicant whose draft is incomplete; `delivered` says whether anything went out. */
+  /** A staff move from the server's `allowed_transitions`; `applicant_message` is logged, never sent. */
+  transition: (id: number, input: TransitionInput) => api.post<ApplicationDetail>(L.TRANSITION(id), input),
+  /** An officer from `GET /staff?for=origination`, or null to clear. */
+  assign: (id: number, officerId: number | null, version: number) =>
+    api.post<ApplicationDetail>(L.ASSIGN(id), { officer_id: officerId, version }),
+  addNote: (id: number, body: string) => api.post<ApplicationNote>(L.NOTES(id), { body }),
+  /** Moves to Additional Information Required and logs the message (never sent). */
+  requestInformation: (id: number, input: { message: string; document_types: string[]; version: number }) =>
+    api.post<ApplicationDetail>(L.REQUEST_INFO(id), input),
+  /** An unsubmitted application, at most once a day; logged, never sent. */
   remind: (id: number) => api.post<ReminderResult>(L.REMIND(id)),
-  /** Links to an existing member after review, or `null` to create one on conversion. */
-  linkMember: (id: number, borrowerId: number | null) =>
-    api.post<ApplicationDetail>(L.LINK_MEMBER(id), { borrower_id: borrowerId }),
-  /** Hands the application to the existing loan approval chain. */
-  submitForApproval: (id: number) => api.post<ApplicationDetail>(L.SUBMIT_FOR_APPROVAL(id)),
-  /** Creates the loan record once; a repeat answers 409 naming the same loan. */
-  convert: (id: number) => api.post<{ loan_id: number }>(L.CONVERT(id)),
+  /** A member in the caller's branches, or null to clear, until the hand-off. */
+  linkMember: (id: number, borrowerId: number | null, version: number) =>
+    api.post<ApplicationDetail>(L.LINK_MEMBER(id), { borrower_id: borrowerId, version }),
+  /** The hand-off: creates and submits the loan; a repeat answers 409 naming it. */
+  submitForApproval: (id: number, input: HandOffInput) => api.post<HandOffResult>(L.SUBMIT_FOR_APPROVAL(id), input),
 
   listAssessments: (filters: AssessmentListFilters = {}) =>
     api.getRaw<PaginatedResponse<Assessment>>(L.ASSESSMENTS, {
       params: { per_page: MAX_PER_PAGE, ...filters },
     }),
-  rerunAssessment: (id: number) => api.post<Assessment>(L.ASSESSMENT_RERUN(id)),
-  saveFindings: (id: number, data: { officer_findings: string; recommendations: string }) =>
+  /** A new revision worked out on the server; figures left out keep the last run's. */
+  rerunAssessment: (id: number, input: RerunAssessmentInput) => api.post<Assessment>(L.ASSESSMENT_RERUN(id), input),
+  saveFindings: (id: number, data: { officer_findings: string | null; recommendations: string | null }) =>
     api.patch<Assessment>(L.ASSESSMENT(id), data),
-  assessmentHistory: (id: number) => api.get<Assessment[]>(L.ASSESSMENT_HISTORY(id)),
   /** The server renders the report, so the PDF matches what it stored. */
   assessmentPdf: (id: number) => api.download(L.ASSESSMENT_PDF(id)),
 
@@ -88,21 +96,19 @@ export const loanOriginationService = {
     api.getRaw<PaginatedResponse<DocumentQueueItem>>(L.DOCUMENTS, {
       params: { per_page: MAX_PER_PAGE, ...filters },
     }),
-  verifyDocument: (docId: number, notes: string) =>
-    api.post<DocumentQueueItem>(L.DOCUMENT_VERIFY(docId), { notes }),
-  rejectDocument: (docId: number, reason: string) =>
-    api.post<DocumentQueueItem>(L.DOCUMENT_REJECT(docId), { reason }),
+  /** An ID also sends its type, its name for "others" and its number (422 without them). */
+  verifyDocument: (docId: number, input: VerifyDocumentInput) => api.post<DocumentDecision>(L.DOCUMENT_VERIFY(docId), input),
+  rejectDocument: (docId: number, reason: string) => api.post<DocumentDecision>(L.DOCUMENT_REJECT(docId), { reason }),
+  /** Logs a message asking the applicant for another file (never sent). */
   requestReplacement: (docId: number, reason: string) =>
-    api.post<DocumentQueueItem>(L.DOCUMENT_REQUEST_REPLACEMENT(docId), { reason }),
+    api.post<DocumentDecision>(L.DOCUMENT_REQUEST_REPLACEMENT(docId), { reason }),
+  /** Needs `borrowers:view` and the application's branch, like its file name. */
   downloadDocument: (docId: number) => api.download(L.DOCUMENT_DOWNLOAD(docId)),
 
   listLinks: () => api.get<ApplicationLink[]>(L.LINKS),
   createLink: (data: ApplicationLinkInput) => api.post<ApplicationLink>(L.LINKS, data),
-  updateLink: (id: number, data: Partial<ApplicationLinkInput>) =>
-    api.patch<ApplicationLink>(L.LINK(id), data),
-  uploadLinkLogo: (id: number, formData: FormData) =>
-    api.upload<ApplicationLink>(L.LINK_LOGO(id), formData),
+  updateLink: (id: number, data: Partial<ApplicationLinkInput>) => api.patch<ApplicationLink>(L.LINK(id), data),
 
   getSettings: () => api.get<OriginationSettings>(L.SETTINGS),
-  updateSettings: (data: OriginationSettings) => api.put<OriginationSettings>(L.SETTINGS, data),
+  updateSettings: (data: OriginationSettingsInput) => api.put<OriginationSettings>(L.SETTINGS, data),
 };
