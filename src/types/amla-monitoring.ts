@@ -123,12 +123,25 @@ export interface AmlaDetectionRule {
   priority: AmlaAlertPriority | string;
   priority_words: string;
   params: AmlaRuleParams;
+  /** Each parameter with the server's own label and kind (AMLA-B7); older answers may lack it. */
+  parameters?: AmlaRuleParameter[];
   /** "Available", or why the rule can't raise anything yet. */
   availability: string;
 }
 
+export interface AmlaRuleParameter {
+  name: string;
+  label: string;
+  kind: "count" | "days" | "multiplier" | "percent" | "peso" | "channels" | string;
+  value: string | number | string[] | null;
+}
+
 export interface AmlaDetectionRulesVersion {
   version: number;
+  /** The version a change was asked from; null for the starting rules (AMLA-B7). */
+  base_version?: number | null;
+  /** The waiting detection rules change, if any (AMLA-B7). */
+  pending_change_request_id?: number | null;
   to_verify: boolean;
   effective_at: string | null;
   note: string;
