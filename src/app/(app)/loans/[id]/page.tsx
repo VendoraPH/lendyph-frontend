@@ -124,6 +124,8 @@ import { MethodReferenceFields } from "@/components/common/method-reference-fiel
 import { releaseConflictOf } from "./_lib/release-conflict";
 import { stepConflictMessage } from "./_lib/step-conflict";
 import { signOffRefusal, signOffRefusalFor, type KeptRefusal } from "./_lib/sign-off-refusal";
+import { approvalChainItems } from "./_lib/left-out-steps";
+import { LeftOutStepChip } from "./_components/left-out-step-chip";
 import { oncePerKey } from "./_lib/once-per-key";
 import { useReleasePreview } from "./_hooks/use-release-preview";
 import { useDeductionsPreview } from "./_hooks/use-deductions-preview";
@@ -1169,6 +1171,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
   const {
     steps: approvalSteps,
     rounds: approvalRounds,
+    leftOut: approvalLeftOut,
     loading: approvalLoading,
     unavailable: approvalUnavailable,
     refresh: refreshApproval,
@@ -1630,6 +1633,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // used for exactly one thing: the `target_step_order` a send-back carries.
   const currentStepIndex = approvalSteps.findIndex((s) => s.status === "pending");
   const currentStep = currentStepIndex >= 0 ? approvalSteps[currentStepIndex] : null;
+  // The tracker's chain: the round's steps, with any step the server says it
+  // left out by its minimum principal in its place, muted (none before the
+  // server sends `left_out_steps`). Positions still count only the kept steps.
+  const approvalChain = approvalChainItems(approvalSteps, approvalLeftOut);
+  const leftOutSteps = approvalChain.flatMap((item) => (item.type === "left_out" ? [item] : []));
   const nextStep =
     currentStepIndex >= 0 ? approvalSteps[currentStepIndex + 1] ?? null : null;
   // Confirmation step = the last approve step (next step is release). Its button
@@ -2616,14 +2624,23 @@ function LoanDetail({ loanId }: { loanId: number }) {
               {approvalSteps.length > 0 && (
               <div className="rounded-lg border bg-muted/20 p-3">
                 <div className="flex items-center gap-1 overflow-x-auto pb-1">
-                  {approvalSteps.map((step, i) => {
+                  {approvalChain.map((item, itemIndex) => {
+                    const isLast = itemIndex === approvalChain.length - 1;
+                    if (item.type === "left_out") {
+                      return (
+                        <div key={item.key} className="flex items-center shrink-0">
+                          <LeftOutStepChip name={item.name} description={item.description} />
+                          {!isLast && <div className="h-0.5 w-4 mx-0.5 shrink-0 bg-muted" />}
+                        </div>
+                      );
+                    }
+                    const { step, position: i } = item;
                     const state = approvalStepState(step.status);
                     const isCurrent = state === "current";
                     const isDone = state === "done";
                     const isSentBack = state === "sent_back";
                     // Closed when the loan was voided: neutral, never the waiting circle.
                     const isCancelled = state === "cancelled";
-                    const isLast = i === approvalSteps.length - 1;
                     return (
                       <div
                         key={`mini-${step.index}`}
@@ -2692,6 +2709,13 @@ function LoanDetail({ loanId }: { loanId: number }) {
                     );
                   })}
                 </div>
+                {leftOutSteps.length > 0 && (
+                  <ul className="mt-2 space-y-0.5 border-t pt-2 text-[11px] text-muted-foreground">
+                    {leftOutSteps.map((item) => (
+                      <li key={item.key}>{item.description}</li>
+                    ))}
+                  </ul>
+                )}
               </div>
               )}
 

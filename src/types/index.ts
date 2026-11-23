@@ -17,6 +17,7 @@ export type {
   LoanApprovalStep,
   LoanApprovalRound,
   LoanApprovalState,
+  LoanApprovalLeftOutStep,
   ApproveStepPayload,
   SendBackStepPayload,
 } from "./loan-approval";
