@@ -34,6 +34,7 @@ import type { DateOrder } from "@/lib/import-date";
 import { columnsFor } from "@/lib/import-schema";
 import { loadImportSession, type ImportSession } from "@/lib/import-session";
 import { formatCount } from "@/lib/report-format";
+import { useAuthStore } from "@/store";
 import type { ImportFileKind } from "@/types/data-import";
 import {
   FILE_LABELS,
@@ -242,7 +243,10 @@ export function StepCheck({
   session,
   showProductMapping = false,
 }: StepCheckProps) {
-  const precheck = useFilePrecheck(files);
+  // The membership columns need the right to edit members on top of importing,
+  // as the server rules; the pre-check predicts it so the count is believed.
+  const membershipAllowed = useAuthStore((s) => s.hasPermission("borrowers:update"));
+  const precheck = useFilePrecheck(files, { membershipAllowed });
   const [productMap, setProductMap] = useState<Record<string, number>>({});
   const [mappingWarnings, setMappingWarnings] = useState<string[]>([]);
   const {

@@ -236,6 +236,137 @@ test("a blocked column is not judged row by row — it is one file-level blocker
 });
 
 // ---------------------------------------------------------------------------
+// The four Member Profile columns, and the two layouts
+// ---------------------------------------------------------------------------
+
+/** The same member in today's 26-column layout: the workbook's 22, then four. */
+const CUSTOMER_26: string[] = [...CUSTOMER, "2012-06-01", "2010-03-15", "Associate", "BC-0007"];
+
+const NEW_COLUMN_AT = { date_hired: 22, membership_date: 23, member_type: 24, membership_number: 25 } as const;
+
+function memberRow(overrides: Partial<Record<keyof typeof NEW_COLUMN_AT, string>>, account = "2019-00101"): string[] {
+  const row = [...CUSTOMER_26];
+  row[0] = account;
+  for (const [key, value] of Object.entries(overrides)) {
+    row[NEW_COLUMN_AT[key as keyof typeof NEW_COLUMN_AT]] = value ?? "";
+  }
+  return row;
+}
+
+function isoColumn(key: string, label: string): DateColumnFinding {
+  return {
+    key,
+    label,
+    inference: { status: "resolved", order: null, evidence: null, stats: {} as never },
+    order: null,
+    chosen: false,
+    blocked: false,
+  };
+}
+
+const CURRENT_CONTEXT = {
+  ...CUSTOMER_CONTEXT,
+  expectedColumns: 26,
+  dates: [
+    isoColumn("birthdate", "Birthdate"),
+    isoColumn("date_hired", "Date Hired"),
+    isoColumn("membership_date", "Membership Date"),
+  ],
+  today: "2026-11-24",
+};
+
+test("good values in the four new columns pass the pre-check", () => {
+  const rows = customerRows([
+    CUSTOMER_26,
+    // The birthdate itself is not before the birthdate, and today is not after today.
+    memberRow({ date_hired: "1985-03-12", membership_date: "2026-11-24", member_type: "REGULAR", membership_number: "2019-00102" }, "2019-00102"),
+    // Every new column blank: not set.
+    memberRow({ date_hired: "", membership_date: "", member_type: "", membership_number: "" }, "2019-00103"),
+  ]);
+
+  const result = checkRows(rows, CURRENT_CONTEXT);
+
+  assert.equal(result.errorCount, 0, result.issues.map((issue) => issue.message).join(" | "));
+  assert.equal(result.warningCount, 0);
+});
+
+test("a bad value in a new column fails the row, in words", () => {
+  const cases: Array<[Partial<Record<keyof typeof NEW_COLUMN_AT, string>>, string, RegExp]> = [
+    [{ date_hired: "2026-11-25" }, "Date Hired", /after today, and a date hired can't be in the future/],
+    [{ date_hired: "1980-01-01" }, "Date Hired", /before this member's birthdate/],
+    [{ date_hired: "1900-01-01" }, "Date Hired", /not after 1 January 1900/],
+    [{ date_hired: "last year" }, "Date Hired", /is not a date/],
+    [{ membership_date: "2026-11-25" }, "Membership Date", /after today, and a membership date can't be in the future/],
+    [{ member_type: "Premium" }, "Member Type", /Expected one of: Regular, Associate/],
+    [{ membership_number: "brw-000123" }, "Membership Number", /reads as a member code/],
+    [{ membership_number: "NIÑO-01" }, "Membership Number", /plain letters, numbers and punctuation/],
+    [{ membership_number: "7".repeat(31) }, "Membership Number", /31 characters; this field holds 30/],
+  ];
+
+  for (const [override, label, words] of cases) {
+    const result = checkRows(customerRows([memberRow(override)]), CURRENT_CONTEXT);
+    const summary = `${JSON.stringify(override)}: ${result.issues.map((issue) => issue.message).join(" | ")}`;
+
+    assert.equal(result.errorCount, 1, summary);
+    assert.equal(result.failingRows, 1, summary);
+    assert.equal(result.issues[0].column, label, summary);
+    assert.match(result.issues[0].message, words, summary);
+    assert.doesNotMatch(result.issues[0].message, /\b[a-z]+_[a-z_]+\b/, `${summary}: words, never field keys`);
+  }
+});
+
+test("spaces in a membership number are a warning: it is stored without them", () => {
+  const result = checkRows(customerRows([memberRow({ membership_number: "bc 0007" })]), CURRENT_CONTEXT);
+
+  assert.equal(result.errorCount, 0);
+  assert.equal(result.warningCount, 1);
+  assert.match(result.issues[0].message, /stored as BC0007/);
+});
+
+test("a membership number used twice in one file fails the second row", () => {
+  const rows = customerRows([
+    memberRow({ membership_number: "BC-0100" }, "2019-00101"),
+    memberRow({ membership_number: "bc-0100" }, "2019-00102"),
+  ]);
+
+  const result = checkRows(rows, CURRENT_CONTEXT);
+
+  assert.equal(result.errorCount, 1);
+  assert.equal(result.issues[0].line, 2);
+  assert.equal(result.issues[0].column, "Membership Number");
+  assert.match(result.issues[0].message, /BC-0100 is already on line 1/);
+});
+
+test("without permission to edit members, a filled membership column fails the row", () => {
+  const rows = customerRows([
+    memberRow({}, "2019-00101"),
+    // Date Hired is an ordinary member field; only the membership columns need it.
+    memberRow({ membership_date: "", member_type: "", membership_number: "" }, "2019-00102"),
+  ]);
+
+  const result = checkRows(rows, { ...CURRENT_CONTEXT, membershipAllowed: false });
+
+  assert.equal(result.errorCount, 1);
+  assert.equal(result.failingRows, 1);
+  assert.equal(result.issues[0].line, 1);
+  assert.match(result.issues[0].message, /Only staff who can edit members can import membership details/);
+});
+
+test("each layout holds its rows to its own width", () => {
+  // An old file's row that grew four cells is not a row of today's layout.
+  const grown = checkRows(customerRows([CUSTOMER_26]), CUSTOMER_CONTEXT);
+  const grownIssue = grown.issues.find((issue) => issue.category === "columns");
+  assert.ok(grownIssue);
+  assert.match(grownIssue.message, /26 columns/);
+  assert.match(grownIssue.message, /earlier 22-column layout/);
+
+  const short = checkRows(customerRows([CUSTOMER]), CURRENT_CONTEXT);
+  const shortIssue = short.issues.find((issue) => issue.category === "columns");
+  assert.ok(shortIssue);
+  assert.match(shortIssue.message, /22 columns; the Customer Profile file needs 26/);
+});
+
+// ---------------------------------------------------------------------------
 // Truncation
 // ---------------------------------------------------------------------------
 
@@ -324,6 +455,15 @@ test("a file whose rows are systematically the wrong width is blocked once", () 
 
   assert.equal(blockers.length, 1);
   assert.match(blockers[0], /Most rows have 18 columns/);
+});
+
+test("a members file at neither layout's width is blocked, and the blocker names both", () => {
+  const inspection = inspectionStub({ widths: [{ columns: 24, rows: 400 }], expectedColumns: 26 });
+
+  const blockers = fileBlockers(inspection, customerRows([CUSTOMER]), NO_DATES);
+
+  assert.equal(blockers.length, 1);
+  assert.match(blockers[0], /Most rows have 24 columns, but the Customer Profile file needs 26, or 22 in the earlier layout/);
 });
 
 test("an unbalanced quote is carried through as a blocker, in the reader's own words", () => {

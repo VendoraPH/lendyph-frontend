@@ -26,6 +26,14 @@ export const IMPORT_TEMPLATES: readonly ImportTemplate[] = [
 ];
 
 /**
+ * What the members template can't carry, and what still imports, said on the
+ * Prepare step. Valid IDs and the photo are files (`documents`, `photo_path`),
+ * so they have no column.
+ */
+export const MEMBERS_TEMPLATE_NOTE =
+  "Valid IDs and member photos are files, so the import can't carry them: add them on each member's profile after the import. A members file made before Date Hired and the membership columns were added still imports, with those fields left blank.";
+
+/**
  * The template's text: one header row, quoted per RFC 4180 where a label holds
  * a comma, quote or line break, ending in CRLF so the first data row starts on
  * its own line. Takes a shape, or the columns themselves.

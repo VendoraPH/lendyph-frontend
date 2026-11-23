@@ -42,12 +42,18 @@ import {
   type CsvRecord,
 } from "@/lib/csv-parse";
 import { readCsvFile, type CsvFileNotice } from "@/lib/csv-read";
+import { todayISO } from "@/lib/format";
+import { memberFieldProblems } from "@/lib/import-member-fields";
 import {
   blockingSizeProblems,
+  canonicalMemberNumber,
   columnsFor,
   detectHeaderRow,
+  expectedWidthWords,
   fieldSizeProblems,
   identifyShape,
+  isEarlierLayout,
+  layoutWidth,
   missingRequiredFields,
   normaliseRow,
   resolveRowEnums,
@@ -172,6 +178,11 @@ export interface FileInspection {
   notices: CsvFileNotice[];
   /** Everything the complete parse produced, header row included. */
   records: CsvRecord[];
+  /**
+   * The width every row of this file is held to: the file's own layout
+   * (today's, or the workbook's earlier one) when its commonest width is one
+   * of them, else today's. See `layoutWidth`.
+   */
   expectedColumns: number;
   /** Run on record 0. `null` for a file with no records at all. */
   header: HeaderDetection | null;
@@ -326,6 +337,7 @@ export async function inspectFile(
   });
 
   const header = result.records.length > 0 ? detectHeaderRow(result.records[0].fields, shape) : null;
+  const widths = widthHistogram(result.records);
 
   return {
     kind,
@@ -339,11 +351,11 @@ export async function inspectFile(
     delimiterRows: result.sniff?.rows ?? 0,
     notices: result.notices,
     records: result.records,
-    expectedColumns: columnsFor(shape).length,
+    expectedColumns: layoutWidth(shape, widths[0]?.columns),
     header,
     headerFields: result.records[0]?.fields ?? null,
     slot: guessSlot(result.records, header?.isHeader ?? false),
-    widths: widthHistogram(result.records),
+    widths,
   };
 }
 
@@ -418,7 +430,8 @@ function quoteOptions(options: readonly { label: string }[]): string {
 function sizeMessage(problem: FieldSizeProblem): string {
   switch (problem.reason) {
     case "too-long":
-      return `${problem.label} is ${problem.raw.length} characters; this field holds ${problem.limit}.`;
+      // Measured on what the server stores, which `kept` holds when it differs.
+      return `${problem.label} is ${(problem.kept ?? problem.raw).length} characters; this field holds ${problem.limit}.`;
     case "too-large":
       return `${problem.label} is larger than this field can store (limit ${problem.limit}).`;
     case "too-precise":
@@ -490,7 +503,15 @@ interface RowCheckContext {
   dates: readonly DateColumnFinding[];
   /** Account numbers from the customers file, or `null` when it was not read. */
   knownAccounts: ReadonlySet<string> | null;
+  /** The file's layout width (`FileInspection.expectedColumns`). */
   expectedColumns: number;
+  /** Today in Manila, `YYYY-MM-DD`. Defaults to the real today. */
+  today?: string;
+  /**
+   * Whether the person importing can edit members, which the membership
+   * columns need on top of importing. Defaults to yes; the server decides.
+   */
+  membershipAllowed?: boolean;
 }
 
 interface RowCheckTotals {
@@ -536,6 +557,10 @@ export function checkRows(
   };
 
   const firstSeenAt = new Map<string, number>();
+  const memberNumberAt = new Map<string, number>();
+  const today = context.today ?? todayISO();
+  const membershipAllowed = context.membershipAllowed ?? true;
+  const fileLabel = context.shape === "customer" ? "Customer Profile" : "Loans";
   let sequence = 0;
   let rowHasError = false;
 
@@ -572,15 +597,16 @@ export function checkRows(
     const reference = String(fields[identityIndex] ?? "").trim();
 
     if (fields.length !== context.expectedColumns) {
+      const needs = isEarlierLayout(context.shape, context.expectedColumns)
+        ? `this ${fileLabel} file is in the earlier ${context.expectedColumns}-column layout, so every row needs ${context.expectedColumns}`
+        : `the ${fileLabel} file needs ${context.expectedColumns}`;
       add(line, reference, {
         column: null,
         severity: "error",
         category: "columns",
         message: `This row has ${fields.length} ${
           fields.length === 1 ? "column" : "columns"
-        }; the ${context.shape === "customer" ? "Customer Profile" : "Loans"} file needs ${
-          context.expectedColumns
-        }. Every value after the gap lines up with the wrong field.`,
+        }; ${needs}. Every value after the gap lines up with the wrong field.`,
         value: null,
       });
     }
@@ -623,6 +649,8 @@ export function checkRows(
       });
     }
 
+    // Each date as read, for the rules that compare one with another.
+    const readDates: Record<string, string> = {};
     for (const date of context.dates) {
       // A blocked column is reported once, for the whole file, in `blockers`.
       // A column still waiting on the admin is not judged at all yet: parsing
@@ -632,7 +660,10 @@ export function checkRows(
       const cell = String(fields[index] ?? "").trim();
       if (!cell) continue; // Blank is `missingRequiredFields`' question.
       const parsed = parseImportDate(cell, date.order);
-      if (parsed.ok) continue;
+      if (parsed.ok) {
+        readDates[date.key] = parsed.iso;
+        continue;
+      }
       add(line, reference, {
         column: date.label,
         severity: "error",
@@ -640,6 +671,35 @@ export function checkRows(
         message: dateMessage(date.label, cell, parsed.reason, date.order),
         value: cell,
       });
+    }
+
+    if (context.shape === "customer") {
+      for (const problem of memberFieldProblems(row, { dates: readDates, today, membershipAllowed })) {
+        add(line, reference, {
+          column: problem.label,
+          severity: problem.severity,
+          category: problem.category,
+          message: problem.message,
+          value: problem.raw,
+        });
+      }
+
+      // A number is one member's: the server keeps the first row that has it
+      // and refuses the rest, so the pre-check says so of the rest.
+      const memberNumber = membershipAllowed ? canonicalMemberNumber(row.membership_number ?? "") : "";
+      if (memberNumber) {
+        const seen = memberNumberAt.get(memberNumber);
+        if (seen === undefined) memberNumberAt.set(memberNumber, line);
+        else {
+          add(line, reference, {
+            column: "Membership Number",
+            severity: "error",
+            category: "duplicate",
+            message: `Membership Number ${memberNumber} is already on line ${seen}. Each member's number is their own, so this row can't be imported with it.`,
+            value: (row.membership_number ?? "").trim(),
+          });
+        }
+      }
     }
 
     if (reference) {
@@ -728,7 +788,7 @@ export function fileBlockers(
   const modal = inspection.widths[0];
   if (!wrongSlot && modal && rows.length > 0 && modal.columns !== inspection.expectedColumns) {
     blockers.push(
-      `Most rows have ${modal.columns} columns, but the ${inspection.label} file needs ${inspection.expectedColumns}. Check the file was exported whole and that no columns were added or removed.`,
+      `Most rows have ${modal.columns} columns, but the ${inspection.label} file needs ${expectedWidthWords(inspection.shape)}. Check the file was exported whole and that no columns were added or removed.`,
     );
   }
 
@@ -781,6 +841,7 @@ export function computeFindings(
   skipHeader: Partial<Record<ImportFileKind, boolean>>,
   dateChoices: Partial<Record<ImportFileKind, Record<string, DateOrder>>>,
   rowCeiling: number = ROW_CHECK_CEILING,
+  membershipAllowed = true,
 ): Partial<Record<ImportFileKind, FileFindings>> {
   const customers = inspections.customers;
   const knownAccounts = customers
@@ -804,6 +865,7 @@ export function computeFindings(
       dates,
       knownAccounts: kind === "loans" ? knownAccounts : null,
       expectedColumns: inspection.expectedColumns,
+      membershipAllowed,
     });
 
     findings[kind] = {
@@ -908,9 +970,13 @@ function readFailureMessage(error: unknown, fileName: string): string {
  * steady — a fresh object literal every render re-reads both files. A slot may
  * be `null` as well as absent: a shell that clears a slot sets it to `null`,
  * and the two mean the same thing here.
+ *
+ * `membershipAllowed` is whether the admin can edit members, which the
+ * membership columns need on top of importing (the server's rule).
  */
 export function useFilePrecheck(
   files: Partial<Record<ImportFileKind, File | null | undefined>>,
+  { membershipAllowed = true }: { membershipAllowed?: boolean } = {},
 ): UseFilePrecheckResult {
   const [inspections, setInspections] = useState<Partial<Record<ImportFileKind, FileInspection>>>({});
   const [findings, setFindings] = useState<Partial<Record<ImportFileKind, FileFindings>>>({});
@@ -987,7 +1053,7 @@ export function useFilePrecheck(
     let cancelled = false;
     setComputing(true);
     const handle = setTimeout(() => {
-      const next = computeFindings(inspections, skipHeaderState, dateChoices);
+      const next = computeFindings(inspections, skipHeaderState, dateChoices, ROW_CHECK_CEILING, membershipAllowed);
       if (cancelled) return;
       setFindings(next);
       setComputing(false);
@@ -996,7 +1062,7 @@ export function useFilePrecheck(
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [inspections, skipHeaderState, dateChoices]);
+  }, [inspections, skipHeaderState, dateChoices, membershipAllowed]);
 
   const skipHeader = useCallback(
     (kind: ImportFileKind) => skipHeaderState[kind] ?? inspections[kind]?.header?.isHeader ?? false,

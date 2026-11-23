@@ -1,7 +1,10 @@
 /**
  * Column schemas for the data-migration CSV import.
  *
- * Two files arrive: a 22-column Customer Profile and an 18-column Loans sheet.
+ * Two files arrive: a 26-column Customer Profile and an 18-column Loans sheet.
+ * The Customer Profile is the client's 22 workbook columns with the four
+ * Member Profile fields the workbook lacked appended after them, and a file in
+ * the workbook's own 22-column layout still reads (see `acceptedWidths`).
  * Both are positional — the client's spec sheet tells users to DELETE the
  * header row before uploading — so a column's meaning is its index and nothing
  * else. That makes three failure modes worth catching before a single row is
@@ -21,6 +24,7 @@ import {
   CIVIL_STATUS_OPTIONS,
   GENDER_OPTIONS,
   INTEREST_TYPE_OPTIONS,
+  MEMBER_TYPE_OPTIONS,
   PAYMENT_FREQUENCY_OPTIONS,
   SUFFIX_OPTIONS,
 } from "@/constants";
@@ -92,8 +96,11 @@ export interface ImportColumn {
    * A repair the SERVER performs on this column before storing it. Declared
    * here so the pre-check can predict the outcome instead of judging the raw
    * cell: a value the server will happily fix is a warning, not a failure.
+   *
+   * `member-number` is the membership number, stored the way members sign in
+   * with it: capitals, with its spaces removed (`canonicalMemberNumber`).
    */
-  readonly serverRepair?: "contact-number";
+  readonly serverRepair?: "contact-number" | "member-number";
   /** Required only when `field` resolves to `equals`. */
   readonly requiredWhen?: { readonly field: string; readonly equals: string };
 }
@@ -148,6 +155,14 @@ export const CUSTOMER_COLUMNS = [
   { key: "spouse_last_name", label: "Spouse LName (If Married)", required: false, type: "text", maxLength: 255, requiredWhen: IF_MARRIED },
   { key: "spouse_contact_number", label: "Spouse Contact No (If Married)", required: false, type: "text", maxLength: 20, requiredWhen: IF_MARRIED, serverRepair: "contact-number" },
   { key: "spouse_occupation", label: "Spouse Occupation (If Married)", required: false, type: "text", maxLength: 255 },
+  // Appended after the workbook's 22, never inserted among them (see
+  // APPENDED_FROM). Date Hired is on the registration form's Employment step;
+  // the other three are the CDA membership columns. All optional: blank is
+  // "not set", exactly as in a file made before them.
+  { key: "date_hired", label: "Date Hired", required: false, type: "date" },
+  { key: "membership_date", label: "Membership Date", required: false, type: "date" },
+  { key: "member_type", label: "Member Type", required: false, type: "enum", options: MEMBER_TYPE_OPTIONS },
+  { key: "membership_number", label: "Membership Number", required: false, type: "text", maxLength: 30, serverRepair: "member-number" },
 ] as const satisfies readonly ImportColumn[];
 
 export const LOAN_COLUMNS = [
@@ -183,6 +198,90 @@ export type ImportRow = Record<string, string>;
 
 export function columnsFor(shape: ImportShape): readonly ImportColumn[] {
   return shape === "customer" ? CUSTOMER_COLUMNS : LOAN_COLUMNS;
+}
+
+// ---------------------------------------------------------------------------
+// Layouts: today's, and the workbook's own
+// ---------------------------------------------------------------------------
+
+/**
+ * The first column appended to a sheet after the client's workbook layout.
+ *
+ * Columns are only ever APPENDED. The file is read by position, so a column
+ * added anywhere else would move every value of an older file one field over.
+ * A file made before them is the same file without its last columns, so it
+ * still reads, and the appended fields read as blank (not set). The server
+ * declares the same (`CsvImportSchema::APPENDED_FROM`).
+ */
+const APPENDED_FROM: Partial<Record<ImportShape, string>> = { customer: "date_hired" };
+
+/**
+ * The record widths a file of this shape may have: today's layout first, then
+ * the workbook's earlier one, if the shape has columns appended since.
+ */
+export function acceptedWidths(shape: ImportShape): readonly number[] {
+  const columns = columnsFor(shape);
+  const first = APPENDED_FROM[shape];
+  const earlier = first ? columns.findIndex((column) => column.key === first) : -1;
+  return earlier > 0 ? [columns.length, earlier] : [columns.length];
+}
+
+/** The appended columns, which a file in the earlier layout does not have. */
+export function appendedColumns(shape: ImportShape): readonly ImportColumn[] {
+  const [, earlier] = acceptedWidths(shape);
+  return earlier === undefined ? [] : columnsFor(shape).slice(earlier);
+}
+
+/**
+ * The width a file is held to: its own commonest width when that is one of
+ * the shape's layouts, else today's (and the width check then reports it).
+ *
+ * Every row of the file is held to this ONE width. Accepting either layout row
+ * by row would read an old file's row that grew four stray separators as a row
+ * of today's layout, with every value after them in the wrong field.
+ */
+export function layoutWidth(shape: ImportShape, fileWidth: number | undefined): number {
+  return fileWidth !== undefined && acceptedWidths(shape).includes(fileWidth)
+    ? fileWidth
+    : columnsFor(shape).length;
+}
+
+/** Whether a width is the shape's earlier layout, not today's. */
+export function isEarlierLayout(shape: ImportShape, width: number): boolean {
+  return width !== columnsFor(shape).length && acceptedWidths(shape).includes(width);
+}
+
+/** `["A", "B", "C"]` → `A, B and C`. */
+function listWords(words: readonly string[]): string {
+  return words.length < 2 ? words.join("") : `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`;
+}
+
+/**
+ * The widths a shape accepts, in words, for a message: `26, or 22 in the
+ * earlier layout without Date Hired, …`, or the one width a single layout has.
+ */
+export function expectedWidthWords(shape: ImportShape): string {
+  const [current, earlier] = acceptedWidths(shape);
+  if (earlier === undefined) return String(current);
+  return `${current}, or ${earlier} in the earlier layout without ${listWords(appendedColumns(shape).map((column) => column.label))}`;
+}
+
+/** What a file in the earlier layout is told about the columns it lacks. */
+export function earlierLayoutNote(shape: ImportShape, width: number): string | null {
+  if (!isEarlierLayout(shape, width)) return null;
+  return `This file is in the earlier ${width}-column layout, without ${listWords(
+    appendedColumns(shape).map((column) => column.label),
+  )}. Its rows import as before, with those fields left blank.`;
+}
+
+/**
+ * A membership number as the server stores it: capitals, spaces removed.
+ * Mirror of the portal's `MemberNumber::normalise()`, because members sign in
+ * with exactly that form. A prediction for the pre-check only; the uploaded
+ * file is never rewritten.
+ */
+export function canonicalMemberNumber(raw: string): string {
+  return String(raw ?? "").replace(/\s+/gu, "").toUpperCase();
 }
 
 // ---------------------------------------------------------------------------
@@ -565,6 +664,16 @@ export function fieldSizeProblems(
         ...extra,
       });
 
+    // A membership number is measured as stored, too: `BC 0007` is six
+    // characters once its space is gone.
+    if (column.serverRepair === "member-number") {
+      const kept = canonicalMemberNumber(raw);
+      if (column.maxLength !== undefined && kept.length > column.maxLength) {
+        at("too-long", column.maxLength, "error", { kept });
+      }
+      continue;
+    }
+
     // Judged on what the server will STORE, not on the raw cell. A contact
     // field is normalised before it is measured, so `0917-123-4567` is eleven
     // digits and fits, and two numbers cost only a warning.
@@ -650,12 +759,16 @@ export interface HeaderDetection {
  * score. Silently importing that file would put provinces into the email
  * column, and a positional-only check would have called it "not a header" and
  * imported the labels as a borrower instead.
+ *
+ * A record in the shape's earlier layout (the workbook's own 22 columns) is
+ * scored against that layout's columns, so an old header is a clean, complete
+ * header rather than one missing the four columns appended since.
  */
 export function detectHeaderRow(
   record: readonly string[],
   shape: ImportShape,
 ): HeaderDetection {
-  const columns = columnsFor(shape);
+  const columns = columnsFor(shape).slice(0, layoutWidth(shape, record.length));
   const cells = record.map((cell) => headerKey(String(cell ?? "")));
   const present = new Set(cells.filter(Boolean));
 
@@ -744,13 +857,13 @@ export interface ShapeGuess {
 function fingerprintScore(
   record: readonly string[],
   fingerprint: Fingerprint[],
-  expectedLength: number,
+  widths: readonly number[],
 ): number {
   const hits = fingerprint.filter((f) => f.test(String(record[f.index] ?? ""))).length;
   // Column count is folded in as one more signal rather than used as a gate:
-  // 22 vs 18 is strong evidence, but a file with a stray trailing comma still
-  // has to be identifiable.
-  const lengthHit = record.length === expectedLength ? 1 : 0;
+  // 26 or 22 vs 18 is strong evidence, but a file with a stray trailing comma
+  // still has to be identifiable.
+  const lengthHit = widths.includes(record.length) ? 1 : 0;
   return (hits + lengthHit) / (fingerprint.length + 1);
 }
 
@@ -777,8 +890,8 @@ export function identifyShape(record: readonly string[]): ShapeGuess {
     };
   }
 
-  const customerScore = fingerprintScore(record, CUSTOMER_FINGERPRINT, CUSTOMER_COLUMNS.length);
-  const loansScore = fingerprintScore(record, LOANS_FINGERPRINT, LOAN_COLUMNS.length);
+  const customerScore = fingerprintScore(record, CUSTOMER_FINGERPRINT, acceptedWidths("customer"));
+  const loansScore = fingerprintScore(record, LOANS_FINGERPRINT, acceptedWidths("loans"));
   return {
     shape: decide(customerScore, loansScore),
     customerScore,

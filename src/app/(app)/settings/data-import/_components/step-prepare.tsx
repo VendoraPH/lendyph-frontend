@@ -29,7 +29,7 @@ import { branchPicker } from "@/lib/user-branches";
 import { importBranchChoice } from "./import-branch";
 import { useAuthStore } from "@/store";
 import { formatDate } from "@/lib/format";
-import { downloadImportTemplate, IMPORT_TEMPLATES } from "@/lib/import-template";
+import { downloadImportTemplate, IMPORT_TEMPLATES, MEMBERS_TEMPLATE_NOTE } from "@/lib/import-template";
 import { notifyError } from "@/lib/notify";
 import type { ImportRunStatus } from "@/types/data-import";
 
@@ -311,6 +311,7 @@ export function StepPrepare({
               Each template is the header row only, with the columns in the order the importer
               reads them. Keep the header row and add one row per member or loan below it.
             </p>
+            <p className="basis-full text-xs text-muted-foreground">{MEMBERS_TEMPLATE_NOTE}</p>
           </div>
 
           {/* The two files side by side from md */}
