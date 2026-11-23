@@ -12,8 +12,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { useDialogOpening } from "@/hooks/use-dialog-opening";
 import { useSubmitGuard } from "@/hooks/use-submit-guard";
 import { amlaApi } from "@/lib/amla/api";
-import { AMLA_PRIORITY_OPTIONS, amlaDetectionChangeBody, amlaDetectionDraft, amlaPublicText, type AmlaDetectionDraft } from "@/lib/amla/monitoring-view";
-import { amlaParamKind, amlaParamLabel, amlaRuleTitle } from "@/lib/amla/rule-words";
+import {
+  AMLA_PRIORITY_OPTIONS,
+  amlaDetectionChangeBody,
+  amlaDetectionDraft,
+  amlaParamFieldLabel,
+  amlaPublicText,
+  amlaRuleParamKind,
+  amlaRuleParamLabel,
+  type AmlaDetectionDraft,
+} from "@/lib/amla/monitoring-view";
+import { amlaRuleTitle } from "@/lib/amla/rule-words";
 import { AMLA_CHANNEL_OPTIONS } from "@/lib/amla/settings-view";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import type { AmlaDetectionRulesVersion } from "@/types/amla-monitoring";
@@ -97,12 +106,13 @@ export function DetectionRulesChangeDialog({ open, version, onClose, onAsked }: 
                   </div>
                   {Object.entries(entry.params).map(([name, value]) => {
                     const id = `rule-${rule.code}-${name}`;
-                    const kind = amlaParamKind(name, rule.params[name]);
+                    const kind = amlaRuleParamKind(rule, name);
+                    const label = amlaRuleParamLabel(rule, name);
                     if (kind === "channels") {
                       const picked = Array.isArray(value) ? value : [];
                       return (
-                        <div key={name} role="group" aria-label={`${rule.code}: ${amlaParamLabel(name)}`} className="space-y-1">
-                          <span className="text-sm font-medium">{amlaParamLabel(name)}</span>
+                        <div key={name} role="group" aria-label={`${rule.code}: ${label}`} className="space-y-1">
+                          <span className="text-sm font-medium">{label}</span>
                           <div className="flex flex-wrap gap-3">
                             {AMLA_CHANNEL_OPTIONS.map((o) => (
                               <label key={o.value} className="flex items-center gap-1.5 text-sm">
@@ -124,10 +134,7 @@ export function DetectionRulesChangeDialog({ open, version, onClose, onAsked }: 
                     }
                     return (
                       <div key={name} className="space-y-1">
-                        <Label htmlFor={id}>
-                          {amlaParamLabel(name)}
-                          {kind === "peso" ? " (₱)" : kind === "percent" ? " (%)" : kind === "days" ? " (days)" : ""}
-                        </Label>
+                        <Label htmlFor={id}>{amlaParamFieldLabel(label, kind)}</Label>
                         <Input
                           id={id}
                           value={String(value)}

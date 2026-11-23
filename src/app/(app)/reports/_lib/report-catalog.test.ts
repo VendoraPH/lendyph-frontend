@@ -236,3 +236,23 @@ test("the Reports page reads each section's subtitle for the signed-in user", ()
   assert.match(page, /\{categoryDescription\(cat, catalog\)\}/);
   assert.doesNotMatch(page, /\{meta\.description\}/);
 });
+
+test("with the AMLA switch off, no AMLA report is listed or opens", async () => {
+  const { AMLA_REPORT_CATALOG, visibleAmlaReports } = await import("./report-catalog");
+  const { amlaReportAccess } = await import("@/lib/amla/reports-access");
+  const everything = () => true;
+  assert.deepEqual(visibleAmlaReports(everything), []);
+  assert.equal(AMLA_REPORT_CATALOG.length, 10);
+  for (const report of AMLA_REPORT_CATALOG) {
+    assert.equal(report.available, false, report.key);
+    assert.equal(amlaReportAccess(report, everything), "not_found", report.key);
+  }
+});
+
+test("the Reports page lists the AMLA reports in its own section, in its search and in its count", () => {
+  const page = readFileSync(resolve(process.cwd(), "src/app/(app)/reports/page.tsx"), "utf8");
+  assert.match(page, /visibleAmlaReports\(hasPermission\)/);
+  assert.match(page, /\{catalog\.length \+ amlaReports\.length\} reports available/);
+  assert.match(page, /<AmlaSection /);
+  assert.match(page, /href=\{report\.href\}/);
+});
