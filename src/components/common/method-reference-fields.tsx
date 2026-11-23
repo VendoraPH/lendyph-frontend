@@ -91,8 +91,10 @@ export function MethodReferenceFields<M extends string>({
           aria-describedby={hint !== null ? hintId : undefined}
           className={autoReference !== null ? "w-full bg-muted font-mono text-muted-foreground" : "w-full"}
         />
+        {/* Wraps even inside a table cell (TableCell is whitespace-nowrap), as on
+            Pledge Entry's expanded row. */}
         {hint !== null && (
-          <p id={hintId} className="text-xs text-muted-foreground">
+          <p id={hintId} className="text-xs whitespace-normal text-muted-foreground">
             {hint}
           </p>
         )}
