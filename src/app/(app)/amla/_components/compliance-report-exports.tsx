@@ -36,7 +36,7 @@ export function ComplianceReportExports({ reportKey, filters }: Props) {
       .then(async (made) => {
         const file = await amlaReportApi.download(made.download_url);
         saveBlob(file.blob, file.filename ?? `${reportKey}.${format}`);
-        notifySuccess(made.is_draft ? "Draft export saved." : "Export saved.", made.is_draft ? "The period hasn't ended, so the file is marked draft." : undefined);
+        notifySuccess(made.is_draft ? "Draft export saved" : "Export saved", made.is_draft ? "The period hasn't ended, so the file is marked draft." : undefined);
       })
       .catch(async (err: unknown) => notifyError(await readBlobError(err), "The report couldn't be exported."))
       .then(() => setBusy(null));
