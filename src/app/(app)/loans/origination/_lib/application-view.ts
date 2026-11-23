@@ -15,6 +15,8 @@ import type {
   StaffDocument,
   TransitionInput,
 } from "@/types/loan-origination";
+import { FORM_FIELDS } from "./form-fields";
+import { words } from "./words";
 
 export type ApplicationAction =
   | "open_loan"
@@ -91,55 +93,11 @@ export function linkMemberBlocker(can: (permission: Permission) => boolean): str
   return null;
 }
 
-/** The application form's fields in words, by the server's `section.field` keys (DraftRules). */
-const FIELD_WORDS: Record<string, string> = {
-  "personal.first_name": "First name",
-  "personal.middle_name": "Middle name",
-  "personal.last_name": "Last name",
-  "personal.suffix": "Suffix",
-  "personal.date_of_birth": "Date of birth",
-  "personal.gender": "Gender",
-  "personal.civil_status": "Civil status",
-  "personal.nationality": "Nationality",
-  "personal.region": "Region",
-  "personal.province": "Province",
-  "personal.city": "City or municipality",
-  "personal.barangay": "Barangay",
-  "personal.street_address": "Street address",
-  "personal.postal_code": "Postal code",
-  "personal.years_at_residence": "Years at address",
-  "personal.residence_ownership": "Residence",
-  "personal.dependents": "Dependents",
-  "personal.membership_number": "Membership number",
-  "employment.income_source": "Income source",
-  "employment.employer_name": "Employer",
-  "employment.employment_type": "Employment type",
-  "employment.job_title": "Job title",
-  "employment.years_employed": "Years employed",
-  "employment.employer_address": "Employer address",
-  "employment.gross_monthly_income": "Gross monthly pay",
-  "employment.net_monthly_income": "Take-home pay a month",
-  "employment.other_regular_income": "Other regular income",
-  "employment.salary_frequency": "How often paid",
-  "employment.business_name": "Business name",
-  "employment.business_type": "Business type",
-  "employment.business_address": "Business address",
-  "employment.years_operating": "Years operating",
-  "employment.monthly_revenue": "Average sales a month",
-  "employment.monthly_business_expenses": "Business costs a month",
-  "employment.monthly_net_business_income": "Net business income a month",
-  "employment.other_source_description": "Source of income",
-  "employment.other_income_amount": "Income amount",
-  "employment.other_income_frequency": "How often income is received",
-  "employment.other_income_details": "Income details",
+/** Keys a missing-field list can name that aren't text or choice fields. */
+const OTHER_FIELD_WORDS: Record<string, string> = {
   "expenses.has_existing_loans": "Existing loans",
   "expenses.existing_loans": "Existing loans",
   "loan.loan_product_id": "Loan product",
-  "loan.amount": "Loan amount",
-  "loan.purpose": "Loan purpose",
-  "loan.term": "Term",
-  "loan.frequency": "Payment frequency",
-  "loan.release_method": "Release method",
 };
 
 const EXISTING_LOAN_WORDS: Record<string, string> = {
@@ -150,15 +108,10 @@ const EXISTING_LOAN_WORDS: Record<string, string> = {
   remaining_term: "remaining term",
 };
 
-/** "snake_case" as a sentence-case phrase. */
-function words(key: string): string {
-  const text = key.replace(/_/g, " ").trim();
-  return text.charAt(0).toUpperCase() + text.slice(1);
-}
-
 /** A missing field the server names (`personal.gender`), in words. */
 export function missingFieldLabel(key: string): string {
-  if (FIELD_WORDS[key]) return FIELD_WORDS[key];
+  const known = FORM_FIELDS.find((f) => f.key === key)?.label ?? OTHER_FIELD_WORDS[key];
+  if (known) return known;
   const loan = /^expenses\.existing_loans\.(\d+)(?:\.(\w+))?$/.exec(key);
   if (loan) {
     const number = String(Number(loan[1]) + 1);

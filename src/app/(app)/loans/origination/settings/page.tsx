@@ -16,6 +16,7 @@ import { settingsPayload, settingsProblems } from "../_lib/settings-form";
 import { AssessmentSection } from "./_components/assessment-section";
 import { DocumentsSection } from "./_components/documents-section";
 import { GeneralSection, NotificationsSection, ServerSection } from "./_components/general-section";
+import { NoticesSection } from "./_components/notices-section";
 import { ProductsSection } from "./_components/products-section";
 
 function SettingsForm({ initial }: { initial: OriginationSettings }) {
@@ -55,13 +56,17 @@ function SettingsForm({ initial }: { initial: OriginationSettings }) {
             <TabsTrigger value="assessment">Assessment</TabsTrigger>
             <TabsTrigger value="documents">Documents</TabsTrigger>
             <TabsTrigger value="notifications">Messages</TabsTrigger>
+            <TabsTrigger value="notices">Notices</TabsTrigger>
           </TabsList>
-          <Button size="sm" onClick={save} disabled={saving || blocker !== null} title={blocker ?? undefined}>
-            {saving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Save className="mr-1 h-4 w-4" />}
-            Save settings
-          </Button>
+          {/* Notices are published one version at a time, on their own tab; Save covers the other tabs. */}
+          {tab !== "notices" && (
+            <Button size="sm" onClick={save} disabled={saving || blocker !== null} title={blocker ?? undefined}>
+              {saving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Save className="mr-1 h-4 w-4" />}
+              Save settings
+            </Button>
+          )}
         </div>
-        {blocker && <p className="text-xs text-muted-foreground">{blocker}</p>}
+        {blocker && tab !== "notices" && <p className="text-xs text-muted-foreground">{blocker}</p>}
         <TabsContent value="general" className="space-y-4">
           <GeneralSection value={form.general} onChange={set("general")} />
           <ServerSection server={form.server} rulesVersion={form.rules_version} updatedBy={form.updated_by} updatedAt={form.updated_at} />
@@ -77,6 +82,9 @@ function SettingsForm({ initial }: { initial: OriginationSettings }) {
         </TabsContent>
         <TabsContent value="notifications">
           <NotificationsSection value={form.notifications} onChange={set("notifications")} />
+        </TabsContent>
+        <TabsContent value="notices">
+          <NoticesSection />
         </TabsContent>
       </Tabs>
     </div>

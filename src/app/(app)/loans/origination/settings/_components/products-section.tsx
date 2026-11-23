@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { DocumentRequirement, OriginationSettings } from "@/types/loan-origination";
 import { useLoanProducts } from "../../../reminders/_hooks/use-loan-products";
 import { SettingsCard, ToggleField } from "./fields";
+import { RequiredFieldsSelect } from "./required-fields-select";
 
 type ProductRule = OriginationSettings["products"][number];
 
@@ -19,8 +20,9 @@ const blank = (loan_product_id: number): ProductRule => ({
 });
 
 /**
- * Per product: whether it is offered online, who may apply, and which
- * documents it asks for. A product with no saved rule starts switched off.
+ * Per product: whether it is offered online, who may apply, which of the
+ * form's fields it makes required, and which documents it asks for. A product
+ * with no saved rule starts switched off.
  */
 export function ProductsSection({
   value,
@@ -72,6 +74,17 @@ export function ProductsSection({
                       onChange={(e) => set(p.id, { instructions: e.target.value || null })}
                     />
                   </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor={`fields-${p.id}`}>Required fields</Label>
+                  <RequiredFieldsSelect
+                    id={`fields-${p.id}`}
+                    value={rule.required_fields}
+                    onChange={(required_fields) => set(p.id, { required_fields })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Fields an applicant must fill in for this product, on top of the ones the form always asks for.
+                  </p>
                 </div>
                 <fieldset className="space-y-2">
                   <legend className="text-sm font-medium">Documents asked for</legend>

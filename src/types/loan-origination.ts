@@ -838,3 +838,39 @@ export interface OriginationSettings extends OriginationSettingsInput {
   updated_by: StaffRef | null;
   updated_at: string | null;
 }
+
+export type NoticeType = "privacy_notice" | "terms" | "declaration" | "credit_authorization";
+
+/** `OriginationNoticeResource`: one published version, never edited or removed. */
+export interface OriginationNotice {
+  id: number;
+  type: NoticeType;
+  type_label: string;
+  version: string;
+  title: string | null;
+  body: string;
+  body_hash: string;
+  /** The owner's approved wording; otherwise a draft. */
+  final: boolean;
+  published_at: string | null;
+  published_by: StaffRef | null;
+}
+
+/** `GET /loan-origination/notices`. */
+export interface OriginationNotices {
+  /** The newest version of each type, or null. */
+  current: Record<NoticeType, OriginationNotice | null>;
+  /** The required notices not published yet, in words; links stay closed until none is. */
+  missing: string[];
+  /** Every version, newest first. */
+  versions: OriginationNotice[];
+}
+
+/** `POST /loan-origination/notices`. */
+export interface PublishNoticeInput {
+  type: NoticeType;
+  version: string;
+  title?: string;
+  body: string;
+  final: boolean;
+}

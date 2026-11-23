@@ -612,6 +612,7 @@ export const API_ENDPOINTS = {
     DOCUMENT_DOWNLOAD: (docId: number) => `/loan-origination/documents/${docId}/download`,
     LINKS: "/loan-origination/links",
     LINK: (id: number) => `/loan-origination/links/${id}`,
+    NOTICES: "/loan-origination/notices",
     SETTINGS: "/loan-origination/settings",
   },
   /**

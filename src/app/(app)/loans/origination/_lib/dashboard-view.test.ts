@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { KPI_TILES, kpiChange, kpiText, previousText, turnaroundRows } from "./dashboard-view";
+import { KPI_TILES, kpiChange, kpiText, previousText, stageChartRows, statusChartRows, turnaroundRows } from "./dashboard-view";
+import { APPLICATION_STATUSES, STATUS_LABELS } from "@/lib/loan-origination";
 
 test("money tiles read the server's two-decimal strings in pesos", () => {
   assert.equal(kpiText("125000.50", "money"), "₱125,000.50");
@@ -73,4 +74,26 @@ test("each tile shows the server's change in the executive dashboard's format, n
   // A KPI the server sent no change for, or a server that sends no changes yet.
   assert.equal(kpiChange(changes, "total"), null);
   assert.equal(kpiChange(undefined, "new"), null);
+});
+
+test("the status charts label every status from the module's own words, whatever label came with it", () => {
+  const rows = statusChartRows([
+    { status: "document_verification", label: "Under DocumentVerification", count: 2 },
+    { status: "additional_info_required", label: "additional_info_required", count: 1 },
+  ]);
+  assert.deepEqual(rows, [
+    { status: "document_verification", label: "Under Document Verification", count: 2 },
+    { status: "additional_info_required", label: "Additional Information Required", count: 1 },
+  ]);
+  assert.deepEqual(stageChartRows([{ status: "under_assessment", label: "x", avg_hours: 5.5, stays: 3 }]), [
+    { status: "under_assessment", label: "Under Assessment", avg_hours: 5.5, stays: 3 },
+  ]);
+});
+
+test("every status has a label in words: no keys, and no words run together", () => {
+  for (const status of APPLICATION_STATUSES) {
+    const label = STATUS_LABELS[status];
+    assert.ok(label, status);
+    assert.doesNotMatch(label, /_|[a-z][A-Z]/, status);
+  }
 });

@@ -7,10 +7,11 @@
  */
 
 import { formatCurrency } from "@/lib/format";
-import { formatDuration } from "@/lib/loan-origination";
+import { STATUS_LABELS, formatDuration } from "@/lib/loan-origination";
 import type { OriginationDashboard, OriginationKpis, OriginationTurnaround } from "@/types/loan-origination";
 import { changeText } from "../../../dashboard/_lib/executive-overview";
 import { padDecimals } from "./server-number";
+import { words } from "./words";
 
 export type KpiKind = "count" | "money" | "percent" | "hours";
 
@@ -92,4 +93,17 @@ export function turnaroundRows(turnaround: OriginationTurnaround) {
           : null,
     };
   });
+}
+
+/** A status in the module's words; a status the module has no words for still reads as words, never as its key. */
+const statusLabel = (status: string) => STATUS_LABELS[status as keyof typeof STATUS_LABELS] ?? words(status);
+
+/** "Applications by status": each row labelled from the module's words, whatever label came with it. */
+export function statusChartRows(rows: OriginationDashboard["by_status"]): OriginationDashboard["by_status"] {
+  return rows.map((r) => ({ ...r, label: statusLabel(r.status) }));
+}
+
+/** "Average time in each stage": each stage labelled from the module's words. */
+export function stageChartRows(rows: OriginationDashboard["stage_times"]): OriginationDashboard["stage_times"] {
+  return rows.map((r) => ({ ...r, label: statusLabel(r.status) }));
 }

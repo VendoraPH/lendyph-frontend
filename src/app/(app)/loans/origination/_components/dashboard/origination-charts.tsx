@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/chart";
 import { formatDate } from "@/lib/format";
 import type { OriginationDashboard } from "@/types/loan-origination";
+import { stageChartRows, statusChartRows } from "../../_lib/dashboard-view";
 
 const TREND = {
   completed: { label: "Completed", color: "var(--chart-2)" },
@@ -39,10 +40,26 @@ function ChartCard({ title, empty, children }: { title: string; empty: boolean; 
 
 const shortDate = (v: string) => formatDate(v);
 
-/** The dashboard's five charts. Every figure and label is the server's; nothing is summed here. */
+/**
+ * A category label drawn on one line. Recharts' own tick wraps a label to the
+ * axis width in separate pieces, which then read with their words run
+ * together ("Under DocumentVerification").
+ */
+function CategoryTick({ x, y, payload }: { x?: number | string; y?: number | string; payload?: { value?: unknown } }) {
+  return (
+    <text x={x} y={y} dy="0.32em" textAnchor="end" fontSize={11} className="fill-muted-foreground">
+      {String(payload?.value ?? "")}
+    </text>
+  );
+}
+
+/**
+ * The dashboard's five charts. Every figure is the server's, nothing is summed
+ * here, and every status reads in the module's words.
+ */
 export function OriginationCharts({ data }: { data: OriginationDashboard }) {
-  const byStatus = data.by_status;
-  const stages = data.stage_times;
+  const byStatus = statusChartRows(data.by_status);
+  const stages = stageChartRows(data.stage_times);
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <ChartCard title="Completed and incomplete applications" empty={data.trends.length === 0}>
@@ -75,7 +92,7 @@ export function OriginationCharts({ data }: { data: OriginationDashboard }) {
         <ChartContainer config={COUNT} className="aspect-auto h-[260px] w-full">
           <BarChart data={byStatus} layout="vertical" margin={{ left: 8, right: 8 }}>
             <XAxis type="number" hide allowDecimals={false} />
-            <YAxis type="category" dataKey="label" tickLine={false} axisLine={false} width={170} />
+            <YAxis type="category" dataKey="label" tickLine={false} axisLine={false} width={190} interval={0} tick={<CategoryTick />} />
             <ChartTooltip content={<ChartTooltipContent />} />
             <Bar dataKey="count" fill="var(--color-count)" radius={[0, 3, 3, 0]} />
           </BarChart>
@@ -85,7 +102,7 @@ export function OriginationCharts({ data }: { data: OriginationDashboard }) {
         <ChartContainer config={COUNT} className="aspect-auto h-[260px] w-full">
           <BarChart data={data.by_product} layout="vertical" margin={{ left: 8, right: 8 }}>
             <XAxis type="number" hide allowDecimals={false} />
-            <YAxis type="category" dataKey="product" tickLine={false} axisLine={false} width={140} />
+            <YAxis type="category" dataKey="product" tickLine={false} axisLine={false} width={150} interval={0} tick={<CategoryTick />} />
             <ChartTooltip content={<ChartTooltipContent />} />
             <Bar dataKey="count" fill="var(--color-count)" radius={[0, 3, 3, 0]} />
           </BarChart>
@@ -95,7 +112,7 @@ export function OriginationCharts({ data }: { data: OriginationDashboard }) {
         <ChartContainer config={HOURS} className="aspect-auto h-[240px] w-full">
           <BarChart data={stages} layout="vertical" margin={{ left: 8, right: 8 }}>
             <XAxis type="number" hide />
-            <YAxis type="category" dataKey="label" tickLine={false} axisLine={false} width={170} />
+            <YAxis type="category" dataKey="label" tickLine={false} axisLine={false} width={190} interval={0} tick={<CategoryTick />} />
             <ChartTooltip content={<ChartTooltipContent />} />
             <Bar dataKey="avg_hours" fill="var(--color-avg_hours)" radius={[0, 3, 3, 0]} />
           </BarChart>

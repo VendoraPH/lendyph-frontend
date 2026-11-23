@@ -17,8 +17,11 @@ import type {
   HandOffInput,
   HandOffResult,
   OriginationDashboard,
+  OriginationNotice,
+  OriginationNotices,
   OriginationSettings,
   OriginationSettingsInput,
+  PublishNoticeInput,
   ReminderResult,
   RerunAssessmentInput,
   TransitionInput,
@@ -108,6 +111,11 @@ export const loanOriginationService = {
   listLinks: () => api.get<ApplicationLink[]>(L.LINKS),
   createLink: (data: ApplicationLinkInput) => api.post<ApplicationLink>(L.LINKS, data),
   updateLink: (id: number, data: Partial<ApplicationLinkInput>) => api.patch<ApplicationLink>(L.LINK(id), data),
+
+  /** The current version of each notice, the required ones still missing (in words) and every version. */
+  listNotices: () => api.get<OriginationNotices>(L.NOTICES),
+  /** Publishes a new version, which becomes its type's current one; it can never be edited or removed. */
+  publishNotice: (input: PublishNoticeInput) => api.post<OriginationNotice>(L.NOTICES, input),
 
   getSettings: () => api.get<OriginationSettings>(L.SETTINGS),
   updateSettings: (data: OriginationSettingsInput) => api.put<OriginationSettings>(L.SETTINGS, data),
