@@ -59,6 +59,7 @@ import {
   AlertTriangle,
   Check,
   ChevronsUpDown,
+  History,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -66,7 +67,7 @@ import { FIT_CLASSES } from "@/lib/page-fill";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
 import { completeRows } from "@/lib/paginate";
-import { userEditChanges, userEditPayload } from "@/lib/user-edit";
+import { storedPrimaryBranch, userEditChanges, userEditPayload, withoutUnchangedPrimary } from "@/lib/user-edit";
 import {
   branchViewer,
   primaryBranchId,
@@ -89,6 +90,16 @@ import { roleDisplayName } from "@/lib/role-display-name";
 import { isInactiveRole, roleOptionLabel, roleOptions, withoutUnchangedRole } from "./_lib/role-options";
 import { USERNAME_PLACEHOLDER, permissionChipLabel, permissionCountLabel, userStatusLabel } from "./_lib/user-labels";
 import { userManageLock } from "./_lib/manage-lock";
+import { branchHistoryLock } from "./_lib/branch-history";
+import {
+  ownPrimaryBranchLock,
+  primaryBranchOptionsFor,
+  primaryBranchProblem,
+  shownPrimaryBranch,
+  type PrimaryBranchChoice,
+} from "./_lib/primary-branch";
+import { PrimaryBranchField } from "./_components/primary-branch-field";
+import { BranchHistoryDialog } from "./_components/branch-history-dialog";
 import type { ApiBranch } from "@/services/branch.service";
 
 // ── Styling helpers ──
@@ -318,10 +329,23 @@ function AddUserDialog({
     password_confirmation: "",
     role: "",
     branch_ids: [] as number[],
+    primary_branch_id: undefined as PrimaryBranchChoice,
   });
 
   const update = (field: string, value: string | number | number[]) =>
     setForm((prev) => ({ ...prev, [field]: value }));
+  const setPrimary = (choice: PrimaryBranchChoice) =>
+    setForm((prev) => ({ ...prev, primary_branch_id: choice }));
+
+  // Worked out on every render from the branches and role picked, so taking a
+  // branch off (or picking a role that doesn't see every branch) moves the
+  // choice with it, and putting it back restores it.
+  const primaryOptions = primaryBranchOptionsFor(
+    branches,
+    form.branch_ids,
+    roles.find((r) => r.name === form.role),
+  );
+  const primary = shownPrimaryBranch(form.primary_branch_id, primaryOptions);
 
   const resetForm = () =>
     setForm({
@@ -334,6 +358,7 @@ function AddUserDialog({
       password_confirmation: "",
       role: "",
       branch_ids: [],
+      primary_branch_id: undefined,
     });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -359,6 +384,11 @@ function AddUserDialog({
       toast.error("Please select a role");
       return;
     }
+    const primaryProblem = primaryBranchProblem(primary, form.branch_ids.length);
+    if (primaryProblem) {
+      toast.error(primaryProblem);
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -372,6 +402,7 @@ function AddUserDialog({
         mobile_number: form.mobile_number || undefined,
         branch_ids: form.branch_ids,
         branch_id: primaryBranchId(form.branch_ids),
+        primary_branch_id: primary,
         role: form.role,
       });
       toast.success("User created");
@@ -486,16 +517,6 @@ function AddUserDialog({
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="add-mobile">Mobile Number</Label>
-                <Input
-                  id="add-mobile"
-                  type="tel"
-                  placeholder="09171234567"
-                  value={form.mobile_number}
-                  onChange={(e) => update("mobile_number", e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
                 <Label>Branches <span className="text-red-500">*</span></Label>
                 <BranchMultiSelect
                   value={form.branch_ids}
@@ -505,6 +526,25 @@ function AddUserDialog({
                 {form.branch_ids.length === 0 && submitting && (
                   <p className="text-xs text-red-500">Please select at least one branch</p>
                 )}
+              </div>
+              <PrimaryBranchField
+                id="add-primary-branch"
+                options={primaryOptions}
+                value={primary}
+                onChange={setPrimary}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="add-mobile">Mobile Number</Label>
+                <Input
+                  id="add-mobile"
+                  type="tel"
+                  placeholder="09171234567"
+                  value={form.mobile_number}
+                  onChange={(e) => update("mobile_number", e.target.value)}
+                />
               </div>
             </div>
 
@@ -561,6 +601,8 @@ function EditUserDialog({
 }) {
   const [submitting, setSubmitting] = useState(false);
   const callerRoles = useAuthStore((s) => s.user?.roles);
+  const callerId = useAuthStore((s) => s.user?.id);
+  const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
   const [form, setForm] = useState({
     first_name: user.first_name,
     last_name: user.last_name,
@@ -568,16 +610,35 @@ function EditUserDialog({
     mobile_number: user.mobile_number ?? "",
     role: user.roles?.[0] ?? "",
     branch_ids: userBranchIds(user),
+    primary_branch_id: storedPrimaryBranch(user),
   });
 
   const update = (field: string, value: string | number | number[]) =>
     setForm((prev) => ({ ...prev, [field]: value }));
+  const setPrimary = (choice: PrimaryBranchChoice) =>
+    setForm((prev) => ({ ...prev, primary_branch_id: choice }));
+
+  // A caller who doesn't see every branch can't change their own primary
+  // branch; the field stays shown, disabled, and the save leaves it out.
+  const primaryLock = ownPrimaryBranchLock({ isSelf: callerId === user.id, viewAll });
+  const primaryOptions = primaryBranchOptionsFor(
+    branches,
+    form.branch_ids,
+    roles.find((r) => r.name === form.role),
+  );
+  const primary = shownPrimaryBranch(form.primary_branch_id, primaryOptions);
+  const sent = { ...form, primary_branch_id: primaryLock ? undefined : primary };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (form.branch_ids.length === 0) {
       toast.error("Please select at least one branch");
+      return;
+    }
+    const primaryProblem = primaryLock ? null : primaryBranchProblem(primary, form.branch_ids.length);
+    if (primaryProblem) {
+      toast.error(primaryProblem);
       return;
     }
 
@@ -587,7 +648,7 @@ function EditUserDialog({
     // ids are super_admin accounts. Without this, Save on an unedited form
     // would surface as "please try again" on a request that fails identically
     // every time.
-    const changed = userEditChanges(user, form);
+    const changed = userEditChanges(user, sent);
     if (changed.length === 0) {
       toast.info("No changes to save.");
       onOpenChange(false);
@@ -596,7 +657,10 @@ function EditUserDialog({
 
     setSubmitting(true);
     try {
-      await userService.update(user.id, withoutUnchangedRole(userEditPayload(form), user.roles?.[0]));
+      await userService.update(
+        user.id,
+        withoutUnchangedPrimary(withoutUnchangedRole(userEditPayload(sent), user.roles?.[0]), user),
+      );
       toast.success("User updated");
       onOpenChange(false);
       onSave();
@@ -688,6 +752,14 @@ function EditUserDialog({
                   branches={branches}
                 />
               </div>
+              <PrimaryBranchField
+                id={`edit-primary-branch-${user.id}`}
+                options={primaryOptions}
+                value={primary}
+                onChange={setPrimary}
+                lockReason={primaryLock}
+                lockedValue={user.primary_branch_name}
+              />
             </div>
 
             <div className="space-y-1.5">
@@ -967,6 +1039,13 @@ function UserActionsCell({
     superAdminLocked: isSuperAdminLocked,
     branchLocked: isBranchLocked,
   });
+  // The history needs only the caller's reach, not the right to manage: a
+  // super_admin's history is open to an admin who sees every branch.
+  const historyLock = branchHistoryLock(user, {
+    viewAll,
+    isSelf: caller?.id === user.id,
+    branchLocked: isBranchLocked,
+  });
 
   return (
     <>
@@ -1001,6 +1080,14 @@ function UserActionsCell({
             <KeyRound className="mr-2 h-4 w-4" />
             Reset Password
           </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={historyLock.locked}
+            title={historyLock.reason ?? undefined}
+            onClick={() => setOpenDialog("history")}
+          >
+            <History className="mr-2 h-4 w-4" />
+            Branch History
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             disabled={cannotManageTarget}
@@ -1027,6 +1114,11 @@ function UserActionsCell({
       <ResetPasswordDialog
         user={user}
         open={openDialog === "reset"}
+        onOpenChange={(v) => !v && setOpenDialog(null)}
+      />
+      <BranchHistoryDialog
+        user={user}
+        open={openDialog === "history"}
         onOpenChange={(v) => !v && setOpenDialog(null)}
       />
       <ToggleStatusDialog
@@ -1226,6 +1318,9 @@ function UsersContent() {
                         {userBranches(user).length > 0
                           ? userBranches(user).map((b) => b.name).join(", ")
                           : "-"}
+                        {user.primary_branch_name && (
+                          <p className="text-xs">Primary: {user.primary_branch_name}</p>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge

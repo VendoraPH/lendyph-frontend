@@ -270,6 +270,7 @@ export const API_ENDPOINTS = {
     DEACTIVATE: (id: number) => `/users/${id}/deactivate`,
     REACTIVATE: (id: number) => `/users/${id}/reactivate`,
     RESET_PASSWORD: (id: number) => `/users/${id}/reset-password`,
+    BRANCH_HISTORY: (id: number) => `/users/${id}/branch-history`,
   },
   STAFF: {
     LIST: "/staff",
