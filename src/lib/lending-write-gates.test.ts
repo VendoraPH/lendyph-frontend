@@ -6,10 +6,11 @@ import type { Permission } from "@/types";
 import {
   AUTO_PAY_TOGGLE_GATE,
   LOAN_ADJUSTMENT_CREATE_GATE,
+  LOAN_EXTEND_GATE,
+  ONE_MONTH_PREVIEW_GATE,
   PAYMENT_CREATE_GATE,
   PLEDGE_ENTRY_CREATE_GATE,
   PLEDGE_UPDATE_GATE,
-  UPON_MATURITY_PREVIEW_GATE,
   recordPaymentGate,
 } from "./lending-write-gates";
 
@@ -26,26 +27,30 @@ test("each lending write is gated by the permission the server checks", () => {
   assert.equal(PLEDGE_ENTRY_CREATE_GATE.permission, "share_capital:create");
   assert.equal(AUTO_PAY_TOGGLE_GATE.permission, "auto_pay:toggle");
   assert.equal(PLEDGE_UPDATE_GATE.permission, "share_capital:update");
+  assert.equal(LOAN_EXTEND_GATE.permission, "loans:extend");
   for (const gate of [
     PLEDGE_UPDATE_GATE,
     PAYMENT_CREATE_GATE,
     LOAN_ADJUSTMENT_CREATE_GATE,
+    LOAN_EXTEND_GATE,
     PLEDGE_ENTRY_CREATE_GATE,
     AUTO_PAY_TOGGLE_GATE,
-    UPON_MATURITY_PREVIEW_GATE,
+    ONE_MONTH_PREVIEW_GATE,
   ]) {
     assert.match(gate.tooltip, /permission/);
     assert.doesNotMatch(gate.tooltip, /[a-z_]+:[a-z_]+/, "the reason reads in words, never a key");
   }
 });
 
-test("Record Payment needs payments:create first, then payments:view for an upon-maturity loan", () => {
+test("Record Payment needs payments:create first, then payments:view where a partial payment asks to extend", () => {
   // A read-only role (the Accountant) holds payments:view but not create.
   assert.equal(recordPaymentGate(false, holding("payments:view")), PAYMENT_CREATE_GATE);
   assert.equal(recordPaymentGate(true, holding("payments:view")), PAYMENT_CREATE_GATE);
   assert.equal(recordPaymentGate(false, holding("payments:create")), PAYMENT_CREATE_GATE);
-  assert.equal(recordPaymentGate(true, holding("payments:create")), UPON_MATURITY_PREVIEW_GATE);
-  assert.equal(recordPaymentGate(true, holding("payments:create", "payments:view")), UPON_MATURITY_PREVIEW_GATE);
+  assert.equal(recordPaymentGate(true, holding("payments:create")), ONE_MONTH_PREVIEW_GATE);
+  assert.equal(recordPaymentGate(true, holding("payments:create", "payments:view")), ONE_MONTH_PREVIEW_GATE);
+  // The check is about a loan that can be extended, not about upon-maturity loans.
+  assert.doesNotMatch(ONE_MONTH_PREVIEW_GATE.tooltip, /upon-maturity/i);
 });
 
 test("the loan page gates Record Payment and New Adjustment", () => {
@@ -62,7 +67,8 @@ test("the loan page gates Record Payment and New Adjustment", () => {
     header,
     /<PermissionButton\s+permission=\{recordPayment\.permission\}\s+tooltip=\{recordPayment\.tooltip\}[\s\S]*?Record Payment/,
   );
-  assert.match(page, /const recordPayment = recordPaymentGate\(isUponMaturityLoan, can\)/);
+  // payments:view is needed exactly where the "Extend loan?" check reads the preview.
+  assert.match(page, /const recordPayment = recordPaymentGate\(offersExtendOnPartialPayment\(loan\), can\)/);
 });
 
 test("Payment Entry's Pay needs payments:create", () => {

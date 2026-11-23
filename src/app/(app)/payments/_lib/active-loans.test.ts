@@ -227,6 +227,14 @@ test("what a summary row doesn't carry stays unknown until the full loan loads",
 
   assert.equal(loan.interest_rate, null);
   assert.equal(loan.amount_due_now, null);
+  assert.equal(loan.is_one_month_term, null);
+});
+
+test("whether the loan can be extended is the full loan's is_one_month_term, as sent", () => {
+  assert.equal(mapLoanToActiveLoan(summaryRow({ is_one_month_term: true })).is_one_month_term, true);
+  assert.equal(mapLoanToActiveLoan(summaryRow({ is_one_month_term: false })).is_one_month_term, false);
+  // Anything but a boolean is not an answer.
+  assert.equal(mapLoanToActiveLoan(summaryRow({ is_one_month_term: "1" })).is_one_month_term, null);
 });
 
 test("a full loan fills in the dialog's figures", () => {

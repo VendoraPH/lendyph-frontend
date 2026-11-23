@@ -79,11 +79,12 @@ import {
   totalPayableFigures,
 } from "./_lib/loan-figures";
 import {
-  PARTIAL_EXTEND_LABELS,
   dispatchPartialExtend,
-  partialExtendOnOpenChange,
+  offersExtendOnPartialPayment,
+  partialExtendPayload,
   type PartialExtendChoice,
-} from "./_lib/partial-extend";
+} from "@/lib/partial-extend";
+import { PartialExtendPrompt } from "@/components/loans/partial-extend-prompt";
 import {
   RestructuredBalanceFigures,
   ScheduleNotice,
@@ -269,7 +270,7 @@ import { currencyOrDash } from "@/lib/report-format";
 import { penaltyMonthsNote } from "@/lib/penalty-months";
 import { PenaltyMonthsNote } from "@/components/common/penalty-months-note";
 import { RecoveryPaymentNote } from "@/components/common/recovery-payment-note";
-import { canRecordPaymentOn, isRecoveryPayment } from "@/lib/recovery-payment";
+import { canRecordPaymentOn } from "@/lib/recovery-payment";
 import {
   formatCurrency,
   formatCurrencyExact,
@@ -1891,18 +1892,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
 
   // ── Repayment Handlers ──
 
-  // Whether the current loan qualifies for "Upon Maturity" extension flows.
-  // Mirrors the predicate storedSchedule passes as `isUponMaturity`.
-  const isUponMaturityLoan = (() => {
-    if (!loan) return false;
-    const freq = loan.frequency ?? loan.payment_frequency ?? "";
-    return (
-      freq === "upon_maturity" ||
-      loan.interest_method === "upon_maturity" ||
-      loan.interest_type === "upon_maturity"
-    );
-  })();
-  const recordPayment = recordPaymentGate(isUponMaturityLoan, can);
+  // A partial payment asks "Extend loan?" only on a loan that can be extended
+  // (offersExtendOnPartialPayment), and only then does it wait for the
+  // server's preview, which needs payments:view.
+  const recordPayment = recordPaymentGate(offersExtendOnPartialPayment(loan), can);
 
   // Loan Extension is offered only on one-month-term loans, whatever the
   // product. The API decides: eligibility depends on the loan's ORIGINAL term,
@@ -1983,13 +1976,13 @@ function LoanDetail({ loanId }: { loanId: number }) {
       ...paymentMethodFields(paymentMethod, paymentReference),
     };
 
-    // Upon Maturity loans: if the server's preview for this amount and date
-    // calls it partial (premium owed counted), prompt to extend instead of
-    // silently posting a partial payment. Until that preview has answered
-    // for exactly this amount and date, the payment is not posted at all.
-    // A defaulted loan can't be extended, so its partial payment is simply
-    // recorded.
-    if (isUponMaturityLoan && paymentMode === "regular" && !isRecoveryPayment(loan.status)) {
+    // A loan that can be extended (a one-month loan, as the server says): if
+    // the server's preview for this amount and date calls it partial
+    // (premium owed counted), prompt to extend instead of silently posting a
+    // partial payment. Until that preview has answered for exactly this
+    // amount and date, the payment is not posted at all. Any other loan's
+    // payment, a defaulted loan's included, is simply recorded.
+    if (paymentMode === "regular" && offersExtendOnPartialPayment(loan)) {
       const decision = shouldPromptExtend({
         hasOpenPeriod: amountDueNow === null || dueNowHasOpenPeriod(amountDueNow),
         preview: paymentPreview,
@@ -2084,13 +2077,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
     if (!paid) return;
     setActionLoading(true);
     try {
-      await loanService.extend(loan.id, {
-        remarks: `Auto-extend on partial payment of ${payload.amount_paid}`,
-        // The cashier's payment was just posted on the line above, so the API
-        // must not collect interest again — whatever remains unpaid carries
-        // into the new period, which is how this flow has always behaved.
-        interest_option: "defer",
-      });
+      // On "defer": the cashier's payment was just posted on the line above,
+      // so the API must not collect interest again (partialExtendPayload).
+      await loanService.extend(loan.id, partialExtendPayload(payload.amount_paid));
       toast.success("Loan extended");
     } catch (err) {
       notifyError(err, "We couldn't extend this loan. Please try again.");
@@ -5476,64 +5465,12 @@ function LoanDetail({ loanId }: { loanId: number }) {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Partial-Payment Extend Prompt (Upon Maturity — Process 2) */}
-      <AlertDialog
+      {/* Partial-payment "Extend loan?" prompt (Process 2), shared with Payment Entry */}
+      <PartialExtendPrompt
         open={partialExtendOpen}
-        onOpenChange={(open) => {
-          const choice = partialExtendOnOpenChange(open);
-          if (choice !== null) void handlePartialExtendChoice(choice);
-        }}
-      >
-        {/* Three buttons don't fit the default width: widen it from sm up and
-            let the row wrap; below sm the footer stacks them full width. */}
-        <AlertDialogContent className="data-[size=default]:sm:max-w-lg">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Extend loan?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Payment is not enough to fully settle this loan.{" "}
-              <span className="font-medium">{PARTIAL_EXTEND_LABELS.extend}</span> records the
-              payment and extends the loan: the remaining principal and interest carry
-              over to the next cycle.{" "}
-              <span className="font-medium">{PARTIAL_EXTEND_LABELS.record}</span> records the
-              payment without extending.{" "}
-              <span className="font-medium">{PARTIAL_EXTEND_LABELS.cancel}</span> records
-              nothing and takes you back to the payment form.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="sm:flex-wrap">
-            <AlertDialogCancel
-              disabled={actionLoading}
-              onClick={() => void handlePartialExtendChoice("cancel")}
-            >
-              {PARTIAL_EXTEND_LABELS.cancel}
-            </AlertDialogCancel>
-            <Button
-              variant="outline"
-              disabled={actionLoading}
-              onClick={() => void handlePartialExtendChoice("record")}
-            >
-              {PARTIAL_EXTEND_LABELS.record}
-            </Button>
-            <AlertDialogAction
-              disabled={actionLoading}
-              onClick={() => void handlePartialExtendChoice("extend")}
-              className="bg-brand-blue text-brand-blue-foreground shadow-sm hover:bg-brand-blue-dark hover:shadow-md transition-all"
-            >
-              {actionLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Extending...
-                </>
-              ) : (
-                <>
-                  <CalendarPlus className="mr-2 h-4 w-4" />
-                  {PARTIAL_EXTEND_LABELS.extend}
-                </>
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        busy={actionLoading}
+        onChoice={(choice) => void handlePartialExtendChoice(choice)}
+      />
 
       {/* Create Adjustment Dialog */}
       <Dialog open={createAdjustmentOpen} onOpenChange={setCreateAdjustmentOpen}>

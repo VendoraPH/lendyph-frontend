@@ -9,7 +9,7 @@ import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { FIT_CLASSES } from "@/lib/page-fill";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { repaymentService } from "@/services";
+import { loanService, repaymentService } from "@/services";
 import type { RepaymentPreview } from "@/services/repayment.service";
 import { useAuth } from "@/hooks/use-auth";
 import { usePermission } from "@/hooks/use-permission";
@@ -66,6 +66,13 @@ import {
   dueNowTiles,
 } from "@/lib/payment-figures";
 import { getErrorMessage } from "@/lib/api-error";
+import { notifyError } from "@/lib/notify";
+import {
+  dispatchPartialExtend,
+  partialExtendPayload,
+  type PartialExtendChoice,
+} from "@/lib/partial-extend";
+import { PartialExtendPrompt } from "@/components/loans/partial-extend-prompt";
 import {
   ACTIVE_LOANS_PER_PAGE_OPTIONS,
   activeLoanDueCell,
@@ -74,7 +81,8 @@ import {
   isDueSoon,
   type ActiveLoan,
 } from "./_lib/active-loans";
-import { buildPaymentBody, referenceAfterMethodChange } from "./_lib/payment-body";
+import { buildPaymentBody, referenceAfterMethodChange, type PaymentBody } from "./_lib/payment-body";
+import { postPaymentStep } from "./_lib/post-payment-step";
 import { useActiveLoanPage, useSelectedLoan } from "./_lib/use-active-loan-page";
 import { allocationPenaltyNote } from "@/lib/penalty-months";
 import { PenaltyMonthsNote } from "@/components/common/penalty-months-note";
@@ -237,6 +245,12 @@ function PaymentsContent() {
   const [remarks, setRemarks] = useState("");
   const [collectedBy, setCollectedBy] = useState(defaultCollector);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // The payment the "Extend loan?" prompt asks about, with its loan: posted
+  // only by "Record partial payment" or "Yes, extend". Null while it's closed.
+  const [pendingPayment, setPendingPayment] = useState<{ loan: ActiveLoan; body: PaymentBody } | null>(null);
+  // Asks for the preview again after it failed, so a dropped request doesn't
+  // hold a payment until the amount is changed.
+  const [previewRound, setPreviewRound] = useState(0);
 
   // The server's preview of exactly this payment. It runs the real repayment
   // code and rolls it back, so its allocation and badge are what posting this
@@ -250,7 +264,7 @@ function PaymentsContent() {
   const sendAmount = amountCheck.amount !== null && amountCheck.amount > 0 ? amountCheck.amount : null;
   const previewKey =
     selectedLoanId !== null && sendAmount !== null && paymentDate
-      ? `${selectedLoanId}|${sendAmount}|${paymentDate}`
+      ? `${selectedLoanId}|${sendAmount}|${paymentDate}|${previewRound}`
       : null;
   const [previewResult, setPreviewResult] = useState<{
     key: string;
@@ -332,23 +346,13 @@ function PaymentsContent() {
     setDialogOpen(false);
   }
 
-  async function handleSubmit() {
-    if (!selectedLoan || sendAmount === null) return;
+  // Posts the payment and, after "Yes, extend", extends the loan straight
+  // after it, as the loan page does. The payment stands even when the
+  // extension is refused.
+  async function postPayment({ loan, body }: { loan: ActiveLoan; body: PaymentBody }, extend: boolean) {
     setIsSubmitting(true);
-
     try {
-      const repayment = await repaymentService.create(
-        selectedLoan.id,
-        buildPaymentBody({
-          paymentDate,
-          amount: sendAmount,
-          method: paymentMethod,
-          referenceNumber,
-          remarks,
-          collectedBy,
-          signedInName: defaultCollector,
-        }),
-      );
+      const repayment = await repaymentService.create(loan.id, body);
 
       const receiptId = repayment?.id;
       if (receiptId) setLastReceiptId(receiptId);
@@ -356,20 +360,80 @@ function PaymentsContent() {
       const scbCredited = repayment?.scb_paid ?? 0;
       toast.success("Payment posted", {
         description: scbCredited > 0
-          ? `${formatCurrency(sendAmount)} recorded for ${selectedLoan.borrower_name} (${selectedLoan.loan_account_number}). ${formatCurrency(scbCredited)} credited to share capital.`
-          : `${formatCurrency(sendAmount)} recorded for ${selectedLoan.borrower_name} (${selectedLoan.loan_account_number})`,
+          ? `${formatCurrency(body.amount_paid)} recorded for ${loan.borrower_name} (${loan.loan_account_number}). ${formatCurrency(scbCredited)} credited to share capital.`
+          : `${formatCurrency(body.amount_paid)} recorded for ${loan.borrower_name} (${loan.loan_account_number})`,
         action: receiptId
           ? { label: "View Receipt", onClick: () => router.push(`/payments/${receiptId}`) }
           : undefined,
       });
-
-      list.reload();
-      resetForm();
     } catch (err) {
       toast.error(postPaymentErrorMessage(err));
-    } finally {
       setIsSubmitting(false);
+      return;
     }
+
+    if (extend) await extendAfterPayment(loan.id, body.amount_paid);
+    list.reload();
+    resetForm();
+    setIsSubmitting(false);
+  }
+
+  // On "defer", since the payment was just posted (partialExtendPayload).
+  async function extendAfterPayment(loanId: number, amount: number) {
+    try {
+      await loanService.extend(loanId, partialExtendPayload(amount));
+      toast.success("Loan extended");
+    } catch (err) {
+      notifyError(err, "We couldn't extend this loan.", "The payment is recorded. Extend the loan from its page.");
+    }
+  }
+
+  async function handleSubmit() {
+    if (!selectedLoan || sendAmount === null) return;
+    const payment = {
+      loan: selectedLoan,
+      body: buildPaymentBody({
+        paymentDate,
+        amount: sendAmount,
+        method: paymentMethod,
+        referenceNumber,
+        remarks,
+        collectedBy,
+        signedInName: defaultCollector,
+      }),
+    };
+
+    // A partial payment on a loan that can be extended asks "Extend loan?"
+    // first, from the server's dated preview of exactly this payment. Until
+    // that preview has answered, nothing is posted. Any other loan's payment
+    // posts as is.
+    const step = postPaymentStep(selectedLoan, currentPreview);
+    if (step === "failed") {
+      toast.error("We couldn't check this payment with the server. Try again.");
+      setPreviewRound((round) => round + 1);
+      return;
+    }
+    if (step === "unknown") {
+      toast.error("We're still checking this payment with the server. Wait for the allocation preview, then try again.");
+      return;
+    }
+    if (step === "prompt") {
+      setPendingPayment(payment);
+      return;
+    }
+    await postPayment(payment, false);
+  }
+
+  // The "Extend loan?" prompt's three buttons: Cancel posts nothing and
+  // leaves the form as typed, "Record partial payment" posts the payment, and
+  // "Yes, extend" posts it and extends the loan.
+  async function handlePartialExtendChoice(choice: PartialExtendChoice) {
+    const payment = pendingPayment;
+    setPendingPayment(null);
+    await dispatchPartialExtend(choice, payment, {
+      record: (p) => postPayment(p, false),
+      recordAndExtend: (p) => postPayment(p, true),
+    });
   }
 
   const needsReference = paymentMethod !== "cash";
@@ -1132,6 +1196,12 @@ function PaymentsContent() {
         )}
       </DialogContent>
     </Dialog>
+
+    <PartialExtendPrompt
+      open={pendingPayment !== null}
+      busy={isSubmitting}
+      onChoice={(choice) => void handlePartialExtendChoice(choice)}
+    />
     </>
   );
 }
