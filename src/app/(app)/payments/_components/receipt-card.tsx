@@ -26,18 +26,12 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 
 interface ReceiptCardProps {
   receipt: ReceiptData;
-  /**
-   * "public" is the shared link's view: it leaves out who collected or voided
-   * the payment and the staff remarks, even if a backend ever sends them.
-   */
-  variant?: "staff" | "public";
   /** The node "Download Image" captures: the whole card, however far it is scrolled. */
   ref?: Ref<HTMLDivElement>;
 }
 
-/** The on-screen payment receipt, shared by the staff page and the public link. */
-export function ReceiptCard({ receipt, variant = "staff", ref }: ReceiptCardProps) {
-  const isPublic = variant === "public";
+/** The on-screen payment receipt on the staff payment page. */
+export function ReceiptCard({ receipt, ref }: ReceiptCardProps) {
   const status = STATUS_STYLES[receipt.status] ?? {
     label: receipt.status,
     className: "bg-muted text-muted-foreground border-border",
@@ -74,9 +68,7 @@ export function ReceiptCard({ receipt, variant = "staff", ref }: ReceiptCardProp
               <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-center">
                 <p className="text-sm font-bold uppercase tracking-widest text-destructive">VOID</p>
                 <p className="text-xs text-destructive/80">This receipt has been voided</p>
-                {!isPublic && (
-                  <p className="text-xs text-destructive/80">Voided by {receipt.voided_by}</p>
-                )}
+                <p className="text-xs text-destructive/80">Voided by {receipt.voided_by}</p>
               </div>
             )}
 
@@ -158,23 +150,20 @@ export function ReceiptCard({ receipt, variant = "staff", ref }: ReceiptCardProp
               </div>
             </div>
 
-            {!isPublic && (
-              <>
-                <Separator />
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Collected by</span>
-                    <span className="font-medium">{receipt.collected_by}</span>
-                  </div>
-                  {receipt.remarks && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Remarks</span>
-                      <span className="max-w-[55%] text-right">{receipt.remarks}</span>
-                    </div>
-                  )}
+            <Separator />
+
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Collected by</span>
+                <span className="font-medium">{receipt.collected_by}</span>
+              </div>
+              {receipt.remarks && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Remarks</span>
+                  <span className="max-w-[55%] text-right">{receipt.remarks}</span>
                 </div>
-              </>
-            )}
+              )}
+            </div>
 
             {/* Signature line */}
             <div className="pt-2 text-center">

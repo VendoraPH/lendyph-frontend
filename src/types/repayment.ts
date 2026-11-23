@@ -51,10 +51,3 @@ export interface CreateRepaymentData {
 export interface VoidRepaymentData {
   void_reason: string;
 }
-
-/** POST /repayments/{id}/share-link: the receipt's public token. */
-export interface ReceiptShareLink {
-  token: string;
-  /** null when the link never expires. */
-  expires_at: string | null;
-}

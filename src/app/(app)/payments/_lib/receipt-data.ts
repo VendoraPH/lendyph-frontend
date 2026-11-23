@@ -5,10 +5,8 @@ import { voidedByName } from "../history/_lib/payment-history";
 import type { Repayment } from "@/types";
 
 /**
- * One payment receipt as the receipt card shows it. Both the staff page
- * (/payments/{id}) and the public shared page (/receipts/{token}) build it
- * with `mapPaymentToReceipt`: the public endpoint answers with the same field
- * names as `RepaymentResource`, minus what a stranger must not see.
+ * One payment receipt as the receipt card shows it. The staff page
+ * (/payments/{id}) builds it with `mapPaymentToReceipt`.
  */
 export interface ReceiptData {
   id: number;
@@ -59,7 +57,7 @@ export const STATUS_STYLES: Record<ReceiptData["status"], { label: string; class
   },
 };
 
-/** Map an API repayment (staff or public resource) to the receipt card's shape. */
+/** Map an API repayment to the receipt card's shape. */
 export function mapPaymentToReceipt(payment: Repayment): ReceiptData {
   const p = payment as Repayment & Record<string, unknown>;
   const loanRel = p.loan as
@@ -117,9 +115,4 @@ export function mapPaymentToReceipt(payment: Repayment): ReceiptData {
 export function receiptImageFileName(receiptNumber: string): string {
   const safe = receiptNumber.trim().replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
   return `receipt-${safe || "payment"}.png`;
-}
-
-/** The public link for a share token, on the deployment the staff member is using. */
-export function receiptShareUrl(origin: string, token: string): string {
-  return `${origin.replace(/\/+$/, "")}/receipts/${encodeURIComponent(token)}`;
 }

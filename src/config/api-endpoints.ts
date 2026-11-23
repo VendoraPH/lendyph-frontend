@@ -147,15 +147,6 @@ export const API_ENDPOINTS = {
     PREVIEW: (loanId: number) => `/loans/${loanId}/repayments/preview`,
     DETAIL: (id: number) => `/repayments/${id}`,
     VOID: (id: number) => `/repayments/${id}/void`,
-    /** Issues (or returns the existing) public share token. Not built yet; see PUBLIC_RECEIPTS. */
-    SHARE_LINK: (id: number) => `/repayments/${id}/share-link`,
-  },
-  /**
-   * A shared payment receipt, read with no Lendy account by whoever has the
-   * link. Not built yet: behind NEXT_PUBLIC_ENABLE_RECEIPT_SHARE_LINKS.
-   */
-  PUBLIC_RECEIPTS: {
-    DETAIL: (token: string) => `/public/receipts/${encodeURIComponent(token)}`,
   },
   LOAN_PRODUCTS: {
     LIST: "/loan-products",

@@ -5,7 +5,6 @@ import type {
   Repayment,
   CreateRepaymentData,
   VoidRepaymentData,
-  ReceiptShareLink,
   PaginatedResponse,
 } from "@/types";
 
@@ -150,8 +149,4 @@ export const repaymentService = {
 
   void: (id: number, data: VoidRepaymentData) =>
     api.patch<Repayment>(API_ENDPOINTS.REPAYMENTS.VOID(id), data),
-
-  /** The receipt's public share token; the server reuses an existing one. */
-  shareLink: (id: number) =>
-    api.post<ReceiptShareLink>(API_ENDPOINTS.REPAYMENTS.SHARE_LINK(id)),
 };

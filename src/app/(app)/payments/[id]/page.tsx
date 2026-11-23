@@ -10,7 +10,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { FIT_CLASSES } from "@/lib/page-fill";
-import { env } from "@/config/env";
 import { repaymentService } from "@/services";
 import { formatCurrency } from "@/lib/format";
 import { toast } from "sonner";
@@ -18,7 +17,6 @@ import { notifyError } from "@/lib/notify";
 import { mapPaymentToReceipt, type ReceiptData } from "../_lib/receipt-data";
 import { ReceiptCard } from "../_components/receipt-card";
 import { DownloadReceiptImageButton } from "../_components/download-receipt-image-button";
-import { ShareReceiptButton } from "../_components/share-receipt-button";
 
 function PaymentReceiptContent({
   params,
@@ -129,9 +127,6 @@ function PaymentReceiptContent({
             </PermissionButton>
           )}
           <DownloadReceiptImageButton target={cardRef} receiptNumber={receipt.receipt_number} />
-          {env.features.receiptShareLinks && (
-            <ShareReceiptButton repaymentId={receipt.id} voided={receipt.status === "voided"} />
-          )}
           {/* Both buttons open the same document, and that is deliberate: an
               Official Receipt is issued under the payment's own receipt number,
               so a reprint is the same paper, not a new one. Printing the React

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mapPaymentToReceipt, receiptImageFileName, receiptShareUrl } from "./receipt-data";
+import { mapPaymentToReceipt, receiptImageFileName } from "./receipt-data";
 import type { Repayment } from "@/types";
 
 test("receiptImageFileName names the PNG after the receipt number", () => {
@@ -10,11 +10,6 @@ test("receiptImageFileName names the PNG after the receipt number", () => {
 test("receiptImageFileName replaces characters a file name can't hold", () => {
   assert.equal(receiptImageFileName(" OR/2026 #15 "), "receipt-OR-2026-15.png");
   assert.equal(receiptImageFileName("///"), "receipt-payment.png");
-});
-
-test("receiptShareUrl builds the public link on the current deployment", () => {
-  assert.equal(receiptShareUrl("https://app.lendy.ph", "abc123"), "https://app.lendy.ph/receipts/abc123");
-  assert.equal(receiptShareUrl("https://app.lendy.ph/", "a b"), "https://app.lendy.ph/receipts/a%20b");
 });
 
 test("mapPaymentToReceipt reads a public receipt that omits the staff-only fields", () => {
