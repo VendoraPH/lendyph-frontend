@@ -39,6 +39,7 @@ export type {
   GCashPendingItem,
   CreateGCashTransactionData,
   GCashListFilters,
+  GCashTransactionTotals,
   GCashNonMember,
   GCashNonMemberInput,
   GCashNonMemberFilters,

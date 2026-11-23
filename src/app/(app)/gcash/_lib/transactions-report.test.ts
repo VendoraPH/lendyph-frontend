@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { formatCurrency } from "@/lib/format";
-import type { GCashTransaction } from "@/types";
+import type { GCashTransaction, GCashTransactionTotals } from "@/types";
 import { GCASH_TRANSACTIONS_TITLE, gcashTransactionsReport } from "./transactions-report";
 
 function tx(id: number, over: Partial<GCashTransaction>): GCashTransaction {
@@ -29,9 +29,24 @@ const rows = [
   tx(1, { borrower: member }),
 ];
 
+/**
+ * `meta.totals` as the server sends it. Deliberately not the sum of `rows`, so
+ * a document that adds up its own rows can't pass for one that shows these.
+ */
+const SERVER_TOTALS: GCashTransactionTotals = {
+  count: 3,
+  amount: "12845.70",
+  cash_in: "12345.60",
+  cash_out: "500.10",
+  charges: "45.25",
+  total: "12891.00",
+};
+
 function build(over: Partial<Parameters<typeof gcashTransactionsReport>[0]> = {}) {
   return gcashTransactionsReport({
     rows,
+    total: rows.length,
+    totals: SERVER_TOTALS,
     from: "2026-11-01",
     to: "2026-11-30",
     type: "all",
@@ -45,6 +60,12 @@ function table(doc: ReturnType<typeof build>) {
   const s = doc.sections.find((x) => x.kind === "table");
   assert.ok(s && s.kind === "table");
   return s;
+}
+
+function summary(doc: ReturnType<typeof build>) {
+  const s = doc.sections.find((x) => x.kind === "kpi_grid");
+  assert.ok(s && s.kind === "kpi_grid");
+  return s.items.map((k) => [k.label, k.value]);
 }
 
 describe("the GCash transactions report", () => {
@@ -78,32 +99,61 @@ describe("the GCash transactions report", () => {
     });
   });
 
-  test("totals add up in centavos, with no float drift", () => {
-    assert.deepEqual(table(build()).totals, [
-      { column: "amount", value: formatCurrency(1500.3) },
-      { column: "charge", value: formatCurrency(30.2) },
-      { column: "total", value: formatCurrency(1530.5) },
-    ]);
-  });
-
-  test("the summary splits Cash In from Cash Out", () => {
-    const kpis = build().sections.find((s) => s.kind === "kpi_grid");
-    assert.ok(kpis && kpis.kind === "kpi_grid");
+  test("each row's amounts are kept exactly as the server sent them", () => {
+    const asText = (v: string) => v as unknown as number;
+    const t = table(build({ rows: [tx(1, { amount: asText("250.50"), charge_amount: asText("5.00"), total_amount: asText("255.50") })] }));
     assert.deepEqual(
-      kpis.items.map((k) => k.value),
-      ["3", formatCurrency(1000.2), formatCurrency(500.1), formatCurrency(30.2)],
+      [t.rows[0].amount, t.rows[0].charge, t.rows[0].total],
+      ["250.50", "5.00", "255.50"],
     );
   });
 
-  test("amounts sent as decimal strings still add up", () => {
-    const asText = (v: string) => v as unknown as number;
-    const doc = build({ rows: [tx(1, { amount: asText("250.50"), charge_amount: asText("5.00"), total_amount: asText("255.50") })] });
-    assert.equal(table(doc).totals?.[2].value, formatCurrency(255.5));
+  test("totals show the server's figures when sent", () => {
+    const doc = build();
+    assert.deepEqual(summary(doc), [
+      ["Transactions", "3"],
+      ["Cash In", formatCurrency(12345.6)],
+      ["Cash Out", formatCurrency(500.1)],
+      ["Charges", formatCurrency(45.25)],
+    ]);
+    assert.deepEqual(table(doc).totals, [
+      { column: "amount", value: formatCurrency(12845.7) },
+      { column: "charge", value: formatCurrency(45.25) },
+      { column: "total", value: formatCurrency(12891) },
+    ]);
+    // A figure left out of the totals is a dash, never the column added up.
+    const noAmount = build({ totals: { ...SERVER_TOTALS, amount: undefined } });
+    assert.equal(table(noAmount).totals?.[0].value, "—");
   });
 
-  test("no range and no rows: All time, zero totals", () => {
-    const doc = build({ rows: [], from: "", to: "" });
+  test("totals read — when the server sends none", () => {
+    const doc = build({ totals: null, total: 3 });
+    assert.deepEqual(summary(doc), [
+      ["Transactions", "3"],
+      ["Cash In", "—"],
+      ["Cash Out", "—"],
+      ["Charges", "—"],
+    ]);
+    assert.deepEqual(table(doc).totals, [
+      { column: "amount", value: "—" },
+      { column: "charge", value: "—" },
+      { column: "total", value: "—" },
+    ]);
+    // No count either: a dash, not the rows counted here.
+    assert.equal(summary(build({ totals: null, total: null }))[0][1], "—");
+  });
+
+  test("no range and no rows: All time, and the server's zero totals read ₱0.00", () => {
+    const zero: GCashTransactionTotals = { count: 0, amount: "0.00", cash_in: "0.00", cash_out: "0.00", charges: "0.00", total: "0.00" };
+    const doc = build({ rows: [], total: 0, totals: zero, from: "", to: "" });
     assert.equal(doc.meta.period, "All time");
-    assert.equal(table(doc).totals?.[0].value, formatCurrency(0));
+    assert.equal(table(doc).rows.length, 0);
+    assert.deepEqual(summary(doc).map(([, value]) => value), [
+      "0",
+      formatCurrency(0),
+      formatCurrency(0),
+      formatCurrency(0),
+    ]);
+    assert.equal(table(doc).totals?.[2].value, formatCurrency(0));
   });
 });

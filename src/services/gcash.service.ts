@@ -11,11 +11,18 @@ import type {
   GCashPendingItem,
   CreateGCashTransactionData,
   GCashListFilters,
+  GCashTransactionTotals,
   GCashNonMember,
   GCashNonMemberInput,
   GCashNonMemberFilters,
   PaginatedResponse,
 } from "@/types";
+
+/** `meta.totals` off a transactions page, or null when it carried none (PHP sends an empty one as `[]`). */
+function transactionTotals(res: unknown): GCashTransactionTotals | null {
+  const totals = (res as { meta?: { totals?: unknown } } | null | undefined)?.meta?.totals;
+  return totals && typeof totals === "object" && !Array.isArray(totals) ? (totals as GCashTransactionTotals) : null;
+}
 
 export const gcashService = {
   // Backend returns a raw Laravel paginator ({data, links, meta}) for this
@@ -29,17 +36,23 @@ export const gcashService = {
 
   /**
    * Every transaction the filters match, across as many pages as it takes, for
-   * the tab's report export. Returns a `DrainResult`: a `truncated` drain
-   * must not be exported, since its totals would cover part of the range.
+   * the tab's report export, with the server's `meta.totals` (null when it
+   * sent none). A `truncated` drain must not be exported: its rows would cover
+   * only part of the range.
    */
-  listAllTransactions: (
+  listAllTransactions: async (
     params?: Omit<GCashListFilters, "page" | "per_page">,
     options?: { maxPages?: number },
-  ): Promise<DrainResult<GCashTransaction>> =>
-    fetchAllPages<GCashTransaction>(
-      ({ page, per_page }) => gcashService.listTransactions({ ...params, page, per_page }),
-      options,
-    ),
+  ): Promise<DrainResult<GCashTransaction> & { totals: GCashTransactionTotals | null }> => {
+    let totals: GCashTransactionTotals | null = null;
+    const drained = await fetchAllPages<GCashTransaction>(async ({ page, per_page }) => {
+      const res = await gcashService.listTransactions({ ...params, page, per_page });
+      // The drain keeps rows and paging only. `meta.totals` covers every page, so page 1's is read.
+      if (page === 1) totals = transactionTotals(res);
+      return res;
+    }, options);
+    return { ...drained, totals };
+  },
 
   createTransaction: (data: CreateGCashTransactionData) =>
     api.post<GCashTransaction>(API_ENDPOINTS.GCASH.TRANSACTIONS_CREATE, data),

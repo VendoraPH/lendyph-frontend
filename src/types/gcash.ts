@@ -103,6 +103,22 @@ export type GCashListFilters = {
   per_page?: number;
 };
 
+/**
+ * `GET /gcash/transactions` `meta.totals`: the server's figures over every
+ * transaction the filters match, not over the page. Money is a 2-decimal
+ * string; a figure that isn't sent is shown as "—", never added up here.
+ */
+export interface GCashTransactionTotals {
+  count: number;
+  /** Every transaction's amount, Cash In and Cash Out together. */
+  amount?: string;
+  cash_in: string;
+  cash_out: string;
+  charges: string;
+  /** Every transaction's total (Cash In adds the charge, Cash Out takes it off). */
+  total: string;
+}
+
 export type GCashTierInput = Omit<GCashTier, "id">;
 
 /**

@@ -34,8 +34,9 @@ export type TransactionsReportFilters = Pick<GCashTransactionsReportInput, "from
 /**
  * Download Report (PDF or Excel) and Print Report for the Transactions tab.
  * Each fetches every transaction the tab's filters match, not just the page
- * on screen, and refuses to go on when the list could not be fetched whole,
- * because the totals would then cover only part of the range.
+ * on screen, with the server's totals, and refuses to go on when the list
+ * could not be fetched whole, because the document would then list only part
+ * of the range.
  */
 export function TransactionsReportActions({
   filters,
@@ -67,7 +68,14 @@ export function TransactionsReportActions({
         setBusy(null);
         return;
       }
-      const doc = await applyChrome(gcashTransactionsReport({ ...filters, rows: drain.rows, branchOf }), {
+      const report = gcashTransactionsReport({
+        ...filters,
+        rows: drain.rows,
+        total: drain.total,
+        totals: drain.totals,
+        branchOf,
+      });
+      const doc = await applyChrome(report, {
         logoUrl,
         logoData: await loadLogoDataUrl(logoUrl),
         preparedBy: user?.full_name ?? user?.username ?? null,
