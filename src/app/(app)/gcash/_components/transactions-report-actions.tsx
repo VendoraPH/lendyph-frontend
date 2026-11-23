@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { gcashService } from "@/services/gcash.service";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { allBranchesLabel, branchViewer } from "@/lib/user-branches";
 import { useAuthStore } from "@/store";
 import { useBrandingStore } from "@/store/branding-store";
 import { applyChrome, loadLogoDataUrl } from "@/app/(app)/reports/_lib/report-chrome";
@@ -48,6 +49,7 @@ export function TransactionsReportActions({
   const [busy, setBusy] = useState<Action | null>(null);
   const [printDoc, setPrintDoc] = useState<ReportDocument | null>(null);
   const user = useAuthStore((s) => s.user);
+  const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
   const logoUrl = useBrandingStore((s) => s.logoUrl);
   const invalidRange = Boolean(filters.from && filters.to && filters.to < filters.from);
 
@@ -79,7 +81,8 @@ export function TransactionsReportActions({
         logoUrl,
         logoData: await loadLogoDataUrl(logoUrl),
         preparedBy: user?.full_name ?? user?.username ?? null,
-        branchLabel: null,
+        // The tab has no branch filter: the list is every branch the caller can see.
+        branchLabel: allBranchesLabel(branchViewer(user, viewAll)),
       });
       if (action === "print") {
         // Busy until the print dialog closes.
