@@ -50,6 +50,7 @@ export function TextField(
     autoComplete?: string;
     placeholder?: string;
     maxLength?: number;
+    readOnly?: boolean;
   },
 ) {
   return (
@@ -61,6 +62,7 @@ export function TextField(
         autoComplete={p.autoComplete}
         placeholder={p.placeholder}
         maxLength={p.maxLength}
+        readOnly={p.readOnly}
         value={p.value}
         aria-invalid={p.error ? true : undefined}
         aria-describedby={describedBy(p)}

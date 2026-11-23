@@ -3,63 +3,58 @@
 import { useState } from "react";
 import { CheckCircle2, FileUp, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { fileProblem, formatFileSize, uploadAccept, uploadRules } from "@/lib/loan-origination";
-import { publicApplicationService, publicErrorMessage } from "@/services/public-application.service";
-import type { ApplicationDocument, DocumentRequirement } from "@/types/loan-origination";
+import { formatFileSize } from "@/lib/loan-origination";
+import { publicApplicationService } from "@/services/public-application.service";
+import type { PublicDocument } from "@/types/public-application";
+import { publicErrorMessage } from "../_lib/errors";
+import { fileProblem, uploadAccept, uploadPercent, uploadRulesText, type UploadRules } from "../_lib/uploads";
 
-/** A requirement counts as met once a file for it is in and not turned down. */
-export function documentMet(doc: ApplicationDocument | undefined): boolean {
-  return !!doc && doc.status !== "not_submitted" && doc.status !== "rejected" && doc.status !== "replacement_requested";
-}
-
-export function requiredDocumentsMet(requirements: DocumentRequirement[], documents: ApplicationDocument[]): boolean {
-  return requirements.filter((r) => r.required).every((r) => documentMet(documents.find((d) => d.type === r.type)));
-}
-
-function DocumentRow({
-  requirement,
-  doc,
-  accept,
-  maxMb,
-  token,
-  sessionToken,
-  onUploaded,
-  onRemoved,
-}: {
-  requirement: DocumentRequirement;
-  doc: ApplicationDocument | undefined;
-  accept: string[];
-  maxMb: number;
+/** What a file row needs to reach the server, and what it tells its list. */
+export interface DocumentRowProps {
+  document: PublicDocument;
+  description: string | null;
+  rules: UploadRules;
   token: string;
   sessionToken: string;
-  onUploaded: (doc: ApplicationDocument) => void;
-  onRemoved: (id: number) => void;
-}) {
+  /** Only while the draft is open; a submitted application can only have a file replaced. */
+  canRemove: boolean;
+  onUploaded: (document: PublicDocument) => void;
+  onRemoved: (type: string) => void;
+  /** A session refusal goes to the page; true when it was one. */
+  onFailed: (err: unknown) => boolean;
+}
+
+/** One document type: its file, if any, and Upload, Replace or Remove. */
+export function DocumentRow({ document: doc, description, rules, token, sessionToken, canRemove, onUploaded, onRemoved, onFailed }: DocumentRowProps) {
   const [progress, setProgress] = useState<number | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
-  const inputId = `doc-${requirement.type}`;
-  const met = documentMet(doc);
+  const inputId = `doc-${doc.type}`;
+  const hasFile = doc.file_name !== null;
+
+  const failed = (err: unknown, fallback: string) => {
+    if (!onFailed(err)) setProblem(publicErrorMessage(err, fallback));
+  };
 
   const upload = (file: File | undefined) => {
     if (!file) return;
-    const bad = fileProblem(file, accept, maxMb);
+    const bad = fileProblem(file, rules);
     setProblem(bad);
     if (bad) return;
     setProgress(0);
     publicApplicationService
-      .uploadDocument(token, sessionToken, requirement.type, file, setProgress)
+      .uploadDocument(token, sessionToken, doc.type, file, (sent, size) => setProgress(uploadPercent(sent, size)))
       .then(onUploaded)
-      .catch((err) => setProblem(publicErrorMessage(err, "The upload did not finish. Try again.")))
+      .catch((err) => failed(err, "The upload did not finish. Try again."))
       .then(() => setProgress(null));
   };
 
   const remove = () => {
-    if (!doc) return;
+    if (doc.id === null) return;
     setProblem(null);
     publicApplicationService
       .removeDocument(token, sessionToken, doc.id)
-      .then(() => onRemoved(doc.id))
-      .catch((err) => setProblem(publicErrorMessage(err, "We could not remove that file.")));
+      .then(() => onRemoved(doc.type))
+      .catch((err) => failed(err, "We could not remove that file."));
   };
 
   return (
@@ -67,35 +62,32 @@ function DocumentRow({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="flex items-center gap-2 font-medium">
-            {met && <CheckCircle2 className="h-4 w-4 shrink-0 text-green-600" aria-label="Uploaded" />}
-            {requirement.label}
-            <span className="text-xs font-normal text-muted-foreground">{requirement.required ? "Required" : "Optional"}</span>
+            {hasFile && <CheckCircle2 className="h-4 w-4 shrink-0 text-green-600" aria-label="Uploaded" />}
+            {doc.label}
+            <span className="text-xs font-normal text-muted-foreground">{doc.required ? "Required" : "Optional"}</span>
           </p>
-          {requirement.description && <p className="text-sm text-muted-foreground">{requirement.description}</p>}
-          {doc?.file_name && (
+          {description && <p className="text-sm text-muted-foreground">{description}</p>}
+          {doc.file_name && (
             <p className="truncate text-sm">
               {doc.file_name} <span className="text-muted-foreground">· {formatFileSize(doc.size_bytes)}</span>
             </p>
           )}
-          {doc?.rejection_reason && (doc.status === "rejected" || doc.status === "replacement_requested") && (
-            <p className="text-sm text-destructive">Please upload another file: {doc.rejection_reason}</p>
-          )}
         </div>
         <div className="flex shrink-0 gap-2">
-          {doc?.file_name && progress === null && (
+          {canRemove && doc.id !== null && progress === null && (
             <Button type="button" variant="ghost" size="sm" onClick={remove}>
               <Trash2 className="mr-1 h-4 w-4" /> Remove
             </Button>
           )}
-          <Button type="button" variant={met ? "outline" : "default"} size="sm" disabled={progress !== null} nativeButton={false} render={<label htmlFor={inputId} />}>
+          <Button type="button" variant={hasFile ? "outline" : "default"} size="sm" disabled={progress !== null} nativeButton={false} render={<label htmlFor={inputId} />}>
             {progress !== null ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <FileUp className="mr-1 h-4 w-4" />}
-            {doc?.file_name ? "Replace" : "Upload"}
+            {hasFile ? "Replace" : "Upload"}
           </Button>
           <input
             id={inputId}
             type="file"
             className="sr-only"
-            accept={uploadAccept(accept)}
+            accept={uploadAccept(rules)}
             onChange={(e) => {
               upload(e.target.files?.[0]);
               e.target.value = "";
@@ -104,7 +96,7 @@ function DocumentRow({
         </div>
       </div>
       {progress !== null && (
-        <div className="h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label={`Uploading ${requirement.label}`}>
+        <div className="h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label={`Uploading ${doc.label}`}>
           <div className="h-full bg-brand-orange transition-[width]" style={{ width: `${progress}%` }} />
         </div>
       )}
@@ -117,44 +109,29 @@ function DocumentRow({
   );
 }
 
+/**
+ * The documents the server lists for this application's product, each with
+ * its file. After every upload or removal the server's view is read again.
+ */
 export function StepDocuments({
-  requirements,
   documents,
-  accept,
-  maxMb,
-  token,
-  sessionToken,
+  descriptions,
+  rules,
   error,
-  onChange,
+  row,
 }: {
-  requirements: DocumentRequirement[];
-  documents: ApplicationDocument[];
-  accept: string[];
-  maxMb: number;
-  token: string;
-  sessionToken: string;
+  documents: PublicDocument[];
+  descriptions: Record<string, string | null>;
+  rules: UploadRules;
   error?: string;
-  onChange: (documents: ApplicationDocument[]) => void;
+  row: Omit<DocumentRowProps, "document" | "description" | "rules">;
 }) {
-  const rules = uploadRules(accept, maxMb);
   return (
     <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">
-        Clear photos or scans are fine. {rules.extensions.map((t) => t.toUpperCase()).join(", ")}, up to {rules.maxMb} MB each.
-      </p>
+      <p className="text-sm text-muted-foreground">Clear photos or scans are fine. {uploadRulesText(rules)}</p>
       <ul className="space-y-3">
-        {requirements.map((r) => (
-          <DocumentRow
-            key={r.type}
-            requirement={r}
-            doc={documents.find((d) => d.type === r.type)}
-            accept={accept}
-            maxMb={maxMb}
-            token={token}
-            sessionToken={sessionToken}
-            onUploaded={(doc) => onChange([...documents.filter((d) => d.type !== doc.type), doc])}
-            onRemoved={(id) => onChange(documents.filter((d) => d.id !== id))}
-          />
+        {documents.map((d) => (
+          <DocumentRow key={d.type} document={d} description={descriptions[d.type] ?? null} rules={rules} {...row} />
         ))}
       </ul>
       {error && (

@@ -3,18 +3,15 @@
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { formatCurrency } from "@/lib/format";
-import {
-  consentIsDraft,
-  declaredExpenseRows,
-  declaredIncomeRows,
-  INCOME_SOURCE_LABELS,
-  parseAmount,
-  type WizardStepId,
-} from "@/lib/loan-origination";
-import type { ApplicationDocument, ApplicationDraft, ConsentAcceptance, PublicApplicationPortal } from "@/types/loan-origination";
-
-type Consent = { privacy: boolean; terms: boolean; credit: boolean; declaration: boolean; marketing: boolean };
+import { CIVIL_STATUS_OPTIONS, GENDER_OPTIONS } from "@/constants";
+import { pesoOrDash } from "@/lib/credit-scoring/capacity";
+import { formatCurrency, formatDate } from "@/lib/format";
+import { INCOME_SOURCE_LABELS, inWords, RELEASE_METHODS, type WizardStepId } from "@/lib/loan-origination";
+import type { ApplicationDraft } from "@/types/loan-origination";
+import type { Consents, DeclaredLine, NoticeKey, PublicApplicationState, PublicPortal, PublicProduct } from "@/types/public-application";
+import { consentsFor, noticesAreDraft, noticesToAccept, scheduleWords } from "../_lib/portal-state";
+import { missingDocumentsMessage, problemsByStep, typedAmount, type StepProblems } from "../_lib/wizard-state";
+import { NoticeText } from "./notice-text";
 
 function Section({ title, step, onEdit, children }: { title: string; step: WizardStepId; onEdit: (s: WizardStepId) => void; children: React.ReactNode }) {
   return (
@@ -25,135 +22,181 @@ function Section({ title, step, onEdit, children }: { title: string; step: Wizar
           Edit
         </Button>
       </div>
-      <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[minmax(0,12rem)_1fr]">{children}</dl>
+      <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[minmax(0,14rem)_1fr]">{children}</dl>
     </section>
   );
 }
 
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
+function Row({ label, value, strong = false }: { label: string; value: React.ReactNode; strong?: boolean }) {
   return (
     <>
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="break-words">{value || "—"}</dd>
+      <dt className={strong ? "font-medium" : "text-muted-foreground"}>{label}</dt>
+      <dd className={strong ? "font-medium break-words tabular-nums" : "break-words tabular-nums"}>{value || "—"}</dd>
     </>
   );
 }
 
-function ConsentBox({ id, label, text, checked, onChange }: { id: string; label: string; text?: string; checked: boolean; onChange: (v: boolean) => void }) {
+/** The server's monthly lines, each as it sent it. */
+function Lines({ lines }: { lines: DeclaredLine[] }) {
   return (
-    <div className="space-y-2">
-      {text && (
-        <details className="rounded-lg border bg-muted/30 p-3 text-sm">
-          <summary className="cursor-pointer font-medium">Read the {label.toLowerCase()}</summary>
-          <p className="mt-2 max-h-48 overflow-y-auto whitespace-pre-line text-muted-foreground">{text}</p>
-        </details>
-      )}
-      <label htmlFor={id} className="flex items-start gap-2 text-sm">
-        <input id={id} type="checkbox" className="mt-0.5" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-        <span>{label === "Marketing" ? "Send me news about other loans and services. (optional)" : `I have read and agree to the ${label.toLowerCase()}.`}</span>
-      </label>
-    </div>
+    <>
+      {lines.map((line) => (
+        <Row key={line.key} label={line.label} value={formatCurrency(line.monthly)} />
+      ))}
+    </>
   );
 }
 
+/** What the server says still blocks a submit, by step, each with a way back to it. */
+function Problems({ title, groups, onEdit }: { title: string; groups: StepProblems[]; onEdit: (s: WizardStepId) => void }) {
+  return (
+    <section className="space-y-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4" role="alert">
+      <h3 className="text-sm font-semibold text-destructive">{title}</h3>
+      {groups.map((group) => (
+        <div key={group.step} className="space-y-1 text-sm">
+          {group.step !== "review" ? (
+            <Button type="button" variant="link" size="sm" className="h-auto p-0 font-medium" onClick={() => onEdit(group.step)}>
+              {group.title}
+            </Button>
+          ) : (
+            <p className="font-medium">{group.title}</p>
+          )}
+          <ul className="list-disc space-y-0.5 pl-5 text-destructive">
+            {group.messages.map((message) => (
+              <li key={message}>{message}</li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+/**
+ * The last step: the answers as saved, the monthly figures the server worked
+ * out from them (`declared_totals`), what the server says still blocks a
+ * submit (`missing_fields` and the required documents), and every published
+ * notice to accept.
+ */
 export function StepReview({
   draft,
   portal,
-  documents,
-  contact,
+  application,
+  product,
   submitting,
   problem,
+  refusals,
   onEdit,
   onSubmit,
 }: {
   draft: ApplicationDraft;
-  portal: PublicApplicationPortal;
-  documents: ApplicationDocument[];
-  contact: { mobile: string; email: string };
+  portal: PublicPortal;
+  application: PublicApplicationState | null;
+  product: PublicProduct | undefined;
   submitting: boolean;
   problem: string | null;
+  /** A refused submit's fields, in the server's words. */
+  refusals: Record<string, string> | null;
   onEdit: (step: WizardStepId) => void;
-  onSubmit: (consent: ConsentAcceptance) => void;
+  onSubmit: (consents: Consents) => void;
 }) {
-  const [c, setC] = useState<Consent>({ privacy: false, terms: false, credit: false, declaration: false, marketing: false });
+  const [ticked, setTicked] = useState<Partial<Record<NoticeKey, boolean>>>({});
+  const [marketing, setMarketing] = useState(false);
   const { personal: p, employment: e, expenses: x, loan: l } = draft;
-  const product = portal.products.find((pr) => pr.id === l.loan_product_id);
-  const ready = c.privacy && c.terms && c.declaration && (!portal.credit_authorization || c.credit);
-  const set = (k: keyof Consent) => (v: boolean) => setC((prev) => ({ ...prev, [k]: v }));
+  const totals = application?.declared_totals;
+  const documentsMissing = application ? missingDocumentsMessage(application.documents) : null;
+  const blocking = problemsByStep({ ...(application?.missing_fields ?? {}), ...(documentsMissing ? { documents: documentsMissing } : {}) });
+  const notices = noticesToAccept(portal);
+  const consents = consentsFor(portal, marketing);
+  const allTicked = notices.every((n) => ticked[n.key]);
+  const ready = consents !== null && allTicked && blocking.length === 0 && !submitting;
+  const amount = typedAmount(l.amount);
+  const schedule = l.frequency || (product?.payment_frequencies.length === 1 ? product.payment_frequencies[0] : "");
 
   return (
     <div className="space-y-4">
+      {blocking.length > 0 && <Problems title="Before you can submit" groups={blocking} onEdit={onEdit} />}
+
       <Section title="Loan" step="loan" onEdit={onEdit}>
         <Row label="Product" value={product?.name} />
-        <Row label="Amount" value={parseAmount(l.amount) !== null ? formatCurrency(parseAmount(l.amount)!) : null} />
+        <Row label="Amount" value={amount !== null ? formatCurrency(amount) : null} />
         <Row label="Term" value={l.term && `${l.term} ${product?.term_unit ?? ""}`} />
+        <Row label="Payment schedule" value={schedule && scheduleWords(schedule)} />
+        <Row label="Receive the money by" value={inWords(l.release_method, RELEASE_METHODS)} />
         <Row label="Purpose" value={l.purpose} />
       </Section>
       <Section title="You" step="personal" onEdit={onEdit}>
         <Row label="Name" value={[p.first_name, p.middle_name, p.last_name, p.suffix].filter(Boolean).join(" ")} />
-        <Row label="Date of birth" value={p.date_of_birth} />
-        <Row label="Mobile" value={contact.mobile} />
-        <Row label="Email" value={contact.email} />
-        <Row label="Address" value={[p.street_address, p.barangay, p.city, p.province, p.postal_code].filter(Boolean).join(", ")} />
+        <Row label="Date of birth" value={/^\d{4}-\d{2}-\d{2}$/.test(p.date_of_birth) ? formatDate(p.date_of_birth) : p.date_of_birth} />
+        <Row label="Gender" value={inWords(p.gender, GENDER_OPTIONS)} />
+        <Row label="Civil status" value={inWords(p.civil_status, CIVIL_STATUS_OPTIONS)} />
+        <Row label="Mobile" value={application?.verified_contact.mobile} />
+        <Row label="Address" value={[p.street_address, p.barangay, p.city, p.province, p.region, p.postal_code].filter(Boolean).join(", ")} />
       </Section>
       <Section title="Income" step="employment" onEdit={onEdit}>
-        <Row label="Source" value={e.income_source ? INCOME_SOURCE_LABELS[e.income_source] : null} />
-        {declaredIncomeRows(e).map(([label, value]) => (
-          <Row key={label} label={label} value={value} />
-        ))}
+        <Row label="Main source" value={e.income_source ? INCOME_SOURCE_LABELS[e.income_source] : null} />
+        {totals && <Lines lines={totals.income} />}
+        <Row label="Monthly income" value={pesoOrDash(totals?.monthly_income)} strong />
       </Section>
       <Section title="Expenses and debts" step="expenses" onEdit={onEdit}>
-        <Row label="Existing loans" value={x.has_existing_loans === null ? null : x.has_existing_loans ? "Yes" : "None"} />
-        {declaredExpenseRows(x).map(([label, value], i) => (
-          <Row key={`${i}-${label}`} label={label} value={value} />
-        ))}
+        <Row label="Loans still being paid" value={x.has_existing_loans === null ? null : x.has_existing_loans ? "Yes" : "None"} />
+        {totals && <Lines lines={totals.expenses} />}
+        <Row label="Monthly expenses" value={pesoOrDash(totals?.monthly_expenses)} strong />
+        {totals && <Lines lines={totals.debts} />}
+        <Row label="Monthly debt payments" value={pesoOrDash(totals?.monthly_debt_payments)} strong />
+        <Row label="Left each month" value={pesoOrDash(totals?.monthly_remaining)} strong />
       </Section>
+      <p className="-mt-2 text-xs text-muted-foreground">
+        Monthly figures are worked out by the office from what you entered: an amount received weekly or yearly is shown per month.
+      </p>
       <Section title="Documents" step="documents" onEdit={onEdit}>
-        {documents.filter((d) => d.file_name).length === 0 ? (
+        {(application?.documents ?? []).filter((d) => d.file_name).length === 0 ? (
           <Row label="Files" value="None uploaded" />
         ) : (
-          documents.filter((d) => d.file_name).map((d) => <Row key={d.id} label={d.label} value={d.file_name} />)
+          (application?.documents ?? []).filter((d) => d.file_name).map((d) => <Row key={d.type} label={d.label} value={d.file_name} />)
         )}
       </Section>
 
       <section className="space-y-4 rounded-xl border bg-card p-4">
         <h3 className="text-sm font-semibold">Before you submit</h3>
-        {consentIsDraft(portal) && (
-          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900" role="note">
+        {noticesAreDraft(portal) && (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200" role="note">
             Draft wording: these texts are placeholders until the cooperative approves its own.
           </p>
         )}
-        <ConsentBox id="consent-privacy" label="Privacy notice" text={portal.privacy_notice.text} checked={c.privacy} onChange={set("privacy")} />
-        <ConsentBox id="consent-terms" label="Terms" text={portal.terms.text} checked={c.terms} onChange={set("terms")} />
-        {portal.credit_authorization && (
-          <ConsentBox id="consent-credit" label="Credit check authorization" text={portal.credit_authorization.text} checked={c.credit} onChange={set("credit")} />
-        )}
-        <ConsentBox id="consent-declaration" label="Declaration" text={portal.declaration.text} checked={c.declaration} onChange={set("declaration")} />
-        <ConsentBox id="consent-marketing" label="Marketing" checked={c.marketing} onChange={set("marketing")} />
+        {notices.map(({ key, label, notice }) => (
+          <div key={key} className="space-y-2">
+            <NoticeText label={label} notice={notice} />
+            <label htmlFor={`consent-${key}`} className="flex items-start gap-2 text-sm">
+              <input
+                id={`consent-${key}`}
+                type="checkbox"
+                className="mt-0.5"
+                checked={ticked[key] ?? false}
+                onChange={(event) => setTicked((prev) => ({ ...prev, [key]: event.target.checked }))}
+              />
+              <span>I have read and agree to the {label.toLowerCase()}.</span>
+            </label>
+          </div>
+        ))}
+        <label htmlFor="consent-marketing" className="flex items-start gap-2 text-sm">
+          <input id="consent-marketing" type="checkbox" className="mt-0.5" checked={marketing} onChange={(event) => setMarketing(event.target.checked)} />
+          <span>Send me news about other loans and services. (optional)</span>
+        </label>
       </section>
 
+      {refusals && <Problems title="Your application wasn't submitted" groups={problemsByStep(refusals)} onEdit={onEdit} />}
       {problem && (
         <p className="text-sm text-destructive" role="alert">
           {problem}
         </p>
       )}
-      <Button
-        size="lg"
-        className="w-full sm:w-auto"
-        disabled={!ready || submitting}
-        onClick={() =>
-          onSubmit({
-            privacy_notice_version: portal.privacy_notice.version,
-            terms_version: portal.terms.version,
-            declaration_version: portal.declaration.version,
-            credit_authorization_version: portal.credit_authorization?.version ?? null,
-            marketing_opt_in: c.marketing,
-          })
-        }
-      >
-        {submitting && <Loader2 className="mr-1 h-4 w-4 animate-spin" />} Submit application
-      </Button>
-      {!ready && <p className="text-xs text-muted-foreground">Tick each agreement above to submit.</p>}
+      <div className="space-y-1">
+        <Button size="lg" className="w-full sm:w-auto" disabled={!ready} onClick={() => consents && onSubmit(consents)}>
+          {submitting && <Loader2 className="mr-1 h-4 w-4 animate-spin" />} Submit application
+        </Button>
+        {blocking.length === 0 && !allTicked && <p className="text-xs text-muted-foreground">Tick each agreement above to submit.</p>}
+      </div>
     </div>
   );
 }

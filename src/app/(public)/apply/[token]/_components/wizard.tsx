@@ -1,152 +1,251 @@
 "use client";
 
-import { useState } from "react";
-import { ArrowLeft, ArrowRight, Check, CloudOff, Loader2 } from "lucide-react";
+import { useRef, useState } from "react";
+import { ArrowLeft, ArrowRight, Check, Loader2 } from "lucide-react";
+import { ScrollBox } from "@/components/common/page-fill";
 import { Button } from "@/components/ui/button";
-import { todayISO } from "@/lib/format";
-import {
-  mergeDraft,
-  validateEmployment,
-  validateExpenses,
-  validateLoanRequest,
-  validatePersonal,
-  WIZARD_STEPS,
-  type WizardErrors,
-  type WizardStepId,
-} from "@/lib/loan-origination";
-import { publicApplicationService, publicErrorMessage } from "@/services/public-application.service";
-import type { ApplicationDocument, ApplicationDraft, ApplicationSession, PublicApplicationPortal, SubmitResult } from "@/types/loan-origination";
-import { useDraftAutosave, type SaveState } from "../_hooks/use-draft-autosave";
+import { mergeDraft, WIZARD_STEPS, type WizardErrors, type WizardStepId } from "@/lib/loan-origination";
+import { publicApplicationService } from "@/services/public-application.service";
+import type { ApplicationDraft } from "@/types/loan-origination";
+import type { ApplicantSession, Consents, PublicApplicationState, PublicDocument, PublicPortal, Submitted } from "@/types/public-application";
+import { useDraftAutosave } from "../_hooks/use-draft-autosave";
 import { useLoanEstimate } from "../_hooks/use-loan-estimate";
-import { OtpVerify, type VerifiedContact } from "./otp-verify";
-import { requiredDocumentsMet, StepDocuments } from "./step-documents";
+import { fieldErrors, publicErrorMessage, sessionProblem } from "../_lib/errors";
+import { uploadRules } from "../_lib/uploads";
+import { draftAfterVerify, estimateRequest, missingDocumentsMessage, resumeStepIndex, stepErrors } from "../_lib/wizard-state";
+import { OtpVerify } from "./otp-verify";
+import { StepDocuments } from "./step-documents";
 import { StepEmployment } from "./step-employment";
 import { StepExpenses } from "./step-expenses";
 import { StepLoan } from "./step-loan";
 import { StepPersonal } from "./step-personal";
 import { StepProduct } from "./step-product";
 import { StepReview } from "./step-review";
+import { WizardHeader } from "./wizard-header";
 
-const SAVE_LABELS: Record<SaveState, string> = { idle: "", saving: "Saving…", saved: "Saved", error: "Not saved yet" };
+/** A removed file's row until the server's list comes back: the type, with no file. */
+const withoutFile = (d: PublicDocument): PublicDocument => ({
+  ...d,
+  id: null,
+  status: "not_submitted",
+  file_name: null,
+  mime_type: null,
+  size_bytes: null,
+  uploaded_at: null,
+});
 
-/** Where a resumed application picks up: the step after the last one finished. */
-function resumeIndex(session: ApplicationSession | null): number {
-  const last = session?.application?.last_completed_step;
-  const i = WIZARD_STEPS.findIndex((s) => s.id === last);
-  return session ? Math.min(Math.max(i + 1, 2), WIZARD_STEPS.length - 1) : 0;
+/** What ends the wizard, for the page to show next. */
+export interface WizardExits {
+  /** Submitted, or found already submitted (the reference, when the server gave it again). */
+  onDone: (result: Submitted | null, already: boolean) => void;
+  /** The session ended (idle, too old or replaced): a new code continues. */
+  onSessionEnded: (message: string, mobile: string) => void;
+  /** The link stopped taking applications. */
+  onLinkClosed: () => void;
+  onSignedOut: () => void;
 }
 
+/**
+ * The eight-step application. The server is the authority on every step:
+ * Next saves the draft and moves on only when the server's `missing_fields`
+ * hold nothing for the step, the estimate and the monthly figures are the
+ * server's, and the server works out the completion and the last step.
+ */
 export function Wizard({
   token,
   portal,
   initialSession,
-  initialContact,
+  initialMobile,
   onDone,
+  onSessionEnded,
+  onLinkClosed,
+  onSignedOut,
 }: {
   token: string;
-  portal: PublicApplicationPortal;
-  initialSession: ApplicationSession | null;
-  initialContact: VerifiedContact | null;
-  onDone: (result: SubmitResult) => void;
-}) {
+  portal: PublicPortal;
+  initialSession: ApplicantSession | null;
+  initialMobile: string;
+} & WizardExits) {
   const [session, setSession] = useState(initialSession);
-  const [contact, setContact] = useState(initialContact);
+  const [mobile, setMobile] = useState(initialMobile);
+  const [application, setApplication] = useState<PublicApplicationState | null>(initialSession?.application ?? null);
   const [draft, setDraft] = useState<ApplicationDraft>(() => mergeDraft(initialSession?.application?.draft));
-  const [documents, setDocuments] = useState<ApplicationDocument[]>(initialSession?.application?.documents ?? []);
-  const [index, setIndex] = useState(() => resumeIndex(initialSession));
+  const [index, setIndex] = useState(() => (initialSession ? resumeStepIndex(initialSession.application?.last_completed_step ?? null) : 0));
   const [errors, setErrors] = useState<WizardErrors>({});
+  const [checking, setChecking] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  const [refusals, setRefusals] = useState<Record<string, string> | null>(null);
+  const consentsSent = useRef<Consents | null>(null);
+  const finished = useRef(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   const step = WIZARD_STEPS[index];
   const sessionToken = session?.session_token ?? null;
   const product = portal.products.find((p) => p.id === draft.loan.loan_product_id);
-  const autosave = useDraftAutosave(token, sessionToken, draft, step.id);
-  const loanErrors = validateLoanRequest(draft.loan, product);
-  const estimate = useLoanEstimate(token, sessionToken, draft.loan, !loanErrors.amount && !loanErrors.term && !loanErrors.frequency && !!product);
+  const rules = uploadRules(portal);
 
-  const patch = <K extends keyof ApplicationDraft>(key: K) => (p: Partial<ApplicationDraft[K]>) =>
-    setDraft((d) => ({ ...d, [key]: { ...d[key], ...p } }));
+  /** The submit already went through: a retried submit answers the same reference. */
+  const recoverSubmitted = () => {
+    const consents = consentsSent.current;
+    if (!sessionToken || !consents) return onDone(null, true);
+    publicApplicationService.submit(token, sessionToken, consents).then(
+      (result) => onDone(result, true),
+      () => onDone(null, true),
+    );
+  };
+
+  /** A session refusal ends the wizard, once; true when `err` was one. */
+  const handleSessionError = (err: unknown): boolean => {
+    const kind = sessionProblem(err);
+    if (!kind) return false;
+    if (finished.current) return true;
+    finished.current = true;
+    if (kind === "ended") onSessionEnded(publicErrorMessage(err, ""), mobile);
+    else if (kind === "closed") {
+      if (sessionToken) void publicApplicationService.logout(token, sessionToken);
+      onLinkClosed();
+    } else recoverSubmitted();
+    return true;
+  };
+
+  const autosave = useDraftAutosave({
+    token,
+    sessionToken,
+    draft,
+    onSaved: setApplication,
+    onFailed: (err) => void handleSessionError(err),
+  });
+  const estimate = useLoanEstimate(token, sessionToken, estimateRequest(draft.loan, product), handleSessionError);
+
+  const patch =
+    <K extends keyof ApplicationDraft>(key: K) =>
+    (p: Partial<ApplicationDraft[K]>) =>
+      setDraft((d) => ({ ...d, [key]: { ...d[key], ...p } }));
 
   const go = (to: number) => {
-    void autosave.flush();
     setErrors({});
     setProblem(null);
+    setRefusals(null);
     setIndex(to);
+    bodyRef.current?.scrollTo({ top: 0 });
     window.scrollTo({ top: 0 });
   };
-  const goTo = (id: WizardStepId) => go(WIZARD_STEPS.findIndex((s) => s.id === id));
+  /** Moves on and saves in the background; a refusal there reaches the save status or ends the session. */
+  const leave = (to: number) => {
+    autosave.flush().catch(() => undefined);
+    go(to);
+  };
+  const goTo = (id: WizardStepId) => leave(WIZARD_STEPS.findIndex((s) => s.id === id));
 
-  const check = (id: WizardStepId): WizardErrors => {
-    switch (id) {
-      case "product":
-        return draft.loan.loan_product_id === null ? { loan_product_id: "Choose a loan product." } : {};
-      case "personal":
-        return validatePersonal(draft.personal, todayISO());
-      case "employment":
-        return validateEmployment(draft.employment);
-      case "expenses":
-        return validateExpenses(draft.expenses);
-      case "loan":
-        return loanErrors;
-      case "documents":
-        return requiredDocumentsMet(portal.documents, documents) ? {} : { documents: "Upload each required document." };
-      default:
-        return {};
-    }
+  /** The server's view again, after a file changed. */
+  const refresh = () => {
+    if (!sessionToken) return;
+    publicApplicationService.getDraft(token, sessionToken).then(setApplication, (err) => void handleSessionError(err));
   };
 
   const next = () => {
-    const found = check(step.id);
-    setErrors(found);
-    if (Object.keys(found).length) {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
+    setProblem(null);
+    if (step.id === "product") {
+      if (draft.loan.loan_product_id === null) return setErrors({ loan_product_id: "Choose a loan product." });
+      return leave(index + 1);
     }
-    go(index + 1);
+    if (step.id === "documents") {
+      const missing = missingDocumentsMessage(application?.documents ?? []);
+      if (missing) return setErrors({ documents: missing });
+      return leave(index + 1);
+    }
+    setChecking(true);
+    autosave.flush().then(
+      (saved) => {
+        setChecking(false);
+        const found = stepErrors(step.id, (saved ?? application)?.missing_fields ?? {});
+        if (Object.keys(found).length > 0) return setErrors(found);
+        go(index + 1);
+      },
+      (err) => {
+        setChecking(false);
+        if (handleSessionError(err)) return;
+        const fields = fieldErrors(err);
+        const found = fields ? stepErrors(step.id, fields) : {};
+        if (Object.keys(found).length > 0) return setErrors(found);
+        setProblem(fields ? Object.values(fields)[0] : publicErrorMessage(err, "Your answers couldn't be saved. Check your connection and try again."));
+      },
+    );
   };
 
-  const submit = (consent: Parameters<typeof publicApplicationService.submit>[2]) => {
+  const verified = (started: ApplicantSession, typedMobile: string) => {
+    const merged = draftAfterVerify(draft, started.application?.draft, portal.branches);
+    setSession(started);
+    setMobile(typedMobile);
+    setApplication(started.application);
+    setDraft(merged);
+    go(resumeStepIndex(started.application?.last_completed_step ?? null));
+  };
+
+  const submit = (consents: Consents) => {
     if (!sessionToken) return;
+    consentsSent.current = consents;
     setSubmitting(true);
     setProblem(null);
+    setRefusals(null);
     autosave
       .flush()
-      .then(() => publicApplicationService.submit(token, sessionToken, consent))
-      .then(onDone)
+      .then(() => publicApplicationService.submit(token, sessionToken, consents))
+      .then((result) => {
+        finished.current = true;
+        // The session's work is done: it could only repeat the submit.
+        void publicApplicationService.logout(token, sessionToken);
+        onDone(result, false);
+      })
       .catch((err) => {
-        setProblem(publicErrorMessage(err, "We could not submit your application. Your answers are saved; try again."));
         setSubmitting(false);
+        if (handleSessionError(err)) return;
+        const fields = fieldErrors(err);
+        if (fields) setRefusals(fields);
+        else setProblem(publicErrorMessage(err, "Your application couldn't be submitted. Your answers are saved; try again."));
       });
   };
 
-  const selectProduct = (id: number) => {
-    const p = portal.products.find((pr) => pr.id === id);
-    patch("loan")({ loan_product_id: id, frequency: p?.payment_frequencies.length === 1 ? p.payment_frequencies[0] : "" });
+  /** Saves what it can, ends the session, and always signs out in the browser. */
+  const signOut = () => {
+    if (!sessionToken) return onSignedOut();
+    setLeaving(true);
+    finished.current = true;
+    autosave
+      .flush()
+      .catch(() => undefined)
+      .then(() => publicApplicationService.logout(token, sessionToken))
+      .then(onSignedOut);
+  };
+
+  const onDocumentChanged = (documents: PublicDocument[]) => {
+    setApplication((current) => (current ? { ...current, documents } : current));
+    refresh();
   };
 
   const body = () => {
     switch (step.id) {
       case "product":
-        return <StepProduct products={portal.products} value={draft.loan.loan_product_id} error={errors.loan_product_id} onChange={selectProduct} />;
-      case "contact":
-        return session && contact ? (
-          <p className="flex items-center gap-2 rounded-lg bg-green-50 p-3 text-sm text-green-800">
-            <Check className="h-4 w-4" /> Verified: {contact.mobile}
-            {contact.email && ` · ${contact.email}`}
-          </p>
-        ) : (
-          <OtpVerify
-            token={token}
-            purpose="apply"
-            channels={portal.otp_channels}
-            onVerified={(s, c) => {
-              setSession(s);
-              setContact(c);
-              if (s.application?.documents) setDocuments(s.application.documents);
-              go(index + 1);
+        return (
+          <StepProduct
+            products={portal.products}
+            value={draft.loan.loan_product_id}
+            error={errors.loan_product_id}
+            onChange={(id) => {
+              const chosen = portal.products.find((p) => p.id === id);
+              patch("loan")({ loan_product_id: id, frequency: chosen?.payment_frequencies.length === 1 ? chosen.payment_frequencies[0] : "" });
             }}
           />
+        );
+      case "contact":
+        return session ? (
+          <p className="flex items-center gap-2 rounded-lg bg-green-50 p-3 text-sm text-green-800 dark:bg-green-500/10 dark:text-green-300">
+            <Check className="h-4 w-4" /> Verified: {application?.verified_contact.mobile ?? mobile}
+          </p>
+        ) : (
+          <OtpVerify token={token} purpose="apply" privacyNotice={portal.privacy_notice} initialMobile={mobile} onVerified={verified} />
         );
       case "personal":
         return <StepPersonal value={draft.personal} errors={errors} onChange={patch("personal")} branches={portal.branches} />;
@@ -157,16 +256,20 @@ export function Wizard({
       case "loan":
         return <StepLoan value={draft.loan} errors={errors} onChange={patch("loan")} product={product} estimate={estimate} />;
       case "documents":
-        return sessionToken ? (
+        return sessionToken && application ? (
           <StepDocuments
-            requirements={portal.documents}
-            documents={documents}
-            accept={portal.accepted_file_types}
-            maxMb={portal.max_upload_mb}
-            token={token}
-            sessionToken={sessionToken}
+            documents={application.documents}
+            descriptions={Object.fromEntries(portal.documents.map((d) => [d.type, d.description]))}
+            rules={rules}
             error={errors.documents}
-            onChange={setDocuments}
+            row={{
+              token,
+              sessionToken,
+              canRemove: true,
+              onUploaded: (doc) => onDocumentChanged(application.documents.map((d) => (d.type === doc.type ? doc : d))),
+              onRemoved: (type) => onDocumentChanged(application.documents.map((d) => (d.type === type ? withoutFile(d) : d))),
+              onFailed: handleSessionError,
+            }}
           />
         ) : null;
       case "review":
@@ -174,10 +277,11 @@ export function Wizard({
           <StepReview
             draft={draft}
             portal={portal}
-            documents={documents}
-            contact={contact ?? { mobile: "", email: "" }}
+            application={application}
+            product={product}
             submitting={submitting}
             problem={problem}
+            refusals={refusals}
             onEdit={goTo}
             onSubmit={submit}
           />
@@ -185,53 +289,34 @@ export function Wizard({
     }
   };
 
-  const hasErrors = Object.keys(errors).length > 0;
   return (
-    <div className="space-y-5">
-      <div className="space-y-2">
-        <div className="flex items-center justify-between gap-2 text-sm">
-          <span className="text-muted-foreground">
-            Step {index + 1} of {WIZARD_STEPS.length}
-          </span>
-          {sessionToken && autosave.state !== "idle" && (
-            <span className="flex items-center gap-1 text-xs text-muted-foreground" aria-live="polite">
-              {autosave.state === "saving" && <Loader2 className="h-3 w-3 animate-spin" />}
-              {autosave.state === "error" && <CloudOff className="h-3 w-3" />}
-              {SAVE_LABELS[autosave.state]}
-            </span>
-          )}
-        </div>
-        <div className="h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden>
-          <div className="h-full bg-brand-orange transition-[width]" style={{ width: `${((index + 1) / WIZARD_STEPS.length) * 100}%` }} />
-        </div>
-        <h1 className="text-xl font-semibold">{step.title}</h1>
-      </div>
+    <div className="flex flex-col gap-4 fit:h-full fit:min-h-0">
+      <WizardHeader
+        index={index}
+        total={WIZARD_STEPS.length}
+        title={step.title}
+        completion={application?.completion_percent ?? null}
+        saveState={sessionToken ? autosave.state : null}
+        leaving={leaving}
+        onSignOut={sessionToken ? signOut : null}
+        messages={step.id === "product" || step.id === "documents" ? [] : Object.values(errors)}
+        problem={step.id === "review" ? null : problem}
+      />
 
-      {hasErrors && (
-        <p className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive" role="alert">
-          Check the fields marked below.
-        </p>
-      )}
+      <ScrollBox ref={bodyRef} className="rounded-xl border bg-card p-4 sm:p-6">
+        {body()}
+      </ScrollBox>
 
-      <div className="rounded-xl border bg-white p-4 sm:p-6">{body()}</div>
-
-      {step.id !== "review" && (
-        <div className="flex justify-between gap-2">
-          <Button variant="outline" onClick={() => go(index - 1)} disabled={index === 0}>
-            <ArrowLeft className="mr-1 h-4 w-4" /> Back
-          </Button>
-          {(step.id !== "contact" || session) && (
-            <Button onClick={next}>
-              Next <ArrowRight className="ml-1 h-4 w-4" />
-            </Button>
-          )}
-        </div>
-      )}
-      {step.id === "review" && (
-        <Button variant="outline" onClick={() => go(index - 1)}>
+      <div className="flex justify-between gap-2">
+        <Button variant="outline" onClick={() => leave(index - 1)} disabled={index === 0 || checking || submitting}>
           <ArrowLeft className="mr-1 h-4 w-4" /> Back
         </Button>
-      )}
+        {step.id !== "review" && (step.id !== "contact" || session) && (
+          <Button onClick={next} disabled={checking}>
+            {checking && <Loader2 className="mr-1 h-4 w-4 animate-spin" />} Next <ArrowRight className="ml-1 h-4 w-4" />
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
