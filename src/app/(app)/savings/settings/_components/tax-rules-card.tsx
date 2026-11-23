@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { PermissionButton } from "@/components/common/permission-button";
+import { ActionButton } from "@/app/(app)/savings/_components/action-button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -12,9 +12,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { usePermission } from "@/hooks";
 import { useSubmitGuard } from "@/hooks/use-submit-guard";
 import { formatDate, formatRate, todayISO } from "@/lib/format";
 import { notifyError, notifySuccess, notifyValidation } from "@/lib/notify";
+import { companyWideBlocker } from "@/lib/savings/company-wide";
 import { savingsService } from "@/services";
 import type { SavingsHolderType, SavingsSettings } from "@/types";
 import { FormField } from "../../_components/field";
@@ -32,8 +34,14 @@ const HOLDER_OPTIONS = (Object.keys(HOLDER_TYPE_LABELS) as SavingsHolderType[]).
   label: HOLDER_TYPE_LABELS[h],
 }));
 
-/** Tax withheld on deposit interest, by holder type. Append-only: a new rule takes effect on its date. */
+/**
+ * Tax withheld on deposit interest, by holder type. Append-only: a new rule
+ * takes effect on its date. Company-wide: adding one needs savings:settings
+ * and branches:view_all; anyone else reads the rules, with the reason.
+ */
 export function TaxRulesCard({ settings, onAdded }: TaxRulesCardProps) {
+  const blocker = companyWideBlocker(usePermission().can, "tax_rules");
+  const canEdit = blocker === null;
   const today = todayISO();
   const [holder, setHolder] = useState<SavingsHolderType>("member");
   const [rate, setRate] = useState("");
@@ -69,18 +77,34 @@ export function TaxRulesCard({ settings, onAdded }: TaxRulesCardProps) {
               value={holder}
               onChange={(v) => setHolder(v as SavingsHolderType)}
               options={HOLDER_OPTIONS}
+              disabled={!canEdit}
             />
           </FormField>
           <FormField id="tx-rate" label="Rate (%)">
-            <Input id="tx-rate" inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="20" />
+            <Input
+              id="tx-rate"
+              inputMode="decimal"
+              value={rate}
+              onChange={(e) => setRate(e.target.value)}
+              placeholder="20"
+              disabled={!canEdit}
+            />
           </FormField>
           <FormField id="tx-from" label="Effective from">
-            <Input id="tx-from" type="date" min={today} value={from} onChange={(e) => setFrom(e.target.value)} />
+            <Input
+              id="tx-from"
+              type="date"
+              min={today}
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+              disabled={!canEdit}
+            />
           </FormField>
-          <PermissionButton permission="savings:settings" onClick={add} disabled={submitting}>
+          <ActionButton permission="savings:settings" onClick={add} disabled={submitting} blockedReason={blocker}>
             {submitting ? "Adding…" : "Add rule"}
-          </PermissionButton>
+          </ActionButton>
         </div>
+        {blocker && <p className="text-xs text-muted-foreground">{blocker}</p>}
         <div className="max-h-72 overflow-auto rounded-lg border">
           <Table>
             <TableHeader>

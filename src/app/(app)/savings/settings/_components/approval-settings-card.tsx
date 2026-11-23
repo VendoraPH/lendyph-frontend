@@ -8,7 +8,7 @@ import { usePermission } from "@/hooks";
 import { notifyError, notifySuccess, notifyValidation } from "@/lib/notify";
 import { savingsService } from "@/services";
 import type { SavingsSettings } from "@/types";
-import { ActionButton } from "../../_components/action-button";
+import { ActionButton } from "@/app/(app)/savings/_components/action-button";
 import { FormField } from "../../_components/field";
 import { readSettingsDraft, settingsEditBlocker, toSettingsDraft, type SettingsDraft } from "../_lib/settings-form";
 

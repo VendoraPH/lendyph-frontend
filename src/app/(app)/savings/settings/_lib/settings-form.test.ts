@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { SavingsSettings } from "@/types";
+import { companyWideBlocker, companyWideMissing } from "@/lib/savings/company-wide";
 import {
   prepareBooksBlocker,
   prepareBooksSummary,
@@ -130,4 +131,14 @@ test("the settings card takes edits only with savings:settings and branches:view
   assert.match(settingsEditBlocker(holding("savings:settings", "savings:view")) ?? "", /every branch, so changing them needs access to all branches/);
   assert.match(settingsEditBlocker(holding("savings:view", "branches:view_all")) ?? "", /needs the Savings configure permission/);
   assert.match(settingsEditBlocker(holding("savings:view")) ?? "", /needs the Savings configure permission/);
+});
+
+test("the settings card and the books set-up follow the one company-wide savings rule", () => {
+  const holding = (...held: string[]) => (p: string) => held.includes(p);
+  const holders = [[], ["savings:view"], ["savings:settings"], ["branches:view_all"], ["savings:settings", "branches:view_all"]];
+  for (const held of holders) {
+    const can = holding(...held);
+    assert.equal(settingsEditBlocker(can), companyWideBlocker(can, "settings"), held.join(", "));
+    assert.equal(prepareBooksBlocker(can) === null, companyWideMissing(can) === null, held.join(", "));
+  }
 });

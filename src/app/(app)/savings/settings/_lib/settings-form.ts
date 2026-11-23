@@ -1,4 +1,5 @@
 import { parseMoneyInput } from "@/lib/money-input";
+import { companyWideBlocker, companyWideMissing } from "@/lib/savings/company-wide";
 import type {
   Permission,
   PrepareBooksResult,
@@ -124,19 +125,18 @@ export function prepareBooksSummary(result: Partial<PrepareBooksResult>): Array<
 }
 
 /**
- * Why the settings card is read-only, or null when it takes edits. The
- * settings apply to every branch, so `PUT /savings/settings` needs
- * savings:settings and branches:view_all (AuthorizesCompanyWideSavings).
+ * Why the settings card is read-only, or null when it takes edits: the
+ * company-wide savings rule (`PUT /savings/settings` needs savings:settings
+ * and branches:view_all).
  */
 export function settingsEditBlocker(can: (permission: Permission) => boolean): string | null {
-  if (!can("savings:settings")) return "Changing the savings settings needs the Savings configure permission.";
-  if (!can("branches:view_all")) return "The savings settings apply to every branch, so changing them needs access to all branches.";
-  return null;
+  return companyWideBlocker(can, "settings");
 }
 
-/** Why the set-up button is disabled, or null: it needs savings:settings and branches:view_all. */
+/** Why the set-up button is disabled, or null: the same company-wide rule, in the books' own words. */
 export function prepareBooksBlocker(can: (permission: Permission) => boolean): string | null {
-  if (!can("savings:settings")) return "Setting up the books needs the Savings configure permission.";
-  if (!can("branches:view_all")) return "Setting up the books changes the whole chart, so it needs access to all branches.";
+  const missing = companyWideMissing(can);
+  if (missing === "savings:settings") return "Setting up the books needs the Savings configure permission.";
+  if (missing === "branches:view_all") return "Setting up the books changes the whole chart, so it needs access to all branches.";
   return null;
 }

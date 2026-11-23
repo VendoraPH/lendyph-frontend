@@ -4,12 +4,12 @@ import { useId, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PermissionButton } from "@/components/common/permission-button";
 import { useSubmitGuard } from "@/hooks/use-submit-guard";
 import { formatDate } from "@/lib/format";
 import { notifyError, notifySuccess, notifyValidation } from "@/lib/notify";
 import { savingsService } from "@/services";
 import type { SavingsProduct } from "@/types";
+import { ActionButton } from "@/app/(app)/savings/_components/action-button";
 import { FormField } from "../../_components/field";
 import { MAX_TIERS, readTierDraft, type TierDraft } from "../_lib/rate-draft";
 
@@ -17,6 +17,8 @@ interface TierRateFormProps {
   product: SavingsProduct;
   today: string;
   onAdded: () => void;
+  /** Why the form is read-only (the company-wide savings rule), or null when it takes rates. */
+  blocker: string | null;
 }
 
 const fresh = (today: string): TierDraft => ({ baseRate: "", tiers: [], effectiveFrom: today });
@@ -28,7 +30,8 @@ const fresh = (today: string): TierDraft => ({ baseRate: "", tiers: [], effectiv
  * The server checks the order and answers in words. Render it with
  * `key={product.id}` so another product starts blank.
  */
-export function TierRateForm({ product, today, onAdded }: TierRateFormProps) {
+export function TierRateForm({ product, today, onAdded, blocker }: TierRateFormProps) {
+  const canEdit = blocker === null;
   const uid = useId();
   const [draft, setDraft] = useState<TierDraft>(() => fresh(today));
   const { submitting, run } = useSubmitGuard();
@@ -63,6 +66,7 @@ export function TierRateForm({ product, today, onAdded }: TierRateFormProps) {
             value={draft.baseRate}
             onChange={(e) => setDraft((d) => ({ ...d, baseRate: e.target.value }))}
             placeholder="0.5000"
+            disabled={!canEdit}
           />
         </FormField>
         <span className="hidden w-9 sm:block" aria-hidden />
@@ -77,6 +81,7 @@ export function TierRateForm({ product, today, onAdded }: TierRateFormProps) {
               value={tier.minBalance}
               onChange={(e) => setTier(i, "minBalance", e.target.value)}
               placeholder="10000.00"
+              disabled={!canEdit}
             />
           </FormField>
           <FormField id={`${uid}-rate-${i}`} label="Annual rate (%)">
@@ -86,6 +91,7 @@ export function TierRateForm({ product, today, onAdded }: TierRateFormProps) {
               value={tier.rate}
               onChange={(e) => setTier(i, "rate", e.target.value)}
               placeholder="1.2500"
+              disabled={!canEdit}
             />
           </FormField>
           <Button
@@ -93,6 +99,7 @@ export function TierRateForm({ product, today, onAdded }: TierRateFormProps) {
             size="icon"
             aria-label={`Remove tier ${i + 1}`}
             onClick={() => setDraft((d) => ({ ...d, tiers: d.tiers.filter((_, j) => j !== i) }))}
+            disabled={!canEdit}
           >
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -104,7 +111,7 @@ export function TierRateForm({ product, today, onAdded }: TierRateFormProps) {
           variant="outline"
           size="sm"
           onClick={() => setDraft((d) => ({ ...d, tiers: [...d.tiers, { minBalance: "", rate: "" }] }))}
-          disabled={draft.tiers.length + 1 >= MAX_TIERS}
+          disabled={!canEdit || draft.tiers.length + 1 >= MAX_TIERS}
         >
           <Plus className="h-4 w-4" /> Add a tier
         </Button>
@@ -115,11 +122,12 @@ export function TierRateForm({ product, today, onAdded }: TierRateFormProps) {
             min={today}
             value={draft.effectiveFrom}
             onChange={(e) => setDraft((d) => ({ ...d, effectiveFrom: e.target.value }))}
+            disabled={!canEdit}
           />
         </FormField>
-        <PermissionButton permission="savings:settings" onClick={save} disabled={submitting}>
+        <ActionButton permission="savings:settings" onClick={save} disabled={submitting} blockedReason={blocker}>
           {submitting ? "Adding…" : "Add rates"}
-        </PermissionButton>
+        </ActionButton>
       </div>
       <p className="text-xs text-muted-foreground">
         Each day the whole balance earns the rate of the highest tier it reaches. List tiers from the lowest balance up.

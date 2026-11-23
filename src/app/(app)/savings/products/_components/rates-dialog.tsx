@@ -19,13 +19,14 @@ import {
 } from "@/components/ui/table";
 import { DataState } from "@/components/common/data-state";
 import { ScrollBox } from "@/components/common/page-fill";
-import { PermissionButton } from "@/components/common/permission-button";
-import { useApiResource, useDialogOpening } from "@/hooks";
+import { useApiResource, useDialogOpening, usePermission } from "@/hooks";
 import { useSubmitGuard } from "@/hooks/use-submit-guard";
 import { formatDate, formatRate, todayISO } from "@/lib/format";
 import { notifyError, notifySuccess, notifyValidation } from "@/lib/notify";
+import { companyWideBlocker } from "@/lib/savings/company-wide";
 import { savingsService } from "@/services";
 import type { SavingsProduct } from "@/types";
+import { ActionButton } from "@/app/(app)/savings/_components/action-button";
 import { FormField } from "../../_components/field";
 import { OptionSelect } from "../../_components/option-select";
 import { actorName } from "../../_lib/savings-rules";
@@ -43,8 +44,12 @@ interface RatesDialogProps {
  * ladder of balance tiers (gap round S2). Shows what is in force today, the
  * full history, and the form to add rates. Rates are append-only: new rates
  * take effect on their date and never rewrite interest already credited.
+ * Adding rates needs savings:settings and branches:view_all (company-wide);
+ * anyone else reads them, with the reason.
  */
 export function RatesDialog({ product, onOpenChange, onAdded }: RatesDialogProps) {
+  const blocker = companyWideBlocker(usePermission().can, "products");
+  const canEdit = blocker === null;
   const open = product !== null;
   const today = todayISO();
   const [draft, setDraft] = useState<RateDraft>({ termDays: "", rate: "", effectiveFrom: today });
@@ -141,8 +146,9 @@ export function RatesDialog({ product, onOpenChange, onAdded }: RatesDialogProps
             <h3 id="rates-add" className="text-sm font-medium">
               {td ? "Add rate" : "Add rates"}
             </h3>
+            {blocker && <p className="text-xs text-muted-foreground">{blocker}</p>}
             {product && !td ? (
-              <TierRateForm key={product.id} product={product} today={today} onAdded={added} />
+              <TierRateForm key={product.id} product={product} today={today} onAdded={added} blocker={blocker} />
             ) : (
               <div className="grid items-end gap-3 sm:grid-cols-4">
                 {td && (
@@ -152,6 +158,7 @@ export function RatesDialog({ product, onOpenChange, onAdded }: RatesDialogProps
                       value={draft.termDays}
                       onChange={(v) => setDraft((d) => ({ ...d, termDays: v }))}
                       options={(product?.term_options_days ?? []).map((t) => ({ value: String(t), label: rateTermLabel(t) }))}
+                      disabled={!canEdit}
                     />
                   </FormField>
                 )}
@@ -162,6 +169,7 @@ export function RatesDialog({ product, onOpenChange, onAdded }: RatesDialogProps
                     value={draft.rate}
                     onChange={(e) => setDraft((d) => ({ ...d, rate: e.target.value }))}
                     placeholder="1.2500"
+                    disabled={!canEdit}
                   />
                 </FormField>
                 <FormField id="rt-from" label="Effective from">
@@ -171,11 +179,12 @@ export function RatesDialog({ product, onOpenChange, onAdded }: RatesDialogProps
                     min={today}
                     value={draft.effectiveFrom}
                     onChange={(e) => setDraft((d) => ({ ...d, effectiveFrom: e.target.value }))}
+                    disabled={!canEdit}
                   />
                 </FormField>
-                <PermissionButton permission="savings:settings" onClick={add} disabled={submitting}>
+                <ActionButton permission="savings:settings" onClick={add} disabled={submitting} blockedReason={blocker}>
                   {submitting ? "Adding…" : "Add rate"}
-                </PermissionButton>
+                </ActionButton>
               </div>
             )}
           </section>

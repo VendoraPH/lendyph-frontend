@@ -3,7 +3,6 @@
 import { useCallback, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Percent, Pencil, Plus, Trash2 } from "lucide-react";
-import { PermissionButton } from "@/components/common/permission-button";
 import { DataState } from "@/components/common/data-state";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import {
@@ -26,9 +25,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useApiResource } from "@/hooks";
+import { useApiResource, usePermission } from "@/hooks";
 import { formatCurrency, formatRate } from "@/lib/format";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { companyWideBlocker } from "@/lib/savings/company-wide";
 import { FIT_CLASSES } from "@/lib/page-fill";
 import { cn } from "@/lib/utils";
 import { savingsService } from "@/services";
@@ -36,11 +36,18 @@ import type { SavingsProduct } from "@/types";
 import { INTEREST_CREDITING_LABELS, PRODUCT_KIND_LABELS, labelOf } from "../../_lib/savings-rules";
 import { termLabel } from "../../_lib/time-deposit-rules";
 import { ACCOUNT_STATUS_TONE } from "../../_components/account-status-badge";
+import { ActionButton } from "@/app/(app)/savings/_components/action-button";
 import { ladderLines, rateTermLabel } from "../_lib/rate-draft";
 import { ProductDialog } from "./product-dialog";
 import { RatesDialog } from "./rates-dialog";
 
+/**
+ * The savings products and their rates. Company-wide: adding, editing (turning
+ * a product on or off included), deleting and adding rates need
+ * savings:settings and branches:view_all; anyone else reads them, with the reason.
+ */
 export function ProductsScreen() {
+  const blocker = companyWideBlocker(usePermission().can, "products");
   const fetcher = useCallback(() => savingsService.products(), []);
   const resource = useApiResource(fetcher);
   const [editing, setEditing] = useState<SavingsProduct | null>(null);
@@ -84,10 +91,11 @@ export function ProductsScreen() {
             Rates by term, minimum balances and rules for passbook savings and time deposits. A product can be
             turned on once the savings books are set up in Accounting.
           </p>
+          {blocker && <p className="mt-1 text-xs text-muted-foreground">{blocker}</p>}
         </div>
-        <PermissionButton permission="savings:settings" onClick={() => edit(null)}>
+        <ActionButton permission="savings:settings" onClick={() => edit(null)} blockedReason={blocker}>
           <Plus className="h-4 w-4" /> Add product
-        </PermissionButton>
+        </ActionButton>
       </div>
 
       <DataState
@@ -168,25 +176,27 @@ export function ProductsScreen() {
                           <Button variant="ghost" size="icon" aria-label={`Rates of ${p.name}`} onClick={() => setRatesFor(p)}>
                             <Percent className="h-4 w-4" />
                           </Button>
-                          <PermissionButton
+                          <ActionButton
                             permission="savings:settings"
                             variant="ghost"
                             size="icon"
                             aria-label={`Edit ${p.name}`}
                             onClick={() => edit(p)}
+                            blockedReason={blocker}
                           >
                             <Pencil className="h-4 w-4" />
-                          </PermissionButton>
+                          </ActionButton>
                           {p.can_delete && (
-                            <PermissionButton
+                            <ActionButton
                               permission="savings:settings"
                               variant="ghost"
                               size="icon"
                               aria-label={`Delete ${p.name}`}
                               onClick={() => setDeleting(p)}
+                              blockedReason={blocker}
                             >
                               <Trash2 className="h-4 w-4" />
-                            </PermissionButton>
+                            </ActionButton>
                           )}
                         </div>
                       </TableCell>
