@@ -8,6 +8,7 @@ import type {
   Pledge,
   AutoCreditStatus,
   AutoCreditProcessResult,
+  CashReferencePreview,
   CreateLedgerEntryData,
   UpdatePledgeData,
   CreatePledgeEntryData,
@@ -82,6 +83,9 @@ export const shareCapitalService = {
    */
   members: (params?: Record<string, unknown>) =>
     api.getRaw<ShareCapitalMembersResponse>(API_ENDPOINTS.SHARE_CAPITAL.MEMBERS, { params }),
+
+  nextCashReference: () =>
+    api.get<CashReferencePreview>(API_ENDPOINTS.SHARE_CAPITAL.NEXT_CASH_REFERENCE),
 
   ledgerCreate: (data: CreateLedgerEntryData) =>
     api.post<ShareCapitalLedgerEntry>(

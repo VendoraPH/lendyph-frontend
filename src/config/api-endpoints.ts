@@ -40,6 +40,8 @@ export const API_ENDPOINTS = {
       `/borrowers/${id}/valid-ids/${validIdId}`,
     LEDGER: (id: number) => `/borrowers/${id}/ledger`,
     LOAN_SUMMARY: (id: number) => `/borrowers/${id}/loan-summary`,
+    // Phase 6 MB-BE4: moving a member to another branch (borrowers:view and borrowers:transfer).
+    TRANSFER: (id: number) => `/borrowers/${id}/transfer`,
   },
   REGISTRATIONS: {
     LIST: "/borrowers",
@@ -323,6 +325,8 @@ export const API_ENDPOINTS = {
     LEDGER_LIST: "/share-capital/ledger",
     LEDGER_CREATE: "/share-capital/ledger",
     MEMBERS: "/share-capital/members",
+    // Preview of the next CSH-[admin id]-[year]-[0001] cash reference.
+    NEXT_CASH_REFERENCE: "/share-capital/cash-reference/next",
   },
   PLEDGES: {
     LIST: "/pledges",
