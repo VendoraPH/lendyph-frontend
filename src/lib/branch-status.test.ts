@@ -73,3 +73,15 @@ test("a branch from a backend before MB-BE1 still gets its action from is_active
   assert.equal(branchStatusAction({ is_active: true })?.label, "Suspend");
   assert.equal(branchStatusAction({ is_active: false })?.label, "Reactivate");
 });
+
+// Backend #354 refuses to reactivate a branch while its closure request waits,
+// so the page says it first (the server sends closure_pending to status managers).
+test("Reactivate is disabled while a closure request waits", () => {
+  assert.deepEqual(branchStatusAction({ status: "suspended", is_active: false, closure_pending: true }), {
+    target: "active",
+    label: "Reactivate",
+    disabledReason: "A request to close this branch is waiting. Reject or cancel it before reactivating the branch.",
+  });
+  assert.equal(branchStatusAction({ status: "suspended", is_active: false, closure_pending: false })?.disabledReason, null);
+  assert.equal(branchStatusAction({ status: "suspended", is_active: false })?.disabledReason, null);
+});
