@@ -45,7 +45,7 @@ export type ReportId =
  * a report without being one (the executive dashboard). Kept apart from
  * `ReportId` so the dashboard is not offered as a `/reports/[reportId]` route.
  */
-export type DocumentId = ReportId | "executive_dashboard";
+export type DocumentId = ReportId | "executive_dashboard" | "share_capital_ledger";
 
 export type ReportCategory =
   | "operations"
@@ -398,3 +398,24 @@ export const CATEGORY_ILLUSTRATION: Record<ReportCategory, ModuleIllustrationNam
   performance: "emptyShareCapital",
   savings: "emptySavings",
 };
+
+/**
+ * One of the ten AMLA reports on the Reports page (Phase 6, AMLA-B7). The
+ * server builds, totals and exports it, on its own page under /amla/reports,
+ * so it carries no builder.
+ */
+export interface AmlaReportDefinition {
+  key: import("@/lib/amla/report-titles").AmlaReportKey;
+  title: string;
+  description: string;
+  icon: LucideIcon;
+  accent: ReportDefinition["accent"];
+  /** Its page: `/amla/reports/<key>`. */
+  href: string;
+  /** Any one of these opens it, as the server's `canAny`. */
+  permissions: readonly Permission[];
+  /** The confidential reports also need every branch (`branches:view_all`). */
+  headOffice: boolean;
+  /** False while NEXT_PUBLIC_ENABLE_AMLA is off. */
+  available: boolean;
+}

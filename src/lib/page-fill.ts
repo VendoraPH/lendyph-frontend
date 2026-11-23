@@ -68,10 +68,15 @@ export const FIT_CLASSES = {
  * - `always`: scrolls at every size; used for the expanded dialog's body. Any
  *   scroll box inside it hands it the scrolling, so headings pin to the dialog
  *   on a phone too.
+ *
+ * Both are `relative`, so the box is the containing block of anything
+ * absolutely positioned inside it. Without it, an `sr-only` element (a chart's
+ * screen-reader table) is placed against the page instead, escapes the box's
+ * clipping and makes the whole window scroll into blank space.
  */
 export function scrollBoxClass({ always = false }: { always?: boolean } = {}): string {
   const frame = always
-    ? "flex flex-1 min-h-0 min-w-0 flex-col overflow-auto [&_[data-slot=scroll-box]]:overflow-visible"
-    : "min-w-0 overflow-x-auto fit:flex-1 fit:min-h-0 fit:overflow-auto";
+    ? "relative flex flex-1 min-h-0 min-w-0 flex-col overflow-auto [&_[data-slot=scroll-box]]:overflow-visible"
+    : "relative min-w-0 overflow-x-auto fit:flex-1 fit:min-h-0 fit:overflow-auto";
   return `${frame} ${STICKY_TABLE}`;
 }

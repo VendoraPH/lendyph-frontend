@@ -54,6 +54,10 @@ export interface BranchClosureInfo {
 
 const MAIN_OFFICE_STAYS_OPEN = "The main office stays open. Make another branch the main office first.";
 
+// The server refuses a closure while the branch is active (backend #354): a
+// branch is suspended first, so staff see this instead of a clear checklist.
+const SUSPEND_FIRST = "Suspend this branch before asking to close it.";
+
 /** One sentence for where the closure stands. */
 export function closureState(info: BranchClosureInfo, branch: { is_main_office?: boolean }): string {
   if (info.status === "closed") return "This branch is closed.";
@@ -63,6 +67,7 @@ export function closureState(info: BranchClosureInfo, branch: { is_main_office?:
     return `${CLOSURE_STATUS_LABELS.pending}: ${who} asked to close it${when}.`;
   }
   if (branch.is_main_office) return MAIN_OFFICE_STAYS_OPEN;
+  if (info.status === "active") return SUSPEND_FIRST;
   if (info.can_close) return "Ready to close: nothing keeps this branch open.";
   const open = info.checklist.filter((item) => !item.clear).length;
   return `Can't close yet: ${open} ${open === 1 ? "item keeps" : "items keep"} this branch open.`;
@@ -105,6 +110,7 @@ export function closureActions(
   }
 
   if (info.status === "closed" || branch.is_main_office) return none;
+  if (info.status === "active") return { ...none, request: true, requestDisabledReason: SUSPEND_FIRST };
   return {
     ...none,
     request: true,

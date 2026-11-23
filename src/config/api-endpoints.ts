@@ -40,6 +40,8 @@ export const API_ENDPOINTS = {
       `/borrowers/${id}/valid-ids/${validIdId}`,
     LEDGER: (id: number) => `/borrowers/${id}/ledger`,
     LOAN_SUMMARY: (id: number) => `/borrowers/${id}/loan-summary`,
+    // Phase 6 MB-BE4: moving a member to another branch (borrowers:view and borrowers:transfer).
+    TRANSFER: (id: number) => `/borrowers/${id}/transfer`,
   },
   REGISTRATIONS: {
     LIST: "/borrowers",
@@ -740,6 +742,11 @@ export const API_ENDPOINTS = {
     REPORT_SUBMISSION_EVIDENCE: (id: number, submissionId: number) => `/amla/reports/${id}/submissions/${submissionId}/evidence`,
     REPORT_EXPORT: (id: number) => `/amla/reports/${id}/export`,
     FILING_DEADLINES: "/amla/filing-deadlines",
+    /** AMLA-B7: the ten reports (each needs its own key), their server exports and the dashboard counts. */
+    COMPLIANCE_REPORTS: "/amla/compliance-reports",
+    COMPLIANCE_REPORT: (key: string) => `/amla/compliance-reports/${encodeURIComponent(key)}`,
+    COMPLIANCE_REPORT_EXPORTS: (key: string) => `/amla/compliance-reports/${encodeURIComponent(key)}/exports`,
+    DASHBOARD_COUNTS: "/amla/dashboard/counts",
   },
   /**
    * CDA Compliance (CDA design §3). Every route needs `branches:view_all` plus

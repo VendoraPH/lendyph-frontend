@@ -62,6 +62,11 @@ import {
   validateMemberStep,
   type MemberFormData,
 } from "../../_lib/member-form-steps";
+import {
+  EDIT_BRANCH_FILL_CAPTION,
+  EDIT_BRANCH_LOCKED_CAPTION,
+  editBranchLocked,
+} from "../../_lib/member-transfer";
 
 interface ValidIdEntry {
   type: string;
@@ -480,6 +485,9 @@ function EditBorrowerContent() {
     );
   }
 
+  // The branch is filled in here only while it's missing.
+  const branchLocked = editBranchLocked(borrower);
+
   return (
     <PageFill>
       {/* Header */}
@@ -726,9 +734,13 @@ function EditBorrowerContent() {
                   <Label htmlFor="member-branch">
                     Assigned Branch <span className="text-destructive">*</span>
                   </Label>
+                  {/* Read-only once set: a move goes through Transfer member
+                      (backend MB-BE4 answers a changed branch with 422). The
+                      unchanged branch_id is still sent, which it accepts. */}
                   <Select
                     value={form.branch_id || null}
                     onValueChange={(v) => update("branch_id", v ?? "")}
+                    disabled={branchLocked}
                   >
                     <SelectTrigger id="member-branch" className="w-full sm:w-2/3">
                       <SelectValue placeholder="Select branch">
@@ -756,7 +768,7 @@ function EditBorrowerContent() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Change the branch this member is assigned to.
+                    {branchLocked ? EDIT_BRANCH_LOCKED_CAPTION : EDIT_BRANCH_FILL_CAPTION}
                   </p>
                 </div>
               </CardContent>
