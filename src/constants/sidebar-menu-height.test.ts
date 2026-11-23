@@ -9,19 +9,19 @@ import { join } from "node:path";
 // With every module switched on, the longest menu must fit the cap.
 
 const FLAGS = [
-  "AMLA",
-  "ANALYTICS",
-  "BINHS_AMORTIZATION",
-  "CDA",
-  "CREDIT_SCORING",
-  "EXECUTIVE_DASHBOARD",
-  "FEE_FORMULAS",
-  "LINDA",
-  "LOAN_ORIGINATION",
-  "MEMBER_PORTAL",
-  "MULTI_BRANCH",
-  "PENALTY_CONFIGS",
-  "SAVINGS",
+  "NEXT_PUBLIC_ENABLE_AMLA",
+  "NEXT_PUBLIC_ENABLE_ANALYTICS",
+  "NEXT_PUBLIC_ENABLE_BINHS_AMORTIZATION",
+  "NEXT_PUBLIC_ENABLE_CDA",
+  "NEXT_PUBLIC_ENABLE_CREDIT_SCORING",
+  "NEXT_PUBLIC_ENABLE_EXECUTIVE_DASHBOARD",
+  "NEXT_PUBLIC_ENABLE_FEE_FORMULAS",
+  "NEXT_PUBLIC_ENABLE_LINDA",
+  "NEXT_PUBLIC_ENABLE_LOAN_ORIGINATION",
+  "NEXT_PUBLIC_ENABLE_MEMBER_PORTAL",
+  "NEXT_PUBLIC_ENABLE_MULTI_BRANCH",
+  "NEXT_PUBLIC_ENABLE_PENALTY_CONFIGS",
+  "NEXT_PUBLIC_ENABLE_SAVINGS",
 ];
 
 /** One menu entry (about 34 px) plus the gap after it. */
@@ -36,7 +36,7 @@ function entries(items: Item[]): number {
 }
 
 test("the longest sidebar menu fits the open menu's height cap", async () => {
-  for (const flag of FLAGS) process.env[`NEXT_PUBLIC_ENABLE_${flag}`] = "true";
+  for (const flag of FLAGS) process.env[flag] = "true";
   const { SIDEBAR_NAV } = await import("./navigation");
 
   const longest = Math.max(...(SIDEBAR_NAV as Item[]).map((item) => entries(item.children ?? [])));
