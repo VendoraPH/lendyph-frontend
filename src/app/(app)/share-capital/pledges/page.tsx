@@ -213,11 +213,13 @@ function PledgeEntryContent() {
   // number while a Cash form is open, and moves on after every save.
   const [entriesSaved, setEntriesSaved] = useState(0);
   const cashNumbering = env.features.cashPledgeReference;
+  // Every entry here is dated today, so the preview asks for today's series.
   const cashPreview = useCashReferencePreview(
     shareCapitalService.nextCashReference,
     cashNumbering &&
       ((manualEntryId !== null && manualMethod === "cash") || (bulkDialogOpen && bulkMethod === "cash")),
     entriesSaved,
+    todayISO(),
   );
   const manualAutoReference = cashAutoReference(cashNumbering, manualMethod, cashPreview);
   // Each selected row is its own entry, numbered in turn from the preview.

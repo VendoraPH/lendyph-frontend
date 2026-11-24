@@ -75,10 +75,13 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
   // each placement.
   const [placedCount, setPlacedCount] = useState(0);
   const serverNumbersCash = env.features.timeDepositCashReference;
+  // The number belongs to the placement date's year (yesterday can be last
+  // year on Jan 1), so the preview follows the date field.
   const cashPreview = useCashReferencePreview(
     timeDepositService.nextCashReference,
     open && serverNumbersCash && form.method === "cash",
     placedCount,
+    form.placementDate,
   );
   const autoReference = seriesAutoReference(TIME_DEPOSIT_CASH_SERIES, serverNumbersCash, form.method, cashPreview);
   if (useDialogOpening(open, null)) {

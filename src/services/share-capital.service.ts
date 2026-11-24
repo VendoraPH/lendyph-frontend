@@ -1,5 +1,6 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
+import { cashReferenceParams } from "@/lib/cash-reference";
 import { fetchAllPages, type DrainResult } from "@/lib/paginate";
 import type {
   ShareCapitalLedgerEntry,
@@ -84,8 +85,9 @@ export const shareCapitalService = {
   members: (params?: Record<string, unknown>) =>
     api.getRaw<ShareCapitalMembersResponse>(API_ENDPOINTS.SHARE_CAPITAL.MEMBERS, { params }),
 
-  nextCashReference: () =>
-    api.get<CashReferencePreview>(API_ENDPOINTS.SHARE_CAPITAL.NEXT_CASH_REFERENCE),
+  /** The CSH number the next cash entry dated `date` (today when left out) would get. */
+  nextCashReference: (date?: string) =>
+    api.get<CashReferencePreview>(API_ENDPOINTS.SHARE_CAPITAL.NEXT_CASH_REFERENCE, { params: cashReferenceParams(date) }),
 
   ledgerCreate: (data: CreateLedgerEntryData) =>
     api.post<ShareCapitalLedgerEntry>(

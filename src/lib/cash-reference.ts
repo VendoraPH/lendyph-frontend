@@ -7,6 +7,7 @@
 // Dependency-free, so it runs under `tsx --test`.
 
 import type { RecordPaymentMethod } from "@/constants/payment-methods";
+import { isCalendarDate } from "./calendar-date";
 
 /** One numbering series: its prefix and what one record of it is called. */
 export interface CashReferenceSeries {
@@ -78,6 +79,16 @@ export function cashAutoReference(
   entries = 1,
 ): AutoReference | null {
   return seriesAutoReference(SHARE_CAPITAL_CASH_SERIES, enabled, method, preview, entries);
+}
+
+/**
+ * The preview request's query: the date the record will carry, so a cash
+ * entry dated Dec 31 and entered on Jan 1 previews the year before's number.
+ * Nothing while the date isn't a whole calendar date (still being typed): the
+ * server then previews for today.
+ */
+export function cashReferenceParams(date: string | null | undefined): { date: string } | undefined {
+  return isCalendarDate(date) ? { date } : undefined;
 }
 
 /**

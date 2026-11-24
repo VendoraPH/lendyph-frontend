@@ -4,6 +4,7 @@ import {
   CASH_REFERENCE_PATTERN,
   TIME_DEPOSIT_CASH_SERIES,
   cashAutoReference,
+  cashReferenceParams,
   savedReferencesText,
   seriesAutoReference,
 } from "./cash-reference";
@@ -101,5 +102,17 @@ describe("the numbers a save got back, for its success message", () => {
     assert.equal(savedReferencesText(["CSH-0001-2026-0004"]), "CSH-0001-2026-0004");
     assert.equal(savedReferencesText([]), "");
     assert.equal(savedReferencesText([null, undefined, ""]), "");
+  });
+});
+
+describe("the preview asks for the date the record will carry", () => {
+  test("a calendar date goes with the request", () => {
+    assert.deepEqual(cashReferenceParams("2026-12-31"), { date: "2026-12-31" });
+  });
+
+  test("no date, a date still being typed or one that isn't a real day asks for today's", () => {
+    for (const value of [null, undefined, "", "2026-12", "20261231", "2026-02-30"]) {
+      assert.equal(cashReferenceParams(value), undefined, String(value));
+    }
   });
 });
