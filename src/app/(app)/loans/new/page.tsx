@@ -43,6 +43,7 @@ import {
 import type {
   CollateralType,
   Loan,
+  LoanApprovalEditState,
   StaffMember,
 } from "@/types";
 
@@ -119,6 +120,13 @@ import {
   PAYMENT_FREQUENCY_LABELS,
 } from "@/constants";
 import { parseEditLoanId } from "./_lib/edit-loan-id";
+import {
+  approvalEditPayload,
+  approvalEditSavedMessage,
+  isApprovalEdit,
+  saveApprovalEdit,
+} from "./_lib/approval-edit-save";
+import { approvalCardHref, readApprovalEditState } from "@/app/(app)/loans/[id]/_lib/approval-edit";
 import { EDIT_LOAN_TITLE } from "@/lib/page-titles";
 import {
   attachedCollateralRows,
@@ -194,11 +202,19 @@ function NewLoanApplicationInner() {
   const searchParams = useSearchParams();
   const editLoanId = parseEditLoanId(searchParams.get("edit"));
   const isEditMode = editLoanId !== null;
+  // The Chairman/Chairwoman's edit at their approval step (`?approval=1`):
+  // saved through PATCH /loans/{id}/approval-edit, which may also change the
+  // term and frequency. The member, product and policy exception stay fixed.
+  const inApproval = isApprovalEdit(editLoanId, searchParams.get("approval"));
   // Lists this form reads under other modules' permissions, which neither
   // `loans:create` nor `loans:update` implies. Without one, that list is not
   // asked for and stays empty, as it would with nothing in it.
   const { can } = usePermission();
   const canListMembers = can("borrowers:view");
+  // The approval edit sends co-makers only for a role that can pick members,
+  // so without that their rows are shown as they are, with nothing to add or
+  // remove.
+  const coMakersLocked = inApproval && !canListMembers;
   const canListProducts = can("loans:view");
   const canListCollaterals = can("collaterals:view");
   // Changing a loan's collaterals. Edit mode states them on the loan update,
@@ -211,13 +227,16 @@ function NewLoanApplicationInner() {
   const canWriteOff = can("loans:write_off");
   const missingAccess = useMemo(
     () =>
-      missingLoanFormAccess({
-        members: canListMembers,
-        products: canListProducts,
-        collaterals: canListCollaterals,
-        shareCapital: canReadShareCapital,
-      }),
-    [canListMembers, canListProducts, canListCollaterals, canReadShareCapital],
+      missingLoanFormAccess(
+        {
+          members: canListMembers,
+          products: canListProducts,
+          collaterals: canListCollaterals,
+          shareCapital: canReadShareCapital,
+        },
+        { editing: isEditMode },
+      ),
+    [canListMembers, canListProducts, canListCollaterals, canReadShareCapital, isEditMode],
   );
   // ── API Data ──
   // The members this form has picked or the loan being edited names, so their
@@ -227,6 +246,9 @@ function NewLoanApplicationInner() {
   const [loadingData, setLoadingData] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [existingLoan, setExistingLoan] = useState<Loan | null>(null);
+  // The approval edit's state as the form opened: the step and the version
+  // the save sends back.
+  const [approvalEdit, setApprovalEdit] = useState<LoanApprovalEditState | null>(null);
   // A restructure's remarks. The server asks for them (422 on `remarks`) when
   // the edit moves its principal below the outstanding balance; its message is
   // kept here and the field turns required.
@@ -294,12 +316,25 @@ function NewLoanApplicationInner() {
     async function fetchData() {
       setLoadingData(true);
 
-      const [productsResult, loanResult] =
+      const [productsResult, loanResult, approvalResult] =
         await Promise.allSettled([
           canListProducts ? loanProductService.listAll().then(completeRows) : [],
           editLoanId ? loanService.detail(editLoanId) : Promise.resolve(null),
+          inApproval && editLoanId ? loanService.approvalEditState(editLoanId) : Promise.resolve(null),
         ]);
       if (cancelled) return;
+
+      // The approval edit opens only on the server's yes, and returns to the
+      // approval card in words otherwise.
+      if (inApproval && editLoanId) {
+        const state = approvalResult.status === "fulfilled" ? readApprovalEditState(approvalResult.value) : null;
+        if (!state?.can_edit) {
+          toast.error(state?.reason ?? "You can't edit this loan at its approval step right now.");
+          router.push(approvalCardHref(editLoanId));
+          return;
+        }
+        setApprovalEdit(state);
+      }
 
       if (productsResult.status === "fulfilled") {
         setProducts(productsResult.value);
@@ -363,7 +398,7 @@ function NewLoanApplicationInner() {
       cancelled = true;
     };
     // Re-fetch if user switches between create and edit in the same tab
-  }, [editLoanId, router, canListProducts]);
+  }, [editLoanId, inApproval, router, canListProducts]);
 
   // ── Collateral types: load once on mount ──
   useEffect(() => {
@@ -664,6 +699,7 @@ function NewLoanApplicationInner() {
           ? storedDeductionInputs(existingLoan.deductions)
           : null,
     }),
+    inApproval ? editLoanId : null,
   );
   const previewCollateral = preview.status === "ready" ? preview.preview.collateral : null;
   const amortization = preview.status === "ready" ? preview.preview.amortization : null;
@@ -862,6 +898,30 @@ function NewLoanApplicationInner() {
           restructureEditFields({ principal, storedPrincipal, scb, remarks: restructureRemarks })),
       };
 
+      // The Chairman/Chairwoman's edit at their approval step: the loan stays
+      // at their step, so it returns to the approval card to approve or forward.
+      if (inApproval && editLoanId && approvalEdit?.version) {
+        const saved = await saveApprovalEdit(
+          editLoanId,
+          approvalEditPayload({
+            payload,
+            version: approvalEdit.version,
+            scbAmount: scb,
+            purpose,
+            coMakerIds: payload.co_maker_ids,
+            storedCoMakerIds: (existingLoan?.co_makers ?? [])
+              .map((c) => c.borrower_id)
+              .filter((id): id is number => typeof id === "number"),
+            canPickMembers: canListMembers,
+            selected: selectedCollaterals,
+            attached: attachedCollaterals,
+          }),
+        );
+        toast.success("Loan updated", { description: approvalEditSavedMessage(approvalEdit.step?.name ?? null) });
+        router.push(approvalCardHref(saved.id ?? editLoanId));
+        return;
+      }
+
       // Edit mode — update existing loan, skip auto-submit (the loan is
       // already beyond draft and already in the approval chain).
       if (isEditMode && editLoanId) {
@@ -977,7 +1037,13 @@ function NewLoanApplicationInner() {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
           <Link
-            href={isEditMode && editLoanId ? `/loans/${editLoanId}` : "/loans"}
+            href={
+              inApproval && editLoanId
+                ? approvalCardHref(editLoanId)
+                : isEditMode && editLoanId
+                  ? `/loans/${editLoanId}`
+                  : "/loans"
+            }
             className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             <ArrowLeft className="size-4" />
@@ -993,6 +1059,20 @@ function NewLoanApplicationInner() {
           )}
         </div>
       </div>
+
+      {inApproval && approvalEdit?.step && (
+        <div
+          role="status"
+          className="flex shrink-0 items-start gap-2 rounded-lg border border-brand-orange/30 bg-brand-orange/5 p-3 text-sm"
+        >
+          <Info className="mt-0.5 size-4 shrink-0 text-brand-orange" aria-hidden="true" />
+          <p>
+            You&rsquo;re editing this loan at the &ldquo;{approvalEdit.step.name}&rdquo; step. It stays at
+            your step after you save, so you can approve or forward it. Every change is recorded in
+            the audit trail.
+          </p>
+        </div>
+      )}
 
       <MissingAccessNotice missing={missingAccess} className="shrink-0" />
 
@@ -1057,6 +1137,7 @@ function NewLoanApplicationInner() {
                 <div className="flex flex-col gap-2" data-field="co_maker_ids">
                   <div className="flex h-6 items-center justify-between">
                     <Label>Co-Maker{coMakerIds.length > 1 ? "s" : ""}</Label>
+                    {!coMakersLocked && (
                     <Button
                       type="button"
                       variant="ghost"
@@ -1067,6 +1148,7 @@ function NewLoanApplicationInner() {
                       <Plus className="h-3 w-3" />
                       Add Co-Maker
                     </Button>
+                    )}
                   </div>
                   <div className="space-y-2">
                     {coMakerIds.map((selectedId, index) => {
@@ -1085,7 +1167,7 @@ function NewLoanApplicationInner() {
                                 : "Your role can't view members"
                             }
                           />
-                          {coMakerIds.length > 1 && (
+                          {coMakerIds.length > 1 && !coMakersLocked && (
                             <Button
                               type="button"
                               variant="ghost"
@@ -1137,6 +1219,7 @@ function NewLoanApplicationInner() {
                   <Checkbox
                     id="policy-exception"
                     checked={policyException}
+                    disabled={inApproval}
                     onCheckedChange={(checked) => {
                       setPolicyException(checked === true);
                       if (!checked) {
@@ -1150,7 +1233,9 @@ function NewLoanApplicationInner() {
                       Policy Exception
                     </Label>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Check this if the loan requires policy exception approval (full BOD review)
+                      {inApproval
+                        ? "It decides the approval chain, so it can't change during approval."
+                        : "Check this if the loan requires policy exception approval (full BOD review)"}
                     </p>
                   </div>
                 </div>
@@ -1166,11 +1251,13 @@ function NewLoanApplicationInner() {
                         placeholder="Describe why this loan requires a policy exception..."
                         value={policyExceptionDetails}
                         onChange={(e) => setPolicyExceptionDetails(e.target.value)}
+                        disabled={inApproval}
                         className="min-h-20"
                       />
                     </div>
 
                     {/* Policy Exception Letter Upload */}
+                    {!inApproval && (
                     <div className="space-y-2">
                       <Label>Policy Exception Letter</Label>
                       {policyExceptionLetter ? (
@@ -1206,6 +1293,7 @@ function NewLoanApplicationInner() {
                         </label>
                       )}
                     </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1224,6 +1312,7 @@ function NewLoanApplicationInner() {
                   value={productId ?? null}
                   onValueChange={(value) => handleProductChange(value)}
                   items={products.map((p) => ({ value: String(p.id), label: p.name }))}
+                  disabled={inApproval}
                 >
                   <SelectTrigger id="loan-product" className="w-full">
                     <SelectValue placeholder="Select a loan product" />
@@ -1245,6 +1334,11 @@ function NewLoanApplicationInner() {
                     ))}
                   </SelectContent>
                 </Select>
+                {inApproval && (
+                  <p className="text-xs text-muted-foreground">
+                    The product can&rsquo;t change during approval.
+                  </p>
+                )}
                 {selectedProduct && (
                   <p className="flex items-center gap-1 text-xs text-muted-foreground">
                     <Info className="size-3" />
@@ -2198,10 +2292,18 @@ function NewLoanApplicationInner() {
 // Edit mode opens by reading the loan, so it needs `loans:view` as well. For a
 // new application the inner guard just repeats the outer one.
 function NewLoanApplicationGuard() {
-  const isEditMode = parseEditLoanId(useSearchParams().get("edit")) !== null;
+  const searchParams = useSearchParams();
+  const editLoanId = parseEditLoanId(searchParams.get("edit"));
+  const isEditMode = editLoanId !== null;
+  // The Chairman/Chairwoman's edit at their approval step needs their own
+  // permission instead of `loans:update`.
+  const inApproval = isApprovalEdit(editLoanId, searchParams.get("approval"));
   const pageName = isEditMode ? EDIT_LOAN_TITLE : "New Loan Application";
   return (
-    <RouteGuard permission={isEditMode ? "loans:update" : "loans:create"} pageName={pageName}>
+    <RouteGuard
+      permission={inApproval ? "loans:edit_in_approval" : isEditMode ? "loans:update" : "loans:create"}
+      pageName={pageName}
+    >
       <RouteGuard permission={isEditMode ? "loans:view" : "loans:create"} pageName={pageName}>
         <NewLoanApplicationInner />
       </RouteGuard>

@@ -58,9 +58,10 @@ export const AMLA_PERMISSIONS: readonly Permission[] = [
 
 /**
  * Every permission lendyph-backend creates (RoleAndPermissionSeeder and the
- * permission migrations). The seeder syncs `Permission::all()` to both
- * super_admin and admin, and each permission migration grants both, so both
- * entries document this list.
+ * permission migrations) but `loans:edit_in_approval`. The seeder syncs
+ * `Permission::all()` to both super_admin and admin, and each permission
+ * migration grants both, so both entries document this list. The Chair's own
+ * `loans:edit_in_approval` is left out of that sync: only `bod1` holds it.
  */
 const EVERY_PERMISSION: Permission[] = [
   "dashboard:view",
@@ -445,6 +446,9 @@ export const ROLES: Record<Role, RoleConfig> = {
       "reports:view",
       "share_capital:view",
       "collaterals:view",
+      // The Chairman/Chairwoman edits a loan while it waits at their approval
+      // step. Seeded for this role alone (RoleAndPermissionSeeder::CHAIR_ROLE).
+      "loans:edit_in_approval",
     ],
   },
   bod2: {

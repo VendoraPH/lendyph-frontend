@@ -143,6 +143,22 @@ export interface ForwardCandidates {
   users: { id: number; name: string }[];
 }
 
+/**
+ * `GET /loans/{loan}/approval-edit`: whether the signed-in user may edit the
+ * loan at its approval step now. Only the Chairman/Chairwoman holds
+ * `loans:edit_in_approval`, and only at their own role's step (not one
+ * forwarded to someone else). `reason` says why not, in words; `version` is
+ * what the save sends back, so a loan changed since reads as stale (409).
+ */
+export interface LoanApprovalEditState {
+  can_edit: boolean;
+  reason: string | null;
+  /** The step the loan waits at, or null when it waits at none. */
+  step: { id: number; name: string } | null;
+  /** Only with `can_edit`. */
+  version: string | null;
+}
+
 export interface SendBackStepPayload {
   /** A prior step's `index` (the server's `step_order`), not an array position. */
   target_step_order: number;

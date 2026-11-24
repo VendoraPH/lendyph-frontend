@@ -107,6 +107,10 @@ export const API_ENDPOINTS = {
     RESTRUCTURE: (id: number) => `/loans/${id}/restructure`,
     LEDGER_ENTRIES: (id: number) => `/loans/${id}/ledger-entries`,
     LEDGER: (id: number) => `/loans/${id}/ledger`,
+    /** The Chairman/Chairwoman's edit at their approval step (`loans:edit_in_approval`): its state (GET) and save (PATCH). */
+    APPROVAL_EDIT: (id: number) => `/loans/${id}/approval-edit`,
+    /** The loan form's preview for that edit. */
+    APPROVAL_EDIT_PREVIEW: (id: number) => `/loans/${id}/approval-edit/preview`,
   },
   LOAN_DOCUMENTS: {
     DISCLOSURE: (loanId: number) => `/loans/${loanId}/disclosure`,

@@ -28,6 +28,17 @@ describe("missingLoanFormAccess", () => {
     assert.equal(missing[0].blocking, true);
   });
 
+  // An edit's member is fixed (the Chairman/Chairwoman's edit at their
+  // approval step is the first edit open to a role without borrowers:view), so
+  // the gap only stops co-makers changing and blocks nothing.
+  test("on an edit, a user without borrowers:view is told that co-makers can't change, and nothing is blocked", () => {
+    const missing = missingLoanFormAccess({ ...ALL, members: false, collaterals: false }, { editing: true });
+    assert.deepEqual(missing.map((m) => m.permission), ["borrowers:view", "collaterals:view"]);
+    assert.equal(missing[0].effect, "The co-maker pickers can't search members, so co-makers can't be changed.");
+    assert.equal(missing[0].grant, "Members → View");
+    assert.ok(missing.every((m) => !m.blocking));
+  });
+
   test("blocking gaps come before non-blocking ones", () => {
     const missing = missingLoanFormAccess({ ...ALL, collaterals: false, members: false });
     assert.deepEqual(

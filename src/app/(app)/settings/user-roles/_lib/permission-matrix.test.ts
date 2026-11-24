@@ -78,6 +78,16 @@ test("the Accounting toggle-all leaves out the allowance, which has its own chec
   assert.deepEqual(moduleToggleActions("loans").includes("write_off"), false);
 });
 
+// `loans:edit_in_approval` is the Chairman/Chairwoman's alone (finish run
+// round 2): offered with its own checkbox, in words, and never swept in by the
+// Loans toggle-all.
+test("the Chair's edit during approval has its own checkbox, in words, outside the Loans toggle-all", () => {
+  assert.ok(offered.includes("loans:edit_in_approval"));
+  assert.equal(moduleToggleActions("loans").includes("edit_in_approval"), false);
+  const page = readFileSync(resolve(process.cwd(), "src/app/(app)/settings/user-roles/page.tsx"), "utf8");
+  assert.match(page, /edit_in_approval: \{ label: "Edit loans at their approval step"/);
+});
+
 // `expenses:pay` (settling a payable) is seeded by the API; the editor offers it
 // so a custom role can be given it, and its "toggle all" covers it like the rest.
 test("the matrix offers the four expenses permissions, pay included", () => {

@@ -20,6 +20,7 @@ export type {
   LoanApprovalLeftOutStep,
   ApproveStepPayload,
   SendBackStepPayload,
+  LoanApprovalEditState,
 } from "./loan-approval";
 export { APPROVAL_CHAIN_HIDDEN_STATUSES, isApprovalChainHidden, loanShouldHaveAChain } from "./loan-approval";
 export type { Repayment, CreateRepaymentData, VoidRepaymentData } from "./repayment";
