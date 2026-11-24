@@ -7,6 +7,7 @@ import { IncompleteListNotice } from "@/components/common/incomplete-list-notice
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { hasIllustration, Illustration } from "@/components/common/illustration";
 import { emptyArt } from "@/lib/illustrations";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -70,6 +71,8 @@ interface LedgerEntry {
   credit: number;
   /** The server's balance after this entry (GET /share-capital/ledger). */
   runningBalance: number | null;
+  /** Brought over by Data Import from the cooperative's earlier books. */
+  imported: boolean;
 }
 
 /** Transform an API row into the shape the UI expects */
@@ -81,6 +84,7 @@ function toLedgerEntry(raw: ShareCapitalLedgerEntry): LedgerEntry {
     reference: raw.reference,
     ...ledgerAmounts(raw),
     runningBalance: raw.running_balance ?? null,
+    imported: raw.is_imported === true,
   };
 }
 
@@ -761,6 +765,11 @@ function SubsidiaryLedgerContent() {
                         </TableCell>
                         <TableCell className="text-sm">
                           {entry.description}
+                          {entry.imported ? (
+                            <Badge variant="outline" className="ml-2 text-[10px]">
+                              Imported
+                            </Badge>
+                          ) : null}
                         </TableCell>
                         <TableCell className="text-right text-sm tabular-nums text-red-600">
                           {entry.debit > 0 ? formatCurrency(entry.debit) : ""}

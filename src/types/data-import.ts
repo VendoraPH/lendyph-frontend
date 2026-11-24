@@ -19,12 +19,13 @@ export type ImportPhase =
   | "awaiting_mapping"
   | "importing_customers"
   | "importing_loans"
+  | "importing_share_capital"
   | "completed"
   | "failed"
   | "cancelled";
 
-/** The two files, keyed — never a positional array. Both endpoints key by this. */
-export type ImportFileKind = "customers" | "loans";
+/** The files, keyed — never a positional array. Every endpoint keys by this. */
+export type ImportFileKind = "customers" | "loans" | "share_capital";
 
 /** Per-row outcome. `matched_existing` is deliberately NOT a kind of `skipped`:
  *  the coop already has 44 self-registered members who will appear in the

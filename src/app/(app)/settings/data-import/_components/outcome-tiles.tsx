@@ -55,6 +55,16 @@ export interface CountsReconciliation {
 export const RECONCILIATION_FORMULA =
   "rows read = imported + matched + already imported + skipped + failed";
 
+/**
+ * The identity for one file. A share capital file has no "matched" figure,
+ * as it has no Matched tile: its rows are entries, never members to match.
+ */
+export function reconciliationFormula(kind: ImportFileKind): string {
+  return kind === "share_capital"
+    ? "rows read = imported + already imported + skipped + failed"
+    : RECONCILIATION_FORMULA;
+}
+
 export function reconcileCounts(counts: ImportCounts): CountsReconciliation {
   const n = (value: number | undefined): number =>
     typeof value === "number" && Number.isFinite(value) ? value : 0;
@@ -78,13 +88,13 @@ export function reconcileCounts(counts: ImportCounts): CountsReconciliation {
   };
 }
 
-/** The identity, with this file's numbers in it. */
-export function reconciliationLine(counts: ImportCounts): string {
+/** The identity, with this file's numbers in it (no matched figure for share capital). */
+export function reconciliationLine(counts: ImportCounts, kind?: ImportFileKind): string {
   const { total } = reconcileCounts(counts);
   return (
     `${formatCountOf(total, "row")} read = ` +
     `${counts.imported.toLocaleString()} imported + ` +
-    `${counts.matched_existing.toLocaleString()} matched + ` +
+    (kind === "share_capital" ? "" : `${counts.matched_existing.toLocaleString()} matched + `) +
     `${counts.already_imported.toLocaleString()} already imported + ` +
     `${counts.skipped.toLocaleString()} skipped + ` +
     `${counts.failed.toLocaleString()} failed`
@@ -111,14 +121,21 @@ const INFO = "border-sky-200 bg-sky-50 dark:border-sky-900 dark:bg-sky-500/10";
 const WARN = "border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-500/10";
 const BAD = "border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-500/10";
 
-function tilesFor(kind: ImportFileKind): TileConfig[] {
+/**
+ * The tiles for one file's counts. A share capital row is an entry on its
+ * member's ledger, never a member of its own, so its file has no "matched"
+ * tile (the count is always 0 there) and its notes say what became of the
+ * entry. Exported for ./outcome-tiles.test.ts.
+ */
+export function tilesFor(kind: ImportFileKind): TileConfig[] {
+  const shareCapital = kind === "share_capital";
   const subject = kind === "loans" ? "loan" : "member";
   const matchedNote =
     kind === "loans"
       ? "Attached to a member who already existed in Lendyph. The loan was created and linked — nothing was duplicated, and this is not a failure."
       : "Matched a member who already existed in Lendyph — self-registered, most likely. Their loans were linked to that member, no duplicate was created, and this is not a failure.";
 
-  return [
+  const tiles: TileConfig[] = [
     {
       key: "total",
       label: "Rows read",
@@ -130,7 +147,7 @@ function tilesFor(kind: ImportFileKind): TileConfig[] {
     {
       key: "imported",
       label: "Imported",
-      note: `Created as a new ${subject}.`,
+      note: shareCapital ? "Added to the member's share capital ledger, marked imported." : `Created as a new ${subject}.`,
       icon: CheckCircle2,
       className: GOOD,
       iconClassName: "text-green-600 dark:text-green-400",
@@ -146,7 +163,9 @@ function tilesFor(kind: ImportFileKind): TileConfig[] {
     {
       key: "already_imported",
       label: "Already imported",
-      note: "Brought in by an earlier run of this same file. Nothing was written twice.",
+      note: shareCapital
+        ? "Brought in by an earlier import. Nothing was written twice."
+        : "Brought in by an earlier run of this same file. Nothing was written twice.",
       icon: RotateCcw,
       className: NEUTRAL,
       iconClassName: "text-muted-foreground",
@@ -154,7 +173,9 @@ function tilesFor(kind: ImportFileKind): TileConfig[] {
     {
       key: "skipped",
       label: "Skipped",
-      note: "Not imported — the row did not pass validation, or there was nothing to import. See the report below.",
+      note: shareCapital
+        ? "Not imported: the row didn't pass the checks, or it repeats an entry already on the ledger. See the report below."
+        : "Not imported — the row did not pass validation, or there was nothing to import. See the report below.",
       icon: SkipForward,
       className: WARN,
       iconClassName: "text-amber-600 dark:text-amber-400",
@@ -168,6 +189,8 @@ function tilesFor(kind: ImportFileKind): TileConfig[] {
       iconClassName: "text-red-600 dark:text-red-400",
     },
   ];
+
+  return shareCapital ? tiles.filter((tile) => tile.key !== "matched_existing") : tiles;
 }
 
 export interface OutcomeTilesProps {
@@ -207,7 +230,7 @@ export function OutcomeTiles({
         ) : null}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className={cn("grid grid-cols-2 gap-3 sm:grid-cols-3", tiles.length === 5 ? "lg:grid-cols-5" : "lg:grid-cols-6")}>
         {tiles.map((tile) => {
           const Icon = tile.icon;
           const value = counts[tile.key] ?? 0;
@@ -231,7 +254,7 @@ export function OutcomeTiles({
 
       {/* The arithmetic, printed rather than implied. */}
       <p className="text-xs text-muted-foreground tabular-nums">
-        {reconciliationLine(counts)}
+        {reconciliationLine(counts, kind)}
       </p>
 
       {brokenArithmetic ? (
@@ -248,7 +271,7 @@ export function OutcomeTiles({
               {reconciliation.overcounted
                 ? rowsOvercounted(reconciliation.decided, reconciliation.total)
                 : `${rowsWithoutOutcome(Math.abs(reconciliation.undecided), reconciliation.total)}, and this run is finished.`}{" "}
-              The identity that should hold is: {RECONCILIATION_FORMULA}. Treat the
+              The identity that should hold is: {reconciliationFormula(kind)}. Treat the
               tiles above as unverified and report this before acting on them.
             </p>
           </div>

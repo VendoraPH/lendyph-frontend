@@ -51,7 +51,7 @@ export async function downloadSheetCsv(sheet: TemplateSheet): Promise<void> {
 }
 
 /**
- * Both sheets in one archive. Two `saveAs` calls in a row would work in
+ * Every sheet in one archive. Two `saveAs` calls in a row would work in
  * exactly one browser and prompt a "download multiple files?" bar in the rest.
  */
 export async function downloadDraftZip(draft: TemplateDraft): Promise<void> {

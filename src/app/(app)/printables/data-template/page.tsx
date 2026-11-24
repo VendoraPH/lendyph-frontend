@@ -65,9 +65,10 @@ export default function DataTemplatePage() {
                 Data Import Template
               </h1>
               <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                The workbook for migrating existing members and loans onto
-                Lendyph. Download it blank, or fill it in here — adding, renaming
-                and reordering columns as your records need — and export the CSVs.
+                The workbook for migrating existing members, loans and share
+                capital onto Lendyph. Download it blank, or fill it in here —
+                adding, renaming and reordering columns as your records need — and
+                export the CSVs.
               </p>
             </div>
           </div>

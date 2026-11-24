@@ -1,12 +1,14 @@
 "use client";
 
 /**
- * Step 1 — pick the branch and the two files. Nothing is uploaded here.
+ * Step 1 — pick the branch and the files. Nothing is uploaded here.
  *
  * Two things on this screen are load-bearing rather than decorative: the branch
  * is a hard requirement the shared hook does not treat as one (see `BranchGate`
- * below), and the files go in two separately-labelled slots because the
- * importer keys them by name (see `file-slot.tsx`).
+ * below), and the files go in separately-labelled slots because the importer
+ * keys them by name (see `file-slot.tsx`). The share capital slot and its
+ * template show only to someone who can record share capital, as the server
+ * rules (./import-files).
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -29,12 +31,18 @@ import { branchPicker } from "@/lib/user-branches";
 import { importBranchChoice } from "./import-branch";
 import { useAuthStore } from "@/store";
 import { formatDate } from "@/lib/format";
-import { downloadImportTemplate, IMPORT_TEMPLATES, MEMBERS_TEMPLATE_NOTE } from "@/lib/import-template";
+import {
+  downloadImportTemplate,
+  importTemplates,
+  MEMBERS_TEMPLATE_NOTE,
+  SHARE_CAPITAL_TEMPLATE_NOTE,
+} from "@/lib/import-template";
 import { notifyError } from "@/lib/notify";
+import { cn } from "@/lib/utils";
 import type { ImportRunStatus } from "@/types/data-import";
 
 import { FileSlot } from "./file-slot";
-import { FILE_SLOTS, FILES_RULE, filesProblem } from "./import-files";
+import { fileSlots, filesProblem, filesRule, membersRequired } from "./import-files";
 import type { ImportFiles } from "./data-import-view";
 
 /**
@@ -236,8 +244,9 @@ export function StepPrepare({
   onNext,
 }: StepPrepareProps) {
   const [branchReload, setBranchReload] = useState(0);
+  const shareCapitalAllowed = useAuthStore((s) => s.hasPermission("share_capital:create"));
 
-  const problem = filesProblem(files);
+  const problem = filesProblem(files, shareCapitalAllowed);
   const loansOnly = Boolean(files.loans && !files.customers);
   const canContinue = branchId !== null && problem === null;
 
@@ -286,13 +295,13 @@ export function StepPrepare({
         <fieldset className="space-y-3">
           <legend className="text-sm font-medium">Files</legend>
           <p className="text-xs text-muted-foreground">
-            {FILES_RULE} They go in separate slots because the importer has to be
-            told which is which — it cannot work that out from the order you
+            {filesRule(shareCapitalAllowed)} They go in separate slots because the importer
+            has to be told which is which — it cannot work that out from the order you
             picked them in.
           </p>
 
           <div className="flex flex-wrap items-center gap-2">
-            {IMPORT_TEMPLATES.map((template) => (
+            {importTemplates(shareCapitalAllowed).map((template) => (
               <Button
                 key={template.shape}
                 type="button"
@@ -310,14 +319,18 @@ export function StepPrepare({
             ))}
             <p className="basis-full text-xs text-muted-foreground">
               Each template is the header row only, with the columns in the order the importer
-              reads them. Keep the header row and add one row per member or loan below it.
+              reads them. Keep the header row and add one row per member, loan or share capital
+              entry below it.
             </p>
             <p className="basis-full text-xs text-muted-foreground">{MEMBERS_TEMPLATE_NOTE}</p>
+            {shareCapitalAllowed ? (
+              <p className="basis-full text-xs text-muted-foreground">{SHARE_CAPITAL_TEMPLATE_NOTE}</p>
+            ) : null}
           </div>
 
-          {/* The two files side by side from md */}
-          <div className="grid gap-3 md:grid-cols-2">
-            {FILE_SLOTS.map((slot) => (
+          {/* The files side by side from md, all three from lg */}
+          <div className={cn("grid gap-3 md:grid-cols-2", shareCapitalAllowed && "lg:grid-cols-3")}>
+            {fileSlots(shareCapitalAllowed).map((slot) => (
               <FileSlot
                 key={slot.kind}
                 label={slot.label}
@@ -325,7 +338,8 @@ export function StepPrepare({
                 hint={slot.hint}
                 file={files[slot.kind]}
                 onSelect={(file) => onFilesChange({ ...files, [slot.kind]: file })}
-                optional={slot.optional}
+                // The members file is optional once share capital comes alone.
+                optional={slot.kind === "customers" ? !membersRequired(files, shareCapitalAllowed) : slot.optional}
               />
             ))}
           </div>

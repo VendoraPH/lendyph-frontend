@@ -20,6 +20,23 @@ test("a run opens with the members file alone, and declares the loans file only 
   );
 });
 
+const SHARE_CAPITAL = { name: "share-capital.csv", size: 1024 };
+
+test("a run declares the share capital file when picked, with or without the members file", () => {
+  assert.deepEqual(declaredFiles({ customers: null, loans: null, share_capital: SHARE_CAPITAL }, { share_capital: "c".repeat(64) }), {
+    share_capital: { filename: "share-capital.csv", size_bytes: 1024, sha256: "c".repeat(64) },
+  });
+  assert.deepEqual(
+    Object.keys(
+      declaredFiles(
+        { customers: MEMBERS, loans: LOANS, share_capital: SHARE_CAPITAL },
+        { customers: "a".repeat(64), loans: "b".repeat(64), share_capital: "c".repeat(64) },
+      ),
+    ),
+    ["customers", "loans", "share_capital"],
+  );
+});
+
 test("the upload step opens a run without waiting for a loans file", () => {
   const source = readFileSync(
     join(process.cwd(), "src/app/(app)/settings/data-import/_components/step-upload.tsx"),
@@ -27,6 +44,8 @@ test("the upload step opens a run without waiting for a loans file", () => {
   );
   assert.doesNotMatch(source, /!customers \|\| !loans/);
   assert.match(source, /files: declaredFiles\(/);
+  // Opened once the picked files make an import (./import-files), the share capital file alone included.
+  assert.match(source, /filesProblem\(/);
 });
 
 test("the screen speaks of one file or both, from the run's own files (./import-files)", () => {

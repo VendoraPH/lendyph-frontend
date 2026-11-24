@@ -34,7 +34,7 @@ import { cn } from "@/lib/utils";
 import { dataImportService } from "@/services/data-import.service";
 import type { ImportCounts, ImportRunStatus } from "@/types/data-import";
 import { useImportStatus } from "../_hooks/use-import-status";
-import { filesPhrase, runFileKinds } from "./import-files";
+import { filesPhrase, runFileKinds, writtenTo } from "./import-files";
 import { ProductMappingGate } from "./product-mapping-table";
 import { rowsProgress } from "@/lib/count-words";
 
@@ -63,6 +63,7 @@ const PHASE_COPY: Record<string, string> = {
   awaiting_mapping: "Waiting for you to confirm the loan products",
   importing_customers: "Creating members",
   importing_loans: "Creating loans",
+  importing_share_capital: "Adding share capital entries",
   completed: "Finished",
   failed: "Stopped by an error",
   cancelled: "Cancelled",
@@ -213,7 +214,9 @@ export function StepProcessing({
 
   const progress = useMemo(() => rowProgress(status?.files), [status?.files]);
   // The run's own files: a members-only run has one, and is told so.
-  const phrase = filesPhrase(runFileKinds(status?.files));
+  const kinds = runFileKinds(status?.files);
+  const phrase = filesPhrase(kinds);
+  const written = writtenTo(kinds);
   const stale = showsStaleWarning(status);
   const waitingOnMapping = awaitsMapping(status?.phase);
   const elapsed = formatElapsed(status?.seconds_since_last_advance);
@@ -231,7 +234,7 @@ export function StepProcessing({
     setRefusal(null);
     try {
       await dataImportService.cancel(runId);
-      notifySuccess("Import cancelled", "Nothing was written to your members or loans.");
+      notifySuccess("Import cancelled", `Nothing was written to ${written}.`);
       announced.current = true;
       onCancelled();
     } catch (err) {
@@ -258,7 +261,7 @@ export function StepProcessing({
     } finally {
       setCancelling(false);
     }
-  }, [runId, onCancelled]);
+  }, [runId, onCancelled, written]);
 
   return (
     <div className={cn("space-y-6", className)}>
@@ -425,8 +428,8 @@ export function StepProcessing({
               {refusal.phase ? `This run is in “${phaseLabel(refusal.phase)}”. ` : ""}
               Cancelling is only accepted from:{" "}
               {(refusal.cancellablePhases ?? []).map(phaseLabel).join(", ")}. Past
-              that, members and loans have already been written and stopping
-              half-way would leave the books inconsistent.
+              that, entries have already been written to {written}, and
+              stopping half-way would leave the books inconsistent.
             </p>
           </div>
         </div>
@@ -439,8 +442,8 @@ export function StepProcessing({
             {cancelling ? "Cancelling…" : "Cancel this import"}
           </Button>
           <span className="text-xs text-muted-foreground">
-            Only possible before anything has been written to your members and
-            loans. The server has the final say.
+            Only possible before anything has been written to {written}. The
+            server has the final say.
           </span>
         </div>
       ) : null}

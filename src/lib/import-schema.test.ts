@@ -24,6 +24,8 @@ import {
   normaliseNumericValue,
   resolveEnumValue,
   resolveRowEnums,
+  SHARE_CAPITAL_COLUMNS,
+  TRANSACTION_TYPE_OPTIONS,
   vocabKey,
   type EnumOption,
   type ImportShape,
@@ -940,4 +942,53 @@ test("the loans sheet's enums resolve on a real row", () => {
   assert.deepEqual(unknown, []);
   assert.equal(row.payment_frequency, "monthly");
   assert.equal(row.interest_type, "diminishing");
+});
+
+// ── The share capital file (finish run round 2, decision 13) ───────────────
+
+test("the share capital file is six columns, in the server's order", () => {
+  assert.deepEqual(
+    SHARE_CAPITAL_COLUMNS.map((column) => [column.key, column.label, column.required]),
+    [
+      ["account_no", "Account No. or Member ID", true],
+      ["transaction_date", "Transaction Date", true],
+      ["reference_number", "Reference Number", false],
+      ["transaction_type", "Transaction Type", true],
+      ["amount", "Amount", true],
+      ["remarks", "Remarks", false],
+    ],
+  );
+  assert.deepEqual(acceptedWidths("share_capital"), [6]);
+  assert.equal(columnsFor("share_capital"), SHARE_CAPITAL_COLUMNS);
+});
+
+test("the transaction type is read in words, Contribution or Withdrawal, as the server reads it", () => {
+  const column = SHARE_CAPITAL_COLUMNS.find((c) => c.key === "transaction_type");
+  assert.ok(column);
+  assert.deepEqual(TRANSACTION_TYPE_OPTIONS.map((option) => option.label), ["Contribution", "Withdrawal"]);
+
+  for (const word of ["Contribution", "contribution", "Credit", "CR", "Share Capital Contribution"]) {
+    assert.deepEqual(resolveEnumValue(column, word), { ok: true, value: "credit", label: "Contribution" }, word);
+  }
+  for (const word of ["Withdrawal", "DEBIT", "dr", "Share capital withdrawal"]) {
+    assert.deepEqual(resolveEnumValue(column, word), { ok: true, value: "debit", label: "Withdrawal" }, word);
+  }
+  assert.equal(resolveEnumValue(column, "Dividend").ok, false);
+});
+
+test("the share capital file identifies itself, by its header or its rows", () => {
+  const header = identifyShape(SHARE_CAPITAL_COLUMNS.map((c) => c.label));
+  assert.equal(header.shape, "share_capital");
+  assert.equal(header.basis, "header");
+
+  const row = identifyShape(["2019-00101", "2026-01-15", "OR-1001", "Contribution", "1500.00", ""]);
+  assert.equal(row.shape, "share_capital");
+  assert.equal(row.basis, "content");
+  assert.ok(row.shareCapitalScore > row.customerScore && row.shareCapitalScore > row.loansScore);
+
+  // The other two files are still themselves.
+  assert.equal(identifyShape(CUSTOMER_HEADER).shape, "customer");
+  assert.equal(identifyShape(LOANS_HEADER).shape, "loans");
+  assert.equal(identifyShape(CUSTOMER_ROW).shape, "customer");
+  assert.equal(identifyShape(LOANS_ROW).shape, "loans");
 });

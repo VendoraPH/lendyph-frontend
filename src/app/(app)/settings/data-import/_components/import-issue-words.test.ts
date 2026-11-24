@@ -8,9 +8,11 @@ import { ISSUE_CATEGORY_WORDS, categoryWords, fieldWords } from "./import-issue-
  * Every code the backend can put in the result report's `category`, listed
  * from lendyph-backend `origin/development` (app/Services/CsvImport):
  *  - the row notes, `->fail($field, '<code>', …)` and `->warn(…)`, in the
- *    normalizers, ValueNormalizer and LoanScheduleReconstructor, plus
+ *    normalizers (the share capital file's `ShareCapitalRowNormalizer`
+ *    included), ValueNormalizer and LoanScheduleReconstructor, plus
  *    `CustomerRowNormalizer::MEMBERSHIP_NEEDS_MEMBER_EDIT`;
- *  - the import pass's outcomes, `RowOutcome::failed('<code>', …)`, the
+ *  - the import pass's outcomes, `RowOutcome::failed('<code>', …)` and
+ *    `RowOutcome::skipped('<code>', …)` (`ShareCapitalRowImporter`'s too), the
  *    match outcomes it skips with (`BorrowerMatch`), and the categories it
  *    stamps (`imported_with_warnings`, `invalid_row`);
  *  - ErrorReportBuilder's own fallbacks and `out_of_product_bounds`.
@@ -39,6 +41,12 @@ const BACKEND_CODES = [
   "rate_invalid", "rate_overflow", "rate_required", "required", "row_column_count",
   "schedule_not_reconstructable", "skipped", "term_disagrees_with_dates", "term_too_long",
   "truncated", "unexplained_fee",
+  // The share capital file (finish run round 2, decision 13).
+  "account_no_too_long", "amount_zero", "branch_closed", "cash_reference_too_large",
+  "duplicate_in_file", "duplicate_reference", "duplicate_transaction", "member_moved",
+  "member_withdrawn", "not_a_member", "reference_number_too_long", "share_capital_needs_permission",
+  "transaction_date_future", "transaction_date_implausible", "transaction_type_invalid",
+  "transaction_type_required", "withdrawal_exceeds_balance",
 ];
 
 test("every code the backend can send has its words", () => {
@@ -53,6 +61,14 @@ test("the words are words: no underscores, no keys", () => {
   assert.equal(categoryWords("membership_number_spaces"), "Membership number stored without spaces");
   assert.equal(categoryWords("membership_number_taken"), "Membership number already used");
   assert.equal(categoryWords("borrower_not_found"), "Member not found", "Member, never Borrower");
+});
+
+test("the share capital file's codes read as what happened to the entry", () => {
+  assert.equal(categoryWords("duplicate_reference"), "Reference already on the ledger");
+  assert.equal(categoryWords("duplicate_transaction"), "Same entry already on the ledger");
+  assert.equal(categoryWords("duplicate_in_file"), "Repeats an earlier row of the file");
+  assert.equal(categoryWords("withdrawal_exceeds_balance"), "Withdrawal above the balance");
+  assert.equal(categoryWords("amount_zero"), "Amount of ₱0.00");
 });
 
 test("an unmatched loan product reads with its name", () => {

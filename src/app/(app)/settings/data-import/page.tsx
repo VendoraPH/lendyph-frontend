@@ -67,9 +67,10 @@ export default function DataImportPage() {
         <header className="shrink-0">
           <h1 className="text-2xl font-semibold">Data Import</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Bring an existing member and loan book into Lendyph from CSV. This
-            creates real members and real loans — it is not a preview, and there
-            is no undo, so work through the checks before uploading.
+            Bring an existing member, loan and share capital book into Lendyph
+            from CSV. This creates real members, loans and share capital entries
+            — it is not a preview, and there is no undo, so work through the
+            checks before uploading.
           </p>
         </header>
 

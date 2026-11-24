@@ -105,7 +105,7 @@ export function FileSlot({
     const dropped = Array.from(event.dataTransfer.files);
     if (dropped.length > 1) {
       setError(
-        `Drop one file here. The members and loans files go in separate slots, because the importer has to know which is which.`,
+        `Drop one file here. Each file goes in its own slot, because the importer has to know which is which.`,
       );
       return;
     }

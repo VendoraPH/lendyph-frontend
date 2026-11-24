@@ -23,14 +23,15 @@ function profiles(): TemplateSheet {
   return sheet;
 }
 
-test("a fresh draft carries both sheets, each with one row to type into", () => {
+test("a fresh draft carries every sheet, each with one row to type into", () => {
   const draft = createDraft();
   assert.deepEqual(
     draft.sheets.map((s) => s.id),
-    ["members", "loans"]
+    ["members", "loans", "share_capital"]
   );
   assert.equal(draft.sheets[0].columns.length, 26);
   assert.equal(draft.sheets[1].columns.length, 18);
+  assert.equal(draft.sheets[2].columns.length, 6);
   for (const sheet of draft.sheets) assert.equal(sheet.rows.length, 1);
 });
 

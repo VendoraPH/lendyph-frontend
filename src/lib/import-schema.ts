@@ -1,18 +1,19 @@
 /**
  * Column schemas for the data-migration CSV import.
  *
- * Two files arrive: a 26-column Customer Profile and an 18-column Loans sheet.
+ * Up to three files arrive: a 26-column Customer Profile, an 18-column Loans
+ * sheet and a 6-column Share Capital file (finish run round 2, decision 13).
  * The Customer Profile is the client's 22 workbook columns with the four
  * Member Profile fields the workbook lacked appended after them, and a file in
  * the workbook's own 22-column layout still reads (see `acceptedWidths`).
- * Both are positional — the client's spec sheet tells users to DELETE the
+ * All are positional — the client's spec sheet tells users to DELETE the
  * header row before uploading — so a column's meaning is its index and nothing
  * else. That makes three failure modes worth catching before a single row is
  * written:
  *
  *  1. the header row is still there and gets imported as a borrower;
  *  2. the header row is gone and row one gets skipped as a header;
- *  3. the loans file is dropped into the customer slot, or the reverse.
+ *  3. one file is dropped into another's slot.
  *
  * Everything here is detection and mapping only. Nothing is coerced, corrected
  * or dropped: a value that does not match a known vocabulary is REPORTED, with
@@ -34,7 +35,7 @@ import { looksLikeDate } from "./import-date";
 // Types
 // ---------------------------------------------------------------------------
 
-export type ImportShape = "customer" | "loans";
+export type ImportShape = "customer" | "loans" | "share_capital";
 
 /**
  * `enum` is a CLOSED vocabulary — the database stores one of a fixed set, so an
@@ -195,6 +196,35 @@ export const LOAN_COLUMNS = [
   { key: "other_fee_amount", label: "Other Fee Amount", required: false, type: "number", numeric: MONEY },
 ] as const satisfies readonly ImportColumn[];
 
+/**
+ * The share capital file's two kinds of entry, in words, and the side of the
+ * ledger each is stored on (`ShareCapitalRowNormalizer::TYPES`). Credit,
+ * Debit, CR and DR read too (`VOCAB_ALIASES`).
+ */
+export const TRANSACTION_TYPE_OPTIONS: readonly EnumOption[] = [
+  { value: "credit", label: "Contribution" },
+  { value: "debit", label: "Withdrawal" },
+];
+
+/**
+ * The share capital file, in the server's order (`CsvImportSchema`). Its own
+ * template, so the labels are the app's words rather than a workbook's.
+ *
+ * Transaction Date is written year-month-day only (2026-11-24), as the server
+ * reads it, so it is checked as written (`shareCapitalFieldProblems`) rather
+ * than settled to a day or month order: a slash date or a spreadsheet date
+ * number is refused, never read. Remarks has no length here because the
+ * server shortens it with a warning, which the same check says.
+ */
+export const SHARE_CAPITAL_COLUMNS = [
+  { key: "account_no", label: "Account No. or Member ID", required: true, type: "text", maxLength: 50 },
+  { key: "transaction_date", label: "Transaction Date", required: true, type: "text" },
+  { key: "reference_number", label: "Reference Number", required: false, type: "text", maxLength: 100 },
+  { key: "transaction_type", label: "Transaction Type", required: true, type: "enum", options: TRANSACTION_TYPE_OPTIONS },
+  { key: "amount", label: "Amount", required: true, type: "number", numeric: MONEY },
+  { key: "remarks", label: "Remarks", required: false, type: "text" },
+] as const satisfies readonly ImportColumn[];
+
 export type CustomerField = (typeof CUSTOMER_COLUMNS)[number]["key"];
 export type LoanField = (typeof LOAN_COLUMNS)[number]["key"];
 
@@ -203,6 +233,7 @@ export type LoanRow = Record<LoanField, string>;
 export type ImportRow = Record<string, string>;
 
 export function columnsFor(shape: ImportShape): readonly ImportColumn[] {
+  if (shape === "share_capital") return SHARE_CAPITAL_COLUMNS;
   return shape === "customer" ? CUSTOMER_COLUMNS : LOAN_COLUMNS;
 }
 
@@ -395,6 +426,14 @@ const VOCAB_ALIASES: Record<string, Record<string, string>> = {
     balloon: "upon_maturity",
     lumpsum: "upon_maturity",
     maturity: "upon_maturity",
+  },
+  // The server's own words (`ShareCapitalRowNormalizer::TYPES`). Credit and
+  // Debit already match the options' values.
+  transaction_type: {
+    cr: "credit",
+    sharecapitalcontribution: "credit",
+    dr: "debit",
+    sharecapitalwithdrawal: "debit",
   },
 };
 
@@ -852,6 +891,13 @@ const CUSTOMER_FINGERPRINT: Fingerprint[] = [
   { index: 9, test: (v) => EMAIL_SHAPE.test(String(v ?? "").trim()) },
 ];
 
+/** Date, transaction type and amount, where the share capital file has them. */
+const SHARE_CAPITAL_FINGERPRINT: Fingerprint[] = [
+  { index: 1, test: looksLikeDate },
+  { index: 3, test: matchesVocabulary("transaction_type", TRANSACTION_TYPE_OPTIONS) },
+  { index: 4, test: (v) => AMOUNT_SHAPE.test(String(v ?? "").trim()) },
+];
+
 const LOANS_FINGERPRINT: Fingerprint[] = [
   { index: 2, test: (v) => AMOUNT_SHAPE.test(String(v ?? "").trim()) },
   { index: 3, test: (v) => AMOUNT_SHAPE.test(String(v ?? "").trim()) },
@@ -862,15 +908,16 @@ const LOANS_FINGERPRINT: Fingerprint[] = [
   { index: 13, test: looksLikeDate },
 ];
 
-/** Minimum score, and minimum lead over the other shape, before we will name one. */
+/** Minimum score, and minimum lead over the next-best shape, before we will name one. */
 const SHAPE_MIN_SCORE = 0.5;
 const SHAPE_MIN_LEAD = 0.2;
 
 export interface ShapeGuess {
-  /** `null` when the record resembles neither file, or both equally. */
+  /** `null` when the record resembles no file, or two of them equally. */
   shape: ImportShape | null;
   customerScore: number;
   loansScore: number;
+  shareCapitalScore: number;
   /** Which evidence decided it: the labels, or the cells' own contents. */
   basis: "header" | "content";
 }
@@ -889,41 +936,54 @@ function fingerprintScore(
 }
 
 /**
- * Which of the two files does this record come from?
+ * Which of the files does this record come from?
  *
  * For catching the user who put the loans CSV in the customer slot — a mistake
  * that is otherwise invisible until the import writes loan amounts into
  * birthdates. A header row is decided on its labels; a headerless row on the
- * shape of its cells, which is unusually reliable here because the two layouts
+ * shape of its cells, which is unusually reliable here because the layouts
  * disagree everywhere it counts (an email at index 9 versus a term in months, a
- * date at index 12 versus a city name).
+ * date at index 12 versus a city name, and a six-column share capital row with
+ * its date, type and amount where neither of the others has them).
  */
 export function identifyShape(record: readonly string[]): ShapeGuess {
   const customerHeader = detectHeaderRow(record, "customer");
   const loansHeader = detectHeaderRow(record, "loans");
+  const shareCapitalHeader = detectHeaderRow(record, "share_capital");
 
-  if (customerHeader.isHeader || loansHeader.isHeader) {
+  if (customerHeader.isHeader || loansHeader.isHeader || shareCapitalHeader.isHeader) {
+    const scores = {
+      customer: customerHeader.labelScore,
+      loans: loansHeader.labelScore,
+      share_capital: shareCapitalHeader.labelScore,
+    };
     return {
-      shape: decide(customerHeader.labelScore, loansHeader.labelScore),
-      customerScore: customerHeader.labelScore,
-      loansScore: loansHeader.labelScore,
+      shape: decide(scores),
+      customerScore: scores.customer,
+      loansScore: scores.loans,
+      shareCapitalScore: scores.share_capital,
       basis: "header",
     };
   }
 
-  const customerScore = fingerprintScore(record, CUSTOMER_FINGERPRINT, acceptedWidths("customer"));
-  const loansScore = fingerprintScore(record, LOANS_FINGERPRINT, acceptedWidths("loans"));
+  const scores = {
+    customer: fingerprintScore(record, CUSTOMER_FINGERPRINT, acceptedWidths("customer")),
+    loans: fingerprintScore(record, LOANS_FINGERPRINT, acceptedWidths("loans")),
+    share_capital: fingerprintScore(record, SHARE_CAPITAL_FINGERPRINT, acceptedWidths("share_capital")),
+  };
   return {
-    shape: decide(customerScore, loansScore),
-    customerScore,
-    loansScore,
+    shape: decide(scores),
+    customerScore: scores.customer,
+    loansScore: scores.loans,
+    shareCapitalScore: scores.share_capital,
     basis: "content",
   };
 }
 
-function decide(customerScore: number, loansScore: number): ImportShape | null {
-  const best = Math.max(customerScore, loansScore);
-  if (best < SHAPE_MIN_SCORE) return null;
-  if (Math.abs(customerScore - loansScore) < SHAPE_MIN_LEAD) return null;
-  return customerScore > loansScore ? "customer" : "loans";
+/** The best-scoring shape, when it scores enough and leads the next one clearly. */
+function decide(scores: Record<ImportShape, number>): ImportShape | null {
+  const [best, second] = (Object.entries(scores) as Array<[ImportShape, number]>).sort((a, b) => b[1] - a[1]);
+  if (best[1] < SHAPE_MIN_SCORE) return null;
+  if (best[1] - (second?.[1] ?? 0) < SHAPE_MIN_LEAD) return null;
+  return best[0];
 }

@@ -4,12 +4,18 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { csvBlob } from "@/lib/csv";
 import { csvRow } from "@/lib/csv-escape";
-import { CUSTOMER_COLUMNS, LOAN_COLUMNS, detectHeaderRow } from "@/lib/import-schema";
+import { CUSTOMER_COLUMNS, LOAN_COLUMNS, SHARE_CAPITAL_COLUMNS, detectHeaderRow } from "@/lib/import-schema";
 import {
   computeFindings,
   inspectFile,
 } from "@/app/(app)/settings/data-import/_hooks/use-file-precheck";
-import { IMPORT_TEMPLATES, MEMBERS_TEMPLATE_NOTE, importTemplateCsv } from "./import-template";
+import {
+  IMPORT_TEMPLATES,
+  MEMBERS_TEMPLATE_NOTE,
+  SHARE_CAPITAL_TEMPLATE_NOTE,
+  importTemplateCsv,
+  importTemplates,
+} from "./import-template";
 
 /** A valid member row as the workbook had it: 22 columns, ending at Spouse Occupation. */
 const OLD_MEMBER_ROW = [
@@ -57,6 +63,14 @@ test("the loans template is the loans file's labels, in column order, and nothin
   assert.ok(importTemplateCsv("loans").startsWith("Account No.,Loan No.,Loan Amount,"));
 });
 
+test("the share capital template is its six columns, in order, and nothing else", () => {
+  assert.equal(
+    importTemplateCsv("share_capital"),
+    "Account No. or Member ID,Transaction Date,Reference Number,Transaction Type,Amount,Remarks\r\n",
+  );
+  assert.equal(importTemplateCsv("share_capital"), `${SHARE_CAPITAL_COLUMNS.map((column) => column.label).join(",")}\r\n`);
+});
+
 test("a label holding a comma or a quote is quoted per RFC 4180", () => {
   assert.equal(
     importTemplateCsv([{ label: "Amount, in pesos" }, { label: 'The "Ref"' }, { label: "Plain" }]),
@@ -70,12 +84,15 @@ test("each template is named for its file and downloads as CSV", () => {
     [
       { shape: "customer", buttonLabel: "Download members template", fileName: "members-import-template.csv" },
       { shape: "loans", buttonLabel: "Download loans template", fileName: "loans-import-template.csv" },
+      { shape: "share_capital", buttonLabel: "Download share capital template", fileName: "share-capital-import-template.csv" },
     ],
   );
+  assert.deepEqual(importTemplates(true), IMPORT_TEMPLATES);
+  assert.deepEqual(importTemplates(false).map((template) => template.shape), ["customer", "loans"]);
 });
 
 test("the template's header row is read as the header, every label in its place", () => {
-  for (const shape of ["customer", "loans"] as const) {
+  for (const shape of ["customer", "loans", "share_capital"] as const) {
     const header = importTemplateCsv(shape).trimEnd().split(",");
     const detection = detectHeaderRow(header, shape);
     assert.equal(detection.isHeader, true, shape);
@@ -138,13 +155,50 @@ test("a loans file made from the template passes the pre-check with its header r
   assert.equal(findings.errorCount, 0);
 });
 
-test("the Prepare step offers both templates beside the files", () => {
+test("a share capital file made from the template passes the pre-check with its header row", async () => {
+  const rows = [
+    ["2019-00101", "2026-01-15", "OR-1001", "Contribution", "1,500.00", "Opening share capital"],
+    ["BRW-000007", "2026-02-15", "", "Withdrawal", "250", ""],
+  ];
+  const text = importTemplateCsv("share_capital") + rows.map(csvRow).join("\r\n") + "\r\n";
+  const file = new File([csvBlob(text)], "share-capital.csv", { type: "text/csv" });
+  const inspection = await inspectFile("share_capital", file);
+
+  assert.equal(inspection.header?.isHeader, true);
+  assert.equal(inspection.slot?.shape, "share_capital");
+
+  const findings = computeFindings({ share_capital: inspection }, {}, {}).share_capital;
+  assert.ok(findings);
+  assert.equal(findings.totalRows, 2, "the header row is not imported as an entry");
+  assert.deepEqual(findings.blockers, []);
+  assert.deepEqual(findings.pendingDecisions, [], "no date order to choose: the date is written year-month-day");
+  assert.equal(findings.errorCount, 0, findings.issues.map((issue) => issue.message).join(" | "));
+});
+
+test("the Prepare step offers the templates beside the files", () => {
   const source = readFileSync(
     join(process.cwd(), "src/app/(app)/settings/data-import/_components/step-prepare.tsx"),
     "utf8",
   );
-  assert.match(source, /IMPORT_TEMPLATES\.map\(/);
+  assert.match(source, /importTemplates\(shareCapitalAllowed\)\.map\(/);
   assert.match(source, /downloadImportTemplate\(template\)/);
+});
+
+test("the Prepare step says what the share capital file takes and what becomes of it", () => {
+  assert.match(SHARE_CAPITAL_TEMPLATE_NOTE, /Contribution or Withdrawal/);
+  assert.match(SHARE_CAPITAL_TEMPLATE_NOTE, /year-month-day, such as 2026-11-24/);
+  assert.match(SHARE_CAPITAL_TEMPLATE_NOTE, /above ₱0\.00/);
+  assert.match(SHARE_CAPITAL_TEMPLATE_NOTE, /account number or member ID/);
+  assert.match(SHARE_CAPITAL_TEMPLATE_NOTE, /same reference/);
+  assert.match(SHARE_CAPITAL_TEMPLATE_NOTE, /Share Capital ledger/);
+  assert.match(SHARE_CAPITAL_TEMPLATE_NOTE, /nothing to the books/);
+  assert.doesNotMatch(SHARE_CAPITAL_TEMPLATE_NOTE, /[Bb]orrower|_/);
+
+  const source = readFileSync(
+    join(process.cwd(), "src/app/(app)/settings/data-import/_components/step-prepare.tsx"),
+    "utf8",
+  );
+  assert.match(source, /\{SHARE_CAPITAL_TEMPLATE_NOTE\}/);
 });
 
 test("the Prepare step says valid IDs and photos are not imported, and that old files still are", () => {

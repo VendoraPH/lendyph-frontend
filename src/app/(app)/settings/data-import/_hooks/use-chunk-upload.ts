@@ -51,6 +51,7 @@ import type {
   ImportFileStatus,
   ImportRunStatus,
 } from "@/types/data-import";
+import { IMPORT_FILE_KINDS } from "../_components/import-files";
 
 /* ------------------------------------------------------------------ */
 /* The per-file block                                                   */
@@ -92,8 +93,11 @@ export const RETRY_MAX_MS = 15_000;
  */
 export const OFFLINE_WAIT_MS = 15_000;
 
-/** The order files are sent in. Deterministic so progress is reproducible. */
-const KIND_ORDER: readonly ImportFileKind[] = ["customers", "loans"];
+/**
+ * The order files are sent in: the order the import reads them
+ * (`IMPORT_FILE_KINDS`). Deterministic so progress is reproducible.
+ */
+const KIND_ORDER: readonly ImportFileKind[] = IMPORT_FILE_KINDS;
 
 export const INSECURE_CONTEXT_MESSAGE =
   "This page must be served over HTTPS (or opened on localhost) to upload. " +

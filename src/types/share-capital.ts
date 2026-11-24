@@ -22,6 +22,11 @@ export interface ShareCapitalLedgerEntry {
   reference: string;
   /** How the money moved; a cash entry's is the server's CSH number. */
   reference_number?: string | null;
+  /**
+   * Brought over by Data Import's share capital file from the cooperative's
+   * earlier books: it has no payment method and posted nothing to the books.
+   */
+  is_imported?: boolean;
   debit: number;
   credit: number;
   /**

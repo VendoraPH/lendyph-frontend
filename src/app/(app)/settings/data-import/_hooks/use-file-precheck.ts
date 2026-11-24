@@ -44,6 +44,7 @@ import {
 import { readCsvFile, type CsvFileNotice } from "@/lib/csv-read";
 import { todayISO } from "@/lib/format";
 import { memberFieldProblems } from "@/lib/import-member-fields";
+import { shareCapitalFieldProblems, shareCapitalRepeats } from "@/lib/import-share-capital";
 import {
   blockingSizeProblems,
   canonicalMemberNumber,
@@ -72,7 +73,7 @@ import {
 } from "@/lib/import-date";
 import { formatCount, formatCountOf } from "@/lib/report-format";
 import type { ImportFileKind, ImportIssueSeverity } from "@/types/data-import";
-import { FILE_LABELS, fileNameInSentence } from "../_components/import-files";
+import { FILE_LABELS, IMPORT_FILE_KINDS, fileNameInSentence } from "../_components/import-files";
 
 // ---------------------------------------------------------------------------
 // Ceilings
@@ -118,6 +119,14 @@ const SLOT_SAMPLE_ROWS = 5;
 export const SHAPE_BY_KIND: Record<ImportFileKind, ImportShape> = {
   customers: "customer",
   loans: "loans",
+  share_capital: "share_capital",
+};
+
+/** The other way round: the file a shape is, for a wrong-slot message. */
+const KIND_BY_SHAPE: Record<ImportShape, ImportFileKind> = {
+  customer: "customers",
+  loans: "loans",
+  share_capital: "share_capital",
 };
 
 export type PrecheckCategory =
@@ -275,28 +284,30 @@ function delimiterWords(delimiter: string): string {
 }
 
 /**
- * Which of the two files does this one look like?
+ * Which of the files does this one look like?
  *
  * A header row settles it on its labels alone. Without one, a single data row
  * is thin evidence — a customer row missing its email scores no better than a
- * loans row — so up to five are polled and the majority wins. Wrong-slot is a
- * hard blocker, and a hard blocker raised on one row would stop a good import.
+ * loans row — so up to five are polled and the majority wins (a tie names
+ * none). Wrong-slot is a hard blocker, and a hard blocker raised on one row
+ * would stop a good import.
  */
 function guessSlot(records: readonly CsvRecord[], headerPresent: boolean): ShapeGuess | null {
   if (records.length === 0) return null;
   if (headerPresent) return identifyShape(records[0].fields);
 
   const sample = records.slice(0, SLOT_SAMPLE_ROWS).map((r) => identifyShape(r.fields));
-  const votes = { customer: 0, loans: 0 };
+  const votes: Record<ImportShape, number> = { customer: 0, loans: 0, share_capital: 0 };
   for (const guess of sample) if (guess.shape) votes[guess.shape] += 1;
 
-  const winner =
-    votes.customer === votes.loans ? null : votes.customer > votes.loans ? "customer" : "loans";
+  const [best, second] = (Object.entries(votes) as Array<[ImportShape, number]>).sort((a, b) => b[1] - a[1]);
+  const winner = best[1] > 0 && best[1] > second[1] ? best[0] : null;
   const first = sample[0];
   return {
     shape: winner,
     customerScore: first.customerScore,
     loansScore: first.loansScore,
+    shareCapitalScore: first.shareCapitalScore,
     basis: first.basis,
   };
 }
@@ -369,10 +380,13 @@ function dateColumns(shape: ImportShape): ImportColumn[] {
   return columnsFor(shape).filter((column) => column.type === "date");
 }
 
-/** The column that names the row in a message: the account, or the loan. */
+/**
+ * The column that names the row in a message: the account (a members or share
+ * capital row), or the loan.
+ */
 function identityColumn(shape: ImportShape): ImportColumn {
-  const key = shape === "customer" ? "account_no" : "loan_no";
-  // Present in both tables by construction; the find is for type narrowing.
+  const key = shape === "loans" ? "loan_no" : "account_no";
+  // Present in every table by construction; the find is for type narrowing.
   return columnsFor(shape).find((column) => column.key === key) ?? columnsFor(shape)[0];
 }
 
@@ -504,7 +518,10 @@ interface RowCheckContext {
   kind: ImportFileKind;
   shape: ImportShape;
   dates: readonly DateColumnFinding[];
-  /** Account numbers from the customers file, or `null` when it was not read. */
+  /**
+   * Account numbers from the customers file, for a loans or share capital
+   * file, or `null` when it was not read.
+   */
   knownAccounts: ReadonlySet<string> | null;
   /** The file's layout width (`FileInspection.expectedColumns`). */
   expectedColumns: number;
@@ -561,6 +578,8 @@ export function checkRows(
 
   const firstSeenAt = new Map<string, number>();
   const memberNumberAt = new Map<string, number>();
+  // A share capital file's own repeat rule, the server's (./import-share-capital).
+  const shareCapitalRepeat = context.shape === "share_capital" ? shareCapitalRepeats() : null;
   const today = context.today ?? todayISO();
   const membershipAllowed = context.membershipAllowed ?? true;
   const fileLabel = fileNameInSentence(context.kind);
@@ -705,7 +724,27 @@ export function checkRows(
       }
     }
 
-    if (reference) {
+    if (context.shape === "share_capital") {
+      for (const problem of shareCapitalFieldProblems(row, today)) {
+        add(line, reference, {
+          column: problem.label,
+          severity: problem.severity,
+          category: problem.category,
+          message: problem.message,
+          value: problem.raw,
+        });
+      }
+
+      // Only a row the server takes is remembered as the first, as it does.
+      const repeat = rowHasError ? null : shareCapitalRepeat?.(row, line);
+      if (repeat) {
+        add(line, reference, { column: repeat.column, severity: "error", category: "duplicate", message: repeat.message, value: repeat.value });
+      }
+    }
+
+    // A member's account on many rows is what a share capital file is, so its
+    // rows repeat by the rule above instead.
+    if (reference && context.shape !== "share_capital") {
       const seen = firstSeenAt.get(reference);
       if (seen === undefined) firstSeenAt.set(reference, line);
       else {
@@ -719,14 +758,17 @@ export function checkRows(
       }
     }
 
-    if (context.knownAccounts && accountIndex >= 0 && context.shape === "loans") {
+    if (context.knownAccounts && accountIndex >= 0 && context.shape !== "customer") {
       const account = String(fields[accountIndex] ?? "").trim();
       if (account && !context.knownAccounts.has(account)) {
         add(line, reference, {
-          column: "Account No.",
+          column: columns[accountIndex].label,
           severity: "warning",
           category: "cross-file",
-          message: `No member with Account No. ${account} is in the customers file. Members who already exist in Lendyph are matched on the server, so this loan can still land — but if they do not exist, this row will fail.`,
+          message:
+            context.shape === "share_capital"
+              ? `No member with account number ${account} is in the members file. A member already in Lendyph is matched on the server by account number or member ID, so this row can still land; if no member has it, the row is refused.`
+              : `No member with Account No. ${account} is in the customers file. Members who already exist in Lendyph are matched on the server, so this loan can still land — but if they do not exist, this row will fail.`,
           value: account,
         });
       }
@@ -775,11 +817,14 @@ export function fileBlockers(
       inspection.records.length === 0
         ? "No rows were found in this file."
         : "The only row in this file is the header row, so there is nothing to import.";
-    // A members-only import is allowed, so an empty loans file is one to drop.
+    // A members-only import is allowed, so an empty loans file is one to drop,
+    // and so is an empty share capital file.
     blockers.push(
       inspection.kind === "loans"
         ? `${empty} The loans file is optional: leave it out when there are no loans to bring over.`
-        : empty,
+        : inspection.kind === "share_capital"
+          ? `${empty} The share capital file is optional: leave it out when there is no share capital to bring over.`
+          : empty,
     );
   }
 
@@ -787,7 +832,7 @@ export function fileBlockers(
   if (wrongSlot) {
     blockers.push(
       `This looks like the ${fileNameInSentence(
-        inspection.slot?.shape === "customer" ? "customers" : "loans",
+        KIND_BY_SHAPE[inspection.slot?.shape ?? inspection.shape],
       )}, but it was chosen as the ${fileNameInSentence(inspection.kind)}. Importing it here would write each value into the wrong field.`,
     );
   }
@@ -814,7 +859,7 @@ export function fileBlockers(
     const named = listWords(unnamed.map((mismatch) => mismatch.expected));
     blockers.push(
       `Row 1 is the header, but it leaves ${unnamed.length === 1 ? "a column" : `${unnamed.length} columns`} unnamed: ${named}. The import holds the header to every column the rows have, so it would refuse this file. Add the missing labels; the ${
-        inspection.shape === "customer" ? "members" : "loans"
+        inspection.shape === "customer" ? "members" : inspection.shape === "loans" ? "loans" : "share capital"
       } template has them all.`,
     );
   }
@@ -883,7 +928,7 @@ export function computeFindings(
 
   const findings: Partial<Record<ImportFileKind, FileFindings>> = {};
 
-  for (const kind of ["customers", "loans"] as const) {
+  for (const kind of IMPORT_FILE_KINDS) {
     const inspection = inspections[kind];
     if (!inspection) continue;
 
@@ -896,7 +941,8 @@ export function computeFindings(
       kind,
       shape: inspection.shape,
       dates,
-      knownAccounts: kind === "loans" ? knownAccounts : null,
+      // Loans and share capital name members by account; members are the list.
+      knownAccounts: kind === "customers" ? null : knownAccounts,
       expectedColumns: inspection.expectedColumns,
       membershipAllowed,
     });
@@ -908,7 +954,7 @@ export function computeFindings(
       rowsNotChecked: rows.length - checked.length,
       dates,
       ...totals,
-      // Both files' blockers share one list on screen, so each names its file.
+      // Every file's blockers share one list on screen, so each names its file.
       blockers: fileBlockers(inspection, rows, dates, skip).map(
         (blocker) => `${inspection.label} (${inspection.fileName}): ${blocker}`,
       ),
@@ -1027,12 +1073,14 @@ export function useFilePrecheck(
 
   const customersFile = files.customers ?? null;
   const loansFile = files.loans ?? null;
+  const shareCapitalFile = files.share_capital ?? null;
   const lastProgressAt = useRef(0);
 
   useEffect(() => {
     const picked: Array<[ImportFileKind, File]> = [];
     if (customersFile) picked.push(["customers", customersFile]);
     if (loansFile) picked.push(["loans", loansFile]);
+    if (shareCapitalFile) picked.push(["share_capital", shareCapitalFile]);
 
     // A new set of files invalidates every override made about the old ones.
     setInspections({});
@@ -1077,7 +1125,7 @@ export function useFilePrecheck(
     })();
 
     return () => controller.abort();
-  }, [customersFile, loansFile, attempt]);
+  }, [customersFile, loansFile, shareCapitalFile, attempt]);
 
   // Off the render path on purpose: 20,000 rows is ~125 ms of work, and doing
   // it inside a useMemo blocks the paint that would have shown "Checking…".
@@ -1125,7 +1173,7 @@ export function useFilePrecheck(
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
   const list = useMemo(
-    () => [findings.customers, findings.loans].filter((f): f is FileFindings => Boolean(f)),
+    () => IMPORT_FILE_KINDS.map((kind) => findings[kind]).filter((f): f is FileFindings => Boolean(f)),
     [findings],
   );
 
