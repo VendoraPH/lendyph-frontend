@@ -6,6 +6,7 @@
 
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
+import { cashReferenceParams } from "@/lib/cash-reference";
 import { idempotencyHeaders } from "@/lib/idempotency-key";
 import { postMoney } from "./savings.service";
 import type {
@@ -30,11 +31,12 @@ export const timeDepositService = {
   list: (params?: Record<string, unknown>) => api.getRaw<TimeDepositsResponse>(E.TIME_DEPOSITS, { params }),
   get: (id: number) => api.get<TimeDeposit>(E.TIME_DEPOSIT(id)),
   /**
-   * The TD-[admin id]-[year]-[0001] number the next cash placement would get.
-   * A preview only: it reserves nothing, and the server numbers the placement
-   * when it saves.
+   * The TD-[admin id]-[year]-[0001] number the next cash placement dated
+   * `date` (today when left out) would get. A preview only: it reserves
+   * nothing, and the server numbers the placement when it saves.
    */
-  nextCashReference: () => api.get<CashReferencePreview>(E.TIME_DEPOSIT_NEXT_CASH_REFERENCE),
+  nextCashReference: (date?: string) =>
+    api.get<CashReferencePreview>(E.TIME_DEPOSIT_NEXT_CASH_REFERENCE, { params: cashReferenceParams(date) }),
   /** The server's figures for a placement. Writes nothing. */
   quote: (data: TimeDepositQuoteInput) => api.post<TimeDepositQuote>(E.TIME_DEPOSIT_QUOTE, data),
   place: (data: PlaceTimeDepositInput, key: string | null) =>
