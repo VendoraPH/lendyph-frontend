@@ -163,10 +163,7 @@ export function evidenceDocumentOptions(
 ): { value: string; label: string }[] {
   const options = (documents ?? [])
     .filter((d) => d.status === "active" || d.id === linkedId)
-    .map((d) => ({
-      value: String(d.id),
-      label: `${d.title} · ${d.category_label || labelOf(DOCUMENT_CATEGORY_LABELS, d.category)}${withdrawnNote(d)}`,
-    }));
+    .map((d) => ({ value: String(d.id), label: evidenceDocumentLabel(d) }));
   if (typeof linkedId === "number" && !options.some((o) => o.value === String(linkedId))) {
     options.push({
       value: String(linkedId),
@@ -174,6 +171,25 @@ export function evidenceDocumentOptions(
     });
   }
   return options;
+}
+
+/** A document by title and category, saying when it has been withdrawn. */
+function evidenceDocumentLabel(d: EvidenceDocument): string {
+  return `${d.title} · ${d.category_label || labelOf(DOCUMENT_CATEGORY_LABELS, d.category)}${withdrawnNote(d)}`;
+}
+
+/**
+ * The linked document in full, for the line under the picker: a native select
+ * cuts a long title and category off. Null with no link, or when the list
+ * doesn't name it (loading, or outside the year's list: the select says so).
+ */
+export function evidenceLinkedCaption(
+  documents: readonly EvidenceDocument[] | null,
+  linkedId: number | null | undefined,
+): string | null {
+  if (typeof linkedId !== "number") return null;
+  const linked = documents?.find((d) => d.id === linkedId);
+  return linked ? evidenceDocumentLabel(linked) : null;
 }
 
 /**

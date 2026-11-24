@@ -11,6 +11,7 @@ import {
   deadlineRequest,
   documentIdOf,
   evidenceDocumentOptions,
+  evidenceLinkedCaption,
   evidenceDocumentsNeeded,
   evidenceEditable,
   evidenceUploadDefaults,
@@ -277,6 +278,28 @@ describe("evidence documents (a Compliance Document linked by its id)", () => {
     assert.deepEqual(evidenceDocumentOptions(year, 99).at(-1), { value: "99", label: "A filed document (not in this year's list)" });
     assert.deepEqual(evidenceDocumentOptions(null, 7), [{ value: "7", label: "A filed document" }]);
     assert.equal(evidenceDocumentOptions(year, 7).length, 2);
+  });
+
+  test("the linked document reads in full under the picker: its whole title and category", () => {
+    const long = doc({
+      id: 14,
+      title: "Minutes of the special general assembly on the amended by-laws and the 2026 budget",
+      category: "minutes",
+      category_label: "Minutes of meetings and resolutions of the Board of Directors",
+    });
+    assert.equal(
+      evidenceLinkedCaption([...year, long], 14),
+      "Minutes of the special general assembly on the amended by-laws and the 2026 budget · Minutes of meetings and resolutions of the Board of Directors",
+    );
+    assert.equal(evidenceLinkedCaption(year, 8), "Old credit policy · Other (withdrawn)");
+    assert.equal(evidenceLinkedCaption(year, 9), "Committee roster · Other");
+  });
+
+  test("no caption without a linked document the list names", () => {
+    assert.equal(evidenceLinkedCaption(year, null), null);
+    assert.equal(evidenceLinkedCaption(year, undefined), null);
+    assert.equal(evidenceLinkedCaption(year, 99), null, "outside the list, the select already says so in words");
+    assert.equal(evidenceLinkedCaption(null, 7), null, "while the list loads");
   });
 
   test("a document uploaded here is offered at once, by title, without reading the list again", () => {

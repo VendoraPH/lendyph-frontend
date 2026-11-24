@@ -2788,7 +2788,8 @@ export function buildPerformanceDoc(raw: unknown, range: DateRange): ReportDocum
 const PROVISIONING_COLUMNS: ReportColumn[] = [
   { key: "bucket", header: "Aging Bucket", format: "text", width: 170 },
   { key: "amount", header: "Overdue Amount", format: "currency", align: "right", width: 180 },
-  { key: "rate", header: "Provision Rate", format: "percent", align: "right", width: 150 },
+  // Text, from `exactRate`: the server's rate as sent ("5%", "2.375%"), the same as the Principal Basis.
+  { key: "rate", header: "Provision Rate", format: "text", align: "right", width: 150 },
   {
     key: "required_allowance",
     header: "Provision on Overdue Amount",
@@ -2880,14 +2881,15 @@ export function buildProvisioningDoc(raw: unknown, range: DateRange): ReportDocu
   //
   // Every figure is the server's. The API sends BOTH `rate` (a fraction, 0.05)
   // and `rate_percent` (whole, 5); everything in a report is whole percent, so
-  // only `rate_percent` is read. A missing allowance is "—", never amount
-  // times rate worked out here.
+  // only `rate_percent` is read, exactly as sent (`exactRate`), as the
+  // Principal Basis reads it. A missing allowance is "—", never amount times
+  // rate worked out here.
   const rows = AGING_BUCKETS.map(([label, keys]) => {
     const bucket = asRecord(pick(buckets, keys));
     return {
       bucket: label,
       amount: serverFigure(bucket, "amount"),
-      rate: serverFigure(bucket, "rate_percent"),
+      rate: exactRate(bucket),
       count: serverFigure(bucket, "count"),
       required_allowance: serverFigure(bucket, "required_allowance"),
     };

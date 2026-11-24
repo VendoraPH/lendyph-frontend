@@ -109,3 +109,8 @@ test("the formula is stated in the same terms the tiles use", () => {
     assert.ok(RECONCILIATION_FORMULA.includes(term), `formula is missing "${term}"`);
   }
 });
+
+test("one row read reads in the singular", () => {
+  const line = reconciliationLine(counts({ total: 1, imported: 1 }));
+  assert.match(line, /^1 row read = /);
+});
