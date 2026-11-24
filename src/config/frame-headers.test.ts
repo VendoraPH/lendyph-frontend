@@ -85,3 +85,40 @@ describe("the public loan application is never framed", () => {
     assert.ok(apply > sources.findIndex((source) => source.startsWith("/((?!")), "after the staff rule");
   });
 });
+
+const RECEIPT_PATHS = ["/r/Tq7m2Xc9Lp4Rz8Kd1Vb6Nw3Hy5Gf0Sa2Jx-Eu_Wo9Ck", "/r/abc"];
+
+describe("a shared receipt is never framed and never sends its address on", () => {
+  test("/r sends DENY and frame-ancestors 'none', with the same-origin referrer policy", async () => {
+    for (const path of RECEIPT_PATHS) {
+      const headers = await headersFor(path);
+      assert.equal(headers["X-Frame-Options"], "DENY", path);
+      assert.equal(headers["Content-Security-Policy"], "frame-ancestors 'none'", path);
+      assert.equal(headers["Referrer-Policy"], "same-origin", path);
+    }
+  });
+
+  test("the staff rule still covers pages that merely start with r", async () => {
+    for (const path of ["/reports", "/reports/aging", "/register", "/roles"]) {
+      const headers = await headersFor(path);
+      assert.equal(headers["X-Frame-Options"], "SAMEORIGIN", path);
+      assert.equal(headers["Referrer-Policy"], undefined, path);
+    }
+  });
+
+  test("/r is kept by no browser or proxy cache, and only /r", async () => {
+    for (const path of RECEIPT_PATHS) {
+      assert.equal((await headersFor(path))["Cache-Control"], "no-store", path);
+    }
+    for (const path of ["/dashboard", "/payments/12", "/reports", ...PORTAL_PATHS, ...APPLY_PATHS]) {
+      assert.equal((await headersFor(path))["Cache-Control"], undefined, path);
+    }
+  });
+
+  test("its rule comes after the staff rule", async () => {
+    const sources = (((await nextConfig.headers?.()) ?? []) as HeaderRoute[]).map((route) => route.source);
+    const receipt = sources.indexOf("/r/:path*");
+    assert.ok(receipt > 0, "the /r rule");
+    assert.ok(receipt > sources.findIndex((source) => source.startsWith("/((?!")), "after the staff rule");
+  });
+});

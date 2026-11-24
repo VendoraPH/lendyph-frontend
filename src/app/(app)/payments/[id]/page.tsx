@@ -16,7 +16,8 @@ import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
 import { mapPaymentToReceipt, type ReceiptData } from "../_lib/receipt-data";
 import { ReceiptCard } from "../_components/receipt-card";
-import { DownloadReceiptImageButton } from "../_components/download-receipt-image-button";
+import { DownloadReceiptImageButton } from "@/components/receipts/download-receipt-image-button";
+import { ShareReceiptLink } from "../_components/share-receipt-link";
 
 function PaymentReceiptContent({
   params,
@@ -126,6 +127,7 @@ function PaymentReceiptContent({
               Void Payment
             </PermissionButton>
           )}
+          <ShareReceiptLink repaymentId={receipt.id} />
           <DownloadReceiptImageButton target={cardRef} receiptNumber={receipt.receipt_number} />
           {/* Both buttons open the same document, and that is deliberate: an
               Official Receipt is issued under the payment's own receipt number,
