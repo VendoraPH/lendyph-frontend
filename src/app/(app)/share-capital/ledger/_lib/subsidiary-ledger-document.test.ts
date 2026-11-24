@@ -2,7 +2,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { formatCurrency } from "@/lib/format";
 import type { ShareCapitalLedgerEntry } from "@/types";
-import { SUBSIDIARY_LEDGER_TITLE, subsidiaryLedgerDocument } from "./subsidiary-ledger-document";
+import { SUBSIDIARY_LEDGER_TITLE, ledgerEntryNumbers, subsidiaryLedgerDocument } from "./subsidiary-ledger-document";
 
 function entry(id: number, date: string, debit: number, credit: number, balance: number, ref: string | null = null): ShareCapitalLedgerEntry {
   return {
@@ -66,9 +66,28 @@ describe("the share capital subsidiary ledger document", () => {
     assert.deepEqual(rows.slice(1).map((r) => r.balance), [2_000, 1_800, 2_300].map((n) => formatCurrency(n)));
   });
 
-  test("the reference number is the payment's, else the ledger's own reference", () => {
-    const rows = table(build()).rows.slice(1);
-    assert.deepEqual(rows.map((r) => r.reference), ["GC-778899", "SC-2", "CSH-1002325-2026-0002"]);
+  test("each entry shows the ledger's own number and its reference, a dash when it has none", () => {
+    const section = table(build());
+    assert.deepEqual(section.columns.map((c) => c.header), [
+      "Date", "Entry No.", "Reference No.", "Description", "Debit", "Credit", "Running Balance",
+    ]);
+    const [opening, ...rows] = section.rows;
+    assert.deepEqual(rows.map((r) => [r.entryNo, r.referenceNo]), [
+      ["SC-1", "GC-778899"],
+      ["SC-2", "—"],
+      ["SC-3", "CSH-1002325-2026-0002"],
+    ]);
+    assert.deepEqual([opening.entryNo, opening.referenceNo], ["", ""], "the opening balance is no entry");
+  });
+
+  test("an entry's two numbers, shared with the screen: the SC- number, and the reference or a dash", () => {
+    assert.deepEqual(ledgerEntryNumbers({ reference: "SC-9", reference_number: "CSH-0012-2026-0007" }), {
+      entryNo: "SC-9",
+      referenceNo: "CSH-0012-2026-0007",
+    });
+    for (const none of [null, "", undefined]) {
+      assert.deepEqual(ledgerEntryNumbers({ reference: "SC-9", reference_number: none }), { entryNo: "SC-9", referenceNo: "—" });
+    }
   });
 
   test("debit and credit are blank where an entry has none", () => {

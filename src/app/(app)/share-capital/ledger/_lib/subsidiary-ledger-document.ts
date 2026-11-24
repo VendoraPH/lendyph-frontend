@@ -35,6 +35,18 @@ function side(value: number): string {
   return value > 0 ? formatCurrency(value) : "";
 }
 
+/**
+ * An entry's two numbers, as the screen and this document show them: the
+ * ledger's own (`reference`, SC-…) and the reference of how the money moved
+ * (`reference_number`: a CSH number, a GCash or bank reference, or the one an
+ * imported file carried), a dash when it has none.
+ */
+export function ledgerEntryNumbers(
+  entry: Pick<ShareCapitalLedgerEntry, "reference" | "reference_number">,
+): { entryNo: string; referenceNo: string } {
+  return { entryNo: entry.reference, referenceNo: entry.reference_number || "—" };
+}
+
 export function subsidiaryLedgerPeriod(range: SubsidiaryLedgerInput["range"]): string {
   return formatDateRange(range.from ?? "", range.to ?? "");
 }
@@ -46,7 +58,7 @@ export function subsidiaryLedgerDocument(input: SubsidiaryLedgerInput): ReportDo
   // Oldest first, the order a ledger reads in; the balances are the server's.
   const rows = [...input.entries].reverse().map((entry) => ({
     date: entry.date,
-    reference: entry.reference_number || entry.reference,
+    ...ledgerEntryNumbers(entry),
     description: entry.description,
     debit: side(entry.debit),
     credit: side(entry.credit),
@@ -85,15 +97,24 @@ export function subsidiaryLedgerDocument(input: SubsidiaryLedgerInput): ReportDo
         kind: "table",
         title: "Transactions",
         columns: [
-          { key: "date", header: "Date", format: "date", width: 13 },
-          { key: "reference", header: "Reference No.", width: 20 },
-          { key: "description", header: "Description", width: 31 },
+          { key: "date", header: "Date", format: "date", width: 11 },
+          { key: "entryNo", header: "Entry No.", width: 14 },
+          { key: "referenceNo", header: "Reference No.", width: 16 },
+          { key: "description", header: "Description", width: 23 },
           { key: "debit", header: "Debit", align: "right", width: 12 },
           { key: "credit", header: "Credit", align: "right", width: 12 },
           { key: "balance", header: "Running Balance", align: "right", width: 12 },
         ],
         rows: [
-          { date: range.from ?? "", reference: "", description: openingLabel, debit: "", credit: "", balance: money(period.opening_balance) },
+          {
+            date: range.from ?? "",
+            entryNo: "",
+            referenceNo: "",
+            description: openingLabel,
+            debit: "",
+            credit: "",
+            balance: money(period.opening_balance),
+          },
           ...rows,
         ],
         // The exporters label the row "Total"; the balance cell is the closing balance.

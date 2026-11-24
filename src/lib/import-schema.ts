@@ -81,7 +81,32 @@ export interface ImportColumn {
   readonly key: string;
   /** The label exactly as printed in the client's workbook. */
   readonly label: string;
+  /**
+   * The workbook's own colour coding: blue required, yellow optional. The Data
+   * Template paints from it (`@/lib/data-template`). What the import does with
+   * a blank is `refusedWhenBlank`, which this never decides.
+   */
   readonly required: boolean;
+  /**
+   * Whether the SERVER refuses a row that leaves this cell blank. Absent, it
+   * is `required`, as the loans and share capital files hold it.
+   *
+   * Set on the members file, where the two differ: the server refuses a member
+   * row only when Account No., Last Name or First Name is blank
+   * (`CustomerRowNormalizer`), and imports the workbook's other required cells
+   * blank, for staff to complete on the member's page. The pre-check follows
+   * the server: a blank here is an error, and a blank in any other required
+   * cell, or in a married member's spouse cell, is a warning.
+   */
+  readonly refusedWhenBlank?: boolean;
+  /**
+   * For a closed vocabulary, whether the SERVER refuses a row whose value it
+   * doesn't recognise. Absent, it does (Member Type, Payment Frequency,
+   * Interest Type, Transaction Type). `false`: it imports the row with the
+   * field blank, with a warning (`enum_unmapped`), as for a member's Gender
+   * and Civil Status.
+   */
+  readonly refusedWhenUnrecognised?: boolean;
   readonly type: ColumnType;
   /** The vocabulary. Required for `enum`; a normalising hint for `open-enum`. */
   readonly options?: readonly EnumOption[];
@@ -137,23 +162,25 @@ const RATE = { max: 9999.9999, decimalPlaces: 4 } as const;
 /** Feeds an `unsignedSmallInteger`. Anything past a few hundred is nonsense. */
 const TERM = { max: 65535, decimalPlaces: 0 } as const;
 
+// `required` is the workbook's blue; `refusedWhenBlank` is what the server
+// does with a blank (finish run round 3). Only the three names refuse a row.
 export const CUSTOMER_COLUMNS = [
-  { key: "account_no", label: "Account No.", required: true, type: "text", maxLength: 50 },
-  { key: "last_name", label: "Last Name", required: true, type: "text", maxLength: 255 },
-  { key: "first_name", label: "First Name", required: true, type: "text", maxLength: 255 },
+  { key: "account_no", label: "Account No.", required: true, refusedWhenBlank: true, type: "text", maxLength: 50 },
+  { key: "last_name", label: "Last Name", required: true, refusedWhenBlank: true, type: "text", maxLength: 255 },
+  { key: "first_name", label: "First Name", required: true, refusedWhenBlank: true, type: "text", maxLength: 255 },
   { key: "middle_name", label: "Middle Name", required: false, type: "text", maxLength: 255 },
   { key: "suffix", label: "Suffix", required: false, type: "open-enum", options: SUFFIX_OPTIONS, maxLength: 20 },
-  { key: "birthdate", label: "Birthdate", required: true, type: "date" },
-  { key: "gender", label: "Gender", required: true, type: "enum", options: GENDER_OPTIONS },
-  { key: "civil_status", label: "Civil Status", required: true, type: "enum", options: CIVIL_STATUS_OPTIONS },
+  { key: "birthdate", label: "Birthdate", required: true, refusedWhenBlank: false, type: "date" },
+  { key: "gender", label: "Gender", required: true, refusedWhenBlank: false, refusedWhenUnrecognised: false, type: "enum", options: GENDER_OPTIONS },
+  { key: "civil_status", label: "Civil Status", required: true, refusedWhenBlank: false, refusedWhenUnrecognised: false, type: "enum", options: CIVIL_STATUS_OPTIONS },
   // 20 is the tight one: two PH mobiles joined by a slash is 23 characters, so
   // a cell holding `0917.../0918...` is reported here rather than truncated.
-  { key: "contact_number", label: "Contact Number", required: true, type: "text", maxLength: 20, serverRepair: "contact-number" },
-  { key: "email", label: "email", required: true, type: "text", maxLength: 255 },
+  { key: "contact_number", label: "Contact Number", required: true, refusedWhenBlank: false, type: "text", maxLength: 20, serverRepair: "contact-number" },
+  { key: "email", label: "email", required: true, refusedWhenBlank: false, type: "text", maxLength: 255 },
   { key: "street_address", label: "Street Address", required: false, type: "text", maxLength: 255 },
-  { key: "barangay", label: "Barangay", required: true, type: "text", maxLength: 255 },
-  { key: "city", label: "City/Municipality", required: true, type: "text", maxLength: 255 },
-  { key: "province", label: "Province", required: true, type: "text", maxLength: 255 },
+  { key: "barangay", label: "Barangay", required: true, refusedWhenBlank: false, type: "text", maxLength: 255 },
+  { key: "city", label: "City/Municipality", required: true, refusedWhenBlank: false, type: "text", maxLength: 255 },
+  { key: "province", label: "Province", required: true, refusedWhenBlank: false, type: "text", maxLength: 255 },
   { key: "employer_or_business", label: "Employer/Business Name", required: false, type: "text", maxLength: 255 },
   { key: "monthly_income", label: "Monthly Income", required: false, type: "number", numeric: INCOME_CEILING },
   { key: "pledge_amount", label: "Pledge Amt(If Applicable)", required: false, type: "number", numeric: PLEDGE_CEILING },
@@ -398,6 +425,8 @@ const VOCAB_ALIASES: Record<string, Record<string, string>> = {
     widower: "widowed",
     divorce: "divorced",
     annulled: "separated",
+    // The server's own words (`CustomerRowNormalizer::CIVIL_STATUS_MAP`).
+    legallyseparated: "separated",
   },
   // `fixed` is what INTEREST_TYPE.FIXED calls this same thing, and "flat" is
   // the term most PH lenders print on their own forms.
@@ -487,6 +516,11 @@ export interface UnknownEnumValue {
   /** The text as it appeared in the file. */
   raw: string;
   options: readonly EnumOption[];
+  /**
+   * `true`: the server refuses the row. `false`: it imports the row with this
+   * field blank (`refusedWhenUnrecognised`).
+   */
+  refused: boolean;
 }
 
 /**
@@ -495,7 +529,8 @@ export interface UnknownEnumValue {
  * A CLOSED enum that does not match keeps its original text in the returned row
  * AND is listed in `unknown`, for the UI to offer a mapping. Blanking it would
  * be the silent drop this module exists to avoid: the row would import looking
- * complete, with one field simply gone.
+ * complete, with one field simply gone. Each one says whether the server
+ * refuses the row for it or imports the field blank.
  *
  * An OPEN vocabulary never lands in `unknown` — an unrecognised suffix is just
  * a suffix, and it is returned exactly as typed.
@@ -517,6 +552,7 @@ export function resolveRowEnums(
         label: column.label,
         raw: result.raw,
         options: column.options,
+        refused: column.refusedWhenUnrecognised ?? true,
       });
     }
   }
@@ -549,23 +585,38 @@ export function normaliseRow(
   return row;
 }
 
+/** A cell the workbook asks for that a row leaves blank. */
+export interface MissingField {
+  key: string;
+  /** The column's printed label, ready to show. */
+  label: string;
+  /**
+   * `true`: the server refuses the row (`refusedWhenBlank`), so it can't be
+   * imported. `false`: the server imports it with this field not set.
+   */
+  refused: boolean;
+}
+
 /**
- * Which required fields this row leaves blank.
+ * Which required fields this row leaves blank, and whether the server refuses
+ * the row for each.
  *
  * The conditional spouse fields are evaluated against the RESOLVED civil
  * status, so `MARRIED`, `married` and `maried` all pull in the same three
- * requirements. Returns column labels, ready to show.
+ * requirements.
  */
 export function missingRequiredFields(
   row: ImportRow,
   shape: ImportShape,
-): string[] {
+): MissingField[] {
   const columns = columnsFor(shape);
-  const missing: string[] = [];
+  const missing: MissingField[] = [];
+  const add = (column: ImportColumn) =>
+    missing.push({ key: column.key, label: column.label, refused: column.refusedWhenBlank ?? column.required });
   for (const column of columns) {
     if ((row[column.key] ?? "").trim()) continue;
     if (column.required) {
-      missing.push(column.label);
+      add(column);
       continue;
     }
     const condition = column.requiredWhen;
@@ -574,7 +625,7 @@ export function missingRequiredFields(
     if (!source) continue;
     const resolved = resolveEnumValue(source, row[condition.field] ?? "");
     if (resolved.ok && resolved.value === condition.equals) {
-      missing.push(column.label);
+      add(column);
     }
   }
   return missing;

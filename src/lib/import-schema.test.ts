@@ -139,6 +139,48 @@ test("only the three starred spouse fields are conditionally required", () => {
   );
 });
 
+// ── What the server refuses (finish run round 3) ───────────────────────────
+
+test("a blank member cell is refused only in Account No., Last Name or First Name; `required` stays the workbook's colours", () => {
+  const blank = normaliseRow([], "customer");
+  assert.deepEqual(
+    missingRequiredFields(blank, "customer").map((field) => [field.label, field.refused]),
+    [
+      ["Account No.", true], ["Last Name", true], ["First Name", true],
+      ["Birthdate", false], ["Gender", false], ["Civil Status", false],
+      ["Contact Number", false], ["email", false], ["Barangay", false],
+      ["City/Municipality", false], ["Province", false],
+    ],
+  );
+});
+
+test("a married member's blank spouse cells are asked for, never refused", () => {
+  const spouseless = [...CUSTOMER_ROW];
+  spouseless[17] = "";
+  spouseless[19] = "";
+  spouseless[20] = "";
+  assert.deepEqual(
+    missingRequiredFields(normaliseRow(spouseless, "customer"), "customer").map((field) => [field.label, field.refused]),
+    [
+      ["Spouse FName (If Married)", false],
+      ["Spouse LName (If Married)", false],
+      ["Spouse Contact No (If Married)", false],
+    ],
+  );
+});
+
+test("the loans and share capital files still refuse every blank required cell", () => {
+  for (const shape of ["loans", "share_capital"] as const) {
+    const missing = missingRequiredFields(normaliseRow([], shape), shape);
+    assert.deepEqual(
+      missing.map((field) => field.label),
+      columnsFor(shape).filter((c) => c.required).map((c) => c.label),
+      shape,
+    );
+    assert.ok(missing.every((field) => field.refused), shape);
+  }
+});
+
 // ── Header detection ───────────────────────────────────────────────────────
 
 test("the exact header row is recognised, in position, with no mismatches", () => {
@@ -446,6 +488,11 @@ test("trailing cells beyond the schema are dropped and values trimmed", () => {
 
 // ── Required fields, including the married rule ────────────────────────────
 
+/** The labels of a row's blank required cells, in column order. */
+function blankLabels(row: Record<string, string>, shape: ImportShape): string[] {
+  return missingRequiredFields(row, shape).map((field) => field.label);
+}
+
 test("a complete row is missing nothing", () => {
   assert.deepEqual(missingRequiredFields(normaliseRow(CUSTOMER_ROW, "customer"), "customer"), []);
   assert.deepEqual(missingRequiredFields(normaliseRow(LOANS_ROW, "loans"), "loans"), []);
@@ -453,7 +500,7 @@ test("a complete row is missing nothing", () => {
 
 test("blank required fields are reported by their printed label", () => {
   const row = normaliseRow(["", "", "Juan", ...CUSTOMER_ROW.slice(3)], "customer");
-  assert.deepEqual(missingRequiredFields(row, "customer"), ["Account No.", "Last Name"]);
+  assert.deepEqual(blankLabels(row, "customer"), ["Account No.", "Last Name"]);
 });
 
 test("a married member must supply the three starred spouse fields", () => {
@@ -462,7 +509,7 @@ test("a married member must supply the three starred spouse fields", () => {
   spouseless[19] = "";
   spouseless[20] = "";
   const row = normaliseRow(spouseless, "customer");
-  assert.deepEqual(missingRequiredFields(row, "customer"), [
+  assert.deepEqual(blankLabels(row, "customer"), [
     "Spouse FName (If Married)", "Spouse LName (If Married)",
     "Spouse Contact No (If Married)",
   ]);
@@ -485,7 +532,7 @@ test("the married rule fires on any spelling of MARRIED", () => {
       "customer",
     );
     assert.deepEqual(
-      missingRequiredFields(row, "customer"),
+      blankLabels(row, "customer"),
       ["Spouse FName (If Married)"],
       `spelling "${spelling}" did not trigger the spouse requirement`,
     );
@@ -935,6 +982,31 @@ test("an unresolvable cell keeps its original text AND is reported", () => {
   assert.equal(unknown[0].label, "Civil Status");
   assert.equal(unknown[0].raw, "Live-in");
   assert.deepEqual(unknown[0].options, CIVIL_STATUS_OPTIONS);
+});
+
+test("an unrecognised gender or civil status is imported blank; any other closed vocabulary refuses the row", () => {
+  const member = [...CUSTOMER_ROW, "", "", "Premium", ""];
+  member[6] = "Lalake";
+  member[7] = "Live-in";
+  assert.deepEqual(
+    resolveRowEnums(normaliseRow(member, "customer"), "customer").unknown.map((value) => [value.label, value.raw, value.refused]),
+    [["Gender", "Lalake", false], ["Civil Status", "Live-in", false], ["Member Type", "Premium", true]],
+  );
+
+  const loan = [...LOANS_ROW];
+  loan[10] = "Quarterly";
+  loan[11] = "Compound";
+  assert.deepEqual(
+    resolveRowEnums(normaliseRow(loan, "loans"), "loans").unknown.map((value) => [value.label, value.refused]),
+    [["Payment Frequency", true], ["Interest Type", true]],
+  );
+});
+
+test("Legally Separated reads as Separated, as the server reads it", () => {
+  const civil = column("customer", "civil_status");
+  for (const spelling of ["Legally Separated", "LEGALLY-SEPARATED", " legally separated "]) {
+    assert.deepEqual(resolveEnumValue(civil, spelling), { ok: true, value: "separated", label: "Separated" }, spelling);
+  }
 });
 
 test("the loans sheet's enums resolve on a real row", () => {
