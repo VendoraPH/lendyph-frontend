@@ -477,6 +477,7 @@ const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   release: { label: "Release", colorClass: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30" },
   restructure: { label: "Restructure", colorClass: "bg-purple-500/10 text-purple-700 border-purple-500/30" },
   write_off: { label: "Write off restructure shortfall", colorClass: "bg-red-500/10 text-red-700 border-red-500/30" },
+  edit_in_approval: { label: "Edit loans at their approval step", colorClass: "bg-amber-500/10 text-amber-700 border-amber-500/30" },
   extend: { label: "Extend", colorClass: "bg-purple-500/10 text-purple-700 border-purple-500/30" },
   reset_password: { label: "Reset password", colorClass: "bg-amber-500/10 text-amber-700 border-amber-500/30" },
   void: { label: "Void", colorClass: "bg-rose-500/10 text-rose-700 border-rose-500/30" },

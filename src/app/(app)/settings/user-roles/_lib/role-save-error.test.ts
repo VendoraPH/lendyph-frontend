@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { otherRoleSaveErrors, readablePermissionKeys, roleSaveErrorMessage } from "./role-save-error";
+import { describePermission, otherRoleSaveErrors, readablePermissionKeys, roleSaveErrorMessage } from "./role-save-error";
 
 function http422(errors: Record<string, string[]>) {
   return { response: { status: 422, data: { message: "The given data was invalid.", errors } } };
@@ -87,4 +87,10 @@ test("a message without a permission list is left as it is", () => {
     readablePermissionKeys("We couldn't update the role (try again later)."),
     "We couldn't update the role (try again later)."
   );
+});
+
+// One label for the Chair's permission: the role editor's, wherever a refusal names it.
+test("the Chair's edit during approval reads as the role editor names it", () => {
+  assert.equal(describePermission("loans:edit_in_approval"), "Loans: Edit loans at their approval step");
+  assert.equal(describePermission("loans:approve"), "Loans: Approve");
 });

@@ -2,7 +2,7 @@ import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { fetchAllPages, type DrainResult } from "@/lib/paginate";
 import type { LoanLedger, LoanSummary } from "@/types/loan";
-import type { AmortizationPreviewResponse, AmortizationCalculatorRequest, AmortizationCalculatorResult, Loan, LoanAmortizationBalances, LoanCoMaker, LoanExtensionPreview, ExtensionInterestOption, LoanFormPreview, LoanFormPreviewRequest, LoanReleasePreview, LoanSchedule, LoanLedgerEntry, PaginatedResponse, AutoPayToggleData, AutoPaySettings } from "@/types";
+import type { AmortizationPreviewResponse, AmortizationCalculatorRequest, AmortizationCalculatorResult, Loan, LoanAmortizationBalances, LoanApprovalEditState, LoanCoMaker, LoanExtensionPreview, ExtensionInterestOption, LoanFormPreview, LoanFormPreviewRequest, LoanReleasePreview, LoanSchedule, LoanLedgerEntry, PaginatedResponse, AutoPayToggleData, AutoPaySettings } from "@/types";
 import type { ApiAmortizationSchedule } from "@/lib/amortization";
 import type { CreateCoMakerData } from "./co-maker.service";
 import type { LoanDeduction as LoanDeductionInput } from "@/lib/loan-restructure";
@@ -23,6 +23,23 @@ export type LoanApplicationPayload = Omit<Partial<Loan>, "deductions"> & {
    * not touched. Sending it needs `collaterals:update`.
    */
   collaterals?: LoanCollateralInput[];
+};
+
+/**
+ * `PATCH /loans/{id}/approval-edit`: the Chairman/Chairwoman's edit at their
+ * approval step. The loan form's fields with the term and frequency, but not
+ * the member, product or policy exception, which stay as they are, and the
+ * `version` read when the edit opened.
+ */
+export type LoanApprovalEditPayload = Omit<
+  LoanApplicationPayload,
+  "borrower_id" | "loan_product_id" | "policy_exception" | "policy_exception_details" | "purpose"
+> & {
+  version: string;
+  /** Null clears it. */
+  purpose?: string | null;
+  /** Member ids, as the loan form's co-maker picker sends them; only when they changed. */
+  co_maker_ids?: number[];
 };
 
 /** One collateral in an edit's `collaterals` list: by id only, never a value. */
@@ -230,6 +247,31 @@ export const loanService = {
 
   update: (id: number, data: LoanApplicationPayload) =>
     api.put<Loan>(API_ENDPOINTS.LOANS.UPDATE(id), data),
+
+  /**
+   * `GET /loans/{id}/approval-edit`: whether the signed-in user may edit the
+   * loan at its approval step now, why not in words, and the `version` the
+   * save sends back. Needs `loans:edit_in_approval` (403 otherwise).
+   */
+  approvalEditState: (id: number) =>
+    api.get<LoanApprovalEditState>(API_ENDPOINTS.LOANS.APPROVAL_EDIT(id)),
+
+  /**
+   * `POST /loans/{id}/approval-edit/preview`: the loan form's preview for the
+   * Chairman/Chairwoman's edit, answered as `preview` answers. Writes nothing.
+   * `signal` lets a superseded preview be cancelled.
+   */
+  approvalEditPreview: (id: number, data: LoanFormPreviewRequest, signal?: AbortSignal) =>
+    api.post<LoanFormPreview>(API_ENDPOINTS.LOANS.APPROVAL_EDIT_PREVIEW(id), data, { signal }),
+
+  /**
+   * `PATCH /loans/{id}/approval-edit`: save the Chairman/Chairwoman's edit.
+   * The loan stays at their step, to approve or forward. A loan changed since
+   * `version` was read answers 409; a figure outside the product's limits, or
+   * a field that can't change, 422; another user's step 403. Each in words.
+   */
+  approvalEdit: (id: number, data: LoanApprovalEditPayload) =>
+    api.patch<Loan>(API_ENDPOINTS.LOANS.APPROVAL_EDIT(id), data),
 
   delete: (id: number) =>
     api.delete(API_ENDPOINTS.LOANS.DELETE(id)),

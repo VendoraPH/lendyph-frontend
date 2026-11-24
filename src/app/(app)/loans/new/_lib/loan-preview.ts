@@ -42,6 +42,12 @@ export interface LoanPreviewInputs {
    * server charges the product's own fees.
    */
   deductions: readonly StatedDeduction[] | null;
+  /**
+   * The Chairman/Chairwoman's edit at their approval step: it saves the
+   * build-up as typed, ₱0.00 included, and its preview reads a build-up left
+   * out as the loan's stored one, so the preview always states it.
+   */
+  statesBuildUp?: boolean;
 }
 
 /** A positive figure typed into the form, parsed as the submit parses it. */
@@ -86,7 +92,7 @@ export function loanPreviewRequest(inputs: LoanPreviewInputs): LoanFormPreviewRe
   const principal = positive(parseFloat(inputs.principalAmount));
   const rate = positive(parseFloat(inputs.interestRate));
   const term = positive(parseInt(inputs.termValue));
-  const scb = positive(parseFloat(inputs.scbAmount));
+  const scb = inputs.statesBuildUp ? parseFloat(inputs.scbAmount) || 0 : positive(parseFloat(inputs.scbAmount));
   const frequency = inputs.paymentFrequency ?? undefined;
   const startDate = inputs.releaseDate ? formatDateISO(inputs.releaseDate) : undefined;
   const borrowerId = inputs.borrowerId ?? undefined;

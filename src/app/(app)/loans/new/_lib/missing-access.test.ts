@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { missingLoanFormAccess, type LoanFormAccess } from "./missing-access";
+import { missingAccessPlacement, missingLoanFormAccess, type LoanFormAccess } from "./missing-access";
 
 const ALL: LoanFormAccess = {
   members: true,
@@ -26,6 +26,17 @@ describe("missingLoanFormAccess", () => {
     assert.equal(missing[0].permission, "borrowers:view");
     assert.equal(missing[0].grant, "Members → View");
     assert.equal(missing[0].blocking, true);
+  });
+
+  // An edit's member is fixed (the Chairman/Chairwoman's edit at their
+  // approval step is the first edit open to a role without borrowers:view), so
+  // the gap only stops co-makers changing and blocks nothing.
+  test("on an edit, a user without borrowers:view is told that co-makers can't change, and nothing is blocked", () => {
+    const missing = missingLoanFormAccess({ ...ALL, members: false, collaterals: false }, { editing: true });
+    assert.deepEqual(missing.map((m) => m.permission), ["borrowers:view", "collaterals:view"]);
+    assert.equal(missing[0].effect, "The co-maker pickers can't search members, so co-makers can't be changed.");
+    assert.equal(missing[0].grant, "Members → View");
+    assert.ok(missing.every((m) => !m.blocking));
   });
 
   test("blocking gaps come before non-blocking ones", () => {
@@ -68,5 +79,27 @@ describe("the share capital notice", () => {
     assert.match(notice.effect, /can't be added/);
     assert.match(notice.effect, /already holds stays attached/);
     assert.doesNotMatch(notice.effect, /can't be attached/);
+  });
+});
+
+// The approval edit fits the screen at 1024x640 (UI round): nothing it can't
+// see stacks above the form, so the form body keeps its fields. The member gap
+// reads beside the co-maker pickers; the collateral step isn't shown at all.
+describe("missingAccessPlacement", () => {
+  const chair = missingLoanFormAccess({ ...ALL, members: false, collaterals: false }, { editing: true });
+
+  test("the approval edit puts nothing above the form and names the member gap beside the co-makers", () => {
+    assert.deepEqual(missingAccessPlacement(chair, true), {
+      aboveForm: [],
+      coMakersNote: "The co-maker pickers can't search members, so co-makers can't be changed.",
+    });
+  });
+
+  test("the approval edit with nothing missing has no note", () => {
+    assert.deepEqual(missingAccessPlacement([], true), { aboveForm: [], coMakersNote: null });
+  });
+
+  test("every other mode keeps the notice above the form, as before", () => {
+    assert.deepEqual(missingAccessPlacement(chair, false), { aboveForm: chair, coMakersNote: null });
   });
 });

@@ -323,6 +323,8 @@ const BACKEND_PERMISSIONS = [
   "loans:view",
   "loans:void",
   "loans:write_off",
+  // The Chairman/Chairwoman's edit at their approval step (finish run round 2).
+  "loans:edit_in_approval",
   "member_portal:announcements",
   "member_portal:invite",
   "member_portal:manage",
@@ -363,13 +365,20 @@ const BACKEND_PERMISSIONS = [
   "users:view",
 ];
 
-test("super_admin is labelled in words and holds exactly every backend permission", () => {
+// Held by the Chairman/Chairwoman's role (`bod1`) alone: RoleAndPermissionSeeder
+// keeps it out of super_admin's and admin's Permission::all() sync.
+const CHAIR_ONLY = ["loans:edit_in_approval"];
+
+/** Every backend permission but the Chair's own. */
+const ADMINS_HOLD = BACKEND_PERMISSIONS.filter((permission) => !CHAIR_ONLY.includes(permission));
+
+test("super_admin is labelled in words and holds every backend permission but the Chair's own", () => {
   assert.equal(ROLES.super_admin.label, "Super Admin");
   assert.equal(
     ROLES.super_admin.description,
     "Platform super administrator — holds every permission. Reserved for the platform team, not client staff.",
   );
-  assert.deepEqual([...ROLES.super_admin.permissions].sort(), [...BACKEND_PERMISSIONS].sort());
+  assert.deepEqual([...ROLES.super_admin.permissions].sort(), [...ADMINS_HOLD].sort());
   assert.equal(new Set(ROLES.super_admin.permissions).size, ROLES.super_admin.permissions.length);
 });
 
@@ -381,9 +390,10 @@ test("ROLE_OPTIONS never offers super_admin", () => {
 });
 
 // RoleAndPermissionSeeder syncs Permission::all() to admin too, and each
-// permission migration grants admin, so the catalog documents admin with all.
-test("admin holds exactly every backend permission", () => {
-  assert.deepEqual([...ROLES.admin.permissions].sort(), [...BACKEND_PERMISSIONS].sort());
+// permission migration grants admin, so the catalog documents admin with all
+// but the Chair's own.
+test("admin holds every backend permission but the Chair's own", () => {
+  assert.deepEqual([...ROLES.admin.permissions].sort(), [...ADMINS_HOLD].sort());
   assert.equal(new Set(ROLES.admin.permissions).size, ROLES.admin.permissions.length);
 });
 
@@ -468,4 +478,13 @@ test("the Compliance Officer writes nothing outside AMLA", () => {
   for (const p of ROLES.compliance_officer.permissions.filter((p) => !p.startsWith("amla:"))) {
     assert.match(p, /:view(_all)?$/, p);
   }
+});
+
+// The Chairman/Chairwoman edits a loan at their approval step: `bod1` alone is
+// documented with it, as the backend seeds it.
+test("only the Chair's role holds loans:edit_in_approval", () => {
+  const holders = Object.entries(ROLES)
+    .filter(([, config]) => config.permissions.includes("loans:edit_in_approval"))
+    .map(([role]) => role);
+  assert.deepEqual(holders, ["bod1"]);
 });

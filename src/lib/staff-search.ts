@@ -25,7 +25,8 @@ export function normaliseStaffQuery(raw: string): string {
 
 /**
  * What an Account Officer picker is for. The loan forms read `GET /staff` on
- * the loan permissions; the savings opening form asks with `for=savings`,
+ * the loan permissions (the Chairman/Chairwoman's edit at their approval step
+ * included); the savings opening form asks with `for=savings`,
  * which the server also lets `savings:create` read (gap round S4); the online
  * applications' assign picker asks with `for=origination`, which lists only
  * the holders of `loan_origination:update` (LO-B3). Either way the rows are the
@@ -38,7 +39,7 @@ export const STAFF_PICKER_PURPOSES: Record<
   { permissions: readonly Permission[]; lockedNote: string }
 > = {
   loans: {
-    permissions: ["loans:create", "loans:update", "loans:restructure"],
+    permissions: ["loans:create", "loans:update", "loans:restructure", "loans:edit_in_approval"],
     lockedNote:
       "Choosing an account officer needs permission to create, edit or restructure loans, which your role does not have.",
   },
