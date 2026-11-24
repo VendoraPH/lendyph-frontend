@@ -2,9 +2,11 @@ import {
   CIVIL_STATUS_OPTIONS,
   GENDER_OPTIONS,
   INTEREST_TYPE_OPTIONS,
+  MEMBER_TYPE_OPTIONS,
   PAYMENT_FREQUENCY_OPTIONS,
   SUFFIX_OPTIONS,
 } from "@/constants";
+import { CUSTOMER_COLUMNS, type ImportColumn } from "@/lib/import-schema";
 import type {
   DictionaryKey,
   TemplateColumn,
@@ -13,7 +15,8 @@ import type {
 } from "./types";
 
 /**
- * `public/Lendy CSV Format.xlsm`, transcribed.
+ * `public/Lendy CSV Format.xlsm`, transcribed (the Loans sheet; the Members
+ * sheet comes from the import's own columns, below).
  *
  * `required` is the workbook's own colour coding — blue (#00B0F0) required,
  * yellow (#FFFF00) optional — read off the header row. If the workbook is ever
@@ -21,69 +24,85 @@ import type {
  * still serves the real thing either way.
  */
 
+/**
+ * The workbook's Data Dictionary sheet.
+ *
+ * Derived from `@/constants`, NOT transcribed a second time. The CSV importer
+ * (`@/lib/import-schema`) validates uploads against these same option tables,
+ * so a hand-typed copy here is a list that silently stops matching the one the
+ * importer enforces — it already had: this was written before `II` was added
+ * to `SUFFIX_OPTIONS`, and because these columns render as a `<select>`, a
+ * member with that suffix could not be entered at all while the importer
+ * accepted it perfectly well.
+ *
+ * The workbook prints labels, not the API's snake_case values, and the labels
+ * in those tables are the workbook's own words.
+ */
+const dictionaryValues = (
+  options: readonly { readonly value: string; readonly label: string }[]
+): string[] =>
+  // `SUFFIX_OPTIONS` leads with a blank-valued "None"; the cell editor renders
+  // its own empty choice, so a second one would read as a duplicate.
+  options.filter((option) => option.value !== "").map((option) => option.label);
+
+export const DATA_DICTIONARY: Record<
+  DictionaryKey,
+  { label: string; values: string[] }
+> = {
+  gender: { label: "Gender", values: dictionaryValues(GENDER_OPTIONS) },
+  civil_status: {
+    label: "Civil Status",
+    values: dictionaryValues(CIVIL_STATUS_OPTIONS),
+  },
+  suffix: { label: "Suffix", values: dictionaryValues(SUFFIX_OPTIONS) },
+  interest_type: {
+    label: "Interest Type",
+    values: dictionaryValues(INTEREST_TYPE_OPTIONS),
+  },
+  payment_frequency: {
+    label: "Payment Frequency",
+    values: dictionaryValues(PAYMENT_FREQUENCY_OPTIONS),
+  },
+  member_type: {
+    label: "Member Type",
+    values: dictionaryValues(MEMBER_TYPE_OPTIONS),
+  },
+};
+
+function isDictionaryKey(key: string): key is DictionaryKey {
+  return Object.hasOwn(DATA_DICTIONARY, key);
+}
+
 const REQUIRED_WHEN_MARRIED = "Required when Civil Status is Married";
 
-const CUSTOMER_PROFILE_COLUMNS: TemplateColumn[] = [
-  { id: "account_no", header: "Account No.", required: true },
-  { id: "last_name", header: "Last Name", required: true },
-  { id: "first_name", header: "First Name", required: true },
-  { id: "middle_name", header: "Middle Name", required: false },
-  { id: "suffix", header: "Suffix", required: false, dictionary: "suffix" },
-  {
-    id: "birthdate",
-    header: "Birthdate",
-    required: true,
-    hint: "YYYY-MM-DD",
-  },
-  { id: "gender", header: "Gender", required: true, dictionary: "gender" },
-  {
-    id: "civil_status",
-    header: "Civil Status",
-    required: true,
-    dictionary: "civil_status",
-  },
-  { id: "contact_number", header: "Contact Number", required: true },
-  { id: "email", header: "Email", required: true },
-  { id: "street_address", header: "Street Address", required: false },
-  { id: "barangay", header: "Barangay", required: true },
-  { id: "city", header: "City/Municipality", required: true },
-  { id: "province", header: "Province", required: true },
-  { id: "employer", header: "Employer/Business Name", required: false },
-  { id: "monthly_income", header: "Monthly Income", required: false },
-  {
-    id: "pledge_amount",
-    header: "Pledge Amt (If Applicable)",
-    required: false,
-  },
-  {
-    id: "spouse_first_name",
-    header: "Spouse FName (If Married)",
-    required: true,
-    requiredWhen: REQUIRED_WHEN_MARRIED,
-  },
-  {
-    id: "spouse_middle_name",
-    header: "Spouse MName (If Married)",
-    required: false,
-  },
-  {
-    id: "spouse_last_name",
-    header: "Spouse LName (If Married)",
-    required: true,
-    requiredWhen: REQUIRED_WHEN_MARRIED,
-  },
-  {
-    id: "spouse_contact_no",
-    header: "Spouse Contact No (If Married)",
-    required: true,
-    requiredWhen: REQUIRED_WHEN_MARRIED,
-  },
-  {
-    id: "spouse_occupation",
-    header: "Spouse Occupation (If Married)",
-    required: false,
-  },
-];
+/**
+ * The Members sheet is the members import's own column table, read from
+ * `CUSTOMER_COLUMNS` rather than transcribed, so the template can't drift from
+ * what the importer reads: the workbook's 22 columns, then the four it lacked
+ * (Date Hired and the membership columns), in the import's order and under the
+ * import's labels. A conditional column (the spouse block) is painted required
+ * and says when, as the workbook does.
+ */
+const MEMBER_COLUMNS: TemplateColumn[] = CUSTOMER_COLUMNS.map(
+  (column: ImportColumn): TemplateColumn => {
+    const conditional = column.requiredWhen !== undefined;
+    const dictionary = isDictionaryKey(column.key) ? column.key : undefined;
+    const hint =
+      column.type === "date"
+        ? "YYYY-MM-DD"
+        : column.defaultWhenBlank
+          ? `Blank means ${column.defaultWhenBlank}`
+          : undefined;
+    return {
+      id: column.key,
+      header: column.label,
+      required: column.required || conditional,
+      ...(conditional && { requiredWhen: REQUIRED_WHEN_MARRIED }),
+      ...(dictionary && { dictionary }),
+      ...(hint && { hint }),
+    };
+  }
+);
 
 const LOAN_COLUMNS: TemplateColumn[] = [
   { id: "account_no", header: "Account No.", required: true },
@@ -129,77 +148,39 @@ const LOAN_COLUMNS: TemplateColumn[] = [
 /** The sheets, with no rows. `createDraft` is what gives them one to type in. */
 export const TEMPLATE_SHEETS: TemplateSheet[] = [
   {
-    id: "customer_profile",
-    name: "Customer Profile",
+    id: "members",
+    name: "Members",
     description:
       "One row per member. Account numbers must be unique across this sheet.",
-    columns: CUSTOMER_PROFILE_COLUMNS,
+    columns: MEMBER_COLUMNS,
     rows: [],
   },
   {
     id: "loans",
     name: "Loans",
     description:
-      "One row per loan account. Every Account No. here must also exist on Customer Profile.",
+      "One row per loan account. Every Account No. here must also exist on Members.",
     columns: LOAN_COLUMNS,
     rows: [],
   },
 ];
 
 /**
- * The workbook's Data Dictionary sheet.
- *
- * Derived from `@/constants`, NOT transcribed a second time. The CSV importer
- * (`@/lib/import-schema`) validates uploads against these same option tables,
- * so a hand-typed copy here is a list that silently stops matching the one the
- * importer enforces — it already had: this was written before `II` was added
- * to `SUFFIX_OPTIONS`, and because these columns render as a `<select>`, a
- * member with that suffix could not be entered at all while the importer
- * accepted it perfectly well.
- *
- * The workbook prints labels, not the API's snake_case values, and the labels
- * in those tables are the workbook's own words.
+ * The workbook's Guidelines sheet, with its "Customer Profile" file called
+ * Members, as the Data Import page names it.
  */
-const dictionaryValues = (
-  options: readonly { readonly value: string; readonly label: string }[]
-): string[] =>
-  // `SUFFIX_OPTIONS` leads with a blank-valued "None"; the cell editor renders
-  // its own empty choice, so a second one would read as a duplicate.
-  options.filter((option) => option.value !== "").map((option) => option.label);
-
-export const DATA_DICTIONARY: Record<
-  DictionaryKey,
-  { label: string; values: string[] }
-> = {
-  gender: { label: "Gender", values: dictionaryValues(GENDER_OPTIONS) },
-  civil_status: {
-    label: "Civil Status",
-    values: dictionaryValues(CIVIL_STATUS_OPTIONS),
-  },
-  suffix: { label: "Suffix", values: dictionaryValues(SUFFIX_OPTIONS) },
-  interest_type: {
-    label: "Interest Type",
-    values: dictionaryValues(INTEREST_TYPE_OPTIONS),
-  },
-  payment_frequency: {
-    label: "Payment Frequency",
-    values: dictionaryValues(PAYMENT_FREQUENCY_OPTIONS),
-  },
-};
-
-/** The workbook's Guidelines sheet, verbatim. */
 export const TEMPLATE_GUIDELINES: TemplateGuideline[] = [
-  { text: "Prepare the Customer Profile and Loans data in separate CSV files." },
+  { text: "Prepare the Members and Loans data in separate CSV files." },
   {
     text: "Populate the data according to the prescribed column headers. Each record must occupy a separate row.",
   },
   { text: "Remove the header row before submitting the final CSV files." },
   {
-    text: "Relationship between the Customer Profile and Loans files:",
+    text: "Relationship between the Members and Loans files:",
     points: [
-      "A Customer Profile account number may exist even if there is no corresponding account number in the Loans file.",
-      "Every Loans account number must have a matching account number in the Customer Profile file.",
-      "Account numbers in the Customer Profile file must be unique.",
+      "A Members account number may exist even if there is no corresponding account number in the Loans file.",
+      "Every Loans account number must have a matching account number in the Members file.",
+      "Account numbers in the Members file must be unique.",
       "Duplicate account numbers are allowed in the Loans file.",
     ],
   },

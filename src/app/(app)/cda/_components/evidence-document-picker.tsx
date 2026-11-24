@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Upload } from "lucide-react";
 import { PermissionButton } from "@/components/common/permission-button";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
@@ -10,7 +10,13 @@ import { notifyError, notifySuccess } from "@/lib/notify";
 import type { CdaEvidence } from "@/types/cda";
 import { reportName } from "../_lib/labels";
 import type { RecordValues } from "../_lib/record-form";
-import { GAP_PERMISSIONS, documentIdOf, evidenceDocumentOptions, evidenceUploadDefaults } from "../_lib/screen-gaps";
+import {
+  GAP_PERMISSIONS,
+  documentIdOf,
+  evidenceDocumentOptions,
+  evidenceLinkedCaption,
+  evidenceUploadDefaults,
+} from "../_lib/screen-gaps";
 import { toUpload, uploadCategories, uploadFields } from "../documents/_lib/document-form";
 import { UPLOAD_FILE_KEY, UPLOAD_STEPS } from "../documents/_lib/upload-steps";
 import { useEvidenceDocuments, type EvidenceDocuments } from "./evidence-documents";
@@ -87,13 +93,17 @@ export function EvidenceDocumentPicker({
 }) {
   const docs = useEvidenceDocuments();
   const [uploading, setUploading] = useState(false);
+  const captionId = useId();
   if (!docs) return null;
 
   const prompt = docs.documents ? "No document linked" : docs.failed ? "Documents couldn't be loaded" : "Loading documents…";
+  // The native select cuts a long title and category off; the line under it reads them in full.
+  const caption = evidenceLinkedCaption(docs.documents, entry.document_id);
   return (
     <div className="flex flex-wrap gap-2">
       <NativeSelect
         aria-label={`${name} document`}
+        aria-describedby={caption ? captionId : undefined}
         className="min-w-48 flex-1"
         value={typeof entry.document_id === "number" ? String(entry.document_id) : ""}
         onChange={(e) => onLink(documentIdOf(e.target.value))}
@@ -115,6 +125,11 @@ export function EvidenceDocumentPicker({
         <Upload className="h-4 w-4" aria-hidden="true" />
         Upload and link
       </PermissionButton>
+      {caption && (
+        <p id={captionId} className="w-full break-words text-xs text-muted-foreground">
+          {caption}
+        </p>
+      )}
       {uploading && (
         <UploadAndLink docs={docs} entry={entry} name={name} onClose={() => setUploading(false)} onLink={onLink} />
       )}

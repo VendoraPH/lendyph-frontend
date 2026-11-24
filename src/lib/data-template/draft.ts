@@ -7,7 +7,7 @@ import type { TemplateColumn, TemplateDraft, TemplateRow, TemplateSheet } from "
  *
  * Kept out of the React tree so the rules that actually matter — a removed
  * column takes its data with it, a renamed one does not — are unit-testable
- * without rendering a 22-column grid.
+ * without rendering a 26-column grid.
  */
 
 export function blankRow(columns: TemplateColumn[]): TemplateRow {

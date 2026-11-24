@@ -86,7 +86,7 @@ function validateRows(sheet: TemplateSheet): TemplateIssue[] {
 /** Guidelines 4b–4c: unique member accounts, every loan tied to one. */
 function validateAccountNumbers(draft: TemplateDraft): TemplateIssue[] {
   const issues: TemplateIssue[] = [];
-  const profiles = draft.sheets.find((s) => s.id === "customer_profile");
+  const profiles = draft.sheets.find((s) => s.id === "members");
   const loans = draft.sheets.find((s) => s.id === "loans");
   if (!profiles) return issues;
 
@@ -116,7 +116,7 @@ function validateAccountNumbers(draft: TemplateDraft): TemplateIssue[] {
       sheetId: loans.id,
       row: index,
       columnId: "account_no",
-      message: `Account No. ${account} has no matching row on Customer Profile.`,
+      message: `Account No. ${account} has no matching row on Members.`,
     });
   });
 
