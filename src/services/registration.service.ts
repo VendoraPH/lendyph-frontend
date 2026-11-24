@@ -90,6 +90,8 @@ export type RegistrationPossibleDuplicate =
       full_name: string;
       /** False when the match is itself a registration, pending or rejected. */
       is_member: boolean;
+      /** The matched record's status, as stored; the screen words it. */
+      status?: string;
       /** Why it matched, in words ("Same full name"). */
       reason: string;
       message: string;

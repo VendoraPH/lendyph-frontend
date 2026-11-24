@@ -6,6 +6,7 @@
  * Pure, so it runs under `tsx --test`.
  */
 import { validationErrors } from "@/lib/api-error";
+import { registrationCode } from "@/app/(app)/borrowers/_lib/registration-code";
 import type {
   Registration,
   RegistrationPossibleDuplicate,
@@ -22,9 +23,16 @@ export function possibleDuplicateHref(duplicate: NamedDuplicate): string {
     : `/borrowers/registrations/${duplicate.id}`;
 }
 
-/** "BRW-000042 (Juan Dela Cruz)". */
+/**
+ * "BRW-000042 (Juan Dela Cruz)" for a member. A registration reads by the code
+ * the Registrations list gives it ("PEND-0013", "REJ-0013"), never by a member
+ * code it isn't using yet.
+ */
 export function possibleDuplicateLabel(duplicate: NamedDuplicate): string {
-  return `${duplicate.borrower_code} (${duplicate.full_name})`;
+  const code = duplicate.is_member
+    ? duplicate.borrower_code
+    : registrationCode(duplicate.status === "rejected" ? "rejected" : "pending", duplicate.id);
+  return `${code} (${duplicate.full_name})`;
 }
 
 /**

@@ -38,8 +38,18 @@ test("the link opens the member, or the other registration's review when it isn'
   assert.equal(possibleDuplicateHref(REGISTRATION), "/borrowers/registrations/51");
 });
 
-test("the link reads as the member code and name", () => {
+// A member reads by their member code; a registration by the code the
+// Registrations list gives it, by its status.
+test("the link reads as the member code, or the registration's list code, and the name", () => {
   assert.equal(possibleDuplicateLabel(MEMBER), "BRW-000042 (Juan Dela Cruz)");
+  assert.equal(
+    possibleDuplicateLabel({ ...REGISTRATION, id: 13, full_name: "DANTE S. TESTOR", status: "pending" }),
+    "PEND-0013 (DANTE S. TESTOR)",
+  );
+  assert.equal(
+    possibleDuplicateLabel({ ...REGISTRATION, id: 13, full_name: "DANTE S. TESTOR", status: "rejected" }),
+    "REJ-0013 (DANTE S. TESTOR)",
+  );
 });
 
 // Approving a registration the server linked to a possible duplicate is
