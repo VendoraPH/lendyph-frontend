@@ -11,6 +11,7 @@
  * presenter converts it (the assessment, the settings).
  */
 
+import type { TermUnit } from "@/lib/loan-terms";
 import type { PaginatedResponse } from "./api";
 import type { TurnaroundStretch } from "./executive-dashboard";
 import type { MoneyString } from "./savings";
@@ -272,13 +273,17 @@ export interface PublicApplicationState {
   verified_contact: { mobile: string | null; email: string | null };
 }
 
+/** A peso amount as the server sends it: a JSON number, or a two-decimal string where the server adds it up exactly. */
+export type Money = number | string;
+
 export interface LoanEstimate {
   installment: number;
   installments_count: number;
   frequency: string;
   total_interest: number;
   total_charges: number;
-  total_repayment: number;
+  /** Principal plus interest, added up exactly on the server: a two-decimal string. */
+  total_repayment: Money;
   net_proceeds: number;
   charges: { name: string; amount: number }[];
   schedule: { number: number; due_date: string; principal: number; interest: number; amount: number }[];
@@ -358,6 +363,8 @@ export interface ApplicationSummary {
   loan_product_name: string | null;
   requested_amount: MoneyString | null;
   requested_term: number | null;
+  /** The loan product's unit for `requested_term`; null while no product is chosen. */
+  term_unit: TermUnit | null;
   branch_id: number | null;
   branch_name: string | null;
   status: ApplicationStatus;
@@ -555,6 +562,8 @@ export interface Assessment {
   loan_product_name: string | null;
   requested_amount: number | null;
   requested_term: number | null;
+  /** The loan product's unit for `requested_term`. */
+  term_unit: TermUnit | null;
   frequency: string | null;
   /** The loan's planned start date the run used. */
   start_date: string | null;

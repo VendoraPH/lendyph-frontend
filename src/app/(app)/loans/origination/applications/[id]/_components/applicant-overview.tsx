@@ -57,7 +57,7 @@ const frequency = (f: IncomeFrequency | "") => (f ? FREQUENCY_LABELS[f] : null);
  * the server. Without `borrowers:view` and the branch, contacts are masked and
  * address lines read "On file".
  */
-export function ApplicantOverview({ application: a, termUnit }: { application: ApplicationDetail; termUnit?: string }) {
+export function ApplicantOverview({ application: a }: { application: ApplicationDetail }) {
   const { personal: p, employment: e, expenses: x, loan: l } = a.draft;
   const totals = a.declared_totals;
   const name = [p.first_name, p.middle_name, p.last_name, p.suffix].filter(Boolean).join(" ");
@@ -97,7 +97,7 @@ export function ApplicantOverview({ application: a, termUnit }: { application: A
           rows={[
             ["Loan product", a.loan_product_name],
             ["Amount", a.requested_amount === null ? null : formatCurrency(a.requested_amount)],
-            ["Term", termText(a.requested_term, termUnit)],
+            ["Term", termText(a.requested_term, a.term_unit)],
             ["Payment frequency", inWords(l.frequency)],
             ["Purpose", l.purpose],
             ["Release method", inWords(l.release_method, RELEASE_METHODS)],
