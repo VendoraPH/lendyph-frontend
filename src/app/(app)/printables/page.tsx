@@ -56,7 +56,7 @@ const IMPORT_TEMPLATE = {
   href: "/printables/data-template",
   title: DATA_IMPORT_TEMPLATE_TITLE,
   description:
-    "The member and loan workbook for migrating an existing book onto Lendyph.",
+    "The member, loan and share capital workbook for migrating an existing book onto Lendyph.",
   /** Extra words the search should match, since none of them are on the card. */
   keywords: "csv excel xlsm bulk import migration upload template onboarding",
 };

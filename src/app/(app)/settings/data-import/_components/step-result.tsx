@@ -21,7 +21,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { useImportStatus } from "../_hooks/use-import-status";
 import { ImportErrorsTable } from "./import-errors-table";
-import { IMPORT_FILE_KINDS, filesPhrase, runFileKinds } from "./import-files";
+import { IMPORT_FILE_KINDS, filesPhrase, runFileKinds, writtenTo } from "./import-files";
 import { OutcomeTiles } from "./outcome-tiles";
 import { phaseLabel } from "./step-processing";
 
@@ -97,7 +97,7 @@ export function StepResult({ runId, onStartOver, className }: StepResultProps) {
                 "The import stopped before it finished. Nothing further will be written.")
               : cancelled
                 ? (status.failure_reason ??
-                  "This import was cancelled before anything was written to your members, loans or share capital.")
+                  `This import was cancelled before anything was written to ${writtenTo(kinds)}.`)
                 : status.is_closed
                   ? `${phrase.everyRow} has been decided. The figures below account for all of them.`
                   : "This import is still running. The figures below are what has been decided so far."}

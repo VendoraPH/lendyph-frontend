@@ -55,6 +55,16 @@ export interface CountsReconciliation {
 export const RECONCILIATION_FORMULA =
   "rows read = imported + matched + already imported + skipped + failed";
 
+/**
+ * The identity for one file. A share capital file has no "matched" figure,
+ * as it has no Matched tile: its rows are entries, never members to match.
+ */
+export function reconciliationFormula(kind: ImportFileKind): string {
+  return kind === "share_capital"
+    ? "rows read = imported + already imported + skipped + failed"
+    : RECONCILIATION_FORMULA;
+}
+
 export function reconcileCounts(counts: ImportCounts): CountsReconciliation {
   const n = (value: number | undefined): number =>
     typeof value === "number" && Number.isFinite(value) ? value : 0;
@@ -78,13 +88,13 @@ export function reconcileCounts(counts: ImportCounts): CountsReconciliation {
   };
 }
 
-/** The identity, with this file's numbers in it. */
-export function reconciliationLine(counts: ImportCounts): string {
+/** The identity, with this file's numbers in it (no matched figure for share capital). */
+export function reconciliationLine(counts: ImportCounts, kind?: ImportFileKind): string {
   const { total } = reconcileCounts(counts);
   return (
     `${formatCountOf(total, "row")} read = ` +
     `${counts.imported.toLocaleString()} imported + ` +
-    `${counts.matched_existing.toLocaleString()} matched + ` +
+    (kind === "share_capital" ? "" : `${counts.matched_existing.toLocaleString()} matched + `) +
     `${counts.already_imported.toLocaleString()} already imported + ` +
     `${counts.skipped.toLocaleString()} skipped + ` +
     `${counts.failed.toLocaleString()} failed`
@@ -244,7 +254,7 @@ export function OutcomeTiles({
 
       {/* The arithmetic, printed rather than implied. */}
       <p className="text-xs text-muted-foreground tabular-nums">
-        {reconciliationLine(counts)}
+        {reconciliationLine(counts, kind)}
       </p>
 
       {brokenArithmetic ? (
@@ -261,7 +271,7 @@ export function OutcomeTiles({
               {reconciliation.overcounted
                 ? rowsOvercounted(reconciliation.decided, reconciliation.total)
                 : `${rowsWithoutOutcome(Math.abs(reconciliation.undecided), reconciliation.total)}, and this run is finished.`}{" "}
-              The identity that should hold is: {RECONCILIATION_FORMULA}. Treat the
+              The identity that should hold is: {reconciliationFormula(kind)}. Treat the
               tiles above as unverified and report this before acting on them.
             </p>
           </div>

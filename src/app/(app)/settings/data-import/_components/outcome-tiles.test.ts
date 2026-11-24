@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { reconcileCounts, reconciliationLine, RECONCILIATION_FORMULA, tilesFor } from "./outcome-tiles";
+import { reconcileCounts, reconciliationFormula, reconciliationLine, RECONCILIATION_FORMULA, tilesFor } from "./outcome-tiles";
 import type { ImportCounts } from "@/types/data-import";
 
 /**
@@ -128,4 +128,15 @@ test("share capital rows read as ledger entries, with no member to match", () =>
   for (const tile of tiles) assert.doesNotMatch(tile.note, /[Bb]orrower|_/);
 
   assert.ok(tilesFor("customers").some((tile) => tile.key === "matched_existing"), "members still match");
+});
+
+test("a share capital file's line and formula have no matched figure, as it has no Matched tile", () => {
+  const line = reconciliationLine(counts({ total: 4, imported: 3, skipped: 1 }), "share_capital");
+  assert.equal(line, "4 rows read = 3 imported + 0 already imported + 1 skipped + 0 failed");
+  assert.doesNotMatch(reconciliationFormula("share_capital"), /matched/);
+  assert.equal(reconciliationFormula("share_capital"), "rows read = imported + already imported + skipped + failed");
+
+  // The members and loans files keep theirs.
+  assert.match(reconciliationLine(counts({ total: 1, imported: 1 }), "customers"), /0 matched/);
+  assert.equal(reconciliationFormula("loans"), RECONCILIATION_FORMULA);
 });

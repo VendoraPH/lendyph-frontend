@@ -106,6 +106,35 @@ export function filesPhrase(kinds: readonly ImportFileKind[]): {
 }
 
 /**
+ * What a run writes to, by the files it carries, for a sentence such as
+ * "Nothing was written to your members' share capital." Before the run's
+ * files are known, it names everything an import can write.
+ */
+export function writtenTo(kinds: readonly ImportFileKind[]): string {
+  const members = kinds.includes("customers");
+  const loans = kinds.includes("loans");
+  const shareCapital = kinds.includes("share_capital");
+
+  if (members && loans && shareCapital) return "your members, loans and share capital";
+  if (members && loans) return "your members and loans";
+  if (members && shareCapital) return "your members and their share capital";
+  if (members) return "your members";
+  if (shareCapital) return "your members' share capital";
+  return "your members, loans or share capital";
+}
+
+/**
+ * Whether the members slot is marked required: always, unless the share
+ * capital file comes without a loans file, which needs no members file.
+ */
+export function membersRequired(
+  files: { customers?: object | null; loans: object | null; share_capital?: object | null },
+  shareCapitalAllowed: boolean,
+): boolean {
+  return !shareCapitalAllowed || Boolean(files.loans) || !files.share_capital;
+}
+
+/**
  * The rule, for the Prepare step: with the share capital file when the person
  * importing can record share capital, and today's rule when they can't.
  */

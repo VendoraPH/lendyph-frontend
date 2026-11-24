@@ -1,5 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { CUSTOMER_COLUMNS, LOAN_COLUMNS, SHARE_CAPITAL_COLUMNS } from "@/lib/import-schema";
 import { DATA_DICTIONARY, TEMPLATE_GUIDELINES, TEMPLATE_SHEETS } from "./template";
 
@@ -89,4 +91,10 @@ test("the guidelines say what the share capital file takes", () => {
   assert.match(text, /Members, Loans and Share Capital data in separate CSV files/);
   assert.match(text, /Every Share Capital row names its member/);
   assert.doesNotMatch(text, /[Bb]orrower/);
+});
+
+test("the Documents catalog names the template's three sheets", () => {
+  const catalog = readFileSync(join(process.cwd(), "src/app/(app)/printables/page.tsx"), "utf8");
+  assert.match(catalog, /"The member, loan and share capital workbook for migrating an existing book onto Lendyph\."/);
+  assert.doesNotMatch(catalog, /The member and loan workbook/);
 });

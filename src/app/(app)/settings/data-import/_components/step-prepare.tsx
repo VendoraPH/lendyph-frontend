@@ -42,7 +42,7 @@ import { cn } from "@/lib/utils";
 import type { ImportRunStatus } from "@/types/data-import";
 
 import { FileSlot } from "./file-slot";
-import { fileSlots, filesProblem, filesRule } from "./import-files";
+import { fileSlots, filesProblem, filesRule, membersRequired } from "./import-files";
 import type { ImportFiles } from "./data-import-view";
 
 /**
@@ -338,7 +338,8 @@ export function StepPrepare({
                 hint={slot.hint}
                 file={files[slot.kind]}
                 onSelect={(file) => onFilesChange({ ...files, [slot.kind]: file })}
-                optional={slot.optional}
+                // The members file is optional once share capital comes alone.
+                optional={slot.kind === "customers" ? !membersRequired(files, shareCapitalAllowed) : slot.optional}
               />
             ))}
           </div>

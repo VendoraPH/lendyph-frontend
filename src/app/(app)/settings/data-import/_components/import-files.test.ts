@@ -11,7 +11,9 @@ import {
   filesPhrase,
   filesProblem,
   filesRule,
+  membersRequired,
   runFileKinds,
+  writtenTo,
 } from "./import-files";
 
 const STEPS = "src/app/(app)/settings/data-import/_components";
@@ -63,7 +65,8 @@ test("Processing, the result and a resumed check speak of the run's own files", 
   const read = (file: string) => readFileSync(join(process.cwd(), STEPS, file), "utf8");
 
   const processing = read("step-processing.tsx");
-  assert.match(processing, /filesPhrase\(runFileKinds\(status\?\.files\)\)/);
+  assert.match(processing, /const kinds = runFileKinds\(status\?\.files\)/);
+  assert.match(processing, /filesPhrase\(kinds\)/);
   assert.doesNotMatch(processing, /Both files are on the server/);
   assert.doesNotMatch(processing, /the files are still being read/);
 
@@ -162,4 +165,35 @@ test("the Prepare step states the rule and draws its slots from the table", () =
   assert.match(source, /hasPermission\("share_capital:create"\)/, "the slot shows only to someone the server lets import it");
   assert.doesNotMatch(source, /At least one file is required/);
   assert.doesNotMatch(source, /no members will be created/);
+});
+
+test("each run is told what it writes to, by the files it carries", () => {
+  assert.equal(writtenTo(["share_capital"]), "your members' share capital");
+  assert.equal(writtenTo(["customers"]), "your members");
+  assert.equal(writtenTo(["customers", "loans"]), "your members and loans");
+  assert.equal(writtenTo(["customers", "share_capital"]), "your members and their share capital");
+  assert.equal(writtenTo(["customers", "loans", "share_capital"]), "your members, loans and share capital");
+  assert.equal(writtenTo([]), "your members, loans or share capital", "before the run's files are known");
+});
+
+test("the members slot is required unless share capital comes alone", () => {
+  assert.equal(membersRequired({ customers: null, loans: null, share_capital: null }, true), true);
+  assert.equal(membersRequired({ customers: null, loans: null, share_capital: SHARE_CAPITAL }, true), false);
+  assert.equal(membersRequired({ customers: MEMBERS, loans: null, share_capital: SHARE_CAPITAL }, true), false);
+  assert.equal(membersRequired({ customers: null, loans: LOANS, share_capital: SHARE_CAPITAL }, true), true, "loans need their members");
+  assert.equal(membersRequired({ customers: null, loans: null, share_capital: SHARE_CAPITAL }, false), true, "no share capital to import alone");
+});
+
+test("Prepare, Processing and the result word the run by its files", () => {
+  const read = (file: string) => readFileSync(join(process.cwd(), STEPS, file), "utf8");
+
+  assert.match(read("step-prepare.tsx"), /membersRequired\(files, shareCapitalAllowed\)/);
+  const processing = read("step-processing.tsx");
+  assert.match(processing, /const written = writtenTo\(kinds\)/);
+  assert.match(processing, /Nothing was written to \$\{written\}\./);
+  assert.doesNotMatch(processing, /your members or loans|members and loans have already been written/);
+  const result = read("step-result.tsx");
+  assert.match(result, /cancelled before anything was written to \$\{writtenTo\(kinds\)\}\./);
+  assert.match(result, /<OutcomeTiles/);
+  assert.doesNotMatch(read("file-slot.tsx"), /The members and loans files go in separate slots/);
 });
