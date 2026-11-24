@@ -63,7 +63,7 @@ import { bulkEntriesRequest, manualEntryRequest } from "./_lib/pledge-entry-requ
 import { MethodReferenceFields } from "@/components/common/method-reference-fields";
 import { PAYMENT_METHOD_OPTIONS, type RecordPaymentMethod } from "@/constants/payment-methods";
 import { paymentReferenceError } from "@/lib/payment-reference";
-import { cashAutoReference } from "@/lib/cash-reference";
+import { cashAutoReference, savedReferencesText } from "@/lib/cash-reference";
 import { env } from "@/config/env";
 import { useCashReferencePreview } from "@/hooks/use-cash-reference-preview";
 import { useDialogOpening } from "@/hooks/use-dialog-opening";
@@ -220,7 +220,8 @@ function PledgeEntryContent() {
     entriesSaved,
   );
   const manualAutoReference = cashAutoReference(cashNumbering, manualMethod, cashPreview);
-  const bulkAutoReference = cashAutoReference(cashNumbering, bulkMethod, cashPreview);
+  // Each selected row is its own entry, numbered in turn from the preview.
+  const bulkAutoReference = cashAutoReference(cashNumbering, bulkMethod, cashPreview, selectedIds.size);
 
   // ── Derived data ──
 
@@ -505,8 +506,9 @@ function PledgeEntryContent() {
     }
     setBulkSubmitting(true);
     try {
-      await shareCapitalService.pledgeBulkEntries(request.data);
-      toast.success(`${valid.length} ${valid.length === 1 ? "entry" : "entries"} created`);
+      const result = await shareCapitalService.pledgeBulkEntries(request.data);
+      const numbers = bulkMethod === "cash" ? savedReferencesText(result?.reference_numbers ?? []) : "";
+      toast.success(`${valid.length} ${valid.length === 1 ? "entry" : "entries"} created${numbers === "" ? "" : ` (${numbers})`}`);
       setEntriesSaved((n) => n + 1);
       setSelectedIds(new Set());
       setBulkEntries({});

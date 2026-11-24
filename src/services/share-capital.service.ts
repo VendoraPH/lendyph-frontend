@@ -143,8 +143,9 @@ export const shareCapitalService = {
       data
     ),
 
+  /** Each row's reference in the batch's order: its own CSH number for cash, the batch's one reference otherwise. */
   pledgeBulkEntries: (data: BulkPledgeEntryData) =>
-    api.post<{ processed_count: number }>(
+    api.post<{ processed_count: number; reference_numbers?: (string | null)[] }>(
       API_ENDPOINTS.PLEDGES.BULK_ENTRIES,
       data
     ),
