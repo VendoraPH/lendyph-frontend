@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState, type SyntheticEvent } from "react";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import {
@@ -36,7 +36,7 @@ import type {
 import { PaidButton } from "./paid-button";
 import { PartyCell } from "./party-cell";
 import { TransactionsReportActions } from "./transactions-report-actions";
-import { DATE_RANGE_REVERSED, dateRangeReady, dateRangeReversed } from "../_lib/date-range";
+import { DATE_RANGE_REVERSED, dateRangeReady, dateRangeReversed, type PartialDates } from "../_lib/date-range";
 import { gcashCanMarkPaid } from "../_lib/row-actions";
 import { gcashRowBranchLabel } from "../_lib/walk-in-branch";
 import { DataState } from "@/components/common/data-state";
@@ -98,17 +98,29 @@ export function TransactionsTab() {
   // Whether the empty list is down to the filters (a "no results" picture) or there is nothing yet.
   const filtersActive =
     filters.type !== "all" || filters.status !== "all" || filters.start_date !== "" || filters.end_date !== "";
-  // A date still being typed (year 0002, 0020, 0202) waits: no request, and the last rows stay.
-  const rangeReady = dateRangeReady(filters.start_date, filters.end_date);
+  // Date inputs typed only in part (month and day, no year): the browser reports "" for them.
+  const [partialDates, setPartialDates] = useState<PartialDates>({});
+  const dateFromId = useId();
+  const dateToId = useId();
+  // A date still being typed (year 0002, 0020, 0202, or no year yet) waits: no request, and the last rows stay.
+  const rangeReady = dateRangeReady(filters.start_date, filters.end_date, partialDates);
   // Only a typed date reverses the range (the pickers bound each other), and the API answers it with a 422.
   const rangeReversed = rangeReady && dateRangeReversed(filters.start_date, filters.end_date);
+
+  /** Reads whether a date input holds a part-typed date, on every keystroke and on leaving it. */
+  function notePartial(end: keyof PartialDates) {
+    return (e: SyntheticEvent<HTMLInputElement>) => {
+      const partial = e.currentTarget.validity.badInput;
+      setPartialDates((p) => (Boolean(p[end]) === partial ? p : { ...p, [end]: partial }));
+    };
+  }
 
   /** A new Date From or Date To. A reversed range asks nothing and shows none of the last filters' rows. */
   function setDates(dates: Partial<Pick<typeof filters, "start_date" | "end_date">>) {
     const next = { ...filters, ...dates };
     setFilters(next);
     if (
-      dateRangeReady(next.start_date, next.end_date) &&
+      dateRangeReady(next.start_date, next.end_date, partialDates) &&
       dateRangeReversed(next.start_date, next.end_date)
     ) {
       setRows([]);
@@ -198,23 +210,41 @@ export function TransactionsTab() {
         </div>
 
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Date From</label>
+          <label htmlFor={dateFromId} className="text-xs text-muted-foreground">
+            Date From
+          </label>
           <Input
+            id={dateFromId}
             type="date"
             value={filters.start_date}
             max={filters.end_date || undefined}
-            onChange={(e) => setDates({ start_date: e.target.value })}
+            onInput={notePartial("from")}
+            onKeyUp={notePartial("from")}
+            onBlur={notePartial("from")}
+            onChange={(e) => {
+              notePartial("from")(e);
+              setDates({ start_date: e.target.value });
+            }}
           />
         </div>
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Date To</label>
+          <label htmlFor={dateToId} className="text-xs text-muted-foreground">
+            Date To
+          </label>
           <Input
+            id={dateToId}
             type="date"
             value={filters.end_date}
             min={filters.start_date || undefined}
             aria-invalid={rangeReversed || undefined}
             aria-describedby={rangeReversed ? "gcash-date-range-error" : undefined}
-            onChange={(e) => setDates({ end_date: e.target.value })}
+            onInput={notePartial("to")}
+            onKeyUp={notePartial("to")}
+            onBlur={notePartial("to")}
+            onChange={(e) => {
+              notePartial("to")(e);
+              setDates({ end_date: e.target.value });
+            }}
           />
         </div>
 
@@ -223,7 +253,7 @@ export function TransactionsTab() {
         </Button>
 
         <div className="ml-auto">
-          <TransactionsReportActions filters={reportFilters} branchOf={branchOf} />
+          <TransactionsReportActions filters={reportFilters} partialDates={partialDates} branchOf={branchOf} />
         </div>
       </div>
 

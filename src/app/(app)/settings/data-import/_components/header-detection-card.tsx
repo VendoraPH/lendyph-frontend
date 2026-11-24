@@ -23,7 +23,7 @@ import { earlierLayoutNote } from "@/lib/import-schema";
 import { formatCount } from "@/lib/report-format";
 import { cn } from "@/lib/utils";
 import type { FileInspection } from "../_hooks/use-file-precheck";
-import { columnsFound } from "../_lib/count-words";
+import { columnsFound } from "@/lib/count-words";
 
 /** Mismatched positions listed before the rest are summarised away. */
 const MISMATCH_PREVIEW = 4;

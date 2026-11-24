@@ -111,7 +111,10 @@ describe("subPageTitle (the breadcrumb's second part)", () => {
 
   test("an unknown segment falls back to its words", () => {
     assert.equal(subPageTitle("reports", "some_new_report"), "Some new report");
-    assert.equal(subPageTitle("printables", "data-template"), "Data template");
+  });
+
+  test("the Data Import Template reads its catalog title, as the Documents menu shows it", () => {
+    assert.equal(subPageTitle("printables", "data-template"), "Data Import Template");
   });
 });
 

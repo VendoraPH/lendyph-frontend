@@ -50,7 +50,7 @@ import type {
   ImportIssueSeverity,
 } from "@/types/data-import";
 import { categoryWords, fieldWords } from "./import-issue-words";
-import { severityCount } from "../_lib/count-words";
+import { severityCount } from "@/lib/count-words";
 
 /* ------------------------------------------------------------------ */
 /* Contract widening                                                    */

@@ -2,6 +2,9 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import {
   columnsFound,
+  pagerSummary,
+  piecesAccepted,
+  piecesOnServer,
   productMatches,
   rowsLeftUnchecked,
   rowsNotReached,
@@ -46,5 +49,37 @@ describe("the import's counts read in the right number", () => {
   test("a product name's matches", () => {
     assert.equal(productMatches(1), "Matches 1 product with this name:");
     assert.equal(productMatches(2), "Matches 2 products with this name:");
+  });
+});
+
+describe("the shared pager reads in the right number", () => {
+  test("one row: Showing 1 of 1 result", () => {
+    assert.equal(pagerSummary(1, 1, 1), "Showing 1 of 1 result");
+  });
+
+  test("a range: Showing 1 to 10 of 25 results", () => {
+    assert.equal(pagerSummary(1, 10, 25), "Showing 1 to 10 of 25 results");
+    assert.equal(pagerSummary(1001, 1020, 1020), "Showing 1,001 to 1,020 of 1,020 results");
+  });
+
+  test("a last page holding one row: Showing 21 of 21 results", () => {
+    assert.equal(pagerSummary(21, 21, 21), "Showing 21 of 21 results");
+  });
+
+  test("nothing to show: No results", () => {
+    assert.equal(pagerSummary(1, 0, 0), "No results");
+  });
+});
+
+describe("the upload's pieces read in the right number", () => {
+  test("1 of 1 piece accepted, 2 of 5 pieces accepted", () => {
+    assert.equal(piecesAccepted(1, 1), "1 of 1 piece accepted");
+    assert.equal(piecesAccepted(2, 5), "2 of 5 pieces accepted");
+  });
+
+  test("pieces already on the server", () => {
+    assert.equal(piecesOnServer(1, 1, "members.csv"), "1 of 1 piece of members.csv is already on the server.");
+    assert.equal(piecesOnServer(1, 4, "members.csv"), "1 of 4 pieces of members.csv is already on the server.");
+    assert.equal(piecesOnServer(3, 4, "members.csv"), "3 of 4 pieces of members.csv are already on the server.");
   });
 });

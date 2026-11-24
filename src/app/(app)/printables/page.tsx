@@ -17,6 +17,7 @@ import { SUBJECT_ACCENT, SUBJECT_ILLUSTRATION, SUBJECT_META } from "@/lib/printa
 import type { PrintableDefinition, PrintableSubject } from "@/lib/printables/types";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { hasIllustration, Illustration } from "@/components/common/illustration";
+import { DATA_IMPORT_TEMPLATE_TITLE } from "@/lib/page-titles";
 
 /**
  * Documents catalog. Grouped by what you have to pick before the document can
@@ -53,7 +54,7 @@ const SUBJECT_DESCRIPTION: Record<PrintableSubject, string> = {
  */
 const IMPORT_TEMPLATE = {
   href: "/printables/data-template",
-  title: "Data Import Template",
+  title: DATA_IMPORT_TEMPLATE_TITLE,
   description:
     "The member and loan workbook for migrating an existing book onto Lendyph.",
   /** Extra words the search should match, since none of them are on the card. */

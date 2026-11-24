@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { pagerSummary } from "@/lib/count-words";
 
 export interface TablePaginationProps {
   /** 1-based current page */
@@ -87,9 +88,7 @@ export function TablePagination({
 
       <div className="flex items-center gap-4">
         <span className="text-sm text-muted-foreground tabular-nums">
-          {hasResults
-            ? `Showing ${startIndex + 1} to ${endIndex} of ${total} results`
-            : "No results"}
+          {pagerSummary(startIndex + 1, endIndex, total)}
         </span>
         <div className="flex items-center gap-1">
           <Button
