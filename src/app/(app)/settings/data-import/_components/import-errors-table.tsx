@@ -50,6 +50,7 @@ import type {
   ImportIssueSeverity,
 } from "@/types/data-import";
 import { categoryWords, fieldWords } from "./import-issue-words";
+import { severityCount } from "../_lib/count-words";
 
 /* ------------------------------------------------------------------ */
 /* Contract widening                                                    */
@@ -256,7 +257,7 @@ export function ImportErrorsTable({
               if (typeof count !== "number" || count === 0) return null;
               return (
                 <Badge key={severity} variant="outline" className={SEVERITY_STYLE[severity]}>
-                  {count.toLocaleString()} {severity === "error" ? "errors" : "warnings"}
+                  {severityCount(count, severity)}
                 </Badge>
               );
             })}

@@ -96,6 +96,7 @@ import type {
   LoanProductOption,
   ProductMappingResponse,
 } from "@/types/data-import";
+import { productMatches } from "../_lib/count-words";
 
 /** Sentinel for "not mapped". Product ids are numbers, so it cannot collide. */
 const UNMAPPED = "";
@@ -190,7 +191,7 @@ function SuggestionNote({
         <span className="text-xs text-muted-foreground">
           {candidates.length > 0 ? (
             <>
-              Matches {candidates.length} products with this name:{" "}
+              {productMatches(candidates.length)}{" "}
               {candidates.map((option, index) => (
                 <span key={option.id}>
                   {index > 0 && ", "}

@@ -4087,12 +4087,35 @@ test("provisioning displays the whole-percent rate, not the fraction", () => {
   // The API sends `rate: 0.05` AND `rate_percent: 5`. Reading `rate` would
   // print a 5% provision as "0.1%" — off by a factor of a hundred on a figure
   // the board signs off.
+  // Shown exactly as the server sends it, the same way as the Principal Basis.
   assert.deepEqual(
     table.rows.map((r) => r.rate),
-    [5, 15, 25, 50]
+    ["5%", "15%", "25%", "50%"]
   );
-  assert.equal(formatValue(table.rows[0].rate, "percent"), "5.0%");
-  assert.equal(formatValue(table.rows[3].rate, "percent"), "50.0%");
+});
+
+test("the schedule and the principal basis read a rate the same way, never rounded", () => {
+  const doc = buildProvisioningDoc(
+    {
+      ...PROVISIONING_PAYLOAD,
+      buckets: {
+        ...PROVISIONING_PAYLOAD.buckets,
+        "1_30": { ...PROVISIONING_PAYLOAD.buckets["1_30"], rate_percent: "2.375" },
+      },
+      principal_basis: {
+        ...PRINCIPAL_BASIS,
+        buckets: {
+          ...PRINCIPAL_BASIS.buckets,
+          "1_30": { ...PRINCIPAL_BASIS.buckets["1_30"], rate_percent: "2.375" },
+        },
+      },
+    },
+    RANGE
+  );
+  const schedule = namedTable(doc, "Provisioning Schedule").rows.map((r) => r.rate);
+  const basis = namedTable(doc, "Principal Basis").rows.map((r) => r.rate);
+  assert.deepEqual(schedule, ["2.375%", "15%", "25%", "50%"]);
+  assert.deepEqual(schedule, basis);
 });
 
 test("a bucket without rate_percent shows no rate, never the fraction scaled up", () => {
@@ -4158,7 +4181,7 @@ test("provisioning never multiplies amount by rate, sums the buckets, or divides
   );
   const rows = namedTable(doc, "Provisioning Schedule").rows;
 
-  assert.equal(rows[0].rate, 5);
+  assert.equal(rows[0].rate, "5%");
   // Not ₱6,422.53 (amount × rate).
   assert.equal(rows[0].required_allowance, null);
   // Not ₱451,861.50 (the buckets added up), nor a rate of allowance ÷ amount.
