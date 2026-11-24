@@ -12,6 +12,18 @@ export type ValidIdType =
   | "prc_id"
   | "tin_id";
 export type EmploymentType = "employed" | "self_employed" | "ofw" | "unemployed" | "retired";
+/** `Borrower::MEMBER_TYPES`; the stored default is regular. */
+export type BorrowerMemberType = "regular" | "associate";
+
+/**
+ * PATCH /borrowers/{id}/membership (`borrowers:update`): only the fields that
+ * change. A null membership number goes back to the member code.
+ */
+export interface BorrowerMembershipUpdate {
+  membership_date?: string;
+  member_type?: BorrowerMemberType;
+  membership_number?: string | null;
+}
 
 export interface BorrowerBranch {
   id: number;
@@ -98,6 +110,8 @@ export interface Borrower {
   contact_number?: string | null;
   email?: string | null;
   employer_or_business?: string | null;
+  /** Employment start date, `YYYY-MM-DD`. */
+  date_hired?: string | null;
   monthly_income?: number | string | null;
   photo_url?: string | null;
   // The shared `/borrowers` list also returns applicants who are not members:
@@ -108,6 +122,17 @@ export interface Borrower {
   // BorrowerStatus itself stays narrow so the members status tabs, which can
   // only ever show the three member states, don't have to grow.
   status: BorrowerStatus | "pending" | "rejected";
+  /**
+   * CDA membership (design §1): when the person became a member, their type
+   * and their membership number (what they sign in to the portal with; the
+   * member code until staff give another). Set on approval or staff creation.
+   */
+  membership_date?: string | null;
+  member_type?: BorrowerMemberType | null;
+  membership_number?: string | null;
+  /** When a withdrawn or deceased member's membership ended (`status` says how). */
+  membership_ended_on?: string | null;
+  membership_end_reason?: string | null;
   branch?: BorrowerBranch | null;
   // The list endpoint may return only the FK without the nested relation;
   // keep it so the table can resolve the branch name from the branches list.
