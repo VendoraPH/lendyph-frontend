@@ -74,6 +74,15 @@ export function saveApprovalEdit(loanId: number, body: LoanApprovalEditPayload):
   return loanService.approvalEdit(loanId, body);
 }
 
+/**
+ * The approval edit's one line under the title, naming the step the loan
+ * stays at. One short line rather than a banner above the form, so the form
+ * body keeps its fields at 1024x640.
+ */
+export function approvalEditHeaderNote(stepName: string | null): string {
+  return `Editing at ${stepName ? `the \u201c${stepName}\u201d step` : "your approval step"}. Saving keeps the loan there for you to approve or forward.`;
+}
+
 /** What the save says, naming the step the loan still waits at. */
 export function approvalEditSavedMessage(stepName: string | null): string {
   return stepName

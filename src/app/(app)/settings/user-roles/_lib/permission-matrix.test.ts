@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { PERMISSION_ACTION_WORDS } from "@/lib/permission-module-names";
 import { MODULE_ACTIONS, moduleActionLabel, moduleToggleActions } from "./permission-matrix";
 
 const offered = Object.entries(MODULE_ACTIONS).flatMap(([mod, actions]) =>
@@ -86,6 +87,8 @@ test("the Chair's edit during approval has its own checkbox, in words, outside t
   assert.equal(moduleToggleActions("loans").includes("edit_in_approval"), false);
   const page = readFileSync(resolve(process.cwd(), "src/app/(app)/settings/user-roles/page.tsx"), "utf8");
   assert.match(page, /edit_in_approval: \{ label: "Edit loans at their approval step"/);
+  // The same words wherever else the permission is named (users dialog, audit trail, refusals).
+  assert.equal(PERMISSION_ACTION_WORDS["loans:edit_in_approval"], "Edit loans at their approval step");
 });
 
 // `expenses:pay` (settling a payable) is seeded by the API; the editor offers it

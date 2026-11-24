@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  approvalEditHeaderNote,
   approvalEditPayload,
   approvalEditSavedMessage,
   isApprovalEdit,
@@ -138,4 +139,13 @@ test("an edit reads the loan's own term unit and rate period, and says when its 
     termUnitMoved: null,
     ratePeriodMoved: null,
   });
+});
+
+// One short line under the title instead of a banner above the form, so the
+// form body keeps its fields at 1024x640.
+test("the approval edit says where the loan stays in one short line", () => {
+  const note = approvalEditHeaderNote("BOD Chairwoman");
+  assert.equal(note, "Editing at the \u201cBOD Chairwoman\u201d step. Saving keeps the loan there for you to approve or forward.");
+  assert.ok(note.length <= 110, "one line at 1024 px");
+  assert.equal(approvalEditHeaderNote(null), "Editing at your approval step. Saving keeps the loan there for you to approve or forward.");
 });

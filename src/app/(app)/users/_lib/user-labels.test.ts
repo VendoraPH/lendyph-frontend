@@ -8,6 +8,8 @@ test("a permission chip reads module and action in words", () => {
   assert.equal(permissionChipLabel("borrowers:view"), "Members: View");
   assert.equal(permissionChipLabel("gcash:transact"), "GCash: Transact");
   assert.equal(permissionChipLabel("loans:write_off"), "Loans: Write Off");
+  // The role editor's own label, so the users dialog and the audit trail read it the same way.
+  assert.equal(permissionChipLabel("loans:edit_in_approval"), "Loans: Edit loans at their approval step");
   assert.equal(permissionChipLabel("chart_of_accounts:view"), "Chart of Accounts: View");
   assert.equal(permissionChipLabel("branches:view_all"), "Branches: View All");
 });

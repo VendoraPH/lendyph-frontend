@@ -74,6 +74,24 @@ const MEMBERS_ON_AN_EDIT: MissingAccess = {
   blocking: false,
 };
 
+/**
+ * Where the form shows what the user can't see. The Chairman/Chairwoman's
+ * approval edit fits the screen at 1024x640 (UI round), so nothing stacks
+ * above its form: the member gap reads beside the co-maker pickers, and the
+ * collateral step isn't shown at all without `collaterals:view`. Every other
+ * mode keeps the notice above the form.
+ */
+export function missingAccessPlacement(
+  missing: MissingAccess[],
+  inApproval: boolean,
+): { aboveForm: MissingAccess[]; coMakersNote: string | null } {
+  if (!inApproval) return { aboveForm: missing, coMakersNote: null };
+  return {
+    aboveForm: [],
+    coMakersNote: missing.find((m) => m.permission === "borrowers:view")?.effect ?? null,
+  };
+}
+
 /** What this user can't see on the loan form, blocking gaps first. */
 export function missingLoanFormAccess(
   access: LoanFormAccess,

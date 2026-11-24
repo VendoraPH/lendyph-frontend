@@ -175,7 +175,13 @@ describe("the picker's purpose", () => {
     assert.deepEqual(staffListParams("loans", ""), { per_page: 20 });
     assert.deepEqual(staffListParams("loans", "ana"), { search: "ana", per_page: 20 });
     assert.deepEqual(staffListParams("savings", ""), { for: "savings", per_page: 20 });
-    assert.deepEqual(STAFF_PICKER_PURPOSES.loans.permissions, ["loans:create", "loans:update", "loans:restructure"]);
+    // The Chairman/Chairwoman edits loans at their approval step, account officer included.
+    assert.deepEqual(STAFF_PICKER_PURPOSES.loans.permissions, [
+      "loans:create",
+      "loans:update",
+      "loans:restructure",
+      "loans:edit_in_approval",
+    ]);
     assert.deepEqual(STAFF_PICKER_PURPOSES.savings.permissions, ["savings:create"]);
   });
 

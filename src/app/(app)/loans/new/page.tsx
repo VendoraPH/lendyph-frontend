@@ -7,7 +7,7 @@ import { FIT_CLASSES } from "@/lib/page-fill";
 import { FormStep, FormStepper, type FormStepperHandle } from "@/components/common/form-stepper";
 import { FORM_STEP_GRID, stepErrorsOf, type StepCheckTrigger, type StepErrors } from "@/lib/form-stepper";
 import { MissingAccessNotice } from "./_components/missing-access-notice";
-import { missingLoanFormAccess } from "./_lib/missing-access";
+import { missingAccessPlacement, missingLoanFormAccess } from "./_lib/missing-access";
 import { StaffPicker } from "@/components/common/staff-picker";
 import {
   collateralLock,
@@ -116,6 +116,7 @@ import {
 } from "@/constants";
 import { parseEditLoanId } from "./_lib/edit-loan-id";
 import {
+  approvalEditHeaderNote,
   approvalEditPayload,
   approvalEditSavedMessage,
   isApprovalEdit,
@@ -235,6 +236,9 @@ function NewLoanApplicationInner() {
       ),
     [canListMembers, canListProducts, canListCollaterals, canReadShareCapital, isEditMode],
   );
+  // The approval edit keeps nothing above its form (it fits at 1024x640): the
+  // member gap reads beside the co-maker pickers instead.
+  const accessPlacement = missingAccessPlacement(missingAccess, inApproval);
   // ── API Data ──
   // The members this form has picked or the loan being edited names, so their
   // names show whatever the pickers' searches have moved on to.
@@ -1070,24 +1074,18 @@ function NewLoanApplicationInner() {
               {existingLoan.application_number}
             </p>
           )}
+          {/* The approval edit says where the loan stays in one line, not a
+              banner, so the form body keeps its fields at 1024x640. */}
+          {inApproval && approvalEdit && (
+            <p role="status" className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Info className="size-3 shrink-0 text-brand-orange" aria-hidden="true" />
+              {approvalEditHeaderNote(approvalEdit.step?.name ?? null)}
+            </p>
+          )}
         </div>
       </div>
 
-      {inApproval && approvalEdit?.step && (
-        <div
-          role="status"
-          className="flex shrink-0 items-start gap-2 rounded-lg border border-brand-orange/30 bg-brand-orange/5 p-3 text-sm"
-        >
-          <Info className="mt-0.5 size-4 shrink-0 text-brand-orange" aria-hidden="true" />
-          <p>
-            You&rsquo;re editing this loan at the &ldquo;{approvalEdit.step.name}&rdquo; step. It stays at
-            your step after you save, so you can approve or forward it. Every change is recorded in
-            the audit trail.
-          </p>
-        </div>
-      )}
-
-      <MissingAccessNotice missing={missingAccess} className="shrink-0" />
+      <MissingAccessNotice missing={accessPlacement.aboveForm} className="shrink-0" />
 
       {/* One step per card. At fit the open step scrolls under the rail and
           Back, Next and the submit stay at the foot. */}
@@ -1163,6 +1161,9 @@ function NewLoanApplicationInner() {
                     </Button>
                     )}
                   </div>
+                  {accessPlacement.coMakersNote && (
+                    <p className="text-xs text-muted-foreground">{accessPlacement.coMakersNote}</p>
+                  )}
                   <div className="space-y-2">
                     {coMakerIds.map((selectedId, index) => {
                       const selected = selectedId ? knownMembers[selectedId] ?? null : null;

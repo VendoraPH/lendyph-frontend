@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { missingLoanFormAccess, type LoanFormAccess } from "./missing-access";
+import { missingAccessPlacement, missingLoanFormAccess, type LoanFormAccess } from "./missing-access";
 
 const ALL: LoanFormAccess = {
   members: true,
@@ -79,5 +79,27 @@ describe("the share capital notice", () => {
     assert.match(notice.effect, /can't be added/);
     assert.match(notice.effect, /already holds stays attached/);
     assert.doesNotMatch(notice.effect, /can't be attached/);
+  });
+});
+
+// The approval edit fits the screen at 1024x640 (UI round): nothing it can't
+// see stacks above the form, so the form body keeps its fields. The member gap
+// reads beside the co-maker pickers; the collateral step isn't shown at all.
+describe("missingAccessPlacement", () => {
+  const chair = missingLoanFormAccess({ ...ALL, members: false, collaterals: false }, { editing: true });
+
+  test("the approval edit puts nothing above the form and names the member gap beside the co-makers", () => {
+    assert.deepEqual(missingAccessPlacement(chair, true), {
+      aboveForm: [],
+      coMakersNote: "The co-maker pickers can't search members, so co-makers can't be changed.",
+    });
+  });
+
+  test("the approval edit with nothing missing has no note", () => {
+    assert.deepEqual(missingAccessPlacement([], true), { aboveForm: [], coMakersNote: null });
+  });
+
+  test("every other mode keeps the notice above the form, as before", () => {
+    assert.deepEqual(missingAccessPlacement(chair, false), { aboveForm: chair, coMakersNote: null });
   });
 });

@@ -9,14 +9,14 @@
  * other error returns null and goes to the shared handler.
  */
 
-import { titleCaseKey } from "@/lib/permission-module-names";
+import { PERMISSION_ACTION_WORDS, titleCaseKey } from "@/lib/permission-module-names";
 
 const PERMISSION_KEY = /^permissions\.(\d+)$/;
 
 /** "credit_scoring:view" → "Credit Scoring: View". */
 export function describePermission(permission: string): string {
   const [module, action] = permission.split(":");
-  return action ? `${titleCaseKey(module)}: ${titleCaseKey(action)}` : titleCaseKey(module);
+  return action ? `${titleCaseKey(module)}: ${PERMISSION_ACTION_WORDS[permission] ?? titleCaseKey(action)}` : titleCaseKey(module);
 }
 
 function joinNames(names: string[]): string {

@@ -9,6 +9,15 @@ const MODULE_NAMES: Record<string, string> = {
   amla: "AMLA Compliance",
 };
 
+/**
+ * Permissions whose action reads differently from its key: the roles screen's
+ * own label, so the users dialog, the audit trail and a refusal name each one
+ * the same way.
+ */
+export const PERMISSION_ACTION_WORDS: Readonly<Record<string, string>> = {
+  "loans:edit_in_approval": "Edit loans at their approval step",
+};
+
 /** Short words that stay lower case in a title, unless they come first. */
 const SMALL_WORDS = new Set(["of", "and", "the", "to", "for", "in", "on"]);
 
