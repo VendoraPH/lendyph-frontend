@@ -75,6 +75,29 @@ export interface SubmitRegistrationResponse {
   expires_at?: string;
 }
 
+/**
+ * The record a public registration may duplicate, linked by the server (the
+ * public form never refuses a duplicate; finish run round 2, decision 3).
+ * Sent by GET /borrowers/{id} only. `visible: false` means the record is
+ * outside the reviewer's branches (or they lack `borrowers:view`): the server
+ * then names nobody and sends only its notice, in words.
+ */
+export type RegistrationPossibleDuplicate =
+  | {
+      visible: true;
+      id: number;
+      borrower_code: string;
+      full_name: string;
+      /** False when the match is itself a registration, pending or rejected. */
+      is_member: boolean;
+      /** The matched record's status, as stored; the screen words it. */
+      status?: string;
+      /** Why it matched, in words ("Same full name"). */
+      reason: string;
+      message: string;
+    }
+  | { visible: false; message: string };
+
 export interface Registration {
   id: number;
   first_name: string;
@@ -132,6 +155,9 @@ export interface Registration {
   rejected_by_user?: { id: number; full_name?: string; name?: string } | null;
   approved_at?: string | null;
   approved_by?: number | null;
+
+  /** The record this registration may duplicate, or null; see RegistrationPossibleDuplicate. */
+  possible_duplicate?: RegistrationPossibleDuplicate | null;
 
   /** When the registration was submitted: the submission creates the record. */
   created_at?: string | null;
@@ -224,9 +250,18 @@ export const registrationService = {
    * approved_by/approved_at. Rejects with 422 (`errors.status` /
    * `errors.valid_id` / `errors.branch_id`) when a gate fails, so callers must
    * surface the server message rather than generic copy.
+   *
+   * A registration whose email is on another member is held (422 on
+   * `errors.email`) until the email is changed or cleared, whatever is
+   * confirmed. One with a `possible_duplicate` also needs
+   * `acknowledge_possible_duplicate: true`, sent once the reviewer confirms
+   * they checked it; without it the server answers 422 on
+   * `errors.possible_duplicate`, after every other gate passes.
    */
-  approve: (id: number, data: { branch_id?: number } = {}) =>
-    api.patch<Registration>(API_ENDPOINTS.REGISTRATIONS.APPROVE(id), data),
+  approve: (
+    id: number,
+    data: { branch_id?: number; acknowledge_possible_duplicate?: boolean } = {}
+  ) => api.patch<Registration>(API_ENDPOINTS.REGISTRATIONS.APPROVE(id), data),
 
   /**
    * Soft-reject a pending registration: sets status to `rejected` and records
