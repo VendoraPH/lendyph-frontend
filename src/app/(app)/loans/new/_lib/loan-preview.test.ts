@@ -276,6 +276,17 @@ describe("loanPreviewRequest", () => {
     );
   });
 
+  // The Chairman/Chairwoman's edit at their approval step saves the build-up
+  // as typed, ₱0.00 included, and the server reads a build-up left out of the
+  // preview as the loan's stored one, so the preview states it too.
+  test("an approval edit always states the build-up, ₱0.00 included, as its save does", () => {
+    for (const scbAmount of ["", "0", "0.00"]) {
+      assert.equal(loanPreviewRequest({ ...COMPLETE, scbAmount, statesBuildUp: true })?.scb_amount, 0, scbAmount);
+      assert.equal("scb_amount" in (loanPreviewRequest({ ...COMPLETE, scbAmount }) ?? {}), false, scbAmount);
+    }
+    assert.equal(loanPreviewRequest({ ...COMPLETE, scbAmount: "150", statesBuildUp: true })?.scb_amount, 150);
+  });
+
   test("asks for the schedule with no collateral once its inputs are all known", () => {
     assert.deepEqual(loanPreviewRequest({ ...COMPLETE, scbAmount: "", collaterals: [], deductions: null }), {
       borrower_id: 11,

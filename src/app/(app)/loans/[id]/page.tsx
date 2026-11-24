@@ -131,6 +131,14 @@ import { approvalChainItems } from "./_lib/left-out-steps";
 import { LeftOutStepChip } from "./_components/left-out-step-chip";
 import { oncePerKey } from "./_lib/once-per-key";
 import { useReleasePreview } from "./_hooks/use-release-preview";
+import { useApprovalEditState } from "./_hooks/use-approval-edit-state";
+import {
+  APPROVAL_ACTIONS_ROW,
+  APPROVAL_CARD_ID,
+  approvalEditHref,
+  asksApprovalEdit,
+  offersApprovalEdit,
+} from "./_lib/approval-edit";
 import { useDeductionsPreview } from "./_hooks/use-deductions-preview";
 import type { PreviewReadState } from "./_hooks/use-preview-read";
 import { cardDeductionsSource, cardFiguresAreEstimated } from "./_lib/deductions-preview";
@@ -1195,6 +1203,24 @@ function LoanDetail({ loanId }: { loanId: number }) {
     unavailable: approvalUnavailable,
     refresh: refreshApproval,
   } = useLoanApproval(loan?.id, loan?.status);
+  // The Chairman/Chairwoman's "Edit Loan" at their approval step
+  // (`loans:edit_in_approval`): the server is asked only for that holder while
+  // the loan waits at an approve step, and again when the step changes. It
+  // shows only on the server's yes for the step on screen.
+  const canEditInApproval = can("loans:edit_in_approval");
+  const pendingApprovalStep = approvalSteps.find((s) => s.status === "pending") ?? null;
+  const approvalEditState = useApprovalEditState(
+    loan?.id,
+    asksApprovalEdit({ canEditInApproval, loanStatus: loan?.status, currentStep: pendingApprovalStep }),
+    String(pendingApprovalStep?.id ?? ""),
+  );
+  // Back from that edit (`/loans/{id}#approval`), the page opens at the card
+  // once the chain is on screen.
+  const approvalCardReady = !approvalLoading && approvalSteps.length > 0;
+  useEffect(() => {
+    if (!approvalCardReady || window.location.hash !== `#${APPROVAL_CARD_ID}`) return;
+    document.getElementById(APPROVAL_CARD_ID)?.scrollIntoView({ block: "start" });
+  }, [approvalCardReady]);
   const [stepRemarks, setStepRemarks] = useState("");
   const [stepActionLoading, setStepActionLoading] = useState(false);
   // "Forward to" on Submit for Approval and Approve & Forward, tied to the
@@ -1682,6 +1708,13 @@ function LoanDetail({ loanId }: { loanId: number }) {
     !!currentStep?.assigned_to && currentStep.assigned_to.id === currentUser?.id;
   // A step forwarded to someone else.
   const currentStepForwardedElsewhere = !!currentStep?.assigned_to && !currentStepIsMine;
+  // The Chairman/Chairwoman may edit the loan at this step (the server's yes).
+  const showsApprovalEdit = offersApprovalEdit({
+    canEditInApproval,
+    loanStatus: loan.status,
+    currentStep,
+    state: approvalEditState,
+  });
 
   // The pick and its error for the step on screen (a draft has none yet).
   const forwardKey = currentStep ? String(currentStep.id) : "draft";
@@ -2483,7 +2516,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
             // which reads as "this loan has no approval process".
             loanShouldHaveAChain(loan.status)) && (
           <Collapsible open={approvalStepsOpen} onOpenChange={setApprovalStepsOpen}>
-            <Card>
+            <Card id={APPROVAL_CARD_ID} className="scroll-mt-4">
               <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
                 <CollapsibleTrigger className="w-full text-left group/trigger">
                   <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -2580,7 +2613,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                       never-submitted draft never reaches — so without these the
                       draft could not be submitted, edited OR voided from its own
                       page. */}
-                  <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                  <div className={APPROVAL_ACTIONS_ROW}>
                     {canVoidLoan && (
                       <Button
                         variant="destructive"
@@ -2873,6 +2906,12 @@ function LoanDetail({ loanId }: { loanId: number }) {
                           {currentStep.kind === "release" &&
                             " — open the release dialog to complete the loan release."}
                         </p>
+                        {showsApprovalEdit && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            You can edit the loan&rsquo;s amount, rate, term and payment schedule here
+                            before you approve or forward it. Every change is recorded in the audit trail.
+                          </p>
+                        )}
                         {!clientCanActOnCurrentStep && (
                           <p
                             className="text-xs text-amber-700 dark:text-amber-400 mt-1"
@@ -2945,7 +2984,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                         />
                       )}
 
-                      <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                      <div className={APPROVAL_ACTIONS_ROW}>
                         {currentStep.kind === "submit" && (
                           <>
                             {canVoidLoan && (
@@ -2986,6 +3025,19 @@ function LoanDetail({ loanId }: { loanId: number }) {
                         )}
                         {currentStep.kind === "approve" && (
                           <>
+                            {showsApprovalEdit && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full sm:w-auto"
+                                disabled={stepActionLoading}
+                                nativeButton={false}
+                                render={<Link href={approvalEditHref(loan.id)} />}
+                              >
+                                <Pencil className="mr-2 h-4 w-4" />
+                                Edit Loan
+                              </Button>
+                            )}
                             {sendBackTargets.length > 1 && (
                               <div className="flex items-center gap-2 w-full sm:w-auto">
                                 <Label

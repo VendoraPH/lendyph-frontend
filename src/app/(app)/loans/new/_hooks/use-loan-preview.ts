@@ -17,10 +17,13 @@ const DEBOUNCE_MS = 300;
  * asked for once typing pauses. A request for inputs that have since changed
  * is cancelled, and its answer ignored if it arrives anyway, so the form only
  * ever shows the preview of the inputs it holds. `request` null means there is
- * nothing to preview.
+ * nothing to preview. With `approvalEditLoanId` (the Chairman/Chairwoman's
+ * edit at their approval step) it asks that edit's own preview, which answers
+ * the same way.
  */
 export function useLoanPreview(
   request: LoanFormPreviewRequest | null,
+  approvalEditLoanId: number | null = null,
 ): { view: LoanPreviewView; retry: () => void } {
   const [outcome, setOutcome] = useState<LoanPreviewOutcome | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -33,8 +36,10 @@ export function useLoanPreview(
     const body = JSON.parse(key) as LoanFormPreviewRequest;
     const controller = new AbortController();
     const timer = setTimeout(() => {
-      loanService
-        .preview(body, controller.signal)
+      (approvalEditLoanId === null
+        ? loanService.preview(body, controller.signal)
+        : loanService.approvalEditPreview(approvalEditLoanId, body, controller.signal)
+      )
         .then((preview) => {
           if (controller.signal.aborted) return;
           setOutcome({ key, attempt, view: { status: "ready", preview } });
@@ -48,7 +53,7 @@ export function useLoanPreview(
       clearTimeout(timer);
       controller.abort();
     };
-  }, [key, attempt]);
+  }, [key, attempt, approvalEditLoanId]);
 
   return {
     view: loanPreviewView(key, attempt, outcome),

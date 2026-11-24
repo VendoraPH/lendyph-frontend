@@ -35,6 +35,14 @@ import { compressImage } from "@/lib/image-compress";
 import { ApprovalBranchField } from "./_components/approval-branch-field";
 import { useApprovalBranch } from "./_hooks/use-approval-branch";
 import { APPROVAL_BRANCH_REQUIRED, approvalBranchError, approvalPayload } from "./_lib/approval-branch";
+import { PossibleDuplicateNotice } from "./_components/possible-duplicate-notice";
+import { PossibleDuplicateDialog } from "./_components/possible-duplicate-dialog";
+import { useDuplicateConfirmation } from "./_hooks/use-duplicate-confirmation";
+import {
+  acknowledgedApprovalPayload,
+  approvalEmailRefusal,
+  possibleDuplicateRefusal,
+} from "./_lib/possible-duplicate";
 import {
   syncValidIdDrafts,
   validIdDraftErrors,
@@ -63,6 +71,10 @@ function RegistrationReviewContent() {
   const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
   const [idPreview, setIdPreview] = useState<{ title: string; images: PreviewImage[] } | null>(null);
   const branch = useApprovalBranch(registration?.branch_id);
+  const duplicate = useDuplicateConfirmation(registration?.possible_duplicate);
+  // The server holds an approval while the email is on another member; its
+  // words stay on the panel until the next try.
+  const [emailRefusal, setEmailRefusal] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -110,20 +122,39 @@ function RegistrationReviewContent() {
     if (message) branch.setError(message);
   }
 
-  async function handleApprove() {
+  // The approval's body: the branch, plus the reviewer's confirmation once a
+  // possible duplicate was checked (the server refuses it without one).
+  function approvalBody(acknowledged: boolean) {
+    const payload = approvalPayload(branch.branchId);
+    return acknowledged ? acknowledgedApprovalPayload(payload) : payload;
+  }
+
+  function handleApprove() {
     if (branchMissing()) return;
+    duplicate.guard(approve);
+  }
+
+  async function approve(acknowledged: boolean) {
     setApproving(true);
+    setEmailRefusal(null);
     try {
-      await registrationService.approve(registrationId, approvalPayload(branch.branchId));
+      await registrationService.approve(registrationId, approvalBody(acknowledged));
       toast.success("Registration approved. Member profile activated.");
       router.push(`/borrowers/${registrationId}`);
     } catch (err) {
       // Approval is gated server-side (still pending + at least one valid ID on
       // file). Those 422s explain exactly what is missing, so surface the
       // server's wording — a generic "please try again" sends the operator
-      // round in circles looking for a fault that isn't there.
-      showBranchRefusal(err);
-      notifyError(err, "We couldn't approve the registration. Please try again.");
+      // round in circles looking for a fault that isn't there. A refusal for
+      // want of the possible duplicate's confirmation opens that question.
+      const refusal = possibleDuplicateRefusal(err);
+      if (refusal) {
+        duplicate.askAfterRefusal(refusal, () => void approve(true));
+      } else {
+        showBranchRefusal(err);
+        setEmailRefusal(approvalEmailRefusal(err));
+        notifyError(err, "We couldn't approve the registration. Please try again.");
+      }
     } finally {
       setApproving(false);
     }
@@ -165,15 +196,19 @@ function RegistrationReviewContent() {
     }
   }
 
-  async function handleSaveEdit() {
+  function handleSaveEdit() {
     const idErrors = validIdDraftErrors(idDrafts);
     if (idErrors.length > 0) {
       toast.error(sentencesMessage(idErrors));
       return;
     }
     if (branchMissing()) return;
+    duplicate.guard(saveEdit);
+  }
 
+  async function saveEdit(acknowledged: boolean) {
     setSavingEdit(true);
+    setEmailRefusal(null);
     // Which step we're on. Each one commits before the next begins, so a
     // failure has to name the step that actually failed — claiming "nothing
     // was saved" after `update()` has already landed pushes the operator into
@@ -184,10 +219,11 @@ function RegistrationReviewContent() {
       phase = "ids";
       await syncValidIds();
       phase = "approve";
-      await registrationService.approve(registrationId, approvalPayload(branch.branchId));
+      await registrationService.approve(registrationId, approvalBody(acknowledged));
       toast.success("Registration updated and approved. Member profile activated.");
       router.push(`/borrowers/${registrationId}`);
     } catch (err) {
+      const refusal = phase === "approve" ? possibleDuplicateRefusal(err) : null;
       if (phase === "details") {
         notifyError(err, "We couldn't save this registration. Please try again.");
       } else if (err instanceof ValidIdSyncError) {
@@ -198,11 +234,16 @@ function RegistrationReviewContent() {
           "We couldn't finish updating the valid IDs. Please try again.",
           "The rest of your changes were saved."
         );
+      } else if (refusal) {
+        // The changes are saved; only the approval waits for the confirmation.
+        duplicate.askAfterRefusal(refusal, () => void approve(true));
       } else {
         // Only the approval gate refused — the applicant is no longer pending,
-        // or still has no valid ID on file. Stay in edit mode so the operator
-        // can fix the cause rather than losing the screen.
+        // still has no valid ID on file, or kept an email another member
+        // holds. Stay in edit mode so the operator can fix the cause rather
+        // than losing the screen.
         showBranchRefusal(err);
+        setEmailRefusal(approvalEmailRefusal(err));
         notifyError(
           err,
           "We couldn't approve this registration. Please try again.",
@@ -316,6 +357,12 @@ function RegistrationReviewContent() {
         <ScrollBox className="p-px">
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
             <div className="space-y-4 min-w-0">
+              {registration.possible_duplicate ? (
+                <PossibleDuplicateNotice
+                  duplicate={registration.possible_duplicate}
+                  pending={!isRejected}
+                />
+              ) : null}
               <RegistrationInfoCards
                 registration={registration}
                 editMode={editMode}
@@ -415,6 +462,7 @@ function RegistrationReviewContent() {
               }}
               onSaveEdit={handleSaveEdit}
               branchField={<ApprovalBranchField branch={branch} disabled={approving || savingEdit} />}
+              approvalRefusal={emailRefusal}
             />
           </div>
         </ScrollBox>
@@ -424,6 +472,12 @@ function RegistrationReviewContent() {
         open={rejectOpen}
         onOpenChange={setRejectOpen}
         onConfirm={handleReject}
+      />
+
+      <PossibleDuplicateDialog
+        text={duplicate.text}
+        onCancel={duplicate.cancel}
+        onConfirm={duplicate.confirm}
       />
 
       <ImagePreviewDialog

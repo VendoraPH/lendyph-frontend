@@ -5,7 +5,7 @@ import { ImageDown, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { downloadNodeAsPng } from "@/lib/download-node-png";
 import { notifyError } from "@/lib/notify";
-import { receiptImageFileName } from "../_lib/receipt-data";
+import { receiptImageFileName } from "@/lib/receipt-image";
 
 interface DownloadReceiptImageButtonProps {
   /** The receipt card to capture. */
@@ -14,7 +14,10 @@ interface DownloadReceiptImageButtonProps {
   className?: string;
 }
 
-/** Saves the on-screen receipt card as a PNG, named after its receipt number. */
+/**
+ * Saves the on-screen receipt card as a PNG, named after its receipt number:
+ * the staff receipt page and the public shared receipt (/r/{token}).
+ */
 export function DownloadReceiptImageButton({ target, receiptNumber, className }: DownloadReceiptImageButtonProps) {
   const [busy, setBusy] = useState(false);
 

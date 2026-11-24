@@ -66,7 +66,10 @@ export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
   // `write_off` (writing off a restructure's shortfall) is seeded for admin
   // and super_admin; the API's grant guard still refuses it to anyone who
   // doesn't hold it themselves. It's left out of the module toggle (below).
-  loans: ["view", "create", "update", "delete", "approve", "reject", "release", "restructure", "write_off"],
+  // `edit_in_approval` (the Chairman/Chairwoman edits a loan at their
+  // approval step) is seeded for the Chair's role alone, so only a super admin
+  // can grant it on; it's left out of the module toggle too.
+  loans: ["view", "create", "update", "delete", "approve", "reject", "release", "restructure", "write_off", "edit_in_approval"],
   // `manage` only: creating, editing and deleting products. Viewing them needs
   // `loans:view`, so there is no `loan_products:view` to offer.
   loan_products: ["manage"],
@@ -244,11 +247,13 @@ export function moduleActionLabel(mod: UIModule, act: Action): string | null {
 /**
  * Actions offered with their own checkbox only. The module's "toggle all"
  * neither grants nor revokes them: writing off a restructure's shortfall
- * destroys debt, and posting the allowance moves every branch's books, so
- * neither is swept in with the rest of its module.
+ * destroys debt, posting the allowance moves every branch's books, and editing
+ * a loan during approval is the Chair's alone, so none is swept in with the
+ * rest of its module.
  */
 const OWN_CHECKBOX_ONLY: Partial<Record<UIModule, readonly Action[]>> = {
-  loans: ["write_off"],
+  // Editing a loan during approval belongs to one role, the Chair's.
+  loans: ["write_off", "edit_in_approval"],
   accounting: ["allowance"],
   // Mediation cases are confidential, and audit and tax reports are
   // restricted: each is granted on its own, never swept in with the rest.

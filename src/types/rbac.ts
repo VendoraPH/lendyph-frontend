@@ -208,6 +208,10 @@ export type Action =
   | "restructure"
   // Writing off a loan's remaining balance; seeded as `loans:write_off`.
   | "write_off"
+  // Editing a loan while it waits at the holder's approval step
+  // (`loans:edit_in_approval`). Seeded for the Chairman/Chairwoman's role
+  // (`bod1`) alone: not admin, not super_admin.
+  | "edit_in_approval"
   // Extending a loan's term (`loans:extend`) and resetting another user's
   // password (`users:reset_password`). Seeded by the API; the role editor has
   // no checkbox for either, and a role keeps whatever it holds on save.
