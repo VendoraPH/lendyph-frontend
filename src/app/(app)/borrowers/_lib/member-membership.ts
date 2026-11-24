@@ -144,6 +144,32 @@ export function membershipDraft(member: MembershipSource): MembershipDraft {
   };
 }
 
+/**
+ * The member portal note. A new number closes the member's open activation or
+ * password reset code (its slip shows the old number), so staff issue a new
+ * one after the change; the member's sessions carry on.
+ */
+const PORTAL_NUMBER_NOTE =
+  "The member signs in to the member portal with this number. " +
+  "Changing it closes any open activation or password reset code, so issue a new one after saving.";
+
+/**
+ * The hint under Membership Number: how a typed number is stored, the member
+ * portal note when the portal is switched on, and what a blank number means.
+ */
+export function membershipNumberHint(typed: string, memberCode: string, portal: boolean): string {
+  const trimmed = typed.trim();
+  const stored = canonicalMemberNumber(trimmed);
+  return [
+    trimmed !== "" && stored !== trimmed ? `It will be saved as ${stored}.` : "",
+    "Numbers are kept in capitals without spaces.",
+    portal ? PORTAL_NUMBER_NOTE : "",
+    `Leave it blank to use the member code, ${memberCode}.`,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 /** The latest date the dialog accepts: today, or the day the membership ended if that came first. */
 export function latestMembershipDate(member: MembershipSource, today: string): string {
   const ended = member.membership_ended_on || null;

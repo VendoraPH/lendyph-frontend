@@ -8,6 +8,7 @@ import {
   membershipDraft,
   membershipFailure,
   membershipLength,
+  membershipNumberHint,
   membershipRequest,
   membershipRows,
   withMembership,
@@ -189,6 +190,24 @@ test("the type must be one of the two, and the number fit its 30 characters", ()
   assert.deepEqual(long, { ok: false, errors: { membership_number: "The membership number can be at most 30 characters." } });
   // Spaces are dropped before it is measured.
   assert.equal(membershipRequest({ ...draft, membership_number: `${"7".repeat(NUMBER_MAX)} ` }, member(), TODAY).ok, true);
+});
+
+test("the number's hint: how it is stored, the portal note when the portal is on, and what blank means", () => {
+  assert.equal(
+    membershipNumberHint("", "BRW-000123", false),
+    "Numbers are kept in capitals without spaces. Leave it blank to use the member code, BRW-000123.",
+  );
+  assert.equal(
+    membershipNumberHint(" mem 0042 ", "BRW-000123", true),
+    "It will be saved as MEM0042. Numbers are kept in capitals without spaces. " +
+      "The member signs in to the member portal with this number. " +
+      "Changing it closes any open activation or password reset code, so issue a new one after saving. " +
+      "Leave it blank to use the member code, BRW-000123.",
+  );
+  // Typed as stored: nothing to say about how it's saved.
+  assert.doesNotMatch(membershipNumberHint("MEM0042", "BRW-000123", true), /saved as/);
+  // Without the portal, no word of signing in or of codes.
+  assert.doesNotMatch(membershipNumberHint("mem 0042", "BRW-000123", false), /portal|code, so/);
 });
 
 // ── A refused save ──

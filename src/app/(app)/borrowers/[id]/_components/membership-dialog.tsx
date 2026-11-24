@@ -17,7 +17,6 @@ import { env } from "@/config/env";
 import { MEMBER_TYPE_OPTIONS } from "@/constants";
 import { useDialogOpening } from "@/hooks";
 import { formatDate, todayISO } from "@/lib/format";
-import { canonicalMemberNumber } from "@/lib/import-schema";
 import { notifyInfo, notifySuccess } from "@/lib/notify";
 import { borrowerService } from "@/services";
 import type { Borrower } from "@/types";
@@ -26,6 +25,7 @@ import {
   memberTypeLabel,
   membershipDraft,
   membershipFailure,
+  membershipNumberHint,
   membershipRequest,
   type MembershipDraft,
   type MembershipErrors,
@@ -63,8 +63,6 @@ export function MembershipDialog({ borrower, open, onOpenChange, onSaved }: Memb
 
   const today = todayISO();
   const ended = borrower.membership_ended_on || null;
-  const typed = draft.membership_number.trim();
-  const stored = canonicalMemberNumber(typed);
 
   function set(field: MembershipField, value: string) {
     setDraft((current) => ({ ...current, [field]: value }));
@@ -191,10 +189,7 @@ export function MembershipDialog({ borrower, open, onOpenChange, onSaved }: Memb
             />
             {fieldError("membership_number")}
             <p id={`${id}-membership_number-hint`} className="text-xs text-muted-foreground">
-              {typed !== "" && stored !== typed ? `It will be saved as ${stored}. ` : ""}
-              Numbers are kept in capitals without spaces.
-              {env.features.memberPortal ? " The member signs in to the member portal with this number." : ""}
-              {` Leave it blank to use the member code, ${borrower.borrower_code}.`}
+              {membershipNumberHint(draft.membership_number, borrower.borrower_code, env.features.memberPortal)}
             </p>
           </div>
 
