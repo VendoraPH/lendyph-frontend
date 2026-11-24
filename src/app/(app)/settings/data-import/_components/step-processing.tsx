@@ -442,8 +442,8 @@ export function StepProcessing({
             {cancelling ? "Cancelling…" : "Cancel this import"}
           </Button>
           <span className="text-xs text-muted-foreground">
-            Only possible before anything has been written to your members and
-            loans. The server has the final say.
+            Only possible before anything has been written to {written}. The
+            server has the final say.
           </span>
         </div>
       ) : null}
