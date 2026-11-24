@@ -26,10 +26,12 @@ export function normaliseStaffQuery(raw: string): string {
 /**
  * What an Account Officer picker is for. The loan forms read `GET /staff` on
  * the loan permissions; the savings opening form asks with `for=savings`,
- * which the server also lets `savings:create` read (gap round S4). Either way
- * the rows are the same names-only list.
+ * which the server also lets `savings:create` read (gap round S4); the online
+ * applications' assign picker asks with `for=origination`, which lists only
+ * the holders of `loan_origination:update` (LO-B3). Either way the rows are the
+ * same names-only list.
  */
-export type StaffPickerPurpose = "loans" | "savings";
+export type StaffPickerPurpose = "loans" | "savings" | "origination";
 
 export const STAFF_PICKER_PURPOSES: Record<
   StaffPickerPurpose,
@@ -44,15 +46,19 @@ export const STAFF_PICKER_PURPOSES: Record<
     permissions: ["savings:create"],
     lockedNote: "Choosing an account officer needs permission to open savings accounts, which your role does not have.",
   },
+  origination: {
+    permissions: ["loan_origination:update"],
+    lockedNote: "Assigning an officer needs the permission to update online applications, which your role does not have.",
+  },
 };
 
-/** The `GET /staff` query for one search: `for=savings` only on the savings form. */
+/** The `GET /staff` query for one search: `for` names any purpose but the loan forms'. */
 export function staffListParams(
   purpose: StaffPickerPurpose,
   search: string,
-): { for?: "savings"; search?: string; per_page: number } {
+): { for?: Exclude<StaffPickerPurpose, "loans">; search?: string; per_page: number } {
   return {
-    ...(purpose === "savings" ? { for: "savings" as const } : {}),
+    ...(purpose === "loans" ? {} : { for: purpose }),
     ...(search ? { search } : {}),
     per_page: STAFF_PAGE_SIZE,
   };

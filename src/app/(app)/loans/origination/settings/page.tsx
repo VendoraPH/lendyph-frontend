@@ -8,26 +8,16 @@ import { RouteGuard } from "@/components/common/route-guard";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useApiResource, usePermission } from "@/hooks";
-import { settingsSaveBlocker, uploadSettingsProblems } from "@/lib/loan-origination";
-import { notifyError, notifySuccess, notifyValidation } from "@/lib/notify";
+import { settingsSaveBlocker } from "@/lib/loan-origination";
+import { notifyError, notifySuccess, notifyWarning } from "@/lib/notify";
 import { loanOriginationService } from "@/services";
 import type { OriginationSettings } from "@/types/loan-origination";
+import { settingsPayload, settingsProblems } from "../_lib/settings-form";
 import { AssessmentSection } from "./_components/assessment-section";
-import { DocumentsSection, toKey } from "./_components/documents-section";
-import { GeneralSection, NotificationsSection } from "./_components/general-section";
+import { DocumentsSection } from "./_components/documents-section";
+import { GeneralSection, NotificationsSection, ServerSection } from "./_components/general-section";
+import { NoticesSection } from "./_components/notices-section";
 import { ProductsSection } from "./_components/products-section";
-
-/** What the server would refuse anyway, caught before the round trip. */
-function problems(s: OriginationSettings): string[] {
-  const out: string[] = [];
-  if (!s.general.reference_format.trim()) out.push("Enter a reference format.");
-  if (s.general.draft_expiration_days < 1) out.push("Drafts must be kept at least one day.");
-  if (s.assessment.max_dti <= 0) out.push("The highest debt-to-income must be above zero.");
-  if (s.documents.accepted_file_types.length === 0) out.push("Accept at least one file type.");
-  out.push(...uploadSettingsProblems(s.documents));
-  if (s.documents.types.some((t) => !t.label.trim())) out.push("Name every document type, or remove the empty ones.");
-  return out;
-}
 
 function SettingsForm({ initial }: { initial: OriginationSettings }) {
   const [form, setForm] = useState(initial);
@@ -37,19 +27,17 @@ function SettingsForm({ initial }: { initial: OriginationSettings }) {
   const set = <K extends keyof OriginationSettings>(key: K) => (value: OriginationSettings[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
 
+  // The server checks every limit and refuses in its own words; only a
+  // document type with no name (and so no key) is caught here.
   const save = () => {
-    const found = problems(form);
+    const found = settingsProblems(form);
     if (found.length) {
-      notifyValidation(found);
+      notifyWarning(found[0]);
       return;
     }
-    const payload: OriginationSettings = {
-      ...form,
-      documents: { ...form.documents, types: form.documents.types.map((t) => ({ ...t, type: t.type || toKey(t.label) })) },
-    };
     setSaving(true);
     loanOriginationService
-      .updateSettings(payload)
+      .updateSettings(settingsPayload(form))
       .then((saved) => {
         setForm(saved);
         notifySuccess("Settings saved");
@@ -68,15 +56,20 @@ function SettingsForm({ initial }: { initial: OriginationSettings }) {
             <TabsTrigger value="assessment">Assessment</TabsTrigger>
             <TabsTrigger value="documents">Documents</TabsTrigger>
             <TabsTrigger value="notifications">Messages</TabsTrigger>
+            <TabsTrigger value="notices">Notices</TabsTrigger>
           </TabsList>
-          <Button size="sm" onClick={save} disabled={saving || blocker !== null} title={blocker ?? undefined}>
-            {saving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Save className="mr-1 h-4 w-4" />}
-            Save settings
-          </Button>
+          {/* Notices are published one version at a time, on their own tab; Save covers the other tabs. */}
+          {tab !== "notices" && (
+            <Button size="sm" onClick={save} disabled={saving || blocker !== null} title={blocker ?? undefined}>
+              {saving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Save className="mr-1 h-4 w-4" />}
+              Save settings
+            </Button>
+          )}
         </div>
-        {blocker && <p className="text-xs text-muted-foreground">{blocker}</p>}
-        <TabsContent value="general">
+        {blocker && tab !== "notices" && <p className="text-xs text-muted-foreground">{blocker}</p>}
+        <TabsContent value="general" className="space-y-4">
           <GeneralSection value={form.general} onChange={set("general")} />
+          <ServerSection server={form.server} rulesVersion={form.rules_version} updatedBy={form.updated_by} updatedAt={form.updated_at} />
         </TabsContent>
         <TabsContent value="products">
           <ProductsSection value={form.products} documentTypes={form.documents.types} onChange={set("products")} />
@@ -89,6 +82,9 @@ function SettingsForm({ initial }: { initial: OriginationSettings }) {
         </TabsContent>
         <TabsContent value="notifications">
           <NotificationsSection value={form.notifications} onChange={set("notifications")} />
+        </TabsContent>
+        <TabsContent value="notices">
+          <NoticesSection />
         </TabsContent>
       </Tabs>
     </div>

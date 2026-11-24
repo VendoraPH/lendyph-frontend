@@ -24,6 +24,7 @@ import {
   type ReportReload,
 } from "../_lib/report-fields";
 import { DeadlineBadge, ReportStatusBadge, ToneBadge } from "./tone-badge";
+import { EvidenceDocumentsProvider } from "./evidence-documents";
 import { ExportPanel } from "./export-panel";
 import { ReadinessBreakdown } from "./readiness-breakdown";
 import { ReportDocumentUpload } from "./report-document-upload";
@@ -187,11 +188,13 @@ function ReportBody({ report, drafts, setDrafts, reloading, onChange, onReload }
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <div className="space-y-4">
-          {report.sections.map((section) => (
-            <ReportSection key={section.key} section={section} drafts={values} canEdit={canEdit} onEdit={edit} />
-          ))}
-        </div>
+        <EvidenceDocumentsProvider report={report} canEdit={canEdit}>
+          <div className="space-y-4">
+            {report.sections.map((section) => (
+              <ReportSection key={section.key} section={section} drafts={values} canEdit={canEdit} onEdit={edit} />
+            ))}
+          </div>
+        </EvidenceDocumentsProvider>
         <div className="space-y-4">
           <ReviewSteps steps={report.approval_steps} />
           <ValidationPanel issues={report.issues} critical={report.critical_count} warnings={report.warning_count} />

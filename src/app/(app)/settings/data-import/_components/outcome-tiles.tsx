@@ -31,6 +31,7 @@
 import { cn } from "@/lib/utils";
 import { AlertTriangle, CheckCircle2, FileText, Link2, RotateCcw, SkipForward, XCircle } from "lucide-react";
 import type { ImportCounts, ImportFileKind } from "@/types/data-import";
+import { FILE_LABELS } from "./import-files";
 
 /* ------------------------------------------------------------------ */
 /* Pure — unit tested in ./outcome-tiles.test.ts                        */
@@ -191,7 +192,7 @@ export function OutcomeTiles({
 }: OutcomeTilesProps) {
   const reconciliation = reconcileCounts(counts);
   const tiles = tilesFor(kind);
-  const heading = kind === "loans" ? "Loans" : "Members";
+  const heading = FILE_LABELS[kind];
   const brokenArithmetic =
     reconciliation.overcounted || (runClosed && !reconciliation.balanced);
 

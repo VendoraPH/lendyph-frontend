@@ -56,6 +56,7 @@ export function ActionButton({ blockedReason, wrapperClassName, className, child
             size={props.size}
             className={cn("opacity-50", className)}
             disabled
+            aria-label={props["aria-label"]}
             aria-describedby={reasonId}
           >
             {children}

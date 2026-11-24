@@ -1,4 +1,4 @@
-export type { User, UserStatus, UserBranch, UserRoleDetail } from "./user";
+export type { User, UserStatus, UserBranch, UserRoleDetail, UserBranchHistoryEntry } from "./user";
 export type { StaffMember } from "./staff";
 export type { Loan, LoanCoMaker, AmortizationCalculatorRequest, AmortizationCalculatorResult, AmortizationCalculatorSchedule, AmortizationMethod, LoanFormPreview, LoanFormPreviewRequest, LoanFormPreviewRow, LoanReleasePreview, LoanStatus, InterestType, LoanSchedule, AmortizationPreviewResponse, LoanExtensionPreview, ExtensionInterestOption, LoanAmortizationBalances, AmortizationBalancePeriod, LoanProduct, LoanLedgerEntry } from "./loan";
 export type { Borrower, BorrowerLedgerEntry, BorrowerLoanSummary, CivilStatus, Gender, BorrowerStatus, ValidIdType, EmploymentType } from "./borrower";
@@ -17,6 +17,7 @@ export type {
   LoanApprovalStep,
   LoanApprovalRound,
   LoanApprovalState,
+  LoanApprovalLeftOutStep,
   ApproveStepPayload,
   SendBackStepPayload,
 } from "./loan-approval";
@@ -24,7 +25,7 @@ export { APPROVAL_CHAIN_HIDDEN_STATUSES, isApprovalChainHidden, loanShouldHaveAC
 export type { Repayment, CreateRepaymentData, VoidRepaymentData } from "./repayment";
 export type { Fee, FeeType, FeeConditions, CreateFeeData, UpdateFeeData } from "./fee";
 export type { PenaltyCondition, PenaltyConfig, PenaltyConfigStatus, SavePenaltyConfigData } from "./penalty";
-export type { ShareCapitalLedgerEntry, ShareCapitalMember, ShareCapitalMemberPeriod, ShareCapitalMembersResponse, ShareCapitalBookTotals, Pledge, AutoCreditStatus, AutoCreditMember, AutoCreditProcessResult, CreateLedgerEntryData, UpdatePledgeData, CreatePledgeEntryData, BulkPledgeEntryData } from "./share-capital";
+export type { ShareCapitalLedgerEntry, ShareCapitalMember, ShareCapitalMemberPeriod, ShareCapitalMembersResponse, ShareCapitalBookTotals, Pledge, AutoCreditStatus, AutoCreditMember, AutoCreditProcessResult, CreateLedgerEntryData, CashReferencePreview, UpdatePledgeData, CreatePledgeEntryData, BulkPledgeEntryData } from "./share-capital";
 export type { CollateralType, Collateral, LoanCollateral, CollateralWithMeta, CollateralSource, SecurityStatus, RegisterCollateral, CollateralRegisterGroup, CollateralRegisterSort, CollateralRegisterDirection, CollateralRegisterParams, CollateralRegisterTotals, CollateralRegisterResponse } from "./collateral";
 export { computeSecurityStatus, securityStatusLabel } from "./collateral";
 export type { AutoPayFilter, AutoPayPartialRow, AutoPayLoanIssue, AutoPayLoanRow, AutoPaySummary, AutoPayPreview, AutoPayPreviewQuery, AutoPayProcessData, AutoPayRepaymentResult, AutoPayResult, AutoPayToggleData, AutoPaySettings } from "./auto-pay";
@@ -39,6 +40,7 @@ export type {
   GCashPendingItem,
   CreateGCashTransactionData,
   GCashListFilters,
+  GCashTransactionTotals,
   GCashNonMember,
   GCashNonMemberInput,
   GCashNonMemberFilters,

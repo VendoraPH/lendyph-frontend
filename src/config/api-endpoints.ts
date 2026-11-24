@@ -40,6 +40,8 @@ export const API_ENDPOINTS = {
       `/borrowers/${id}/valid-ids/${validIdId}`,
     LEDGER: (id: number) => `/borrowers/${id}/ledger`,
     LOAN_SUMMARY: (id: number) => `/borrowers/${id}/loan-summary`,
+    // Phase 6 MB-BE4: moving a member to another branch (borrowers:view and borrowers:transfer).
+    TRANSFER: (id: number) => `/borrowers/${id}/transfer`,
   },
   REGISTRATIONS: {
     LIST: "/borrowers",
@@ -270,6 +272,7 @@ export const API_ENDPOINTS = {
     DEACTIVATE: (id: number) => `/users/${id}/deactivate`,
     REACTIVATE: (id: number) => `/users/${id}/reactivate`,
     RESET_PASSWORD: (id: number) => `/users/${id}/reset-password`,
+    BRANCH_HISTORY: (id: number) => `/users/${id}/branch-history`,
   },
   STAFF: {
     LIST: "/staff",
@@ -323,6 +326,8 @@ export const API_ENDPOINTS = {
     LEDGER_LIST: "/share-capital/ledger",
     LEDGER_CREATE: "/share-capital/ledger",
     MEMBERS: "/share-capital/members",
+    // Preview of the next CSH-[admin id]-[year]-[0001] cash reference.
+    NEXT_CASH_REFERENCE: "/share-capital/cash-reference/next",
   },
   PLEDGES: {
     LIST: "/pledges",
@@ -530,6 +535,8 @@ export const API_ENDPOINTS = {
     TIME_DEPOSITS: "/savings/time-deposits",
     TIME_DEPOSIT: (id: number) => `/savings/time-deposits/${id}`,
     TIME_DEPOSIT_QUOTE: "/savings/time-deposits/quote",
+    // Preview of the next TD-[admin id]-[year]-[0001] cash placement reference.
+    TIME_DEPOSIT_NEXT_CASH_REFERENCE: "/savings/time-deposits/cash-reference/next",
     TIME_DEPOSIT_SETTLE: (id: number) => `/savings/time-deposits/${id}/settle`,
     TIME_DEPOSIT_PRETERMINATE: (id: number) => `/savings/time-deposits/${id}/preterminate`,
     TIME_DEPOSIT_PRETERMINATION_QUOTE: (id: number) =>
@@ -576,10 +583,10 @@ export const API_ENDPOINTS = {
     LOAN_ASSESSMENT: (loanId: number) => `/credit-scoring/loans/${loanId}/assessment`,
   },
   /**
-   * Loan Origination: online applications from public links. None of these
-   * exist yet; the contract is `@/types/loan-origination` and
-   * `docs/LOAN_ORIGINATION_BACKEND_HANDOFF.md`. The screens stay behind
-   * NEXT_PUBLIC_ENABLE_LOAN_ORIGINATION and show "Not connected yet" (404).
+   * Loan Origination, staff side: `routes/api/loan-origination/*` in the
+   * backend (LO-B1 to LO-B4). The screens stay behind
+   * NEXT_PUBLIC_ENABLE_LOAN_ORIGINATION. "Submit for approval" is the
+   * hand-off; there is no separate convert, and links have no logo upload.
    */
   LOAN_ORIGINATION: {
     DASHBOARD: "/loan-origination/dashboard",
@@ -592,7 +599,6 @@ export const API_ENDPOINTS = {
     REMIND: (id: number) => `/loan-origination/applications/${id}/remind`,
     LINK_MEMBER: (id: number) => `/loan-origination/applications/${id}/link-member`,
     SUBMIT_FOR_APPROVAL: (id: number) => `/loan-origination/applications/${id}/submit-for-approval`,
-    CONVERT: (id: number) => `/loan-origination/applications/${id}/convert`,
     ASSESSMENTS: "/loan-origination/assessments",
     ASSESSMENT: (id: number) => `/loan-origination/applications/${id}/assessment`,
     ASSESSMENT_RERUN: (id: number) => `/loan-origination/applications/${id}/assessment/rerun`,
@@ -606,23 +612,30 @@ export const API_ENDPOINTS = {
     DOCUMENT_DOWNLOAD: (docId: number) => `/loan-origination/documents/${docId}/download`,
     LINKS: "/loan-origination/links",
     LINK: (id: number) => `/loan-origination/links/${id}`,
-    LINK_LOGO: (id: number) => `/loan-origination/links/${id}/logo`,
+    NOTICES: "/loan-origination/notices",
     SETTINGS: "/loan-origination/settings",
   },
   /**
-   * The applicant's side of Loan Origination: no Lendy account, a link token
-   * and, after the OTP, an `X-Application-Session` header. Not built yet.
+   * The applicant's side of Loan Origination (LO-B2,
+   * `routes/api/public-apply/intake.php`): no Lendy account, a link token and,
+   * after the code step, an `X-Application-Session` header. Every route
+   * answers 404 while the server switch (LOAN_ORIGINATION_ENABLED) is off.
+   * Document ids are the documents' random public ids. The token comes from
+   * the page address (decoded, so `%2F` arrives as `/`) and is encoded back,
+   * like the document id, so each stays one path segment.
    */
   PUBLIC_APPLY: {
-    PORTAL: (token: string) => `/public/apply/${token}`,
-    OTP_REQUEST: (token: string) => `/public/apply/${token}/otp`,
-    OTP_VERIFY: (token: string) => `/public/apply/${token}/otp/verify`,
-    DRAFT: (token: string) => `/public/apply/${token}/draft`,
-    ESTIMATE: (token: string) => `/public/apply/${token}/estimate`,
-    DOCUMENTS: (token: string) => `/public/apply/${token}/documents`,
-    DOCUMENT: (token: string, docId: number) => `/public/apply/${token}/documents/${docId}`,
-    SUBMIT: (token: string) => `/public/apply/${token}/submit`,
-    TRACK: (token: string) => `/public/apply/${token}/track`,
+    PORTAL: (token: string) => `/public-apply/${encodeURIComponent(token)}`,
+    OTP_REQUEST: (token: string) => `/public-apply/${encodeURIComponent(token)}/otp`,
+    OTP_VERIFY: (token: string) => `/public-apply/${encodeURIComponent(token)}/otp/verify`,
+    DRAFT: (token: string) => `/public-apply/${encodeURIComponent(token)}/draft`,
+    ESTIMATE: (token: string) => `/public-apply/${encodeURIComponent(token)}/estimate`,
+    DOCUMENTS: (token: string) => `/public-apply/${encodeURIComponent(token)}/documents`,
+    DOCUMENT: (token: string, documentId: string) =>
+      `/public-apply/${encodeURIComponent(token)}/documents/${encodeURIComponent(documentId)}`,
+    SUBMIT: (token: string) => `/public-apply/${encodeURIComponent(token)}/submit`,
+    LOGOUT: (token: string) => `/public-apply/${encodeURIComponent(token)}/logout`,
+    TRACK: (token: string) => `/public-apply/${encodeURIComponent(token)}/track`,
   },
   /**
    * Automated due-date reminders. None of these exist yet: the scheduler,
@@ -736,6 +749,11 @@ export const API_ENDPOINTS = {
     REPORT_SUBMISSION_EVIDENCE: (id: number, submissionId: number) => `/amla/reports/${id}/submissions/${submissionId}/evidence`,
     REPORT_EXPORT: (id: number) => `/amla/reports/${id}/export`,
     FILING_DEADLINES: "/amla/filing-deadlines",
+    /** AMLA-B7: the ten reports (each needs its own key), their server exports and the dashboard counts. */
+    COMPLIANCE_REPORTS: "/amla/compliance-reports",
+    COMPLIANCE_REPORT: (key: string) => `/amla/compliance-reports/${encodeURIComponent(key)}`,
+    COMPLIANCE_REPORT_EXPORTS: (key: string) => `/amla/compliance-reports/${encodeURIComponent(key)}/exports`,
+    DASHBOARD_COUNTS: "/amla/dashboard/counts",
   },
   /**
    * CDA Compliance (CDA design §3). Every route needs `branches:view_all` plus

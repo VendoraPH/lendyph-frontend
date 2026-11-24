@@ -28,7 +28,7 @@ export default function Page() {
             <p className="flex shrink-0 items-start gap-2 rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
               <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
               Both reports apply only while the cooperative holds a valid Certificate of Tax Exemption for the year. Set
-              the CTE in CDA Settings.
+              the CTE in Settings → CDA.
             </p>
             <Tabs defaultValue="atir" className={FIT_CLASSES.section}>
               <TabsList className="shrink-0">

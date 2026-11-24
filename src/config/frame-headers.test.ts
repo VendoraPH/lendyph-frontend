@@ -65,3 +65,23 @@ describe("the Member Portal is never framed", () => {
     }
   });
 });
+
+const APPLY_PATHS = ["/apply/Tq7m2Xc9Lp4Rz8Kd1Vb6Nw3Hy5Gf0Sa2", "/apply/Tq7m2Xc9Lp4Rz8Kd1Vb6Nw3Hy5Gf0Sa2/track"];
+
+describe("the public loan application is never framed", () => {
+  test("/apply sends DENY and frame-ancestors 'none', with the portal's referrer policy", async () => {
+    for (const path of APPLY_PATHS) {
+      const headers = await headersFor(path);
+      assert.equal(headers["X-Frame-Options"], "DENY", path);
+      assert.equal(headers["Content-Security-Policy"], "frame-ancestors 'none'", path);
+      assert.equal(headers["Referrer-Policy"], "same-origin", path);
+    }
+  });
+
+  test("its rule comes after the staff rule, so it wins wherever both could match", async () => {
+    const sources = (((await nextConfig.headers?.()) ?? []) as HeaderRoute[]).map((route) => route.source);
+    const apply = sources.indexOf("/apply/:path*");
+    assert.ok(apply > 0, "the /apply rule");
+    assert.ok(apply > sources.findIndex((source) => source.startsWith("/((?!")), "after the staff rule");
+  });
+});

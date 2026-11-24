@@ -8,7 +8,6 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Switch } from "@/components/ui/switch";
 import { useBranches } from "@/hooks";
 import { useDialogOpening } from "@/hooks/use-dialog-opening";
-import { calendarDate, formatDateISO } from "@/lib/format";
 import { branchPicker } from "@/lib/user-branches";
 import { loanOriginationService } from "@/services";
 import { useWorkingBranch } from "@/hooks/use-working-branch";
@@ -16,34 +15,11 @@ import { useAuthStore } from "@/store";
 import type { ApplicationLink, ApplicationLinkInput } from "@/types/loan-origination";
 import { useLoanProducts } from "../../../reminders/_hooks/use-loan-products";
 import { ActionDialog } from "../../_components/action-dialog";
-
-const EMPTY: ApplicationLinkInput = {
-  name: "",
-  active: true,
-  branch_id: null,
-  loan_product_ids: [],
-  expires_at: null,
-  display_name: null,
-  contact_phone: null,
-  contact_email: null,
-};
-
-function fromLink(l: ApplicationLink): ApplicationLinkInput {
-  return {
-    name: l.name,
-    active: l.active,
-    branch_id: l.branch_id,
-    loan_product_ids: l.loan_product_ids,
-    expires_at: l.expires_at ? formatDateISO(calendarDate(l.expires_at)) : null,
-    display_name: l.display_name,
-    contact_phone: l.contact_phone,
-    contact_email: l.contact_email,
-  };
-}
+import { emptyLinkInput, linkInputFrom } from "../../_lib/links";
 
 const orNull = (v: string) => (v.trim() === "" ? null : v);
 
-/** Creates a link, or edits one (`link` set). The logo uploads after the link is saved. */
+/** Creates a link, or edits one (`link` set). The server makes the token; links have no logo. */
 export function LinkFormDialog({
   link,
   open,
@@ -61,30 +37,17 @@ export function LinkFormDialog({
   const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
   const picker = branchPicker(branches, caller, viewAll);
   const { branchId: working } = useWorkingBranch();
-  const [form, setForm] = useState<ApplicationLinkInput>(EMPTY);
-  const [logo, setLogo] = useState<File | null>(null);
-  // Without branches:view_all a link belongs to one of the caller's branches:
-  // "Default branch" (the company setting) may be a branch they can't see.
+  const [form, setForm] = useState<ApplicationLinkInput>(() => emptyLinkInput(null));
+  // Without branches:view_all a link belongs to one of the caller's branches;
+  // a link for every branch needs view_all.
   const ownBranchOnly = !viewAll;
   if (useDialogOpening(open, link)) {
     // A new link starts in the working branch (multi-branch flag), else as before.
-    setForm(link ? fromLink(link) : { ...EMPTY, branch_id: working ?? (ownBranchOnly ? (picker.branches[0]?.id ?? null) : null) });
-    setLogo(null);
+    setForm(link ? linkInputFrom(link) : emptyLinkInput(working ?? (ownBranchOnly ? (picker.branches[0]?.id ?? null) : null)));
   }
   const set = (patch: Partial<ApplicationLinkInput>) => setForm((f) => ({ ...f, ...patch }));
   const toggleProduct = (id: number, on: boolean) =>
     set({ loan_product_ids: on ? [...form.loan_product_ids, id] : form.loan_product_ids.filter((x) => x !== id) });
-
-  const save = async () => {
-    const saved = link
-      ? await loanOriginationService.updateLink(link.id, form)
-      : await loanOriginationService.createLink(form);
-    if (logo) {
-      const data = new FormData();
-      data.append("logo", logo);
-      await loanOriginationService.uploadLinkLogo(saved.id, data);
-    }
-  };
 
   return (
     <ActionDialog
@@ -96,14 +59,14 @@ export function LinkFormDialog({
       successMessage={link ? "Link saved" : "Link created"}
       errorMessage="Could not save the link"
       canConfirm={form.name.trim() !== "" && (!ownBranchOnly || form.branch_id !== null)}
-      onConfirm={save}
+      onConfirm={() => (link ? loanOriginationService.updateLink(link.id, form) : loanOriginationService.createLink(form))}
       onDone={onDone}
       size="lg"
     >
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5 sm:col-span-2">
           <Label htmlFor="link-name">Name (staff only)</Label>
-          <Input id="link-name" value={form.name} onChange={(e) => set({ name: e.target.value })} placeholder="Facebook campaign, June" />
+          <Input id="link-name" maxLength={100} value={form.name} onChange={(e) => set({ name: e.target.value })} placeholder="Facebook campaign, June" />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="link-branch">Branch</Label>
@@ -118,7 +81,7 @@ export function LinkFormDialog({
                 Choose a branch
               </NativeSelectOption>
             ) : (
-              <NativeSelectOption value="">Default branch</NativeSelectOption>
+              <NativeSelectOption value="">Every branch</NativeSelectOption>
             )}
             {picker.branches.map((b) => (
               <NativeSelectOption key={b.id} value={b.id}>
@@ -136,23 +99,25 @@ export function LinkFormDialog({
             onChange={(e) => set({ expires_at: e.target.value || null })}
           />
         </div>
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 sm:col-span-2">
           <Label htmlFor="link-display">Name shown to applicants</Label>
-          <Input id="link-display" value={form.display_name ?? ""} onChange={(e) => set({ display_name: orNull(e.target.value) })} />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="link-logo">Logo (optional)</Label>
-          <Input id="link-logo" type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => setLogo(e.target.files?.[0] ?? null)} />
+          <Input
+            id="link-display"
+            maxLength={100}
+            value={form.display_name ?? ""}
+            onChange={(e) => set({ display_name: orNull(e.target.value) })}
+          />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="link-phone">Contact phone</Label>
-          <Input id="link-phone" value={form.contact_phone ?? ""} onChange={(e) => set({ contact_phone: orNull(e.target.value) })} />
+          <Input id="link-phone" maxLength={30} value={form.contact_phone ?? ""} onChange={(e) => set({ contact_phone: orNull(e.target.value) })} />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="link-email">Contact email</Label>
           <Input
             id="link-email"
             type="email"
+            maxLength={150}
             value={form.contact_email ?? ""}
             onChange={(e) => set({ contact_email: orNull(e.target.value) })}
           />
@@ -176,6 +141,15 @@ export function LinkFormDialog({
       <label className="flex items-center gap-2 text-sm">
         <Switch checked={form.active} onCheckedChange={(active) => set({ active })} />
         Accepting applications
+      </label>
+      <label className="flex items-start gap-2 text-sm">
+        <Switch className="mt-0.5" checked={form.is_test} onCheckedChange={(is_test) => set({ is_test })} />
+        <span>
+          Test link
+          <span className="block text-xs text-muted-foreground">
+            Its applications stay out of the dashboard. On staging, only a test link shows test codes to the allowed staff numbers.
+          </span>
+        </span>
       </label>
     </ActionDialog>
   );

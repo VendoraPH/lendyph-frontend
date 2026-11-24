@@ -1,8 +1,15 @@
 "use client";
 
-import { formatCurrency } from "@/lib/format";
+import { rateWithPeriod } from "@/lib/loan-terms";
 import { cn } from "@/lib/utils";
-import type { PublicLoanProduct } from "@/types/loan-origination";
+import type { PublicProduct } from "@/types/public-application";
+import { amountRange, termRange } from "../_lib/portal-state";
+
+/** A product's limits and rate in one line, from the server's own figures. */
+export function ProductFacts({ product }: { product: PublicProduct }) {
+  const facts = [amountRange(product), termRange(product), rateWithPeriod(product.interest_rate, product.interest_rate_frequency)];
+  return <span className="block text-sm">{facts.filter(Boolean).join(" · ")}</span>;
+}
 
 /** Choosing the product first lets later steps show its limits. */
 export function StepProduct({
@@ -11,7 +18,7 @@ export function StepProduct({
   error,
   onChange,
 }: {
-  products: PublicLoanProduct[];
+  products: PublicProduct[];
   value: number | null;
   error?: string;
   onChange: (id: number) => void;
@@ -27,20 +34,11 @@ export function StepProduct({
             value === p.id ? "border-brand-orange bg-brand-orange/5" : "hover:border-foreground/30",
           )}
         >
-          <input
-            type="radio"
-            name="loan-product"
-            className="mt-1"
-            checked={value === p.id}
-            onChange={() => onChange(p.id)}
-          />
+          <input type="radio" name="loan-product" className="mt-1" checked={value === p.id} onChange={() => onChange(p.id)} />
           <span className="space-y-1">
             <span className="block font-medium">{p.name}</span>
             {p.description && <span className="block text-sm text-muted-foreground">{p.description}</span>}
-            <span className="block text-sm">
-              {formatCurrency(p.min_amount)} to {formatCurrency(p.max_amount)} · {p.min_term} to {p.max_term} {p.term_unit} ·{" "}
-              {p.interest_rate}% {p.interest_rate_frequency.replace(/_/g, " ")}
-            </span>
+            <ProductFacts product={p} />
             {p.eligibility && <span className="block text-xs text-muted-foreground">Who may apply: {p.eligibility}</span>}
           </span>
         </label>

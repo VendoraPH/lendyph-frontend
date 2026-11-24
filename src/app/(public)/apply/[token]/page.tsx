@@ -3,29 +3,33 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import type { ApplicationSession, SubmitResult } from "@/types/loan-origination";
+import type { ApplicantSession, Submitted } from "@/types/public-application";
 import { Confirmation } from "./_components/confirmation";
 import { Landing } from "./_components/landing";
-import { OtpVerify, type VerifiedContact } from "./_components/otp-verify";
+import { OtpVerify } from "./_components/otp-verify";
 import { PortalError, PortalLoading, PortalShell } from "./_components/portal-shell";
 import { Wizard } from "./_components/wizard";
 import { usePortal } from "./_hooks/use-portal";
 
 type Mode =
-  | { kind: "landing" }
-  | { kind: "resume" }
-  | { kind: "wizard"; session: ApplicationSession | null; contact: VerifiedContact | null }
-  | { kind: "done"; result: SubmitResult };
+  | { kind: "landing"; notice: string | null }
+  | { kind: "resume"; notice: string | null; mobile: string }
+  | { kind: "wizard"; session: ApplicantSession | null; mobile: string }
+  | { kind: "done"; result: Submitted | null; already: boolean };
+
+const SIGNED_OUT = "You signed out. Your answers are saved: continue any time with a new code.";
 
 /**
  * The public loan application: landing, then an eight-step wizard that saves
  * as the applicant goes, then a reference number. The session lives only in
- * memory; a returning applicant verifies their mobile again to resume.
+ * memory; a returning applicant verifies their mobile again to resume. A
+ * session that ends asks for a new code, a link that stops taking
+ * applications shows why, and signing out always works.
  */
 export default function ApplyPage() {
   const { token } = useParams<{ token: string }>();
-  const { portal, error, loading } = usePortal(token);
-  const [mode, setMode] = useState<Mode>({ kind: "landing" });
+  const { portal, error, loading, reload } = usePortal(token);
+  const [mode, setMode] = useState<Mode>({ kind: "landing", notice: null });
 
   const content = () => {
     if (loading) return <PortalLoading />;
@@ -36,24 +40,30 @@ export default function ApplyPage() {
           <Landing
             token={token}
             portal={portal}
-            onStart={() => setMode({ kind: "wizard", session: null, contact: null })}
-            onResume={() => setMode({ kind: "resume" })}
+            notice={mode.notice}
+            onStart={() => setMode({ kind: "wizard", session: null, mobile: "" })}
+            onResume={() => setMode({ kind: "resume", notice: null, mobile: "" })}
           />
         );
       case "resume":
         return (
-          <div className="space-y-4 rounded-xl border bg-white p-4 sm:p-6">
+          <div className="space-y-4 rounded-xl border bg-card p-4 sm:p-6">
             <div>
               <h1 className="text-xl font-semibold">Continue your application</h1>
-              <p className="text-sm text-muted-foreground">Enter the mobile number you applied with. We send a code to confirm it is you.</p>
+              <p className="text-sm text-muted-foreground">Enter the mobile number you applied with. We text a code to confirm it is you.</p>
             </div>
+            {mode.notice && (
+              <p className="rounded-lg border bg-muted/40 p-3 text-sm" role="status">
+                {mode.notice}
+              </p>
+            )}
             <OtpVerify
               token={token}
               purpose="resume"
-              channels={portal.otp_channels}
-              onVerified={(session, contact) => setMode({ kind: "wizard", session, contact })}
+              initialMobile={mode.mobile}
+              onVerified={(session, mobile) => setMode({ kind: "wizard", session, mobile })}
             />
-            <Button variant="link" className="h-auto p-0" onClick={() => setMode({ kind: "landing" })}>
+            <Button variant="link" className="h-auto p-0" onClick={() => setMode({ kind: "landing", notice: null })}>
               Back
             </Button>
           </div>
@@ -64,12 +74,18 @@ export default function ApplyPage() {
             token={token}
             portal={portal}
             initialSession={mode.session}
-            initialContact={mode.contact}
-            onDone={(result) => setMode({ kind: "done", result })}
+            initialMobile={mode.mobile}
+            onDone={(result, already) => setMode({ kind: "done", result, already })}
+            onSessionEnded={(notice, mobile) => setMode({ kind: "resume", notice, mobile })}
+            onLinkClosed={() => {
+              reload();
+              setMode({ kind: "landing", notice: null });
+            }}
+            onSignedOut={() => setMode({ kind: "landing", notice: SIGNED_OUT })}
           />
         );
       case "done":
-        return <Confirmation token={token} result={mode.result} />;
+        return <Confirmation token={token} result={mode.result} already={mode.already} />;
     }
   };
 

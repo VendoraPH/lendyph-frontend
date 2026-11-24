@@ -1,80 +1,97 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { ArrowRightLeft, BellRing, HandCoins, MessageSquareMore, Send, StickyNote, UserCheck, UserPlus } from "lucide-react";
+import Link from "next/link";
+import { ArrowRightLeft, BellRing, ExternalLink, MessageSquareMore, Send, StickyNote, UserCheck, UserPlus } from "lucide-react";
+import { DisabledReason } from "@/components/common/disabled-reason";
 import { PermissionButton } from "@/components/common/permission-button";
-import { allowedTransitions, isClosed, isUnsubmitted, reminderNotice } from "@/lib/loan-origination";
+import { Button } from "@/components/ui/button";
+import { usePermission } from "@/hooks";
+import { httpStatusOf } from "@/lib/api-error";
+import { reminderNotice } from "@/lib/loan-origination";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { loanOriginationService } from "@/services";
-import type { ApplicationDetail, ApplicationStatus } from "@/types/loan-origination";
-import { AssignDialog, ConvertDialog, LinkMemberDialog, SubmitForApprovalDialog } from "./handover-actions";
+import type { ApplicationDetail } from "@/types/loan-origination";
+import { applicationActions, linkMemberBlocker, type ApplicationAction } from "../../../_lib/application-view";
+import { handOffBlocker } from "../../../_lib/hand-off";
+import { HandOffDialog } from "./hand-off-dialog";
+import { AssignDialog, LinkMemberDialog } from "./officer-member-dialogs";
 import { NoteDialog, RequestInfoDialog, TransitionDialog } from "./status-actions";
 
-type Open = "transition" | "request" | "note" | "assign" | "link" | "submit" | "convert" | null;
-
-/** Statuses where staff are still reviewing and may ask the applicant for more. */
-const REVIEWING: readonly ApplicationStatus[] = ["submitted", "document_verification", "under_assessment", "pending_approval"];
+type Open = "hand_off" | "change_status" | "request_information" | "assign" | "link_member" | "note" | null;
 
 /**
- * The action row on an application. Each button shows only when the action
- * fits the current status; the server still checks every move.
+ * The action row. What shows follows the server (its `allowed_transitions`,
+ * the hand-off and processing rules); every action sends the version read,
+ * and a 409 reloads the application so staff see what changed.
  */
 export function ApplicationActions({ application: a, onChanged }: { application: ApplicationDetail; onChanged: () => void }) {
-  const router = useRouter();
+  const { can } = usePermission();
   const [open, setOpen] = useState<Open>(null);
-  const closed = isClosed(a.status);
+  const actions = applicationActions(a);
+  const has = (action: ApplicationAction) => actions.includes(action);
   const dialog = (which: Exclude<Open, null>) => ({
     application: a,
     open: open === which,
     onOpenChange: (next: boolean) => setOpen(next ? which : null),
     onDone: onChanged,
+    onFailed: (err: unknown) => {
+      if (httpStatusOf(err) === 409) onChanged();
+    },
   });
 
   const remind = () =>
     loanOriginationService
       .remind(a.id)
       .then((result) => notifySuccess(reminderNotice(result)))
-      .catch((err) => notifyError(err, "Could not send the reminder"));
+      .then(onChanged)
+      .catch((err) => notifyError(err, "Could not record the reminder"));
 
-  const button = (which: Exclude<Open, null>, label: string, Icon: typeof Send, primary = false) => (
-    <PermissionButton
-      permission={which === "convert" ? "loan_origination:convert" : "loan_origination:update"}
-      size="sm"
-      variant={primary ? "default" : "outline"}
-      onClick={() => setOpen(which)}
-    >
+  const button = (which: Exclude<Open, null>, label: string, Icon: typeof Send) => (
+    <PermissionButton permission="loan_origination:update" size="sm" variant="outline" onClick={() => setOpen(which)}>
       <Icon className="mr-1 h-4 w-4" /> {label}
     </PermissionButton>
   );
+  const handOffReason = handOffBlocker(can, a.linked_borrower_id === null);
+  const linkReason = linkMemberBlocker(can);
 
   return (
     <div className="flex flex-wrap gap-2">
-      {a.status === "approved" && a.loan_id === null && button("convert", "Convert to loan", HandCoins, true)}
-      {a.status === "under_assessment" && a.assessment && button("submit", "Submit for approval", Send, true)}
-      {allowedTransitions(a.status).length > 0 && button("transition", "Change status", ArrowRightLeft)}
-      {REVIEWING.includes(a.status) && button("request", "Request information", MessageSquareMore)}
-      {!closed && button("assign", a.assigned_officer_name ? "Reassign" : "Assign officer", UserCheck)}
-      {a.status !== "converted" && button("link", a.linked_borrower_id ? "Change member" : "Link member", UserPlus)}
-      {isUnsubmitted(a.status) && (
+      {has("open_loan") && a.loan_id !== null && (
+        <Button size="sm" nativeButton={false} render={<Link href={`/loans/${a.loan_id}`} />}>
+          <ExternalLink className="mr-1 h-4 w-4" /> Open loan
+        </Button>
+      )}
+      {has("hand_off") && (
+        <DisabledReason reason={handOffReason}>
+          <Button size="sm" disabled={handOffReason !== null} onClick={() => setOpen("hand_off")}>
+            <Send className="mr-1 h-4 w-4" /> Submit for approval
+          </Button>
+        </DisabledReason>
+      )}
+      {has("change_status") && button("change_status", "Change status", ArrowRightLeft)}
+      {has("request_information") && button("request_information", "Request information", MessageSquareMore)}
+      {has("assign") && button("assign", a.assigned_officer_name ? "Reassign" : "Assign officer", UserCheck)}
+      {has("link_member") && (
+        <DisabledReason reason={linkReason}>
+          <Button size="sm" variant="outline" disabled={linkReason !== null} onClick={() => setOpen("link_member")}>
+            <UserPlus className="mr-1 h-4 w-4" /> {a.linked_borrower_id === null ? "Link member" : "Change member"}
+          </Button>
+        </DisabledReason>
+      )}
+      {has("remind") && (
         <PermissionButton permission="loan_origination:update" size="sm" variant="outline" onClick={remind}>
           <BellRing className="mr-1 h-4 w-4" /> Remind applicant
         </PermissionButton>
       )}
-      {button("note", "Add note", StickyNote)}
+      {has("note") && button("note", "Add note", StickyNote)}
 
-      <TransitionDialog {...dialog("transition")} />
-      <RequestInfoDialog {...dialog("request")} />
-      <NoteDialog {...dialog("note")} />
+      <HandOffDialog application={a} open={open === "hand_off"} onOpenChange={(next) => setOpen(next ? "hand_off" : null)} onDone={onChanged} />
+      <TransitionDialog {...dialog("change_status")} />
+      <RequestInfoDialog {...dialog("request_information")} />
       <AssignDialog {...dialog("assign")} />
-      <LinkMemberDialog {...dialog("link")} />
-      <SubmitForApprovalDialog {...dialog("submit")} />
-      <ConvertDialog
-        application={a}
-        open={open === "convert"}
-        onOpenChange={(next) => setOpen(next ? "convert" : null)}
-        onConverted={(loanId) => router.push(`/loans/${loanId}`)}
-      />
+      <LinkMemberDialog {...dialog("link_member")} />
+      <NoteDialog {...dialog("note")} />
     </div>
   );
 }

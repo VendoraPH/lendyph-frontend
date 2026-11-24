@@ -17,16 +17,41 @@ export const PAYMENT_CREATE_GATE: PermissionGate = {
   tooltip: "Your role doesn't have permission to record payments",
 };
 
-/** An upon-maturity payment is checked against the server's payment preview. */
-export const UPON_MATURITY_PREVIEW_GATE: PermissionGate = {
+/**
+ * A payment on a loan that can be extended (a one-month loan) is checked
+ * against the server's payment preview, which decides whether it asks
+ * "Extend loan?" first.
+ */
+export const ONE_MONTH_PREVIEW_GATE: PermissionGate = {
   permission: "payments:view",
-  tooltip: "Checking an upon-maturity payment needs permission to view payments",
+  tooltip: "Checking a payment on a one-month loan needs permission to view payments",
+};
+
+/** POST /loans/{loan}/extend (ExtendLoanRequest), and "Yes, extend" on a partial payment. */
+export const LOAN_EXTEND_GATE: PermissionGate = {
+  permission: "loans:extend",
+  tooltip: "Your role doesn't have permission to extend loans",
 };
 
 /** POST /loans/{loan}/adjustments (StoreLoanAdjustmentRequest). */
 export const LOAN_ADJUSTMENT_CREATE_GATE: PermissionGate = {
   permission: "loan_adjustments:create",
   tooltip: "Your role doesn't have permission to request loan adjustments",
+};
+
+/**
+ * PATCH /loan-adjustments/{id}/approve and /reject: both check
+ * loan_adjustments:approve (ApproveLoanAdjustmentRequest).
+ */
+export const LOAN_ADJUSTMENT_DECIDE_GATE: PermissionGate = {
+  permission: "loan_adjustments:approve",
+  tooltip: "Your role doesn't have permission to approve or reject loan adjustments",
+};
+
+/** PATCH /loan-adjustments/{id}/apply: the controller checks loan_adjustments:approve too. */
+export const LOAN_ADJUSTMENT_APPLY_GATE: PermissionGate = {
+  permission: "loan_adjustments:approve",
+  tooltip: "Your role doesn't have permission to apply loan adjustments",
 };
 
 /**
@@ -56,15 +81,16 @@ export const AUTO_PAY_TOGGLE_GATE: PermissionGate = {
 };
 
 /**
- * Record Payment on the loan page: recording needs payments:create, and an
- * upon-maturity loan's payment also needs payments:view for its preview. The
- * missing permission's reason is the one shown.
+ * Record Payment on the loan page: recording needs payments:create, and on a
+ * loan whose partial payment asks "Extend loan?" (`asksToExtend`) the payment
+ * also needs payments:view for its preview. The missing permission's reason
+ * is the one shown.
  */
 export function recordPaymentGate(
-  uponMaturity: boolean,
+  asksToExtend: boolean,
   can: (permission: Permission) => boolean,
 ): PermissionGate {
-  return uponMaturity && can(PAYMENT_CREATE_GATE.permission)
-    ? UPON_MATURITY_PREVIEW_GATE
+  return asksToExtend && can(PAYMENT_CREATE_GATE.permission)
+    ? ONE_MONTH_PREVIEW_GATE
     : PAYMENT_CREATE_GATE;
 }

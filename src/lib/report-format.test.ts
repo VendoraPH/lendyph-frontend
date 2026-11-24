@@ -1,6 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DASH, formatRatePercent, formatValue, rateOrDash } from "./report-format";
+import { DASH, formatCountOf, formatRatePercent, formatValue, rateOrDash } from "./report-format";
+
+test("a count reads with its noun in the right number", () => {
+  assert.equal(formatCountOf(1, "value"), "1 value");
+  assert.equal(formatCountOf(0, "value"), "0 values");
+  assert.equal(formatCountOf(2_500, "value"), "2,500 values");
+  assert.equal(formatCountOf(1, "entry", "entries"), "1 entry");
+  assert.equal(formatCountOf(3, "entry", "entries"), "3 entries");
+});
 
 test("rate: a stored rate prints with every place it has", () => {
   assert.equal(formatValue(2.5, "rate"), "2.5%");

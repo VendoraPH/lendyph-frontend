@@ -33,6 +33,14 @@ import {
 import type { ApiRole } from "@/services/role.service";
 import { roleDisplayName } from "@/lib/role-display-name";
 import { stepRoleOptions } from "./_lib/step-role-options";
+import {
+  minimumLabel,
+  minimumRuleFor,
+  minimumToSend,
+  sameMinimum,
+  stepMinimumErrors,
+  withMinimum,
+} from "./_lib/step-minimum";
 import { CdaReviewChain } from "./_components/cda-review-chain";
 import { env } from "@/config/env";
 import {
@@ -119,6 +127,9 @@ interface StepFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   step: ApprovalChainStep | null; // null = add
+  /** The chain on screen, and where the step sits in it (a new step goes at the end). */
+  steps: ApprovalChainStep[];
+  index: number;
   existingIds: string[];
   roles: ApiRole[];
   onSave: (step: ApprovalChainStep) => void;
@@ -128,6 +139,8 @@ function StepFormDialog({
   open,
   onOpenChange,
   step,
+  steps,
+  index,
   existingIds,
   roles,
   onSave,
@@ -137,15 +150,22 @@ function StepFormDialog({
   const [role, setRole] = useState<string>("");
   const [kind, setKind] = useState<ChainStepKind>("approve");
   const [status, setStatus] = useState<string>("");
+  const [minimum, setMinimum] = useState("");
   // Active roles, plus the step's own role when it has since been
   // deactivated, so the trigger reads "Name (inactive)", never the key.
   const roleOptions = stepRoleOptions(roles, role);
+  // Only an approval step after the first may carry a minimum principal; the
+  // Submit step, the first approval step and the Release step always apply.
+  const minimumRule = minimumRuleFor(steps, index, kind);
+  // A minimum this step has but can't keep where it is: saving drops it.
+  const minimumDropped = !minimumRule.allowed && !!step?.min_principal;
 
   if (useDialogOpening(open, step)) {
     setName(step?.name ?? "");
     setRole(step?.role ?? "");
     setKind(step?.kind ?? "approve");
     setStatus(step?.status ?? "");
+    setMinimum(step?.min_principal ?? "");
   }
 
   function handleSave() {
@@ -158,13 +178,18 @@ function StepFormDialog({
       return;
     }
     const id = isEdit && step ? step.id : generateUniqueId(name, existingIds);
-    onSave({
-      id,
-      name: name.trim(),
-      role: role.trim(),
-      kind,
-      status: status.trim() || null,
-    });
+    onSave(
+      withMinimum(
+        {
+          id,
+          name: name.trim(),
+          role: role.trim(),
+          kind,
+          status: status.trim() || null,
+        },
+        minimumRule.allowed ? minimumToSend(minimum) : null,
+      ),
+    );
     onOpenChange(false);
   }
 
@@ -256,6 +281,32 @@ function StepFormDialog({
               Shown as the loan&apos;s status while it waits at this step.
             </p>
           </div>
+          {minimumRule.allowed ? (
+            <div className="space-y-2">
+              <Label htmlFor="step-min-principal">Minimum Principal (₱)</Label>
+              <Input
+                id="step-min-principal"
+                inputMode="decimal"
+                placeholder="No minimum"
+                value={minimum}
+                onChange={(e) => setMinimum(e.target.value)}
+                className="text-right font-mono"
+                aria-describedby="step-min-principal-hint"
+              />
+              <p id="step-min-principal-hint" className="text-xs text-muted-foreground">
+                Loans with a smaller principal skip this step. A restructure counts the
+                larger of its new principal and the amount it restructures. Leave empty to
+                apply this step to every loan.
+              </p>
+            </div>
+          ) : (
+            (kind === "approve" || minimumDropped) && (
+              <p className="text-xs text-muted-foreground" role="note">
+                {minimumRule.reason}
+                {minimumDropped && " Saving this step removes its minimum."}
+              </p>
+            )
+          )}
         </div>
         <div className="flex justify-end gap-3 pt-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -308,6 +359,20 @@ function ApprovalWorkflowContent() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingStep, setEditingStep] = useState<ApprovalChainStep | null>(null);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  // The server's refusals of step minimums from the last save, by step id,
+  // shown under their step until it changes. Kept with the tab they came from.
+  const [minimumErrors, setMinimumErrors] = useState<{
+    tab: WorkflowTab;
+    byStep: Record<string, string>;
+  } | null>(null);
+  const shownMinimumErrors = minimumErrors?.tab === activeTab ? minimumErrors.byStep : {};
+  const forgetMinimumError = (id: string) =>
+    setMinimumErrors((prev) => {
+      if (!prev || !(id in prev.byStep)) return prev;
+      const byStep = { ...prev.byStep };
+      delete byStep[id];
+      return { ...prev, byStep };
+    });
 
   useEffect(() => {
     let cancelled = false;
@@ -362,7 +427,8 @@ function ApprovalWorkflowContent() {
         s.name !== saved.name ||
         s.role !== saved.role ||
         s.kind !== saved.kind ||
-        (s.status ?? null) !== (saved.status ?? null)
+        (s.status ?? null) !== (saved.status ?? null) ||
+        !sameMinimum(s.min_principal, saved.min_principal)
       );
     });
   }, [steps, savedSteps]);
@@ -387,6 +453,7 @@ function ApprovalWorkflowContent() {
   }
 
   function handleSaveStep(newStep: ApprovalChainStep) {
+    forgetMinimumError(newStep.id);
     setSteps((prev) => {
       if (editingStep) {
         return prev.map((s) => (s.id === editingStep.id ? newStep : s));
@@ -397,11 +464,14 @@ function ApprovalWorkflowContent() {
   }
 
   function handleDeleteStep(id: string) {
+    forgetMinimumError(id);
     setSteps((prev) => prev.filter((s) => s.id !== id));
     toast.success("Step removed");
   }
 
   function moveStep(index: number, direction: "up" | "down") {
+    // A refusal can depend on the step's place in the chain, so a move clears them.
+    setMinimumErrors(null);
     setSteps((prev) => {
       const next = [...prev];
       const target = direction === "up" ? index - 1 : index + 1;
@@ -418,6 +488,7 @@ function ApprovalWorkflowContent() {
     }
     try {
       setSaving(true);
+      setMinimumErrors(null);
       if (activeTab === "normal") {
         await approvalWorkflowService.saveNormal(steps);
         // Refetch from server so display reflects server truth — catches any
@@ -433,6 +504,9 @@ function ApprovalWorkflowContent() {
       }
       toast.success(`${activeTab === "normal" ? "Normal" : "Policy Exception"} workflow saved`);
     } catch (err) {
+      // The server refuses a minimum on a step that can't carry one, or one
+      // that isn't an amount, in words; each refusal shows under its step too.
+      setMinimumErrors({ tab: activeTab, byStep: stepMinimumErrors(err, steps) });
       notifyError(err, "We couldn't save the workflow. Please try again.");
     } finally {
       setSaving(false);
@@ -440,6 +514,7 @@ function ApprovalWorkflowContent() {
   }
 
   function handleRevert() {
+    setMinimumErrors(null);
     if (activeTab === "normal") {
       setNormalSteps(savedNormalSteps);
     } else {
@@ -451,6 +526,7 @@ function ApprovalWorkflowContent() {
   async function handleReset() {
     try {
       setSaving(true);
+      setMinimumErrors(null);
       if (activeTab === "normal") {
         const defaults = await approvalWorkflowService.resetNormal();
         setNormalSteps(defaults);
@@ -688,6 +764,8 @@ function ApprovalWorkflowContent() {
                   const meta = KIND_META[step.kind];
                   const Icon = meta.icon;
                   const apiRole = roles.find((r) => r.name === step.role);
+                  const minimum = minimumLabel(step.min_principal);
+                  const minimumError = shownMinimumErrors[step.id];
                   return (
                     <div
                       key={step.id}
@@ -763,6 +841,16 @@ function ApprovalWorkflowContent() {
                             </>
                           )}
                         </p>
+                        {minimum && (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {minimum}: loans with a smaller principal skip this step.
+                          </p>
+                        )}
+                        {minimumError && (
+                          <p className="text-xs text-red-600 dark:text-red-400 mt-1" role="alert">
+                            {minimumError}
+                          </p>
+                        )}
                       </div>
 
                       {/* Actions — wrap to their own row on very narrow widths */}
@@ -797,6 +885,8 @@ function ApprovalWorkflowContent() {
             open={formOpen}
             onOpenChange={setFormOpen}
             step={editingStep}
+            steps={steps}
+            index={editingStep ? steps.findIndex((s) => s.id === editingStep.id) : steps.length}
             existingIds={existingIds}
             roles={roles}
             onSave={handleSaveStep}

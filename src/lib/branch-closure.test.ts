@@ -22,9 +22,13 @@ const blocked = [
   { key: "assigned_users", label: "Assigned users", count: 0, amount: null, clear: true },
 ];
 
+// A branch is suspended before anyone asks to close it (backend #354), so the
+// usual starting point is a suspended branch.
 function info(over: Partial<BranchClosureInfo> = {}): BranchClosureInfo {
-  return { branch_id: 4, status: "active", can_close: true, checklist: clearList, request: null, ...over };
+  return { branch_id: 4, status: "suspended", can_close: true, checklist: clearList, request: null, ...over };
 }
+
+const SUSPEND_FIRST = "Suspend this branch before asking to close it.";
 
 function pending(requester: number) {
   return {
@@ -94,6 +98,27 @@ test("anyone who may manage can ask, once nothing keeps the branch open", () => 
     reject: false,
     cancel: false,
   });
+});
+
+test("an active branch is suspended first: Ask to close shows, disabled, with the reason", () => {
+  assert.equal(closureState(info({ status: "active", can_close: false }), branch), SUSPEND_FIRST);
+  assert.deepEqual(closureActions(info({ status: "active", can_close: false }), branch, ME, true), {
+    request: true,
+    requestDisabledReason: SUSPEND_FIRST,
+    approve: false,
+    reject: false,
+    cancel: false,
+  });
+  // The main office reads its own reason before the suspend-first one.
+  assert.equal(
+    closureState(info({ status: "active", can_close: false }), { is_main_office: true }),
+    "The main office stays open. Make another branch the main office first.",
+  );
+  // A request already waiting still reads as waiting, whatever the status.
+  assert.equal(
+    closureState(info({ status: "active", request: pending(OTHER) }), branch),
+    "Waiting for approval: Ben Cruz asked to close it on Nov 19, 2026.",
+  );
 });
 
 test("the main office and a closed branch offer no request", () => {

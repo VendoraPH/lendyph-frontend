@@ -43,6 +43,10 @@ export interface SavingsSettings {
   tier3_checkers: number;
   dormancy_months: number;
   large_transaction_alert: MoneyString;
+  /** The days before a time deposit matures on which staff and the member are told, largest first (0 is the day itself). */
+  notice_days: number[];
+  /** How many days before an account turns dormant it is listed as approaching, and staff and the member are warned. */
+  dormancy_warning_days: number;
   /** The rate in force today per holder type. */
   current_tax_rates: Record<SavingsHolderType, RateString>;
   tax_rules: SavingsTaxRule[];
@@ -63,6 +67,10 @@ export interface SavingsSettingsInput {
   tier3_checkers: number;
   dormancy_months: number;
   large_transaction_alert: string;
+  /** 0 to 365, each once, up to 10; [] sends none. */
+  notice_days: number[];
+  /** 0 to 365. */
+  dormancy_warning_days: number;
 }
 
 /** `POST /savings/settings/prepare-books`: what setting up the books did, each a sentence. */
@@ -574,6 +582,8 @@ export type MaturityInstruction = "payout" | "rollover_principal" | "rollover_al
 export interface TimeDeposit {
   id: number;
   certificate_number: string;
+  /** The payment reference; the server's TD-… number for a cash placement once it numbers them. */
+  reference?: string | null;
   borrower_id: number;
   borrower_name: string | null;
   borrower_code: string | null;

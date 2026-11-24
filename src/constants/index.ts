@@ -126,6 +126,16 @@ export const GENDER_OPTIONS = [
   { value: "female", label: "Female" },
 ] as const;
 
+/**
+ * The two member types the backend stores (`Borrower::MEMBER_TYPES`), with the
+ * words every screen shows for them. Here, like `GENDER_OPTIONS`, so the CSV
+ * import's Member Type column validates against one shared list.
+ */
+export const MEMBER_TYPE_OPTIONS = [
+  { value: "regular", label: "Regular" },
+  { value: "associate", label: "Associate" },
+] as const;
+
 export const VALID_ID_OPTIONS = [
   { value: "philippine_id", label: "Philippine National ID (PhilSys)" },
   { value: "drivers_license", label: "Driver's License" },

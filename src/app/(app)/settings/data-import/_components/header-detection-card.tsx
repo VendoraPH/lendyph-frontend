@@ -19,6 +19,7 @@ import { AlertTriangle, Check, FileText, Shuffle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { earlierLayoutNote } from "@/lib/import-schema";
 import { formatCount } from "@/lib/report-format";
 import { cn } from "@/lib/utils";
 import type { FileInspection } from "../_hooks/use-file-precheck";
@@ -48,6 +49,7 @@ export function HeaderDetectionCard({
   const { header, expectedColumns, widths, label } = inspection;
   const found = widths[0]?.columns ?? 0;
   const widthMatches = found === expectedColumns;
+  const layoutNote = widthMatches ? earlierLayoutNote(inspection.shape, found) : null;
   const raggedRows = widths.slice(1).reduce((sum, entry) => sum + entry.rows, 0);
   const detected = header?.isHeader ?? false;
   const groupName = `header-${inspection.kind}`;
@@ -137,6 +139,7 @@ export function HeaderDetectionCard({
               <span className="font-medium">{found}</span> columns found,{" "}
               <span className="font-medium">{expectedColumns}</span> expected.
             </p>
+            {layoutNote && <p className="mt-1 text-muted-foreground">{layoutNote}</p>}
             {raggedRows > 0 && (
               <p className="mt-1 text-muted-foreground">
                 {formatCount(raggedRows)} {raggedRows === 1 ? "row does" : "rows do"} not have{" "}

@@ -246,8 +246,11 @@ export function unitText(value: number | null, unit: ExecutiveCard["unit"], comp
   return `${value.toFixed(2)}%`;
 }
 
-/** "+25.0%" or "−1.50 pts"; null when the server sent no change. */
-function changeText(change: number | null, unit: ExecutiveCard["change_unit"]): string | null {
+/**
+ * "+25.0%" or "−1.50 pts"; null when the server sent no change. The loan
+ * origination dashboard shows its server changes with it too.
+ */
+export function changeText(change: number | null, unit: ExecutiveCard["change_unit"]): string | null {
   if (change === null) return null;
   const sign = change > 0 ? "+" : change < 0 ? "−" : "";
   const size = Math.abs(change);

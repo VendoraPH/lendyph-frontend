@@ -29,6 +29,8 @@ interface ActionDialogProps {
   onConfirm: () => Promise<unknown>;
   /** Called after a successful confirm, before the dialog closes. */
   onDone?: () => void;
+  /** Called after a failed confirm, once the server's words are shown (a 409 reloads the page's record). */
+  onFailed?: (err: unknown) => void;
   size?: "default" | "md" | "lg";
   children?: React.ReactNode;
 }
@@ -50,6 +52,7 @@ export function ActionDialog({
   destructive = false,
   onConfirm,
   onDone,
+  onFailed,
   size = "default",
   children,
 }: ActionDialogProps) {
@@ -63,7 +66,10 @@ export function ActionDialog({
         onDone?.();
         onOpenChange(false);
       })
-      .catch((err) => notifyError(err, errorMessage))
+      .catch((err) => {
+        notifyError(err, errorMessage);
+        onFailed?.(err);
+      })
       .then(() => setBusy(false));
   };
 

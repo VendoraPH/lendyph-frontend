@@ -37,6 +37,13 @@ export interface SavingsDashboardKpis {
   deposits: SavingsCountAmount;
   withdrawals: SavingsCountAmount;
   net_deposit_movement: MoneyString;
+  /**
+   * Savings interest earned but not yet credited, as of today whatever the
+   * period (the Balances report's `total_accrued_interest`, same branch
+   * scope). Shown only: nothing posts until an interest run credits it.
+   * Absent from an API that doesn't send it yet.
+   */
+  accrued_interest?: MoneyString | null;
   interest_credited: { gross: MoneyString; tax: MoneyString; net: MoneyString };
   /** Excess-withdrawal fees: the cooperative's income, never a withdrawal. */
   fees_charged: SavingsCountAmount;

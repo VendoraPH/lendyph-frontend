@@ -4,13 +4,16 @@ import {
   CIVIL_STATUS_OPTIONS,
   GENDER_OPTIONS,
   INTEREST_TYPE_OPTIONS,
+  MEMBER_TYPE_OPTIONS,
   PAYMENT_FREQUENCY_OPTIONS,
   SUFFIX_OPTIONS,
 } from "@/constants";
 import {
+  acceptedWidths,
   columnsFor,
   CUSTOMER_COLUMNS,
   detectHeaderRow,
+  earlierLayoutNote,
   identifyShape,
   LOAN_COLUMNS,
   missingRequiredFields,
@@ -51,8 +54,8 @@ const LOANS_ROW = [
 
 // ── The column tables ──────────────────────────────────────────────────────
 
-test("the customer sheet is 22 columns in the client's exact order", () => {
-  assert.equal(CUSTOMER_COLUMNS.length, 22);
+test("the customer sheet is the client's 22 columns in their exact order, then the four Member Profile columns", () => {
+  assert.equal(CUSTOMER_COLUMNS.length, 26);
   assert.deepEqual(CUSTOMER_HEADER, [
     "Account No.", "Last Name", "First Name", "Middle Name", "Suffix",
     "Birthdate", "Gender", "Civil Status", "Contact Number", "email",
@@ -61,7 +64,37 @@ test("the customer sheet is 22 columns in the client's exact order", () => {
     "Spouse FName (If Married)", "Spouse MName (If Married)",
     "Spouse LName (If Married)", "Spouse Contact No (If Married)",
     "Spouse Occupation (If Married)",
+    // Appended, never inserted: the file is read by position, so a column
+    // anywhere else would move every value of an older file one field over.
+    "Date Hired", "Membership Date", "Member Type", "Membership Number",
   ]);
+});
+
+test("a members file may be in today's layout or the workbook's 22-column one; loans have one", () => {
+  assert.deepEqual(acceptedWidths("customer"), [26, 22]);
+  assert.deepEqual(acceptedWidths("loans"), [18]);
+});
+
+test("the four new columns are optional and typed as the app stores them", () => {
+  const added = CUSTOMER_COLUMNS.slice(22);
+  assert.deepEqual(added.map((c) => [c.key, c.type, c.required]), [
+    ["date_hired", "date", false],
+    ["membership_date", "date", false],
+    ["member_type", "enum", false],
+    ["membership_number", "text", false],
+  ]);
+  assert.equal(column("customer", "membership_number").maxLength, 30);
+});
+
+test("only a file in the earlier layout gets the note, and it says what its rows get", () => {
+  // Member Type is not left blank: the column's default, Regular, is stored.
+  assert.equal(
+    earlierLayoutNote("customer", 22),
+    "This file is in the earlier 22-column layout, without Date Hired, Membership Date, Member Type and Membership Number. Its rows import as before, with Date Hired, Membership Date and Membership Number left blank, and Member Type read as Regular, the default.",
+  );
+  assert.equal(earlierLayoutNote("customer", 26), null);
+  assert.equal(earlierLayoutNote("customer", 24), null);
+  assert.equal(earlierLayoutNote("loans", 18), null);
 });
 
 test("the loans sheet is 18 columns in the client's exact order", () => {
@@ -253,6 +286,22 @@ test("a REORDERED header is flagged rather than mistaken for data", () => {
   assert.equal(result.reordered, true);
 });
 
+test("a header is held to the file's width, as the server holds it", () => {
+  // The workbook's 22 labels over 26-column rows: still the header, but the
+  // four appended columns have no label, which the server refuses.
+  const short = detectHeaderRow(WORKBOOK_HEADER, "customer", 26);
+  assert.equal(short.isHeader, true);
+  assert.deepEqual(
+    short.mismatched.map((m) => [m.index, m.expected, m.found]),
+    [[22, "Date Hired", ""], [23, "Membership Date", ""], [24, "Member Type", ""], [25, "Membership Number", ""]],
+  );
+
+  // Today's 26 labels over rows in the earlier layout: read against their 22.
+  const full = detectHeaderRow(CUSTOMER_HEADER, "customer", 22);
+  assert.equal(full.positionalScore, 1);
+  assert.deepEqual(full.mismatched, []);
+});
+
 test("the loans header is detected against its own label set", () => {
   assert.equal(detectHeaderRow(LOANS_HEADER, "loans").positionalScore, 1);
 });
@@ -327,8 +376,16 @@ test("a record resembling neither sheet is named as neither", () => {
 });
 
 test("column count alone does not decide it", () => {
-  // 22 empty cells is the right width and no evidence of anything.
+  // 22 or 26 empty cells is a right width and no evidence of anything.
   assert.equal(identifyShape(Array(22).fill("")).shape, null);
+  assert.equal(identifyShape(Array(26).fill("")).shape, null);
+});
+
+test("a member row in today's 26-column layout identifies as a customer too", () => {
+  const current = [...CUSTOMER_ROW, "2012-06-01", "2010-03-15", "Associate", "BC-0007"];
+  const guess = identifyShape(current);
+  assert.equal(guess.shape, "customer");
+  assert.equal(guess.customerScore, 1);
 });
 
 test("a customer row missing its trailing spouse columns is still a customer", () => {
@@ -338,12 +395,28 @@ test("a customer row missing its trailing spouse columns is still a customer", (
 // ── normaliseRow ───────────────────────────────────────────────────────────
 
 test("normaliseRow maps positional cells onto named fields", () => {
-  const row = normaliseRow(CUSTOMER_ROW, "customer");
+  const row = normaliseRow([...CUSTOMER_ROW, "2012-06-01", "2010-03-15", "Associate", "BC-0007"], "customer");
   assert.equal(row.account_no, "2020-0041");
   assert.equal(row.birthdate, "03/04/1985");
   assert.equal(row.email, "juan.delacruz@gmail.com");
   assert.equal(row.spouse_occupation, "Teacher");
-  assert.equal(Object.keys(row).length, 22);
+  assert.equal(row.date_hired, "2012-06-01");
+  assert.equal(row.membership_date, "2010-03-15");
+  assert.equal(row.member_type, "Associate");
+  assert.equal(row.membership_number, "BC-0007");
+  assert.equal(Object.keys(row).length, CUSTOMER_COLUMNS.length);
+});
+
+test("a row in the workbook's 22-column layout reads the four new fields as blank", () => {
+  const row = normaliseRow(CUSTOMER_ROW, "customer");
+  assert.equal(row.spouse_occupation, "Teacher", "every old column keeps its place");
+  assert.deepEqual(
+    [row.date_hired, row.membership_date, row.member_type, row.membership_number],
+    ["", "", "", ""],
+  );
+  assert.deepEqual(missingRequiredFields(row, "customer"), []);
+  assert.deepEqual(resolveRowEnums(row, "customer").unknown, []);
+  assert.deepEqual(fieldSizeProblems(row, "customer"), []);
 });
 
 test("normaliseRow maps the loans sheet's own fields", () => {
@@ -358,13 +431,15 @@ test("a short record fills missing fields with blanks, not undefined", () => {
   const row = normaliseRow(["2020-0041", "Dela Cruz"], "customer");
   assert.equal(row.first_name, "");
   assert.equal(row.spouse_occupation, "");
-  assert.equal(Object.keys(row).length, 22);
+  assert.equal(row.membership_number, "");
+  assert.equal(Object.keys(row).length, CUSTOMER_COLUMNS.length);
 });
 
 test("trailing cells beyond the schema are dropped and values trimmed", () => {
-  const row = normaliseRow(["  2020-0041  ", ...CUSTOMER_ROW.slice(1), "extra"], "customer");
+  const row = normaliseRow(["  2020-0041  ", ...CUSTOMER_ROW.slice(1), "", "", "", "", "extra"], "customer");
   assert.equal(row.account_no, "2020-0041");
-  assert.equal(Object.keys(row).length, 22);
+  assert.equal(row.membership_number, "");
+  assert.equal(Object.keys(row).length, CUSTOMER_COLUMNS.length);
 });
 
 // ── Required fields, including the married rule ────────────────────────────
@@ -428,6 +503,7 @@ const VOCABULARIES: [ImportShape, string, readonly EnumOption[]][] = [
   ["customer", "gender", GENDER_OPTIONS],
   ["customer", "civil_status", CIVIL_STATUS_OPTIONS],
   ["customer", "suffix", SUFFIX_OPTIONS],
+  ["customer", "member_type", MEMBER_TYPE_OPTIONS],
   ["loans", "interest_type", INTEREST_TYPE_OPTIONS],
   ["loans", "payment_frequency", PAYMENT_FREQUENCY_OPTIONS],
 ];
@@ -458,6 +534,31 @@ test("closed vocabularies reject, open ones do not", () => {
   assert.equal(column("loans", "interest_type").type, "enum");
   assert.equal(column("loans", "payment_frequency").type, "enum");
   assert.equal(column("customer", "suffix").type, "open-enum");
+  assert.equal(column("customer", "member_type").type, "enum");
+});
+
+test("Member Type is Regular or Associate in any case, stored as the app's value", () => {
+  const type = column("customer", "member_type");
+  assert.deepEqual(MEMBER_TYPE_OPTIONS.map((o) => [o.value, o.label]), [
+    ["regular", "Regular"],
+    ["associate", "Associate"],
+  ]);
+  assert.deepEqual(resolveEnumValue(type, " ASSOCIATE "), { ok: true, value: "associate", label: "Associate" });
+  assert.deepEqual(resolveEnumValue(type, "regular"), { ok: true, value: "regular", label: "Regular" });
+  assert.equal(resolveEnumValue(type, "Premium").ok, false);
+  assert.deepEqual(resolveEnumValue(type, ""), { ok: true, value: "", label: "" }, "blank is not set");
+});
+
+test("a membership number is measured as it will be stored: capitals, no spaces", () => {
+  const thirty = "BC-" + "7".repeat(27);
+  const fits = normaliseRow([...CUSTOMER_ROW, "", "", "", `${thirty.slice(0, 10)} ${thirty.slice(10)}`], "customer");
+  assert.deepEqual(fieldSizeProblems(fits, "customer"), [], "30 characters once its space is gone");
+
+  const over = normaliseRow([...CUSTOMER_ROW, "", "", "", `${thirty}7`], "customer");
+  const problems = fieldSizeProblems(over, "customer");
+  assert.deepEqual(problems.map((p) => [p.key, p.reason, p.severity, p.limit]), [
+    ["membership_number", "too-long", "error", 30],
+  ]);
 });
 
 test("the vocabularies are the ones the app already ships", () => {

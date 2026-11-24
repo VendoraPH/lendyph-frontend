@@ -34,9 +34,9 @@ import type { DateOrder } from "@/lib/import-date";
 import { columnsFor } from "@/lib/import-schema";
 import { loadImportSession, type ImportSession } from "@/lib/import-session";
 import { formatCount } from "@/lib/report-format";
+import { useAuthStore } from "@/store";
 import type { ImportFileKind } from "@/types/data-import";
 import {
-  FILE_LABELS,
   SHAPE_BY_KIND,
   sessionAnswers,
   useFilePrecheck,
@@ -46,6 +46,7 @@ import {
 } from "../_hooks/use-file-precheck";
 import { DateFormatCard } from "./date-format-card";
 import { HeaderDetectionCard } from "./header-detection-card";
+import { FILE_LABELS, filesPhrase, runFileKinds } from "./import-files";
 import { PrecheckErrorsTable } from "./precheck-errors-table";
 import { PrecheckSummary } from "./precheck-summary";
 import { ProductMappingGate } from "./product-mapping-table";
@@ -242,7 +243,10 @@ export function StepCheck({
   session,
   showProductMapping = false,
 }: StepCheckProps) {
-  const precheck = useFilePrecheck(files);
+  // The membership columns need the right to edit members on top of importing,
+  // as the server rules; the pre-check predicts it so the count is believed.
+  const membershipAllowed = useAuthStore((s) => s.hasPermission("borrowers:update"));
+  const precheck = useFilePrecheck(files, { membershipAllowed });
   const [productMap, setProductMap] = useState<Record<string, number>>({});
   const [mappingWarnings, setMappingWarnings] = useState<string[]>([]);
   const {
@@ -334,6 +338,10 @@ export function StepCheck({
 
     if (stored) {
       const mapped = Object.keys(stored.productMap).length;
+      // The run's own files, off the saved session: a members-only run has no
+      // loan products to count and one file to choose again.
+      const storedKinds = runFileKinds(stored.files);
+      const storedPhrase = filesPhrase(storedKinds);
       return (
         <Card>
           <CardHeader>
@@ -384,24 +392,26 @@ export function StepCheck({
                 </div>
               ))}
 
-              <div className="grid gap-1 border-t pt-3 sm:grid-cols-[11rem_1fr] sm:gap-4">
-                <p className="font-medium">Loan products mapped</p>
-                <p className="text-muted-foreground tabular-nums">{formatCount(mapped)}</p>
-              </div>
+              {storedKinds.includes("loans") ? (
+                <div className="grid gap-1 border-t pt-3 sm:grid-cols-[11rem_1fr] sm:gap-4">
+                  <p className="font-medium">Loan products mapped</p>
+                  <p className="text-muted-foreground tabular-nums">{formatCount(mapped)}</p>
+                </div>
+              ) : null}
             </div>
 
             <p className="flex items-start gap-2 rounded-lg border bg-muted/40 p-3 text-sm">
               <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
               <span>
-                If you are not sure these are still right — or the file has changed since — choose
-                the files again and the whole check runs from scratch.
+                If you are not sure these are still right — or the file has changed since — choose{" "}
+                {storedPhrase.again} again and the whole check runs from scratch.
               </span>
             </p>
 
             <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
               <Button variant="outline" onClick={onBack}>
                 <RefreshCw aria-hidden="true" />
-                Choose the files again
+                Choose {storedPhrase.again} again
               </Button>
               <Button
                 onClick={() =>

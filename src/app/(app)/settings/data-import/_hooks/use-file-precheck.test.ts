@@ -18,7 +18,7 @@ import {
 // Fixtures
 // ---------------------------------------------------------------------------
 
-/** A complete, valid Customer Profile row. Mutate a copy to make one bad. */
+/** A complete, valid members file row. Mutate a copy to make one bad. */
 const CUSTOMER: string[] = [
   "2019-00101",
   "Dela Cruz",
@@ -236,6 +236,155 @@ test("a blocked column is not judged row by row — it is one file-level blocker
 });
 
 // ---------------------------------------------------------------------------
+// The four Member Profile columns, and the two layouts
+// ---------------------------------------------------------------------------
+
+/** The same member in today's 26-column layout: the workbook's 22, then four. */
+const CUSTOMER_26: string[] = [...CUSTOMER, "2012-06-01", "2010-03-15", "Associate", "BC-0007"];
+
+const NEW_COLUMN_AT = { date_hired: 22, membership_date: 23, member_type: 24, membership_number: 25 } as const;
+
+function memberRow(overrides: Partial<Record<keyof typeof NEW_COLUMN_AT, string>>, account = "2019-00101"): string[] {
+  const row = [...CUSTOMER_26];
+  row[0] = account;
+  for (const [key, value] of Object.entries(overrides)) {
+    row[NEW_COLUMN_AT[key as keyof typeof NEW_COLUMN_AT]] = value ?? "";
+  }
+  return row;
+}
+
+function isoColumn(key: string, label: string): DateColumnFinding {
+  return {
+    key,
+    label,
+    inference: { status: "resolved", order: null, evidence: null, stats: {} as never },
+    order: null,
+    chosen: false,
+    blocked: false,
+  };
+}
+
+const CURRENT_CONTEXT = {
+  ...CUSTOMER_CONTEXT,
+  expectedColumns: 26,
+  dates: [
+    isoColumn("birthdate", "Birthdate"),
+    isoColumn("date_hired", "Date Hired"),
+    isoColumn("membership_date", "Membership Date"),
+  ],
+  today: "2026-11-24",
+};
+
+test("good values in the four new columns pass the pre-check", () => {
+  const rows = customerRows([
+    CUSTOMER_26,
+    // The birthdate itself is not before the birthdate, and today is not after today.
+    memberRow({ date_hired: "1985-03-12", membership_date: "2026-11-24", member_type: "REGULAR", membership_number: "2019-00102" }, "2019-00102"),
+    // Every new column blank: not set.
+    memberRow({ date_hired: "", membership_date: "", member_type: "", membership_number: "" }, "2019-00103"),
+  ]);
+
+  const result = checkRows(rows, CURRENT_CONTEXT);
+
+  assert.equal(result.errorCount, 0, result.issues.map((issue) => issue.message).join(" | "));
+  assert.equal(result.warningCount, 0);
+});
+
+test("a bad value in a new column fails the row, in words", () => {
+  const cases: Array<[Partial<Record<keyof typeof NEW_COLUMN_AT, string>>, string, RegExp]> = [
+    [{ date_hired: "2026-11-25" }, "Date Hired", /after today, and a date hired can't be in the future/],
+    [{ date_hired: "1980-01-01" }, "Date Hired", /before this member's birthdate/],
+    [{ date_hired: "1900-01-01" }, "Date Hired", /not after 1 January 1900/],
+    [{ date_hired: "last year" }, "Date Hired", /is not a date/],
+    [{ membership_date: "2026-11-25" }, "Membership Date", /after today, and a membership date can't be in the future/],
+    [{ member_type: "Premium" }, "Member Type", /Expected one of: Regular, Associate/],
+    [{ membership_number: "brw-000123" }, "Membership Number", /starts like a member code \(BRW\)/],
+    // Look-alikes of a member code are refused the same way.
+    [{ membership_number: "BRW000123" }, "Membership Number", /starts like a member code \(BRW\)/],
+    [{ membership_number: "BRW-00O123" }, "Membership Number", /starts like a member code \(BRW\)/],
+    [{ membership_number: "NIÑO-01" }, "Membership Number", /plain letters, numbers and punctuation/],
+    [{ membership_number: "7".repeat(31) }, "Membership Number", /31 characters; this field holds 30/],
+    // A spreadsheet placeholder would become the member's sign-in number.
+    [{ membership_number: "-" }, "Membership Number", /has no digits, so it reads as a spreadsheet placeholder/],
+    [{ membership_number: "N/A" }, "Membership Number", /has no digits, so it reads as a spreadsheet placeholder/],
+    [{ membership_number: "0" }, "Membership Number", /is nothing but zeros/],
+    [{ membership_number: "00-00" }, "Membership Number", /is nothing but zeros/],
+  ];
+
+  for (const [override, label, words] of cases) {
+    const result = checkRows(customerRows([memberRow(override)]), CURRENT_CONTEXT);
+    const summary = `${JSON.stringify(override)}: ${result.issues.map((issue) => issue.message).join(" | ")}`;
+
+    assert.equal(result.errorCount, 1, summary);
+    assert.equal(result.failingRows, 1, summary);
+    assert.equal(result.issues[0].column, label, summary);
+    assert.match(result.issues[0].message, words, summary);
+    assert.doesNotMatch(result.issues[0].message, /\b[a-z]+_[a-z_]+\b/, `${summary}: words, never field keys`);
+  }
+});
+
+test("a real membership number may hold zeros, and letters other than a member code's", () => {
+  const rows = customerRows(
+    ["BC-000", "A1", "10", "BR-0007"].map((number, i) => memberRow({ membership_number: number }, `2019-0020${i}`)),
+  );
+
+  const result = checkRows(rows, CURRENT_CONTEXT);
+
+  assert.equal(result.errorCount, 0, result.issues.map((issue) => issue.message).join(" | "));
+});
+
+test("spaces in a membership number are a warning: it is stored without them", () => {
+  const result = checkRows(customerRows([memberRow({ membership_number: "bc 0007" })]), CURRENT_CONTEXT);
+
+  assert.equal(result.errorCount, 0);
+  assert.equal(result.warningCount, 1);
+  assert.match(result.issues[0].message, /stored as BC0007/);
+});
+
+test("a membership number used twice in one file fails the second row", () => {
+  const rows = customerRows([
+    memberRow({ membership_number: "BC-0100" }, "2019-00101"),
+    memberRow({ membership_number: "bc-0100" }, "2019-00102"),
+  ]);
+
+  const result = checkRows(rows, CURRENT_CONTEXT);
+
+  assert.equal(result.errorCount, 1);
+  assert.equal(result.issues[0].line, 2);
+  assert.equal(result.issues[0].column, "Membership Number");
+  assert.match(result.issues[0].message, /BC-0100 is already on line 1/);
+});
+
+test("without permission to edit members, a filled membership column fails the row", () => {
+  const rows = customerRows([
+    memberRow({}, "2019-00101"),
+    // Date Hired is an ordinary member field; only the membership columns need it.
+    memberRow({ membership_date: "", member_type: "", membership_number: "" }, "2019-00102"),
+  ]);
+
+  const result = checkRows(rows, { ...CURRENT_CONTEXT, membershipAllowed: false });
+
+  assert.equal(result.errorCount, 1);
+  assert.equal(result.failingRows, 1);
+  assert.equal(result.issues[0].line, 1);
+  assert.match(result.issues[0].message, /Only staff who can edit members can import membership details/);
+});
+
+test("each layout holds its rows to its own width", () => {
+  // An old file's row that grew four cells is not a row of today's layout.
+  const grown = checkRows(customerRows([CUSTOMER_26]), CUSTOMER_CONTEXT);
+  const grownIssue = grown.issues.find((issue) => issue.category === "columns");
+  assert.ok(grownIssue);
+  assert.match(grownIssue.message, /26 columns/);
+  assert.match(grownIssue.message, /earlier 22-column layout/);
+
+  const short = checkRows(customerRows([CUSTOMER]), CURRENT_CONTEXT);
+  const shortIssue = short.issues.find((issue) => issue.category === "columns");
+  assert.ok(shortIssue);
+  assert.match(shortIssue.message, /22 columns; the members file needs 26/);
+});
+
+// ---------------------------------------------------------------------------
 // Truncation
 // ---------------------------------------------------------------------------
 
@@ -266,7 +415,7 @@ function inspectionStub(overrides: Partial<FileInspection> = {}): FileInspection
   return {
     kind: "customers",
     shape: "customer",
-    label: "Customer Profile",
+    label: "Members file",
     fileName: "customers.csv",
     sizeBytes: 100,
     delimiter: ",",
@@ -314,7 +463,7 @@ test("the loans file dropped into the customers slot is a blocker, not a row err
   const blockers = fileBlockers(inspection, customerRows([CUSTOMER]), NO_DATES);
 
   assert.equal(blockers.length, 1);
-  assert.match(blockers[0], /looks like the Loans file/);
+  assert.match(blockers[0], /looks like the loans file, but it was chosen as the members file/);
 });
 
 test("a file whose rows are systematically the wrong width is blocked once", () => {
@@ -324,6 +473,109 @@ test("a file whose rows are systematically the wrong width is blocked once", () 
 
   assert.equal(blockers.length, 1);
   assert.match(blockers[0], /Most rows have 18 columns/);
+});
+
+/** A members file from records, comma-joined (no cell here holds a comma). */
+function membersFile(records: readonly (readonly string[])[]): File {
+  return new File([records.map((fields) => fields.join(",")).join("\r\n") + "\r\n"], "members.csv", {
+    type: "text/csv",
+  });
+}
+
+const OLD_LABELS = [
+  "Account No.", "Last Name", "First Name", "Middle Name", "Suffix", "Birthdate", "Gender",
+  "Civil Status", "Contact Number", "email", "Street Address", "Barangay", "City/Municipality",
+  "Province", "Employer/Business Name", "Monthly Income", "Pledge Amt(If Applicable)",
+  "Spouse FName (If Married)", "Spouse MName (If Married)", "Spouse LName (If Married)",
+  "Spouse Contact No (If Married)", "Spouse Occupation (If Married)",
+];
+
+test("a 22-column header over 26-column rows is caught, as the server holds a header to the rows' width", async () => {
+  const inspection = await inspectFile("customers", membersFile([
+    OLD_LABELS,
+    memberRow({}, "2019-00101"),
+    memberRow({}, "2019-00102"),
+  ]));
+
+  assert.equal(inspection.expectedColumns, 26);
+  assert.equal(inspection.header?.isHeader, true, "it is still the header row, and is not imported as a member");
+
+  const findings = computeFindings({ customers: inspection }, {}, {}).customers;
+  assert.ok(findings);
+  assert.equal(findings.totalRows, 2);
+  assert.deepEqual(findings.blockers, [
+    "Members file (members.csv): Row 1 is the header, but it leaves 4 columns unnamed: Date Hired, Membership Date, Member Type and Membership Number. The import holds the header to every column the rows have, so it would refuse this file. Add the missing labels; the members template has them all.",
+  ]);
+});
+
+test("a full header over rows in the earlier layout is read against those rows' 22 columns", async () => {
+  const fullHeader = [...OLD_LABELS, "Date Hired", "Membership Date", "Member Type", "Membership Number"];
+  const inspection = await inspectFile("customers", membersFile([fullHeader, CUSTOMER, ["2019-00102", ...CUSTOMER.slice(1)]]));
+
+  assert.equal(inspection.expectedColumns, 22);
+  assert.equal(inspection.header?.isHeader, true);
+  assert.deepEqual(inspection.header?.mismatched, []);
+
+  const findings = computeFindings({ customers: inspection }, {}, {}).customers;
+  assert.deepEqual(findings?.blockers, []);
+  assert.equal(findings?.errorCount, 0);
+});
+
+test("a refusal names the file it is about, and an empty loans file says it can be left out", async () => {
+  const loans = new File(
+    ["Account No.,Loan No.,Loan Amount,Loan Balance,Interest Rate,Interest Amount,Interest Balance,Purpose,Loan Product,Term in Months,Payment Frequency,Interest Type,Date Released,Maturity Date,Processing Fee,Service Fee,Other Fee Detail,Other Fee Amount\r\n"],
+    "loans.csv",
+    { type: "text/csv" },
+  );
+  const inspection = await inspectFile("loans", loans);
+
+  const findings = computeFindings({ loans: inspection }, {}, {}).loans;
+
+  assert.deepEqual(findings?.blockers, [
+    "Loans file (loans.csv): The only row in this file is the header row, so there is nothing to import. The loans file is optional: leave it out when there are no loans to bring over.",
+  ]);
+});
+
+test("a file in the earlier layout lists only the date columns it has", () => {
+  const earlier = computeFindings({ customers: inspectionStub() }, {}, {}).customers;
+  assert.deepEqual(earlier?.dates.map((date) => date.key), ["birthdate"], "Date Hired and Membership Date are not in a 22-column file");
+
+  const current = computeFindings(
+    { customers: inspectionStub({ records: customerRows([CUSTOMER_26]), expectedColumns: 26, widths: [{ columns: 26, rows: 1 }] }) },
+    {},
+    {},
+  ).customers;
+  assert.deepEqual(current?.dates.map((date) => date.key), ["birthdate", "date_hired", "membership_date"]);
+});
+
+test("a date column of one unreadable value says 1 value, not 1 values", () => {
+  const unusable: DateColumnFinding = {
+    key: "birthdate",
+    label: "Birthdate",
+    inference: {
+      status: "unusable",
+      stats: {
+        total: 1, blank: 0, iso: 0, pair: 0, serial: 0, shortYear: 0, invalid: 0, unrecognised: 1,
+        shortYearSamples: [], invalidSamples: [], unrecognisedSamples: ["soon"],
+      } as never,
+    },
+    order: undefined,
+    chosen: false,
+    blocked: true,
+  };
+
+  const [blocker] = fileBlockers(inspectionStub(), customerRows([CUSTOMER]), [unusable]);
+
+  assert.match(blocker, /Of 1 value, 1 is not a date at all \(soon\)\./);
+});
+
+test("a members file at neither layout's width is blocked, and the blocker names both", () => {
+  const inspection = inspectionStub({ widths: [{ columns: 24, rows: 400 }], expectedColumns: 26 });
+
+  const blockers = fileBlockers(inspection, customerRows([CUSTOMER]), NO_DATES);
+
+  assert.equal(blockers.length, 1);
+  assert.match(blockers[0], /Most rows have 24 columns, but the members file needs 26, or 22 in the earlier layout/);
 });
 
 test("an unbalanced quote is carried through as a blocker, in the reader's own words", () => {

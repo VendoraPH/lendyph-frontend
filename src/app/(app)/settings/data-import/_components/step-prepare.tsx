@@ -29,11 +29,12 @@ import { branchPicker } from "@/lib/user-branches";
 import { importBranchChoice } from "./import-branch";
 import { useAuthStore } from "@/store";
 import { formatDate } from "@/lib/format";
-import { downloadImportTemplate, IMPORT_TEMPLATES } from "@/lib/import-template";
+import { downloadImportTemplate, IMPORT_TEMPLATES, MEMBERS_TEMPLATE_NOTE } from "@/lib/import-template";
 import { notifyError } from "@/lib/notify";
 import type { ImportRunStatus } from "@/types/data-import";
 
 import { FileSlot } from "./file-slot";
+import { FILE_SLOTS, FILES_RULE, filesProblem } from "./import-files";
 import type { ImportFiles } from "./data-import-view";
 
 /**
@@ -236,9 +237,9 @@ export function StepPrepare({
 }: StepPrepareProps) {
   const [branchReload, setBranchReload] = useState(0);
 
-  const hasAnyFile = Boolean(files.customers || files.loans);
+  const problem = filesProblem(files);
   const loansOnly = Boolean(files.loans && !files.customers);
-  const canContinue = branchId !== null && hasAnyFile;
+  const canContinue = branchId !== null && problem === null;
 
   return (
     <div className="space-y-5">
@@ -285,9 +286,9 @@ export function StepPrepare({
         <fieldset className="space-y-3">
           <legend className="text-sm font-medium">Files</legend>
           <p className="text-xs text-muted-foreground">
-            At least one file is required; most migrations use both. They go in
-            separate slots because the importer has to be told which is which —
-            it cannot work that out from the order you picked them in.
+            {FILES_RULE} They go in separate slots because the importer has to be
+            told which is which — it cannot work that out from the order you
+            picked them in.
           </p>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -311,37 +312,32 @@ export function StepPrepare({
               Each template is the header row only, with the columns in the order the importer
               reads them. Keep the header row and add one row per member or loan below it.
             </p>
+            <p className="basis-full text-xs text-muted-foreground">{MEMBERS_TEMPLATE_NOTE}</p>
           </div>
 
           {/* The two files side by side from md */}
           <div className="grid gap-3 md:grid-cols-2">
-            <FileSlot
-              label="Members file"
-              description="One row per member of the existing book."
-              hint="Exported as CSV from your spreadsheet: File → Save As (or Download) → CSV."
-              file={files.customers}
-              onSelect={(file) => onFilesChange({ ...files, customers: file })}
-              optional
-            />
-
-            <FileSlot
-              label="Loans file"
-              description="One row per loan, referencing members by their account number."
-              hint="Loans are matched to members by account number, so both files must use the same one."
-              file={files.loans}
-              onSelect={(file) => onFilesChange({ ...files, loans: file })}
-              optional
-            />
+            {FILE_SLOTS.map((slot) => (
+              <FileSlot
+                key={slot.kind}
+                label={slot.label}
+                description={slot.description}
+                hint={slot.hint}
+                file={files[slot.kind]}
+                onSelect={(file) => onFilesChange({ ...files, [slot.kind]: file })}
+                optional={slot.optional}
+              />
+            ))}
           </div>
 
           {loansOnly ? (
             <Alert className={CAUTION}>
               <AlertTriangle className="text-amber-600" />
-              <AlertTitle>Loans only — no members will be created</AlertTitle>
+              <AlertTitle>The loans file needs its members file</AlertTitle>
               <AlertDescription>
-                Every loan has to match a member that already exists in Lendyph.
-                Any loan whose account number is not found is reported as failed
-                rather than creating the member for you.
+                Loans are matched to the members in the same import, so pick the
+                members file too. Members already in Lendyph are matched rather
+                than created again.
               </AlertDescription>
             </Alert>
           ) : null}
@@ -353,9 +349,7 @@ export function StepPrepare({
               visible text instead — which also answers it for everyone else. */}
           {!canContinue ? (
             <p className="text-xs text-muted-foreground">
-              {branchId === null
-                ? "Choose a branch to continue."
-                : "Pick at least one file to continue."}
+              {branchId === null ? "Choose a branch to continue." : problem}
             </p>
           ) : null}
           <Button type="button" onClick={onNext} disabled={!canContinue}>

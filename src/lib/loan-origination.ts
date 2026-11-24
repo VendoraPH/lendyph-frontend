@@ -3,10 +3,10 @@
  * and allowed moves, what an applicant is told, the declared amounts as
  * entered, the wizard's own checks, and dashboard rates.
  *
- * The server is the authority for every one of these. The transitions here
- * only decide which buttons to offer; the API refuses any other move. The
- * assessment figures are never computed here: the browser shows what the
- * server calculated (see `docs/LOAN_ORIGINATION_BACKEND_HANDOFF.md`).
+ * The server is the authority for every one of these. Staff screens take
+ * their status moves (`allowed_transitions`), declared totals, assessment
+ * figures and checks from the server and show them as sent; their own rules
+ * live beside them in `src/app/(app)/loans/origination/_lib/`.
  */
 
 import type {
@@ -63,7 +63,7 @@ export const STATUS_LABELS: Record<ApplicationStatus, string> = {
   document_verification: "Under Document Verification",
   additional_info_required: "Additional Information Required",
   under_assessment: "Under Assessment",
-  pending_approval: "Pending Approval",
+  pending_approval: "For Approval",
   approved: "Approved",
   rejected: "Rejected",
   withdrawn: "Withdrawn",
@@ -85,31 +85,6 @@ export const STATUS_TONES: Record<ApplicationStatus, Tone> = {
   converted: "success",
   expired: "neutral",
 };
-
-/**
- * The moves staff may make by hand. Draft → incomplete → submitted belong to
- * the applicant (and the expiry job), approved → converted to the conversion
- * action, and approval itself to the existing approval workflow, so none of
- * those appear here.
- */
-export const STAFF_TRANSITIONS: Record<ApplicationStatus, readonly ApplicationStatus[]> = {
-  draft: [],
-  incomplete: [],
-  submitted: ["document_verification", "additional_info_required", "rejected"],
-  document_verification: ["additional_info_required", "under_assessment", "rejected"],
-  additional_info_required: ["document_verification", "under_assessment", "rejected", "withdrawn"],
-  under_assessment: ["additional_info_required", "pending_approval", "rejected"],
-  pending_approval: ["additional_info_required", "rejected"],
-  approved: [],
-  rejected: [],
-  withdrawn: [],
-  converted: [],
-  expired: [],
-};
-
-export function allowedTransitions(status: ApplicationStatus): readonly ApplicationStatus[] {
-  return STAFF_TRANSITIONS[status] ?? [];
-}
 
 /** Statuses where nothing more happens to the application. */
 export function isClosed(status: ApplicationStatus): boolean {
@@ -173,13 +148,14 @@ export const BORROWER_STATUS_TONES: Record<BorrowerFacingStatus, Tone> = {
 
 // ── Documents and assessments ──────────────────────────────────────────────
 
+/** The document statuses in the server's words (OriginationDocument::STATUS_LABELS), for the queue's tabs. */
 export const DOCUMENT_STATUS_LABELS: Record<DocumentStatus, string> = {
-  not_submitted: "Not Submitted",
+  not_submitted: "Not submitted",
   uploaded: "Uploaded",
-  pending_verification: "Pending Verification",
+  pending_verification: "Pending verification",
   verified: "Verified",
   rejected: "Rejected",
-  replacement_requested: "Replacement Requested",
+  replacement_requested: "Replacement requested",
 };
 
 export const DOCUMENT_STATUS_TONES: Record<DocumentStatus, Tone> = {
@@ -191,24 +167,12 @@ export const DOCUMENT_STATUS_TONES: Record<DocumentStatus, Tone> = {
   replacement_requested: "warning",
 };
 
-/** A file staff can still act on (verify, reject, ask for another). */
-export function documentAwaitsReview(status: DocumentStatus): boolean {
-  return status === "uploaded" || status === "pending_verification";
-}
-
-export const ASSESSMENT_LABELS: Record<AssessmentResult, string> = {
-  within_capacity: "Appears Within Configured Capacity",
-  further_review: "Requires Further Financial Review",
-  above_capacity: "Appears Above Configured Capacity",
-  insufficient_information: "Insufficient Verified Information",
-};
-
-/** Short form for table cells. */
+/** The assessment results in the server's words (OriginationAssessment::RESULT_LABELS). */
 export const ASSESSMENT_SHORT_LABELS: Record<AssessmentResult, string> = {
   within_capacity: "Within capacity",
-  further_review: "Further review",
+  further_review: "Further review needed",
   above_capacity: "Above capacity",
-  insufficient_information: "Insufficient info",
+  insufficient_information: "Insufficient information",
 };
 
 export const ASSESSMENT_TONES: Record<AssessmentResult, Tone> = {
@@ -217,17 +181,6 @@ export const ASSESSMENT_TONES: Record<AssessmentResult, Tone> = {
   above_capacity: "danger",
   insufficient_information: "neutral",
 };
-
-/** Whether a computed ratio passes a configured limit, for colouring only. */
-export function ratioTone(
-  value: number | null,
-  limit: number,
-  direction: "max" | "min",
-): Tone {
-  if (value === null || !Number.isFinite(value)) return "neutral";
-  const passes = direction === "max" ? value <= limit : value >= limit;
-  return passes ? "success" : "danger";
-}
 
 // ── Income and frequencies ─────────────────────────────────────────────────
 
@@ -642,12 +595,6 @@ export function mergeDraft(saved: Partial<ApplicationDraft> | null | undefined):
 
 // ── Dashboard ──────────────────────────────────────────────────────────────
 
-/** Percent change from `previous` to `current`, or null when it can't be said. */
-export function percentChange(current: number | null | undefined, previous: number | null | undefined): number | null {
-  if (typeof current !== "number" || typeof previous !== "number" || previous === 0) return null;
-  return Math.round(((current - previous) / previous) * 1000) / 10;
-}
-
 /** "2.5 days" or "6 hours" from a number of hours. */
 export function formatDuration(hours: number | null | undefined): string {
   if (typeof hours !== "number" || !Number.isFinite(hours)) return "—";
@@ -719,21 +666,6 @@ export function fileProblem(
   return null;
 }
 
-/** What Settings would let applicants upload beyond the member document rules. */
-export function uploadSettingsProblems(documents: { accepted_file_types: readonly string[]; max_upload_mb: number }): string[] {
-  const out: string[] = [];
-  const outside = documents.accepted_file_types.map(normalizeType).filter((t) => t && !MEMBER_DOCUMENT_TYPES.includes(t));
-  if (outside.length > 0) {
-    out.push(
-      `Applicants can upload only the member document types (JPG, PNG, PDF, DOC, DOCX). Remove ${outside.map((t) => t.toUpperCase()).join(", ")}.`,
-    );
-  }
-  if (documents.max_upload_mb > MEMBER_DOCUMENT_MAX_MB) {
-    out.push(`The largest file can be at most ${MEMBER_DOCUMENT_MAX_MB} MB, as for member documents.`);
-  }
-  return out;
-}
-
 // ── What the applicant and staff are told ──────────────────────────────────
 
 /**
@@ -747,11 +679,9 @@ export function otpSentMessage(result: OtpRequestResult): string {
   return `Text and email sending is not switched on yet, so no message went out to ${result.destination}. Please contact the office to continue.`;
 }
 
-/** The toast after "Remind applicant", by what the server says it did. */
+/** The toast after "Remind applicant": sent only when the server sent it, else its delivery words ("Logged, not sent"). */
 export function reminderNotice(result: ReminderResult): string {
-  return result.delivered === true
-    ? "Reminder sent to the applicant"
-    : "Reminder logged. Sending is not switched on yet, so nothing went out.";
+  return result.delivered ? "Reminder sent to the applicant" : `Reminder recorded: ${result.delivery_label}.`;
 }
 
 /** True until the server marks every text the applicant accepts as final (the owner's wording). */

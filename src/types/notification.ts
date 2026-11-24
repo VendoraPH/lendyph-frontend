@@ -38,6 +38,11 @@ export type NotificationType =
   | "savings_time_deposit_maturing"
   | "savings_dormancy_warning"
   | "savings_account_dormant"
+  // Savings openings (backend #356, OpeningNotices), to savings:view holders
+  // in the branch, never the person who did it: an account opened, and a time
+  // deposit placed (titled "Time deposit rolled over" when a rollover placed it).
+  | "savings_account_opened"
+  | "savings_time_deposit_placed"
   // CDA Compliance (Phase 3): the report workflow (a report waiting for
   // approval, returned, finalized, marked for correction), the deadline
   // reminders, a compliance document expiring within 30 days, and an

@@ -490,13 +490,15 @@ describe("savings notifications", () => {
 });
 
 // The savings servicing notice keys (backend S4: ApprovalWaitingNotice,
-// NightlyNotices and AccountEventNotices).
+// NightlyNotices and AccountEventNotices; backend #356: OpeningNotices).
 describe("savings servicing notifications", () => {
   const SERVICING_KINDS: Record<string, [string, string]> = {
     savings_approval_waiting: ["Savings approval waiting", "approval"],
     savings_time_deposit_maturing: ["Time deposit maturing", "info"],
     savings_dormancy_warning: ["Savings account dormant soon", "warning"],
     savings_account_dormant: ["Savings account dormant", "warning"],
+    savings_account_opened: ["Savings account opened", "success"],
+    savings_time_deposit_placed: ["Time deposit placed", "success"],
   };
 
   for (const [type, [label, tone]] of Object.entries(SERVICING_KINDS)) {
@@ -539,6 +541,58 @@ describe("savings servicing notifications", () => {
     assert.equal(first.title, "Savings approval waiting");
     assert.equal(older.title, "Savings approval waiting");
     assert.equal(second.kind, "Savings approval waiting");
+  });
+
+  test("an opened account opens the account and names itself once", () => {
+    const [item] = buildFeed(
+      [
+        row({
+          id: "s6",
+          type: "savings_account_opened",
+          title: "Savings account opened",
+          body: "Regular Savings account SA-000012 (Ana Cruz) was opened on Nov 24, 2026, with an opening deposit of ₱500.00.",
+          url: "/savings/accounts/12",
+          data: { account_id: 12 },
+        }),
+      ],
+      NOW,
+    );
+    assert.equal(item.kind, "Savings account opened");
+    assert.equal(item.tone, "success");
+    assert.equal(item.announceKind, false);
+    assert.equal(item.href, "/savings/accounts/12");
+    assert.match(item.body ?? "", /₱500\.00/);
+  });
+
+  test("a placement or a rollover opens the deposit and reads the server's title once", () => {
+    const [rolled, placed] = buildFeed(
+      [
+        row({
+          id: "s7",
+          type: "savings_time_deposit_placed",
+          title: "Time deposit rolled over",
+          url: "/savings/time-deposits/9",
+          data: { time_deposit_id: 9, rolled_over_from_id: 4 },
+          created_at: "2026-11-24T02:00:00Z",
+        }),
+        row({
+          id: "s8",
+          type: "savings_time_deposit_placed",
+          title: "Time deposit placed",
+          url: "/savings/time-deposits/8",
+          data: { time_deposit_id: 8, rolled_over_from_id: null },
+          created_at: "2026-11-24T01:00:00Z",
+        }),
+      ],
+      NOW,
+    );
+    assert.equal(rolled.title, "Time deposit rolled over");
+    assert.equal(rolled.kind, "Time deposit placed");
+    assert.equal(rolled.announceKind, false, "a rollover isn't announced as a placement first");
+    assert.equal(rolled.href, "/savings/time-deposits/9");
+    assert.equal(placed.title, "Time deposit placed");
+    assert.equal(placed.announceKind, false);
+    assert.equal(placed.tone, "success");
   });
 
   test("a maturing deposit due today opens the deposit and names itself once", () => {

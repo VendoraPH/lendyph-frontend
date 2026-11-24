@@ -27,9 +27,10 @@ const STAFF_APP_HEADERS = [
   { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
 ];
 
-// Every path except /member and /member/..., which keep the portal's stricter
-// headers above (/member-portal, the staff screens, is matched here).
-const STAFF_APP_SOURCE = "/((?!member(?:/|$)).*)";
+// Every path except /member and /member/..., and the public loan application
+// (/apply/...), which keep the portal's stricter headers above
+// (/member-portal, the staff screens, is matched here).
+const STAFF_APP_SOURCE = "/((?!member(?:/|$)|apply(?:/|$)).*)";
 
 const nextConfig: NextConfig = {
   async headers() {
@@ -37,6 +38,9 @@ const nextConfig: NextConfig = {
       { source: STAFF_APP_SOURCE, headers: STAFF_APP_HEADERS },
       { source: "/member", headers: MEMBER_PORTAL_HEADERS },
       { source: "/member/:path*", headers: MEMBER_PORTAL_HEADERS },
+      // The public loan application: an applicant's page, framed by no one.
+      // Listed after the staff rule, so it would win if both ever matched.
+      { source: "/apply/:path*", headers: MEMBER_PORTAL_HEADERS },
     ];
   },
   experimental: {
@@ -103,6 +107,17 @@ const nextConfig: NextConfig = {
         pathname: "/storage/**",
       },
     ],
+  },
+  // Module settings now live under Settings; old links and bookmarks follow.
+  async redirects() {
+    return [
+      ["/accounting/settings", "/settings/accounting"],
+      ["/cda/settings", "/settings/cda"],
+      ["/credit-scoring/settings", "/settings/credit-scoring"],
+      ["/credit-scoring/scorecard-configuration", "/settings/scorecard-configuration"],
+      ["/savings/settings", "/settings/savings"],
+      ["/savings/products", "/settings/savings-products"],
+    ].map(([source, destination]) => ({ source, destination, permanent: false }));
   },
   async rewrites() {
     return [

@@ -6,17 +6,16 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { DocumentRequirement, OriginationSettings } from "@/types/loan-origination";
+import { documentTypeKey } from "../../_lib/settings-form";
 import { NumberField, SettingsCard } from "./fields";
 
 type Documents = OriginationSettings["documents"];
 
-/** `Payslip (latest)` → `payslip_latest`: a stable key for a new document type. */
-export const toKey = (label: string) =>
-  label
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_|_$/g, "");
-
+/**
+ * Uploads and document types. The server holds the limits (JPEG, PNG and PDF
+ * up to 10 MB) and refuses anything outside them in its own words, as it does
+ * a key that reads as "valid ID": the applicant's ID is `government_id`.
+ */
 export function DocumentsSection({ value, onChange }: { value: Documents; onChange: (next: Documents) => void }) {
   const set = (patch: Partial<Documents>) => onChange({ ...value, ...patch });
   const setType = (i: number, patch: Partial<DocumentRequirement>) =>
@@ -26,7 +25,7 @@ export function DocumentsSection({ value, onChange }: { value: Documents; onChan
     <>
       <SettingsCard
         title="Uploads"
-        description="What applicants may upload, within the member document rules (JPG, PNG, PDF, DOC or DOCX, up to 10 MB), and how long the files are kept."
+        description="What applicants may upload (JPEG, PNG or PDF, up to 10 MB) and how long files of declined or withdrawn applications are kept."
       >
         <div className="grid gap-4 sm:grid-cols-3">
           <div className="space-y-1.5">
@@ -42,8 +41,9 @@ export function DocumentsSection({ value, onChange }: { value: Documents; onChan
                     .filter(Boolean),
                 })
               }
-              placeholder="pdf, jpg, png"
+              placeholder="pdf, jpg, jpeg, png"
             />
+            <p className="text-xs text-muted-foreground">Any of jpg, jpeg, jpe, jfif, png and pdf.</p>
           </div>
           <NumberField
             label="Largest file"
@@ -55,32 +55,38 @@ export function DocumentsSection({ value, onChange }: { value: Documents; onChan
           <NumberField
             label="Keep files of declined or withdrawn applications for"
             suffix="days"
-            min={1}
+            min={30}
+            hint="From 30 to 3,650 days."
             value={value.retention_days}
-            onChange={(v) => set({ retention_days: v ?? 1 })}
+            onChange={(v) => set({ retention_days: v ?? 30 })}
           />
         </div>
       </SettingsCard>
       <SettingsCard
         title="Document types"
-        description="The documents a loan product can ask for. Choose which each product needs under Products."
+        description="The documents a loan product can ask for. Choose which each product needs under Products. A saved type keeps its key; a new one is keyed from its name when saved."
       >
         <ul className="space-y-3">
           {value.types.map((t, i) => (
-            <li key={i} className="grid gap-2 rounded-lg border p-3 sm:grid-cols-[1fr_2fr_auto_auto] sm:items-center">
-              <Input
-                aria-label="Document name"
-                value={t.label}
-                onChange={(e) => setType(i, { label: e.target.value, type: t.type || toKey(e.target.value) })}
-                placeholder="Latest payslip"
-              />
+            <li key={i} className="grid gap-2 rounded-lg border p-3 sm:grid-cols-[1fr_2fr_auto_auto] sm:items-start">
+              <div className="space-y-1">
+                <Input
+                  aria-label="Document name"
+                  maxLength={100}
+                  value={t.label}
+                  onChange={(e) => setType(i, { label: e.target.value })}
+                  placeholder="Latest payslip"
+                />
+                <p className="font-mono text-xs text-muted-foreground">Key: {t.type || documentTypeKey(t.label) || "—"}</p>
+              </div>
               <Input
                 aria-label="Guidance for applicants"
+                maxLength={500}
                 value={t.description ?? ""}
                 onChange={(e) => setType(i, { description: e.target.value || null })}
                 placeholder="Guidance for applicants (optional)"
               />
-              <label className="flex items-center gap-2 text-sm whitespace-nowrap">
+              <label className="flex h-8 items-center gap-2 text-sm whitespace-nowrap">
                 <Checkbox checked={t.required} onCheckedChange={(required) => setType(i, { required })} />
                 Always required
               </label>
