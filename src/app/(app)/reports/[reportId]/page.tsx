@@ -11,6 +11,9 @@ import { AccessDenied, RouteGuard } from "@/components/common";
 import { SubjectPicker } from "@/components/common/subject-picker";
 import {
   ACCOUNT_REPORT_HINT,
+  CUTOFF_SCOPE,
+  cutoffProblem,
+  cutoffRange,
   noDateRangeScope,
   linkedBranchId,
   presetAccountId,
@@ -173,6 +176,8 @@ function ReportDetailContent({
   const [range, setRange] = useState<DateRange>(() =>
     linkedPeriod ?? presetRange(defaultPreset, { from: "", to: "" })
   );
+  // A report run to one cutoff date opens on today, or on a link's `?to=`.
+  const [cutoff, setCutoff] = useState<string>(() => (report?.cutoffDate ? periodParam?.to : undefined) ?? todayISO());
   // A link's `?branch=<id>` presets the picker on reports that filter by
   // branch, else the working branch (multi-branch flag). Either counts only
   // once the picker offers it (see `linkedBranchId`).
@@ -250,7 +255,11 @@ function ReportDetailContent({
     };
   }, [logoUrl]);
 
-  const activeRange = preset === "custom" ? range : presetRange(preset, range);
+  const activeRange = report?.cutoffDate
+    ? cutoffRange(cutoff)
+    : preset === "custom"
+      ? range
+      : presetRange(preset, range);
 
   if (!report && access === "no_access") {
     const title = REPORT_CATALOG.find((r) => r.id === reportId)?.title;
@@ -299,6 +308,9 @@ function ReportDetailContent({
   // the two custom date inputs can reach it, since every preset is narrower.
   const spanTooWide = exceedsReportSpanCap(activeRange);
 
+  // A cutoff date is a whole real day, never after today (the API's 422).
+  const cutoffIssue = report.cutoffDate ? cutoffProblem(cutoff, todayISO()) : null;
+
   // What the preview and the CSV are scoped to, so the two always agree.
   const scope = {
     range: activeRange,
@@ -309,7 +321,7 @@ function ReportDetailContent({
   };
 
   async function handleGenerate() {
-    if (!report || missingSubject || spanTooWide || branchPending) return;
+    if (!report || missingSubject || spanTooWide || branchPending || cutoffIssue) return;
     setGenerating(true);
     try {
       const built = await report.build(scope);
@@ -489,6 +501,8 @@ function ReportDetailContent({
               <p className="text-sm text-muted-foreground min-w-0 flex-1">
                 {noDateRangeScope(report.subject)}
               </p>
+            ) : report.cutoffDate ? (
+              <p className="text-sm text-muted-foreground min-w-0 flex-1">{CUTOFF_SCOPE}</p>
             ) : (
               <div className="space-y-2 fit:space-y-1 min-w-0 flex-1">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -525,7 +539,25 @@ function ReportDetailContent({
             )}
 
             <div className="flex items-end gap-2">
-              {!report.noDateRange && (
+              {report.cutoffDate && (
+                <div className="space-y-1">
+                  <Label htmlFor="cutoff-date" className="text-xs">
+                    Cutoff Date
+                  </Label>
+                  <Input
+                    id="cutoff-date"
+                    type="date"
+                    value={cutoff}
+                    max={todayISO()}
+                    onChange={(e) => {
+                      setCutoff(e.target.value);
+                      setDoc(null);
+                    }}
+                    className="w-40"
+                  />
+                </div>
+              )}
+              {!report.noDateRange && !report.cutoffDate && (
                 <>
                   <div className="space-y-1">
                     <Label htmlFor="from-date" className="text-xs">
@@ -563,7 +595,7 @@ function ReportDetailContent({
               )}
               <Button
                 onClick={handleGenerate}
-                disabled={generating || missingSubject || spanTooWide || branchPending}
+                disabled={generating || missingSubject || spanTooWide || branchPending || cutoffIssue !== null}
                 className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
               >
                 {generating ? (
@@ -593,7 +625,8 @@ function ReportDetailContent({
             report.supportsProduct ||
             report.groupBy ||
             report.subject ||
-            report.accountParam) && (
+            report.accountParam ||
+            cutoffIssue) && (
             <div className="mt-4 flex flex-wrap items-end gap-4 border-t pt-4 fit:mt-3 fit:gap-3 fit:pt-3">
               {report.supportsBranch && (
                 <div className="space-y-1">
@@ -678,6 +711,8 @@ function ReportDetailContent({
               {missingSubject && report.accountParam && (
                 <p className="text-xs text-muted-foreground pb-2">{ACCOUNT_REPORT_HINT}</p>
               )}
+
+              {cutoffIssue && <p className="text-xs text-destructive pb-2">{cutoffIssue}</p>}
 
               {spanTooWide && (
                 <p className="text-xs text-destructive pb-2">

@@ -10,7 +10,7 @@
  * The draft's own shape is shared with the staff screens.
  */
 
-import type { ApplicationDraft, DocumentStatus } from "./loan-origination";
+import type { ApplicationDraft, DocumentStatus, Money } from "./loan-origination";
 
 /** A text the applicant accepts, by version; `final` once it is the owner's wording. */
 export interface PublicNotice {
@@ -171,8 +171,6 @@ export interface EstimateRequest {
   term: number;
   frequency: string | null;
 }
-
-type Money = number | string;
 
 /** The loan form's own preview. `total_repayment` is principal plus interest. */
 export interface PublicEstimate {

@@ -8,7 +8,7 @@ import { TablePagination } from "@/components/common/table-pagination";
 import { AssessmentBadge, ToneBadge } from "@/components/loan-origination/badges";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { useApiResource, usePermission } from "@/hooks";
+import { useApiResource } from "@/hooks";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { emptyArt, filtersActive } from "@/lib/illustrations";
 import { ASSESSMENT_SHORT_LABELS } from "@/lib/loan-origination";
@@ -20,8 +20,6 @@ import { AssessmentPdfButton } from "../_components/assessment-actions";
 import { AssessmentReport } from "../_components/assessment-report";
 import { StatusTabs } from "../_components/status-tabs";
 import { dtiText, figureText } from "../_lib/assessment-view";
-import { termUnitOf } from "../_lib/term";
-import { useLoanProducts } from "../../reminders/_hooks/use-loan-products";
 
 const PER_PAGE_OPTIONS = [20, 50, 100] as const;
 const RESULTS = Object.keys(ASSESSMENT_SHORT_LABELS) as AssessmentResult[];
@@ -36,8 +34,6 @@ export default function AssessmentsPage() {
   const fetcher = useCallback(() => loanOriginationService.listAssessments(filters), [filters]);
   const list = useApiResource(fetcher);
   const [open, setOpen] = useState<Assessment | null>(null);
-  // A term is a number in its loan product's unit; listing products needs loans:view.
-  const { products } = useLoanProducts(usePermission().can("loans:view"));
 
   return (
     <div className={cn(FIT_CLASSES.section, "gap-3")}>
@@ -134,7 +130,7 @@ export default function AssessmentsPage() {
                     Open the application
                   </Link>
                 </div>
-                <AssessmentReport assessment={open} termUnit={termUnitOf(products, open.loan_product_id)} />
+                <AssessmentReport assessment={open} />
               </div>
             </>
           )}

@@ -22,6 +22,7 @@ export type ReportId =
   | "share_capital"
   | "performance"
   | "provisioning"
+  | "profit_sharing"
   | "savings_balances"
   | "savings_transactions"
   | "time_deposit_maturities"
@@ -333,6 +334,13 @@ export interface ReportDefinition {
   /** Set when the API takes no dates, which hides the date range controls. */
   noDateRange?: boolean;
   /**
+   * Set when the report runs to one cutoff date (the Profit Sharing report): a
+   * single Cutoff Date field, today by default and never after it, stands in
+   * for the date range. The build reads the cutoff as `range.to`; `range.from`
+   * is January 1 of its year.
+   */
+  cutoffDate?: boolean;
+  /**
    * The period the report opens on. "this_month" (the default) runs from the
    * 1st to today; "whole_month" to the month's last day, for a report that
    * looks ahead, such as time deposits maturing.
@@ -346,6 +354,12 @@ export interface ReportDefinition {
    * listed and its page says the user has no access (`reportAccess`).
    */
   permission?: Permission;
+  /**
+   * Further permissions beyond `reports:view`, every one of them needed, for a
+   * report that shows figures from several sources (Profit Sharing). Without
+   * any one it is not listed and its page says the user has no access.
+   */
+  permissions?: readonly Permission[];
   /** False when the report's module is switched off for this deployment. */
   available?: boolean;
   build: (ctx: ReportContext) => Promise<ReportDocument>;
