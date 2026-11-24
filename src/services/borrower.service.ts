@@ -2,7 +2,7 @@ import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { fetchAllPages, type DrainResult } from "@/lib/paginate";
 import type { Borrower, BorrowerLoanSummary, PaginatedResponse } from "@/types";
-import type { BorrowerLedgerResponse } from "@/types/borrower";
+import type { BorrowerLedgerResponse, BorrowerMembershipUpdate } from "@/types/borrower";
 
 /** A valid-ID entry as returned grouped (front/back pair) by the API. */
 export interface BorrowerValidId {
@@ -85,6 +85,17 @@ export const borrowerService = {
    */
   transfer: (id: number, body: { branch_id: number; reason: string }) =>
     api.post<Borrower>(API_ENDPOINTS.BORROWERS.TRANSFER(id), body),
+
+  /**
+   * Change the membership date, member type or membership number
+   * (`borrowers:update`, finish run round 2). Send only what changes; a null
+   * number goes back to the member code. Refused in words with 422 (a field,
+   * a number another member holds, a registration not yet a member, a date
+   * after the membership ended); 404 for a member outside the caller's
+   * branches. The answer is the member's record.
+   */
+  updateMembership: (id: number, body: BorrowerMembershipUpdate) =>
+    api.patch<Borrower>(API_ENDPOINTS.BORROWERS.MEMBERSHIP(id), body),
 
   uploadPhoto: (id: number, formData: FormData) =>
     api.upload<Borrower>(API_ENDPOINTS.BORROWERS.UPLOAD_PHOTO(id), formData),

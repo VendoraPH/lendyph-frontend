@@ -69,6 +69,7 @@ import { keepsRunForUpload } from "../_hooks/use-import-reattach";
 // so there is one definition rather than two that agree until someone edits one.
 import type { ImportFiles, PrecheckOutcome } from "./data-import-view";
 import { FILE_LABELS, fileNameInSentence, filesPhrase } from "./import-files";
+import { piecesAccepted } from "@/lib/count-words";
 
 export interface StepUploadProps {
   /** The branch the members and loans are created under. Null on a resume. */
@@ -521,7 +522,7 @@ function FileProgress({
             <span className="text-green-600 dark:text-green-400">Verified</span>
           ) : (
             <span className="text-muted-foreground">
-              {file.uploadedChunks} of {file.totalChunks} pieces accepted
+              {piecesAccepted(file.uploadedChunks, file.totalChunks)}
             </span>
           )}
         </div>

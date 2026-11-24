@@ -33,7 +33,7 @@ import { AlertTriangle, CheckCircle2, FileText, Link2, RotateCcw, SkipForward, X
 import type { ImportCounts, ImportFileKind } from "@/types/data-import";
 import { FILE_LABELS } from "./import-files";
 import { formatCountOf } from "@/lib/report-format";
-import { rowsNotReached, rowsOvercounted, rowsWithoutOutcome } from "../_lib/count-words";
+import { rowsNotReached, rowsOvercounted, rowsWithoutOutcome } from "@/lib/count-words";
 
 /* ------------------------------------------------------------------ */
 /* Pure — unit tested in ./outcome-tiles.test.ts                        */
