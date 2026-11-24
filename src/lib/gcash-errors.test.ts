@@ -36,4 +36,14 @@ describe("extractGCashErrorMessage", () => {
       "You don't have permission to record GCash transactions.",
     );
   });
+
+  test("a 422 on any field reaches the user in the server's words: a closed branch", () => {
+    const message = "Frontier Branch is closed and takes no new records.";
+    assert.equal(extractGCashErrorMessage(failed(422, { message, errors: { branch: [message] } })), message);
+  });
+
+  test("a 422 with only a message, no field, shows the message", () => {
+    const message = "Frontier Branch is closing and takes no new records.";
+    assert.equal(extractGCashErrorMessage(failed(422, { message })), message);
+  });
 });

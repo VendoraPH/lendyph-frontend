@@ -42,6 +42,8 @@ export const API_ENDPOINTS = {
     LOAN_SUMMARY: (id: number) => `/borrowers/${id}/loan-summary`,
     // Phase 6 MB-BE4: moving a member to another branch (borrowers:view and borrowers:transfer).
     TRANSFER: (id: number) => `/borrowers/${id}/transfer`,
+    // Finish run round 2: the membership date, member type and number (borrowers:update).
+    MEMBERSHIP: (id: number) => `/borrowers/${id}/membership`,
   },
   REGISTRATIONS: {
     LIST: "/borrowers",

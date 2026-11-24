@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { firstStepWithError, stepIndexForField, type FormStepDef } from "@/lib/form-stepper";
 import {
   editMemberPayload,
+  memberFieldErrors,
   memberFormSteps,
+  memberStepMessage,
   newMemberPayload,
   requiredMemberFieldErrors,
   validateMemberStep,
@@ -11,6 +13,8 @@ import {
   type MemberFormData,
   type NewMemberFormData,
 } from "./member-form-steps";
+
+const TODAY = "2026-11-24";
 
 function filledForm(overrides: Partial<NewMemberFormData> = {}): NewMemberFormData {
   return {
@@ -28,6 +32,7 @@ function filledForm(overrides: Partial<NewMemberFormData> = {}): NewMemberFormDa
     city: "Cebu City",
     province: "Cebu",
     employer_or_business: "Store",
+    date_hired: "2015-06-01",
     monthly_income: "15000",
     pledge_amount: "500",
     branch_id: "2",
@@ -114,6 +119,7 @@ test("every field the forms check belongs to exactly one step", () => {
   const keys = [
     ...Object.keys(requiredMemberFieldErrors(emptyForm())),
     ...Object.keys(validIdStepErrors(ids)),
+    ...Object.keys(memberFieldErrors(filledForm({ date_hired: "2027-01-01" }), TODAY)),
   ];
   assert.ok(keys.length > 9);
   for (const mode of ["create", "edit"] as const) {
@@ -139,11 +145,13 @@ test("the payloads are the same as before: Add Member", () => {
     city: "Cebu City",
     province: "Cebu",
     employer_or_business: "Store",
+    date_hired: "2015-06-01",
     monthly_income: 15000,
     pledge_amount: 500,
   });
-  const married = newMemberPayload(filledForm({ pledge_amount: "" }), true);
+  const married = newMemberPayload(filledForm({ pledge_amount: "", date_hired: "" }), true);
   assert.equal(married.pledge_amount, 0);
+  assert.equal("date_hired" in married, false, "a blank Date Hired is left out of a new member");
   assert.equal(married.suffix, "jr");
   assert.equal(married.spouse_occupation, "Teacher");
   assert.equal(married.force, true);
@@ -166,10 +174,12 @@ test("the payloads are the same as before: Edit Member", () => {
     city: "Cebu City",
     province: "Cebu",
     employer_or_business: "Store",
+    date_hired: "2015-06-01",
     monthly_income: 15000,
     branch_id: 2,
   });
   assert.equal(editMemberPayload(filledForm({ spouse_middle_name: "" })).spouse_middle_name, null);
+  assert.equal(editMemberPayload(filledForm({ date_hired: "" })).date_hired, null, "a cleared Date Hired is cleared");
 });
 
 test("the required fields keep their labels and order, split by step", () => {
@@ -226,6 +236,8 @@ test("server 422 keys open the right step, dotted keys included", () => {
   const edit = memberFormSteps({ mode: "edit", married: true });
   assert.equal(at("branch_id", edit), "branch");
   assert.equal(at("monthly_income", edit), "employment");
+  assert.equal(at("date_hired", create), "employment");
+  assert.equal(at("date_hired", edit), "employment");
   assert.equal(
     create[firstStepWithError({ province: ["Required."], "valid_ids.1.type": ["Pick one."] }, create)].id,
     "contact",
@@ -236,4 +248,57 @@ test("a spouse error opens no step while the form shows no spouse fields", () =>
   const single = memberFormSteps({ mode: "create", married: false });
   assert.equal(stepIndexForField("spouse_first_name", single), -1);
   assert.equal(firstStepWithError({ spouse_first_name: ["Too long."] }, single), -1);
+});
+
+// ── Date Hired (finish run round 2, decision 15) ──
+
+test("Date Hired sits on the Employment step, in both forms", () => {
+  for (const mode of ["create", "edit"] as const) {
+    const employment = memberFormSteps({ mode, married: false }).find((s) => s.id === "employment");
+    assert.ok(employment?.fields?.includes("date_hired"), mode);
+  }
+});
+
+test("Date Hired is optional, written year-month-day, not after today and not before the birthdate", () => {
+  const problem = (overrides: Partial<NewMemberFormData>) => memberFieldErrors(filledForm(overrides), TODAY).date_hired;
+  assert.equal(problem({ date_hired: "" }), undefined);
+  assert.equal(problem({ date_hired: "2026-11-24" }), undefined);
+  assert.equal(problem({ date_hired: "1990-01-02" }), undefined, "the birthdate itself is not before the birthdate");
+  assert.equal(problem({ date_hired: "2026-11-25" }), "The date hired cannot be in the future.");
+  assert.equal(problem({ date_hired: "1990-01-01" }), "The date hired can't be before the member's birthdate (Jan 2, 1990).");
+  assert.equal(
+    problem({ date_hired: "2015-02-30" }),
+    "The date hired must be a date written as year-month-day, such as 2020-06-01.",
+  );
+  assert.equal(problem({ date_hired: "06/01/2015" }), "The date hired must be a date written as year-month-day, such as 2020-06-01.");
+  // Without a birthdate there is nothing to compare with.
+  assert.equal(problem({ birthdate: "", date_hired: "1950-01-01" }), undefined);
+});
+
+test("the Employment step checks Date Hired on Next; the other steps don't", () => {
+  const steps = memberFormSteps({ mode: "create", married: false });
+  const step = (id: string) => steps.find((s) => s.id === id);
+  const late = filledForm({ date_hired: "2026-12-01" });
+  assert.deepEqual(validateMemberStep(step("employment"), late, [], TODAY), {
+    date_hired: "The date hired cannot be in the future.",
+  });
+  assert.equal(validateMemberStep(step("personal"), late, [], TODAY), true);
+  assert.equal(validateMemberStep(step("employment"), filledForm(), [], TODAY), true);
+});
+
+test("a step's toast: missing fields by name, and full sentences as they are", () => {
+  assert.equal(memberStepMessage({ first_name: "First name", last_name: "Last name" }), "Please complete: First name and Last name.");
+  assert.equal(memberStepMessage({ province: "Province" }), "Please enter a valid Province.");
+  assert.equal(
+    memberStepMessage({ date_hired: "The date hired cannot be in the future." }),
+    "The date hired cannot be in the future.",
+  );
+  assert.equal(
+    memberStepMessage({ "valid_ids.1.id_number": "Enter the ID number for ID 2.", "valid_ids.1.front_file": "Upload the front of ID 2." }),
+    "Enter the ID number for ID 2. Upload the front of ID 2.",
+  );
+  assert.equal(
+    memberStepMessage({ city: "City / Municipality", date_hired: "The date hired cannot be in the future." }),
+    "Please enter a valid City / Municipality. The date hired cannot be in the future.",
+  );
 });

@@ -77,6 +77,9 @@ export const PRINTABLE_TITLES: Readonly<
   time_deposit_early_termination: "Early Termination Form",
 };
 
+/** The bulk-import workbook's title in the Documents catalog, and so its breadcrumb. */
+export const DATA_IMPORT_TEMPLATE_TITLE = "Data Import Template";
+
 /** Fixed sub-pages, whatever section they sit under. */
 const SUB_PAGE_TITLES: Readonly<Record<string, string>> = {
   products: "Loan Products",
@@ -97,7 +100,7 @@ const ID_TITLES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   borrowers: { new: "New Member" },
   collaterals: { new: "New Collateral" },
   reports: REPORT_TITLES,
-  printables: PRINTABLE_TITLES,
+  printables: { ...PRINTABLE_TITLES, "data-template": DATA_IMPORT_TEMPLATE_TITLE },
   "credit-scoring": {
     borrowers: "Member Scores",
     assessment: "Credit Assessment",

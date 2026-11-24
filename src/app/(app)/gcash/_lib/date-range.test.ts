@@ -51,3 +51,17 @@ describe("a date still being typed", () => {
     assert.equal(dateRangeReady("0020-11-01", "2026-11-30"), false);
   });
 });
+
+describe("a date input the browser holds as partial", () => {
+  test("a native date input reports \"\" while it's partial; its badInput keeps it waiting", () => {
+    assert.equal(filterDateReady("", true), false);
+    assert.equal(filterDateReady("", false), true);
+  });
+
+  test("the range waits while either input is partial", () => {
+    assert.equal(dateRangeReady("", "", { from: true }), false);
+    assert.equal(dateRangeReady("2026-11-01", "", { to: true }), false);
+    assert.equal(dateRangeReady("2026-11-01", "2026-11-30", {}), true);
+    assert.equal(dateRangeReady("2026-11-01", "", { from: false, to: false }), true);
+  });
+});
