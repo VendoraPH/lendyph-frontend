@@ -18,9 +18,12 @@ const FIRST_YEAR = 1900;
  * True when a Date From or Date To can be asked for: empty (an open end), or a
  * real `YYYY-MM-DD` date with a year from 1900. While a year is being typed the
  * date input already reports a date (0002-11-24, then 0020-, then 0202-), so
- * those wait instead of each sending a list request.
+ * those wait instead of each sending a list request. A native date input
+ * typed only in part (month and day, no year) reports "", so its
+ * `validity.badInput` (`partial`) keeps it waiting too.
  */
-export function filterDateReady(value: string): boolean {
+export function filterDateReady(value: string, partial = false): boolean {
+  if (partial) return false;
   if (value === "") return true;
   const match = FILTER_DATE.exec(value);
   if (!match) return false;
@@ -30,7 +33,13 @@ export function filterDateReady(value: string): boolean {
   return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
 }
 
+/** Which date inputs the browser holds as typed in part (`validity.badInput`). */
+export interface PartialDates {
+  from?: boolean;
+  to?: boolean;
+}
+
 /** True when both ends of the range are ready (see `filterDateReady`). */
-export function dateRangeReady(from: string, to: string): boolean {
-  return filterDateReady(from) && filterDateReady(to);
+export function dateRangeReady(from: string, to: string, partial: PartialDates = {}): boolean {
+  return filterDateReady(from, partial.from) && filterDateReady(to, partial.to);
 }

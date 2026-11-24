@@ -36,7 +36,7 @@ import type { ImportCounts, ImportRunStatus } from "@/types/data-import";
 import { useImportStatus } from "../_hooks/use-import-status";
 import { filesPhrase, runFileKinds } from "./import-files";
 import { ProductMappingGate } from "./product-mapping-table";
-import { rowsProgress } from "../_lib/count-words";
+import { rowsProgress } from "@/lib/count-words";
 
 /* ------------------------------------------------------------------ */
 /* Pure — unit tested in ./step-processing.test.ts                      */

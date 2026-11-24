@@ -27,7 +27,7 @@ import { isEarlierLayout } from "@/lib/import-schema";
 import { formatCount } from "@/lib/report-format";
 import { cn } from "@/lib/utils";
 import type { FileFindings, FileInspection } from "../_hooks/use-file-precheck";
-import { rowsLeftUnchecked } from "../_lib/count-words";
+import { rowsLeftUnchecked } from "@/lib/count-words";
 
 export interface PrecheckFileSummary {
   inspection: FileInspection;
