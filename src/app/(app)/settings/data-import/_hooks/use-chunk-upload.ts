@@ -44,6 +44,7 @@ import {
   type ImportSession,
 } from "@/lib/import-session";
 import { getErrorMessage } from "@/lib/api-error";
+import { piecesOnServer } from "@/lib/count-words";
 import { dataImportService } from "@/services/data-import.service";
 import type {
   ImportFileKind,
@@ -325,7 +326,7 @@ export function resumeVerdict(args: {
       kind: "needs-file",
       reason:
         received > 0
-          ? `${received} of ${total} pieces of ${name} are already on the server. Pick ${name} again to carry on from there — the file itself is never stored in this browser, so it has to be re-opened.`
+          ? `${piecesOnServer(received, total, name)} Pick ${name} again to carry on from there — the file itself is never stored in this browser, so it has to be re-opened.`
           : `Pick ${name} to start the upload.`,
     };
   }

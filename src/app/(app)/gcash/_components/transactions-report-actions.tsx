@@ -18,7 +18,7 @@ import { useBrandingStore } from "@/store/branding-store";
 import { applyChrome, loadLogoDataUrl } from "@/app/(app)/reports/_lib/report-chrome";
 import type { ReportDocument } from "@/app/(app)/reports/_lib/types";
 import type { GCashListFilters, GCashTransaction } from "@/types";
-import { DATE_RANGE_REVERSED, dateRangeReady, dateRangeReversed } from "../_lib/date-range";
+import { DATE_RANGE_REVERSED, dateRangeReady, dateRangeReversed, type PartialDates } from "../_lib/date-range";
 import {
   gcashTransactionsReport,
   transactionsExportRefusal,
@@ -44,9 +44,12 @@ export type TransactionsReportFilters = Pick<GCashTransactionsReportInput, "from
  */
 export function TransactionsReportActions({
   filters,
+  partialDates = {},
   branchOf,
 }: {
   filters: TransactionsReportFilters;
+  /** Date inputs typed only in part, which report "" (see `dateRangeReady`). */
+  partialDates?: PartialDates;
   branchOf: (row: GCashTransaction) => string;
 }) {
   const [busy, setBusy] = useState<Action | null>(null);
@@ -55,7 +58,7 @@ export function TransactionsReportActions({
   const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
   const logoUrl = useBrandingStore((s) => s.logoUrl);
   // A date still being typed, or a reversed range, makes no report.
-  const rangeReady = dateRangeReady(filters.from, filters.to);
+  const rangeReady = dateRangeReady(filters.from, filters.to, partialDates);
   const reversed = rangeReady && dateRangeReversed(filters.from, filters.to);
   const invalidRange = !rangeReady || reversed;
 
