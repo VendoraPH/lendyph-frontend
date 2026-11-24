@@ -170,6 +170,8 @@ jobs:
               # Staging only: AMLA and multi-branch (Arvin, 2026-11-19, Phase 6 plan "Yes GO!").
               export NEXT_PUBLIC_ENABLE_AMLA=true
               export NEXT_PUBLIC_ENABLE_MULTI_BRANCH=true
+              # Staging only: loan origination (Arvin, 2026-11-24, finish run round 2, decision 10).
+              export NEXT_PUBLIC_ENABLE_LOAN_ORIGINATION=true
               DEPLOY_BRANCH=development
               # The proxy secret, delivered by the step before this one (staging only).
               # Exported so deploy.sh's children inherit it: never echoed, never on a
@@ -413,6 +415,8 @@ jobs:
               # Staging only: AMLA and multi-branch (Arvin, 2026-11-19, Phase 6 plan "Yes GO!").
               export NEXT_PUBLIC_ENABLE_AMLA=true
               export NEXT_PUBLIC_ENABLE_MULTI_BRANCH=true
+              # Staging only: loan origination (Arvin, 2026-11-24, finish run round 2, decision 10).
+              export NEXT_PUBLIC_ENABLE_LOAN_ORIGINATION=true
               DEPLOY_BRANCH=development
               # The proxy secret, delivered by the step before this one (staging only).
               # Exported so deploy.sh's children inherit it: never echoed, never on a
