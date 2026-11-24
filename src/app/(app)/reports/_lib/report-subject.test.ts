@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   ACCOUNT_REPORT_HINT,
+  cutoffProblem,
+  cutoffRange,
   noDateRangeScope,
   presetAccountId,
   presetBranchId,
@@ -108,4 +110,28 @@ test("a linked branch counts only once the picker has loaded and offers it", () 
   assert.equal(linkedBranchId(9, offered, true), null, "a branch the picker doesn't offer");
   assert.equal(linkedBranchId(5, [], true), null, "the list failed or is empty");
   assert.equal(linkedBranchId(null, offered, true), null);
+});
+
+test("a cutoff report asks for a cutoff date", () => {
+  assert.equal(reportPickPrompt({ cutoffDate: true }), "a cutoff date");
+});
+
+test("a cutoff date's period runs from January 1 of its year", () => {
+  assert.deepEqual(cutoffRange("2026-06-30"), { from: "2026-01-01", to: "2026-06-30" });
+  assert.deepEqual(cutoffRange("2028-02-29"), { from: "2028-01-01", to: "2028-02-29" });
+  assert.deepEqual(cutoffRange("2026-01-01"), { from: "2026-01-01", to: "2026-01-01" });
+  for (const value of ["", "2026-02-31", "2026-6-30", "20260630"]) {
+    assert.deepEqual(cutoffRange(value), { from: "", to: "" }, value);
+  }
+});
+
+test("a cutoff date is a real day no later than today", () => {
+  const today = "2026-11-24";
+  assert.equal(cutoffProblem("2026-11-24", today), null);
+  assert.equal(cutoffProblem("2026-06-30", today), null);
+  assert.equal(cutoffProblem("2026-11-25", today), "The cutoff date can't be after today.");
+  // A date input reads "" while a part of the date is still blank.
+  for (const value of ["", "2026-02-31", "2026-6-30"]) {
+    assert.equal(cutoffProblem(value, today), "Pick a cutoff date.", value);
+  }
 });

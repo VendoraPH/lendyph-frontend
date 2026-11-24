@@ -38,6 +38,7 @@ const REFERENCE_PREFIX: Record<DocumentId, string> = {
   share_capital: "SCP",
   performance: "PRF",
   provisioning: "PRV",
+  profit_sharing: "PSH",
   // Savings report prefixes never start like a savings record's own number
   // (SAV- accounts, SVT- transactions, SVI- interest rows, TD- certificates),
   // so a printed report can't be mistaken for a transaction.

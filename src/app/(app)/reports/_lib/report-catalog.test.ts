@@ -256,3 +256,43 @@ test("the Reports page lists the AMLA reports in its own section, in its search 
   assert.match(page, /<AmlaSection /);
   assert.match(page, /href=\{report\.href\}/);
 });
+
+// Finish run round 2, decision 17: one cutoff date and no date range. After
+// the money review (#376) it is the whole cooperative, so it has no branch
+// filter, and it is listed only for users holding the permission of every
+// figure it shows (the server answers 403 without any one of them).
+const PROFIT_SHARING_NEEDS = ["share_capital:view", "expenses:view", "accounting:view", "branches:view_all"];
+
+test("Profit Sharing asks only for its cutoff date: the whole cooperative, no branch", async () => {
+  const report = await reportDefinition("profit_sharing");
+  assert.equal(report.title, "Profit Sharing");
+  assert.equal(report.category, "financial");
+  assert.equal(report.cutoffDate, true);
+  assert.equal(report.supportsBranch, false);
+
+  requests.length = 0;
+  const doc = await report.build({ range: { from: "2026-01-01", to: "2026-06-30" }, branchId: 3 });
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].pathname, "/reports/profit-sharing");
+  assert.equal(requests[0].searchParams.get("cutoff_date"), "2026-06-30");
+  assert.equal(requests[0].searchParams.has("branch_id"), false);
+  assert.equal(requests[0].searchParams.has("date_from"), false);
+  assert.equal(requests[0].searchParams.has("date_to"), false);
+  assert.equal(doc.reportId, "profit_sharing");
+  assert.equal(doc.meta.asOf, "Jun 30, 2026");
+});
+
+test("Profit Sharing is listed and opens only for users holding every permission it needs", async () => {
+  const { reportAccess, visibleReports } = await import("./report-catalog");
+  const listed = (can: (p: string) => boolean) => visibleReports(can).some((r) => r.id === "profit_sharing");
+
+  assert.equal(listed(() => true), true);
+  assert.equal(reportAccess("profit_sharing", () => true), "open");
+  for (const missing of PROFIT_SHARING_NEEDS) {
+    const without = (p: string) => p !== missing;
+    assert.equal(listed(without), false, missing);
+    assert.equal(reportAccess("profit_sharing", without), "no_access", missing);
+  }
+  // The other reports keep their own rules.
+  assert.equal(visibleReports((p) => p !== "expenses:view").some((r) => r.id === "share_capital"), true);
+});

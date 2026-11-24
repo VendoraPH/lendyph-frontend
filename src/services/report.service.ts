@@ -288,6 +288,11 @@ export const reportService = {
   provisioning: (params?: Record<string, unknown>) =>
     api.get(API_ENDPOINTS.REPORTS.PROVISIONING, { params }),
 
+  // `cutoff_date` and `branch_id`: the profit to the cutoff date and each
+  // member's share of it, every figure and total the server's.
+  profitSharing: (params?: Record<string, unknown>) =>
+    api.get(API_ENDPOINTS.REPORTS.PROFIT_SHARING, { params }),
+
   // Savings (NEXT_PUBLIC_ENABLE_SAVINGS; reports:view plus savings:view).
   // The lists are paginator envelopes with `totals` over the whole filter, so
   // getRaw keeps the meta and the server's figures.

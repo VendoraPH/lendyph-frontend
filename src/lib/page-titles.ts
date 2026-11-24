@@ -23,6 +23,7 @@ export const REPORT_TITLES: Readonly<Record<ReportId, string>> = {
   cash_flow: "Cash Flow Statement",
   share_capital: "Share Capital Report",
   provisioning: "Loan Loss Provisioning",
+  profit_sharing: "Profit Sharing",
   savings_balances: "Savings Balances",
   savings_transactions: "Savings Transactions",
   time_deposit_maturities: "Time Deposit Maturities",

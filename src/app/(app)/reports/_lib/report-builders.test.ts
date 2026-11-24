@@ -2466,6 +2466,7 @@ const ALL_REPORT_IDS: Record<DocumentId, true> = {
   share_capital: true,
   performance: true,
   provisioning: true,
+  profit_sharing: true,
   savings_balances: true,
   savings_transactions: true,
   time_deposit_maturities: true,
