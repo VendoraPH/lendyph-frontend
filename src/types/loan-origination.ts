@@ -11,6 +11,7 @@
  * presenter converts it (the assessment, the settings).
  */
 
+import type { TermUnit } from "@/lib/loan-terms";
 import type { PaginatedResponse } from "./api";
 import type { TurnaroundStretch } from "./executive-dashboard";
 import type { MoneyString } from "./savings";
@@ -358,6 +359,8 @@ export interface ApplicationSummary {
   loan_product_name: string | null;
   requested_amount: MoneyString | null;
   requested_term: number | null;
+  /** The loan product's unit for `requested_term`; null while no product is chosen. */
+  term_unit: TermUnit | null;
   branch_id: number | null;
   branch_name: string | null;
   status: ApplicationStatus;
@@ -555,6 +558,8 @@ export interface Assessment {
   loan_product_name: string | null;
   requested_amount: number | null;
   requested_term: number | null;
+  /** The loan product's unit for `requested_term`. */
+  term_unit: TermUnit | null;
   frequency: string | null;
   /** The loan's planned start date the run used. */
   start_date: string | null;

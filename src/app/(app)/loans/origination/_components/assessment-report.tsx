@@ -53,10 +53,10 @@ function Flags({ title, items, tone }: { title: string; items: string[]; tone: T
  * as sent. Figures that count a linked member's loans read "Withheld" for a
  * viewer the server withholds them from. A guide for staff, never a decision.
  */
-export function AssessmentReport({ assessment: a, termUnit }: { assessment: Assessment; termUnit?: string }) {
+export function AssessmentReport({ assessment: a }: { assessment: Assessment }) {
   const request: [string, string | null][] = [
     ["Amount requested", a.requested_amount === null ? null : formatCurrency(a.requested_amount)],
-    ["Term", termText(a.requested_term, termUnit)],
+    ["Term", termText(a.requested_term, a.term_unit)],
     ["Payment schedule", inWords(a.frequency)],
     ["Loan start date", a.start_date ? formatDate(a.start_date) : null],
     ["Instalment taken as", a.instalment_basis],

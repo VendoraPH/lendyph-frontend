@@ -5,7 +5,9 @@
  *   keeps its height (`shrink-0`); a row that scrolls sideways would
  *   otherwise shrink and clip its 32 px chips;
  * - a handed-off application offers "Open loan" once, in its action row;
- * - every chip's remove button names what it removes.
+ * - every chip's remove button names what it removes;
+ * - a term reads its unit from the application or the assessment
+ *   (`term_unit`), so no page reads the loan products for it.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -29,6 +31,14 @@ test("every filter row above a list keeps its height", () => {
 test("a handed-off application offers Open loan once, in its action row", () => {
   assert.doesNotMatch(read("applications/[id]/page.tsx"), /Open loan/);
   assert.equal(read("applications/[id]/_components/application-actions.tsx").match(/Open loan/g)?.length, 1);
+});
+
+test("a term reads its unit from the application or the assessment, with no products request", () => {
+  for (const page of ["applications/[id]/page.tsx", "assessments/page.tsx"]) {
+    assert.doesNotMatch(read(page), /useLoanProducts|termUnitOf/);
+  }
+  assert.match(read("applications/[id]/_components/applicant-overview.tsx"), /termText\(a\.requested_term, a\.term_unit\)/);
+  assert.match(read("_components/assessment-report.tsx"), /termText\(a\.requested_term, a\.term_unit\)/);
 });
 
 test("each required-field chip's remove button names the field", () => {

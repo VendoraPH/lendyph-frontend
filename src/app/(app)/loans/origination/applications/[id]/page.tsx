@@ -14,8 +14,6 @@ import { formatDateTime } from "@/lib/format";
 import { loanOriginationService } from "@/services";
 import type { ApplicationDetail } from "@/types/loan-origination";
 import { NOT_FOUND, isMissing, missingFieldLabel, orMissing } from "../../_lib/application-view";
-import { termUnitOf } from "../../_lib/term";
-import { useLoanProducts } from "../../../reminders/_hooks/use-loan-products";
 import { ActivityPanel } from "./_components/activity-panel";
 import { ApplicantOverview } from "./_components/applicant-overview";
 import { ApplicationActions } from "./_components/application-actions";
@@ -85,20 +83,18 @@ function NotFound() {
 
 /**
  * The loaded application. The tab lives in the page, so a reload after an
- * action keeps it; so do the loan products a term's unit is read from.
+ * action keeps it.
  */
 function ApplicationView({
   a,
   tab,
   onTab,
   onChanged,
-  termUnitFor,
 }: {
   a: ApplicationDetail;
   tab: string;
   onTab: (tab: string) => void;
   onChanged: () => void;
-  termUnitFor: (productId: number | null) => string | undefined;
 }) {
   return (
     <div className="space-y-4">
@@ -114,13 +110,13 @@ function ApplicationView({
           <TabsTrigger value="activity">Notes and history</TabsTrigger>
         </TabsList>
         <TabsContent value="overview">
-          <ApplicantOverview application={a} termUnit={termUnitFor(a.loan_product_id)} />
+          <ApplicantOverview application={a} />
         </TabsContent>
         <TabsContent value="documents">
           <DocumentsPanel application={a} onChanged={onChanged} />
         </TabsContent>
         <TabsContent value="assessment">
-          <AssessmentPanel application={a} onChanged={onChanged} termUnitFor={termUnitFor} />
+          <AssessmentPanel application={a} onChanged={onChanged} />
         </TabsContent>
         <TabsContent value="messages">
           <MessagesPanel messages={a.applicant_messages} />
@@ -138,9 +134,6 @@ export default function ApplicationDetailPage() {
   const fetcher = useCallback(() => orMissing(loanOriginationService.getApplication(id)), [id]);
   const resource = useApiResource(fetcher);
   const [tab, setTab] = useState("overview");
-  // A term is a number in its loan product's unit; listing products needs loans:view.
-  const { products } = useLoanProducts(usePermission().can("loans:view"));
-  const termUnitFor = (productId: number | null) => termUnitOf(products, productId);
 
   return (
     <ScrollBox className="space-y-4">
@@ -153,7 +146,7 @@ export default function ApplicationDetailPage() {
           isMissing(a) ? (
             <NotFound />
           ) : (
-            <ApplicationView a={a} tab={tab} onTab={setTab} onChanged={resource.refetch} termUnitFor={termUnitFor} />
+            <ApplicationView a={a} tab={tab} onTab={setTab} onChanged={resource.refetch} />
           )
         }
       </DataState>
