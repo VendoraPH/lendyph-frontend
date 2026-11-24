@@ -91,12 +91,7 @@ import {
   PESO_DECIMALS,
   sanitizeDecimalInput,
 } from "@/lib/percent";
-import {
-  ratePeriodWord,
-  readRateFrequency,
-  readTermUnit,
-  termUnitNoun,
-} from "@/lib/loan-terms";
+import { ratePeriodWord, readTermUnit, termUnitNoun } from "@/lib/loan-terms";
 import { editedAccountOfficer } from "@/lib/loan-account-officer";
 import {
   applicationDeductions,
@@ -124,6 +119,8 @@ import {
   approvalEditPayload,
   approvalEditSavedMessage,
   isApprovalEdit,
+  loanFormSave,
+  loanTermsBasis,
   saveApprovalEdit,
 } from "./_lib/approval-edit-save";
 import { approvalCardHref, readApprovalEditState } from "@/app/(app)/loans/[id]/_lib/approval-edit";
@@ -548,10 +545,19 @@ function NewLoanApplicationInner() {
     return raw ? [String(raw)] : [];
   }, [selectedProduct]);
 
-  // `term` is a length in the product's unit — months unless it says days.
-  const termUnit = readTermUnit(selectedProduct?.term_unit);
-  // …and the rate is quoted per the product's rate frequency.
-  const rateFrequency = readRateFrequency(selectedProduct?.interest_rate_frequency);
+  // `term` is a length in the loan's unit — months unless it says days — and
+  // the rate is quoted per the loan's rate period: an edit's own, copied from
+  // its product when it was made, else the product's.
+  const termsBasis = useMemo(
+    () => loanTermsBasis(isEditMode ? existingLoan : null, selectedProduct),
+    [isEditMode, existingLoan, selectedProduct],
+  );
+  const termUnit = termsBasis.termUnit;
+  const rateFrequency = termsBasis.rateFrequency;
+  // On the approval edit, a term or rate whose product range is now in other
+  // terms stays as it is (the server refuses a change in the same words).
+  const termLocked = inApproval && termsBasis.termUnitMoved !== null;
+  const rateLocked = inApproval && termsBasis.ratePeriodMoved !== null;
   const principal = parseFloat(principalAmount) || 0;
   const term = parseInt(termValue) || 0;
   const rate = parseFloat(interestRate) || 0;
@@ -581,13 +587,13 @@ function NewLoanApplicationInner() {
   }, [selectedProduct, principalAmount, principal, isRestructureEdit, storedPrincipal]);
 
   const termError = useMemo(() => {
-    if (!selectedProduct || !termValue) return null;
+    if (!selectedProduct || !termValue || termLocked) return null;
     if (term < selectedProduct.min_term)
       return `Minimum term is ${selectedProduct.min_term} ${termUnitNoun(termUnit)}`;
     if (term > selectedProduct.max_term)
       return `Maximum term is ${selectedProduct.max_term} ${termUnitNoun(termUnit)}`;
     return null;
-  }, [selectedProduct, termValue, term, termUnit]);
+  }, [selectedProduct, termValue, term, termUnit, termLocked]);
 
   // SCB validation — required when the product says so; range-checked when
   // the product defines min/max. A restructure is held to the server's rule
@@ -698,6 +704,7 @@ function NewLoanApplicationInner() {
         : existingLoan
           ? storedDeductionInputs(existingLoan.deductions)
           : null,
+      statesBuildUp: inApproval,
     }),
     inApproval ? editLoanId : null,
   );
@@ -900,12 +907,18 @@ function NewLoanApplicationInner() {
 
       // The Chairman/Chairwoman's edit at their approval step: the loan stays
       // at their step, so it returns to the approval card to approve or forward.
-      if (inApproval && editLoanId && approvalEdit?.version) {
+      // Without its version it is refused, never saved as a plain edit.
+      const save = loanFormSave({ inApproval, editLoanId, version: approvalEdit?.version ?? null });
+      if (save.kind === "refused") {
+        toast.error(save.message);
+        return;
+      }
+      if (save.kind === "approval") {
         const saved = await saveApprovalEdit(
-          editLoanId,
+          save.loanId,
           approvalEditPayload({
             payload,
-            version: approvalEdit.version,
+            version: save.version,
             scbAmount: scb,
             purpose,
             coMakerIds: payload.co_maker_ids,
@@ -917,8 +930,8 @@ function NewLoanApplicationInner() {
             attached: attachedCollaterals,
           }),
         );
-        toast.success("Loan updated", { description: approvalEditSavedMessage(approvalEdit.step?.name ?? null) });
-        router.push(approvalCardHref(saved.id ?? editLoanId));
+        toast.success("Loan updated", { description: approvalEditSavedMessage(approvalEdit?.step?.name ?? null) });
+        router.push(approvalCardHref(saved.id ?? save.loanId));
         return;
       }
 
@@ -1344,7 +1357,7 @@ function NewLoanApplicationInner() {
                     <Info className="size-3" />
                     Amount: {formatCurrency(selectedProduct.min_amount)} –{" "}
                     {formatCurrency(selectedProduct.max_amount)} | Term:{" "}
-                    {selectedProduct.min_term} – {selectedProduct.max_term} {termUnit}
+                    {selectedProduct.min_term} – {selectedProduct.max_term} {readTermUnit(selectedProduct.term_unit)}
                   </p>
                 )}
               </div>
@@ -1392,7 +1405,9 @@ function NewLoanApplicationInner() {
                     onChange={(e) => setTermValue(e.target.value.replace(/\D/g, ""))}
                     min={selectedProduct?.min_term}
                     max={selectedProduct?.max_term}
+                    disabled={termLocked}
                   />
+                  {termLocked && <p className="text-xs text-muted-foreground">{termsBasis.termUnitMoved}</p>}
                 </div>
 
                 {/* Payment Frequency */}
@@ -1436,7 +1451,9 @@ function NewLoanApplicationInner() {
                     placeholder="0"
                     value={interestRate}
                     onChange={(e) => setInterestRate(sanitizeDecimalInput(e.target.value))}
+                    disabled={rateLocked}
                   />
+                  {rateLocked && <p className="text-xs text-muted-foreground">{termsBasis.ratePeriodMoved}</p>}
                 </div>
 
                 {/* Interest Type — read-only: the server snapshots it from the product */}

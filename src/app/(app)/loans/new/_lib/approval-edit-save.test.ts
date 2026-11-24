@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { approvalEditPayload, approvalEditSavedMessage, isApprovalEdit } from "./approval-edit-save";
+import {
+  approvalEditPayload,
+  approvalEditSavedMessage,
+  isApprovalEdit,
+  loanFormSave,
+  loanTermsBasis,
+} from "./approval-edit-save";
 import type { SelectedCollateral } from "./edit-collaterals";
 
 /** The payload the form builds for an edit, as handleSubmit builds it. */
@@ -88,4 +94,48 @@ test("the account officer goes up only when the form stated a change", () => {
 test("the save says the loan still waits at the step", () => {
   assert.equal(approvalEditSavedMessage("BOD Chairwoman"), "It's still at the \"BOD Chairwoman\" step for you to approve or forward.");
   assert.equal(approvalEditSavedMessage(null), "It's still at your approval step for you to approve or forward.");
+});
+
+// The approval edit saves through its own endpoint with its version, and never
+// falls back to the plain edit (PUT /loans/{id}) when the version is missing.
+test("the save goes to the approval edit with its version, or is refused in words, never to the plain edit", () => {
+  assert.deepEqual(loanFormSave({ inApproval: true, editLoanId: 12, version: "v1" }), {
+    kind: "approval",
+    loanId: 12,
+    version: "v1",
+  });
+  for (const version of [null, ""]) {
+    assert.deepEqual(loanFormSave({ inApproval: true, editLoanId: 12, version }), {
+      kind: "refused",
+      message: "This edit didn't open at your approval step. Reload the loan and open the edit again.",
+    });
+  }
+  assert.deepEqual(loanFormSave({ inApproval: false, editLoanId: 12, version: null }), { kind: "edit", loanId: 12 });
+  assert.deepEqual(loanFormSave({ inApproval: false, editLoanId: null, version: null }), { kind: "create" });
+});
+
+// An edit reads its loan's own term unit and rate period (copied from the
+// product when the loan was made); a new application reads its product's.
+test("an edit reads the loan's own term unit and rate period, and says when its product has moved", () => {
+  const loan = { term_unit: "months" as const, interest_rate_frequency: "monthly" as const };
+  const moved = { term_unit: "days" as const, interest_rate_frequency: "annual" as const };
+
+  assert.deepEqual(loanTermsBasis(loan, loan), {
+    termUnit: "months",
+    rateFrequency: "monthly",
+    termUnitMoved: null,
+    ratePeriodMoved: null,
+  });
+  assert.deepEqual(loanTermsBasis(loan, moved), {
+    termUnit: "months",
+    rateFrequency: "monthly",
+    termUnitMoved: "This loan's term is counted in months, but its product now counts days, so the term can't change here.",
+    ratePeriodMoved: "This loan's rate is quoted per month, but its product now quotes rates per year, so the rate can't change here.",
+  });
+  assert.deepEqual(loanTermsBasis(null, moved), {
+    termUnit: "days",
+    rateFrequency: "annual",
+    termUnitMoved: null,
+    ratePeriodMoved: null,
+  });
 });

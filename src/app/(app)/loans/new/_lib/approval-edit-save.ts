@@ -1,5 +1,6 @@
 import { loanService, type LoanApplicationPayload, type LoanApprovalEditPayload } from "@/services/loan.service";
 import type { Loan } from "@/types";
+import { ratePeriodWord, readRateFrequency, readTermUnit, type RateFrequency, type TermUnit } from "@/lib/loan-terms";
 import { editedCollaterals, type SelectedCollateral } from "./edit-collaterals";
 
 /**
@@ -78,4 +79,73 @@ export function approvalEditSavedMessage(stepName: string | null): string {
   return stepName
     ? `It's still at the "${stepName}" step for you to approve or forward.`
     : "It's still at your approval step for you to approve or forward.";
+}
+
+/** Where the loan form's save goes. */
+export type LoanFormSave =
+  | { kind: "approval"; loanId: number; version: string }
+  | { kind: "refused"; message: string }
+  | { kind: "edit"; loanId: number }
+  | { kind: "create" };
+
+/** The approval edit can't be saved without the version it opened at. */
+export const APPROVAL_EDIT_NOT_OPEN =
+  "This edit didn't open at your approval step. Reload the loan and open the edit again.";
+
+/**
+ * Where the save goes: the approval edit with its version, the plain edit
+ * (`PUT /loans/{id}`), or a new application. An approval edit with no version
+ * is refused in words, never sent to the plain edit, which saves differently.
+ */
+export function loanFormSave(input: {
+  inApproval: boolean;
+  editLoanId: number | null;
+  version: string | null;
+}): LoanFormSave {
+  if (input.inApproval) {
+    return input.editLoanId !== null && input.version
+      ? { kind: "approval", loanId: input.editLoanId, version: input.version }
+      : { kind: "refused", message: APPROVAL_EDIT_NOT_OPEN };
+  }
+  return input.editLoanId !== null ? { kind: "edit", loanId: input.editLoanId } : { kind: "create" };
+}
+
+/** What a loan or a product counts its term in and quotes its rate per. */
+interface TermsSource {
+  term_unit?: string | null;
+  interest_rate_frequency?: string | null;
+}
+
+/**
+ * The term unit and rate period the form reads: an edit's own, copied from its
+ * product when the loan was made, else the product's. When the product has
+ * moved to another since, its range is in other terms, so the field can't
+ * change here (the server refuses it in the same words).
+ */
+export function loanTermsBasis(
+  loan: TermsSource | null,
+  product: TermsSource | null,
+): {
+  termUnit: TermUnit;
+  rateFrequency: RateFrequency;
+  termUnitMoved: string | null;
+  ratePeriodMoved: string | null;
+} {
+  const own = loan ?? product;
+  const termUnit = readTermUnit(own?.term_unit);
+  const rateFrequency = readRateFrequency(own?.interest_rate_frequency);
+  const productUnit = product ? readTermUnit(product.term_unit) : termUnit;
+  const productPeriod = product ? readRateFrequency(product.interest_rate_frequency) : rateFrequency;
+  return {
+    termUnit,
+    rateFrequency,
+    termUnitMoved:
+      loan && productUnit !== termUnit
+        ? `This loan's term is counted in ${termUnit}, but its product now counts ${productUnit}, so the term can't change here.`
+        : null,
+    ratePeriodMoved:
+      loan && productPeriod !== rateFrequency
+        ? `This loan's rate is quoted per ${ratePeriodWord(rateFrequency)}, but its product now quotes rates per ${ratePeriodWord(productPeriod)}, so the rate can't change here.`
+        : null,
+  };
 }
