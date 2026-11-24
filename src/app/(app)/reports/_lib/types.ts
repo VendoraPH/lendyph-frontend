@@ -354,6 +354,12 @@ export interface ReportDefinition {
    * listed and its page says the user has no access (`reportAccess`).
    */
   permission?: Permission;
+  /**
+   * Further permissions beyond `reports:view`, every one of them needed, for a
+   * report that shows figures from several sources (Profit Sharing). Without
+   * any one it is not listed and its page says the user has no access.
+   */
+  permissions?: readonly Permission[];
   /** False when the report's module is switched off for this deployment. */
   available?: boolean;
   build: (ctx: ReportContext) => Promise<ReportDocument>;

@@ -14,7 +14,6 @@ function payload(overrides: Record<string, unknown> = {}): Record<string, unknow
     cutoff_date: "2026-06-30",
     period_from: "2026-01-01",
     period_to: "2026-06-30",
-    branch_scope: "organisation",
     profit: {
       interest_income: 5000,
       penalty_income: 500,
@@ -138,7 +137,7 @@ test("the hand-checked example reads every figure as the server sent it", () => 
   const all = notes(doc);
   assert.equal(all.at(-1), payload().basis_note);
   assert.equal(all.some((n) => /rounding/i.test(n)), false);
-  assert.equal(all.some((n) => /Branch figures/.test(n)), false);
+  assert.equal(all.some((n) => /branch/i.test(n)), false);
 });
 
 test("a share % shows every place the server sent, never rounded to one", () => {
@@ -187,11 +186,15 @@ test("with no share capital it says the profit isn't shared", () => {
   assert.equal(tableTitled(doc, "Members' Shares")?.emptyText, "No member holds share capital on the cutoff date.");
 });
 
-test("a rounding remainder, members left out and a branch scope each say so", () => {
+test("a rounding remainder and members left out each say so, and the share % total is the server's", () => {
   const doc = buildProfitSharingDoc(
     payload({
-      branch_scope: "branches",
-      totals: { ...(payload().totals as Record<string, unknown>), rounding_remainder: 0.01, members_with_negative_balance: 2 },
+      totals: {
+        ...(payload().totals as Record<string, unknown>),
+        share_percent: 99.9999,
+        rounding_remainder: 0.01,
+        members_with_negative_balance: 2,
+      },
     }),
     RANGE,
   );
@@ -199,8 +202,8 @@ test("a rounding remainder, members left out and a branch scope each say so", ()
 
   assert.ok(all.some((n) => n.startsWith("Rounding remainder: ₱0.01.")), all.join("\n"));
   assert.ok(all.includes("2 members with a negative share capital balance on the cutoff date are left out."));
-  assert.ok(all.some((n) => n.startsWith("Branch figures:")));
   assert.equal(all.at(-1), payload().basis_note);
+  assert.equal(tableTitled(doc, "Members' Shares")?.totals?.find((t) => t.column === "share_percent")?.value, "99.9999%");
 
   const one = notes(buildProfitSharingDoc(
     payload({ totals: { ...(payload().totals as Record<string, unknown>), members_with_negative_balance: 1 } }),
@@ -209,7 +212,7 @@ test("a rounding remainder, members left out and a branch scope each say so", ()
   assert.ok(one.includes("1 member with a negative share capital balance on the cutoff date is left out."));
 });
 
-test("a failed request still renders the report, every figure a dash", () => {
+test("a failed request says the figures didn't load, never that nobody holds share capital", () => {
   const doc = buildProfitSharingDoc(null, RANGE);
 
   assert.equal(doc.meta.asOf, "Jun 30, 2026");
@@ -219,5 +222,9 @@ test("a failed request still renders the report, every figure a dash", () => {
   assert.ok(reached);
   assert.ok(reached.rows.every((row) => row.amount === null));
   assert.equal(reached.totals?.find((t) => t.column === "amount")?.value, DASH);
-  assert.deepEqual(tableTitled(doc, "Members' Shares")?.rows, []);
+
+  assert.equal(tableTitled(doc, "Members' Shares"), undefined);
+  const all = notes(doc);
+  assert.deepEqual(all, ["The profit sharing figures couldn't be loaded. Please generate the report again."]);
+  assert.equal(JSON.stringify(doc).includes("No member holds share capital"), false);
 });

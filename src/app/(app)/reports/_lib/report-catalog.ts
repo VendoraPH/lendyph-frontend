@@ -293,15 +293,16 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     category: "financial",
     icon: HandCoins,
     accent: ACCENT.green,
-    supportsBranch: true,
+    // The whole cooperative: shared among every member by all members' share
+    // capital, so there is no branch filter.
+    supportsBranch: false,
     cutoffDate: true,
-    // Members' share capital: the same permission as the Share Capital report.
-    permission: "share_capital:view",
+    // Each figure's source: share capital, expenses, the books, and every
+    // branch. The server answers 403 without any one of them.
+    permissions: ["share_capital:view", "expenses:view", "accounting:view", "branches:view_all"],
     // One cutoff date, sent as itself: the server works out the period from it.
     build: async (ctx) => {
-      const raw = await reportService
-        .profitSharing({ cutoff_date: ctx.range.to, ...reportScopeParams(ctx) })
-        .catch(() => null);
+      const raw = await reportService.profitSharing({ cutoff_date: ctx.range.to }).catch(() => null);
       return buildProfitSharingDoc(raw, ctx.range);
     },
   },
@@ -744,14 +745,17 @@ export function visibleAmlaReports(can: (permission: Permission) => boolean): Am
   return AMLA_REPORT_CATALOG.filter((r) => amlaReportAccess(r, can) === "open");
 }
 
+/** Whether the user holds every permission beyond `reports:view` the report's data needs. */
+function holdsReportPermissions(report: ReportDefinition, can: (permission: Permission) => boolean): boolean {
+  return (!report.permission || can(report.permission)) && (report.permissions ?? []).every((p) => can(p));
+}
+
 /**
  * The reports this user may open: their module is switched on for this
- * deployment, and they hold any extra permission the report's data needs.
+ * deployment, and they hold every extra permission the report's data needs.
  */
 export function visibleReports(can: (permission: Permission) => boolean): ReportDefinition[] {
-  return REPORT_CATALOG.filter(
-    (r) => r.available !== false && (!r.permission || can(r.permission)),
-  );
+  return REPORT_CATALOG.filter((r) => r.available !== false && holdsReportPermissions(r, can));
 }
 
 /**
@@ -777,5 +781,5 @@ export function reportAccess(
 ): "open" | "no_access" | "not_found" {
   const report = REPORT_CATALOG.find((r) => r.id === id);
   if (!report || report.available === false) return "not_found";
-  return !report.permission || can(report.permission) ? "open" : "no_access";
+  return holdsReportPermissions(report, can) ? "open" : "no_access";
 }

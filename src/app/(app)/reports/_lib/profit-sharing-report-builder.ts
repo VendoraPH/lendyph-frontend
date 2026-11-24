@@ -56,9 +56,8 @@ const LOSS_LINES: [string, string][] = [
   ["Less: written off against the allowance or interest never received", "written_off_covered"],
 ];
 
-const BRANCH_NOTE =
-  "Branch figures: the lending income, expenses and credit losses of the branch, shared among the " +
-  "members now in it, each with their whole share capital.";
+/** Said in the member table's place when the request failed: never "no member holds share capital". */
+const LOAD_ERROR = "The profit sharing figures couldn't be loaded. Please generate the report again.";
 
 /** The server's figure for one key, or null when it sent none. */
 function figure(block: Record<string, unknown> | null, key: string): number | null {
@@ -123,8 +122,6 @@ function sharingNotes(obj: Record<string, unknown> | null, profit: number | null
     );
   }
 
-  if (pick(obj, ["branch_scope"]) === "branches") texts.push(BRANCH_NOTE);
-
   return texts.map((text) => ({ kind: "note", text }));
 }
 
@@ -160,9 +157,15 @@ export function buildProfitSharingDoc(raw: unknown, range: DateRange): ReportDoc
     statementSection("Credit Losses", LOSS_LINES, profitBlock, ["Credit losses", "losses"]),
   ];
 
+  // A failed request says so, and nothing about the members: an empty table
+  // would read as if nobody held share capital.
+  if (obj === null) {
+    sections.push({ kind: "note", text: LOAD_ERROR });
+    return document(sections, asOf);
+  }
+
   // Withheld, not absent: the server's reason stands in the table's place, as
-  // the Share Capital report's roster does. Null rows with no reason (a failed
-  // request) still draw the table, empty.
+  // the Share Capital report's roster does.
   const omitted = asRecord(pick(obj, ["rows_omitted"]));
   if (omitted) {
     sections.push({ kind: "note", text: String(pick(omitted, ["message"]) ?? "") });
@@ -204,11 +207,15 @@ export function buildProfitSharingDoc(raw: unknown, range: DateRange): ReportDoc
     sections.push({ kind: "note", text: basis });
   }
 
+  return document(sections, asOf);
+}
+
+function document(sections: ReportSection[], asOf: string): ReportDocument {
   return {
     reportId: "profit_sharing",
     meta: {
       title: "Profit Sharing",
-      subtitle: "Each member's share of the distributable profit, by share capital on the cutoff date",
+      subtitle: "Each member's share of the whole cooperative's distributable profit, by share capital on the cutoff date",
       asOf,
       generatedAt: formatGeneratedAt(),
       org: "",
