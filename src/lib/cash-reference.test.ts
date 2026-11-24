@@ -4,6 +4,8 @@ import {
   CASH_REFERENCE_PATTERN,
   TIME_DEPOSIT_CASH_SERIES,
   cashAutoReference,
+  cashReferenceParams,
+  savedReferencesText,
   seriesAutoReference,
 } from "./cash-reference";
 
@@ -62,5 +64,55 @@ describe("a cash time deposit placement's automatic reference number", () => {
       assert.equal(seriesAutoReference(TIME_DEPOSIT_CASH_SERIES, true, method, "TD-1-2026-0001"), null);
     }
     assert.equal(seriesAutoReference(TIME_DEPOSIT_CASH_SERIES, false, "cash", "TD-1-2026-0001"), null);
+  });
+});
+
+describe("a bulk batch of cash entries", () => {
+  test("each entry gets its own number, starting with the preview", () => {
+    const field = cashAutoReference(true, "cash", "CSH-0001-2026-0004", 3);
+    assert.equal(field?.value, "CSH-0001-2026-0004");
+    assert.equal(field?.hint, "Each entry gets its own CSH reference number when saved, starting with this one.");
+  });
+
+  test("with no preview yet it still says each entry is numbered on save", () => {
+    assert.equal(
+      cashAutoReference(true, "cash", null, 2)?.hint,
+      "Each cash entry gets its own CSH reference number when saved.",
+    );
+  });
+
+  test("one selected row reads as a single entry", () => {
+    assert.match(cashAutoReference(true, "cash", "CSH-0001-2026-0004", 1)?.hint ?? "", /confirmed when the entry saves/);
+  });
+
+  test("other methods keep the typed field whatever the batch size", () => {
+    assert.equal(cashAutoReference(true, "gcash", "CSH-0001-2026-0004", 3), null);
+  });
+});
+
+describe("the numbers a save got back, for its success message", () => {
+  test("a batch reads as its first and last number", () => {
+    assert.equal(
+      savedReferencesText(["CSH-0001-2026-0004", "CSH-0001-2026-0005", "CSH-0001-2026-0006"]),
+      "CSH-0001-2026-0004 to CSH-0001-2026-0006",
+    );
+  });
+
+  test("one number reads as itself, and none as nothing", () => {
+    assert.equal(savedReferencesText(["CSH-0001-2026-0004"]), "CSH-0001-2026-0004");
+    assert.equal(savedReferencesText([]), "");
+    assert.equal(savedReferencesText([null, undefined, ""]), "");
+  });
+});
+
+describe("the preview asks for the date the record will carry", () => {
+  test("a calendar date goes with the request", () => {
+    assert.deepEqual(cashReferenceParams("2026-12-31"), { date: "2026-12-31" });
+  });
+
+  test("no date, a date still being typed or one that isn't a real day asks for today's", () => {
+    for (const value of [null, undefined, "", "2026-12", "20261231", "2026-02-30"]) {
+      assert.equal(cashReferenceParams(value), undefined, String(value));
+    }
   });
 });
