@@ -5,6 +5,8 @@ import { User, MapPin, Briefcase, CreditCard } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/format";
 import type { Borrower, BorrowerLoanSummary, Loan, CoMaker } from "@/types";
 import { loanNeedsCoMaker } from "../_lib/co-maker-recommendation";
+import { hasMembership } from "../../_lib/member-membership";
+import { MembershipCard } from "./membership-card";
 import { NotificationPreferencesCard } from "./notification-preferences-card";
 import { PortalAccessCard } from "./portal-access-card";
 import { env } from "@/config/env";
@@ -21,6 +23,8 @@ interface OverviewTabProps {
    * and void applications as money borrowed.
    */
   summary: BorrowerLoanSummary | null;
+  /** After the Membership card saves: the member's record as the server answered it. */
+  onMembershipSaved: (saved: Borrower) => void;
 }
 
 function InfoItem({ label, value }: { label: string; value?: string | null }) {
@@ -32,7 +36,7 @@ function InfoItem({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
-export function OverviewTab({ borrower, loans, coMakers, summary }: OverviewTabProps) {
+export function OverviewTab({ borrower, loans, coMakers, summary, onMembershipSaved }: OverviewTabProps) {
   const money = (amount: number | undefined) => (amount === undefined ? "—" : formatCurrency(amount));
   const count = (n: number | undefined) => (n === undefined ? "—" : String(n));
   const { can } = usePermission();
@@ -65,6 +69,9 @@ export function OverviewTab({ borrower, loans, coMakers, summary }: OverviewTabP
         </CardContent>
       </Card>
 
+      {/* Membership: members only; a pending or rejected registration has none. */}
+      {hasMembership(borrower) && <MembershipCard borrower={borrower} onSaved={onMembershipSaved} />}
+
       {/* Address */}
       <Card>
         <CardHeader className="pb-3">
@@ -91,6 +98,7 @@ export function OverviewTab({ borrower, loans, coMakers, summary }: OverviewTabP
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-4">
           <InfoItem label="Employer / Business" value={borrower.employer_or_business} />
+          <InfoItem label="Date Hired" value={borrower.date_hired ? formatDate(borrower.date_hired) : undefined} />
           <InfoItem label="Monthly Income" value={borrower.monthly_income ? formatCurrency(Number(borrower.monthly_income)) : undefined} />
         </CardContent>
       </Card>
