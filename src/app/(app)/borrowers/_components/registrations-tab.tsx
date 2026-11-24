@@ -128,7 +128,7 @@ export function RegistrationsTab({
               <TableRow key={reg.id} className="hover:bg-muted/50">
                 <SharedCells
                   reg={reg}
-                  codePrefix={variant.codePrefix}
+                  status={status}
                   branchNameById={branchNameById}
                   align={variant.align}
                 />

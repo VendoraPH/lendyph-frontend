@@ -9,15 +9,15 @@ import { formatCurrency, formatDateTime } from "@/lib/format";
 import type { Registration } from "@/services/registration.service";
 import { memberStatusLabel, reviewerLabel, statusBadgeColor } from "./utils";
 import { getInitials } from "@/lib/initials";
+import { registrationCode, type RegistrationTabStatus } from "../_lib/registration-code";
 
-/** The two registration statuses that get a tab of their own. */
-export type RegistrationTabStatus = "pending" | "rejected";
+export type { RegistrationTabStatus };
 
 export function fullNameOf(reg: Registration): string {
   return [reg.first_name, reg.middle_name, reg.last_name].filter(Boolean).join(" ");
 }
 
-function ApplicantCell({ reg, codePrefix }: { reg: Registration; codePrefix: string }) {
+function ApplicantCell({ reg, status }: { reg: Registration; status: RegistrationTabStatus }) {
   const fullName = fullNameOf(reg);
   const photoSrc = fileUrl(reg.photo_url ?? reg.photo);
   return (
@@ -31,7 +31,7 @@ function ApplicantCell({ reg, codePrefix }: { reg: Registration; codePrefix: str
       <div>
         <p className="font-medium">{fullName}</p>
         <p className="text-xs text-muted-foreground font-mono">
-          {codePrefix}-{String(reg.id).padStart(4, "0")}
+          {registrationCode(status, reg.id)}
         </p>
       </div>
     </div>
@@ -41,12 +41,12 @@ function ApplicantCell({ reg, codePrefix }: { reg: Registration; codePrefix: str
 /** Columns 1-3, identical for both statuses. */
 export function SharedCells({
   reg,
-  codePrefix,
+  status,
   branchNameById,
   align,
 }: {
   reg: Registration;
-  codePrefix: string;
+  status: RegistrationTabStatus;
   branchNameById: Map<number, string>;
   /** Matches the variant's own cells; the rejected reason wraps to two lines. */
   align: "align-middle" | "align-top";
@@ -56,7 +56,7 @@ export function SharedCells({
   return (
     <>
       <TableCell className={align}>
-        <ApplicantCell reg={reg} codePrefix={codePrefix} />
+        <ApplicantCell reg={reg} status={status} />
       </TableCell>
       <TableCell className={`text-muted-foreground ${align}`}>
         {reg.contact_number || "—"}
@@ -127,7 +127,6 @@ interface RegistrationVariant {
   headers: { label: string; className?: string }[];
   /** Cells for those same columns. */
   Cells: (props: { reg: Registration }) => React.ReactNode;
-  codePrefix: string;
   align: "align-middle" | "align-top";
   action: string;
   caption: string;
@@ -152,7 +151,6 @@ export const REGISTRATION_VARIANTS: Record<RegistrationTabStatus, RegistrationVa
       { label: "Status" },
     ],
     Cells: PendingCells,
-    codePrefix: "PEND",
     align: "align-middle",
     action: "Review",
     caption: "Membership applications awaiting approval",
@@ -165,7 +163,6 @@ export const REGISTRATION_VARIANTS: Record<RegistrationTabStatus, RegistrationVa
   rejected: {
     headers: [{ label: "Rejected" }, { label: "Reason" }],
     Cells: RejectedCells,
-    codePrefix: "REJ",
     align: "align-top",
     action: "View",
     caption: "Rejected membership applications",

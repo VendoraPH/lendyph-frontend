@@ -156,6 +156,11 @@ export const env = {
     // POST /linda/chat, so production never offers an assistant that can only
     // answer "not available". Literal reference for the same reason as above.
     linda: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_LINDA),
+    // Receipt share links: "Share link" on the payment receipt and the public
+    // /r/{token} page that opens one receipt, masked, without signing in. Off
+    // by default until the backend serves them (RECEIPT_SHARE_LINKS_ENABLED);
+    // the button also waits for the server to answer. Literal reference.
+    receiptShareLinks: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_RECEIPT_SHARE_LINKS),
     // Cash share capital entries numbered by the server (CSH-[admin id]-[year]-
     // [0001]): the Reference Number field locks on Cash and shows the next one.
     // Off until the backend assigns them. Literal reference, as above.
