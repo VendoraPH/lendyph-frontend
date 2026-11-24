@@ -27,10 +27,10 @@ const STAFF_APP_HEADERS = [
   { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
 ];
 
-// Every path except /member and /member/..., and the public loan application
-// (/apply/...), which keep the portal's stricter headers above
-// (/member-portal, the staff screens, is matched here).
-const STAFF_APP_SOURCE = "/((?!member(?:/|$)|apply(?:/|$)).*)";
+// Every path except /member and /member/..., the public loan application
+// (/apply/...) and a shared receipt (/r/...), which keep the portal's stricter
+// headers above (/member-portal, the staff screens, is matched here).
+const STAFF_APP_SOURCE = "/((?!member(?:/|$)|apply(?:/|$)|r(?:/|$)).*)";
 
 const nextConfig: NextConfig = {
   async headers() {
@@ -41,6 +41,9 @@ const nextConfig: NextConfig = {
       // The public loan application: an applicant's page, framed by no one.
       // Listed after the staff rule, so it would win if both ever matched.
       { source: "/apply/:path*", headers: MEMBER_PORTAL_HEADERS },
+      // A shared receipt: its address holds the link's token, so it is framed
+      // by no one and never sent on as a referrer. After the staff rule too.
+      { source: "/r/:path*", headers: MEMBER_PORTAL_HEADERS },
     ];
   },
   experimental: {

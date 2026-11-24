@@ -149,6 +149,9 @@ export const API_ENDPOINTS = {
     PREVIEW: (loanId: number) => `/loans/${loanId}/repayments/preview`,
     DETAIL: (id: number) => `/repayments/${id}`,
     VOID: (id: number) => `/repayments/${id}/void`,
+    /** The receipt's share link: GET its status, POST to make one (finish run round 2, decision 6). */
+    SHARE_LINK: (id: number) => `/repayments/${id}/share-link`,
+    SHARE_LINK_REVOKE: (id: number) => `/repayments/${id}/share-link/revoke`,
   },
   LOAN_PRODUCTS: {
     LIST: "/loan-products",
@@ -614,6 +617,15 @@ export const API_ENDPOINTS = {
     LINK: (id: number) => `/loan-origination/links/${id}`,
     NOTICES: "/loan-origination/notices",
     SETTINGS: "/loan-origination/settings",
+  },
+  /**
+   * A shared receipt (finish run round 2, decision 6): no Lendy account, a
+   * link token in the address. Answers 404 while the server switch
+   * (RECEIPT_SHARE_LINKS_ENABLED) is off. The token is encoded back, so it
+   * stays one path segment.
+   */
+  PUBLIC_RECEIPTS: {
+    SHOW: (token: string) => `/public/receipts/${encodeURIComponent(token)}`,
   },
   /**
    * The applicant's side of Loan Origination (LO-B2,
