@@ -216,6 +216,8 @@ export const API_ENDPOINTS = {
     SHARE_CAPITAL: "/reports/share-capital",
     PERFORMANCE: "/reports/performance",
     PROVISIONING: "/reports/provisioning",
+    // reports:view plus share_capital:view; the member rows also need reports:export.
+    PROFIT_SHARING: "/reports/profit-sharing",
     // Savings & Deposits (savings design §2). reports:view plus savings:view;
     // CSV needs reports:export. Totals cover the whole filter.
     SAVINGS_BALANCES: "/reports/savings/balances",

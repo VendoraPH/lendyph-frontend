@@ -16,6 +16,7 @@ import {
   Coins,
   FileText,
   Gauge,
+  HandCoins,
   Hourglass,
   Scale,
   Layers,
@@ -54,6 +55,7 @@ import {
   buildStatementOfAccountDoc,
   buildSubsidiaryLedgerDoc,
 } from "./report-builders";
+import { buildProfitSharingDoc } from "./profit-sharing-report-builder";
 import {
   buildSavingsBalancesDoc,
   buildSavingsDormantDoc,
@@ -283,6 +285,25 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     accent: ACCENT.red,
     supportsBranch: true,
     build: reportBuilder(reportService.provisioning, buildProvisioningDoc),
+  },
+  {
+    id: "profit_sharing",
+    title: REPORT_TITLES.profit_sharing,
+    description: "Each member's share of the year's distributable profit, by share capital on the cutoff date.",
+    category: "financial",
+    icon: HandCoins,
+    accent: ACCENT.green,
+    supportsBranch: true,
+    cutoffDate: true,
+    // Members' share capital: the same permission as the Share Capital report.
+    permission: "share_capital:view",
+    // One cutoff date, sent as itself: the server works out the period from it.
+    build: async (ctx) => {
+      const raw = await reportService
+        .profitSharing({ cutoff_date: ctx.range.to, ...reportScopeParams(ctx) })
+        .catch(() => null);
+      return buildProfitSharingDoc(raw, ctx.range);
+    },
   },
   {
     id: "portfolio_summary",

@@ -256,3 +256,32 @@ test("the Reports page lists the AMLA reports in its own section, in its search 
   assert.match(page, /<AmlaSection /);
   assert.match(page, /href=\{report\.href\}/);
 });
+
+// Finish run round 2, decision 17: one cutoff date, no date range, and the
+// Share Capital report's permission, since it shows members' share capital.
+test("Profit Sharing asks the server for its cutoff date and branch, and needs share_capital:view", async () => {
+  const { reportAccess, visibleReports } = await import("./report-catalog");
+  const report = await reportDefinition("profit_sharing");
+  assert.equal(report.title, "Profit Sharing");
+  assert.equal(report.category, "financial");
+  assert.equal(report.cutoffDate, true);
+  assert.equal(report.supportsBranch, true);
+  assert.equal(report.permission, "share_capital:view");
+  assert.equal(reportAccess("profit_sharing", (p) => p !== "share_capital:view"), "no_access");
+  assert.equal(visibleReports((p) => p !== "share_capital:view").some((r) => r.id === "profit_sharing"), false);
+
+  requests.length = 0;
+  const doc = await report.build({ range: { from: "2026-01-01", to: "2026-06-30" }, branchId: 3 });
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].pathname, "/reports/profit-sharing");
+  assert.equal(requests[0].searchParams.get("cutoff_date"), "2026-06-30");
+  assert.equal(requests[0].searchParams.get("branch_id"), "3");
+  assert.equal(requests[0].searchParams.has("date_from"), false);
+  assert.equal(requests[0].searchParams.has("date_to"), false);
+  assert.equal(doc.reportId, "profit_sharing");
+  assert.equal(doc.meta.asOf, "Jun 30, 2026");
+
+  requests.length = 0;
+  await report.build({ range: { from: "2026-01-01", to: "2026-06-30" }, branchId: null });
+  assert.equal(requests[0].searchParams.has("branch_id"), false);
+});

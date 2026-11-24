@@ -12,12 +12,18 @@ export function noDateRangeScope(subject: SubjectKind | undefined): string {
   return `Covers the whole ${subject === "loan" ? "loan" : "portfolio"}, as of the day it is generated.`;
 }
 
+/** What a report run to one cutoff date covers, for the line in the date presets' place. */
+export const CUTOFF_SCOPE =
+  "Share capital on the cutoff date, and the profit from January 1 of its year to the cutoff date.";
+
 /** What the empty preview asks the user to pick before generating. */
 export function reportPickPrompt(report: {
   noDateRange?: boolean;
   subject?: SubjectKind;
   accountParam?: boolean;
+  cutoffDate?: boolean;
 }): string {
+  if (report.cutoffDate) return "a cutoff date";
   if (report.accountParam) return "a date range for the savings account";
   if (!report.noDateRange) return "a date range";
   return report.subject ? `a ${reportSubjectNoun(report.subject)}` : "a branch";
@@ -57,6 +63,20 @@ function isCalendarDate(value: string | null): value is string {
   if (value === null || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const [y, m, d] = value.split("-").map(Number);
   return formatDateISO(new Date(y, m - 1, d)) === value;
+}
+
+/**
+ * The period a report run to `cutoff` covers: January 1 of its year to the
+ * cutoff date. Empty while the date isn't a real one (still being typed).
+ */
+export function cutoffRange(cutoff: string): DateRange {
+  return isCalendarDate(cutoff) ? { from: `${cutoff.slice(0, 4)}-01-01`, to: cutoff } : { from: "", to: "" };
+}
+
+/** Why a cutoff date can't be run yet, in words, or null when it can. */
+export function cutoffProblem(cutoff: string, today: string): string | null {
+  if (!isCalendarDate(cutoff)) return "Pick a cutoff date.";
+  return cutoff > today ? "The cutoff date can't be after today." : null;
 }
 
 /**
