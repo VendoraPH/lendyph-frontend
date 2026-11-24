@@ -46,7 +46,7 @@ import {
 } from "../_hooks/use-file-precheck";
 import { DateFormatCard } from "./date-format-card";
 import { HeaderDetectionCard } from "./header-detection-card";
-import { FILE_LABELS, filesPhrase, runFileKinds } from "./import-files";
+import { FILE_LABELS, IMPORT_FILE_KINDS, filesPhrase, runFileKinds } from "./import-files";
 import { PrecheckErrorsTable } from "./precheck-errors-table";
 import { PrecheckSummary } from "./precheck-summary";
 import { ProductMappingGate } from "./product-mapping-table";
@@ -172,7 +172,6 @@ interface FilePair {
   findings: FileFindings;
 }
 
-const FILE_ORDER: ImportFileKind[] = ["customers", "loans"];
 
 /** The stored session, when it is the one this run belongs to. */
 function resumableSession(
@@ -211,7 +210,7 @@ export interface StoredFileAnswer {
  * `date_released` is our word for that column and "Date Released" is theirs.
  */
 export function storedAnswers(session: ImportSession): StoredFileAnswer[] {
-  return FILE_ORDER.filter(
+  return IMPORT_FILE_KINDS.filter(
     (kind) =>
       kind in session.hasHeaderRow ||
       kind in session.dateFormat ||
@@ -268,7 +267,7 @@ export function StepCheck({
 
   const pairs = useMemo<FilePair[]>(() => {
     const list: FilePair[] = [];
-    for (const kind of FILE_ORDER) {
+    for (const kind of IMPORT_FILE_KINDS) {
       const inspection = inspections[kind];
       const found = findings[kind];
       if (inspection && found) list.push({ inspection, findings: found });
@@ -328,7 +327,7 @@ export function StepCheck({
     );
   }, [decided, productMap, runId, onConfirm]);
 
-  const hasFiles = Boolean(files.customers || files.loans);
+  const hasFiles = Boolean(files.customers || files.loans || files.share_capital);
 
   // -------------------------------------------------------------------------
   // Resumed run: a run id, but no file to read

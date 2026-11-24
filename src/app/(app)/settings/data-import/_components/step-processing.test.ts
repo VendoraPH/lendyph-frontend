@@ -45,6 +45,7 @@ function counts(overrides: Partial<ImportCounts> = {}): ImportCounts {
 test("every phase is named for what is happening, not 'Processing…'", () => {
   assert.equal(phaseLabel("importing_customers"), "Creating members");
   assert.equal(phaseLabel("importing_loans"), "Creating loans");
+  assert.equal(phaseLabel("importing_share_capital"), "Adding share capital entries");
   assert.equal(phaseLabel("staging"), "Reading the rows out of your files");
   assert.equal(phaseLabel("awaiting_mapping"), "Waiting for you to confirm the loan products");
   assert.equal(phaseLabel("cancelled"), "Cancelled");

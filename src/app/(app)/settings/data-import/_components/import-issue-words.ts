@@ -30,6 +30,8 @@ export const ISSUE_CATEGORY_WORDS: Readonly<Record<string, string>> = {
   date_hired_implausible: "Date hired too early",
   date_hired_before_birthdate: "Date hired before birthdate",
   membership_date_future: "Membership date in the future",
+  transaction_date_future: "Transaction date in the future",
+  transaction_date_implausible: "Transaction date before 1900",
 
   // Contact details
   contact_number_invalid: "Contact number not accepted",
@@ -42,6 +44,8 @@ export const ISSUE_CATEGORY_WORDS: Readonly<Record<string, string>> = {
   enum_required: "Choice blank",
   enum_unmapped: "Value not recognised, left blank",
   member_type_invalid: "Member type not recognised",
+  transaction_type_invalid: "Transaction type not recognised",
+  transaction_type_required: "Transaction type blank",
 
   // Membership number
   membership_number_invalid: "Membership number has a character it can't hold",
@@ -61,6 +65,7 @@ export const ISSUE_CATEGORY_WORDS: Readonly<Record<string, string>> = {
   money_overflow: "Amount too large",
   money_precision: "More than two decimal places",
   money_required: "Amount blank",
+  amount_zero: "Amount of ₱0.00",
   amount_above_app_maximum: "Amount above the member form's limit",
   rate_invalid: "Not an interest rate",
   rate_overflow: "Interest rate too large",
@@ -85,9 +90,23 @@ export const ISSUE_CATEGORY_WORDS: Readonly<Record<string, string>> = {
   schedule_not_reconstructable: "Payment schedule can't be rebuilt",
   out_of_product_bounds: "Outside the loan product's limits",
 
+  // A share capital entry
+  account_no_too_long: "Account number or member ID too long",
+  reference_number_too_long: "Reference number too long",
+  duplicate_in_file: "Repeats an earlier row of the file",
+  duplicate_reference: "Reference already on the ledger",
+  duplicate_transaction: "Same entry already on the ledger",
+  withdrawal_exceeds_balance: "Withdrawal above the balance",
+  cash_reference_too_large: "Cash reference number too large",
+  share_capital_needs_permission: "Share capital needs permission to record entries",
+
   // Matching members, and what became of the row
   borrower_not_found: "Member not found",
   ambiguous_match: "More than one matching member",
+  not_a_member: "Registration, not a member",
+  member_withdrawn: "Member has withdrawn",
+  member_moved: "Member moved to another branch",
+  branch_closed: "Member's branch is closed or closing",
   account_no_conflict: "Account number already on another member",
   already_imported: "Already imported",
   matched_existing: "Matched a member already in Lendyph",

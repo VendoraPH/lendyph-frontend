@@ -46,6 +46,7 @@ import { StepCheck } from "./step-check";
 import { StepUpload } from "./step-upload";
 import { StepProcessing } from "./step-processing";
 import { StepResult } from "./step-result";
+import { filesProblem } from "./import-files";
 
 // ---------------------------------------------------------------------------
 // Vocabulary
@@ -71,12 +72,13 @@ const STEP_LABELS: Record<ImportStep, string> = {
 
 /**
  * The picked files, keyed by `ImportFileKind` — never a positional array. The
- * server has no way to tell a members file from a loans file except by the key
- * we send it.
+ * server has no way to tell a members file from a loans or share capital file
+ * except by the key we send it.
  */
 export interface ImportFiles {
   customers: File | null;
   loans: File | null;
+  share_capital: File | null;
 }
 
 /**
@@ -92,7 +94,7 @@ export type PrecheckOutcome = Pick<
   "hasHeaderRow" | "dateFormat" | "productMap"
 >;
 
-const NO_FILES: ImportFiles = { customers: null, loans: null };
+const NO_FILES: ImportFiles = { customers: null, loans: null, share_capital: null };
 
 // ---------------------------------------------------------------------------
 // Reattach panel
@@ -324,9 +326,9 @@ export function DataImportView() {
     );
   }
 
-  // The members file is what an import needs; a loans file only rides along
-  // with it (./import-files).
-  const hasMembersFile = Boolean(files.customers);
+  // The members file, the share capital file, or both, make an import; a loans
+  // file only rides along with the members file (./import-files).
+  const hasImportableFiles = filesProblem(files) === null;
 
   function renderStep() {
     switch (step) {
@@ -366,7 +368,7 @@ export function DataImportView() {
       // requirements apply. A reload that lands here with neither gets a panel
       // rather than a crash on a null the child was promised would not be one.
       case "check":
-        if (runId === null && (branchId === null || !hasMembersFile)) {
+        if (runId === null && (branchId === null || !hasImportableFiles)) {
           return <LostThreadPanel onStartOver={startOver} />;
         }
         return (
@@ -383,7 +385,7 @@ export function DataImportView() {
         );
 
       case "upload":
-        if (runId === null && (branchId === null || !hasMembersFile || !precheck)) {
+        if (runId === null && (branchId === null || !hasImportableFiles || !precheck)) {
           return <LostThreadPanel onStartOver={startOver} />;
         }
         return (

@@ -427,7 +427,7 @@ function inspectionStub(overrides: Partial<FileInspection> = {}): FileInspection
     expectedColumns: 22,
     header: null,
     headerFields: null,
-    slot: { shape: "customer", customerScore: 1, loansScore: 0, basis: "content" },
+    slot: { shape: "customer", customerScore: 1, loansScore: 0, shareCapitalScore: 0, basis: "content" },
     widths: [{ columns: 22, rows: 1 }],
     ...overrides,
   };
@@ -457,13 +457,24 @@ test("a conflicted date column blocks the file and quotes both proofs", () => {
 
 test("the loans file dropped into the customers slot is a blocker, not a row error", () => {
   const inspection = inspectionStub({
-    slot: { shape: "loans", customerScore: 0.1, loansScore: 0.9, basis: "content" },
+    slot: { shape: "loans", customerScore: 0.1, loansScore: 0.9, shareCapitalScore: 0, basis: "content" },
   });
 
   const blockers = fileBlockers(inspection, customerRows([CUSTOMER]), NO_DATES);
 
   assert.equal(blockers.length, 1);
   assert.match(blockers[0], /looks like the loans file, but it was chosen as the members file/);
+});
+
+test("the share capital file dropped into the members slot is a blocker, not a row error", () => {
+  const inspection = inspectionStub({
+    slot: { shape: "share_capital", customerScore: 0.1, loansScore: 0.1, shareCapitalScore: 0.9, basis: "content" },
+  });
+
+  const blockers = fileBlockers(inspection, customerRows([CUSTOMER]), NO_DATES);
+
+  assert.equal(blockers.length, 1);
+  assert.match(blockers[0], /looks like the share capital file, but it was chosen as the members file/);
 });
 
 test("a file whose rows are systematically the wrong width is blocked once", () => {
@@ -797,4 +808,191 @@ test("a file with no date columns still records its header answer", () => {
   const written = sessionAnswers([answer("customers", true, {})]);
   assert.equal(written.hasHeaderRow.customers, true);
   assert.deepEqual(written.dateFormat.customers, {});
+});
+
+// ---------------------------------------------------------------------------
+// The share capital file (finish run round 2, decision 13)
+// ---------------------------------------------------------------------------
+
+/** A valid share capital row: account, date, reference, type, amount, remarks. */
+const SHARE: string[] = ["2019-00101", "2026-01-15", "OR-1001", "Contribution", "1500.00", "Opening share capital"];
+
+const SHARE_CONTEXT = {
+  kind: "share_capital" as const,
+  shape: "share_capital" as const,
+  dates: NO_DATES,
+  knownAccounts: null,
+  expectedColumns: 6,
+  today: "2026-11-24",
+};
+
+/** Share capital records from line 2 on, as under a header row. */
+function shareRows(rows: readonly (readonly string[])[]): CsvRecord[] {
+  return rows.map((fields, i) => record(fields, i + 2));
+}
+
+function share(changes: Record<number, string>): string[] {
+  const row = [...SHARE];
+  for (const [index, value] of Object.entries(changes)) row[Number(index)] = value;
+  return row;
+}
+
+test("a share capital row the server takes passes, in either type's words", () => {
+  const result = checkRows(
+    shareRows([SHARE, share({ 2: "", 3: "Withdrawal", 4: "250" }), share({ 0: "BRW-000007", 2: "OR-2", 3: "CR" }), share({ 2: "OR-3", 3: "dr", 4: "₱1,000.50" })]),
+    SHARE_CONTEXT,
+  );
+
+  assert.equal(result.errorCount, 0, result.issues.map((issue) => issue.message).join(" | "));
+  assert.equal(result.warningCount, 0, "a member's account on many rows is what this file is");
+});
+
+test("the transaction date is written year-month-day, from 1900 and not after today", () => {
+  const cases: Array<[string, RegExp]> = [
+    ["03/04/2026", /^Transaction Date "03\/04\/2026" isn't a date written as year-month-day, such as 2026-11-24\.$/],
+    ["2026-02-30", /isn't a date written as year-month-day/],
+    ["45000", /isn't a date written as year-month-day/],
+    ["2026-11-25", /^Transaction Date "2026-11-25" is after today, and a share capital entry can't be dated in the future\.$/],
+    ["1899-12-31", /^Transaction Date "1899-12-31" is before 1900, too early for a share capital entry\. Check the year\.$/],
+  ];
+
+  for (const [date, message] of cases) {
+    const result = checkRows(shareRows([share({ 1: date })]), SHARE_CONTEXT);
+    assert.equal(result.errorCount, 1, date);
+    assert.equal(result.issues[0].column, "Transaction Date", date);
+    assert.equal(result.issues[0].category, "date", date);
+    assert.match(result.issues[0].message, message, date);
+  }
+
+  assert.equal(checkRows(shareRows([share({ 1: "2026-11-24" })]), SHARE_CONTEXT).errorCount, 0, "today is allowed");
+  assert.equal(checkRows(shareRows([share({ 1: "1900-01-01" })]), SHARE_CONTEXT).errorCount, 0);
+});
+
+test("the amount is above ₱0.00 with at most two decimals", () => {
+  const zero = checkRows(shareRows([share({ 4: "0.00" })]), SHARE_CONTEXT);
+  assert.equal(zero.errorCount, 1);
+  assert.equal(zero.issues[0].message, "Amount is ₱0.00. A share capital entry moves money, so its amount must be above ₱0.00.");
+
+  const negative = checkRows(shareRows([share({ 4: "-500" })]), SHARE_CONTEXT);
+  assert.equal(negative.errorCount, 1);
+  assert.equal(negative.issues[0].message, 'Amount "-500" is a negative amount, which can\'t be imported. A withdrawal is written as a positive amount with Transaction Type Withdrawal.');
+
+  assert.equal(checkRows(shareRows([share({ 4: "1.005" })]), SHARE_CONTEXT).issues[0].message, "Amount has more decimal places than this field stores (2).");
+  assert.equal(checkRows(shareRows([share({ 4: "five hundred" })]), SHARE_CONTEXT).errorCount, 1);
+  assert.equal(checkRows(shareRows([share({ 4: "(500.00)" })]), SHARE_CONTEXT).errorCount, 1);
+});
+
+test("an unknown transaction type quotes the two it takes", () => {
+  const result = checkRows(shareRows([share({ 3: "Dividend" })]), SHARE_CONTEXT);
+
+  assert.equal(result.errorCount, 1);
+  assert.equal(result.issues[0].message, '"Dividend" is not a value Transaction Type accepts. Expected one of: Contribution, Withdrawal.');
+});
+
+test("a blank member, date, type or amount fails the row; a reference and remarks may be blank", () => {
+  const result = checkRows(shareRows([share({ 0: "", 1: "", 3: "", 4: "" }), share({ 2: "", 5: "" })]), SHARE_CONTEXT);
+
+  assert.deepEqual(
+    result.issues.map((issue) => [issue.line, issue.column, issue.category]),
+    [
+      [2, "Account No. or Member ID", "required"],
+      [2, "Transaction Date", "required"],
+      [2, "Transaction Type", "required"],
+      [2, "Amount", "required"],
+    ],
+  );
+});
+
+test("nothing that names the entry is cut short, and long remarks are a warning the server repairs", () => {
+  const long = checkRows(shareRows([share({ 0: "7".repeat(51), 2: "R".repeat(101) })]), SHARE_CONTEXT);
+  assert.deepEqual(long.issues.map((issue) => [issue.column, issue.severity]), [
+    ["Account No. or Member ID", "error"],
+    ["Reference Number", "error"],
+  ]);
+
+  const remarks = checkRows(shareRows([share({ 5: "x".repeat(300) })]), SHARE_CONTEXT);
+  assert.equal(remarks.errorCount, 0);
+  assert.equal(remarks.warningCount, 1);
+  assert.equal(remarks.issues[0].message, "Remarks is 300 characters. The import keeps the first 255 as the entry's description.");
+});
+
+test("a row repeating an earlier row of the file fails, naming that line, and the first is kept", () => {
+  const result = checkRows(
+    shareRows([
+      share({ 2: "OR-7", 4: "100" }),
+      share({ 2: "or-7", 4: "999" }),
+      share({ 2: "", 4: "40" }),
+      share({ 0: "2019-00101 ", 2: "", 4: "40.00" }),
+      share({ 2: "", 4: "41" }),
+      // No reference, the same figures as the referenced first row: nothing tells them apart.
+      share({ 2: "", 4: "100" }),
+    ]),
+    SHARE_CONTEXT,
+  );
+
+  assert.deepEqual(
+    result.issues.map((issue) => [issue.line, issue.column, issue.category, issue.message]),
+    [
+      [3, "Reference Number", "duplicate", "Reference or-7 is also on line 2 of this file. A reference number belongs to one transaction, so only that first row is imported."],
+      [5, null, "duplicate", "This row repeats line 4 of this file: the same member, date, type and amount, with no reference number. Only that first row is imported; if both are real, give each its own reference number."],
+      [7, null, "duplicate", "This row repeats line 2 of this file: the same member, date, type and amount, with no reference number. Only that first row is imported; if both are real, give each its own reference number."],
+    ],
+  );
+  assert.equal(result.failingRows, 3);
+});
+
+test("a row that already fails is not remembered as the first", () => {
+  const result = checkRows(shareRows([share({ 2: "OR-1", 4: "0" }), share({ 2: "OR-1" })]), SHARE_CONTEXT);
+
+  assert.deepEqual(result.issues.map((issue) => issue.line), [2]);
+});
+
+test("a member not in the members file is a warning: members already in Lendyph are matched on the server", () => {
+  const result = checkRows(shareRows([share({ 0: "BRW-000007" })]), {
+    ...SHARE_CONTEXT,
+    knownAccounts: new Set(["2019-00101"]),
+  });
+
+  assert.equal(result.errorCount, 0);
+  assert.equal(result.warningCount, 1);
+  assert.equal(result.issues[0].category, "cross-file");
+  assert.equal(
+    result.issues[0].message,
+    "No member with account number BRW-000007 is in the members file. A member already in Lendyph is matched on the server by account number or member ID, so this row can still land; if no member has it, the row is refused.",
+  );
+});
+
+test("the share capital file is read and checked beside the members file", async () => {
+  const members = membersFile([CUSTOMER]);
+  const shareCapital = new File(
+    ["Account No. or Member ID,Transaction Date,Reference Number,Transaction Type,Amount,Remarks\r\n2019-00101,2026-01-15,OR-1,Contribution,500,\r\n2020-00999,2026-01-16,OR-2,Contribution,500,\r\n"],
+    "share-capital.csv",
+    { type: "text/csv" },
+  );
+  const inspections = {
+    customers: await inspectFile("customers", members),
+    share_capital: await inspectFile("share_capital", shareCapital),
+  };
+
+  assert.equal(inspections.share_capital.shape, "share_capital");
+  assert.equal(inspections.share_capital.expectedColumns, 6);
+  assert.equal(inspections.share_capital.label, "Share capital file");
+
+  const findings = computeFindings(inspections, {}, {}).share_capital;
+  assert.ok(findings);
+  assert.equal(findings.totalRows, 2);
+  assert.deepEqual(findings.blockers, []);
+  assert.deepEqual(findings.dates, [], "the date is checked as written, not settled to an order");
+  assert.deepEqual(findings.issues.map((issue) => [issue.line, issue.category]), [[3, "cross-file"]]);
+});
+
+test("an empty share capital file says it can be left out", async () => {
+  const inspection = await inspectFile(
+    "share_capital",
+    new File(["Account No. or Member ID,Transaction Date,Reference Number,Transaction Type,Amount,Remarks\r\n"], "share-capital.csv", { type: "text/csv" }),
+  );
+
+  assert.deepEqual(computeFindings({ share_capital: inspection }, {}, {}).share_capital?.blockers, [
+    "Share capital file (share-capital.csv): The only row in this file is the header row, so there is nothing to import. The share capital file is optional: leave it out when there is no share capital to bring over.",
+  ]);
 });

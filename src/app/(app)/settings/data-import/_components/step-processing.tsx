@@ -63,6 +63,7 @@ const PHASE_COPY: Record<string, string> = {
   awaiting_mapping: "Waiting for you to confirm the loan products",
   importing_customers: "Creating members",
   importing_loans: "Creating loans",
+  importing_share_capital: "Adding share capital entries",
   completed: "Finished",
   failed: "Stopped by an error",
   cancelled: "Cancelled",

@@ -68,7 +68,7 @@ import { keepsRunForUpload } from "../_hooks/use-import-reattach";
 // compiled on its own branch; now that both are on one branch they are imported,
 // so there is one definition rather than two that agree until someone edits one.
 import type { ImportFiles, PrecheckOutcome } from "./data-import-view";
-import { FILE_LABELS, fileNameInSentence, filesPhrase } from "./import-files";
+import { FILE_LABELS, IMPORT_FILE_KINDS, fileNameInSentence, filesPhrase, filesProblem } from "./import-files";
 import { piecesAccepted } from "@/lib/count-words";
 
 export interface StepUploadProps {
@@ -123,19 +123,18 @@ interface DeclaredFile {
   sha256: string;
 }
 
-const DECLARED_ORDER: readonly ImportFileKind[] = ["customers", "loans"];
-
 /**
- * The create-run `files`: the members file, and the loans file only when one
- * was picked. The server refuses a loans file without its members file, and
- * accepts members alone (`StoreCsvImportRunRequest`).
+ * The create-run `files`: each picked file, in the order the import reads
+ * them. The server takes the members file, the share capital file or both,
+ * and a loans file only beside the members file (`StoreCsvImportRunRequest`);
+ * `filesProblem` holds the picks to that before a run is opened.
  */
 export function declaredFiles(
   picked: Partial<Record<ImportFileKind, { name: string; size: number } | null>>,
   digests: Partial<Record<ImportFileKind, string | undefined>>,
 ): Partial<Record<ImportFileKind, DeclaredFile>> {
   const declared: Partial<Record<ImportFileKind, DeclaredFile>> = {};
-  for (const kind of DECLARED_ORDER) {
+  for (const kind of IMPORT_FILE_KINDS) {
     const file = picked[kind];
     const sha256 = digests[kind];
     if (file && sha256) declared[kind] = { filename: file.name, size_bytes: file.size, sha256 };
@@ -188,6 +187,7 @@ export function StepUpload({
     () => ({
       customers: repicked.customers ?? files.customers,
       loans: repicked.loans ?? files.loans,
+      share_capital: repicked.share_capital ?? files.share_capital,
     }),
     [files, repicked],
   );
@@ -196,11 +196,15 @@ export function StepUpload({
 
   useEffect(() => {
     if (runId !== null || openingRef.current) return;
-    const customers = merged.customers;
-    const loans = merged.loans ?? null;
-    // The members file is what a run needs; the loans file comes along only
-    // when one was picked (./import-files).
-    if (branchId === null || !customers || !precheck) return;
+    const picked: Record<ImportFileKind, File | null> = {
+      customers: merged.customers ?? null,
+      loans: merged.loans ?? null,
+      share_capital: merged.share_capital ?? null,
+    };
+    // The picked files must make an import: the members file, the share
+    // capital file or both, with loans only beside the members file
+    // (./import-files).
+    if (branchId === null || !precheck || filesProblem(picked) !== null) return;
 
     openingRef.current = true;
     setOpening(true);
@@ -208,10 +212,14 @@ export function StepUpload({
 
     void (async () => {
       try {
-        const [customersSha, loansSha] = await Promise.all([
-          sha256Hex(customers),
-          loans ? sha256Hex(loans) : Promise.resolve(undefined),
-        ]);
+        const digests: Partial<Record<ImportFileKind, string>> = Object.fromEntries(
+          await Promise.all(
+            IMPORT_FILE_KINDS.flatMap((kind) => {
+              const file = picked[kind];
+              return file ? [sha256Hex(file).then((sha) => [kind, sha] as const)] : [];
+            }),
+          ),
+        );
 
         /**
          * `api.rawPost`, NOT `dataImportService.createRun` — and this is a
@@ -231,7 +239,7 @@ export function StepUpload({
         const created = await api.rawPost<CreateRunBody>(API_ENDPOINTS.DATA_IMPORT.RUNS, {
           branch_id: branchId,
           as_of_date: todayISO(),
-          files: declaredFiles({ customers, loans }, { customers: customersSha, loans: loansSha }),
+          files: declaredFiles(picked, digests),
         });
 
         const id = created?.run?.id;
@@ -262,9 +270,12 @@ export function StepUpload({
           hasHeaderRow: precheck.hasHeaderRow,
           dateFormat: precheck.dateFormat,
           chunkSize: created.chunk_size,
-          files: loans
-            ? { customers: sessionFile(customers), loans: sessionFile(loans) }
-            : { customers: sessionFile(customers) },
+          files: Object.fromEntries(
+            IMPORT_FILE_KINDS.flatMap((kind) => {
+              const file = picked[kind];
+              return file ? [[kind, sessionFile(file)] as const] : [];
+            }),
+          ),
           startedAt: Date.now(),
         };
         saveImportSession(stored);

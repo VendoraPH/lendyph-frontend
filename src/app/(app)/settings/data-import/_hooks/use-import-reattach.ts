@@ -136,6 +136,7 @@ export function stepForRunStatus(status: {
     case "staging":
     case "importing_customers":
     case "importing_loans":
+    case "importing_share_capital":
       return "processing";
     default:
       return "processing";
