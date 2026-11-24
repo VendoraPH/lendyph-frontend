@@ -18,7 +18,7 @@ import { useBrandingStore } from "@/store/branding-store";
 import { applyChrome, loadLogoDataUrl } from "@/app/(app)/reports/_lib/report-chrome";
 import type { ReportDocument } from "@/app/(app)/reports/_lib/types";
 import type { GCashListFilters, GCashTransaction } from "@/types";
-import { DATE_RANGE_REVERSED, dateRangeReversed } from "../_lib/date-range";
+import { DATE_RANGE_REVERSED, dateRangeReady, dateRangeReversed } from "../_lib/date-range";
 import {
   gcashTransactionsReport,
   transactionsExportRefusal,
@@ -54,7 +54,10 @@ export function TransactionsReportActions({
   const user = useAuthStore((s) => s.user);
   const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
   const logoUrl = useBrandingStore((s) => s.logoUrl);
-  const invalidRange = dateRangeReversed(filters.from, filters.to);
+  // A date still being typed, or a reversed range, makes no report.
+  const rangeReady = dateRangeReady(filters.from, filters.to);
+  const reversed = rangeReady && dateRangeReversed(filters.from, filters.to);
+  const invalidRange = !rangeReady || reversed;
 
   async function run(action: Action) {
     setBusy(action);
@@ -114,7 +117,7 @@ export function TransactionsReportActions({
   const spin = <Loader2 className="size-4 animate-spin" />;
 
   return (
-    <div className="flex items-center gap-2" title={invalidRange ? DATE_RANGE_REVERSED : undefined}>
+    <div className="flex items-center gap-2" title={reversed ? DATE_RANGE_REVERSED : undefined}>
       <DropdownMenu>
         <DropdownMenuTrigger render={<Button variant="outline" disabled={disabled} />}>
           {busy === "pdf" || busy === "excel" ? spin : <Download className="size-4" />}

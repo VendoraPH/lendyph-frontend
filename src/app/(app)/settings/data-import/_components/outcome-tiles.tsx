@@ -32,6 +32,8 @@ import { cn } from "@/lib/utils";
 import { AlertTriangle, CheckCircle2, FileText, Link2, RotateCcw, SkipForward, XCircle } from "lucide-react";
 import type { ImportCounts, ImportFileKind } from "@/types/data-import";
 import { FILE_LABELS } from "./import-files";
+import { formatCountOf } from "@/lib/report-format";
+import { rowsNotReached, rowsOvercounted, rowsWithoutOutcome } from "../_lib/count-words";
 
 /* ------------------------------------------------------------------ */
 /* Pure — unit tested in ./outcome-tiles.test.ts                        */
@@ -80,7 +82,7 @@ export function reconcileCounts(counts: ImportCounts): CountsReconciliation {
 export function reconciliationLine(counts: ImportCounts): string {
   const { total } = reconcileCounts(counts);
   return (
-    `${total.toLocaleString()} rows read = ` +
+    `${formatCountOf(total, "row")} read = ` +
     `${counts.imported.toLocaleString()} imported + ` +
     `${counts.matched_existing.toLocaleString()} matched + ` +
     `${counts.already_imported.toLocaleString()} already imported + ` +
@@ -244,8 +246,8 @@ export function OutcomeTiles({
             </p>
             <p className="mt-0.5 text-muted-foreground">
               {reconciliation.overcounted
-                ? `The outcomes total ${reconciliation.decided.toLocaleString()}, which is more than the ${reconciliation.total.toLocaleString()} rows read.`
-                : `${Math.abs(reconciliation.undecided).toLocaleString()} of the ${reconciliation.total.toLocaleString()} rows read have no recorded outcome, and this run is finished.`}{" "}
+                ? rowsOvercounted(reconciliation.decided, reconciliation.total)
+                : `${rowsWithoutOutcome(Math.abs(reconciliation.undecided), reconciliation.total)}, and this run is finished.`}{" "}
               The identity that should hold is: {RECONCILIATION_FORMULA}. Treat the
               tiles above as unverified and report this before acting on them.
             </p>
@@ -253,8 +255,8 @@ export function OutcomeTiles({
         </div>
       ) : !reconciliation.balanced ? (
         <p className="text-xs text-muted-foreground">
-          {reconciliation.undecided.toLocaleString()} rows have not been reached
-          yet. The server works through them in batches, about once a minute.
+          {rowsNotReached(reconciliation.undecided)} The server works through
+          them in batches, about once a minute.
         </p>
       ) : null}
     </section>

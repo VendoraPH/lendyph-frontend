@@ -23,6 +23,7 @@ import { earlierLayoutNote } from "@/lib/import-schema";
 import { formatCount } from "@/lib/report-format";
 import { cn } from "@/lib/utils";
 import type { FileInspection } from "../_hooks/use-file-precheck";
+import { columnsFound } from "../_lib/count-words";
 
 /** Mismatched positions listed before the rest are summarised away. */
 const MISMATCH_PREVIEW = 4;
@@ -136,14 +137,14 @@ export function HeaderDetectionCard({
           )}
           <div>
             <p className="tabular-nums">
-              <span className="font-medium">{found}</span> columns found,{" "}
+              <span className="font-medium">{columnsFound(found)}</span> found,{" "}
               <span className="font-medium">{expectedColumns}</span> expected.
             </p>
             {layoutNote && <p className="mt-1 text-muted-foreground">{layoutNote}</p>}
             {raggedRows > 0 && (
               <p className="mt-1 text-muted-foreground">
                 {formatCount(raggedRows)} {raggedRows === 1 ? "row does" : "rows do"} not have{" "}
-                {found} columns. Those rows are listed below.
+                {columnsFound(found)}. Those rows are listed below.
               </p>
             )}
           </div>
