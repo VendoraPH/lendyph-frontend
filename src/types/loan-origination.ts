@@ -273,13 +273,17 @@ export interface PublicApplicationState {
   verified_contact: { mobile: string | null; email: string | null };
 }
 
+/** A peso amount as the server sends it: a JSON number, or a two-decimal string where the server adds it up exactly. */
+export type Money = number | string;
+
 export interface LoanEstimate {
   installment: number;
   installments_count: number;
   frequency: string;
   total_interest: number;
   total_charges: number;
-  total_repayment: number;
+  /** Principal plus interest, added up exactly on the server: a two-decimal string. */
+  total_repayment: Money;
   net_proceeds: number;
   charges: { name: string; amount: number }[];
   schedule: { number: number; due_date: string; principal: number; interest: number; amount: number }[];
