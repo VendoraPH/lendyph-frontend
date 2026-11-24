@@ -6,7 +6,12 @@ import {
   PAYMENT_FREQUENCY_OPTIONS,
   SUFFIX_OPTIONS,
 } from "@/constants";
-import { CUSTOMER_COLUMNS, type ImportColumn } from "@/lib/import-schema";
+import {
+  CUSTOMER_COLUMNS,
+  SHARE_CAPITAL_COLUMNS,
+  TRANSACTION_TYPE_OPTIONS,
+  type ImportColumn,
+} from "@/lib/import-schema";
 import type {
   DictionaryKey,
   TemplateColumn,
@@ -66,6 +71,10 @@ export const DATA_DICTIONARY: Record<
   member_type: {
     label: "Member Type",
     values: dictionaryValues(MEMBER_TYPE_OPTIONS),
+  },
+  transaction_type: {
+    label: "Transaction Type",
+    values: dictionaryValues(TRANSACTION_TYPE_OPTIONS),
   },
 };
 
@@ -145,6 +154,39 @@ const LOAN_COLUMNS: TemplateColumn[] = [
   { id: "other_fee_amount", header: "Other Fee Amount", required: false },
 ];
 
+/**
+ * What each share capital column takes, in a few words: the import's own
+ * rules (`ShareCapitalRowNormalizer`). Transaction Type's two words are its
+ * dictionary instead.
+ */
+const SHARE_CAPITAL_HINTS: Partial<Record<string, string>> = {
+  account_no: "Account No. on Members, or a member ID in Lendyph",
+  transaction_date: "YYYY-MM-DD",
+  reference_number: "One per transaction",
+  amount: "Above ₱0.00, 2 decimals at most",
+  remarks: "The entry's description",
+};
+
+/**
+ * The Share Capital sheet is the share capital import's own column table,
+ * read from `SHARE_CAPITAL_COLUMNS` as the Members sheet is from
+ * `CUSTOMER_COLUMNS`, so it can't drift from what the importer reads. The
+ * workbook has no such sheet (finish run round 2, decision 13).
+ */
+const SHARE_CAPITAL_TEMPLATE_COLUMNS: TemplateColumn[] = SHARE_CAPITAL_COLUMNS.map(
+  (column: ImportColumn): TemplateColumn => {
+    const dictionary = isDictionaryKey(column.key) ? column.key : undefined;
+    const hint = SHARE_CAPITAL_HINTS[column.key];
+    return {
+      id: column.key,
+      header: column.label,
+      required: column.required,
+      ...(dictionary && { dictionary }),
+      ...(hint && { hint }),
+    };
+  }
+);
+
 /** The sheets, with no rows. `createDraft` is what gives them one to type in. */
 export const TEMPLATE_SHEETS: TemplateSheet[] = [
   {
@@ -163,14 +205,23 @@ export const TEMPLATE_SHEETS: TemplateSheet[] = [
     columns: LOAN_COLUMNS,
     rows: [],
   },
+  {
+    id: "share_capital",
+    name: "Share Capital",
+    description:
+      "One row per share capital contribution or withdrawal. Name each member by an Account No. on Members, or by their member ID in Lendyph.",
+    columns: SHARE_CAPITAL_TEMPLATE_COLUMNS,
+    rows: [],
+  },
 ];
 
 /**
  * The workbook's Guidelines sheet, with its "Customer Profile" file called
- * Members, as the Data Import page names it.
+ * Members, as the Data Import page names it, and the Share Capital file it
+ * lacks.
  */
 export const TEMPLATE_GUIDELINES: TemplateGuideline[] = [
-  { text: "Prepare the Members and Loans data in separate CSV files." },
+  { text: "Prepare the Members, Loans and Share Capital data in separate CSV files." },
   {
     text: "Populate the data according to the prescribed column headers. Each record must occupy a separate row.",
   },
@@ -182,6 +233,14 @@ export const TEMPLATE_GUIDELINES: TemplateGuideline[] = [
       "Every Loans account number must have a matching account number in the Members file.",
       "Account numbers in the Members file must be unique.",
       "Duplicate account numbers are allowed in the Loans file.",
+    ],
+  },
+  {
+    text: "Share Capital rows:",
+    points: [
+      "Every Share Capital row names its member by an account number on Members, or by their member ID in Lendyph.",
+      "Transaction Type is Contribution or Withdrawal, Transaction Date is written YYYY-MM-DD, and Amount is above ₱0.00.",
+      "A row with the same reference as an entry already on the ledger, or with no reference the same member, date, type and amount, is skipped.",
     ],
   },
   { text: "If the customer has no middle name, leave the Middle Name field blank." },

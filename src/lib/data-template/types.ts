@@ -1,12 +1,13 @@
 /**
  * The bulk data-import template — the workbook a cooperative fills in when it
- * migrates its existing members and loans onto Lendyph.
+ * migrates its existing members, loans and share capital onto Lendyph.
  *
  * The source of truth is `public/Lendy CSV Format.xlsm`, which staff can still
  * download untouched. What lives here is that workbook transcribed into data so
  * the app can render it, let staff edit it, and write CSVs out of it without
  * parsing a 22 kB zip in the browser. Its Members sheet follows the members
- * import's 26 columns (`CUSTOMER_COLUMNS`).
+ * import's 26 columns (`CUSTOMER_COLUMNS`), and its Share Capital sheet the
+ * share capital file's six (`SHARE_CAPITAL_COLUMNS`), which the workbook lacks.
  *
  * Rows are keyed by column *id*, never by position: a column can be renamed,
  * reordered or removed and the data typed under it has to survive all three.
@@ -41,7 +42,7 @@ export interface TemplateSheet {
   rows: TemplateRow[];
 }
 
-export type TemplateSheetId = "members" | "loans";
+export type TemplateSheetId = "members" | "loans" | "share_capital";
 
 export type DictionaryKey =
   | "gender"
@@ -49,7 +50,8 @@ export type DictionaryKey =
   | "suffix"
   | "interest_type"
   | "payment_frequency"
-  | "member_type";
+  | "member_type"
+  | "transaction_type";
 
 export interface TemplateDraft {
   sheets: TemplateSheet[];

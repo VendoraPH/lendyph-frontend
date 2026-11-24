@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CUSTOMER_COLUMNS, LOAN_COLUMNS } from "@/lib/import-schema";
+import { CUSTOMER_COLUMNS, LOAN_COLUMNS, SHARE_CAPITAL_COLUMNS } from "@/lib/import-schema";
 import { DATA_DICTIONARY, TEMPLATE_GUIDELINES, TEMPLATE_SHEETS } from "./template";
 
 function sheet(id: string) {
@@ -61,4 +61,32 @@ test("the sheet descriptions and guidelines call the members file Members", () =
     ...TEMPLATE_GUIDELINES.flatMap((g) => [g.text, ...(g.points ?? [])]),
   ].join("\n");
   assert.doesNotMatch(text, /Customer Profile/);
+});
+
+test("the share capital sheet shows the import's six columns, in the import's order", () => {
+  const shareCapital = sheet("share_capital");
+  assert.equal(shareCapital.name, "Share Capital");
+  assert.deepEqual(
+    shareCapital.columns.map((c) => [c.id, c.header, c.required]),
+    SHARE_CAPITAL_COLUMNS.map((c) => [c.key, c.label, c.required])
+  );
+  assert.match(shareCapital.description, /contribution or withdrawal/);
+});
+
+test("the share capital sheet's columns carry their hints and the transaction types", () => {
+  const byId = new Map(sheet("share_capital").columns.map((c) => [c.id, c]));
+  assert.equal(byId.get("account_no")?.hint, "Account No. on Members, or a member ID in Lendyph");
+  assert.equal(byId.get("transaction_date")?.hint, "YYYY-MM-DD");
+  assert.equal(byId.get("reference_number")?.hint, "One per transaction");
+  assert.equal(byId.get("transaction_type")?.dictionary, "transaction_type");
+  assert.equal(byId.get("amount")?.hint, "Above ₱0.00, 2 decimals at most");
+  assert.equal(byId.get("remarks")?.hint, "The entry's description");
+  assert.deepEqual(DATA_DICTIONARY.transaction_type, { label: "Transaction Type", values: ["Contribution", "Withdrawal"] });
+});
+
+test("the guidelines say what the share capital file takes", () => {
+  const text = TEMPLATE_GUIDELINES.flatMap((g) => [g.text, ...(g.points ?? [])]).join("\n");
+  assert.match(text, /Members, Loans and Share Capital data in separate CSV files/);
+  assert.match(text, /Every Share Capital row names its member/);
+  assert.doesNotMatch(text, /[Bb]orrower/);
 });
