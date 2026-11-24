@@ -202,7 +202,10 @@ export const AMLA_SETTINGS_NAV: NavSubItem = {
  * (next.config.ts).
  */
 export const MODULE_SETTINGS_NAV: NavSubItem[] = [
-  { title: "Accounting", href: "/settings/accounting", permission: "accounting:settings" },
+  // NEXT_PUBLIC_ENABLE_ACCOUNTING (on unless a deployment turns it off).
+  ...(env.features.accounting
+    ? [{ title: "Accounting", href: "/settings/accounting", permission: "accounting:settings" as const }]
+    : []),
   ...(env.features.savings
     ? [
         { title: "Savings Products", href: "/settings/savings-products", permission: "savings:settings" as const },
@@ -223,7 +226,7 @@ export const MODULE_SETTINGS_NAV: NavSubItem[] = [
 /** Any one of these opens Settings: its own key, or a module's settings key. */
 const SETTINGS_SECTION_PERMISSIONS: Permission[] = [
   "settings:view",
-  "accounting:settings",
+  ...(env.features.accounting ? (["accounting:settings"] as const) : []),
   ...(env.features.savings ? (["savings:settings"] as const) : []),
   ...(env.features.cda ? (["cda:view"] as const) : []),
   ...(env.features.creditScoring ? (["credit_scoring:settings"] as const) : []),

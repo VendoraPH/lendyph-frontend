@@ -141,7 +141,8 @@ export function OverviewTab({ borrower, loans, coMakers, summary }: OverviewTabP
         </CardContent>
       </Card>
 
-      <NotificationPreferencesCard borrowerId={borrower.id} />
+      {/* Reminder preferences: hidden while NEXT_PUBLIC_ENABLE_LOAN_REMINDERS is off. */}
+      {env.features.loanReminders && <NotificationPreferencesCard borrowerId={borrower.id} />}
 
       {showPortal && <PortalAccessCard borrowerId={borrower.id} memberName={borrower.full_name} />}
     </div>
