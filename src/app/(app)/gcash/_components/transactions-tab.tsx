@@ -36,7 +36,7 @@ import type {
 import { PaidButton } from "./paid-button";
 import { PartyCell } from "./party-cell";
 import { TransactionsReportActions } from "./transactions-report-actions";
-import { DATE_RANGE_REVERSED, dateRangeReversed } from "../_lib/date-range";
+import { DATE_RANGE_REVERSED, dateRangeReady, dateRangeReversed } from "../_lib/date-range";
 import { gcashCanMarkPaid } from "../_lib/row-actions";
 import { gcashRowBranchLabel } from "../_lib/walk-in-branch";
 import { DataState } from "@/components/common/data-state";
@@ -98,14 +98,19 @@ export function TransactionsTab() {
   // Whether the empty list is down to the filters (a "no results" picture) or there is nothing yet.
   const filtersActive =
     filters.type !== "all" || filters.status !== "all" || filters.start_date !== "" || filters.end_date !== "";
+  // A date still being typed (year 0002, 0020, 0202) waits: no request, and the last rows stay.
+  const rangeReady = dateRangeReady(filters.start_date, filters.end_date);
   // Only a typed date reverses the range (the pickers bound each other), and the API answers it with a 422.
-  const rangeReversed = dateRangeReversed(filters.start_date, filters.end_date);
+  const rangeReversed = rangeReady && dateRangeReversed(filters.start_date, filters.end_date);
 
   /** A new Date From or Date To. A reversed range asks nothing and shows none of the last filters' rows. */
   function setDates(dates: Partial<Pick<typeof filters, "start_date" | "end_date">>) {
     const next = { ...filters, ...dates };
     setFilters(next);
-    if (dateRangeReversed(next.start_date, next.end_date)) {
+    if (
+      dateRangeReady(next.start_date, next.end_date) &&
+      dateRangeReversed(next.start_date, next.end_date)
+    ) {
       setRows([]);
       setTotalPages(1);
       setLoading(false);
@@ -113,7 +118,7 @@ export function TransactionsTab() {
   }
 
   useEffect(() => {
-    if (rangeReversed) return;
+    if (!rangeReady || rangeReversed) return;
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -137,7 +142,7 @@ export function TransactionsTab() {
     return () => {
       cancelled = true;
     };
-  }, [filters, page, reloadToken, rangeReversed]);
+  }, [filters, page, reloadToken, rangeReady, rangeReversed]);
 
   return (
     <div className={cn("gap-4", FIT_CLASSES.section)}>
