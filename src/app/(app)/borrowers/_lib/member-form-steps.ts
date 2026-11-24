@@ -8,7 +8,10 @@
  * unchanged.
  */
 
-import { stepErrorsOf, type FormStepDef, type StepErrors } from "@/lib/form-stepper";
+import { isCalendarDate } from "@/lib/calendar-date";
+import { formatDate, todayISO } from "@/lib/format";
+import { errorMessages, stepErrorsOf, type FormStepDef, type StepErrors } from "@/lib/form-stepper";
+import { formatValidationMessage } from "@/lib/validation-message";
 import { validateValidIds, type ValidIdDraft } from "@/lib/valid-id";
 
 export interface MemberFormData {
@@ -26,6 +29,8 @@ export interface MemberFormData {
   city: string;
   province: string;
   employer_or_business: string;
+  /** `YYYY-MM-DD`, or blank: it's optional. */
+  date_hired: string;
   monthly_income: string;
   branch_id: string;
   spouse_first_name: string;
@@ -52,7 +57,7 @@ const SPOUSE = [
 ];
 // The street goes out as both `address` and `street_address`.
 const CONTACT = ["contact_number", "email", "address", "street_address", "barangay", "city", "province"];
-const EMPLOYMENT = ["employer_or_business", "monthly_income"];
+const EMPLOYMENT = ["employer_or_business", "date_hired", "monthly_income"];
 
 /**
  * The form's steps. Spouse Information shows only while the civil status is
@@ -96,6 +101,46 @@ export function requiredMemberFieldErrors(form: MemberFormData): Record<string, 
   return missing;
 }
 
+/** The server's own words for Date Hired (HasBorrowerRules), so the form and a refusal read alike. */
+const DATE_HIRED_FORMAT = "The date hired must be a date written as year-month-day, such as 2020-06-01.";
+const DATE_HIRED_FUTURE = "The date hired cannot be in the future.";
+
+/**
+ * Fields the form refuses for what they hold rather than for being empty, as
+ * full sentences. Date Hired (finish run round 2, decision 15) is optional,
+ * written year-month-day, not after today (Manila) and not before the
+ * birthdate, the members import's rule.
+ */
+export function memberFieldErrors(form: MemberFormData, today: string): Record<string, string> {
+  const errors: Record<string, string> = {};
+  const hired = form.date_hired.trim();
+  if (hired === "") return errors;
+
+  // Both are `YYYY-MM-DD`, so the strings compare as the dates do.
+  if (!isCalendarDate(hired)) errors.date_hired = DATE_HIRED_FORMAT;
+  else if (hired > today) errors.date_hired = DATE_HIRED_FUTURE;
+  else if (isCalendarDate(form.birthdate) && hired < form.birthdate) {
+    errors.date_hired = `The date hired can't be before the member's birthdate (${formatDate(form.birthdate)}).`;
+  }
+  return errors;
+}
+
+/**
+ * A step's toast: the missing fields by name ("Please complete: First name and
+ * Province."), then any full sentences as they are ("Enter the ID number for
+ * ID 2."). `notifyValidation` alone would wrap a sentence in "Please enter a
+ * valid …".
+ */
+export function memberStepMessage(errors: StepErrors): string {
+  const messages = errorMessages(errors);
+  const sentences = messages.filter((m) => m.trim().endsWith("."));
+  const names = messages.filter((m) => !m.trim().endsWith("."));
+  return [names.length > 0 ? formatValidationMessage(names) : "", ...sentences]
+    .map((m) => m.trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
 /** The shared valid ID check, keyed `valid_ids.<row>.<field>` so the row's field gets focus. */
 export function validIdStepErrors(validIds: readonly ValidIdDraft[]): Record<string, string> {
   const out: Record<string, string> = {};
@@ -109,10 +154,14 @@ export function validIdStepErrors(validIds: readonly ValidIdDraft[]): Record<str
 export function validateMemberStep(
   step: FormStepDef | undefined,
   form: MemberFormData,
-  validIds: readonly ValidIdDraft[]
+  validIds: readonly ValidIdDraft[],
+  today: string = todayISO()
 ): StepErrors | true {
   if (!step) return true;
-  const errors = stepErrorsOf({ ...requiredMemberFieldErrors(form), ...validIdStepErrors(validIds) }, step);
+  const errors = stepErrorsOf(
+    { ...requiredMemberFieldErrors(form), ...memberFieldErrors(form, today), ...validIdStepErrors(validIds) },
+    step
+  );
   return Object.keys(errors).length > 0 ? errors : true;
 }
 
@@ -140,6 +189,7 @@ export function newMemberPayload(form: NewMemberFormData, force: boolean): Recor
   if (form.city.trim()) payload.city = form.city.trim();
   if (form.province.trim()) payload.province = form.province.trim();
   if (form.employer_or_business.trim()) payload.employer_or_business = form.employer_or_business.trim();
+  if (form.date_hired.trim()) payload.date_hired = form.date_hired.trim();
   if (form.monthly_income) payload.monthly_income = Number(form.monthly_income);
   payload.pledge_amount = form.pledge_amount ? Number(form.pledge_amount) : 0;
 
@@ -172,6 +222,7 @@ export function editMemberPayload(form: MemberFormData): Record<string, unknown>
     city: form.city.trim() || null,
     province: form.province.trim() || null,
     employer_or_business: form.employer_or_business.trim() || null,
+    date_hired: form.date_hired.trim() || null,
     monthly_income: form.monthly_income ? Number(form.monthly_income) : null,
     branch_id: Number(form.branch_id),
   };

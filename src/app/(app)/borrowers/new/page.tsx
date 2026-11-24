@@ -47,9 +47,12 @@ import { CIVIL_STATUS_OPTIONS, SUFFIX_OPTIONS, VALID_ID_OPTIONS } from "@/consta
 import { PageFill } from "@/components/common/page-fill";
 import { FIT_CLASSES } from "@/lib/page-fill";
 import { FormStep, FormStepper, type FormStepperHandle, type StepErrors } from "@/components/common/form-stepper";
-import { errorMessages, FORM_STEP_GRID } from "@/lib/form-stepper";
+import { FORM_STEP_GRID } from "@/lib/form-stepper";
+import { todayISO } from "@/lib/format";
 import {
+  memberFieldErrors,
   memberFormSteps,
+  memberStepMessage,
   newMemberPayload,
   requiredMemberFieldErrors,
   validateMemberStep,
@@ -109,6 +112,7 @@ function emptyForm(): BorrowerFormData {
     city: "",
     province: "",
     employer_or_business: "",
+    date_hired: "",
     monthly_income: "",
     pledge_amount: "",
     branch_id: "",
@@ -342,11 +346,11 @@ function NewBorrowerContent() {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
-  // A step's missing fields read as before: one "Please complete: …" toast, and
-  // an incomplete ID in sentences ("Enter the ID number for ID 2.").
-  function notifyStepErrors(errors: StepErrors, stepId: string) {
-    if (stepId === "valid_ids") toast.error(sentencesMessage(errorMessages(errors)));
-    else notifyValidation(errorMessages(errors));
+  // A step's missing fields read as before: one "Please complete: …" toast,
+  // and an incomplete ID or a refused Date Hired in sentences ("Enter the ID
+  // number for ID 2.").
+  function notifyStepErrors(errors: StepErrors) {
+    toast.error(memberStepMessage(errors));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -373,6 +377,15 @@ function NewBorrowerContent() {
     if (missing.length > 0) {
       notifyValidation(missing);
       stepperRef.current?.showErrors(missingFields);
+      return;
+    }
+
+    // Date Hired, when given: written year-month-day, not after today and not
+    // before the birthdate.
+    const fieldProblems = memberFieldErrors(form, todayISO());
+    if (Object.keys(fieldProblems).length > 0) {
+      toast.error(sentencesMessage(Object.values(fieldProblems)));
+      stepperRef.current?.showErrors(fieldProblems);
       return;
     }
 
@@ -1065,6 +1078,16 @@ function NewBorrowerContent() {
                       placeholder="Company or business name"
                       value={form.employer_or_business}
                       onChange={(e) => update("employer_or_business", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="date_hired">Date Hired</Label>
+                    <Input
+                      id="date_hired"
+                      type="date"
+                      max={todayISO()}
+                      value={form.date_hired}
+                      onChange={(e) => update("date_hired", e.target.value)}
                     />
                   </div>
                   <div className="space-y-2">
