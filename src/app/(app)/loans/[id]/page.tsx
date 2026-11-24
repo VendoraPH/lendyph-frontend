@@ -125,6 +125,14 @@ import {
 } from "./_lib/release-figures";
 import { MethodReferenceFields } from "@/components/common/method-reference-fields";
 import { releaseConflictOf } from "./_lib/release-conflict";
+import {
+  outdatedPrints,
+  releaseBlockedReason,
+  releaseDocumentsRefusal,
+  reprintNotice,
+} from "./_lib/reprint-notice";
+import { useRereadOnReturn } from "./_hooks/use-reread-on-return";
+import { DisabledReason } from "@/components/common/disabled-reason";
 import { stepConflictMessage } from "./_lib/step-conflict";
 import { signOffRefusal, signOffRefusalFor, type KeptRefusal } from "./_lib/sign-off-refusal";
 import { approvalChainItems } from "./_lib/left-out-steps";
@@ -1529,6 +1537,12 @@ function LoanDetail({ loanId }: { loanId: number }) {
     };
   }, [recordPaymentOpen, loan, paymentAmount, paymentDate, canViewPayments, paymentPreviewRound]);
 
+  // A document is printed in its own tab. While a printed one is out of date,
+  // read the loan again each time staff come back to this tab, so the notice
+  // and the held Release clear once the reprint is recorded. Never on a timer.
+  const rereadLoan = () => loadLoan(loanId, loan ?? null).then(setLoan);
+  useRereadOnReturn(outdatedPrints(loan).length > 0, rereadLoan);
+
   if (loading) {
     return <PageLoader />;
   }
@@ -1540,6 +1554,13 @@ function LoanDetail({ loanId }: { loanId: number }) {
       <LoanNotFound />
     );
   }
+
+  // Printed documents whose terms changed since they were printed, from the
+  // server: the notice names them, and Release waits until they are printed
+  // again (the server refuses it until then).
+  const outdatedDocuments = outdatedPrints(loan);
+  const reprintNoticeText = reprintNotice(outdatedDocuments);
+  const releaseHeldReason = releaseBlockedReason(outdatedDocuments);
 
   // What the release will store, from the server (see `releaseConfirmView`).
   // Null until the right answer is in for what is typed now, and Confirm
@@ -1598,7 +1619,17 @@ function LoanDetail({ loanId }: { loanId: number }) {
         setReleaseOpen(false);
         reloadLoan();
       } else {
-        notifyError(err, "We couldn't release this loan. Please try again.");
+        const documentsRefusal = releaseDocumentsRefusal(err);
+        if (documentsRefusal !== null) {
+          // Nothing was released: a printed document's terms changed since it
+          // was printed. Say so in the server's words, and read the loan again
+          // so the notice names the document and Release says why it's off.
+          toast.error(documentsRefusal);
+          setReleaseOpen(false);
+          void rereadLoan().catch(() => {});
+        } else {
+          notifyError(err, "We couldn't release this loan. Please try again.");
+        }
       }
       setActionLoading(false);
       return;
@@ -1953,6 +1984,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // dialog. `handleRelease()` makes the real call and then refreshes the chain.
   const handleStepRelease = () => {
     if (!currentStep || currentStep.kind !== "release") return;
+    if (releaseHeldReason !== null) return;
     if (!assertCanActOnStep("release this loan")) return;
     setReleaseOpen(true);
   };
@@ -2491,6 +2523,28 @@ function LoanDetail({ loanId }: { loanId: number }) {
       {/* The header stays put; the loan's cards scroll under it. Dialogs sit
           outside the box. */}
       <ScrollBox className="space-y-6 p-px">
+        {/* Reprint after a change: a printed document's terms no longer match
+            the loan, so the signed copy is out of date until it is printed
+            again. The server says which; Release waits until then. */}
+        {reprintNoticeText !== null && (
+          <Card
+            role="alert"
+            className="border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-900/10"
+          >
+            <CardContent className="py-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="flex-1 space-y-1">
+                  <p className="font-semibold text-amber-700 dark:text-amber-400">
+                    Print again before release
+                  </p>
+                  <p className="text-sm text-amber-700/80 dark:text-amber-300/80">{reprintNoticeText}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <LoanCollateralsCard
           loanId={loan.id}
           summary={loan.collateral_summary ?? null}
@@ -3106,15 +3160,17 @@ function LoanDetail({ loanId }: { loanId: number }) {
                           </>
                         )}
                         {currentStep.kind === "release" && (
-                          <Button
-                            size="sm"
-                            className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                            onClick={handleStepRelease}
-                            disabled={stepActionLoading || !clientCanActOnCurrentStep}
-                          >
-                            <Unlock className="mr-2 h-4 w-4" />
-                            Release Loan
-                          </Button>
+                          <DisabledReason reason={releaseHeldReason} wrapperClassName="w-full sm:w-auto">
+                            <Button
+                              size="sm"
+                              className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                              onClick={handleStepRelease}
+                              disabled={stepActionLoading || !clientCanActOnCurrentStep || releaseHeldReason !== null}
+                            >
+                              <Unlock className="mr-2 h-4 w-4" />
+                              Release Loan
+                            </Button>
+                          </DisabledReason>
                         )}
                       </div>
                     </div>
