@@ -1,9 +1,29 @@
 import { formatCount, formatCountOf } from "@/lib/report-format";
 
 /**
- * The import's counts in words, each noun in the right number ("1 warning",
- * never "1 warnings").
+ * Counts in words, each noun in the right number ("1 warning", never
+ * "1 warnings"): the shared pager, and the import's counts.
  */
+
+/**
+ * The shared pager's line: "Showing 1 to 10 of 25 results", "Showing 1 of 1
+ * result", or "No results". `first` and `last` are 1-based rows of this page.
+ */
+export function pagerSummary(first: number, last: number, total: number): string {
+  if (total <= 0) return "No results";
+  const range = first === last ? formatCount(first) : `${formatCount(first)} to ${formatCount(last)}`;
+  return `Showing ${range} of ${formatCountOf(total, "result")}`;
+}
+
+/** The upload's progress: "1 of 1 piece accepted". */
+export function piecesAccepted(accepted: number, total: number): string {
+  return `${formatCount(accepted)} of ${formatCountOf(total, "piece")} accepted`;
+}
+
+/** A resumed upload: "3 of 4 pieces of members.csv are already on the server." */
+export function piecesOnServer(received: number, total: number, name: string): string {
+  return `${formatCount(received)} of ${formatCountOf(total, "piece")} of ${name} ${received === 1 ? "is" : "are"} already on the server.`;
+}
 
 /** The grouped report's header badge: "1 warning", "3 errors". */
 export function severityCount(count: number, severity: "error" | "warning"): string {

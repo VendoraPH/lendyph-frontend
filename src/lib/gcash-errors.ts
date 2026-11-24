@@ -13,7 +13,10 @@ export function extractGCashErrorMessage(err: unknown): string {
     const status = err.response?.status;
     const body = err.response?.data as ApiErrorBody | undefined;
 
-    if (status === 422 && body?.message?.toLowerCase().includes("tier")) {
+    // Only the no-tier refusal itself, never a message that merely holds the
+    // letters (a "Frontier" branch): every other 422, on any field, keeps the
+    // server's words below.
+    if (status === 422 && /\bno tier\b/i.test(body?.message ?? "")) {
       return "No tier covers this amount. Update GCash settings.";
     }
     if (status === 409) {

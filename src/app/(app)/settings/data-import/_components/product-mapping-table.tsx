@@ -96,7 +96,7 @@ import type {
   LoanProductOption,
   ProductMappingResponse,
 } from "@/types/data-import";
-import { productMatches } from "../_lib/count-words";
+import { productMatches } from "@/lib/count-words";
 
 /** Sentinel for "not mapped". Product ids are numbers, so it cannot collide. */
 const UNMAPPED = "";
