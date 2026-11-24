@@ -38,7 +38,11 @@ import { APPROVAL_BRANCH_REQUIRED, approvalBranchError, approvalPayload } from "
 import { PossibleDuplicateNotice } from "./_components/possible-duplicate-notice";
 import { PossibleDuplicateDialog } from "./_components/possible-duplicate-dialog";
 import { useDuplicateConfirmation } from "./_hooks/use-duplicate-confirmation";
-import { acknowledgedApprovalPayload, possibleDuplicateRefusal } from "./_lib/possible-duplicate";
+import {
+  acknowledgedApprovalPayload,
+  approvalEmailRefusal,
+  possibleDuplicateRefusal,
+} from "./_lib/possible-duplicate";
 import {
   syncValidIdDrafts,
   validIdDraftErrors,
@@ -68,6 +72,9 @@ function RegistrationReviewContent() {
   const [idPreview, setIdPreview] = useState<{ title: string; images: PreviewImage[] } | null>(null);
   const branch = useApprovalBranch(registration?.branch_id);
   const duplicate = useDuplicateConfirmation(registration?.possible_duplicate);
+  // The server holds an approval while the email is on another member; its
+  // words stay on the panel until the next try.
+  const [emailRefusal, setEmailRefusal] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -129,6 +136,7 @@ function RegistrationReviewContent() {
 
   async function approve(acknowledged: boolean) {
     setApproving(true);
+    setEmailRefusal(null);
     try {
       await registrationService.approve(registrationId, approvalBody(acknowledged));
       toast.success("Registration approved. Member profile activated.");
@@ -144,6 +152,7 @@ function RegistrationReviewContent() {
         duplicate.askAfterRefusal(refusal, () => void approve(true));
       } else {
         showBranchRefusal(err);
+        setEmailRefusal(approvalEmailRefusal(err));
         notifyError(err, "We couldn't approve the registration. Please try again.");
       }
     } finally {
@@ -199,6 +208,7 @@ function RegistrationReviewContent() {
 
   async function saveEdit(acknowledged: boolean) {
     setSavingEdit(true);
+    setEmailRefusal(null);
     // Which step we're on. Each one commits before the next begins, so a
     // failure has to name the step that actually failed — claiming "nothing
     // was saved" after `update()` has already landed pushes the operator into
@@ -229,9 +239,11 @@ function RegistrationReviewContent() {
         duplicate.askAfterRefusal(refusal, () => void approve(true));
       } else {
         // Only the approval gate refused — the applicant is no longer pending,
-        // or still has no valid ID on file. Stay in edit mode so the operator
-        // can fix the cause rather than losing the screen.
+        // still has no valid ID on file, or kept an email another member
+        // holds. Stay in edit mode so the operator can fix the cause rather
+        // than losing the screen.
         showBranchRefusal(err);
+        setEmailRefusal(approvalEmailRefusal(err));
         notifyError(
           err,
           "We couldn't approve this registration. Please try again.",
@@ -450,6 +462,7 @@ function RegistrationReviewContent() {
               }}
               onSaveEdit={handleSaveEdit}
               branchField={<ApprovalBranchField branch={branch} disabled={approving || savingEdit} />}
+              approvalRefusal={emailRefusal}
             />
           </div>
         </ScrollBox>

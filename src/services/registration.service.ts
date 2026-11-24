@@ -249,7 +249,9 @@ export const registrationService = {
    * `errors.valid_id` / `errors.branch_id`) when a gate fails, so callers must
    * surface the server message rather than generic copy.
    *
-   * A registration with a `possible_duplicate` also needs
+   * A registration whose email is on another member is held (422 on
+   * `errors.email`) until the email is changed or cleared, whatever is
+   * confirmed. One with a `possible_duplicate` also needs
    * `acknowledge_possible_duplicate: true`, sent once the reviewer confirms
    * they checked it; without it the server answers 422 on
    * `errors.possible_duplicate`, after every other gate passes.

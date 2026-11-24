@@ -65,3 +65,12 @@ export function acknowledgedApprovalPayload(payload: { branch_id?: number }): {
 export function possibleDuplicateRefusal(err: unknown): string | null {
   return validationErrors(err)?.possible_duplicate?.[0] ?? null;
 }
+
+/**
+ * The server holding an approval because the registration's email is on
+ * another member, in its own words, or null for any other error. No
+ * confirmation gets past it: the email is changed or cleared in Edit Details.
+ */
+export function approvalEmailRefusal(err: unknown): string | null {
+  return validationErrors(err)?.email?.[0] ?? null;
+}

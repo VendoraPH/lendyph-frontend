@@ -20,6 +20,8 @@ interface Props {
   onSaveEdit: () => void;
   /** The branch the member is approved into, shown above the decision buttons. */
   branchField: ReactNode;
+  /** Why the last approval was held, in the server's words, until the next try. */
+  approvalRefusal?: string | null;
 }
 
 function StatusPill({ status }: { status: Registration["status"] }) {
@@ -50,6 +52,7 @@ export function ReviewActionPanel({
   onToggleEdit,
   onSaveEdit,
   branchField,
+  approvalRefusal,
 }: Props) {
   const submitted = registrationSubmittedAt(registration);
   const submittedDate = submitted ? formatDate(submitted) : "—";
@@ -113,6 +116,15 @@ export function ReviewActionPanel({
         ) : (
           <>
             {branchField}
+
+            {approvalRefusal ? (
+              <p
+                role="alert"
+                className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+              >
+                {approvalRefusal}
+              </p>
+            ) : null}
 
             <div className="space-y-2">
               {editMode ? (

@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   acknowledgedApprovalPayload,
+  approvalEmailRefusal,
   duplicateConfirmationText,
   needsDuplicateConfirmation,
   possibleDuplicateHref,
@@ -76,4 +77,25 @@ test("only a 422 on the possible duplicate reads as the server asking for the co
   assert.equal(possibleDuplicateRefusal(refusal({ possible_duplicate: ["Check it."] }, 500)), null);
   assert.equal(possibleDuplicateRefusal(new Error("network")), null);
   assert.equal(possibleDuplicateRefusal(null), null);
+});
+
+// The server holds an approval while the registration's email is on another
+// member, whatever was confirmed; the page shows its words until the next try.
+test("only a 422 on the email reads as the email being on file", () => {
+  const words =
+    "This email is already on file for another member. Change or clear it in Edit Details before approving.";
+
+  assert.equal(approvalEmailRefusal(refusal({ email: [words] })), words);
+  assert.equal(approvalEmailRefusal(refusal({ possible_duplicate: ["Check it."] })), null);
+  assert.equal(approvalEmailRefusal(refusal({ email: [words] }, 409)), null);
+  assert.equal(approvalEmailRefusal(null), null);
+});
+
+test("an email match reads its reason in the server's words", () => {
+  const byEmail: PossibleDuplicate = { ...MEMBER, reason: "Same email", message: "Possible duplicate of BRW-000042 (Juan Dela Cruz): same email." };
+
+  assert.equal(
+    duplicateConfirmationText(byEmail),
+    "Possible duplicate of BRW-000042 (Juan Dela Cruz): same email. Approve this registration as a new member only once you've checked that it's a different person.",
+  );
 });
