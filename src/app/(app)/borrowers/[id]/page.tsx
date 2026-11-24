@@ -26,6 +26,7 @@ import { coMakerIdFormData, type ReadyCoMakerId } from "@/lib/co-maker-valid-id"
 import { BorrowerHeader } from "./_components/borrower-header";
 import { TransferMemberDialog } from "./_components/transfer-member-dialog";
 import { canTransferMember } from "../_lib/member-transfer";
+import { withMembership } from "../_lib/member-membership";
 import { OverviewTab } from "./_components/overview-tab";
 import { LoansTab } from "./_components/loans-tab";
 import { PaymentsTab } from "./_components/payments-tab";
@@ -285,7 +286,13 @@ function BorrowerDetailContent() {
 
         <TabsContent value="overview" className={cn("pt-4", FIT_CLASSES.section)}>
           <ScrollBox className="p-px">
-            <OverviewTab borrower={borrower} loans={loans} coMakers={coMakers} summary={loanSummary} />
+            <OverviewTab
+              borrower={borrower}
+              loans={loans}
+              coMakers={coMakers}
+              summary={loanSummary}
+              onMembershipSaved={(saved) => setBorrower((current) => (current ? withMembership(current, saved) : current))}
+            />
           </ScrollBox>
         </TabsContent>
 
