@@ -106,6 +106,15 @@ describe("a shared receipt is never framed and never sends its address on", () =
     }
   });
 
+  test("/r is kept by no browser or proxy cache, and only /r", async () => {
+    for (const path of RECEIPT_PATHS) {
+      assert.equal((await headersFor(path))["Cache-Control"], "no-store", path);
+    }
+    for (const path of ["/dashboard", "/payments/12", "/reports", ...PORTAL_PATHS, ...APPLY_PATHS]) {
+      assert.equal((await headersFor(path))["Cache-Control"], undefined, path);
+    }
+  });
+
   test("its rule comes after the staff rule", async () => {
     const sources = (((await nextConfig.headers?.()) ?? []) as HeaderRoute[]).map((route) => route.source);
     const receipt = sources.indexOf("/r/:path*");
