@@ -16,7 +16,8 @@ const SHARE_TOKEN = /^[A-Za-z0-9_-]{43}$/;
 export const PUBLIC_RECEIPT_UNAVAILABLE =
   "This receipt link isn't available. Ask the cooperative for a new link.";
 
-export const PUBLIC_RECEIPT_TOO_MANY = "Too many tries. Please wait a minute and try again.";
+/** The server's own words for a view over its limits, which last a minute or up to an hour. */
+export const PUBLIC_RECEIPT_TOO_MANY = "This receipt was opened too many times. Please try again later.";
 
 const PUBLIC_RECEIPT_UNREACHABLE = "We couldn't open this receipt. Check your connection and try again.";
 

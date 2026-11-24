@@ -113,6 +113,9 @@ test("a refused link reads one message whatever the reason, and a limit reads it
   assert.equal(publicReceiptErrorMessage(status(404)), PUBLIC_RECEIPT_UNAVAILABLE);
   assert.equal(publicReceiptErrorMessage(status(403)), PUBLIC_RECEIPT_UNAVAILABLE);
   assert.equal(publicReceiptErrorMessage(status(429)), PUBLIC_RECEIPT_TOO_MANY);
+  // The same words as the server's 429, which can last a minute or an hour: no time is promised.
+  assert.equal(PUBLIC_RECEIPT_TOO_MANY, "This receipt was opened too many times. Please try again later.");
+  assert.doesNotMatch(PUBLIC_RECEIPT_TOO_MANY, /minute|hour|second|\d/);
   assert.match(publicReceiptErrorMessage(new Error("Network Error")), /couldn't open/);
   assert.doesNotMatch(PUBLIC_RECEIPT_UNAVAILABLE, /expired|revoked|exist/i, "the message never says which");
 });
