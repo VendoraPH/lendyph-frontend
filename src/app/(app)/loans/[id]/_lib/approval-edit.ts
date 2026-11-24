@@ -11,6 +11,15 @@ import type { LoanApprovalEditState, LoanApprovalStep } from "@/types/loan-appro
 /** The id of the approval card, where the edit returns to. */
 export const APPROVAL_CARD_ID = "approval";
 
+/**
+ * The approval card's action rows: stacked below sm, right-aligned from sm,
+ * and wrapping when they don't fit. At 1024x640 the approve step's four
+ * actions (Edit Loan, the send-back target, Send Back for Revision, Approve &
+ * Forward) are wider than the card, and a row that doesn't wrap pushed Edit
+ * Loan out of it; at 1440 they still fit one row.
+ */
+export const APPROVAL_ACTIONS_ROW = "flex flex-col-reverse sm:flex-row sm:flex-wrap sm:justify-end gap-2";
+
 /** Whether the page asks the server at all: the permission, a loan for approval, and an approve step waiting. */
 export function asksApprovalEdit(input: {
   canEditInApproval: boolean;

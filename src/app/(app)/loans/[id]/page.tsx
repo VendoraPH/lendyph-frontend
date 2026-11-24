@@ -132,7 +132,13 @@ import { LeftOutStepChip } from "./_components/left-out-step-chip";
 import { oncePerKey } from "./_lib/once-per-key";
 import { useReleasePreview } from "./_hooks/use-release-preview";
 import { useApprovalEditState } from "./_hooks/use-approval-edit-state";
-import { APPROVAL_CARD_ID, approvalEditHref, asksApprovalEdit, offersApprovalEdit } from "./_lib/approval-edit";
+import {
+  APPROVAL_ACTIONS_ROW,
+  APPROVAL_CARD_ID,
+  approvalEditHref,
+  asksApprovalEdit,
+  offersApprovalEdit,
+} from "./_lib/approval-edit";
 import { useDeductionsPreview } from "./_hooks/use-deductions-preview";
 import type { PreviewReadState } from "./_hooks/use-preview-read";
 import { cardDeductionsSource, cardFiguresAreEstimated } from "./_lib/deductions-preview";
@@ -2607,7 +2613,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                       never-submitted draft never reaches — so without these the
                       draft could not be submitted, edited OR voided from its own
                       page. */}
-                  <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                  <div className={APPROVAL_ACTIONS_ROW}>
                     {canVoidLoan && (
                       <Button
                         variant="destructive"
@@ -2978,7 +2984,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                         />
                       )}
 
-                      <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                      <div className={APPROVAL_ACTIONS_ROW}>
                         {currentStep.kind === "submit" && (
                           <>
                             {canVoidLoan && (
