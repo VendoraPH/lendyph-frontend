@@ -474,8 +474,11 @@ export interface Reconciliation {
   lines: ReconciliationLine[];
 }
 
-/** Expense and payable tracking. */
-export type ExpenseStatus = "unpaid" | "partially_paid" | "paid" | "overdue";
+/**
+ * Expense and payable tracking. `reversed`: the expense's journal was reversed
+ * on the Journals screen, so the server counts it in no total or other status.
+ */
+export type ExpenseStatus = "unpaid" | "partially_paid" | "paid" | "overdue" | "reversed";
 
 export interface Expense {
   id: number;
@@ -495,7 +498,10 @@ export interface Expense {
   due_date?: string | null;
   status: ExpenseStatus;
   journal_id?: number | null;
-  /** Centavos still owed, from the server (`amount - amount_paid`, never below 0). */
+  /**
+   * Centavos still owed, from the server (`amount - amount_paid`, never below
+   * 0; 0 once the expense is reversed).
+   */
   amount_due: number;
 }
 

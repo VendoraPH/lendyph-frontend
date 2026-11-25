@@ -58,6 +58,7 @@ test("an expense's status reads as the status filter reads it", () => {
   assert.equal(expenseStatusLabel("partially_paid"), "Partially paid");
   assert.equal(expenseStatusLabel("paid"), "Paid");
   assert.equal(expenseStatusLabel("overdue"), "Overdue");
+  assert.equal(expenseStatusLabel("reversed"), "Reversed");
 });
 
 test("an expense status the screen doesn't know yet still reads in words", () => {

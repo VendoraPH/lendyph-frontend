@@ -97,7 +97,7 @@ const PAGE_META: Record<string, Record<string, unknown>> = {
   },
   "/accounting/expenses": {
     totals: { count: EXPENSE_COUNT, amount: 4_000_000, amount_paid: 0, amount_due: 4_000_000 },
-    stats: { unpaid: 40, partially_paid: 0, paid: 0, overdue: 0 },
+    stats: { unpaid: 40, partially_paid: 0, paid: 0, overdue: 0, reversed: 0 },
   },
   "/accounting/cash-accounts": {
     totals: {

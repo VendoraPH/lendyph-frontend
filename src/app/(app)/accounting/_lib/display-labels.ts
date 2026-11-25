@@ -44,6 +44,7 @@ const EXPENSE_STATUS_LABELS: Record<string, string> = {
   partially_paid: "Partially paid",
   paid: "Paid",
   overdue: "Overdue",
+  reversed: "Reversed",
 };
 
 export const expenseStatusLabel = (status: string): string =>
