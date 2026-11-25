@@ -32,6 +32,7 @@ import {
 } from "@/lib/savings/withdrawal-fee";
 import type { SavingsWithdrawalRule } from "@/types/savings-servicing";
 import { PAYMENT_METHOD_OPTIONS, outflowHoldNote } from "../../../_lib/savings-rules";
+import { serverFieldError } from "../../../_lib/step-errors";
 import { printSavingsReceipt } from "../_lib/print-receipt";
 
 export type TransactionMode = "deposit" | "withdrawal";
@@ -56,6 +57,9 @@ export function TransactionDialog({ mode, account, onOpenChange, onPosted }: Tra
   const [reference, setReference] = useState("");
   const [remarks, setRemarks] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  // The server's refusal of the reference (one already on record for the
+  // method, say), shown on the field until the reference or method changes.
+  const [referenceError, setReferenceError] = useState<string | null>(null);
   const { submitting, run } = useSubmitGuard();
   if (useDialogOpening(open, mode)) {
     setAmountRaw("");
@@ -64,6 +68,7 @@ export function TransactionDialog({ mode, account, onOpenChange, onPosted }: Tra
     setReference("");
     setRemarks("");
     setSubmitted(false);
+    setReferenceError(null);
   }
 
   // The product's rule, from the server's product: only read when the account
@@ -113,7 +118,10 @@ export function TransactionDialog({ mode, account, onOpenChange, onPosted }: Tra
         onOpenChange(false);
         onPosted();
       })
-      .catch((err: unknown) => notifyError(err, `Couldn't post the ${mode}.`));
+      .catch((err: unknown) => {
+        setReferenceError(serverFieldError(err, "reference"));
+        notifyError(err, `Couldn't post the ${mode}.`);
+      });
   }
 
   return (
@@ -151,12 +159,23 @@ export function TransactionDialog({ mode, account, onOpenChange, onPosted }: Tra
               <OptionSelect
                 id="tx-method"
                 value={method}
-                onChange={(v) => setMethod(v as Exclude<SavingsMethod, "savings">)}
+                onChange={(v) => {
+                  setMethod(v as Exclude<SavingsMethod, "savings">);
+                  setReferenceError(null);
+                }}
                 options={PAYMENT_METHOD_OPTIONS}
               />
             </FormField>
-            <FormField id="tx-ref" label="Reference (optional)">
-              <Input id="tx-ref" value={reference} onChange={(e) => setReference(e.target.value)} placeholder="OR / transfer no." />
+            <FormField id="tx-ref" label="Reference (optional)" error={referenceError}>
+              <Input
+                id="tx-ref"
+                value={reference}
+                onChange={(e) => {
+                  setReference(e.target.value);
+                  setReferenceError(null);
+                }}
+                placeholder="OR / transfer no."
+              />
             </FormField>
           </div>
           {holdNote && <p className="text-xs font-medium text-amber-700 dark:text-amber-400">{holdNote}</p>}

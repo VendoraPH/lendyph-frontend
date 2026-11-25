@@ -110,6 +110,13 @@ export type ReportSection =
        * ("overdu/e").
        */
       compact?: boolean;
+      /**
+       * In the PDF, print the title on the page of the column headings and the
+       * first row: when they don't fit under it, the title starts the next page
+       * with them, as a fields box's title does. Opt-in, so no other report's
+       * pages move.
+       */
+      keepTitleWithRows?: boolean;
     }
   | {
       kind: "note";

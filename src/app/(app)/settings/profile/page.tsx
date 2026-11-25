@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { RouteGuard } from "@/components/common";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
@@ -296,9 +295,14 @@ function ChangePasswordCard() {
 
 // ── Main Page ──
 
+/**
+ * The signed-in user's own profile. Every signed-in, active user may read and
+ * save it (GET and PATCH /auth/me need no permission on the server), so the
+ * page has no guard of its own: the app shell already needs a signed-in user,
+ * and nothing here reads under another permission.
+ */
 export default function ProfileSettingsPage() {
   return (
-    <RouteGuard permission="settings:view" pageName="Profile Settings">
     <PageFill className="min-w-0">
       {/* Header */}
       <div className="shrink-0">
@@ -317,6 +321,5 @@ export default function ProfileSettingsPage() {
         </div>
       </ScrollBox>
     </PageFill>
-    </RouteGuard>
   );
 }

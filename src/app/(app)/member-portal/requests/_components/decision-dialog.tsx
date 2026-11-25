@@ -22,6 +22,7 @@ import type { SavingsMethod } from "@/types";
 import { FormField } from "../../../savings/_components/field";
 import { OptionSelect } from "../../../savings/_components/option-select";
 import { PAYMENT_METHOD_OPTIONS } from "../../../savings/_lib/savings-rules";
+import { serverFieldError } from "../../../savings/_lib/step-errors";
 import { REQUEST_TYPE_LABELS, labelOf } from "../../_lib/labels";
 import { notifyPortalError } from "../../_lib/notify-portal-error";
 import {
@@ -76,10 +77,14 @@ export function DecisionDialog({ request, decision, onOpenChange, onDecided }: D
   const open = decision !== null;
   const [form, setForm] = useState<DecisionForm>(() => initialForm(request, decision ?? "under_review"));
   const [submitted, setSubmitted] = useState(false);
+  // The savings teller's refusal of the reference (one already on record for
+  // the method, say), shown on the field until the reference or method changes.
+  const [referenceError, setReferenceError] = useState<string | null>(null);
   const { submitting, run } = useSubmitGuard();
   if (useDialogOpening(open, decision)) {
     setForm(initialForm(request, decision ?? "under_review"));
     setSubmitted(false);
+    setReferenceError(null);
   }
 
   const money = form.decision === "approve" ? moneyDetailsFor(request.type) : null;
@@ -96,6 +101,7 @@ export function DecisionDialog({ request, decision, onOpenChange, onDecided }: D
         onDecided();
       })
       .catch((err: unknown) => {
+        setReferenceError(serverFieldError(err, "reference"));
         notifyPortalError(err, "The decision couldn't be saved. Please try again.");
         if (reloadAfterFailure(err)) {
           onOpenChange(false);
@@ -144,17 +150,28 @@ export function DecisionDialog({ request, decision, onOpenChange, onDecided }: D
                 <OptionSelect
                   id="pd-method"
                   value={form.money.method}
-                  onChange={(v) => setMoney({ method: v as SavingsMethod })}
+                  onChange={(v) => {
+                    setMoney({ method: v as SavingsMethod });
+                    setReferenceError(null);
+                  }}
                   options={PAYMENT_METHOD_OPTIONS}
                   placeholder="Choose the method"
                 />
               </FormField>
-              <FormField id="pd-ref" label="Reference (optional)" hint="A transfer or receipt number.">
+              <FormField
+                id="pd-ref"
+                label="Reference (optional)"
+                hint="A transfer or receipt number."
+                error={referenceError}
+              >
                 <Input
                   id="pd-ref"
                   maxLength={64}
                   value={form.money.reference}
-                  onChange={(e) => setMoney({ reference: e.target.value })}
+                  onChange={(e) => {
+                    setMoney({ reference: e.target.value });
+                    setReferenceError(null);
+                  }}
                 />
               </FormField>
             </>
