@@ -66,3 +66,13 @@ test("when the server numbers cash placements, a cash body carries no reference;
   const off = checkPlacement({ ...FORM, reference: "OR-9" }, PRODUCT);
   assert.equal(off.body?.reference, "OR-9");
 });
+
+test("by bank transfer, GCash or Maya it needs the reference, in the server's words; cash and savings don't", () => {
+  const blank = checkPlacement({ ...FORM, method: "gcash", reference: "  " }, PRODUCT);
+  assert.equal(blank.errors.reference, "Enter the GCash reference for this time deposit.");
+  assert.equal(blank.body, null);
+  assert.equal(checkPlacement({ ...FORM, method: "bank_transfer" }, PRODUCT).errors.reference, "Enter the bank transfer reference for this time deposit.");
+  assert.equal(checkPlacement({ ...FORM, method: "maya", reference: "MY-1" }, PRODUCT).errors.reference, null);
+  assert.equal(checkPlacement(FORM, PRODUCT, { serverNumbersCash: true }).errors.reference, null);
+  assert.equal(checkPlacement({ ...FORM, method: "savings", fundingAccountId: "11" }, PRODUCT).errors.reference, null);
+});

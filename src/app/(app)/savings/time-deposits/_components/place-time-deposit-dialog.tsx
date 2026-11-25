@@ -31,6 +31,7 @@ import { useBooksReady } from "../../_hooks/use-books-ready";
 import { productChoice, productPlaceholder, termChoice } from "@/lib/savings/product-choice";
 import { METHOD_LABELS, PAYMENT_METHOD_OPTIONS } from "../../_lib/savings-rules";
 import { MATURITY_INSTRUCTION_OPTIONS, termsOfferedText } from "../../_lib/time-deposit-rules";
+import { referenceLabel, referenceNeeded } from "../../_lib/savings-reference";
 import { errorsForStep, serverFieldError, serverStepErrors } from "../../_lib/step-errors";
 import { checkPlacement, type PlacementForm } from "../_lib/placement-form";
 import { PLACEMENT_STEPS, placementErrors } from "../_lib/placement-steps";
@@ -127,6 +128,8 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
 
   const { errors, quote, body } = checkPlacement({ ...form, memberId }, product, { serverNumbersCash });
   const keyedErrors = placementErrors(errors);
+  // Bank transfer, GCash and Maya need their reference (round 5); cash and a move from savings don't.
+  const needsReference = referenceNeeded(form.method);
   const show = (stepId: string, error: string | null) => (submitted || checkedSteps.has(stepId) ? error : null);
 
   const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((f) => ({ ...f, [key]: value }));
@@ -292,9 +295,9 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
                   <FormField
                     id="td-ref"
                     field="reference"
-                    label={autoReference ? "Reference" : "Reference (optional)"}
+                    label={autoReference ? "Reference" : referenceLabel(needsReference)}
                     hint={autoReference?.hint}
-                    error={referenceError}
+                    error={referenceError ?? show("payment", errors.reference)}
                   >
                     {autoReference ? (
                       <Input
@@ -307,6 +310,7 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
                     ) : (
                       <Input
                         id="td-ref"
+                        aria-required={needsReference}
                         value={form.reference}
                         onChange={(e) => {
                           set("reference", e.target.value);

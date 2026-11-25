@@ -1,5 +1,6 @@
 import type { MaturityInstruction, SavingsAccount, SavingsMethod, SettleTimeDepositInput, TimeDeposit } from "@/types";
 import { METHOD_LABELS, PAYMENT_METHOD_OPTIONS } from "../../_lib/savings-rules";
+import { payoutReferenceField } from "../../_lib/savings-reference";
 
 /**
  * How a time deposit's money can be paid out: into one of the member's own
@@ -51,19 +52,24 @@ export function defaultPayoutAccount(
   return td.payout_account_id && offered.some((a) => a.id === td.payout_account_id) ? String(td.payout_account_id) : "";
 }
 
-/** The payout fields: the method, and the account when it goes into savings. */
+/**
+ * The payout fields: the method, the account when it goes into savings, and
+ * the payout's reference when it leaves over the counter (required for bank
+ * transfer, GCash and Maya; `savingsReferenceError` says so first).
+ */
 export function payoutFields(
   method: SavingsMethod,
   accountId: string,
-): { payout_method: SavingsMethod; payout_account_id?: number } {
+  reference = "",
+): { payout_method: SavingsMethod; payout_account_id?: number; payout_reference?: string } {
   return method === "savings" && Number(accountId) > 0
     ? { payout_method: method, payout_account_id: Number(accountId) }
-    : { payout_method: method };
+    : { payout_method: method, ...payoutReferenceField(method, reference) };
 }
 
 /**
  * `POST …/{id}/settle`. A full rollover pays nothing out, so it sends no
- * payout method; a rollover sends the new placement's instruction.
+ * payout method or reference; a rollover sends the new placement's instruction.
  */
 export function settleBody(
   date: string,
@@ -71,11 +77,12 @@ export function settleBody(
   payoutMethod: SavingsMethod,
   nextInstruction: MaturityInstruction,
   payoutAccountId = "",
+  payoutReference = "",
 ): SettleTimeDepositInput {
   return {
     date,
     action,
-    ...(action === "rollover_all" ? {} : payoutFields(payoutMethod, payoutAccountId)),
+    ...(action === "rollover_all" ? {} : payoutFields(payoutMethod, payoutAccountId, payoutReference)),
     ...(action === "payout" ? {} : { next_instruction: nextInstruction }),
   };
 }

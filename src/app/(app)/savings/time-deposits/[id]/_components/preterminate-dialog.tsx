@@ -22,6 +22,7 @@ import type { SavingsMethod, TimeDeposit } from "@/types";
 import { FormField } from "../../../_components/field";
 import { OptionSelect } from "../../../_components/option-select";
 import { defaultPayoutAccount, payoutFields, payoutOptions } from "../../_lib/settle-form";
+import { serverFieldError } from "../../../_lib/step-errors";
 import { PayoutAccountField, usePayoutAccounts } from "./payout-account-field";
 
 interface PreterminateDialogProps {
@@ -37,14 +38,20 @@ export function PreterminateDialog({ open, deposit, onOpenChange, onDone }: Pret
   const [method, setMethod] = useState<SavingsMethod>(methods[0].value);
   const [reason, setReason] = useState("");
   const [accountId, setAccountId] = useState("");
+  const [reference, setReference] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  // The server's refusal of the payout reference (one already on record, say),
+  // shown on the field until the reference or method changes.
+  const [referenceError, setReferenceError] = useState<string | null>(null);
   const { submitting, run } = useSubmitGuard();
   if (useDialogOpening(open, deposit)) {
     setDate(todayISO());
     setMethod(methods[0].value);
     setAccountId("");
+    setReference("");
     setReason("");
     setSubmitted(false);
+    setReferenceError(null);
   }
 
   const dateOk = date !== "" && date < deposit.maturity_date;
@@ -55,18 +62,20 @@ export function PreterminateDialog({ open, deposit, onOpenChange, onDone }: Pret
   const accounts = usePayoutAccounts(deposit, open && intoSavings);
   const payoutAccount = accountId || defaultPayoutAccount(deposit, accounts.offered);
   const accountError = intoSavings && !payoutAccount ? "Choose the savings account to pay into." : null;
-
   function submit() {
     setSubmitted(true);
     if (reasonError || !dateOk || accountError) return;
-    const body = { date, reason: reason.trim(), ...payoutFields(method, payoutAccount) };
+    const body = { date, reason: reason.trim(), ...payoutFields(method, payoutAccount, reference) };
     run((key) => timeDepositService.preterminate(deposit.id, body, key))
       ?.then((result) => {
         notifySuccess(moneyPostMessage(result, "Time deposit pre-terminated"), deposit.certificate_number);
         onOpenChange(false);
         onDone();
       })
-      .catch((err: unknown) => notifyError(err, "Couldn't pre-terminate the time deposit."));
+      .catch((err: unknown) => {
+        setReferenceError(serverFieldError(err, "payout_reference"));
+        notifyError(err, "Couldn't pre-terminate the time deposit.");
+      });
   }
 
   return (
@@ -91,11 +100,29 @@ export function PreterminateDialog({ open, deposit, onOpenChange, onDone }: Pret
               <OptionSelect
                 id="pt-method"
                 value={method}
-                onChange={(v) => setMethod(v as SavingsMethod)}
+                onChange={(v) => {
+                  setMethod(v as SavingsMethod);
+                  setReferenceError(null);
+                }}
                 options={methods}
               />
             </FormField>
           </div>
+          {/* Optional: a payout's reference exists only once the money is sent (round 5). */}
+          {!intoSavings && (
+            <FormField id="pt-ref" label="Reference (optional)" error={referenceError}>
+              <Input
+                id="pt-ref"
+                value={reference}
+                maxLength={100}
+                onChange={(e) => {
+                  setReference(e.target.value);
+                  setReferenceError(null);
+                }}
+                placeholder="OR / transfer no."
+              />
+            </FormField>
+          )}
           {intoSavings && (
             <PayoutAccountField
               id="pt-account"

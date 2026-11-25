@@ -32,7 +32,8 @@ import {
   readOpeningDetails,
   type OpeningDetailsDraft,
 } from "../_lib/opening-draft";
-import { OPEN_ACCOUNT_STEPS, openAccountErrors } from "../_lib/open-account-steps";
+import { OPEN_ACCOUNT_STEPS, openAccountErrors, openingDepositPays } from "../_lib/open-account-steps";
+import { referenceLabel, referenceNeeded, savingsReferenceError } from "../_lib/savings-reference";
 import { errorsForStep, serverFieldError, serverStepErrors } from "../_lib/step-errors";
 import { ALIGNED_FIELDS, FormField } from "./field";
 import { MemberCheckPanel } from "./member-check-panel";
@@ -113,12 +114,18 @@ export function OpenAccountDialog({ open, onOpenChange, onOpened }: OpenAccountD
   const productError = product ? null : "Choose a savings product.";
   const amountError = amount.ok ? null : amount.message;
   const dateError = form.openedAt ? null : "Enter the opening date.";
-  const valid = !memberError && !productError && !amountError && !dateError && opening.problems.length === 0;
+  // A deposit by bank transfer, GCash or Maya needs its reference, in the server's words (round 5); ₱0.00 pays nothing.
+  const paid = openingDepositPays(amount);
+  const needsReference = referenceNeeded(form.method, paid);
+  const referenceProblem = savingsReferenceError(form.method, form.reference, "opening_deposit", paid);
+  const valid =
+    !memberError && !productError && !amountError && !dateError && !referenceProblem && opening.problems.length === 0;
   const errors = openAccountErrors({
     memberError,
     productError,
     dateError,
     amountError,
+    referenceError: referenceProblem,
     sourceError: opening.problems[0] ?? null,
   });
 
@@ -266,9 +273,15 @@ export function OpenAccountDialog({ open, onOpenChange, onOpened }: OpenAccountD
                     options={PAYMENT_METHOD_OPTIONS}
                   />
                 </FormField>
-                <FormField id="sv-ref" field="reference" label="Reference (optional)" error={referenceError}>
+                <FormField
+                  id="sv-ref"
+                  field="reference"
+                  label={referenceLabel(needsReference)}
+                  error={referenceError ?? show("deposit", referenceProblem)}
+                >
                   <Input
                     id="sv-ref"
+                    aria-required={needsReference}
                     value={form.reference}
                     onChange={(e) => {
                       set("reference", e.target.value);

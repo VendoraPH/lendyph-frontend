@@ -23,6 +23,8 @@ import type { SavingsAccount, SavingsMethod } from "@/types";
 import { FormField } from "../../../_components/field";
 import { OptionSelect } from "../../../_components/option-select";
 import { PAYMENT_METHOD_OPTIONS } from "../../../_lib/savings-rules";
+import { payoutReferenceField } from "../../../_lib/savings-reference";
+import { serverFieldError } from "../../../_lib/step-errors";
 
 interface CloseAccountDialogProps {
   open: boolean;
@@ -36,19 +38,26 @@ type PayoutMethod = Exclude<SavingsMethod, "savings">;
 /**
  * Close an account on the server's closing quote: the accrued interest is
  * credited first, then the balance is paid out. Above the approval amount the
- * close waits for approval (202).
+ * close waits for approval (202). The payout's reference is optional: it
+ * exists only once the money is sent (finish run round 5).
  */
 export function CloseAccountDialog({ open, account, onOpenChange, onClosed }: CloseAccountDialogProps) {
   const [date, setDate] = useState("");
   const [method, setMethod] = useState<PayoutMethod>("cash");
+  const [reference, setReference] = useState("");
   const [reason, setReason] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  // The server's refusal of the reference (one already on record, say), shown
+  // on the field until the reference or method changes.
+  const [referenceError, setReferenceError] = useState<string | null>(null);
   const { submitting, run } = useSubmitGuard();
   if (useDialogOpening(open, account)) {
     setDate(todayISO());
     setMethod("cash");
+    setReference("");
     setReason("");
     setSubmitted(false);
+    setReferenceError(null);
   }
 
   // The quote is for the closing date chosen (today or yesterday).
@@ -65,14 +74,17 @@ export function CloseAccountDialog({ open, account, onOpenChange, onClosed }: Cl
   function submit() {
     setSubmitted(true);
     if (reasonError || !date || !canClose) return;
-    const body = { date, reason: reason.trim(), payout_method: method };
+    const body = { date, reason: reason.trim(), payout_method: method, ...payoutReferenceField(method, reference) };
     run((key) => savingsService.close(account.id, body, key))
       ?.then((result) => {
         notifySuccess(moneyPostMessage(result, "Account closed"), account.account_number);
         onOpenChange(false);
         onClosed();
       })
-      .catch((err: unknown) => notifyError(err, "Couldn't close the account."));
+      .catch((err: unknown) => {
+        setReferenceError(serverFieldError(err, "payout_reference"));
+        notifyError(err, "Couldn't close the account.");
+      });
   }
 
   return (
@@ -124,8 +136,23 @@ export function CloseAccountDialog({ open, account, onOpenChange, onClosed }: Cl
               <OptionSelect
                 id="cl-method"
                 value={method}
-                onChange={(v) => setMethod(v as PayoutMethod)}
+                onChange={(v) => {
+                  setMethod(v as PayoutMethod);
+                  setReferenceError(null);
+                }}
                 options={PAYMENT_METHOD_OPTIONS}
+              />
+            </FormField>
+            <FormField id="cl-ref" label="Reference (optional)" error={referenceError}>
+              <Input
+                id="cl-ref"
+                value={reference}
+                maxLength={64}
+                onChange={(e) => {
+                  setReference(e.target.value);
+                  setReferenceError(null);
+                }}
+                placeholder="OR / transfer no."
               />
             </FormField>
           </div>

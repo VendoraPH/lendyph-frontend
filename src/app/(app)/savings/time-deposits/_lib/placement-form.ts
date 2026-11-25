@@ -6,6 +6,7 @@ import type {
   SavingsProduct,
   TimeDepositQuoteInput,
 } from "@/types";
+import { savingsReferenceError } from "../../_lib/savings-reference";
 
 /** The placement form as typed. */
 export interface PlacementForm {
@@ -24,7 +25,7 @@ export interface PlacementForm {
 }
 
 export interface PlacementCheck {
-  errors: Record<"member" | "product" | "term" | "amount" | "date" | "funding", string | null>;
+  errors: Record<"member" | "product" | "term" | "amount" | "date" | "funding" | "reference", string | null>;
   quote: TimeDepositQuoteInput | null;
   body: PlaceTimeDepositInput | null;
 }
@@ -32,7 +33,8 @@ export interface PlacementCheck {
 /**
  * Checks the form and builds the quote request and the placement body. The
  * amount is sent exactly as typed; the server checks the minimum and works
- * out every figure.
+ * out every figure. A placement by bank transfer, GCash or Maya needs its
+ * reference, in the server's words.
  */
 export function checkPlacement(
   form: PlacementForm,
@@ -51,6 +53,7 @@ export function checkPlacement(
     amount: amount.ok ? null : amount.message,
     date: /^\d{4}-\d{2}-\d{2}$/.test(form.placementDate) ? null : "Enter the placement date.",
     funding: form.method === "savings" && !funding ? "Choose the savings account that pays for it." : null,
+    reference: savingsReferenceError(form.method, form.reference, "time_deposit"),
   };
   const quote =
     product && term && amount.ok && !errors.date

@@ -55,5 +55,6 @@ export function placementErrors(errors: PlacementCheck["errors"]): Record<string
     principal: errors.amount,
     placement_date: errors.date,
     funding_account_id: errors.funding,
+    reference: errors.reference,
   });
 }
