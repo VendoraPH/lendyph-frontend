@@ -1,4 +1,6 @@
 import { httpStatusOf } from "@/lib/api-error";
+import { referenceNeeded, savingsReferenceError, type SavingsReferenceEntry } from "../../savings/_lib/savings-reference";
+import { serverFieldError } from "../../savings/_lib/step-errors";
 import type {
   PortalDecisionInput,
   PortalMoneyDetails,
@@ -67,7 +69,8 @@ function aboveZero(amount: string | null | undefined): boolean {
 /**
  * What's still missing before the form can be sent, in words (the server
  * checks again). `amount` is the request's own, as the server sent it: a new
- * account with an opening deposit needs the deposit's method.
+ * account with an opening deposit needs the deposit's method. The reference
+ * has its own check, shown on its field (`decisionReferenceProblem`).
  */
 export function decisionProblems(type: PortalRequestType, form: DecisionForm, amount: string | null = null): string[] {
   const problems: string[] = [];
@@ -79,6 +82,45 @@ export function decisionProblems(type: PortalRequestType, form: DecisionForm, am
   if (money === "payout" && form.money.method === "") problems.push("Choose how the money was paid out.");
   if (money === "deposit" && form.money.method === "" && aboveZero(amount)) problems.push("Choose how the opening deposit was paid.");
   return problems;
+}
+
+/** What an approval's reference is for, and whether money moves; null when the decision takes none. */
+function referenceFor(
+  type: PortalRequestType,
+  form: DecisionForm,
+  amount: string | null,
+): { entry: SavingsReferenceEntry; paid: boolean } | null {
+  const money = form.decision === "approve" ? moneyDetailsFor(type) : null;
+  if (money === "payout") return { entry: "payout", paid: true };
+  if (money === "deposit") return { entry: "opening_deposit", paid: aboveZero(amount) };
+  return null;
+}
+
+/**
+ * Whether the approval needs a reference (finish run round 5): a payout, or a
+ * new account's opening deposit above ₱0.00, paid by bank transfer, GCash or
+ * Maya. Cash needs none.
+ */
+export function decisionReferenceNeeded(type: PortalRequestType, form: DecisionForm, amount: string | null = null): boolean {
+  const subject = referenceFor(type, form, amount);
+  return subject !== null && referenceNeeded(form.money.method, subject.paid);
+}
+
+/** A needed reference left blank, in the server's words, or null. */
+export function decisionReferenceProblem(type: PortalRequestType, form: DecisionForm, amount: string | null = null): string | null {
+  const subject = referenceFor(type, form, amount);
+  return subject ? savingsReferenceError(form.money.method, form.money.reference, subject.entry, subject.paid) : null;
+}
+
+/**
+ * The server's refusal of the reference, for its field: from the approval's
+ * own key (`payout.reference`, `deposit.reference`: a blank one) or the
+ * savings teller's (`reference`: one already on record, or held). Null for
+ * any other answer.
+ */
+export function decisionReferenceRefusal(type: PortalRequestType, err: unknown): string | null {
+  const money = moneyDetailsFor(type);
+  return serverFieldError(err, "reference") ?? (money ? serverFieldError(err, `${money}.reference`) : null);
 }
 
 /** The decision body. Payout and deposit go only with an approval of their own type. */

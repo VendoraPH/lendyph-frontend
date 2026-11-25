@@ -361,6 +361,7 @@ export interface OpenSavingsAccountInput extends SavingsOpeningDetailsInput {
   opened_at: string;
   initial_deposit: string;
   payment_method: SavingsMethod;
+  /** Required for bank transfer, GCash and Maya when the deposit is above ₱0.00 (finish run round 5). */
   reference?: string;
 }
 
@@ -436,6 +437,7 @@ export interface SavingsTransactionInput {
   /** YYYY-MM-DD, Asia/Manila. */
   date: string;
   payment_method: SavingsMethod;
+  /** Required for bank transfer, GCash and Maya (finish run round 5). */
   reference?: string;
   remarks?: string;
 }
@@ -681,6 +683,7 @@ export interface PlaceTimeDepositInput {
   placement_date: string;
   maturity_instruction: MaturityInstruction;
   payment_method: SavingsMethod;
+  /** Required for bank transfer, GCash and Maya (finish run round 5); cash gets the server's TD number. */
   reference?: string;
   /** The savings account paying for it, when `payment_method` is `savings`. */
   funding_account_id?: number;

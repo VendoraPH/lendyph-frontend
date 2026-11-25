@@ -22,7 +22,7 @@ import type { SavingsMethod } from "@/types";
 import { FormField } from "../../../savings/_components/field";
 import { OptionSelect } from "../../../savings/_components/option-select";
 import { PAYMENT_METHOD_OPTIONS } from "../../../savings/_lib/savings-rules";
-import { serverFieldError } from "../../../savings/_lib/step-errors";
+import { referenceLabel } from "../../../savings/_lib/savings-reference";
 import { REQUEST_TYPE_LABELS, labelOf } from "../../_lib/labels";
 import { notifyPortalError } from "../../_lib/notify-portal-error";
 import {
@@ -30,6 +30,9 @@ import {
   decisionBody,
   decisionOutcome,
   decisionProblems,
+  decisionReferenceNeeded,
+  decisionReferenceProblem,
+  decisionReferenceRefusal,
   moneyDetailsFor,
   needsMessage,
   reloadAfterFailure,
@@ -77,8 +80,9 @@ export function DecisionDialog({ request, decision, onOpenChange, onDecided }: D
   const open = decision !== null;
   const [form, setForm] = useState<DecisionForm>(() => initialForm(request, decision ?? "under_review"));
   const [submitted, setSubmitted] = useState(false);
-  // The savings teller's refusal of the reference (one already on record for
-  // the method, say), shown on the field until the reference or method changes.
+  // The server's refusal of the reference (blank for a non-cash method, or one
+  // the savings teller finds already on record), shown on the field until the
+  // reference or method changes.
   const [referenceError, setReferenceError] = useState<string | null>(null);
   const { submitting, run } = useSubmitGuard();
   if (useDialogOpening(open, decision)) {
@@ -89,11 +93,14 @@ export function DecisionDialog({ request, decision, onOpenChange, onDecided }: D
 
   const money = form.decision === "approve" ? moneyDetailsFor(request.type) : null;
   const problems = decisionProblems(request.type, form, request.amount);
+  // A non-cash payout or opening deposit needs its reference, in the server's words (round 5).
+  const needsReference = decisionReferenceNeeded(request.type, form, request.amount);
+  const referenceProblem = decisionReferenceProblem(request.type, form, request.amount);
   const setMoney = (patch: Partial<DecisionForm["money"]>) => setForm((f) => ({ ...f, money: { ...f.money, ...patch } }));
 
   function submit() {
     setSubmitted(true);
-    if (problems.length > 0) return;
+    if (problems.length > 0 || referenceProblem) return;
     run((key) => portalAdminService.decide(request.id, decisionBody(request.type, form), key))
       ?.then((result) => {
         notifySuccess(decisionOutcome(request.type, form.decision, result.status), request.reference);
@@ -101,7 +108,7 @@ export function DecisionDialog({ request, decision, onOpenChange, onDecided }: D
         onDecided();
       })
       .catch((err: unknown) => {
-        setReferenceError(serverFieldError(err, "reference"));
+        setReferenceError(decisionReferenceRefusal(request.type, err));
         notifyPortalError(err, "The decision couldn't be saved. Please try again.");
         if (reloadAfterFailure(err)) {
           onOpenChange(false);
@@ -160,12 +167,13 @@ export function DecisionDialog({ request, decision, onOpenChange, onDecided }: D
               </FormField>
               <FormField
                 id="pd-ref"
-                label="Reference (optional)"
+                label={referenceLabel(needsReference)}
                 hint="A transfer or receipt number."
-                error={referenceError}
+                error={referenceError ?? (submitted ? referenceProblem : null)}
               >
                 <Input
                   id="pd-ref"
+                  aria-required={needsReference}
                   maxLength={64}
                   value={form.money.reference}
                   onChange={(e) => {

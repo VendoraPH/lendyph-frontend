@@ -32,6 +32,7 @@ import {
 } from "@/lib/savings/withdrawal-fee";
 import type { SavingsWithdrawalRule } from "@/types/savings-servicing";
 import { PAYMENT_METHOD_OPTIONS, outflowHoldNote } from "../../../_lib/savings-rules";
+import { referenceLabel, referenceNeeded, savingsReferenceError } from "../../../_lib/savings-reference";
 import { serverFieldError } from "../../../_lib/step-errors";
 import { printSavingsReceipt } from "../_lib/print-receipt";
 
@@ -83,11 +84,14 @@ export function TransactionDialog({ mode, account, onOpenChange, onPosted }: Tra
   const amount = parseMoneyInput(amountRaw);
   const amountError = amount.ok ? null : amount.message;
   const dateError = date ? null : "Enter the date.";
+  // Bank transfer, GCash and Maya need their reference, in the server's words (round 5).
+  const needsReference = referenceNeeded(method);
+  const referenceProblem = savingsReferenceError(method, reference, mode ?? "deposit");
   const copy = COPY[mode ?? "deposit"];
 
   function submit() {
     setSubmitted(true);
-    if (!mode || dateError || !amount.ok) return;
+    if (!mode || dateError || !amount.ok || referenceProblem) return;
     const post = mode === "deposit" ? savingsService.deposit : savingsService.withdraw;
     const body = {
       amount: amount.value,
@@ -166,9 +170,14 @@ export function TransactionDialog({ mode, account, onOpenChange, onPosted }: Tra
                 options={PAYMENT_METHOD_OPTIONS}
               />
             </FormField>
-            <FormField id="tx-ref" label="Reference (optional)" error={referenceError}>
+            <FormField
+              id="tx-ref"
+              label={referenceLabel(needsReference)}
+              error={referenceError ?? (submitted ? referenceProblem : null)}
+            >
               <Input
                 id="tx-ref"
+                aria-required={needsReference}
                 value={reference}
                 onChange={(e) => {
                   setReference(e.target.value);

@@ -1,10 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { firstStepWithError, stepErrorsOf, stepIndexForField } from "@/lib/form-stepper";
+import { parseMoneyInput } from "@/lib/money-input";
 import {
   OPEN_ACCOUNT_SENT_FIELDS,
   OPEN_ACCOUNT_STEPS,
   openAccountErrors,
+  openingDepositPays,
   type OpenAccountCheck,
 } from "./open-account-steps";
 import { serverStepErrors } from "./step-errors";
@@ -14,6 +16,7 @@ const NOTHING_OK: OpenAccountCheck = {
   productError: "Choose a savings product.",
   dateError: "Enter the opening date.",
   amountError: "Enter the opening deposit.",
+  referenceError: "Enter the GCash reference for the opening deposit.",
   sourceError: "Source of funds: say where the money comes from",
 };
 
@@ -22,6 +25,7 @@ const ALL_OK: OpenAccountCheck = {
   productError: null,
   dateError: null,
   amountError: null,
+  referenceError: null,
   sourceError: null,
 };
 
@@ -59,6 +63,7 @@ test("each step checks only its own fields, with the dialog's words", () => {
   assert.deepEqual(stepErrorsOf(errors, OPEN_ACCOUNT_STEPS[1]), {
     opened_at: "Enter the opening date.",
     initial_deposit: "Enter the opening deposit.",
+    reference: "Enter the GCash reference for the opening deposit.",
   });
   assert.deepEqual(stepErrorsOf(errors, OPEN_ACCOUNT_STEPS[2]), {
     source_of_funds_other: "Source of funds: say where the money comes from",
@@ -89,4 +94,14 @@ test("only a 422 carries field errors", () => {
   assert.deepEqual(serverStepErrors({ response: { status: 409, data: { errors: { opened_at: ["x"] } } } }), {});
   assert.deepEqual(serverStepErrors(new Error("offline")), {});
   assert.deepEqual(serverStepErrors(null), {});
+});
+
+test("an opening deposit pays something unless it reads ₱0.00; one that can't be read counts as paid, as on the server", () => {
+  const read = (raw: string) => parseMoneyInput(raw, { label: "Opening deposit", allowZero: true });
+  assert.equal(openingDepositPays(read("0")), false);
+  assert.equal(openingDepositPays(read("0.00")), false);
+  assert.equal(openingDepositPays(read("500")), true);
+  assert.equal(openingDepositPays(read("0.01")), true);
+  assert.equal(openingDepositPays(read("")), true);
+  assert.equal(openingDepositPays(read("abc")), true);
 });

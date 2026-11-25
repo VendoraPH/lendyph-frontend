@@ -70,6 +70,13 @@ test("a complete placement has no errors", () => {
   assert.ok(body);
 });
 
+test("a missing reference is the payment step's, in the server's words", () => {
+  const form: PlacementForm = { ...EMPTY, method: "maya" };
+  const keyed = placementErrors(checkPlacement(form, null).errors);
+  assert.equal(stepErrorsOf(keyed, PLACEMENT_STEPS[1]).reference, "Enter the Maya reference for this time deposit.");
+  assert.equal(owners("reference"), 1);
+});
+
 test("a 422 opens the step that holds its field", () => {
   assert.equal(firstStepWithError({ principal: ["Below the minimum."] }, PLACEMENT_STEPS), 1);
   assert.equal(firstStepWithError({ term_days: ["Not offered."] }, PLACEMENT_STEPS), 0);

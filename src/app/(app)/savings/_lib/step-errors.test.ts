@@ -20,7 +20,7 @@ test("any other answer leaves the field alone", () => {
   assert.equal(serverFieldError(null, "reference"), null);
 });
 
-test("each savings form with a typed reference reads it as optional, as the server does, and shows a refusal on it", () => {
+test("each savings form with a typed reference labels it by the method, as the server requires it, and shows a refusal on it", () => {
   for (const file of [
     "src/app/(app)/savings/accounts/[id]/_components/transaction-dialog.tsx",
     "src/app/(app)/savings/_components/open-account-dialog.tsx",
@@ -29,8 +29,10 @@ test("each savings form with a typed reference reads it as optional, as the serv
     "src/app/(app)/member-portal/requests/_components/decision-dialog.tsx",
   ]) {
     const source = readFileSync(resolve(process.cwd(), file), "utf8");
-    assert.match(source, /"Reference \(optional\)"/, file);
-    assert.match(source, /serverFieldError\(err, "reference"\)/, file);
-    assert.match(source, /error=\{referenceError\}/, file);
+    // Finish run round 5: required for bank transfer, GCash and Maya, so "(optional)" follows the method.
+    assert.doesNotMatch(source, /"Reference \(optional\)"/, file);
+    assert.match(source, /referenceLabel\(/, file);
+    assert.match(source, /serverFieldError\(err, "reference"\)|decisionReferenceRefusal\(request\.type, err\)/, file);
+    assert.match(source, /error=\{referenceError \?\? /, file);
   }
 });

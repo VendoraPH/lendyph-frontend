@@ -1,6 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { reloadAfterFailure, decisionBody, decisionOutcome, decisionProblems, decisionsFor, needsMessage, type DecisionForm } from "./request-rules";
+import {
+  reloadAfterFailure,
+  decisionBody,
+  decisionOutcome,
+  decisionProblems,
+  decisionReferenceNeeded,
+  decisionReferenceProblem,
+  decisionReferenceRefusal,
+  decisionsFor,
+  needsMessage,
+  type DecisionForm,
+} from "./request-rules";
 
 const form = (over: Partial<DecisionForm> = {}): DecisionForm => ({
   decision: "approve",
@@ -78,4 +89,42 @@ test("a 409 reloads the request, so its status and buttons are current", () => {
   assert.equal(reloadAfterFailure({ response: { status: 409, data: {} } }), true);
   assert.equal(reloadAfterFailure({ response: { status: 422, data: {} } }), false);
   assert.equal(reloadAfterFailure(new Error("offline")), false);
+});
+
+test("a payout by bank transfer, GCash or Maya needs its reference, in the server's words; cash doesn't", () => {
+  const gcash = form({ money: { date: "2026-11-11", method: "gcash", reference: " " } });
+  assert.equal(decisionReferenceNeeded("savings_withdrawal", gcash), true);
+  assert.equal(decisionReferenceProblem("savings_withdrawal", gcash), "Enter the GCash reference for this payout.");
+  assert.equal(
+    decisionReferenceProblem("savings_withdrawal", form({ money: { date: "2026-11-11", method: "bank_transfer", reference: "" } })),
+    "Enter the bank transfer reference for this payout.",
+  );
+  assert.equal(decisionReferenceProblem("savings_withdrawal", form({ money: { date: "2026-11-11", method: "maya", reference: "MY-1" } })), null);
+  assert.equal(decisionReferenceNeeded("savings_withdrawal", form()), false);
+  assert.equal(decisionReferenceProblem("savings_withdrawal", form()), null);
+  // The other problems stay as they were: the reference has its own check, on its field.
+  assert.deepEqual(decisionProblems("savings_withdrawal", gcash), []);
+});
+
+test("a new account's non-cash opening deposit needs its reference; nothing to deposit, or another decision, needs none", () => {
+  const maya = form({ money: { date: "2026-11-11", method: "maya", reference: "" } });
+  assert.equal(decisionReferenceProblem("savings_opening", maya, "500.00"), "Enter the Maya reference for the opening deposit.");
+  assert.equal(decisionReferenceNeeded("savings_opening", maya, "0.00"), false);
+  assert.equal(decisionReferenceProblem("savings_opening", maya, "0.00"), null);
+  assert.equal(decisionReferenceProblem("savings_withdrawal", form({ decision: "reject", money: maya.money })), null);
+  assert.equal(decisionReferenceNeeded("profile_update", maya), false);
+});
+
+test("the server's refusal of the reference shows on the field, from the approval's own key or the teller's", () => {
+  const refused = (key: string, message: string) => ({ response: { status: 422, data: { message, errors: { [key]: [message] } } } });
+  const missing = "Enter the GCash reference for this payout.";
+  const taken = 'Reference "GC-1" is already on record for another GCash transaction. Check the reference and enter the right one.';
+  assert.equal(decisionReferenceRefusal("savings_withdrawal", refused("payout.reference", missing)), missing);
+  assert.equal(decisionReferenceRefusal("savings_withdrawal", refused("reference", taken)), taken);
+  assert.equal(
+    decisionReferenceRefusal("savings_opening", refused("deposit.reference", "Enter the GCash reference for the opening deposit.")),
+    "Enter the GCash reference for the opening deposit.",
+  );
+  assert.equal(decisionReferenceRefusal("savings_withdrawal", refused("payout.date", "Enter the payout date.")), null);
+  assert.equal(decisionReferenceRefusal("savings_withdrawal", { response: { status: 409, data: {} } }), null);
 });
