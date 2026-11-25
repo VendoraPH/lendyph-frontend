@@ -84,6 +84,11 @@ test("the loans sheet is the loans import's own column table, so the two can't d
   const byId = new Map(loans.columns.map((c) => [c.id, c]));
   assert.equal(byId.get("payment_frequency")?.dictionary, "payment_frequency");
   assert.equal(byId.get("interest_type")?.dictionary, "interest_type");
+  // The interest types the loans import takes, Upon Maturity included.
+  assert.deepEqual(DATA_DICTIONARY.interest_type.values, ["Straight (Fixed)", "Diminishing", "Upon Maturity"]);
+  assert.deepEqual(DATA_DICTIONARY.payment_frequency.values, [
+    "Daily", "Weekly", "Bi-Weekly", "Semi-Monthly", "Monthly", "Upon Maturity",
+  ]);
   assert.equal(byId.get("date_released")?.hint, "YYYY-MM-DD");
   assert.equal(byId.get("maturity_date")?.hint, "YYYY-MM-DD");
   assert.deepEqual(

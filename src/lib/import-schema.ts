@@ -220,8 +220,9 @@ const LOAN_INTEREST_TYPE_WORDS = {
 /**
  * The interest types a loans file carries, in words: the app's two
  * (`INTEREST_TYPE_OPTIONS`) and Upon Maturity, which the server imports too.
+ * The Data Template's Interest Type list reads these.
  */
-const LOAN_INTEREST_TYPE_OPTIONS: readonly EnumOption[] = Object.entries(INTEREST_METHOD_LABELS).map(
+export const LOAN_INTEREST_TYPE_OPTIONS: readonly EnumOption[] = Object.entries(INTEREST_METHOD_LABELS).map(
   ([value, label]) => ({ value, label }),
 );
 
@@ -247,8 +248,6 @@ const INCOME_CEILING = { max: 99999999.99, decimalPlaces: 2 } as const;
  * existing validation rules and is deliberate, not a typo; do not "fix" it.
  */
 const PLEDGE_CEILING = { max: 9999999.99, decimalPlaces: 2 } as const;
-/** `decimal(8,4)`. A rate given in basis points overflows this, by design. */
-const RATE = { max: 9999.9999, decimalPlaces: 4 } as const;
 
 // `required` is the workbook's blue; `refusedWhenBlank` is what the server
 // does with a blank (finish run round 3). Only the three names refuse a row.
@@ -287,32 +286,33 @@ export const CUSTOMER_COLUMNS = [
   { key: "membership_number", label: "Membership Number", required: false, type: "text", maxLength: 30, serverRepair: "member-number" },
 ] as const satisfies readonly ImportColumn[];
 
-// The server's rules (`LoanRowNormalizer`, finish run round 4): a blank Purpose
-// or Loan Product imports (`refusedWhenBlank`); Term in Months and a Purpose
-// past 500 characters are `./import-loan-fields`' to check.
+// The server's rules (`LoanRowNormalizer`, finish run round 4). A blank Purpose
+// or Loan Product imports (`refusedWhenBlank`). The amounts, Interest Rate and
+// Term in Months carry no limits here: `./import-loan-fields` reads them as the
+// server does, with the checks between cells, and says what the server cuts
+// (Purpose past 500, Loan Product and Other Fee Detail past 255).
 export const LOAN_COLUMNS = [
+  // The two identifiers are refused past their 50-character columns, never cut
+  // short: an account number tells one member from another, a loan number one
+  // loan from another.
   { key: "account_no", label: "Account No.", required: true, type: "text", maxLength: 50 },
-  // Refused past 20, never cut short: a loan number tells one loan from another.
-  { key: "loan_no", label: "Loan No.", required: true, type: "text", maxLength: 20 },
-  { key: "loan_amount", label: "Loan Amount", required: true, type: "number", numeric: MONEY },
-  { key: "loan_balance", label: "Loan Balance", required: true, type: "number", numeric: MONEY },
-  { key: "interest_rate", label: "Interest Rate", required: true, type: "number", numeric: RATE },
-  { key: "interest_amount", label: "Interest Amount", required: true, type: "number", numeric: MONEY },
-  { key: "interest_balance", label: "Interest Balance", required: true, type: "number", numeric: MONEY },
-  // No length here: past its 500 the server cuts it, with a warning.
+  { key: "loan_no", label: "Loan No.", required: true, type: "text", maxLength: 50 },
+  { key: "loan_amount", label: "Loan Amount", required: true, type: "number" },
+  { key: "loan_balance", label: "Loan Balance", required: true, type: "number" },
+  { key: "interest_rate", label: "Interest Rate", required: true, type: "number" },
+  { key: "interest_amount", label: "Interest Amount", required: true, type: "number" },
+  { key: "interest_balance", label: "Interest Balance", required: true, type: "number" },
   { key: "purpose", label: "Purpose", required: true, refusedWhenBlank: false, whenBlank: PURPOSE_WHEN_BLANK, type: "text" },
-  // No confirmed width for Loan Product — deliberately left unconstrained
-  // rather than assumed to be 255. Add it once the migration is checked.
   { key: "loan_product", label: "Loan Product", required: true, refusedWhenBlank: false, whenBlank: LOAN_PRODUCT_WHEN_BLANK, type: "text" },
   { key: "term_months", label: "Term in Months", required: true, type: "number" },
   { key: "payment_frequency", label: "Payment Frequency", required: true, type: "enum", options: PAYMENT_FREQUENCY_OPTIONS, serverVocabulary: LOAN_FREQUENCY_WORDS },
   { key: "interest_type", label: "Interest Type", required: true, type: "enum", options: LOAN_INTEREST_TYPE_OPTIONS, serverVocabulary: LOAN_INTEREST_TYPE_WORDS },
   { key: "date_released", label: "Date Released", required: true, type: "date" },
   { key: "maturity_date", label: "Maturity Date", required: true, type: "date" },
-  { key: "processing_fee", label: "Processing Fee", required: false, type: "number", numeric: MONEY },
-  { key: "service_fee", label: "Service Fee", required: false, type: "number", numeric: MONEY },
-  { key: "other_fee_detail", label: "Other Fee Detail", required: false, type: "text", maxLength: 255 },
-  { key: "other_fee_amount", label: "Other Fee Amount", required: false, type: "number", numeric: MONEY },
+  { key: "processing_fee", label: "Processing Fee", required: false, type: "number" },
+  { key: "service_fee", label: "Service Fee", required: false, type: "number" },
+  { key: "other_fee_detail", label: "Other Fee Detail", required: false, type: "text" },
+  { key: "other_fee_amount", label: "Other Fee Amount", required: false, type: "number" },
 ] as const satisfies readonly ImportColumn[];
 
 /**

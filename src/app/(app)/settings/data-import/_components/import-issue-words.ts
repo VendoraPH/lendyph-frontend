@@ -90,11 +90,13 @@ export const ISSUE_CATEGORY_WORDS: Readonly<Record<string, string>> = {
   schedule_not_reconstructable: "Payment schedule can't be rebuilt",
   out_of_product_bounds: "Outside the loan product's limits",
 
-  // A loan's own number, refused rather than cut short
+  // An identifier past its column, refused rather than cut short: a loan's
+  // number, and an account number in any file (the share capital file's
+  // account number or member ID included).
   loan_no_too_long: "Loan number too long",
+  account_no_too_long: "Account number too long",
 
   // A share capital entry
-  account_no_too_long: "Account number or member ID too long",
   reference_number_too_long: "Reference number too long",
   duplicate_in_file: "Repeats an earlier row of the file",
   duplicate_reference: "Reference already on the ledger",

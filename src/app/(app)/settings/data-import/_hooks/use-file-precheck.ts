@@ -736,7 +736,7 @@ export function checkRows(
     }
 
     if (context.shape === "loans") {
-      for (const problem of loanFieldProblems(row)) {
+      for (const problem of loanFieldProblems(row, { dates: readDates })) {
         add(line, reference, {
           column: problem.label,
           severity: problem.severity,

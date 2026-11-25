@@ -340,12 +340,83 @@ test("a blank Purpose or Loan Product warns and the loan imports, as on the serv
   assert.deepEqual(described(amount), [["Loan Amount", "error", "Loan Amount is blank, and this row cannot be imported without it."]]);
 });
 
-test("a Loan No. longer than 20 characters can't be imported; 20 can", () => {
-  assert.deepEqual(checkLoan({ 1: "LN-2023-ABCDEFGHIJKL" }).issues, []);
+test("a Loan No. or Account No. longer than its 50-character column can't be imported; 50 can", () => {
+  const fifty = "LN-2023-".padEnd(50, "7");
+  assert.deepEqual(checkLoan({ 1: fifty }).issues, []);
+  assert.deepEqual(checkLoan({ 1: "LN-2023-ABCDEFGHIJKLM" }).issues, [], "21 characters, cut to 20 before round 4");
 
-  const long = checkLoan({ 1: "LN-2023-ABCDEFGHIJKLM" });
+  const long = checkLoan({ 1: `${fifty}7` });
   assert.equal(long.failingRows, 1);
-  assert.deepEqual(described(long), [["Loan No.", "error", "Loan No. is 21 characters; this field holds 20."]]);
+  assert.deepEqual(described(long), [["Loan No.", "error", "Loan No. is 51 characters; this field holds 50."]]);
+
+  const account = "ACCT-".padEnd(51, "4");
+  assert.deepEqual(described(checkLoan({ 0: account })), [["Account No.", "error", "Account No. is 51 characters; this field holds 50."]]);
+  const member = [...CUSTOMER];
+  member[0] = account;
+  assert.deepEqual(described(checkRows(customerRows([member]), CUSTOMER_CONTEXT)), [
+    ["Account No.", "error", "Account No. is 51 characters; this field holds 50."],
+  ]);
+});
+
+/** The loans file's two dates, settled as written (year-month-day). */
+const LOAN_DATES: DateColumnFinding[] = [
+  { key: "date_released", label: "Date Released", inference: { status: "resolved", order: null, evidence: null, stats: {} as never }, order: null, chosen: false, blocked: false },
+  { key: "maturity_date", label: "Maturity Date", inference: { status: "resolved", order: null, evidence: null, stats: {} as never }, order: null, chosen: false, blocked: false },
+];
+
+test("amounts the server refuses can't be imported here either, in its words", () => {
+  const negative = checkLoan({ 3: "-500.00", 14: "(1,000.00)" });
+  assert.equal(negative.failingRows, 1);
+  assert.deepEqual(described(negative), [
+    ["Loan Balance", "error", '"-500.00" is a negative amount, which cannot be imported.'],
+    ["Processing Fee", "error", '"(1,000.00)" is written in accounting notation for a negative amount. Negative amounts cannot be imported.'],
+  ]);
+
+  assert.deepEqual(described(checkLoan({ 2: "0.00", 3: "0", 14: "", 15: "" })), [
+    ["Loan Amount", "error", "The loan amount must be greater than zero."],
+  ]);
+  assert.deepEqual(described(checkLoan({ 5: "1234.500" })), [
+    ["Interest Amount", "error", '"1234.500" has more than 2 decimal places. Round it to centavos in the source file — this importer will not round it for you.'],
+  ]);
+  // A rate written with its percent sign reads, as on the server.
+  assert.deepEqual(checkLoan({ 4: "2%" }).issues, []);
+});
+
+test("a balance above its amount, or fees above the principal, can't be imported", () => {
+  assert.deepEqual(described(checkLoan({ 3: "50,000.01", 6: "12,000.01" })), [
+    ["Loan Balance", "error", "The loan balance is larger than the loan amount. A balance cannot exceed the principal that was released."],
+    ["Interest Balance", "error", "The interest balance is larger than the total interest. A balance cannot exceed what was charged."],
+  ]);
+
+  const fees = checkLoan({ 14: "40,000.00", 15: "10,000.00", 16: "Notarial", 17: "0.01" });
+  assert.equal(fees.failingRows, 1);
+  assert.deepEqual(described(fees), [
+    [null, "error", "The fees on this loan add up to more than the principal, which would make its net proceeds negative. Check the Processing Fee, Service Fee and Other Fee Amount cells."],
+  ]);
+});
+
+test("a maturity date on or before the date released can't be imported, on the dates as read", () => {
+  const result = checkRows(customerRows([LOAN.map((cell, index) => (index === 13 ? "2025-01-15" : cell))]), { ...LOANS_CONTEXT, dates: LOAN_DATES });
+  assert.equal(result.failingRows, 1);
+  assert.deepEqual(described(result), [
+    ["Maturity Date", "error", "The maturity date (2025-01-15) is not after the date released (2025-01-15), so no payment schedule can be built."],
+  ]);
+  assert.deepEqual(checkRows(customerRows([LOAN]), { ...LOANS_CONTEXT, dates: LOAN_DATES }).issues, []);
+});
+
+test("a long Loan Product or Other Fee Detail, and an other fee with no description, warn and the loan imports", () => {
+  const long = checkLoan({ 8: "p".repeat(256), 16: "d".repeat(300), 17: "150.00" });
+  assert.equal(long.failingRows, 0);
+  assert.deepEqual(described(long), [
+    ["Loan Product", "warning", "Loan Product is 256 characters. The import keeps the first 255."],
+    ["Other Fee Detail", "warning", "Other Fee Detail is 300 characters. The import keeps the first 255."],
+  ]);
+
+  const unexplained = checkLoan({ 17: "150.00" });
+  assert.equal(unexplained.failingRows, 0);
+  assert.deepEqual(described(unexplained), [
+    ["Other Fee Detail", "warning", "An other-fee amount was given with no description. The disclosure statement has to itemise every deduction, so a description will need to be added."],
+  ]);
 });
 
 test("a Purpose longer than 500 characters warns that the import keeps the first 500", () => {
@@ -363,12 +434,12 @@ test("Term in Months is a whole number of months from 1 to 120, else the row can
   for (const term of ["0", "121", "240"]) {
     const result = checkLoan({ 9: term });
     assert.equal(result.failingRows, 1, term);
-    assert.deepEqual(described(result), [["Term in Months", "error", `Term in Months "${term}" is outside 1 to 120 months, the terms the import takes.`]], term);
+    assert.deepEqual(described(result), [["Term in Months", "error", `"${term}" is outside the accepted range 1–120.`]], term);
   }
   for (const term of ["12.5", "12.0", "-6", "₱12", "12 months", "twelve"]) {
     const result = checkLoan({ 9: term });
     assert.equal(result.failingRows, 1, term);
-    assert.deepEqual(described(result), [["Term in Months", "error", `Term in Months "${term}" isn't a whole number of months.`]], term);
+    assert.deepEqual(described(result), [["Term in Months", "error", `"${term}" is not a whole number.`]], term);
   }
 });
 

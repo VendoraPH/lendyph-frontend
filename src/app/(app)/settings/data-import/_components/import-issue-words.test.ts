@@ -73,6 +73,13 @@ test("the share capital file's codes read as what happened to the entry", () => 
   assert.equal(categoryWords("amount_zero"), "Amount of ₱0.00");
 });
 
+test("an identifier past its column reads the same in every file: never cut, refused", () => {
+  // The members and loans files' Account No. (finish run round 4), and the
+  // share capital file's account number or member ID.
+  assert.equal(categoryWords("account_no_too_long"), "Account number too long");
+  assert.equal(categoryWords("loan_no_too_long"), "Loan number too long");
+});
+
 test("an unmatched loan product reads with its name", () => {
   assert.equal(categoryWords("unmapped_product:Salary Loan"), "Loan product not matched: Salary Loan");
   assert.equal(categoryWords("unmapped_product:(blank)"), "No loan product");

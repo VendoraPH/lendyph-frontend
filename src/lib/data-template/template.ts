@@ -1,7 +1,6 @@
 import {
   CIVIL_STATUS_OPTIONS,
   GENDER_OPTIONS,
-  INTEREST_TYPE_OPTIONS,
   MEMBER_TYPE_OPTIONS,
   PAYMENT_FREQUENCY_OPTIONS,
   SUFFIX_OPTIONS,
@@ -9,6 +8,7 @@ import {
 import {
   CUSTOMER_COLUMNS,
   LOAN_COLUMNS,
+  LOAN_INTEREST_TYPE_OPTIONS,
   SHARE_CAPITAL_COLUMNS,
   TRANSACTION_TYPE_OPTIONS,
   type ImportColumn,
@@ -62,9 +62,10 @@ export const DATA_DICTIONARY: Record<
     values: dictionaryValues(CIVIL_STATUS_OPTIONS),
   },
   suffix: { label: "Suffix", values: dictionaryValues(SUFFIX_OPTIONS) },
+  // The loans import's own list: Upon Maturity too (finish run round 4).
   interest_type: {
     label: "Interest Type",
-    values: dictionaryValues(INTEREST_TYPE_OPTIONS),
+    values: dictionaryValues(LOAN_INTEREST_TYPE_OPTIONS),
   },
   payment_frequency: {
     label: "Payment Frequency",

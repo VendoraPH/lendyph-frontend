@@ -829,8 +829,8 @@ test("real rejections stay errors — only the repairable one is downgraded", ()
   // refuses the row. Getting this backwards in either direction is a bug.
   const cases: [ImportShape, number, string, string][] = [
     ["customer", 16, "50000000", "too-large"],
-    ["loans", 2, "1234.567", "too-precise"],
-    ["loans", 2, "N/A", "not-a-number"],
+    ["customer", 15, "1234.567", "too-precise"],
+    ["customer", 15, "N/A", "not-a-number"],
     ["customer", 1, "x".repeat(256), "too-long"],
     ["customer", 4, "a".repeat(21), "too-long"],
   ];
@@ -854,34 +854,43 @@ test("blockingSizeProblems keeps errors and drops warnings from a mixed row", ()
   );
 });
 
-test("a long Purpose is never a size refusal: the server cuts it, and the loan rules say so", () => {
-  // `./import-loan-fields` warns past 500; nothing here refuses the row.
+test("a long Purpose, Loan Product or Other Fee Detail is never a size refusal: the server cuts them, and the loan rules say so", () => {
+  // `./import-loan-fields` warns past 500 and 255; nothing here refuses the row.
   assert.deepEqual(sizeProblem("loans", 7, "x".repeat(1000)), []);
-  assert.equal(column("loans", "purpose").maxLength, undefined);
-  // Other Fee Detail sits on the ordinary 255 beside it.
-  assert.equal(sizeProblem("loans", 16, "x".repeat(256))[0].limit, 255);
+  assert.deepEqual(sizeProblem("loans", 8, "x".repeat(1000)), []);
+  assert.deepEqual(sizeProblem("loans", 16, "x".repeat(1000)), []);
+  for (const key of ["purpose", "loan_product", "other_fee_detail"]) {
+    assert.equal(column("loans", key).maxLength, undefined, key);
+  }
 });
 
-test("an account number holds 50; a Loan No. is refused past 20, never cut", () => {
-  assert.equal(sizeProblem("customer", 0, "x".repeat(51))[0].limit, 50);
-  assert.equal(sizeProblem("loans", 0, "x".repeat(51))[0].limit, 50);
+test("an Account No. in either file, and a Loan No., are refused past their 50-character columns, never cut", () => {
+  const fifty = "x".repeat(50);
+  for (const [shape, index, label] of [["customer", 0, "Account No."], ["loans", 0, "Account No."], ["loans", 1, "Loan No."]] as const) {
+    assert.deepEqual(sizeProblem(shape, index, fifty), [], `${shape} ${label}: 50`);
+    assert.deepEqual(
+      sizeProblem(shape, index, `${fifty}x`).map((p) => [p.label, p.reason, p.severity, p.limit]),
+      [[label, "too-long", "error", 50]],
+      `${shape} ${label}: 51`,
+    );
+  }
+  // Twenty-one characters, which the server cut to 20 before round 4, read whole.
+  assert.deepEqual(sizeProblem("loans", 1, "LN-2023-ABCDEFGHIJKLM"), []);
+});
 
-  assert.deepEqual(sizeProblem("loans", 1, "LN-2023-ABCDEFGHIJKL"), [], "20 characters");
-  const problems = sizeProblem("loans", 1, "LN-2023-ABCDEFGHIJKLM");
-  assert.deepEqual(problems.map((p) => [p.label, p.reason, p.severity, p.limit]), [["Loan No.", "too-long", "error", 20]]);
+test("the loans file's amounts, rate and term have no size limits here: the loan rules read them as the server does", () => {
+  for (const key of ["loan_amount", "loan_balance", "interest_rate", "interest_amount", "interest_balance", "term_months", "processing_fee", "service_fee", "other_fee_amount"]) {
+    assert.equal(column("loans", key).numeric, undefined, key);
+  }
+  for (const written of ["-500", "(500)", "1234.500", "$500", "3%"]) {
+    assert.deepEqual(sizeProblem("loans", 2, written), [], written);
+  }
 });
 
 test("names and addresses are varchar(255)", () => {
   assert.deepEqual(sizeProblem("customer", 1, "x".repeat(255)), []);
   assert.equal(sizeProblem("customer", 1, "x".repeat(256))[0].label, "Last Name");
   assert.equal(sizeProblem("customer", 12, "x".repeat(256))[0].label, "City/Municipality");
-});
-
-test("Loan Product has no confirmed width, so nothing is invented for it", () => {
-  // Deliberately unconstrained until someone reads the migration. Guessing 255
-  // would either be right by luck or reject valid data for no reason.
-  assert.equal(column("loans", "loan_product").maxLength, undefined);
-  assert.deepEqual(sizeProblem("loans", 8, "x".repeat(1000)), []);
 });
 
 // ── Numbers: precision, not length ─────────────────────────────────────────
@@ -893,31 +902,23 @@ test("numbers are measured after normalisation, never as raw text", () => {
   assert.equal(normaliseNumericValue("50 000"), "50000");
   assert.equal(normaliseNumericValue(" 1234.5 "), "1234.5");
   for (const written of ["₱50,000.00", "PHP 50,000.00", "50 000.00", "50000"]) {
-    assert.deepEqual(sizeProblem("loans", 2, written), [], `"${written}" should be accepted`);
+    assert.deepEqual(sizeProblem("customer", 15, written), [], `"${written}" should be accepted`);
   }
 });
 
 test("more decimal places than the column stores is caught", () => {
   // A coop system exporting 3dp. Seven characters long and still unstorable —
   // no character count would find this.
-  const problems = sizeProblem("loans", 2, "1234.567");
+  const problems = sizeProblem("customer", 15, "1234.567");
   assert.equal(problems.length, 1);
   assert.equal(problems[0].reason, "too-precise");
   assert.equal(problems[0].limit, 2);
 });
 
 test("trailing zeros are two decimal places written badly, not three", () => {
-  assert.deepEqual(sizeProblem("loans", 2, "1234.500"), []);
-  assert.deepEqual(sizeProblem("loans", 2, "1234.5000000"), []);
-  assert.deepEqual(sizeProblem("loans", 2, "1234.00"), []);
-});
-
-test("Interest Rate is decimal(8,4) — basis points overflow it by design", () => {
-  assert.deepEqual(sizeProblem("loans", 4, "9999.9999"), []);
-  assert.deepEqual(sizeProblem("loans", 4, "3.1416"), []);
-  assert.equal(sizeProblem("loans", 4, "10000")[0].reason, "too-large");
-  // Four places are fine; five are not.
-  assert.equal(sizeProblem("loans", 4, "3.14159")[0].reason, "too-precise");
+  assert.deepEqual(sizeProblem("customer", 15, "1234.500"), []);
+  assert.deepEqual(sizeProblem("customer", 15, "1234.5000000"), []);
+  assert.deepEqual(sizeProblem("customer", 15, "1234.00"), []);
 });
 
 test("Pledge Amt has a TIGHTER ceiling than Monthly Income, and that is deliberate", () => {
@@ -935,11 +936,6 @@ test("Pledge Amt has a TIGHTER ceiling than Monthly Income, and that is delibera
   assert.equal(sizeProblem("customer", 15, "100000000")[0].reason, "too-large");
 });
 
-test("money columns take the full decimal(12,2) capacity", () => {
-  assert.deepEqual(sizeProblem("loans", 2, "9,999,999,999.99"), []);
-  assert.equal(sizeProblem("loans", 2, "10000000000")[0].reason, "too-large");
-});
-
 test("Term in Months is the loan rules' question, not a size one", () => {
   // `./import-loan-fields` reads it as the server does: 1 to 120 whole months.
   for (const written of ["12", "121", "12.5", "₱12"]) {
@@ -948,13 +944,13 @@ test("Term in Months is the loan rules' question, not a size one", () => {
 });
 
 test("a numeric column holding text is reported, not coerced to zero", () => {
-  const problems = sizeProblem("loans", 2, "N/A");
+  const problems = sizeProblem("customer", 15, "N/A");
   assert.equal(problems.length, 1);
   assert.equal(problems[0].reason, "not-a-number");
   assert.equal(problems[0].raw, "N/A");
   assert.equal(problems[0].limit, null);
   // A bare currency symbol is not a number either.
-  assert.equal(sizeProblem("loans", 2, "₱")[0].reason, "not-a-number");
+  assert.equal(sizeProblem("customer", 15, "₱")[0].reason, "not-a-number");
 });
 
 test("a blank cell is a required-field question, not a size one", () => {
