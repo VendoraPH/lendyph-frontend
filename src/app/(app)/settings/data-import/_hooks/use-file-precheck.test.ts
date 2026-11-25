@@ -254,6 +254,31 @@ test("an unrecognised gender or civil status warns that it will be imported blan
   ]);
 });
 
+test("a gender or civil status the server imports blank warns, even a spelling a reader would know", () => {
+  const cases: Array<[number, string, string]> = [
+    [6, "Gender", "Lalaki"],
+    [6, "Gender", "Babae"],
+    [7, "Civil Status", "Maried"],
+    [7, "Civil Status", "Marrried"],
+    [7, "Civil Status", "Seperated"],
+    [7, "Civil Status", "Divorce"],
+    [7, "Civil Status", "Annulled"],
+  ];
+
+  for (const [index, label, spelling] of cases) {
+    const row = [...CUSTOMER];
+    row[index] = spelling;
+    const result = checkRows(customerRows([row]), CUSTOMER_CONTEXT);
+
+    assert.deepEqual(result.issues.map((issue) => [issue.column, issue.severity]), [[label, "warning"]], spelling);
+    assert.ok(
+      result.issues[0].message.startsWith(`${label} "${spelling}" isn't one the import recognises, so it will be imported blank;`),
+      result.issues[0].message,
+    );
+    assert.equal(result.failingRows, 0, spelling);
+  }
+});
+
 test("a civil status the server reads, Legally Separated, raises nothing", () => {
   const row = [...CUSTOMER];
   row[7] = "Legally Separated";

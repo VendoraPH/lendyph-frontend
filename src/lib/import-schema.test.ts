@@ -391,6 +391,13 @@ test("headerless data rows identify their own sheet from their contents", () => 
   assert.ok(loans.loansScore > loans.customerScore);
 });
 
+test("a members row in the server's other words, M or Legally Separated, is as plainly the members file", () => {
+  const terse = [...CUSTOMER_ROW];
+  terse[6] = "M";
+  terse[7] = "Legally Separated";
+  assert.equal(identifyShape(terse).customerScore, identifyShape(CUSTOMER_ROW).customerScore);
+});
+
 test("the loans file dropped into the customer slot is caught", () => {
   // The mistake this exists for. Left undetected the import writes loan
   // amounts into birthdates and nothing about the result looks wrong.
@@ -525,18 +532,18 @@ test("a single member need not, and the spouse's middle name is never required",
   assert.deepEqual(missingRequiredFields(normaliseRow(single, "customer"), "customer"), []);
 });
 
-test("the married rule fires on any spelling of MARRIED", () => {
-  for (const spelling of ["MARRIED", " married ", "maried", "Married"]) {
-    const row = normaliseRow(
-      CUSTOMER_ROW.map((cell, i) => (i === 7 ? spelling : i === 17 ? "" : cell)),
-      "customer",
-    );
+test("the married rule fires on any spelling of MARRIED the server reads", () => {
+  const spouseless = (spelling: string) =>
+    normaliseRow(CUSTOMER_ROW.map((cell, i) => (i === 7 ? spelling : i === 17 ? "" : cell)), "customer");
+  for (const spelling of ["MARRIED", " married ", "Married.", "Married"]) {
     assert.deepEqual(
-      blankLabels(row, "customer"),
+      blankLabels(spouseless(spelling), "customer"),
       ["Spouse FName (If Married)"],
       `spelling "${spelling}" did not trigger the spouse requirement`,
     );
   }
+  // The server imports "maried" blank, so the member isn't married there.
+  assert.deepEqual(blankLabels(spouseless("maried"), "customer"), []);
 });
 
 // ── Vocabularies ───────────────────────────────────────────────────────────
@@ -650,7 +657,7 @@ test("matching is trimmed and case-insensitive, as the junk arriving demands", (
   // The workbook carries no data-validation rules and no macros, so its enum
   // lists were documentation the typist could ignore — and did.
   const civil = column("customer", "civil_status");
-  for (const spelling of ["MARRIED", "married", " Married ", "maried"]) {
+  for (const spelling of ["MARRIED", "married", " Married ", "Married."]) {
     assert.equal(resolveEnumValue(civil, spelling).ok, true, spelling);
   }
   const gender = column("customer", "gender");
@@ -1000,6 +1007,54 @@ test("an unrecognised gender or civil status is imported blank; any other closed
     resolveRowEnums(normaliseRow(loan, "loans"), "loans").unknown.map((value) => [value.label, value.refused]),
     [["Payment Frequency", true], ["Interest Type", true]],
   );
+});
+
+/**
+ * The server's own words for a member's Gender and Civil Status, as
+ * `CustomerRowNormalizer::GENDER_MAP` and `::CIVIL_STATUS_MAP` hold them
+ * (lendyph-backend, app/Services/CsvImport/CustomerRowNormalizer.php), keyed
+ * after `CsvImportSchema::normalizeLabel()`. Written out here, not imported,
+ * so the client's copy is checked against the server's list.
+ */
+const SERVER_GENDER_MAP: Record<string, string> = {
+  male: "male",
+  m: "male",
+  female: "female",
+  f: "female",
+};
+const SERVER_CIVIL_STATUS_MAP: Record<string, string> = {
+  single: "single",
+  married: "married",
+  widowed: "widowed",
+  widow: "widowed",
+  widower: "widowed",
+  separated: "separated",
+  "legally separated": "separated",
+  divorced: "divorced",
+};
+
+test("every word the server reads for a member's gender and civil status resolves to the server's value", () => {
+  for (const [key, map] of [["gender", SERVER_GENDER_MAP], ["civil_status", SERVER_CIVIL_STATUS_MAP]] as const) {
+    const vocabulary = column("customer", key);
+    for (const [word, value] of Object.entries(map)) {
+      // As the server keys a cell: any case, punctuation between words or at the ends.
+      for (const spelling of [word, word.toUpperCase(), ` ${word}. `, word.replace(" ", "-")]) {
+        const result = resolveEnumValue(vocabulary, spelling);
+        assert.equal(result.ok ? result.value : null, value, `${key} "${spelling}"`);
+      }
+    }
+  }
+});
+
+test("a member's gender or civil status the server doesn't read isn't read here either", () => {
+  const gender = column("customer", "gender");
+  for (const spelling of ["Lalaki", "Babae", "Fe male", "Ma-le"]) {
+    assert.equal(resolveEnumValue(gender, spelling).ok, false, spelling);
+  }
+  const civil = column("customer", "civil_status");
+  for (const spelling of ["Maried", "Marrried", "Seperated", "Divorce", "Annulled", "LegallySeparated", "Widow er"]) {
+    assert.equal(resolveEnumValue(civil, spelling).ok, false, spelling);
+  }
 });
 
 test("Legally Separated reads as Separated, as the server reads it", () => {
