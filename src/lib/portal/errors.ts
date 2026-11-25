@@ -1,5 +1,6 @@
 import { getErrorMessage, httpStatusOf } from "@/lib/api-error";
 import { NotConfirmedError } from "./server-confirm";
+import { PORTAL_HIDDEN_WORDS, portalHidden } from "./portal-hidden";
 
 /**
  * A portal call's failure in words. The server's own sentence wins where the
@@ -36,6 +37,8 @@ export function portalErrorMessage(err: unknown, fallback: string): string {
   if (typeof code === "string" && Object.hasOwn(CODE_WORDS, code)) return CODE_WORDS[code];
   const status = httpStatusOf(err);
   if (status === 401) return unauthorizedWords(data?.message);
+  // Menu Visibility hides the portal: every portal route answers 404.
+  if (status === 404 && portalHidden()) return PORTAL_HIDDEN_WORDS;
   if (status === 404) return "We couldn't find that. It may have been removed, or it isn't yours.";
   return getErrorMessage(err, fallback);
 }

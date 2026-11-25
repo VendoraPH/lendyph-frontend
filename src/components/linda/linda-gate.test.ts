@@ -23,7 +23,14 @@ test("the floating button, the side panel and the expanded chat render only thro
 test("the gate checks the build flag before any hook, then linda:use", () => {
   const gate = read("src/components/linda/linda-gate.tsx");
   assert.match(gate, /if \(!env\.features\.linda\) return null;/);
-  assert.match(gate, /lindaAvailable\(env\.features\.linda, can\)/);
+  assert.match(gate, /lindaAvailable\(env\.features\.linda, can, isHidden\("linda"\)\)/);
+});
+
+// Menu Visibility (finish run round 6): hiding Linda hides her floating
+// button, her panel and the expanded chat, all through the one gate.
+test("the gate also asks Menu Visibility whether Linda is hidden", () => {
+  const gate = read("src/components/linda/linda-gate.tsx");
+  assert.match(gate, /useMenuVisibility\(\)/);
 });
 
 test("the credit scoring card asks the same gate", () => {

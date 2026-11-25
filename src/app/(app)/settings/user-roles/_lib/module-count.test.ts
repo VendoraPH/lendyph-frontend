@@ -62,6 +62,7 @@ const REMINDERS = [
   "amla:view",
   "interbranch_transfers:view",
   "loan_origination:view",
+  "menu_visibility:manage",
 ];
 
 test("admin holding loan_products:manage, branches:view_all and reminders is in every offered module", () => {

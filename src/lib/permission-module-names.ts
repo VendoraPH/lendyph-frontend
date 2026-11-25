@@ -16,6 +16,7 @@ const MODULE_NAMES: Record<string, string> = {
  */
 export const PERMISSION_ACTION_WORDS: Readonly<Record<string, string>> = {
   "loans:edit_in_approval": "Edit loans at their approval step",
+  "menu_visibility:manage": "Manage menu visibility",
 };
 
 /** Short words that stay lower case in a title, unless they come first. */

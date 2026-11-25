@@ -3,12 +3,17 @@
 import type { ReactNode } from "react";
 import { env } from "@/config/env";
 import { usePermission } from "@/hooks";
+import { useMenuVisibility } from "@/hooks/use-menu-visibility";
 import { lindaAvailable } from "@/lib/linda";
 
-/** True when Linda shows for the signed-in user: the build flag and `linda:use`. */
+/**
+ * True when Linda shows for the signed-in user: the build flag, `linda:use`,
+ * and Menu Visibility not hiding her (her floating button, panel and chat go).
+ */
 export function useLindaAvailable(): boolean {
   const { can } = usePermission();
-  return lindaAvailable(env.features.linda, can);
+  const { isHidden } = useMenuVisibility();
+  return lindaAvailable(env.features.linda, can, isHidden("linda"));
 }
 
 /**

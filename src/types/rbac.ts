@@ -46,6 +46,10 @@ export type Module =
   | "collections"
   | "reports"
   | "settings"
+  // Settings → Menu Visibility (finish run round 6): which side-menu modules
+  // this deployment shows. `menu_visibility:manage` opens the page, which also
+  // asks for the administrator password the server checks.
+  | "menu_visibility"
   | "fees"
   // Settings → Penalties (overdue-day penalty brackets per loan product).
   | "penalties"

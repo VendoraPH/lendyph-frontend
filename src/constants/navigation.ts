@@ -32,6 +32,7 @@ import { AMLA_SETTINGS_PAGE_PERMISSIONS } from "@/lib/amla/access";
 import { AMLA_RISK_RULES_PERMISSIONS } from "@/lib/amla/monitoring-access";
 import { AMLA_CTR_READ, AMLA_REPORT_READ, AMLA_STR_READ } from "@/lib/amla/case-access";
 import { EXECUTIVE_DASHBOARD_PERMISSION } from "@/app/(app)/dashboard/_lib/executive-access";
+import type { MenuModuleKey } from "./menu-modules";
 
 export interface NavSubItem {
   title: string;
@@ -58,6 +59,12 @@ export interface NavSubItem {
    * Member Portal is company-wide, so it also needs `branches:view_all`.
    */
   alsoRequires?: Permission[];
+  /**
+   * The Menu Visibility module this page belongs to, when it isn't its
+   * section's: a submenu with its own switch (Reminders, Auto-Pay) or a
+   * Settings page of a module (Accounting, Savings). Hidden with it.
+   */
+  module?: MenuModuleKey;
 }
 
 export interface NavItem {
@@ -91,7 +98,25 @@ export interface NavItem {
    * new page could miss.
    */
   opensForItsPages?: boolean;
+  /** Its Menu Visibility module (`menu-modules.ts`); Settings has none, as it is always on. */
+  module?: MenuModuleKey;
   children?: NavSubItem[];
+}
+
+/**
+ * The menu without the modules Menu Visibility hides: a hidden section goes
+ * with its pages, and a hidden page (a submenu with its own switch, a
+ * module's Settings page) goes alone. Permissions are checked afterwards, as
+ * before.
+ */
+export function visibleNav(menu: readonly NavItem[], isHidden: (key: MenuModuleKey) => boolean): NavItem[] {
+  return menu
+    .filter((item) => !item.module || !isHidden(item.module))
+    .map((item) =>
+      item.children
+        ? { ...item, children: item.children.filter((child) => !child.module || !isHidden(child.module)) }
+        : item,
+    );
 }
 
 /** Whether the menu shows a section: its permission (or one of its pages) and everything it also requires. */
@@ -146,6 +171,7 @@ export const MEMBER_PORTAL_NAV: NavItem = {
   title: "Member Portal",
   href: "/member-portal",
   icon: MonitorSmartphone,
+  module: "member_portal",
   icon3d: "icon-portal",
   permission: "member_portal:view",
   anyOf: ["member_portal:view", "member_portal:requests", "member_portal:announcements"],
@@ -178,6 +204,7 @@ export const PENALTIES_SETTINGS_NAV: NavSubItem = {
   title: "Penalties",
   href: "/settings/penalties",
   permission: "penalties:view",
+  module: "loans",
 };
 
 /**
@@ -191,6 +218,7 @@ export const LINDA_SETTINGS_NAV: NavSubItem = {
   href: "/settings/linda",
   permission: "linda:settings",
   alsoRequires: ["branches:view_all"],
+  module: "linda",
 };
 
 /**
@@ -206,6 +234,7 @@ export const AMLA_SETTINGS_NAV: NavSubItem = {
   title: "AMLA",
   href: "/settings/amla",
   permission: [...AMLA_SETTINGS_PAGE_PERMISSIONS],
+  module: "amla",
 };
 
 /**
@@ -215,20 +244,20 @@ export const AMLA_SETTINGS_NAV: NavSubItem = {
  * (next.config.ts).
  */
 export const MODULE_SETTINGS_NAV: NavSubItem[] = [
-  { title: "Accounting", href: "/settings/accounting", permission: "accounting:settings" },
+  { title: "Accounting", href: "/settings/accounting", permission: "accounting:settings", module: "accounting" },
   ...(env.features.savings
     ? [
-        { title: "Savings Products", href: "/settings/savings-products", permission: "savings:settings" as const },
-        { title: "Savings", href: "/settings/savings", permission: "savings:settings" as const },
+        { title: "Savings Products", href: "/settings/savings-products", permission: "savings:settings" as const, module: "savings" as const },
+        { title: "Savings", href: "/settings/savings", permission: "savings:settings" as const, module: "savings" as const },
       ]
     : []),
   ...(env.features.cda
-    ? [{ title: "CDA", href: "/settings/cda", permission: "cda:view" as const, alsoRequires: ["branches:view_all" as const] }]
+    ? [{ title: "CDA", href: "/settings/cda", permission: "cda:view" as const, alsoRequires: ["branches:view_all" as const], module: "cda" as const }]
     : []),
   ...(env.features.creditScoring
     ? [
-        { title: "Scorecard Configuration", href: "/settings/scorecard-configuration", permission: "credit_scoring:settings" as const },
-        { title: "Credit Scoring", href: "/settings/credit-scoring", permission: "credit_scoring:settings" as const },
+        { title: "Scorecard Configuration", href: "/settings/scorecard-configuration", permission: "credit_scoring:settings" as const, module: "credit_scoring" as const },
+        { title: "Credit Scoring", href: "/settings/credit-scoring", permission: "credit_scoring:settings" as const, module: "credit_scoring" as const },
       ]
     : []),
 ];
@@ -250,6 +279,7 @@ export const AMLA_NAV: NavItem = {
   title: "AMLA Compliance",
   href: "/amla",
   icon: ShieldAlert,
+  module: "amla",
   permission: "amla:view",
   anyOf: [...AMLA_SETTINGS_PAGE_PERMISSIONS],
   children: [
@@ -289,6 +319,7 @@ export const CDA_NAV: NavItem = {
   title: "CDA Compliance",
   href: "/cda",
   icon: ClipboardCheck,
+  module: "cda",
   icon3d: "empty-compliance",
   permission: "cda:view",
   alsoRequires: MODULE_ALSO_REQUIRES.cda as Permission[],
@@ -314,6 +345,7 @@ const CREDIT_SCORING_NAV: NavItem = {
   title: "Credit Scoring",
   href: "/credit-scoring",
   icon: Gauge,
+  module: "credit_scoring",
   icon3d: "icon-credit-score",
   permission: "credit_scoring:view",
   /**
@@ -357,6 +389,7 @@ export const LINDA_NAV: NavItem = {
   title: "Linda",
   href: "/linda",
   icon: Sparkles,
+  module: "linda",
   permission: "linda:use",
 };
 
@@ -369,6 +402,7 @@ export const EXECUTIVE_DASHBOARD_NAV: NavItem = {
   title: "Executive Dashboard",
   href: "/dashboard/executive",
   icon: TrendingUp,
+  module: "executive_dashboard",
   icon3d: "icon-trend",
   permission: EXECUTIVE_DASHBOARD_PERMISSION,
 };
@@ -377,6 +411,7 @@ export const SIDEBAR_NAV: NavItem[] = [
   {
     title: "Dashboard",
     href: "/dashboard",
+    module: "dashboard",
     icon: LayoutDashboard,
     icon3d: "icon-dashboard",
     permission: "dashboard:view",
@@ -386,6 +421,7 @@ export const SIDEBAR_NAV: NavItem[] = [
   {
     title: "Members",
     href: "/borrowers",
+    module: "members",
     icon: Users,
     icon3d: "empty-members",
     permission: "borrowers:view",
@@ -397,6 +433,7 @@ export const SIDEBAR_NAV: NavItem[] = [
   {
     title: "Loans",
     href: "/loans",
+    module: "loans",
     icon: FileText,
     icon3d: "empty-loans",
     permission: "loans:view",
@@ -413,36 +450,38 @@ export const SIDEBAR_NAV: NavItem[] = [
       // Shown with `reminders:view`, which the server grants to admin and
       // super_admin (other roles only through the roles screen). The six
       // reminder screens are tabs inside /loans/reminders, not menu items.
-      { title: "Reminders", href: "/loans/reminders", permission: "reminders:view" },
+      { title: "Reminders", href: "/loans/reminders", permission: "reminders:view", module: "loans.reminders" },
       // NEXT_PUBLIC_ENABLE_LOAN_ORIGINATION only. Its six screens are tabs
       // inside /loans/origination, not menu items.
       ...(env.features.loanOrigination
-        ? [{ title: "Loan Origination", href: "/loans/origination", permission: "loan_origination:view" as const }]
+        ? [{ title: "Loan Origination", href: "/loans/origination", permission: "loan_origination:view" as const, module: "loans.origination" as const }]
         : []),
     ],
   },
   {
     title: "Payments",
     href: "/payments",
+    module: "payments",
     icon: CreditCard,
     icon3d: "empty-payments",
     permission: "payments:view",
     children: [
       { title: "New Payment", href: "/payments" },
       { title: "Payment History", href: "/payments/history" },
-      { title: "Auto-Pay", href: "/payments/auto-pay", permission: "auto_pay:view" },
+      { title: "Auto-Pay", href: "/payments/auto-pay", permission: "auto_pay:view", module: "payments.auto_pay" },
     ],
   },
   {
     title: "Share Capital",
     href: "/share-capital",
+    module: "share_capital",
     icon: Landmark,
     icon3d: "empty-share-capital",
     permission: "share_capital:view",
     children: [
       { title: "Subsidiary Ledger", href: "/share-capital/ledger" },
       { title: "Pledge Entry", href: "/share-capital/pledges" },
-      { title: "Auto-Credit", href: "/share-capital/auto-credit", permission: "share_capital:create" },
+      { title: "Auto-Credit", href: "/share-capital/auto-credit", permission: "share_capital:create", module: "share_capital.auto_credit" },
     ],
   },
   // Savings & Deposits: hidden unless NEXT_PUBLIC_ENABLE_SAVINGS is on (staging
@@ -453,6 +492,7 @@ export const SIDEBAR_NAV: NavItem[] = [
           title: "Savings",
           href: "/savings",
           icon: PiggyBank,
+          module: "savings" as const,
           icon3d: "empty-savings" as const,
           permission: "savings:view" as const,
           children: [
@@ -471,6 +511,7 @@ export const SIDEBAR_NAV: NavItem[] = [
   {
     title: "Collateral",
     href: "/collaterals",
+    module: "collateral",
     icon: ShieldCheck,
     icon3d: "empty-collaterals",
     permission: "collaterals:view",
@@ -482,6 +523,7 @@ export const SIDEBAR_NAV: NavItem[] = [
   {
     title: "GCash",
     href: "/gcash",
+    module: "gcash",
     icon: GCashIcon,
     permission: "gcash:view",
   },
@@ -494,6 +536,7 @@ export const SIDEBAR_NAV: NavItem[] = [
   {
     title: "Accounting",
     href: "/accounting",
+    module: "accounting",
     icon: BookOpenCheck,
     icon3d: "empty-ledger",
     permission: "accounting:view",
@@ -531,6 +574,7 @@ export const SIDEBAR_NAV: NavItem[] = [
   {
     title: "User Management",
     href: "/users",
+    module: "users",
     icon: UserCog,
     icon3d: "icon-users",
     permission: "users:view",
@@ -538,6 +582,7 @@ export const SIDEBAR_NAV: NavItem[] = [
   {
     title: "Reports",
     href: "/reports",
+    module: "reports",
     icon: BarChart3,
     icon3d: "pick-report",
     permission: "reports:view",
@@ -545,6 +590,7 @@ export const SIDEBAR_NAV: NavItem[] = [
   {
     title: "Documents",
     href: "/printables",
+    module: "documents",
     icon: FileStack,
     icon3d: "empty-documents",
     // Same gate as Reports: both read the whole book — every loan, member and
@@ -554,6 +600,7 @@ export const SIDEBAR_NAV: NavItem[] = [
   {
     title: "Audit Trail",
     href: "/audit-trail",
+    module: "audit_trail",
     icon: History,
     icon3d: "icon-audit",
     permission: "audit_logs:view",
@@ -576,15 +623,15 @@ export const SIDEBAR_NAV: NavItem[] = [
       { title: "Profile", href: "/settings/profile", permission: "settings:view" },
       { title: "Branding", href: "/settings/branding", permission: "settings:view" },
       { title: "Branches", href: "/settings/branches", permission: "settings:view" },
-      { title: "Loan Products", href: "/settings/loan-products", permission: "settings:view" },
-      { title: "Fees", href: "/settings/fees", permission: "fees:view" },
+      { title: "Loan Products", href: "/settings/loan-products", permission: "settings:view", module: "loans" },
+      { title: "Fees", href: "/settings/fees", permission: "fees:view", module: "loans" },
       // Gated on NEXT_PUBLIC_ENABLE_PENALTY_CONFIGS at build time; the route
       // answers not found when it is off (settings/penalties/layout.tsx).
       ...(env.features.penaltyConfigs ? [PENALTIES_SETTINGS_NAV] : []),
-      { title: "Collateral Types", href: "/settings/collateral-types", permission: "settings:view" },
+      { title: "Collateral Types", href: "/settings/collateral-types", permission: "settings:view", module: "collateral" },
       { title: "Role and Permissions", href: "/settings/user-roles", permission: "settings:view" },
       { title: "Approval Workflow", href: "/settings/approval-workflow", permission: "settings:view" },
-      { title: "GCash", href: "/settings/gcash", permission: "settings:view" },
+      { title: "GCash", href: "/settings/gcash", permission: "settings:view", module: "gcash" },
       ...MODULE_SETTINGS_NAV,
       // Company-wide, so it also needs branches:view_all, as the server does.
       ...(env.features.memberPortal
@@ -594,11 +641,15 @@ export const SIDEBAR_NAV: NavItem[] = [
               href: "/settings/member-portal",
               permission: "member_portal:settings" as const,
               alsoRequires: ["branches:view_all" as const],
+              module: "member_portal" as const,
             },
           ]
         : []),
       ...(env.features.linda ? [LINDA_SETTINGS_NAV] : []),
       ...(env.features.amla ? [AMLA_SETTINGS_NAV] : []),
+      // Which menus this deployment shows (Menu Visibility); the page also asks
+      // for the administrator password, which the server checks.
+      { title: "Menu Visibility", href: "/settings/menu-visibility", permission: "menu_visibility:manage" },
       // Lives under Settings because it is admin-only, org-wide, one-time
       // config — and because it belongs to neither Members nor Loans: a single
       // run writes both.

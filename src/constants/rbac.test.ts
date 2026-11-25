@@ -363,6 +363,7 @@ const BACKEND_PERMISSIONS = [
   "users:reset_password",
   "users:update",
   "users:view",
+  "menu_visibility:manage",
 ];
 
 // Held by the Chairman/Chairwoman's role (`bod1`) alone: RoleAndPermissionSeeder
@@ -487,4 +488,11 @@ test("only the Chair's role holds loans:edit_in_approval", () => {
     .filter(([, config]) => config.permissions.includes("loans:edit_in_approval"))
     .map(([role]) => role);
   assert.deepEqual(holders, ["bod1"]);
+});
+
+test("admin and super_admin are documented with menu_visibility:manage, as the server seeds it", () => {
+  for (const role of ["admin", "super_admin"] as const) {
+    assert.ok(ROLES[role].permissions.includes("menu_visibility:manage"), role);
+  }
+  assert.equal(ROLES.accountant.permissions.includes("menu_visibility:manage"), false);
 });

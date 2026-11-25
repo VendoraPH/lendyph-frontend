@@ -86,6 +86,9 @@ export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
   // Money moved between branches; the maker never approves their own.
   interbranch_transfers: ["view", "create", "approve", "receive"],
   settings: ["view", "update"],
+  // `manage` opens Settings → Menu Visibility; the server also asks for the
+  // administrator password before anything shows.
+  menu_visibility: ["manage"],
   audit_logs: ["view", "export"],
   auto_pay: ["view", "process", "toggle"],
   gcash: ["view", "transact", "settings"],
@@ -200,6 +203,7 @@ export const MODULE_ACTION_LABELS: Partial<Record<UIModule, Partial<Record<Actio
     settings: "Set dashboard alert thresholds",
   },
   borrowers: { transfer: "Move members to another branch" },
+  menu_visibility: { manage: "Manage menu visibility" },
   branches: { manage: "Add, edit, open and close branches" },
   interbranch_transfers: {
     view: "View interbranch transfers",

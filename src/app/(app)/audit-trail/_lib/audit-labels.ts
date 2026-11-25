@@ -142,6 +142,10 @@ const ACTION_LABELS: Record<string, string> = {
   portal_announcement_published: "Announcement published",
   portal_announcement_withdrawn: "Announcement withdrawn",
   portal_announcement_deleted: "Announcement draft deleted",
+  // Menu Visibility (finish run round 6). The password is never in the row.
+  menu_visibility_override_granted: "Menu Visibility opened with the administrator password",
+  menu_visibility_override_refused: "Menu Visibility password refused",
+  menu_visibility_changed: "Menu visibility changed",
 };
 
 /**

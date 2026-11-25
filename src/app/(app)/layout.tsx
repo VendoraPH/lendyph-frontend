@@ -9,6 +9,8 @@ import { authService } from "@/services";
 import { tokenManager } from "@/lib/axios-client";
 import { isSessionRejection, isTokenExpired } from "@/lib/session-token";
 import { SessionProvider } from "@/components/providers/session-provider";
+import { MenuVisibilityProvider } from "@/components/providers/menu-visibility-provider";
+import { HiddenModuleGate } from "@/components/layout/hidden-module-gate";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { LindaFab } from "@/components/linda/linda-fab";
@@ -100,28 +102,33 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <SessionProvider>
-      {/*
-        h-dvh, not h-screen: on a phone the browser's own bar would hide the
-        foot of the page. `data-app-shell` is what print CSS resets, and the
-        floating Linda button sets `data-linda-fab` here while it shows, so
-        pinned controls keep clear of it (globals.css).
-      */}
-      <div data-app-shell className="flex h-dvh overflow-hidden">
-        <Sidebar
-          mobileOpen={sidebarOpen}
-          onMobileClose={() => setSidebarOpen(false)}
-        />
-        <div data-app-column className="flex flex-1 flex-col min-w-0">
-          <Header onMenuClick={() => setSidebarOpen(true)} />
-          {/* Scrolls for pages not yet built to fit; a PageFill page fills it exactly. */}
-          <main data-app-main className="flex-1 overflow-y-auto bg-muted/40 p-4 sm:p-6">{children}</main>
+      {/* Which modules Menu Visibility hides: the menus, pages and Linda read it. */}
+      <MenuVisibilityProvider>
+        {/*
+          h-dvh, not h-screen: on a phone the browser's own bar would hide the
+          foot of the page. `data-app-shell` is what print CSS resets, and the
+          floating Linda button sets `data-linda-fab` here while it shows, so
+          pinned controls keep clear of it (globals.css).
+        */}
+        <div data-app-shell className="flex h-dvh overflow-hidden">
+          <Sidebar
+            mobileOpen={sidebarOpen}
+            onMobileClose={() => setSidebarOpen(false)}
+          />
+          <div data-app-column className="flex flex-1 flex-col min-w-0">
+            <Header onMenuClick={() => setSidebarOpen(true)} />
+            {/* Scrolls for pages not yet built to fit; a PageFill page fills it exactly. */}
+            <main data-app-main className="flex-1 overflow-y-auto bg-muted/40 p-4 sm:p-6">
+              <HiddenModuleGate>{children}</HiddenModuleGate>
+            </main>
+          </div>
+          {/* Beside the page, not over it: opening Linda narrows the content. */}
+          <LindaPanel />
+          {/* The floating button that opens the panel, and the panel's expanded chat. */}
+          <LindaFab />
+          <LindaModal />
         </div>
-        {/* Beside the page, not over it: opening Linda narrows the content. */}
-        <LindaPanel />
-        {/* The floating button that opens the panel, and the panel's expanded chat. */}
-        <LindaFab />
-        <LindaModal />
-      </div>
+      </MenuVisibilityProvider>
     </SessionProvider>
   );
 }

@@ -858,4 +858,14 @@ export const API_ENDPOINTS = {
   SYSTEM: {
     HEALTH: "/health",
   },
+  /**
+   * Menu Visibility (finish run round 6). `HIDDEN` answers any signed-in staff
+   * user; the rest need `menu_visibility:manage`, and `SETTINGS` also an
+   * active administrator override (`OVERRIDE`, for this sign-in only).
+   */
+  MENU_VISIBILITY: {
+    HIDDEN: "/menu-visibility/hidden",
+    OVERRIDE: "/menu-visibility/override",
+    SETTINGS: "/menu-visibility",
+  },
 } as const;
