@@ -17,6 +17,7 @@ import { periodError, presetPeriod, type DashboardPeriod, type DashboardPreset }
 import { DashboardFilters } from "./dashboard-filters";
 import { GlControlNotice } from "./gl-control-notice";
 import { KpiGrid } from "./kpi-grid";
+import { MissingReferenceNotice } from "./missing-reference-notice";
 import { SeriesCharts } from "./series-charts";
 import { BreakdownTable } from "./breakdown-table";
 import { MaturityBuckets } from "./maturity-buckets";
@@ -98,6 +99,7 @@ export function SavingsDashboardScreen() {
                   {formatDateRange(data.date_from, data.date_to)}
                 </p>
                 <GlControlNotice kpis={data.kpis} canOpenReport={canReports} />
+                <MissingReferenceNotice kpis={data.kpis} />
                 <KpiGrid kpis={data.kpis} />
                 <SeriesCharts series={data.series} />
                 <div className="grid gap-4 min-[1800px]:grid-cols-2">
