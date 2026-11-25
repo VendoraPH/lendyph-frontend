@@ -1207,18 +1207,48 @@ test("the transaction date is written year-month-day, from 1900 and not after to
   assert.equal(checkRows(shareRows([share({ 1: "1900-01-01" })]), SHARE_CONTEXT).errorCount, 0);
 });
 
-test("the amount is above ₱0.00 with at most two decimals", () => {
-  const zero = checkRows(shareRows([share({ 4: "0.00" })]), SHARE_CONTEXT);
-  assert.equal(zero.errorCount, 1);
-  assert.equal(zero.issues[0].message, "Amount is ₱0.00. A share capital entry moves money, so its amount must be above ₱0.00.");
+/**
+ * The share capital Amount as the server reads it (lendyph-backend,
+ * app/Services/CsvImport), written out. `ShareCapitalRowNormalizer::amount()`
+ * reads it with `ValueNormalizer::centavos()`, required, after a trim:
+ *  1. starts with "(" or ends with ")": refused, accounting notation;
+ *  2. with "₱", ",", spaces and "php" (any case) removed and leading "+"
+ *     dropped, starts or ends with "-": refused, negative;
+ *  3. matches /^\d*\.\d{3,}$/: refused, more than 2 decimal places;
+ *  4. doesn't match /^(\d+(\.\d{1,2})?|\.\d{1,2})$/: refused, not an amount;
+ *  5. above 999,999,999,999 centavos: refused, too large;
+ * and then refuses ₱0.00. A blank is the required check's.
+ */
+test("the amount is read as the server reads it, in its words, and must be above ₱0.00", () => {
+  for (const amount of ["1500.00", "₱1,000.50", "PHP 250", "php250", "+500", ".50", "1 000", "9,999,999,999.99"]) {
+    assert.deepEqual(checkRows(shareRows([share({ 4: amount })]), SHARE_CONTEXT).issues, [], amount);
+  }
 
-  const negative = checkRows(shareRows([share({ 4: "-500" })]), SHARE_CONTEXT);
-  assert.equal(negative.errorCount, 1);
-  assert.equal(negative.issues[0].message, 'Amount "-500" is a negative amount, which can\'t be imported. A withdrawal is written as a positive amount with Transaction Type Withdrawal.');
+  const refusals: Array<[string, string]> = [
+    ["0.00", "The amount is ₱0.00. A share capital entry moves money, so its amount must be above ₱0.00."],
+    ["0", "The amount is ₱0.00. A share capital entry moves money, so its amount must be above ₱0.00."],
+    ["(500.00)", '"(500.00)" is written in accounting notation for a negative amount. Negative amounts cannot be imported.'],
+    ["-500", '"-500" is a negative amount, which cannot be imported.'],
+    ["500-", '"500-" is a negative amount, which cannot be imported.'],
+    ["1.005", '"1.005" has more than 2 decimal places. Round it to centavos in the source file — this importer will not round it for you.'],
+    ["1234.500", '"1234.500" has more than 2 decimal places. Round it to centavos in the source file — this importer will not round it for you.'],
+    ["$500", '"$500" is not a valid amount.'],
+    ["P500", '"P500" is not a valid amount.'],
+    ["five hundred", '"five hundred" is not a valid amount.'],
+    ["₱", '"₱" is not a valid amount.'],
+    ["10000000000", '"10000000000" is larger than the maximum this system stores (9,999,999,999.99).'],
+  ];
+  for (const [amount, message] of refusals) {
+    const result = checkRows(shareRows([share({ 4: amount })]), SHARE_CONTEXT);
+    assert.equal(result.failingRows, 1, amount);
+    assert.deepEqual(result.issues.map((issue) => [issue.column, issue.severity, issue.message]), [["Amount", "error", message]], amount);
+  }
+});
 
-  assert.equal(checkRows(shareRows([share({ 4: "1.005" })]), SHARE_CONTEXT).issues[0].message, "Amount has more decimal places than this field stores (2).");
-  assert.equal(checkRows(shareRows([share({ 4: "five hundred" })]), SHARE_CONTEXT).errorCount, 1);
-  assert.equal(checkRows(shareRows([share({ 4: "(500.00)" })]), SHARE_CONTEXT).errorCount, 1);
+test("a repeated row is one with the same amount as the server reads it", () => {
+  // `₱1,000.50` and `1000.5` are one amount; the second row, with no reference, repeats the first.
+  const result = checkRows(shareRows([share({ 2: "", 4: "₱1,000.50" }), share({ 2: "", 4: "1000.5" })]), SHARE_CONTEXT);
+  assert.deepEqual(result.issues.map((issue) => [issue.line, issue.category]), [[3, "duplicate"]]);
 });
 
 test("an unknown transaction type quotes the two it takes", () => {

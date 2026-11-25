@@ -450,12 +450,6 @@ function sizeMessage(problem: FieldSizeProblem): string {
     case "too-long":
       // Measured on what the server stores, which `kept` holds when it differs.
       return `${problem.label} is ${(problem.kept ?? problem.raw).length} characters; this field holds ${problem.limit}.`;
-    case "too-large":
-      return `${problem.label} is larger than this field can store (limit ${problem.limit}).`;
-    case "too-precise":
-      return `${problem.label} has more decimal places than this field stores (${problem.limit}).`;
-    case "not-a-number":
-      return `${problem.label} is "${problem.raw}", which is not a number.`;
     case "multiple-values":
       // `kept` is the server's own predicted output, so an empty one means the
       // cell had no digits at all and this is not really "two numbers" — it is

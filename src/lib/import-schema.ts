@@ -56,22 +56,6 @@ export interface EnumOption {
   readonly label: string;
 }
 
-/**
- * The limits of a numeric column — a PRECISION question, not a length one.
- *
- * `decimal(12,2)` does not reject a long string; it rejects too many total
- * digits or more than two places after the point. `1234.567` is a real case (a
- * coop system exporting three decimal places) and no character count catches
- * it. `max` is the *validated* ceiling where the app's rules are tighter than
- * the column itself, which they sometimes are — see Pledge Amt.
- */
-export interface NumericLimits {
-  /** Largest accepted magnitude. */
-  readonly max: number;
-  /** Digits permitted after the decimal point. */
-  readonly decimalPlaces: number;
-}
-
 export interface ImportColumn {
   /**
    * Field name on the normalised row. These name the FILE's fields, not the
@@ -132,8 +116,6 @@ export interface ImportColumn {
    * for nothing, which is the honest outcome.
    */
   readonly maxLength?: number;
-  /** What a numeric column can actually store. See `NumericLimits`. */
-  readonly numeric?: NumericLimits;
   /**
    * A repair the SERVER performs on this column before storing it. Declared
    * here so the pre-check can predict the outcome instead of judging the raw
@@ -235,13 +217,6 @@ const PURPOSE_WHEN_BLANK = "The loan will be imported with no purpose.";
 const LOAN_PRODUCT_WHEN_BLANK =
   "The loan will still import: on the Processing step, choose a product for the loans with no product named.";
 
-/**
- * `decimal(12,2)` at full column capacity: the share capital file's Amount.
- * The members and loans files' amounts are read as the server reads them
- * instead (`./import-member-fields`, `./import-loan-fields`).
- */
-const MONEY = { max: 9999999999.99, decimalPlaces: 2 } as const;
-
 // `required` is the workbook's blue; `refusedWhenBlank` is what the server
 // does with a blank (finish run round 3). Only the three names refuse a row.
 export const CUSTOMER_COLUMNS = [
@@ -335,7 +310,8 @@ export const SHARE_CAPITAL_COLUMNS = [
   { key: "transaction_date", label: "Transaction Date", required: true, type: "text" },
   { key: "reference_number", label: "Reference Number", required: false, type: "text", maxLength: 100 },
   { key: "transaction_type", label: "Transaction Type", required: true, type: "enum", options: TRANSACTION_TYPE_OPTIONS },
-  { key: "amount", label: "Amount", required: true, type: "number", numeric: MONEY },
+  // Read as the server reads it, by `./import-share-capital` (finish run round 4).
+  { key: "amount", label: "Amount", required: true, type: "number" },
   { key: "remarks", label: "Remarks", required: false, type: "text" },
 ] as const satisfies readonly ImportColumn[];
 
@@ -731,18 +707,13 @@ export interface FieldSizeProblem {
   label: string;
   /**
    * `too-long`        more characters than the column holds.
-   * `too-large`       past the numeric ceiling.
-   * `too-precise`     more decimal places than the column stores.
-   * `not-a-number`    a numeric column holding something that is not one.
    * `multiple-values` more than one value in a single-value column. Repaired
    *                   server-side, so a warning rather than a failure.
+   *
+   * Amounts, rates and whole numbers are read as the server reads them, by
+   * each file's own rules (`./import-server-values`), not here.
    */
-  reason:
-    | "too-long"
-    | "too-large"
-    | "too-precise"
-    | "not-a-number"
-    | "multiple-values";
+  reason: "too-long" | "multiple-values";
   /**
    * `error`   the server REJECTS the row; it will not import as it stands.
    * `warning` the server REPAIRS the value and imports the row anyway. Show
@@ -752,7 +723,7 @@ export interface FieldSizeProblem {
   severity: "error" | "warning";
   /** The cell as it appeared, for the error report. */
   raw: string;
-  /** Characters, ceiling, or decimal places — whichever was exceeded. */
+  /** The characters the column holds. */
   limit: number | null;
   /** For a repaired value: what the server will store. */
   kept?: string;
@@ -799,35 +770,14 @@ export function blockingSizeProblems(
 }
 
 /**
- * Strip the decoration a spreadsheet puts on a number.
- *
- * `₱50,000.00`, `PHP 50,000.00`, `P5,000` and `50 000` all name the same
- * amount. Measuring any of them as raw text answers the wrong question, so
- * every numeric check below runs on the output of this, never on the cell.
- * Exported because the value posted to the API has to be normalised too, and
- * two implementations of this would drift.
- */
-export function normaliseNumericValue(raw: string): string {
-  return String(raw ?? "")
-    .trim()
-    .replace(/^(?:php|p)\s*/i, "")
-    .replace(/[₱$,\s]/g, "");
-}
-
-const NUMBER_SHAPE = /^-?(\d+)(?:\.(\d*))?$/;
-
-/**
  * Everything the database will reject on size, found before a single row ships.
  *
  * This is worth real money on a migration: without it the import 422s on row
  * 3,000 after 2,999 rows have already been written, and the admin has no way to
  * see which cell was too long.
  *
- * Length and precision are genuinely different questions. `decimal(12,2)` does
- * not care how long the string is — it rejects too many total digits, or more
- * than two places after the point. A rate of `3.14159` is 7 characters and
- * still unstorable. Trailing zeros are stripped before counting, because
- * `1234.500` is two decimal places written badly, not three.
+ * Amounts, rates and whole numbers are not measured here: each file's own rules
+ * read them as the server does (`./import-server-values`), in its words.
  *
  * Blanks are skipped: emptiness is `missingRequiredFields`' question, and
  * answering it here would report the same cell twice. Call this on the RESOLVED
@@ -835,8 +785,8 @@ const NUMBER_SHAPE = /^-?(\d+)(?:\.(\d*))?$/;
  * length.
  *
  * Every problem is classified by what the SERVER will do, not by what the cell
- * looks like. `too-large`, `too-precise` and `not-a-number` are genuine
- * rejections and are errors. A contact cell holding two numbers is repaired
+ * looks like. A value too long for its column is a genuine rejection and an
+ * error. A contact cell holding two numbers is repaired
  * server-side — the first is kept — so it is a warning, and reporting it as a
  * failure would be worse than not reporting it at all: it tells the admin their
  * data is broken when it is not, on the one screen whose whole job is to be
@@ -886,22 +836,6 @@ export function fieldSizeProblems(
       }
       if (column.maxLength !== undefined && kept.length > column.maxLength) {
         at("too-long", column.maxLength);
-      }
-      continue;
-    }
-
-    if (column.numeric) {
-      const parts = NUMBER_SHAPE.exec(normaliseNumericValue(raw));
-      if (!parts) {
-        at("not-a-number", null);
-        continue;
-      }
-      const places = (parts[2] ?? "").replace(/0+$/, "").length;
-      if (places > column.numeric.decimalPlaces) {
-        at("too-precise", column.numeric.decimalPlaces);
-      }
-      if (Math.abs(Number(normaliseNumericValue(raw))) > column.numeric.max) {
-        at("too-large", column.numeric.max);
       }
       continue;
     }
