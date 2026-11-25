@@ -112,6 +112,28 @@ test("a contact number holding two numbers is a warning, not a failure", () => {
   assert.match(result.issues[0].message, /drops 09181234567/);
 });
 
+test("a malformed email warns that it will be imported as blank, and the row still imports", () => {
+  const row = [...CUSTOMER];
+  row[9] = "maria@example .com";
+
+  const result = checkRows(customerRows([row]), CUSTOMER_CONTEXT);
+
+  assert.equal(result.errorCount, 0);
+  assert.equal(result.failingRows, 0, "the server imports the row with the email blank");
+  assert.deepEqual(result.issues.map((issue) => [issue.column, issue.severity, issue.category, issue.value]), [
+    ["email", "warning", "value", "maria@example .com"],
+  ]);
+  assert.match(result.issues[0].message, /will be imported as blank/);
+});
+
+test("an email the server accepts raises nothing, however unusual", () => {
+  for (const email of ["juan@localhost", '"juan dela cruz"@example.com', "juan @example.com"]) {
+    const row = [...CUSTOMER];
+    row[9] = email;
+    assert.deepEqual(checkRows(customerRows([row]), CUSTOMER_CONTEXT).issues, [], email);
+  }
+});
+
 test("a member's amounts are read as the server reads them, in its words", () => {
   const row = [...CUSTOMER];
   row[15] = "1234.500"; // Monthly Income: refused, as on the server

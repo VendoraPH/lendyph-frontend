@@ -76,6 +76,7 @@ import {
 import { formatCount, formatCountOf } from "@/lib/report-format";
 import type { ImportFileKind, ImportIssueSeverity } from "@/types/data-import";
 import { FILE_LABELS, IMPORT_FILE_KINDS, fileNameInSentence } from "../_components/import-files";
+import { emailWarning } from "../_lib/import-email";
 
 // ---------------------------------------------------------------------------
 // Ceilings
@@ -539,7 +540,8 @@ interface RowCheckTotals {
  *    there, by what the SERVER will do with the value, and re-deciding it at
  *    the call site is how a repairable value lands in a failure total.
  *  - a cell the server imports blank: a member's blank one the workbook asks
- *    for (a birthdate), or a gender or civil status it doesn't recognise, and
+ *    for (a birthdate), a gender or civil status it doesn't recognise or an
+ *    email its rule refuses (`../_lib/import-email`), and
  *    a loan's blank Purpose or Loan Product. Only the cells it refuses a row
  *    for are errors (`refusedWhenBlank`, `refusedWhenUnrecognised`).
  */
@@ -692,6 +694,13 @@ export function checkRows(
     }
 
     if (context.shape === "customer") {
+      // Imported blank by the server, so a warning: the row still imports.
+      const emailCell = row.email ?? "";
+      const badEmail = emailWarning(emailCell);
+      if (badEmail) {
+        add(line, reference, { column: columns.find((column) => column.key === "email")?.label ?? "email", severity: "warning", category: "value", message: badEmail, value: emailCell.trim() });
+      }
+
       for (const problem of memberFieldProblems(row, { dates: readDates, today, membershipAllowed })) {
         add(line, reference, {
           column: problem.label,
