@@ -10,6 +10,8 @@ interface JournalActionButtonProps extends VariantProps<typeof buttonVariants> {
   state: JournalActionState;
   onClick: () => void;
   children: React.ReactNode;
+  /** The button's name where its text alone is ambiguous, as in a table row. */
+  "aria-label"?: string;
 }
 
 /**
@@ -17,12 +19,18 @@ interface JournalActionButtonProps extends VariantProps<typeof buttonVariants> {
  * disabled, and its reason shows on hover and focus and is read to screen
  * readers, as `PermissionButton` does for a missing permission.
  */
-export function JournalActionButton({ state, onClick, children, ...variant }: JournalActionButtonProps) {
+export function JournalActionButton({
+  state,
+  onClick,
+  children,
+  "aria-label": ariaLabel,
+  ...variant
+}: JournalActionButtonProps) {
   const reasonId = useId();
 
   if (state.disabledReason === null) {
     return (
-      <Button {...variant} onClick={onClick}>
+      <Button {...variant} onClick={onClick} aria-label={ariaLabel}>
         {children}
       </Button>
     );
@@ -42,7 +50,7 @@ export function JournalActionButton({ state, onClick, children, ...variant }: Jo
             />
           }
         >
-          <Button {...variant} disabled aria-describedby={reasonId}>
+          <Button {...variant} disabled aria-label={ariaLabel} aria-describedby={reasonId}>
             {children}
           </Button>
         </TooltipTrigger>

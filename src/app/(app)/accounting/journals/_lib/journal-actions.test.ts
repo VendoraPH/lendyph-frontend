@@ -263,6 +263,16 @@ test("an entry the server marks not reversible shows Reverse disabled with the s
   assert.equal(noReason.reverse.disabledReason, "This entry can't be reversed from the journal.");
 });
 
+test("an expense's or a payment's entry waits on Expenses & Payables, in the server's words", () => {
+  const fromExpenses =
+    "This entry comes from Expenses & Payables. Reverse it from Expenses & Payables, so the expense and the books stay the same.";
+  for (const source of ["expense", "payable"] as const) {
+    const entry = { ...posted, source, reversible: false, not_reversible_reason: fromExpenses };
+    const actions = journalActions(entry, holding(...ALL), { editing: false, balance: "balanced" });
+    assert.deepEqual(actions.reverse, { shown: true, disabledReason: fromExpenses });
+  }
+});
+
 test("a server that sends no reversible field keeps today's Reverse", () => {
   assert.deepEqual(journalActions(posted, holding(...ALL), { editing: false, balance: "balanced" }).reverse, {
     shown: true,

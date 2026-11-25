@@ -526,6 +526,8 @@ describe("round B endpoints", () => {
     assert.equal(A.EXPENSES_SHOW(4), "/accounting/expenses/4");
     assert.equal(A.EXPENSES_UPDATE(4), "/accounting/expenses/4");
     assert.equal(A.EXPENSES_PAY(4), "/accounting/expenses/4/pay");
+    assert.equal(A.EXPENSES_REVERSE(4), "/accounting/expenses/4/reverse");
+    assert.equal(A.EXPENSE_PAYMENT_REVERSE(4, 9), "/accounting/expenses/4/payments/9/reverse");
     assert.equal(A.RECONCILIATIONS_SHOW(3), "/accounting/reconciliations/3");
     assert.equal(A.RECONCILIATIONS_MATCH(3), "/accounting/reconciliations/3/match");
   });
@@ -769,6 +771,21 @@ describe("round B writes", () => {
     assert.equal(req.method, "POST");
     assert.equal(req.path, "/accounting/expenses/4/pay");
     assert.deepEqual(req.body, { date: "2026-11-09", amount: 25_000, account_id: 12 });
+  });
+
+  test("reverseExpense and reverseExpensePayment POST the reason to their paths", async () => {
+    await accountingService.reverseExpense(4, "Recorded twice");
+    let req = onlyRequest();
+    assert.equal(req.method, "POST");
+    assert.equal(req.path, "/accounting/expenses/4/reverse");
+    assert.deepEqual(req.body, { reason: "Recorded twice" });
+
+    requests = [];
+    await accountingService.reverseExpensePayment(4, 9, "Paid twice");
+    req = onlyRequest();
+    assert.equal(req.method, "POST");
+    assert.equal(req.path, "/accounting/expenses/4/payments/9/reverse");
+    assert.deepEqual(req.body, { reason: "Paid twice" });
   });
 
   test("createAccount, updateAccount and deleteAccount use the account paths", async () => {

@@ -475,10 +475,30 @@ export interface Reconciliation {
 }
 
 /**
- * Expense and payable tracking. `reversed`: the expense's journal was reversed
- * on the Journals screen, so the server counts it in no total or other status.
+ * Expense and payable tracking. `reversed`: the expense was reversed (from
+ * Expenses & Payables, or by hand on the Journals screen before that was
+ * refused), so the server counts it in no total or other status.
  */
 export type ExpenseStatus = "unpaid" | "partially_paid" | "paid" | "overdue" | "reversed";
+
+/**
+ * One payment of an expense, from the server. A reversed payment no longer
+ * counts as paid; `can_reverse` says whether Reverse payment is open (its
+ * journal stands). Whether the user may take it is the screen's to check.
+ */
+export interface ExpensePayment {
+  id: number;
+  date: string;
+  /** Centavos. */
+  amount: number;
+  payment_account_id: number;
+  payment_account_name?: string | null;
+  journal_id: number | null;
+  /** The payment's entry on the Journals screen. */
+  journal_no?: string | null;
+  reversed: boolean;
+  can_reverse: boolean;
+}
 
 export interface Expense {
   id: number;
@@ -489,6 +509,7 @@ export interface Expense {
   expense_account_name?: string;
   /** Centavos. */
   amount: number;
+  /** Centavos paid that still stand, from the server: a reversed payment doesn't count. */
   amount_paid: number;
   /** Null when the expense was accrued rather than paid on the spot. */
   payment_account_id: number | null;
@@ -503,6 +524,17 @@ export interface Expense {
    * 0; 0 once the expense is reversed).
    */
   amount_due: number;
+  /** False once the expense is reversed: Edit is hidden. */
+  can_edit?: boolean;
+  /** Reverse expense can be taken now: its journal stands and no payment does. */
+  can_reverse?: boolean;
+  /**
+   * Why Reverse expense is refused while payments stand, in the server's
+   * words, for a disabled button. Null when it's open or doesn't apply.
+   */
+  reverse_blocked_reason?: string | null;
+  /** Every payment, reversed ones included, by date. */
+  payments?: ExpensePayment[];
 }
 
 /**

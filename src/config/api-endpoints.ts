@@ -457,6 +457,9 @@ export const API_ENDPOINTS = {
     EXPENSES_SHOW: (id: number) => `/accounting/expenses/${id}`,
     EXPENSES_UPDATE: (id: number) => `/accounting/expenses/${id}`,
     EXPENSES_PAY: (id: number) => `/accounting/expenses/${id}/pay`,
+    EXPENSES_REVERSE: (id: number) => `/accounting/expenses/${id}/reverse`,
+    EXPENSE_PAYMENT_REVERSE: (expenseId: number, paymentId: number) =>
+      `/accounting/expenses/${expenseId}/payments/${paymentId}/reverse`,
 
     // Reconciliation
     RECONCILIATIONS_LIST: "/accounting/reconciliations",
