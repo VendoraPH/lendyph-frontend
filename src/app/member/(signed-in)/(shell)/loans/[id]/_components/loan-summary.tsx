@@ -5,16 +5,19 @@ import { formatDate } from "@/lib/format";
 import { FREQUENCY, INTEREST_METHOD, NONE, TERM_UNIT, labelOf } from "@/lib/portal/labels";
 import type { LoanDetail } from "@/lib/portal/types";
 import { penaltyOwedNote, rateText } from "@/lib/portal/words";
+import { paidBeforeImportNote } from "@/lib/paid-before-import";
 
 const date = (value: string | null) => (value ? formatDate(value) : NONE);
 
 /**
  * The loan's figures, each one the server's loan summary (round fz wording):
  * "Outstanding" is everything owed, "Principal Balance" the principal only,
- * "Total Paid" all money received for the loan.
+ * "Total Paid" all money received for the loan, on a loan brought in from the
+ * cooperative's earlier books including what was paid before the import.
  */
 export function LoanSummary({ loan }: { loan: LoanDetail }) {
   const penaltyNote = penaltyOwedNote(loan.penalty_months, loan.outstanding_penalty);
+  const totalPaidNote = paidBeforeImportNote(loan.paid_before_import);
   return (
     <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
       <SectionCard title="What you owe">
@@ -50,7 +53,16 @@ export function LoanSummary({ loan }: { loan: LoanDetail }) {
       <SectionCard title="Paid so far">
         <DetailList
           items={[
-            { label: "Total Paid", value: <Money value={loan.total_repaid} />, strong: true },
+            {
+              label: "Total Paid",
+              value: (
+                <>
+                  <Money value={loan.total_repaid} />
+                  {totalPaidNote && <span className="block text-xs text-muted-foreground">{totalPaidNote}</span>}
+                </>
+              ),
+              strong: true,
+            },
             { label: "Principal Paid", value: <Money value={loan.principal_paid} /> },
             { label: "Interest Paid", value: <Money value={loan.interest_paid} /> },
             { label: "Penalty Paid", value: <Money value={loan.penalty_paid} /> },

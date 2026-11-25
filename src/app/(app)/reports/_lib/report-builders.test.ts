@@ -2336,7 +2336,16 @@ test("ledger KPIs read the server's totals block", () => {
   assert.equal(kpiValue(doc, "Total Loans"), "2");
   assert.equal(kpiValue(doc, "Total Released"), "₱80,000.00");
   assert.equal(kpiValue(doc, "Total Paid"), "₱51,000.50");
+  assert.equal(kpi(doc, "Total Paid").hint, undefined);
   assert.equal(kpiValue(doc, "Outstanding"), "₱34,500.25");
+});
+
+test("the ledger's Total Paid says what it holds from before an import", () => {
+  const doc = buildSubsidiaryLedgerDoc(
+    { ...LEDGER_PAYLOAD, totals: { ...LEDGER_PAYLOAD.totals, paid_before_import: 23600 } },
+    RANGE
+  );
+  assert.equal(kpi(doc, "Total Paid").hint, "Including ₱23,600.00 paid before the import");
 });
 
 test("the ledger shows each loan's Principal Balance and Outstanding as sent, never the old alias", () => {
@@ -4627,7 +4636,7 @@ const SOA_FULL = {
       principal_balance: 48300,
     },
   ],
-  transaction_totals: { debit: 50121.85, credit: 2950 },
+  transaction_totals: { debit: 50121.85, credit: 2950, amount_paid: 3000 },
 };
 
 test("finding 8: the Balance Summary has the insurance premium owed, as sent", () => {
@@ -4774,6 +4783,41 @@ test("an adjustment line shows its credit or debit, and a dash in every applied 
   assert.equal(formatCell(table.rows[4], table.columns.find((c) => c.key === "penalty_applied")!), DASH);
 });
 
+test("the line for what an imported loan was paid before the import shows its parts, and no receipt", () => {
+  const paidBeforeImport = {
+    type: "paid_before_import",
+    kind: "adjustment",
+    date: "2026-02-01",
+    description: "Paid before the loan was imported",
+    amount_paid: 0,
+    debit: null,
+    credit: 23600,
+    voided: false,
+    principal_applied: 20000,
+    interest_applied: 3600,
+    penalty_applied: 0,
+    insurance_applied: 0,
+    build_up_applied: 0,
+    overpayment_applied: 0,
+    principal_balance: 30000,
+  };
+  const table = namedTable(
+    buildStatementOfAccountDoc({ ...SOA_FULL, transactions: [...SOA_FULL.transactions, paidBeforeImport] }, RANGE),
+    "Transaction History"
+  );
+  const row = table.rows[4];
+  const cell = (key: string) => formatCell(row, table.columns.find((c) => c.key === key)!);
+
+  // Money paid, so its parts add up to its credit, like a payment's.
+  assert.equal(cell("credit"), "₱23,600.00");
+  assert.equal(cell("principal_applied"), "₱20,000.00");
+  assert.equal(cell("interest_applied"), "₱3,600.00");
+  assert.equal(cell("penalty_applied"), "₱0.00");
+  // It has no receipt.
+  assert.equal(cell("amount_paid"), DASH);
+  assert.equal(cell("debit"), DASH);
+});
+
 test("a payment line keeps its parts as the server sent them", () => {
   const table = namedTable(buildStatementOfAccountDoc(SOA_FULL, RANGE), "Transaction History");
   assert.equal(table.rows[3].principal_applied, 1700);
@@ -4798,18 +4842,47 @@ test("a payment shows the receipt's amount beside the Credit, which leaves out b
   assert.equal(namedTableTotal(doc, "Transaction History", "amount_paid"), "₱3,000.00");
 });
 
-test("the Receipt Amount footer is the server's: its line total, else Total Paid, else a dash", () => {
+test("the Receipt Amount footer is the server's line total, else a dash", () => {
   const sent = buildStatementOfAccountDoc(
     { ...SOA_FULL, transaction_totals: { ...SOA_FULL.transaction_totals, amount_paid: 3100 } },
     RANGE
   );
   assert.equal(namedTableTotal(sent, "Transaction History", "amount_paid"), "₱3,100.00");
 
-  const neither = buildStatementOfAccountDoc(
-    { ...SOA_FULL, summary: { ...SOA_FULL.summary, total_paid: undefined } },
+  // Never Total Paid in its place: on an imported loan that also holds what was
+  // paid before the import, which no receipt line carries.
+  const { amount_paid, ...withoutReceipts } = SOA_FULL.transaction_totals;
+  void amount_paid;
+  const notSent = buildStatementOfAccountDoc({ ...SOA_FULL, transaction_totals: withoutReceipts }, RANGE);
+  assert.equal(namedTableTotal(notSent, "Transaction History", "amount_paid"), DASH);
+});
+
+test("an imported loan's statement says what Total Paid holds from before the import", () => {
+  const imported = buildStatementOfAccountDoc(
+    {
+      ...SOA_FULL,
+      summary: { ...SOA_FULL.summary, total_paid: 25600, paid_before_import: 23600 },
+      transaction_totals: { ...SOA_FULL.transaction_totals, amount_paid: 2000 },
+    },
     RANGE
   );
-  assert.equal(namedTableTotal(neither, "Transaction History", "amount_paid"), DASH);
+
+  assert.equal(kpiValue(imported, "Total Paid"), "₱25,600.00");
+  assert.equal(kpi(imported, "Total Paid").hint, "Including ₱23,600.00 paid before the import");
+  assert.equal(fieldValue(imported, "What Has Been Paid", "Total Paid"), "₱25,600.00");
+  assert.equal(fieldValue(imported, "What Has Been Paid", "Of Which Paid Before the Import"), "₱23,600.00");
+  // The Receipt Amount column adds up its own lines: the receipts.
+  assert.equal(namedTableTotal(imported, "Transaction History", "amount_paid"), "₱2,000.00");
+
+  // A loan that was not imported reads as before.
+  for (const summary of [SOA_FULL.summary, { ...SOA_FULL.summary, paid_before_import: 0 }]) {
+    const doc = buildStatementOfAccountDoc({ ...SOA_FULL, summary }, RANGE);
+    assert.equal(kpi(doc, "Total Paid").hint, undefined);
+    assert.equal(
+      fieldItems(doc, "What Has Been Paid").some((item) => item.label === "Of Which Paid Before the Import"),
+      false
+    );
+  }
 });
 
 test("release, charge and adjustment lines have no receipt amount", () => {

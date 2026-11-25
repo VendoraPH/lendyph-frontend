@@ -8,7 +8,7 @@ import {
 import { Banknote, CalendarClock, AlertCircle, CheckCircle2 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/format";
 import type { BorrowerLoanSummary, Payment, Loan } from "@/types";
-import { memberPaymentFigures } from "../_lib/member-payment-figures";
+import { memberPaymentFigures, memberTotalPaidNote } from "../_lib/member-payment-figures";
 import { paymentReferenceCell, statusInWords } from "@/app/(app)/borrowers/_components/utils";
 import { ScrollBox } from "@/components/common/page-fill";
 import { FIT_CLASSES } from "@/lib/page-fill";
@@ -38,6 +38,7 @@ interface PaymentsTabProps {
 export function PaymentsTab({ payments, loans, summary }: PaymentsTabProps) {
   // Every money card is the server's figure; a missing one shows a dash.
   const figures = memberPaymentFigures(summary);
+  const totalPaidNote = memberTotalPaidNote(summary);
   const hasOverdue = (summary?.overdue_amount ?? 0) > 0;
 
   const ongoingLoans = loans.filter((l) => l.status === "ongoing");
@@ -64,6 +65,7 @@ export function PaymentsTab({ payments, loans, summary }: PaymentsTabProps) {
               <div>
                 <p className="text-xs text-muted-foreground">Total Paid</p>
                 <p className="text-2xl font-bold text-green-600">{figures.totalPaid}</p>
+                {totalPaidNote && <p className="text-xs text-muted-foreground">{totalPaidNote}</p>}
               </div>
               <CheckCircle2 className="h-8 w-8 text-green-600/30" />
             </div>

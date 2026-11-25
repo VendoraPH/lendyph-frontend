@@ -1,5 +1,6 @@
 import type { BorrowerLoanSummary } from "@/types";
 import { currencyOrDash } from "@/lib/report-format";
+import { paidBeforeImportNote } from "@/lib/paid-before-import";
 
 /**
  * The member Payments tab's cards, read from GET /borrowers/{id}/loan-summary:
@@ -18,4 +19,13 @@ export function memberPaymentFigures(summary: BorrowerLoanSummary | null): {
     outstanding: currencyOrDash(summary?.total_outstanding),
     overdue: currencyOrDash(summary?.overdue_amount),
   };
+}
+
+/**
+ * The words under the member's Total Paid when it holds what imported loans'
+ * files say was paid before the import (the server's `paid_before_import`);
+ * null otherwise.
+ */
+export function memberTotalPaidNote(summary: BorrowerLoanSummary | null): string | null {
+  return paidBeforeImportNote(summary?.paid_before_import);
 }

@@ -256,7 +256,7 @@ test("a serial parses the same whatever order the admin picked, with the server'
     assert.deepEqual(parseImportDate("43831", order), {
       ok: true,
       iso: "2020-01-01",
-      warning: '"43831" is an Excel serial date number and was read as 2020-01-01. Confirm it against the source workbook.',
+      warning: '"43831" is an Excel serial date number and will be read as 2020-01-01. Confirm it against the source workbook.',
     });
   }
 });
@@ -294,7 +294,7 @@ test("with no order, a slash date reads month-first with the server's warning wh
   assert.deepEqual(parseImportDate("03/04/2020", null), {
     ok: true,
     iso: "2020-03-04",
-    warning: '"03/04/2020" could be read as 2020-03-04 (month first, which is what was used) or as 2020-04-03 (day first). Check it against the source workbook.',
+    warning: '"03/04/2020" could be read as 2020-03-04 (month first, which is what will be used) or as 2020-04-03 (day first). Check it against the source workbook.',
   });
   assert.deepEqual(parseImportDate("03/31/2020", null), { ok: true, iso: "2020-03-31", warning: null });
   // Day-first with no order is not a date the server reads.

@@ -69,6 +69,8 @@ import {
   type ScheduleTotals,
 } from "./_lib/server-schedule";
 import { ledgerShowsScb, readLoanLedger, type LedgerView } from "./_lib/loan-ledger";
+import { IMPORTED_LOAN_NO_LABEL, importedLoanNo } from "./_lib/imported-loan";
+import { paidBeforeImportNote } from "@/lib/paid-before-import";
 import {
   interestAmountFigure,
   outstandingPrincipal,
@@ -1452,6 +1454,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
   const loanTotalOutstanding = totalOutstanding(loanSummary, loan);
   // "Penalty: N month(s) late": the summary's own penalty and count, worded only.
   const summaryPenaltyNote = penaltyMonthsNote(loanSummary?.penalty_amount, loanSummary?.penalty_months);
+  // Under Total Paid on an imported loan: what its file says was paid before
+  // the import, which Total Paid holds; null on any other loan.
+  const totalPaidNote = paidBeforeImportNote(loanSummary?.paid_before_import);
+  // The cooperative's own Loan No. in the file an imported loan came in.
+  const fileLoanNo = importedLoanNo(loan);
   // Principal still owed, from the summary or the loan.
   const loanPrincipalBalance = outstandingPrincipal(loanSummary, loan);
   // Insurance premium left unpaid at release, still owed on the loan (part of
@@ -3342,6 +3349,12 @@ function LoanDetail({ loanId }: { loanId: number }) {
                     {loanProductName || "N/A"}
                   </p>
                 </div>
+                {fileLoanNo && (
+                  <div className="col-span-2">
+                    <p className="text-xs text-muted-foreground">{IMPORTED_LOAN_NO_LABEL}</p>
+                    <p className="text-sm font-medium font-mono break-all">{fileLoanNo}</p>
+                  </div>
+                )}
                 {loan.purpose && (
                   <div className="col-span-2">
                     <p className="text-xs text-muted-foreground">Purpose</p>
@@ -3815,6 +3828,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   <div>
                     <p className="text-xs text-muted-foreground">Total Paid</p>
                     <p className="text-sm font-medium">{currencyOrDash(loanSummary.total_repaid)}</p>
+                    {totalPaidNote && <p className="text-xs text-muted-foreground">{totalPaidNote}</p>}
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Principal Paid</p>
@@ -3971,6 +3985,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                           <div>
                             <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Total Paid</p>
                             <p className="text-base font-bold tabular-nums">{currencyOrDash(loanSummary.total_repaid)}</p>
+                            {totalPaidNote && <p className="text-xs text-muted-foreground">{totalPaidNote}</p>}
                           </div>
                           {(loanSummary.overdue_amount ?? 0) > 0 && (
                             <div>

@@ -278,7 +278,14 @@ export interface ProductMappingConfirmation {
   data: ProductMappingConfirmedPayload;
 }
 
-export type ImportIssueSeverity = "error" | "warning";
+/**
+ * An import report line's severity, by what became of its row: `error` is why
+ * a row was not imported, `skipped` every other line of a row that was not
+ * imported (never a warning), and `warning` a row that WAS imported with
+ * something adjusted. The Check step, before anything is imported, uses only
+ * `error` and `warning`.
+ */
+export type ImportIssueSeverity = "error" | "skipped" | "warning";
 
 export interface ImportRowIssue {
   /** The uploaded FILENAME, not the kind — the API sends both. */

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { BorrowerLoanSummary } from "@/types";
-import { memberPaymentFigures } from "./member-payment-figures";
+import { memberPaymentFigures, memberTotalPaidNote } from "./member-payment-figures";
 
 const summary = (over: Partial<Record<keyof BorrowerLoanSummary, unknown>> = {}) =>
   ({
@@ -41,4 +41,14 @@ test("a figure the server did not send shows a dash", () => {
 
 test("no summary at all (loading or failed) shows dashes, not sums of the rows", () => {
   assert.deepEqual(memberPaymentFigures(null), { totalPaid: "—", outstanding: "—", overdue: "—" });
+});
+
+test("Total Paid says what it holds from before an import, off the server's figure", () => {
+  assert.equal(
+    memberTotalPaidNote(summary({ total_paid: 25_600, paid_before_import: 23_600 })),
+    "Including ₱23,600.00 paid before the import"
+  );
+  assert.equal(memberTotalPaidNote(summary({ paid_before_import: 0 })), null);
+  assert.equal(memberTotalPaidNote(summary()), null);
+  assert.equal(memberTotalPaidNote(null), null);
 });

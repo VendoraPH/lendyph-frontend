@@ -416,6 +416,8 @@ export interface Loan {
   id: number;
   application_number?: string;
   loan_account_number?: string;
+  /** An imported loan's own Loan No. in the cooperative's file; null on any other loan. */
+  external_loan_no?: string | null;
   // Nested relations from API
   borrower?: {
     id: number;
@@ -803,8 +805,13 @@ export interface LoanSummary {
   payoff_amount?: number | string | null;
   /** Principal, interest and penalty paid only; narrower than Total Paid. */
   total_paid?: number;
-  /** Every posted receipt: what the loan page shows as Total Paid. */
+  /**
+   * Total Paid on the loan page: every posted receipt, plus, on an imported
+   * loan, `paid_before_import`.
+   */
   total_repaid?: number | string | null;
+  /** What an imported loan's file says was paid before the import; 0 otherwise. */
+  paid_before_import?: number | string | null;
   principal_paid?: number;
   interest_paid?: number;
   overdue_amount?: number;

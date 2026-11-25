@@ -7,6 +7,7 @@ import {
   assertPrintableShape,
   chargeAmount,
   fieldValue,
+  hasChargeLine,
   hasTable,
   isBlankField,
   notes,
@@ -192,4 +193,22 @@ test("member ledger card: eleven columns still share the page and print compact"
   assert.equal(table.columns.length, 11);
   assert.equal(widths.reduce((sum, w) => sum + w, 0), 100);
   assert.equal(table.compact, true);
+});
+
+test("member ledger card: Total paid says what it holds from before an import", () => {
+  const imported = buildMemberLedgerCardDoc({
+    ...PAYLOAD,
+    totals: { ...PAYLOAD.totals, paid_before_import: 23600 },
+  });
+  assert.equal(chargeAmount(imported, "Of which paid before the import"), formatCurrency(23600));
+
+  // A member with no imported loan prints as before.
+  assert.equal(hasChargeLine(buildMemberLedgerCardDoc(PAYLOAD), "Of which paid before the import"), false);
+  assert.equal(
+    hasChargeLine(
+      buildMemberLedgerCardDoc({ ...PAYLOAD, totals: { ...PAYLOAD.totals, paid_before_import: 0 } }),
+      "Of which paid before the import"
+    ),
+    false
+  );
 });

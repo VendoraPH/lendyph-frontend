@@ -20,6 +20,9 @@ describe("the import's counts read in the right number", () => {
     assert.equal(severityCount(2, "warning"), "2 warnings");
     assert.equal(severityCount(1, "error"), "1 error");
     assert.equal(severityCount(1500, "error"), "1,500 errors");
+    // A row that was not imported is counted as skipped, in its own words.
+    assert.equal(severityCount(1, "skipped"), "1 skipped");
+    assert.equal(severityCount(6, "skipped"), "6 skipped");
   });
 
   test("the processing bar: 1 of 1 row, 3 of 40 rows", () => {
