@@ -13,7 +13,7 @@ export const NO_ADDRESS =
 
 /** Under the form's Test link switch: who sees a code on screen, as the server decides it (`TestCodes::serves()`). */
 export const TEST_LINK_NOTE =
-  "Its applications stay out of the dashboard. On staging, only a test link shows test codes, for the mobile number on an active staff account (Settings → Profile, or User Management) or another allowed staff number.";
+  "Its applications stay out of the dashboard. On staging, only an open test link shows test codes: for the mobile number on an active staff account that works on loan origination (Settings → Profile, or User Management), or another allowed staff number.";
 
 export function emptyLinkInput(branchId: number | null): ApplicationLinkInput {
   return {

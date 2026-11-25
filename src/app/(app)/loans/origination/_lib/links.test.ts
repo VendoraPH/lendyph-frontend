@@ -48,8 +48,8 @@ test("a link with no public address says why instead of offering an empty copy",
   assert.match(NO_ADDRESS, /public address/);
 });
 
-test("the test link note says who sees test codes: an active staff account's mobile number, on a test link only", () => {
-  assert.match(TEST_LINK_NOTE, /only a test link shows test codes/);
-  assert.match(TEST_LINK_NOTE, /mobile number on an active staff account/);
+test("the test link note says who sees test codes: origination staff's own numbers, on an open test link only", () => {
+  assert.match(TEST_LINK_NOTE, /only an open test link shows test codes/);
+  assert.match(TEST_LINK_NOTE, /mobile number on an active staff account that works on loan origination/);
   assert.match(TEST_LINK_NOTE, /Settings → Profile/);
 });
