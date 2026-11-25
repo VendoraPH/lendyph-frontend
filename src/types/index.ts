@@ -77,6 +77,7 @@ export type {
   Reconciliation,
   ExpenseStatus,
   Expense,
+  ExpensePayment,
   ReportLine,
   ReportSection,
   CashFlowStatement,

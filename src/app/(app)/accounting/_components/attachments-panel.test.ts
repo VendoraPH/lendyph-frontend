@@ -345,10 +345,14 @@ describe("wiring", () => {
     assert.match(page, /<AttachmentsDialog\s+expense=\{attaching\}/);
 
     const table = source("expenses/_components/expense-table.tsx");
-    assert.match(table, /onClick=\{\(\) => onAttachments\(expense\)\}/);
-    assert.match(table, />\s*Attachments\s*</);
+    assert.match(table, /<ExpenseRowMenu[\s\S]*?onAttachments=\{onAttachments\}/);
     // The Actions column no longer depends on Pay or Edit.
     assert.doesNotMatch(table, /hasActions/);
+    // Attachments sits in every row's More menu, with no permission of its own.
+    const menu = source("expenses/_components/expense-row-menu.tsx");
+    assert.match(menu, /onClick=\{\(\) => onAttachments\(expense\)\}/);
+    assert.match(menu, />\s*Attachments\s*</);
+    assert.doesNotMatch(menu, /\{menu\.attachments &&/);
 
     const dialog = source("_components/attachments-dialog.tsx");
     assert.match(dialog, /<AttachmentsPanel owner=\{\{ kind: "expense", id: expense\.id, status: expense\.status \}\} \/>/);

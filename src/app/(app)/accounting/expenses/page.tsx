@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Inbox, Plus, Search } from "lucide-react";
 import { PermissionGate, RouteGuard, TablePagination } from "@/components/common";
+import { VISIBLE_SCROLLBAR } from "@/components/amla/visible-scrollbar";
 import { hasIllustration, Illustration } from "@/components/common/illustration";
 import { FillSection, PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Card, CardContent } from "@/components/ui/card";
@@ -32,6 +33,7 @@ import { EditExpenseDialog, ExpenseDialog } from "../_components/expense-dialog"
 import { PayExpenseDialog } from "../_components/pay-expense-dialog";
 import { ANY_STATUS, expenseStatusItems } from "../_lib/select-items";
 import { centavosOrDash } from "../_lib/server-figure";
+import { reversalText, type ExpenseReversal } from "./_lib/expense-actions";
 import type { ExpenseEditPayload } from "./_lib/expense-forms";
 import {
   EXPENSE_PAGE_SIZE,
@@ -40,7 +42,9 @@ import {
   expensePageToStepBackTo,
   expenseStatusCounts,
 } from "./_lib/expense-list";
+import { ExpensePaymentsDialog } from "./_components/expense-payments-dialog";
 import { ExpenseTable } from "./_components/expense-table";
+import { ReverseExpenseDialog } from "./_components/reverse-expense-dialog";
 import { emptyArt } from "@/lib/illustrations";
 
 function ExpensesContent() {
@@ -52,6 +56,10 @@ function ExpensesContent() {
   const [paying, setPaying] = useState<Expense | null>(null);
   const [editing, setEditing] = useState<Expense | null>(null);
   const [attaching, setAttaching] = useState<Expense | null>(null);
+  // By id: the dialog shows the expense as the latest page has it, so a
+  // reversed payment reads Reversed once the list has reloaded.
+  const [paymentsOf, setPaymentsOf] = useState<number | null>(null);
+  const [reversing, setReversing] = useState<ExpenseReversal | null>(null);
 
   // The search goes to the server once typing settles, from page one.
   useEffect(() => {
@@ -120,6 +128,26 @@ function ExpensesContent() {
     refetch();
   };
 
+  // A payment's reversal goes back to the expense's payments.
+  const closeReversal = (target: ExpenseReversal | null) => {
+    setReversing(null);
+    if (target?.kind === "payment") setPaymentsOf(target.expense.id);
+  };
+
+  const reverse = async (target: ExpenseReversal, reason: string) => {
+    if (target.kind === "payment") {
+      await accountingService.reverseExpensePayment(target.expense.id, target.payment.id, reason);
+    } else {
+      await accountingService.reverseExpense(target.expense.id, reason);
+    }
+    notifySuccess(reversalText(target).done);
+    closeReversal(target);
+    refetch();
+  };
+
+  const showingPayments =
+    paymentsOf === null ? null : ((data?.data ?? []).find((e) => e.id === paymentsOf) ?? null);
+
   const filtered = status !== ANY_STATUS || search.trim() !== "";
 
   return (
@@ -187,6 +215,8 @@ function ExpensesContent() {
           "POST /accounting/expenses",
           "PUT /accounting/expenses/{id}",
           "POST /accounting/expenses/{id}/pay",
+          "POST /accounting/expenses/{id}/reverse",
+          "POST /accounting/expenses/{id}/payments/{payment}/reverse",
         ]}
       >
         {(answer) => {
@@ -214,11 +244,15 @@ function ExpensesContent() {
                   {rows.length === 0 ? (
                     <EmptyExpenses filtered={filtered} />
                   ) : (
-                    <ScrollBox>
+                    // Focusable and named: on a narrow window the list scrolls
+                    // sideways here, with Actions pinned in view.
+                    <ScrollBox className={VISIBLE_SCROLLBAR} tabIndex={0} role="region" aria-label="Expenses, scrolls sideways">
                       <ExpenseTable
                         rows={rows}
                         onPay={setPaying}
+                        onPayments={(expense) => setPaymentsOf(expense.id)}
                         onEdit={setEditing}
+                        onReverse={(expense) => setReversing({ kind: "expense", expense })}
                         onAttachments={setAttaching}
                       />
                     </ScrollBox>
@@ -254,6 +288,20 @@ function ExpensesContent() {
       <AttachmentsDialog
         expense={attaching}
         onOpenChange={(open) => !open && setAttaching(null)}
+      />
+      <ExpensePaymentsDialog
+        expense={showingPayments}
+        onOpenChange={(open) => !open && setPaymentsOf(null)}
+        onReverse={(expense, payment) => {
+          setPaymentsOf(null);
+          setReversing({ kind: "payment", expense, payment });
+        }}
+      />
+      <ReverseExpenseDialog
+        target={reversing}
+        onOpenChange={(open) => !open && closeReversal(reversing)}
+        onConfirm={reverse}
+        onRefused={refetch}
       />
     </PageFill>
   );

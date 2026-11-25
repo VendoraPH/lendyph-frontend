@@ -395,6 +395,14 @@ export const accountingService = {
   payExpense: (id: number, data: PayExpenseData): Promise<Expense> =>
     api.post<Expense>(API_ENDPOINTS.ACCOUNTING.EXPENSES_PAY(id), data),
 
+  /** Reverses the expense once none of its payments stands; answers the expense. */
+  reverseExpense: (id: number, reason: string): Promise<Expense> =>
+    api.post<Expense>(API_ENDPOINTS.ACCOUNTING.EXPENSES_REVERSE(id), { reason }),
+
+  /** Reverses one payment of the expense; answers the expense. */
+  reverseExpensePayment: (expenseId: number, paymentId: number, reason: string): Promise<Expense> =>
+    api.post<Expense>(API_ENDPOINTS.ACCOUNTING.EXPENSE_PAYMENT_REVERSE(expenseId, paymentId), { reason }),
+
   // ── Cash and bank ──
   cashAccountsList: (params: PageParams = {}): Promise<ListPage<Account>> =>
     api.getRaw<ListPage<Account>>(API_ENDPOINTS.ACCOUNTING.CASH_ACCOUNTS_LIST, {
