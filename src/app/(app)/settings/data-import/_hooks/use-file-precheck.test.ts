@@ -148,15 +148,74 @@ test("cross-file matching is skipped entirely when the customers file was not re
 // Row-level checks
 // ---------------------------------------------------------------------------
 
-test("a blank required field fails the row and names the column", () => {
+test("a blank Account No. fails the row and names the column", () => {
   const row = [...CUSTOMER];
-  row[11] = ""; // Barangay
+  row[0] = "";
 
   const result = checkRows(customerRows([row]), CUSTOMER_CONTEXT);
 
   assert.equal(result.failingRows, 1);
+  assert.equal(result.issues[0].severity, "error");
   assert.equal(result.issues[0].category, "required");
-  assert.equal(result.issues[0].column, "Barangay");
+  assert.equal(result.issues[0].column, "Account No.");
+  assert.equal(result.issues[0].message, "Account No. is blank, and this row cannot be imported without it.");
+});
+
+// ---------------------------------------------------------------------------
+// Blank and unrecognised member cells: what the server refuses (round 3)
+// ---------------------------------------------------------------------------
+
+test("of the workbook's required cells, only a blank Account No., Last Name or First Name fails a member's row", () => {
+  const refused: Array<[number, string]> = [[0, "Account No."], [1, "Last Name"], [2, "First Name"]];
+  const imported: Array<[number, string]> = [
+    [5, "Birthdate"], [6, "Gender"], [7, "Civil Status"], [8, "Contact Number"],
+    [9, "email"], [11, "Barangay"], [12, "City/Municipality"], [13, "Province"],
+  ];
+
+  for (const [index, label] of refused) {
+    const row = [...CUSTOMER];
+    row[index] = "";
+    const result = checkRows(customerRows([row]), CUSTOMER_CONTEXT);
+    assert.deepEqual(
+      result.issues.map((issue) => [issue.column, issue.severity, issue.message]),
+      [[label, "error", `${label} is blank, and this row cannot be imported without it.`]],
+      label,
+    );
+    assert.equal(result.failingRows, 1, label);
+  }
+
+  for (const [index, label] of imported) {
+    const row = [...CUSTOMER];
+    row[index] = "";
+    const result = checkRows(customerRows([row]), CUSTOMER_CONTEXT);
+    assert.deepEqual(
+      result.issues.map((issue) => [issue.column, issue.severity, issue.category, issue.message]),
+      [[label, "warning", "required", `${label} is blank. The member will be imported without it; add it later on their page.`]],
+      label,
+    );
+    assert.equal(result.errorCount, 0, label);
+    assert.equal(result.failingRows, 0, label);
+  }
+});
+
+test("a married member with a blank spouse name or contact number warns, and the row imports", () => {
+  const row = [...CUSTOMER];
+  row[17] = ""; // Spouse FName
+  row[19] = ""; // Spouse LName
+  row[20] = ""; // Spouse Contact No
+
+  const result = checkRows(customerRows([row]), CUSTOMER_CONTEXT);
+
+  assert.equal(result.errorCount, 0);
+  assert.equal(result.failingRows, 0);
+  assert.deepEqual(
+    result.issues.map((issue) => [issue.column, issue.severity, issue.message]),
+    ["Spouse FName (If Married)", "Spouse LName (If Married)", "Spouse Contact No (If Married)"].map((label) => [
+      label,
+      "warning",
+      `${label} is blank. The member will be imported without it; add it later on their page.`,
+    ]),
+  );
 });
 
 test("a row of the wrong width is reported once, as a whole-row problem", () => {
@@ -168,14 +227,63 @@ test("a row of the wrong width is reported once, as a whole-row problem", () => 
   assert.match(columnIssues[0].message, /21 columns/);
 });
 
-test("an unknown closed-vocabulary value quotes the options back", () => {
+test("an unrecognised gender or civil status warns that it will be imported blank, and quotes the options", () => {
+  const gender = [...CUSTOMER];
+  gender[6] = "Lalake";
+  const civil = [...CUSTOMER];
+  civil[0] = "2019-00102";
+  civil[7] = "Live-in";
+
+  const result = checkRows(customerRows([gender, civil]), CUSTOMER_CONTEXT);
+
+  assert.equal(result.errorCount, 0);
+  assert.equal(result.failingRows, 0);
+  assert.deepEqual(result.issues.map((issue) => [issue.column, issue.severity, issue.category, issue.message]), [
+    [
+      "Gender",
+      "warning",
+      "value",
+      'Gender "Lalake" isn\'t one the import recognises, so it will be imported blank; add it later on the member\'s page. Expected one of: Male, Female.',
+    ],
+    [
+      "Civil Status",
+      "warning",
+      "value",
+      'Civil Status "Live-in" isn\'t one the import recognises, so it will be imported blank; add it later on the member\'s page. Expected one of: Single, Married, Widowed, Separated, Divorced.',
+    ],
+  ]);
+});
+
+test("a gender or civil status the server imports blank warns, even a spelling a reader would know", () => {
+  const cases: Array<[number, string, string]> = [
+    [6, "Gender", "Lalaki"],
+    [6, "Gender", "Babae"],
+    [7, "Civil Status", "Maried"],
+    [7, "Civil Status", "Marrried"],
+    [7, "Civil Status", "Seperated"],
+    [7, "Civil Status", "Divorce"],
+    [7, "Civil Status", "Annulled"],
+  ];
+
+  for (const [index, label, spelling] of cases) {
+    const row = [...CUSTOMER];
+    row[index] = spelling;
+    const result = checkRows(customerRows([row]), CUSTOMER_CONTEXT);
+
+    assert.deepEqual(result.issues.map((issue) => [issue.column, issue.severity]), [[label, "warning"]], spelling);
+    assert.ok(
+      result.issues[0].message.startsWith(`${label} "${spelling}" isn't one the import recognises, so it will be imported blank;`),
+      result.issues[0].message,
+    );
+    assert.equal(result.failingRows, 0, spelling);
+  }
+});
+
+test("a civil status the server reads, Legally Separated, raises nothing", () => {
   const row = [...CUSTOMER];
-  row[6] = "Lalake";
+  row[7] = "Legally Separated";
 
-  const result = checkRows(customerRows([row]), CUSTOMER_CONTEXT);
-
-  assert.equal(result.issues[0].category, "value");
-  assert.match(result.issues[0].message, /Expected one of/);
+  assert.deepEqual(checkRows(customerRows([row]), CUSTOMER_CONTEXT).issues, []);
 });
 
 test("a duplicate identifier is a warning that points at the first row", () => {
@@ -323,6 +431,15 @@ test("a bad value in a new column fails the row, in words", () => {
   }
 });
 
+test("an unknown Member Type still fails the row: the server refuses it, unlike a gender", () => {
+  const result = checkRows(customerRows([memberRow({ member_type: "Premium" })]), CURRENT_CONTEXT);
+
+  assert.equal(result.failingRows, 1);
+  assert.deepEqual(result.issues.map((issue) => [issue.column, issue.severity, issue.message]), [
+    ["Member Type", "error", '"Premium" is not a value Member Type accepts. Expected one of: Regular, Associate.'],
+  ]);
+});
+
 test("a real membership number may hold zeros, and letters other than a member code's", () => {
   const rows = customerRows(
     ["BC-000", "A1", "10", "BR-0007"].map((number, i) => memberRow({ membership_number: number }, `2019-0020${i}`)),
@@ -390,7 +507,7 @@ test("each layout holds its rows to its own width", () => {
 
 test("capping the issue LIST never caps the issue COUNT", () => {
   const bad = [...CUSTOMER];
-  bad[11] = ""; // Barangay blank on every row
+  bad[1] = ""; // Last Name blank on every row: the server refuses it
   const rows = customerRows(Array.from({ length: 40 }, () => bad));
 
   const result = checkRows(rows, CUSTOMER_CONTEXT, 10);
@@ -618,6 +735,29 @@ test("the row total is the complete parse even when checks stop at the ceiling",
   assert.equal(findings.customers?.totalRows, 25);
   assert.equal(findings.customers?.checkedRows, 10);
   assert.equal(findings.customers?.rowsNotChecked, 15);
+});
+
+test("a members file with only these warnings isn't counted as failing, and nothing holds it up", () => {
+  const changes: Array<Record<number, string>> = [
+    { 0: "2019-00201", 5: "" }, // Birthdate blank
+    { 0: "2019-00202", 6: "Lalake" }, // a gender the server doesn't recognise
+    { 0: "2019-00203", 17: "", 19: "" }, // married, spouse names blank
+    { 0: "2019-00204", 9: "", 13: "" }, // email and Province blank
+  ];
+  const rows = changes.map((change) => CUSTOMER.map((cell, index) => change[index] ?? cell));
+
+  const findings = computeFindings(
+    { customers: inspectionStub({ records: customerRows(rows), widths: [{ columns: 22, rows: rows.length }] }) },
+    {},
+    {},
+  ).customers;
+
+  assert.ok(findings);
+  assert.equal(findings.errorCount, 0, findings.issues.map((issue) => issue.message).join(" | "));
+  assert.equal(findings.failingRows, 0, "no row will fail");
+  assert.equal(findings.warningCount, 6);
+  assert.deepEqual(findings.blockers, []);
+  assert.deepEqual(findings.pendingDecisions, []);
 });
 
 test("the header override moves the first row between header and data", () => {

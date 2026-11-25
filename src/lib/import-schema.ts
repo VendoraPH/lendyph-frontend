@@ -39,7 +39,8 @@ export type ImportShape = "customer" | "loans" | "share_capital";
 
 /**
  * `enum` is a CLOSED vocabulary — the database stores one of a fixed set, so an
- * unmatched value is an error the admin has to map.
+ * unmatched value is reported: an error the admin has to map, or a warning
+ * where the server imports it blank (`refusedWhenUnrecognised`).
  *
  * `open-enum` is free text that happens to have a dropdown in the UI. The
  * option list is an affordance for normalising the common spellings, never a
@@ -81,10 +82,43 @@ export interface ImportColumn {
   readonly key: string;
   /** The label exactly as printed in the client's workbook. */
   readonly label: string;
+  /**
+   * The workbook's own colour coding: blue required, yellow optional. The Data
+   * Template paints from it (`@/lib/data-template`). What the import does with
+   * a blank is `refusedWhenBlank`, which this never decides.
+   */
   readonly required: boolean;
+  /**
+   * Whether the SERVER refuses a row that leaves this cell blank. Absent, it
+   * is `required`, as the loans and share capital files hold it.
+   *
+   * Set on the members file, where the two differ: the server refuses a member
+   * row only when Account No., Last Name or First Name is blank
+   * (`CustomerRowNormalizer`), and imports the workbook's other required cells
+   * blank, for staff to complete on the member's page. The pre-check follows
+   * the server: a blank here is an error, and a blank in any other required
+   * cell, or in a married member's spouse cell, is a warning.
+   */
+  readonly refusedWhenBlank?: boolean;
+  /**
+   * For a closed vocabulary, whether the SERVER refuses a row whose value it
+   * doesn't recognise. Absent, it does (Member Type, Payment Frequency,
+   * Interest Type, Transaction Type). `false`: it imports the row with the
+   * field blank, with a warning (`enum_unmapped`), as for a member's Gender
+   * and Civil Status.
+   */
+  readonly refusedWhenUnrecognised?: boolean;
   readonly type: ColumnType;
   /** The vocabulary. Required for `enum`; a normalising hint for `open-enum`. */
   readonly options?: readonly EnumOption[];
+  /**
+   * Every spelling the SERVER reads in this column, keyed as it keys a cell
+   * (`serverLabelKey`), and the value it stores. When set, it is the whole
+   * vocabulary: a cell is one of these or unrecognised, and neither the
+   * options' own words nor `VOCAB_ALIASES` match. `options` still names the
+   * values in a message.
+   */
+  readonly serverVocabulary?: Readonly<Record<string, string>>;
   /**
    * The column's database width in CHARACTERS. Read from the migrations, never
    * inferred — a column with no confirmed limit carries none, and is checked
@@ -119,6 +153,26 @@ export interface ImportColumn {
 /** Spouse details are required only of a married member. */
 const IF_MARRIED = { field: "civil_status", equals: "married" } as const;
 
+/**
+ * Every spelling the server reads for a member's Gender and Civil Status, and
+ * the value each stores: `CustomerRowNormalizer::GENDER_MAP` and
+ * `::CIVIL_STATUS_MAP`, copied. Anything else is imported blank (finish run
+ * round 3), so the members import reads these and no others. The member form
+ * and the Data Template keep the app's own lists (`GENDER_OPTIONS`,
+ * `CIVIL_STATUS_OPTIONS`).
+ */
+const MEMBER_GENDER_WORDS = { male: "male", m: "male", female: "female", f: "female" } as const;
+const MEMBER_CIVIL_STATUS_WORDS = {
+  single: "single",
+  married: "married",
+  widowed: "widowed",
+  widow: "widowed",
+  widower: "widowed",
+  separated: "separated",
+  "legally separated": "separated",
+  divorced: "divorced",
+} as const;
+
 // Numeric limits, named for the role rather than the column type, so the use
 // site reads as the rule it is. All from the migrations and the validation
 // rules — see the note on PLEDGE_CEILING for the one asymmetry.
@@ -137,23 +191,25 @@ const RATE = { max: 9999.9999, decimalPlaces: 4 } as const;
 /** Feeds an `unsignedSmallInteger`. Anything past a few hundred is nonsense. */
 const TERM = { max: 65535, decimalPlaces: 0 } as const;
 
+// `required` is the workbook's blue; `refusedWhenBlank` is what the server
+// does with a blank (finish run round 3). Only the three names refuse a row.
 export const CUSTOMER_COLUMNS = [
-  { key: "account_no", label: "Account No.", required: true, type: "text", maxLength: 50 },
-  { key: "last_name", label: "Last Name", required: true, type: "text", maxLength: 255 },
-  { key: "first_name", label: "First Name", required: true, type: "text", maxLength: 255 },
+  { key: "account_no", label: "Account No.", required: true, refusedWhenBlank: true, type: "text", maxLength: 50 },
+  { key: "last_name", label: "Last Name", required: true, refusedWhenBlank: true, type: "text", maxLength: 255 },
+  { key: "first_name", label: "First Name", required: true, refusedWhenBlank: true, type: "text", maxLength: 255 },
   { key: "middle_name", label: "Middle Name", required: false, type: "text", maxLength: 255 },
   { key: "suffix", label: "Suffix", required: false, type: "open-enum", options: SUFFIX_OPTIONS, maxLength: 20 },
-  { key: "birthdate", label: "Birthdate", required: true, type: "date" },
-  { key: "gender", label: "Gender", required: true, type: "enum", options: GENDER_OPTIONS },
-  { key: "civil_status", label: "Civil Status", required: true, type: "enum", options: CIVIL_STATUS_OPTIONS },
+  { key: "birthdate", label: "Birthdate", required: true, refusedWhenBlank: false, type: "date" },
+  { key: "gender", label: "Gender", required: true, refusedWhenBlank: false, refusedWhenUnrecognised: false, type: "enum", options: GENDER_OPTIONS, serverVocabulary: MEMBER_GENDER_WORDS },
+  { key: "civil_status", label: "Civil Status", required: true, refusedWhenBlank: false, refusedWhenUnrecognised: false, type: "enum", options: CIVIL_STATUS_OPTIONS, serverVocabulary: MEMBER_CIVIL_STATUS_WORDS },
   // 20 is the tight one: two PH mobiles joined by a slash is 23 characters, so
   // a cell holding `0917.../0918...` is reported here rather than truncated.
-  { key: "contact_number", label: "Contact Number", required: true, type: "text", maxLength: 20, serverRepair: "contact-number" },
-  { key: "email", label: "email", required: true, type: "text", maxLength: 255 },
+  { key: "contact_number", label: "Contact Number", required: true, refusedWhenBlank: false, type: "text", maxLength: 20, serverRepair: "contact-number" },
+  { key: "email", label: "email", required: true, refusedWhenBlank: false, type: "text", maxLength: 255 },
   { key: "street_address", label: "Street Address", required: false, type: "text", maxLength: 255 },
-  { key: "barangay", label: "Barangay", required: true, type: "text", maxLength: 255 },
-  { key: "city", label: "City/Municipality", required: true, type: "text", maxLength: 255 },
-  { key: "province", label: "Province", required: true, type: "text", maxLength: 255 },
+  { key: "barangay", label: "Barangay", required: true, refusedWhenBlank: false, type: "text", maxLength: 255 },
+  { key: "city", label: "City/Municipality", required: true, refusedWhenBlank: false, type: "text", maxLength: 255 },
+  { key: "province", label: "Province", required: true, refusedWhenBlank: false, type: "text", maxLength: 255 },
   { key: "employer_or_business", label: "Employer/Business Name", required: false, type: "text", maxLength: 255 },
   { key: "monthly_income", label: "Monthly Income", required: false, type: "number", numeric: INCOME_CEILING },
   { key: "pledge_amount", label: "Pledge Amt(If Applicable)", required: false, type: "number", numeric: PLEDGE_CEILING },
@@ -382,23 +438,12 @@ export function headerKey(label: string): string {
  * a judgement call is deliberately absent and comes back as unknown for the
  * admin to map. Fuzzy matching is not used at all: an edit-distance guess is a
  * guess, and this importer does not make those.
+ *
+ * A member's Gender and Civil Status have none: they read the server's own
+ * words and nothing else (`serverVocabulary`), since the server imports any
+ * other spelling blank.
  */
 const VOCAB_ALIASES: Record<string, Record<string, string>> = {
-  // M/F is near-universal in PH member registers; the Filipino words turn up
-  // in hand-maintained sheets often enough to be worth the two lines.
-  gender: { m: "male", f: "female", lalaki: "male", babae: "female" },
-  // No single-letter aliases here on purpose. `M` in a civil-status column
-  // would be "married", but `M` is also a gender, and a file whose columns
-  // have shifted by one is exactly the case that must NOT resolve cleanly.
-  civil_status: {
-    maried: "married",
-    marrried: "married",
-    seperated: "separated",
-    widow: "widowed",
-    widower: "widowed",
-    divorce: "divorced",
-    annulled: "separated",
-  },
   // `fixed` is what INTEREST_TYPE.FIXED calls this same thing, and "flat" is
   // the term most PH lenders print on their own forms.
   interest_type: {
@@ -443,6 +488,7 @@ export type EnumResolution =
 
 /**
  * Match one cell against a column's vocabulary, trimmed and case-insensitively.
+ * A column with a `serverVocabulary` reads exactly the server's words.
  *
  * A blank resolves to a blank — emptiness is a required-field question, not a
  * vocabulary one, and answering it here would report the same cell twice.
@@ -455,7 +501,9 @@ export function resolveEnumValue(
   if (!column.options) return { ok: true, value: trimmed, label: trimmed };
   if (!trimmed) return { ok: true, value: "", label: "" };
 
-  const hit = matchOption(trimmed, column.options, VOCAB_ALIASES[column.key]);
+  const hit = column.serverVocabulary
+    ? serverOption(trimmed, column.serverVocabulary, column.options)
+    : matchOption(trimmed, column.options, VOCAB_ALIASES[column.key]);
   if (hit) return { ok: true, value: hit.value, label: hit.label };
   // An OPEN vocabulary cannot fail. The column is free text in the database and
   // the option list is only a dropdown; rejecting `II` — which the client's own
@@ -480,6 +528,33 @@ function matchOption(
   );
 }
 
+/**
+ * A cell keyed as the SERVER keys one before a lookup
+ * (`CsvImportSchema::normalizeLabel()`): byte-order marks dropped, lower case,
+ * each run of characters that are neither letters nor digits one space, then
+ * trimmed. Unlike `vocabKey`, a break between words stays: the server reads
+ * `Legally-Separated` as `legally separated`, and `LegallySeparated` as
+ * nothing it knows.
+ */
+function serverLabelKey(raw: string): string {
+  return raw
+    .replace(/\uFEFF/gu, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+/** The server's own lookup: the cell keyed as it keys one, then its words. */
+function serverOption(
+  trimmed: string,
+  words: Readonly<Record<string, string>>,
+  options: readonly EnumOption[],
+): EnumOption | undefined {
+  const key = serverLabelKey(trimmed);
+  if (!Object.hasOwn(words, key)) return undefined;
+  return options.find((option) => option.value === words[key]);
+}
+
 export interface UnknownEnumValue {
   key: string;
   /** The column's printed label, for the error report. */
@@ -487,6 +562,11 @@ export interface UnknownEnumValue {
   /** The text as it appeared in the file. */
   raw: string;
   options: readonly EnumOption[];
+  /**
+   * `true`: the server refuses the row. `false`: it imports the row with this
+   * field blank (`refusedWhenUnrecognised`).
+   */
+  refused: boolean;
 }
 
 /**
@@ -495,7 +575,8 @@ export interface UnknownEnumValue {
  * A CLOSED enum that does not match keeps its original text in the returned row
  * AND is listed in `unknown`, for the UI to offer a mapping. Blanking it would
  * be the silent drop this module exists to avoid: the row would import looking
- * complete, with one field simply gone.
+ * complete, with one field simply gone. Each one says whether the server
+ * refuses the row for it or imports the field blank.
  *
  * An OPEN vocabulary never lands in `unknown` — an unrecognised suffix is just
  * a suffix, and it is returned exactly as typed.
@@ -517,6 +598,7 @@ export function resolveRowEnums(
         label: column.label,
         raw: result.raw,
         options: column.options,
+        refused: column.refusedWhenUnrecognised ?? true,
       });
     }
   }
@@ -549,23 +631,38 @@ export function normaliseRow(
   return row;
 }
 
+/** A cell the workbook asks for that a row leaves blank. */
+export interface MissingField {
+  key: string;
+  /** The column's printed label, ready to show. */
+  label: string;
+  /**
+   * `true`: the server refuses the row (`refusedWhenBlank`), so it can't be
+   * imported. `false`: the server imports it with this field not set.
+   */
+  refused: boolean;
+}
+
 /**
- * Which required fields this row leaves blank.
+ * Which required fields this row leaves blank, and whether the server refuses
+ * the row for each.
  *
  * The conditional spouse fields are evaluated against the RESOLVED civil
- * status, so `MARRIED`, `married` and `maried` all pull in the same three
- * requirements. Returns column labels, ready to show.
+ * status, so `MARRIED`, `married` and `Married.` all pull in the same three
+ * requirements.
  */
 export function missingRequiredFields(
   row: ImportRow,
   shape: ImportShape,
-): string[] {
+): MissingField[] {
   const columns = columnsFor(shape);
-  const missing: string[] = [];
+  const missing: MissingField[] = [];
+  const add = (column: ImportColumn) =>
+    missing.push({ key: column.key, label: column.label, refused: column.refusedWhenBlank ?? column.required });
   for (const column of columns) {
     if ((row[column.key] ?? "").trim()) continue;
     if (column.required) {
-      missing.push(column.label);
+      add(column);
       continue;
     }
     const condition = column.requiredWhen;
@@ -574,7 +671,7 @@ export function missingRequiredFields(
     if (!source) continue;
     const resolved = resolveEnumValue(source, row[condition.field] ?? "");
     if (resolved.ok && resolved.value === condition.equals) {
-      missing.push(column.label);
+      add(column);
     }
   }
   return missing;
@@ -875,26 +972,30 @@ const EMAIL_SHAPE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 /** `50,000.00`, `₱50000`, `12.5` — an amount as a spreadsheet writes one. */
 const AMOUNT_SHAPE = /^-?[₱P$]?\s*\d[\d,]*(\.\d+)?$/;
 
-/** "Does this cell hold a value from that vocabulary?" — blanks prove nothing. */
-function matchesVocabulary(key: string, options: readonly EnumOption[]) {
-  const aliases = VOCAB_ALIASES[key];
+/**
+ * "Does this cell hold a value that column reads?" — blanks prove nothing.
+ * Read through the column itself, so a member's gender counts as evidence in
+ * exactly the server's words (M and F included).
+ */
+function matchesVocabulary(shape: ImportShape, key: string) {
+  const column = columnsFor(shape).find((c) => c.key === key);
   return (value: string): boolean => {
     const trimmed = String(value ?? "").trim();
-    return trimmed !== "" && matchOption(trimmed, options, aliases) !== undefined;
+    return trimmed !== "" && column !== undefined && resolveEnumValue(column, trimmed).ok;
   };
 }
 
 const CUSTOMER_FINGERPRINT: Fingerprint[] = [
   { index: 5, test: looksLikeDate },
-  { index: 6, test: matchesVocabulary("gender", GENDER_OPTIONS) },
-  { index: 7, test: matchesVocabulary("civil_status", CIVIL_STATUS_OPTIONS) },
+  { index: 6, test: matchesVocabulary("customer", "gender") },
+  { index: 7, test: matchesVocabulary("customer", "civil_status") },
   { index: 9, test: (v) => EMAIL_SHAPE.test(String(v ?? "").trim()) },
 ];
 
 /** Date, transaction type and amount, where the share capital file has them. */
 const SHARE_CAPITAL_FINGERPRINT: Fingerprint[] = [
   { index: 1, test: looksLikeDate },
-  { index: 3, test: matchesVocabulary("transaction_type", TRANSACTION_TYPE_OPTIONS) },
+  { index: 3, test: matchesVocabulary("share_capital", "transaction_type") },
   { index: 4, test: (v) => AMOUNT_SHAPE.test(String(v ?? "").trim()) },
 ];
 
@@ -902,8 +1003,8 @@ const LOANS_FINGERPRINT: Fingerprint[] = [
   { index: 2, test: (v) => AMOUNT_SHAPE.test(String(v ?? "").trim()) },
   { index: 3, test: (v) => AMOUNT_SHAPE.test(String(v ?? "").trim()) },
   { index: 4, test: (v) => AMOUNT_SHAPE.test(String(v ?? "").trim()) },
-  { index: 10, test: matchesVocabulary("payment_frequency", PAYMENT_FREQUENCY_OPTIONS) },
-  { index: 11, test: matchesVocabulary("interest_type", INTEREST_TYPE_OPTIONS) },
+  { index: 10, test: matchesVocabulary("loans", "payment_frequency") },
+  { index: 11, test: matchesVocabulary("loans", "interest_type") },
   { index: 12, test: looksLikeDate },
   { index: 13, test: looksLikeDate },
 ];

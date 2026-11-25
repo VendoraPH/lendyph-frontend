@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { CUSTOMER_COLUMNS, LOAN_COLUMNS, SHARE_CAPITAL_COLUMNS } from "@/lib/import-schema";
+import { CUSTOMER_COLUMNS, LOAN_COLUMNS, SHARE_CAPITAL_COLUMNS, type ImportColumn } from "@/lib/import-schema";
 import { DATA_DICTIONARY, TEMPLATE_GUIDELINES, TEMPLATE_SHEETS } from "./template";
 
 function sheet(id: string) {
@@ -33,6 +33,26 @@ test("the members sheet's required flags follow the import, spouse columns only 
     assert.equal(column.required, source.required || conditional, source.key);
     assert.equal(Boolean(column.requiredWhen), conditional, source.key);
   }
+});
+
+test("the members sheet keeps the workbook's colours, whatever the import refuses", () => {
+  // Blue: the workbook's own required columns, and the spouse block when married.
+  assert.deepEqual(
+    sheet("members").columns.filter((c) => c.required).map((c) => [c.header, c.requiredWhen ?? null]),
+    [
+      ["Account No.", null], ["Last Name", null], ["First Name", null],
+      ["Birthdate", null], ["Gender", null], ["Civil Status", null],
+      ["Contact Number", null], ["email", null], ["Barangay", null],
+      ["City/Municipality", null], ["Province", null],
+      ["Spouse FName (If Married)", "Required when Civil Status is Married"],
+      ["Spouse LName (If Married)", "Required when Civil Status is Married"],
+      ["Spouse Contact No (If Married)", "Required when Civil Status is Married"],
+    ]
+  );
+  // Painted from `required`, never from what the server refuses: a member
+  // imports without a birthdate, and the column is still blue.
+  const birthdate: ImportColumn | undefined = CUSTOMER_COLUMNS.find((c) => c.key === "birthdate");
+  assert.equal(birthdate?.refusedWhenBlank, false);
 });
 
 test("the members sheet's closed lists and dates carry their dictionary and format", () => {

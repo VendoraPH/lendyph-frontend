@@ -547,7 +547,7 @@ interface RowCheckTotals {
  *
  * Pure and exported so it can be unit-tested without a DOM or a `File`.
  *
- * Two things are deliberately NOT errors here:
+ * Three things are deliberately NOT errors here:
  *  - a loans row whose account number is absent from the customers file. The
  *    coop already has 44 self-registered members who exist server-side and are
  *    not in the migration sheet, and the client cannot replicate the server's
@@ -556,6 +556,10 @@ interface RowCheckTotals {
  *  - anything `fieldSizeProblems` marks `warning`. The severity is decided
  *    there, by what the SERVER will do with the value, and re-deciding it at
  *    the call site is how a repairable value lands in a failure total.
+ *  - a member cell the server imports blank: a blank one the workbook asks for
+ *    (a birthdate), or a gender or civil status it doesn't recognise. Only the
+ *    cells it refuses a row for are errors (`refusedWhenBlank`,
+ *    `refusedWhenUnrecognised`).
  */
 export function checkRows(
   rows: readonly CsvRecord[],
@@ -636,22 +640,28 @@ export function checkRows(
     const raw = normaliseRow(fields, context.shape);
     const { row, unknown } = resolveRowEnums(raw, context.shape);
 
+    // Refused or imported blank, as the server decides (the column's markers).
     for (const bad of unknown) {
+      const options = quoteOptions(bad.options);
       add(line, reference, {
         column: bad.label,
-        severity: "error",
+        severity: bad.refused ? "error" : "warning",
         category: "value",
-        message: `"${bad.raw}" is not a value ${bad.label} accepts. Expected one of: ${quoteOptions(bad.options)}.`,
+        message: bad.refused
+          ? `"${bad.raw}" is not a value ${bad.label} accepts. Expected one of: ${options}.`
+          : `${bad.label} "${bad.raw}" isn't one the import recognises, so it will be imported blank; add it later on the member's page. Expected one of: ${options}.`,
         value: bad.raw,
       });
     }
 
-    for (const label of missingRequiredFields(row, context.shape)) {
+    for (const missing of missingRequiredFields(row, context.shape)) {
       add(line, reference, {
-        column: label,
-        severity: "error",
+        column: missing.label,
+        severity: missing.refused ? "error" : "warning",
         category: "required",
-        message: `${label} is blank, and this row cannot be imported without it.`,
+        message: missing.refused
+          ? `${missing.label} is blank, and this row cannot be imported without it.`
+          : `${missing.label} is blank. The member will be imported without it; add it later on their page.`,
         value: null,
       });
     }

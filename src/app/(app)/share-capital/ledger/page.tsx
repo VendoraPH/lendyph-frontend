@@ -51,7 +51,7 @@ import { ledgerAmounts } from "@/utils/share-capital";
 import { useAuthStore } from "@/store";
 import { bookTotalsLabels } from "./_lib/book-totals-labels";
 import { LedgerDocumentActions } from "./_components/ledger-document-actions";
-import type { SubsidiaryLedgerInput } from "./_lib/subsidiary-ledger-document";
+import { ledgerEntryNumbers, type SubsidiaryLedgerInput } from "./_lib/subsidiary-ledger-document";
 import type {
   ShareCapitalBookTotals,
   ShareCapitalLedgerEntry,
@@ -66,7 +66,10 @@ interface LedgerEntry {
   id: number;
   date: string;
   description: string;
-  reference: string;
+  /** The ledger's own number (SC-…). */
+  entryNo: string;
+  /** How the money moved: a CSH, GCash, bank or imported reference, or "—". */
+  referenceNo: string;
   debit: number;
   credit: number;
   /** The server's balance after this entry (GET /share-capital/ledger). */
@@ -81,7 +84,7 @@ function toLedgerEntry(raw: ShareCapitalLedgerEntry): LedgerEntry {
     id: raw.id,
     date: raw.date,
     description: raw.description,
-    reference: raw.reference,
+    ...ledgerEntryNumbers(raw),
     ...ledgerAmounts(raw),
     runningBalance: raw.running_balance ?? null,
     imported: raw.is_imported === true,
@@ -732,7 +735,8 @@ function SubsidiaryLedgerContent() {
                           <SortIcon active={detailSort === "date"} dir={detailSortDir} />
                         </span>
                       </TableHead>
-                      <TableHead className="text-xs">Reference</TableHead>
+                      <TableHead className="text-xs">Entry No.</TableHead>
+                      <TableHead className="text-xs">Reference No.</TableHead>
                       <TableHead className="text-xs">Description</TableHead>
                       <TableHead className="text-right text-xs">Debit</TableHead>
                       <TableHead className="text-right text-xs">Credit</TableHead>
@@ -743,7 +747,7 @@ function SubsidiaryLedgerContent() {
                     {/* Opening Balance Row */}
                     {(range.from || (openingBalance !== null && openingBalance !== 0)) && (
                       <TableRow className="bg-muted/30">
-                        <TableCell colSpan={3} className="text-sm font-medium italic text-muted-foreground">
+                        <TableCell colSpan={4} className="text-sm font-medium italic text-muted-foreground">
                           {range.from
                             ? `Opening Balance as of ${formatDate(range.from)}`
                             : "Opening Balance"}
@@ -761,7 +765,10 @@ function SubsidiaryLedgerContent() {
                           {formatDate(entry.date)}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground font-mono text-xs">
-                          {entry.reference}
+                          {entry.entryNo}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground font-mono text-xs">
+                          {entry.referenceNo}
                         </TableCell>
                         <TableCell className="text-sm">
                           {entry.description}
@@ -784,7 +791,7 @@ function SubsidiaryLedgerContent() {
                     ))}
                     {displayedEntries.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                        <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                           {hasIllustration(entriesPicture) && (
                             <Illustration name={entriesPicture} className="mx-auto mb-3 block" />
                           )}
@@ -798,7 +805,7 @@ function SubsidiaryLedgerContent() {
                   {displayedEntries.length > 0 && (
                     <TableFooter>
                       <TableRow className="bg-muted/50 font-semibold">
-                        <TableCell colSpan={3} className="text-sm">
+                        <TableCell colSpan={4} className="text-sm">
                           Period Total
                         </TableCell>
                         <TableCell className="text-right text-sm text-red-600 tabular-nums">

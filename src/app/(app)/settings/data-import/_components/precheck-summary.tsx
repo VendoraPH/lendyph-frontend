@@ -291,7 +291,7 @@ export function PrecheckSummary({
           >
             <p className="text-muted-foreground">
               {totalWarnings > 0
-                ? "These rows import. The import repairs or matches the value; the note is so you know what it did."
+                ? "These rows import. Each note says what the import does with the value."
                 : "Nothing needs your attention beyond the rows above."}
             </p>
           </Banner>
