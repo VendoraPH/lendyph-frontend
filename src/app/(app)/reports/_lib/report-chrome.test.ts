@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { siteConfig } from "@/config/site";
 import { useBrandingStore } from "@/store/branding-store";
-import { SAVINGS_RECORD_PREFIXES, applyChrome, buildReference } from "./report-chrome";
+import { SAVINGS_RECORD_PREFIXES, applyChrome, buildReference, statementReferenceKey } from "./report-chrome";
 import { orgDetailsLine, type ReportDocument } from "./types";
 
 /**
@@ -252,4 +252,29 @@ test("a statement's reference carries the seconds, so two in one minute differ",
   const second = buildReference("statement_of_account", new Date("2026-11-07T07:54:41Z"), "LN-000008");
   assert.equal(first, "SOA-LN-000008-20261107-155405");
   assert.notEqual(first, second);
+});
+
+test("round 6: an imported loan's statement reference carries the file's Loan No.", () => {
+  // The importer leaves an imported loan's LN- number empty on purpose, so its
+  // reference had no loan at all ("SOA-20261125-140500").
+  assert.equal(statementReferenceKey({ loan_account_number: "LN-000004", external_loan_no: "OLD-0041" }), "LN-000004");
+  assert.equal(statementReferenceKey({ loan_account_number: null, external_loan_no: "OLD-0041" }), "OLD-0041");
+  assert.equal(statementReferenceKey({ loan_account_number: "", external_loan_no: "  " }), undefined);
+  assert.equal(statementReferenceKey(null), undefined);
+
+  const at = new Date("2026-11-25T06:05:00Z");
+  assert.equal(
+    buildReference("statement_of_account", at, statementReferenceKey({ loan_account_number: null, external_loan_no: "OLD-0041" })),
+    "SOA-OLD-0041-20261125-140500",
+  );
+});
+
+test("round 6: the statement builder keys its reference on that number", async () => {
+  const { buildStatementOfAccountDoc } = await import("./report-builders");
+  const doc = buildStatementOfAccountDoc(
+    { loan: { loan_account_number: null, external_loan_no: "OLD-0041" }, schedule: [], transactions: [] },
+    { from: "", to: "" },
+  );
+  assert.equal(doc.meta.referenceKey, "OLD-0041");
+  assert.equal(doc.meta.subtitle, "Loan OLD-0041");
 });

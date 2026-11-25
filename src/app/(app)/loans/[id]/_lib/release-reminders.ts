@@ -54,8 +54,9 @@ export function insuranceReprintReminder(
 
 /**
  * The co-makers linked to the loan after `print`: the server's `added_at` is
- * later than the print. A link with no time (made before it was recorded, or a
- * row sent without the member's details) isn't counted.
+ * later than the print. A link with no time (made before it was recorded) isn't
+ * counted. A short row, sent to a caller who can't read the co-maker's details,
+ * carries `added_at` too since round 6, so it counts the same way.
  */
 function addedAfter(coMakers: LoanCoMaker[] | undefined, print: PrintedDocument): LoanCoMaker[] {
   const printed = readAt(print.printed_at);

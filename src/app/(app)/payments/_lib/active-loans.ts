@@ -204,6 +204,11 @@ export interface ActiveLoan {
    * zero), which decides where a payment's excess goes; null when not sent.
    */
   has_build_up: boolean | null;
+  /**
+   * An imported loan's as-of date (`Y-m-d`): its file counts payments up to
+   * this day, so a payment on it or before is refused. Null on any other loan.
+   */
+  payments_counted_until: string | null;
 }
 
 /** The schedule row fields the penalty note reads, as sent. */
@@ -263,6 +268,7 @@ export function mapLoanToActiveLoan(loan: Loan): ActiveLoan {
     is_one_month_term: typeof l.is_one_month_term === "boolean" ? l.is_one_month_term : null,
     member_status: typeof l.borrower?.status === "string" ? l.borrower.status : null,
     has_build_up: loanHasBuildUp(l.scb_amount),
+    payments_counted_until: typeof l.payments_counted_until === "string" ? l.payments_counted_until : null,
   };
 }
 

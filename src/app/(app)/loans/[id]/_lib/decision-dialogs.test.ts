@@ -65,7 +65,8 @@ test("a reason or remark may be as long as the server keeps (max:1000)", () => {
 
 test("the loan page asks in app dialogs, never the browser's prompt box", () => {
   assert.doesNotMatch(page, /\bprompt\(/);
-  assert.equal(page.match(/<ReasonDialog\b/g)?.length, 2);
+  // Void, approve or reject, and (round 6) cancelling an approved adjustment.
+  assert.equal(page.match(/<ReasonDialog\b/g)?.length, 3);
   assert.match(page, /\{\.\.\.voidPaymentDialog\(/);
   assert.match(page, /\{\.\.\.adjustmentDecisionDialog\(/);
   assert.equal(page.match(/maxLength=\{LOAN_DECISION_NOTE_MAX\}/g)?.length, 2);

@@ -88,6 +88,21 @@ const manilaStamp = new Intl.DateTimeFormat("en-CA", {
 });
 
 /**
+ * The number a Statement of Account's reference carries: the loan's LN-
+ * number, else, on a loan migrated in by Data Import, the file's own Loan No.
+ * (`external_loan_no`). The importer leaves an imported loan's LN- number empty
+ * on purpose (the release sequence reads it), so its reference used to carry no
+ * loan at all (finish run round 6). Undefined when the statement sent neither.
+ */
+export function statementReferenceKey(loan: Record<string, unknown> | null | undefined): string | undefined {
+  for (const key of ["loan_account_number", "account_number", "external_loan_no"]) {
+    const value = loan?.[key];
+    if (typeof value === "string" && value.trim() !== "") return value.trim();
+  }
+  return undefined;
+}
+
+/**
  * `AGE-20260806-0915` — prefix, generation date, generation time, in Philippine
  * time whatever the computer is set to. A document about one record has that
  * record and the seconds in it too (`SOA-LN-000004-20261105-091207`): three

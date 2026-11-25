@@ -24,6 +24,7 @@ import type {
 } from "./types";
 import type { LoanStatus } from "@/types/loan";
 import { paidBeforeImportNote } from "@/lib/paid-before-import";
+import { statementReferenceKey } from "./report-chrome";
 
 /**
  * Pure payload → ReportDocument builders.
@@ -1373,10 +1374,6 @@ function owedTone(value: unknown): KpiItem["tone"] {
   return (toNumber(value) ?? 0) > 0 ? "negative" : "neutral";
 }
 
-function textOrUndefined(value: unknown): string | undefined {
-  return typeof value === "string" && value !== "" ? value : undefined;
-}
-
 /**
  * The notes under the schedule. The server's own note names what restated or
  * replaced a period. Without it, each period's own note is listed, because a
@@ -1582,13 +1579,13 @@ export function buildStatementOfAccountDoc(raw: unknown): ReportDocument {
     reportId: "statement_of_account",
     meta: {
       title: "Statement of Account",
-      subtitle: pick(loan, ["loan_account_number", "account_number"])
-        ? `Loan ${pick(loan, ["loan_account_number", "account_number"])}`
+      subtitle: statementReferenceKey(loan)
+        ? `Loan ${statementReferenceKey(loan)}`
         : "Schedule, payments, and balance for a single loan",
       asOf: formatValue(pick(obj, ["as_of"]), "date"),
       generatedAt: formatGeneratedAt(),
       org: "",
-      referenceKey: textOrUndefined(pick(loan, ["loan_account_number", "account_number"])),
+      referenceKey: statementReferenceKey(loan),
     },
     sections,
   };
