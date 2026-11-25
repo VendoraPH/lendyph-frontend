@@ -1,27 +1,28 @@
 /**
- * A savings entry paid by bank transfer, GCash or Maya needs the reference of
- * that payment (finish run round 5), as the server checks it
- * (`SavingsReference`): a deposit, a withdrawal, an opening deposit, a time
- * deposit placement, a Member Portal payout, and a payout at closing, at a
- * time deposit's maturity or on its pre-termination (`payout_reference`).
+ * Money coming in by bank transfer, GCash or Maya needs the reference of that
+ * payment (finish run round 5), as the server checks it (`SavingsReference`):
+ * a deposit, an opening deposit (staff's, or a member's new account) and a
+ * time deposit placement. That reference exists before the money is
+ * recorded. Money going out (a withdrawal, a Member Portal payout, a payout
+ * at closing, maturity or pre-termination) doesn't need one: its reference
+ * exists only once the money is sent, which is after any approval, so it
+ * stays optional, and the server still checks one given for duplicates.
  * Cash needs none (a counter receipt; the server numbers a cash time
- * deposit), nor does `savings` (a placement paid from, or a payout into, the
- * member's own savings), nor an opening deposit of ₱0.00 or a full rollover.
- * The words are the server's, so the field reads the same before and after
- * sending. Dependency-free, so it runs under `tsx --test`.
+ * deposit), nor does `savings` (a placement paid from the member's own
+ * savings), nor an opening deposit of ₱0.00. The words are the server's, so
+ * the field reads the same before and after sending. Dependency-free, so it
+ * runs under `tsx --test`.
  */
 
 import type { SavingsMethod } from "@/types";
 
-/** What the reference is for, as the server's message names it. */
-export type SavingsReferenceEntry = "deposit" | "withdrawal" | "opening_deposit" | "time_deposit" | "payout";
+/** The money coming in that the reference is for, as the server's message names it. */
+export type SavingsReferenceEntry = "deposit" | "opening_deposit" | "time_deposit";
 
 const ENTRY_WORDS: Record<SavingsReferenceEntry, string> = {
   deposit: "this deposit",
-  withdrawal: "this withdrawal",
   opening_deposit: "the opening deposit",
   time_deposit: "this time deposit",
-  payout: "this payout",
 };
 
 /** The methods that need a reference, in the words the server's message uses. */
@@ -60,7 +61,20 @@ export function savingsReferenceError(
   return `Enter the ${words} reference for ${ENTRY_WORDS[entry]}.`;
 }
 
-/** A payout's `payout_reference` as sent: the typed reference, or nothing when blank or paid into savings. */
+/**
+ * The counter's rule (Deposit and Withdrawal share a dialog): a deposit by
+ * bank transfer, GCash or Maya needs its reference; a withdrawal never does.
+ */
+export function counterReferenceRule(
+  mode: "deposit" | "withdrawal",
+  method: MethodChoice,
+  reference: string,
+): { needed: boolean; problem: string | null } {
+  if (mode === "withdrawal") return { needed: false, problem: null };
+  return { needed: referenceNeeded(method), problem: savingsReferenceError(method, reference, "deposit") };
+}
+
+/** A payout's optional `payout_reference` as sent: the typed reference, or nothing when blank or paid into savings. */
 export function payoutReferenceField(method: MethodChoice, reference: string): { payout_reference?: string } {
   const typed = reference.trim();
   return method === "savings" || typed === "" ? {} : { payout_reference: typed };

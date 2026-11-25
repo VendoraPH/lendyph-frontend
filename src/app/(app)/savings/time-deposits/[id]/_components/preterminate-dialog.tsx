@@ -22,7 +22,6 @@ import type { SavingsMethod, TimeDeposit } from "@/types";
 import { FormField } from "../../../_components/field";
 import { OptionSelect } from "../../../_components/option-select";
 import { defaultPayoutAccount, payoutFields, payoutOptions } from "../../_lib/settle-form";
-import { referenceLabel, referenceNeeded, savingsReferenceError } from "../../../_lib/savings-reference";
 import { serverFieldError } from "../../../_lib/step-errors";
 import { PayoutAccountField, usePayoutAccounts } from "./payout-account-field";
 
@@ -63,13 +62,9 @@ export function PreterminateDialog({ open, deposit, onOpenChange, onDone }: Pret
   const accounts = usePayoutAccounts(deposit, open && intoSavings);
   const payoutAccount = accountId || defaultPayoutAccount(deposit, accounts.offered);
   const accountError = intoSavings && !payoutAccount ? "Choose the savings account to pay into." : null;
-  // Paid out by bank transfer, GCash or Maya, it needs its reference (round 5).
-  const needsReference = referenceNeeded(method);
-  const referenceProblem = savingsReferenceError(method, reference, "payout");
-
   function submit() {
     setSubmitted(true);
-    if (reasonError || !dateOk || accountError || referenceProblem) return;
+    if (reasonError || !dateOk || accountError) return;
     const body = { date, reason: reason.trim(), ...payoutFields(method, payoutAccount, reference) };
     run((key) => timeDepositService.preterminate(deposit.id, body, key))
       ?.then((result) => {
@@ -113,15 +108,11 @@ export function PreterminateDialog({ open, deposit, onOpenChange, onDone }: Pret
               />
             </FormField>
           </div>
+          {/* Optional: a payout's reference exists only once the money is sent (round 5). */}
           {!intoSavings && (
-            <FormField
-              id="pt-ref"
-              label={referenceLabel(needsReference)}
-              error={referenceError ?? (submitted ? referenceProblem : null)}
-            >
+            <FormField id="pt-ref" label="Reference (optional)" error={referenceError}>
               <Input
                 id="pt-ref"
-                aria-required={needsReference}
                 value={reference}
                 maxLength={100}
                 onChange={(e) => {

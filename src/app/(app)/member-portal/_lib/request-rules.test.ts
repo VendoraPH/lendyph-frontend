@@ -91,19 +91,13 @@ test("a 409 reloads the request, so its status and buttons are current", () => {
   assert.equal(reloadAfterFailure(new Error("offline")), false);
 });
 
-test("a payout by bank transfer, GCash or Maya needs its reference, in the server's words; cash doesn't", () => {
-  const gcash = form({ money: { date: "2026-11-11", method: "gcash", reference: " " } });
-  assert.equal(decisionReferenceNeeded("savings_withdrawal", gcash), true);
-  assert.equal(decisionReferenceProblem("savings_withdrawal", gcash), "Enter the GCash reference for this payout.");
-  assert.equal(
-    decisionReferenceProblem("savings_withdrawal", form({ money: { date: "2026-11-11", method: "bank_transfer", reference: "" } })),
-    "Enter the bank transfer reference for this payout.",
-  );
-  assert.equal(decisionReferenceProblem("savings_withdrawal", form({ money: { date: "2026-11-11", method: "maya", reference: "MY-1" } })), null);
-  assert.equal(decisionReferenceNeeded("savings_withdrawal", form()), false);
-  assert.equal(decisionReferenceProblem("savings_withdrawal", form()), null);
-  // The other problems stay as they were: the reference has its own check, on its field.
-  assert.deepEqual(decisionProblems("savings_withdrawal", gcash), []);
+test("a payout's reference is optional by every method: it exists only once the money is sent", () => {
+  for (const method of ["cash", "bank_transfer", "gcash", "maya"] as const) {
+    const blank = form({ money: { date: "2026-11-11", method, reference: " " } });
+    assert.equal(decisionReferenceNeeded("savings_withdrawal", blank), false, method);
+    assert.equal(decisionReferenceProblem("savings_withdrawal", blank), null, method);
+    assert.deepEqual(decisionProblems("savings_withdrawal", blank), [], method);
+  }
 });
 
 test("a new account's non-cash opening deposit needs its reference; nothing to deposit, or another decision, needs none", () => {
@@ -117,9 +111,9 @@ test("a new account's non-cash opening deposit needs its reference; nothing to d
 
 test("the server's refusal of the reference shows on the field, from the approval's own key or the teller's", () => {
   const refused = (key: string, message: string) => ({ response: { status: 422, data: { message, errors: { [key]: [message] } } } });
-  const missing = "Enter the GCash reference for this payout.";
+  const tooLong = "The reference can be at most 64 characters.";
   const taken = 'Reference "GC-1" is already on record for another GCash transaction. Check the reference and enter the right one.';
-  assert.equal(decisionReferenceRefusal("savings_withdrawal", refused("payout.reference", missing)), missing);
+  assert.equal(decisionReferenceRefusal("savings_withdrawal", refused("payout.reference", tooLong)), tooLong);
   assert.equal(decisionReferenceRefusal("savings_withdrawal", refused("reference", taken)), taken);
   assert.equal(
     decisionReferenceRefusal("savings_opening", refused("deposit.reference", "Enter the GCash reference for the opening deposit.")),

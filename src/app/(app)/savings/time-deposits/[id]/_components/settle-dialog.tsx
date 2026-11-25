@@ -21,7 +21,6 @@ import type { MaturityInstruction, SavingsMethod, TimeDeposit } from "@/types";
 import { FormField } from "../../../_components/field";
 import { OptionSelect } from "../../../_components/option-select";
 import { MATURITY_INSTRUCTION_OPTIONS } from "../../../_lib/time-deposit-rules";
-import { referenceLabel, referenceNeeded, savingsReferenceError } from "../../../_lib/savings-reference";
 import { serverFieldError } from "../../../_lib/step-errors";
 import { defaultPayoutAccount, payoutOptions, postMaturityLabel, settleBody } from "../../_lib/settle-form";
 import { PayoutAccountField, usePayoutAccounts } from "./payout-account-field";
@@ -66,14 +65,12 @@ export function SettleDialog({ open, deposit, onOpenChange, onSettled }: SettleD
   // The placement's own payout account is picked until staff choose another.
   const payoutAccount = accountId || defaultPayoutAccount(deposit, accounts.offered);
   const accountError = intoSavings && !payoutAccount ? "Choose the savings account to pay into." : null;
-  // Paid out over the counter by bank transfer, GCash or Maya, it needs its reference (round 5).
+  // Paid out over the counter, its reference is optional: it exists only once the money is sent (round 5).
   const overTheCounter = paysOut && !intoSavings;
-  const needsReference = referenceNeeded(method, paysOut);
-  const referenceProblem = savingsReferenceError(method, reference, "payout", paysOut);
 
   function submit() {
     setSubmitted(true);
-    if (!date || tooEarly || accountError || referenceProblem) return;
+    if (!date || tooEarly || accountError) return;
     const body = settleBody(date, action, method, next, payoutAccount, reference);
     run((key) => timeDepositService.settle(deposit.id, body, key))
       ?.then((result) => {
@@ -146,14 +143,9 @@ export function SettleDialog({ open, deposit, onOpenChange, onSettled }: SettleD
             )}
           </div>
           {overTheCounter && (
-            <FormField
-              id="st-ref"
-              label={referenceLabel(needsReference)}
-              error={referenceError ?? (submitted ? referenceProblem : null)}
-            >
+            <FormField id="st-ref" label="Reference (optional)" error={referenceError}>
               <Input
                 id="st-ref"
-                aria-required={needsReference}
                 value={reference}
                 maxLength={100}
                 onChange={(e) => {

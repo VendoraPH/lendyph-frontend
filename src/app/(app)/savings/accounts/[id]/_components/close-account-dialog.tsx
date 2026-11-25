@@ -23,12 +23,7 @@ import type { SavingsAccount, SavingsMethod } from "@/types";
 import { FormField } from "../../../_components/field";
 import { OptionSelect } from "../../../_components/option-select";
 import { PAYMENT_METHOD_OPTIONS } from "../../../_lib/savings-rules";
-import {
-  payoutReferenceField,
-  referenceLabel,
-  referenceNeeded,
-  savingsReferenceError,
-} from "../../../_lib/savings-reference";
+import { payoutReferenceField } from "../../../_lib/savings-reference";
 import { serverFieldError } from "../../../_lib/step-errors";
 
 interface CloseAccountDialogProps {
@@ -43,8 +38,8 @@ type PayoutMethod = Exclude<SavingsMethod, "savings">;
 /**
  * Close an account on the server's closing quote: the accrued interest is
  * credited first, then the balance is paid out. Above the approval amount the
- * close waits for approval (202). A payout by bank transfer, GCash or Maya
- * needs its reference (finish run round 5).
+ * close waits for approval (202). The payout's reference is optional: it
+ * exists only once the money is sent (finish run round 5).
  */
 export function CloseAccountDialog({ open, account, onOpenChange, onClosed }: CloseAccountDialogProps) {
   const [date, setDate] = useState("");
@@ -74,13 +69,11 @@ export function CloseAccountDialog({ open, account, onOpenChange, onClosed }: Cl
   const quote = useApiResource(fetchQuote, open);
 
   const reasonError = reason.trim() ? null : "Say why the account is being closed.";
-  const needsReference = referenceNeeded(method);
-  const referenceProblem = savingsReferenceError(method, reference, "payout");
   const canClose = quote.data?.can_close === true;
 
   function submit() {
     setSubmitted(true);
-    if (reasonError || !date || !canClose || referenceProblem) return;
+    if (reasonError || !date || !canClose) return;
     const body = { date, reason: reason.trim(), payout_method: method, ...payoutReferenceField(method, reference) };
     run((key) => savingsService.close(account.id, body, key))
       ?.then((result) => {
@@ -150,14 +143,9 @@ export function CloseAccountDialog({ open, account, onOpenChange, onClosed }: Cl
                 options={PAYMENT_METHOD_OPTIONS}
               />
             </FormField>
-            <FormField
-              id="cl-ref"
-              label={referenceLabel(needsReference)}
-              error={referenceError ?? (submitted ? referenceProblem : null)}
-            >
+            <FormField id="cl-ref" label="Reference (optional)" error={referenceError}>
               <Input
                 id="cl-ref"
-                aria-required={needsReference}
                 value={reference}
                 maxLength={64}
                 onChange={(e) => {

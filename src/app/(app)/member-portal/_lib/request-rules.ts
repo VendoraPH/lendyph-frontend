@@ -84,22 +84,25 @@ export function decisionProblems(type: PortalRequestType, form: DecisionForm, am
   return problems;
 }
 
-/** What an approval's reference is for, and whether money moves; null when the decision takes none. */
+/**
+ * What an approval's required reference is for, and whether money moves; null
+ * when it needs none. Only money coming in needs one: a new account's opening
+ * deposit. A payout's reference exists only once the money is sent (after a
+ * second approval above tier 1), so it stays optional.
+ */
 function referenceFor(
   type: PortalRequestType,
   form: DecisionForm,
   amount: string | null,
 ): { entry: SavingsReferenceEntry; paid: boolean } | null {
   const money = form.decision === "approve" ? moneyDetailsFor(type) : null;
-  if (money === "payout") return { entry: "payout", paid: true };
-  if (money === "deposit") return { entry: "opening_deposit", paid: aboveZero(amount) };
-  return null;
+  return money === "deposit" ? { entry: "opening_deposit", paid: aboveZero(amount) } : null;
 }
 
 /**
- * Whether the approval needs a reference (finish run round 5): a payout, or a
- * new account's opening deposit above ₱0.00, paid by bank transfer, GCash or
- * Maya. Cash needs none.
+ * Whether the approval needs a reference (finish run round 5): a new
+ * account's opening deposit above ₱0.00 paid by bank transfer, GCash or Maya.
+ * Cash needs none, and a payout's is optional.
  */
 export function decisionReferenceNeeded(type: PortalRequestType, form: DecisionForm, amount: string | null = null): boolean {
   const subject = referenceFor(type, form, amount);
@@ -114,9 +117,9 @@ export function decisionReferenceProblem(type: PortalRequestType, form: Decision
 
 /**
  * The server's refusal of the reference, for its field: from the approval's
- * own key (`payout.reference`, `deposit.reference`: a blank one) or the
- * savings teller's (`reference`: one already on record, or held). Null for
- * any other answer.
+ * own key (`deposit.reference` blank, or either key too long) or the savings
+ * teller's (`reference`: one already on record, or held). Null for any other
+ * answer.
  */
 export function decisionReferenceRefusal(type: PortalRequestType, err: unknown): string | null {
   const money = moneyDetailsFor(type);

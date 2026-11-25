@@ -32,7 +32,7 @@ import {
 } from "@/lib/savings/withdrawal-fee";
 import type { SavingsWithdrawalRule } from "@/types/savings-servicing";
 import { PAYMENT_METHOD_OPTIONS, outflowHoldNote } from "../../../_lib/savings-rules";
-import { referenceLabel, referenceNeeded, savingsReferenceError } from "../../../_lib/savings-reference";
+import { counterReferenceRule, referenceLabel } from "../../../_lib/savings-reference";
 import { serverFieldError } from "../../../_lib/step-errors";
 import { printSavingsReceipt } from "../_lib/print-receipt";
 
@@ -84,9 +84,9 @@ export function TransactionDialog({ mode, account, onOpenChange, onPosted }: Tra
   const amount = parseMoneyInput(amountRaw);
   const amountError = amount.ok ? null : amount.message;
   const dateError = date ? null : "Enter the date.";
-  // Bank transfer, GCash and Maya need their reference, in the server's words (round 5).
-  const needsReference = referenceNeeded(method);
-  const referenceProblem = savingsReferenceError(method, reference, mode ?? "deposit");
+  // A deposit by bank transfer, GCash or Maya needs its reference, in the server's words;
+  // a withdrawal's is optional, since it exists only once the money is sent (round 5).
+  const { needed: needsReference, problem: referenceProblem } = counterReferenceRule(mode ?? "deposit", method, reference);
   const copy = COPY[mode ?? "deposit"];
 
   function submit() {

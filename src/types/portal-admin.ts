@@ -238,7 +238,7 @@ export interface PortalMoneyDetails {
   reference: string;
 }
 
-/** An approval's `reference` is required for bank transfer, GCash and Maya (a deposit only above ₱0.00; finish run round 5). */
+/** A new account's `deposit.reference` is required for bank transfer, GCash and Maya above ₱0.00; a payout's is optional (finish run round 5). */
 export interface PortalDecisionInput {
   decision: PortalRequestDecision;
   message?: string;
