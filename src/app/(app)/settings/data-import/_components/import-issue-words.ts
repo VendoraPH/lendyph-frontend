@@ -90,6 +90,9 @@ export const ISSUE_CATEGORY_WORDS: Readonly<Record<string, string>> = {
   schedule_not_reconstructable: "Payment schedule can't be rebuilt",
   out_of_product_bounds: "Outside the loan product's limits",
 
+  // A loan's own number, refused rather than cut short
+  loan_no_too_long: "Loan number too long",
+
   // A share capital entry
   account_no_too_long: "Account number or member ID too long",
   reference_number_too_long: "Reference number too long",

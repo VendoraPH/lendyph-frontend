@@ -43,6 +43,7 @@ import {
 } from "@/lib/csv-parse";
 import { readCsvFile, type CsvFileNotice } from "@/lib/csv-read";
 import { todayISO } from "@/lib/format";
+import { loanFieldProblems } from "@/lib/import-loan-fields";
 import { memberFieldProblems } from "@/lib/import-member-fields";
 import { shareCapitalFieldProblems, shareCapitalRepeats } from "@/lib/import-share-capital";
 import {
@@ -556,10 +557,10 @@ interface RowCheckTotals {
  *  - anything `fieldSizeProblems` marks `warning`. The severity is decided
  *    there, by what the SERVER will do with the value, and re-deciding it at
  *    the call site is how a repairable value lands in a failure total.
- *  - a member cell the server imports blank: a blank one the workbook asks for
- *    (a birthdate), or a gender or civil status it doesn't recognise. Only the
- *    cells it refuses a row for are errors (`refusedWhenBlank`,
- *    `refusedWhenUnrecognised`).
+ *  - a cell the server imports blank: a member's blank one the workbook asks
+ *    for (a birthdate), or a gender or civil status it doesn't recognise, and
+ *    a loan's blank Purpose or Loan Product. Only the cells it refuses a row
+ *    for are errors (`refusedWhenBlank`, `refusedWhenUnrecognised`).
  */
 export function checkRows(
   rows: readonly CsvRecord[],
@@ -661,7 +662,7 @@ export function checkRows(
         category: "required",
         message: missing.refused
           ? `${missing.label} is blank, and this row cannot be imported without it.`
-          : `${missing.label} is blank. The member will be imported without it; add it later on their page.`,
+          : `${missing.label} is blank. ${missing.whenBlank ?? "The member will be imported without it; add it later on their page."}`,
         value: null,
       });
     }
@@ -731,6 +732,18 @@ export function checkRows(
             value: (row.membership_number ?? "").trim(),
           });
         }
+      }
+    }
+
+    if (context.shape === "loans") {
+      for (const problem of loanFieldProblems(row)) {
+        add(line, reference, {
+          column: problem.label,
+          severity: problem.severity,
+          category: problem.category,
+          message: problem.message,
+          value: problem.raw,
+        });
       }
     }
 

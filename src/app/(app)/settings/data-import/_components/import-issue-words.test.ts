@@ -47,6 +47,8 @@ const BACKEND_CODES = [
   "member_withdrawn", "not_a_member", "reference_number_too_long", "share_capital_needs_permission",
   "transaction_date_future", "transaction_date_implausible", "transaction_type_invalid",
   "transaction_type_required", "withdrawal_exceeds_balance",
+  // A Loan No. longer than 20 is refused, never cut (finish run round 4).
+  "loan_no_too_long",
 ];
 
 test("every code the backend can send has its words", () => {

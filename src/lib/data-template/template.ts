@@ -8,6 +8,7 @@ import {
 } from "@/constants";
 import {
   CUSTOMER_COLUMNS,
+  LOAN_COLUMNS,
   SHARE_CAPITAL_COLUMNS,
   TRANSACTION_TYPE_OPTIONS,
   type ImportColumn,
@@ -20,13 +21,14 @@ import type {
 } from "./types";
 
 /**
- * `public/Lendy CSV Format.xlsm`, transcribed (the Loans sheet; the Members
- * sheet comes from the import's own columns, below).
+ * The client's Lendy CSV Format workbook, as data: its sheets read the
+ * import's own column tables (`@/lib/import-schema`), so neither this page nor
+ * the blank workbook it downloads (`./workbook`) can drift from what the
+ * import reads.
  *
  * `required` is the workbook's own colour coding — blue (#00B0F0) required,
- * yellow (#FFFF00) optional — read off the header row. If the workbook is ever
- * re-issued, this file is what has to move with it, and the download button
- * still serves the real thing either way.
+ * yellow (#FFFF00) optional — read off its header row, and kept even where the
+ * import takes a blank (a member's birthdate, a loan's Purpose).
  */
 
 /**
@@ -84,75 +86,39 @@ function isDictionaryKey(key: string): key is DictionaryKey {
 
 const REQUIRED_WHEN_MARRIED = "Required when Civil Status is Married";
 
-/**
- * The Members sheet is the members import's own column table, read from
- * `CUSTOMER_COLUMNS` rather than transcribed, so the template can't drift from
- * what the importer reads: the workbook's 22 columns, then the four it lacked
- * (Date Hired and the membership columns), in the import's order and under the
- * import's labels. A conditional column (the spouse block) is painted required
- * and says when, as the workbook does.
- */
-const MEMBER_COLUMNS: TemplateColumn[] = CUSTOMER_COLUMNS.map(
-  (column: ImportColumn): TemplateColumn => {
-    const conditional = column.requiredWhen !== undefined;
-    const dictionary = isDictionaryKey(column.key) ? column.key : undefined;
-    const hint =
-      column.type === "date"
-        ? "YYYY-MM-DD"
-        : column.defaultWhenBlank
-          ? `Blank means ${column.defaultWhenBlank}`
-          : undefined;
-    return {
-      id: column.key,
-      header: column.label,
-      required: column.required || conditional,
-      ...(conditional && { requiredWhen: REQUIRED_WHEN_MARRIED }),
-      ...(dictionary && { dictionary }),
-      ...(hint && { hint }),
-    };
-  }
-);
+/** A column's hint by its type: a date's format, or what a blank reads as. */
+function typeHint(column: ImportColumn): string | undefined {
+  if (column.type === "date") return "YYYY-MM-DD";
+  return column.defaultWhenBlank ? `Blank means ${column.defaultWhenBlank}` : undefined;
+}
 
-const LOAN_COLUMNS: TemplateColumn[] = [
-  { id: "account_no", header: "Account No.", required: true },
-  { id: "loan_no", header: "Loan No.", required: true },
-  { id: "loan_amount", header: "Loan Amount", required: true },
-  { id: "loan_balance", header: "Loan Balance", required: true },
-  { id: "interest_rate", header: "Interest Rate", required: true },
-  { id: "interest_amount", header: "Interest Amount", required: true },
-  { id: "interest_balance", header: "Interest Balance", required: true },
-  { id: "purpose", header: "Purpose", required: true },
-  { id: "loan_product", header: "Loan Product", required: true },
-  { id: "term_months", header: "Term in Months", required: true },
-  {
-    id: "payment_frequency",
-    header: "Payment Frequency",
-    required: true,
-    dictionary: "payment_frequency",
-  },
-  {
-    id: "interest_type",
-    header: "Interest Type",
-    required: true,
-    dictionary: "interest_type",
-  },
-  {
-    id: "date_released",
-    header: "Date Released",
-    required: true,
-    hint: "YYYY-MM-DD",
-  },
-  {
-    id: "maturity_date",
-    header: "Maturity Date",
-    required: true,
-    hint: "YYYY-MM-DD",
-  },
-  { id: "processing_fee", header: "Processing Fee", required: false },
-  { id: "service_fee", header: "Service Fee", required: false },
-  { id: "other_fee_detail", header: "Other Fee Detail", required: false },
-  { id: "other_fee_amount", header: "Other Fee Amount", required: false },
-];
+/**
+ * One import column as a template column: its key and label, the workbook's
+ * colour, its dictionary and a hint. A conditional column (the spouse block)
+ * is painted required and says when, as the workbook does.
+ */
+function templateColumn(column: ImportColumn, hint = typeHint(column)): TemplateColumn {
+  const conditional = column.requiredWhen !== undefined;
+  const dictionary = isDictionaryKey(column.key) ? column.key : undefined;
+  return {
+    id: column.key,
+    header: column.label,
+    required: column.required || conditional,
+    ...(conditional && { requiredWhen: REQUIRED_WHEN_MARRIED }),
+    ...(dictionary && { dictionary }),
+    ...(hint && { hint }),
+  };
+}
+
+/**
+ * The Members sheet is the members import's own column table: the workbook's
+ * 22 columns, then the four it lacked (Date Hired and the membership columns),
+ * in the import's order and under the import's labels.
+ */
+const MEMBER_COLUMNS: TemplateColumn[] = CUSTOMER_COLUMNS.map((column) => templateColumn(column));
+
+/** The Loans sheet is the loans import's own column table, likewise. */
+const LOAN_TEMPLATE_COLUMNS: TemplateColumn[] = LOAN_COLUMNS.map((column) => templateColumn(column));
 
 /**
  * What each share capital column takes, in a few words: the import's own
@@ -173,18 +139,8 @@ const SHARE_CAPITAL_HINTS: Partial<Record<string, string>> = {
  * `CUSTOMER_COLUMNS`, so it can't drift from what the importer reads. The
  * workbook has no such sheet (finish run round 2, decision 13).
  */
-const SHARE_CAPITAL_TEMPLATE_COLUMNS: TemplateColumn[] = SHARE_CAPITAL_COLUMNS.map(
-  (column: ImportColumn): TemplateColumn => {
-    const dictionary = isDictionaryKey(column.key) ? column.key : undefined;
-    const hint = SHARE_CAPITAL_HINTS[column.key];
-    return {
-      id: column.key,
-      header: column.label,
-      required: column.required,
-      ...(dictionary && { dictionary }),
-      ...(hint && { hint }),
-    };
-  }
+const SHARE_CAPITAL_TEMPLATE_COLUMNS: TemplateColumn[] = SHARE_CAPITAL_COLUMNS.map((column) =>
+  templateColumn(column, SHARE_CAPITAL_HINTS[column.key])
 );
 
 /** The sheets, with no rows. `createDraft` is what gives them one to type in. */
@@ -202,7 +158,7 @@ export const TEMPLATE_SHEETS: TemplateSheet[] = [
     name: "Loans",
     description:
       "One row per loan account. Every Account No. here must also exist on Members.",
-    columns: LOAN_COLUMNS,
+    columns: LOAN_TEMPLATE_COLUMNS,
     rows: [],
   },
   {
@@ -250,14 +206,3 @@ export const TEMPLATE_GUIDELINES: TemplateGuideline[] = [
   { text: "Blue fields indicate required data." },
   { text: "Yellow fields indicate optional data." },
 ];
-
-/**
- * The untouched workbook, served straight from `public/`. Kept beside the
- * transcription so the two can never drift apart silently — if the filename
- * changes, this is the one place it changes.
- */
-export const TEMPLATE_FILE = {
-  /** URL-encoded: the filename has spaces. */
-  url: "/Lendy%20CSV%20Format.xlsm",
-  filename: "Lendy CSV Format.xlsm",
-} as const;

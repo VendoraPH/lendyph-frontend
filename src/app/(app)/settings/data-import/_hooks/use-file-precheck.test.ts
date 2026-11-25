@@ -229,7 +229,7 @@ test("a row of the wrong width is reported once, as a whole-row problem", () => 
 
 test("an unrecognised gender or civil status warns that it will be imported blank, and quotes the options", () => {
   const gender = [...CUSTOMER];
-  gender[6] = "Lalake";
+  gender[6] = "Other";
   const civil = [...CUSTOMER];
   civil[0] = "2019-00102";
   civil[7] = "Live-in";
@@ -243,7 +243,7 @@ test("an unrecognised gender or civil status warns that it will be imported blan
       "Gender",
       "warning",
       "value",
-      'Gender "Lalake" isn\'t one the import recognises, so it will be imported blank; add it later on the member\'s page. Expected one of: Male, Female.',
+      'Gender "Other" isn\'t one the import recognises, so it will be imported blank; add it later on the member\'s page. Expected one of: Male, Female.',
     ],
     [
       "Civil Status",
@@ -254,10 +254,19 @@ test("an unrecognised gender or civil status warns that it will be imported blan
   ]);
 });
 
+test("Lalaki, Lalake and Babae read as a gender, as the server reads them, and raise nothing", () => {
+  for (const spelling of ["Lalaki", "LALAKE", "babae"]) {
+    const row = [...CUSTOMER];
+    row[6] = spelling;
+
+    assert.deepEqual(checkRows(customerRows([row]), CUSTOMER_CONTEXT).issues, [], spelling);
+  }
+});
+
 test("a gender or civil status the server imports blank warns, even a spelling a reader would know", () => {
   const cases: Array<[number, string, string]> = [
-    [6, "Gender", "Lalaki"],
-    [6, "Gender", "Babae"],
+    [6, "Gender", "Lalakii"],
+    [6, "Gender", "Babai"],
     [7, "Civil Status", "Maried"],
     [7, "Civil Status", "Marrried"],
     [7, "Civil Status", "Seperated"],
@@ -294,6 +303,85 @@ test("a duplicate identifier is a warning that points at the first row", () => {
   assert.equal(dupes[0].line, 2);
   assert.match(dupes[0].message, /already on line 1/);
   assert.equal(result.errorCount, 0);
+});
+
+// ---------------------------------------------------------------------------
+// The loans file follows the server (finish run round 4)
+// ---------------------------------------------------------------------------
+
+/** One loans row with the given cells changed, checked on its own. */
+function checkLoan(changes: Record<number, string>) {
+  return checkRows(customerRows([LOAN.map((cell, index) => changes[index] ?? cell)]), LOANS_CONTEXT);
+}
+
+/** Each issue as [column, severity, message]. */
+function described(result: ReturnType<typeof checkRows>) {
+  return result.issues.map((issue) => [issue.column, issue.severity, issue.message]);
+}
+
+test("a complete loans row raises nothing", () => {
+  assert.deepEqual(checkLoan({}).issues, []);
+});
+
+test("a blank Purpose or Loan Product warns and the loan imports, as on the server", () => {
+  const purpose = checkLoan({ 7: "" });
+  assert.equal(purpose.failingRows, 0);
+  assert.deepEqual(described(purpose), [["Purpose", "warning", "Purpose is blank. The loan will be imported with no purpose."]]);
+
+  const product = checkLoan({ 8: "  " });
+  assert.equal(product.failingRows, 0);
+  assert.deepEqual(described(product), [
+    ["Loan Product", "warning", "Loan Product is blank. The loan will still import: on the Processing step, choose a product for the loans with no product named."],
+  ]);
+
+  // Any other blank required cell still refuses the row.
+  const amount = checkLoan({ 2: "" });
+  assert.equal(amount.failingRows, 1);
+  assert.deepEqual(described(amount), [["Loan Amount", "error", "Loan Amount is blank, and this row cannot be imported without it."]]);
+});
+
+test("a Loan No. longer than 20 characters can't be imported; 20 can", () => {
+  assert.deepEqual(checkLoan({ 1: "LN-2023-ABCDEFGHIJKL" }).issues, []);
+
+  const long = checkLoan({ 1: "LN-2023-ABCDEFGHIJKLM" });
+  assert.equal(long.failingRows, 1);
+  assert.deepEqual(described(long), [["Loan No.", "error", "Loan No. is 21 characters; this field holds 20."]]);
+});
+
+test("a Purpose longer than 500 characters warns that the import keeps the first 500", () => {
+  assert.deepEqual(checkLoan({ 7: "p".repeat(500) }).issues, []);
+
+  const long = checkLoan({ 7: "p".repeat(1000) });
+  assert.equal(long.failingRows, 0);
+  assert.deepEqual(described(long), [["Purpose", "warning", "Purpose is 1000 characters. The import keeps the first 500."]]);
+});
+
+test("Term in Months is a whole number of months from 1 to 120, else the row can't be imported", () => {
+  for (const term of ["1", "120", " 12 ", "006"]) {
+    assert.deepEqual(checkLoan({ 9: term }).issues, [], term);
+  }
+  for (const term of ["0", "121", "240"]) {
+    const result = checkLoan({ 9: term });
+    assert.equal(result.failingRows, 1, term);
+    assert.deepEqual(described(result), [["Term in Months", "error", `Term in Months "${term}" is outside 1 to 120 months, the terms the import takes.`]], term);
+  }
+  for (const term of ["12.5", "12.0", "-6", "₱12", "12 months", "twelve"]) {
+    const result = checkLoan({ 9: term });
+    assert.equal(result.failingRows, 1, term);
+    assert.deepEqual(described(result), [["Term in Months", "error", `Term in Months "${term}" isn't a whole number of months.`]], term);
+  }
+});
+
+test("a payment frequency or interest type the server doesn't read can't be imported, and names the ones it takes", () => {
+  assert.deepEqual(checkLoan({ 10: "Bi-Weekly", 11: "Straight (Fixed)" }).issues, []);
+  assert.deepEqual(checkLoan({ 10: "UPON MATURITY", 11: "Upon Maturity" }).issues, []);
+
+  const result = checkLoan({ 10: "Fortnightly", 11: "Reducing" });
+  assert.equal(result.failingRows, 1);
+  assert.deepEqual(described(result), [
+    ["Payment Frequency", "error", '"Fortnightly" is not a value Payment Frequency accepts. Expected one of: Daily, Weekly, Bi-Weekly, Semi-Monthly, Monthly, Upon Maturity.'],
+    ["Interest Type", "error", '"Reducing" is not a value Interest Type accepts. Expected one of: Straight (Fixed), Diminishing, Upon Maturity.'],
+  ]);
 });
 
 // ---------------------------------------------------------------------------
@@ -740,7 +828,7 @@ test("the row total is the complete parse even when checks stop at the ceiling",
 test("a members file with only these warnings isn't counted as failing, and nothing holds it up", () => {
   const changes: Array<Record<number, string>> = [
     { 0: "2019-00201", 5: "" }, // Birthdate blank
-    { 0: "2019-00202", 6: "Lalake" }, // a gender the server doesn't recognise
+    { 0: "2019-00202", 6: "Other" }, // a gender the server doesn't recognise
     { 0: "2019-00203", 17: "", 19: "" }, // married, spouse names blank
     { 0: "2019-00204", 9: "", 13: "" }, // email and Province blank
   ];

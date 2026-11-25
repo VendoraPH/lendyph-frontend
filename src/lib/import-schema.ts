@@ -24,7 +24,7 @@
 import {
   CIVIL_STATUS_OPTIONS,
   GENDER_OPTIONS,
-  INTEREST_TYPE_OPTIONS,
+  INTEREST_METHOD_LABELS,
   MEMBER_TYPE_OPTIONS,
   PAYMENT_FREQUENCY_OPTIONS,
   SUFFIX_OPTIONS,
@@ -90,16 +90,23 @@ export interface ImportColumn {
   readonly required: boolean;
   /**
    * Whether the SERVER refuses a row that leaves this cell blank. Absent, it
-   * is `required`, as the loans and share capital files hold it.
+   * is `required`, as the share capital file holds it.
    *
-   * Set on the members file, where the two differ: the server refuses a member
-   * row only when Account No., Last Name or First Name is blank
-   * (`CustomerRowNormalizer`), and imports the workbook's other required cells
-   * blank, for staff to complete on the member's page. The pre-check follows
-   * the server: a blank here is an error, and a blank in any other required
-   * cell, or in a married member's spouse cell, is a warning.
+   * Set where the two differ. The server refuses a member row only when
+   * Account No., Last Name or First Name is blank (`CustomerRowNormalizer`),
+   * and imports the workbook's other required cells blank, for staff to
+   * complete on the member's page. It imports a loan with a blank Purpose or
+   * Loan Product (`LoanRowNormalizer`). The pre-check follows the server: a
+   * blank here is an error, and a blank in any other required cell, or in a
+   * married member's spouse cell, is a warning.
    */
   readonly refusedWhenBlank?: boolean;
+  /**
+   * What the import does with this cell left blank, in words, where it takes
+   * the row anyway (`refusedWhenBlank: false`). Absent, the members file's:
+   * the member is imported without it, to complete on their page.
+   */
+  readonly whenBlank?: string;
   /**
    * For a closed vocabulary, whether the SERVER refuses a row whose value it
    * doesn't recognise. Absent, it does (Member Type, Payment Frequency,
@@ -157,11 +164,20 @@ const IF_MARRIED = { field: "civil_status", equals: "married" } as const;
  * Every spelling the server reads for a member's Gender and Civil Status, and
  * the value each stores: `CustomerRowNormalizer::GENDER_MAP` and
  * `::CIVIL_STATUS_MAP`, copied. Anything else is imported blank (finish run
- * round 3), so the members import reads these and no others. The member form
- * and the Data Template keep the app's own lists (`GENDER_OPTIONS`,
+ * round 3), so the members import reads these and no others. Gender reads the
+ * Filipino Lalaki (or Lalake) and Babae too (finish run round 4). The member
+ * form and the Data Template keep the app's own lists (`GENDER_OPTIONS`,
  * `CIVIL_STATUS_OPTIONS`).
  */
-const MEMBER_GENDER_WORDS = { male: "male", m: "male", female: "female", f: "female" } as const;
+const MEMBER_GENDER_WORDS = {
+  male: "male",
+  m: "male",
+  lalaki: "male",
+  lalake: "male",
+  female: "female",
+  f: "female",
+  babae: "female",
+} as const;
 const MEMBER_CIVIL_STATUS_WORDS = {
   single: "single",
   married: "married",
@@ -172,6 +188,51 @@ const MEMBER_CIVIL_STATUS_WORDS = {
   "legally separated": "separated",
   divorced: "divorced",
 } as const;
+
+/**
+ * Every spelling the server reads for a loan's Payment Frequency and Interest
+ * Type, and the value each stores: `LoanRowNormalizer::frequencyMap()`, which
+ * keys each `LoanFrequency` with its words spaced and run together, and
+ * `::INTEREST_TYPE_MAP`, copied. The server refuses a row with any other
+ * (finish run round 4), so the loans import reads these and no others.
+ */
+const LOAN_FREQUENCY_WORDS = {
+  daily: "daily",
+  weekly: "weekly",
+  "bi weekly": "bi_weekly",
+  biweekly: "bi_weekly",
+  "semi monthly": "semi_monthly",
+  semimonthly: "semi_monthly",
+  monthly: "monthly",
+  "upon maturity": "upon_maturity",
+  uponmaturity: "upon_maturity",
+} as const;
+const LOAN_INTEREST_TYPE_WORDS = {
+  "straight fixed": "straight",
+  straight: "straight",
+  fixed: "straight",
+  flat: "straight",
+  diminishing: "diminishing",
+  "diminishing balance": "diminishing",
+  "upon maturity": "upon_maturity",
+} as const;
+
+/**
+ * The interest types a loans file carries, in words: the app's two
+ * (`INTEREST_TYPE_OPTIONS`) and Upon Maturity, which the server imports too.
+ */
+const LOAN_INTEREST_TYPE_OPTIONS: readonly EnumOption[] = Object.entries(INTEREST_METHOD_LABELS).map(
+  ([value, label]) => ({ value, label }),
+);
+
+/**
+ * What the loans import does with a blank Purpose or Loan Product: it takes
+ * the loan (`LoanRowNormalizer`), and a blank product is one of the products
+ * the Processing step maps.
+ */
+const PURPOSE_WHEN_BLANK = "The loan will be imported with no purpose.";
+const LOAN_PRODUCT_WHEN_BLANK =
+  "The loan will still import: on the Processing step, choose a product for the loans with no product named.";
 
 // Numeric limits, named for the role rather than the column type, so the use
 // site reads as the rule it is. All from the migrations and the validation
@@ -188,8 +249,6 @@ const INCOME_CEILING = { max: 99999999.99, decimalPlaces: 2 } as const;
 const PLEDGE_CEILING = { max: 9999999.99, decimalPlaces: 2 } as const;
 /** `decimal(8,4)`. A rate given in basis points overflows this, by design. */
 const RATE = { max: 9999.9999, decimalPlaces: 4 } as const;
-/** Feeds an `unsignedSmallInteger`. Anything past a few hundred is nonsense. */
-const TERM = { max: 65535, decimalPlaces: 0 } as const;
 
 // `required` is the workbook's blue; `refusedWhenBlank` is what the server
 // does with a blank (finish run round 3). Only the three names refuse a row.
@@ -228,22 +287,26 @@ export const CUSTOMER_COLUMNS = [
   { key: "membership_number", label: "Membership Number", required: false, type: "text", maxLength: 30, serverRepair: "member-number" },
 ] as const satisfies readonly ImportColumn[];
 
+// The server's rules (`LoanRowNormalizer`, finish run round 4): a blank Purpose
+// or Loan Product imports (`refusedWhenBlank`); Term in Months and a Purpose
+// past 500 characters are `./import-loan-fields`' to check.
 export const LOAN_COLUMNS = [
   { key: "account_no", label: "Account No.", required: true, type: "text", maxLength: 50 },
-  { key: "loan_no", label: "Loan No.", required: true, type: "text", maxLength: 50 },
+  // Refused past 20, never cut short: a loan number tells one loan from another.
+  { key: "loan_no", label: "Loan No.", required: true, type: "text", maxLength: 20 },
   { key: "loan_amount", label: "Loan Amount", required: true, type: "number", numeric: MONEY },
   { key: "loan_balance", label: "Loan Balance", required: true, type: "number", numeric: MONEY },
   { key: "interest_rate", label: "Interest Rate", required: true, type: "number", numeric: RATE },
   { key: "interest_amount", label: "Interest Amount", required: true, type: "number", numeric: MONEY },
   { key: "interest_balance", label: "Interest Balance", required: true, type: "number", numeric: MONEY },
-  // The only 500 in either file, and the field most likely to hold a sentence.
-  { key: "purpose", label: "Purpose", required: true, type: "text", maxLength: 500 },
+  // No length here: past its 500 the server cuts it, with a warning.
+  { key: "purpose", label: "Purpose", required: true, refusedWhenBlank: false, whenBlank: PURPOSE_WHEN_BLANK, type: "text" },
   // No confirmed width for Loan Product — deliberately left unconstrained
   // rather than assumed to be 255. Add it once the migration is checked.
-  { key: "loan_product", label: "Loan Product", required: true, type: "text" },
-  { key: "term_months", label: "Term in Months", required: true, type: "number", numeric: TERM },
-  { key: "payment_frequency", label: "Payment Frequency", required: true, type: "enum", options: PAYMENT_FREQUENCY_OPTIONS },
-  { key: "interest_type", label: "Interest Type", required: true, type: "enum", options: INTEREST_TYPE_OPTIONS },
+  { key: "loan_product", label: "Loan Product", required: true, refusedWhenBlank: false, whenBlank: LOAN_PRODUCT_WHEN_BLANK, type: "text" },
+  { key: "term_months", label: "Term in Months", required: true, type: "number" },
+  { key: "payment_frequency", label: "Payment Frequency", required: true, type: "enum", options: PAYMENT_FREQUENCY_OPTIONS, serverVocabulary: LOAN_FREQUENCY_WORDS },
+  { key: "interest_type", label: "Interest Type", required: true, type: "enum", options: LOAN_INTEREST_TYPE_OPTIONS, serverVocabulary: LOAN_INTEREST_TYPE_WORDS },
   { key: "date_released", label: "Date Released", required: true, type: "date" },
   { key: "maturity_date", label: "Maturity Date", required: true, type: "date" },
   { key: "processing_fee", label: "Processing Fee", required: false, type: "number", numeric: MONEY },
@@ -439,21 +502,12 @@ export function headerKey(label: string): string {
  * admin to map. Fuzzy matching is not used at all: an edit-distance guess is a
  * guess, and this importer does not make those.
  *
- * A member's Gender and Civil Status have none: they read the server's own
- * words and nothing else (`serverVocabulary`), since the server imports any
- * other spelling blank.
+ * A member's Gender and Civil Status, and a loan's Payment Frequency and
+ * Interest Type, have none: they read the server's own words and nothing else
+ * (`serverVocabulary`), since the server imports any other gender or civil
+ * status blank and refuses any other frequency or interest type.
  */
 const VOCAB_ALIASES: Record<string, Record<string, string>> = {
-  // `fixed` is what INTEREST_TYPE.FIXED calls this same thing, and "flat" is
-  // the term most PH lenders print on their own forms.
-  interest_type: {
-    fixed: "straight",
-    flat: "straight",
-    reducing: "diminishing",
-    decreasing: "diminishing",
-  },
-  // "bullet" and "balloon" are named as synonyms for Upon Maturity by the
-  // comment on PAYMENT_FREQUENCY_OPTIONS itself.
   // Normalising only — Suffix is open, so anything not listed still passes
   // through verbatim. `jr`/`JR`/`Jr` already fold onto `Jr.` via vocabKey.
   suffix: {
@@ -463,14 +517,6 @@ const VOCAB_ALIASES: Record<string, Record<string, string>> = {
     "3rd": "III",
     "4th": "IV",
     "5th": "V",
-  },
-  payment_frequency: {
-    fortnightly: "bi_weekly",
-    twicemonthly: "semi_monthly",
-    bullet: "upon_maturity",
-    balloon: "upon_maturity",
-    lumpsum: "upon_maturity",
-    maturity: "upon_maturity",
   },
   // The server's own words (`ShareCapitalRowNormalizer::TYPES`). Credit and
   // Debit already match the options' values.
@@ -641,6 +687,8 @@ export interface MissingField {
    * imported. `false`: the server imports it with this field not set.
    */
   refused: boolean;
+  /** For a blank the server takes, what becomes of it, when the column says. */
+  whenBlank?: string;
 }
 
 /**
@@ -658,7 +706,12 @@ export function missingRequiredFields(
   const columns = columnsFor(shape);
   const missing: MissingField[] = [];
   const add = (column: ImportColumn) =>
-    missing.push({ key: column.key, label: column.label, refused: column.refusedWhenBlank ?? column.required });
+    missing.push({
+      key: column.key,
+      label: column.label,
+      refused: column.refusedWhenBlank ?? column.required,
+      ...(column.whenBlank !== undefined && { whenBlank: column.whenBlank }),
+    });
   for (const column of columns) {
     if ((row[column.key] ?? "").trim()) continue;
     if (column.required) {
