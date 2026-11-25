@@ -298,7 +298,7 @@ export function ImportErrorsTable({
                           {stat.severity}
                         </Badge>
                       ) : null}
-                      {categoryWords(stat.category)}
+                      {categoryWords(stat.category, stat.severity)}
                     </span>
                     <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
                       {stat.count.toLocaleString()}{" "}
@@ -386,7 +386,7 @@ export function ImportErrorsTable({
                         viewport and clips it. The message column is the one
                         thing this screen exists to show, so it wraps. */}
                     <TableCell className="min-w-64 max-w-md whitespace-normal">
-                      <span className="text-xs text-muted-foreground">{categoryWords(issue.category)}</span>
+                      <span className="text-xs text-muted-foreground">{categoryWords(issue.category, issue.severity)}</span>
                       <br />
                       {issue.message}
                     </TableCell>

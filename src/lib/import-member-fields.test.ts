@@ -60,15 +60,15 @@ test("an amount the server refuses is refused here, in its words", () => {
 test("an amount above what the member form allows is imported blank, with the server's warning", () => {
   assert.deepEqual(problems({ monthly_income: "99,999,999.99" }), []);
   assert.deepEqual(problems({ monthly_income: "100,000,000.00" }), [
-    ["Monthly Income", "warning", "This amount is above the 99,999,999.99 the member form allows, so it was imported as blank rather than leaving a member who cannot be saved."],
+    ["Monthly Income", "warning", "This amount is above the 99,999,999.99 the member form allows, so it will be imported as blank rather than leaving a member who cannot be saved."],
   ]);
   assert.deepEqual(problems({ pledge_amount: "9,999,999.99" }), []);
   assert.deepEqual(problems({ pledge_amount: "10,000,000.00" }), [
-    ["Pledge Amt(If Applicable)", "warning", "This amount is above the 9,999,999.99 the member form allows, so it was imported as blank rather than leaving a member who cannot be saved."],
+    ["Pledge Amt(If Applicable)", "warning", "This amount is above the 9,999,999.99 the member form allows, so it will be imported as blank rather than leaving a member who cannot be saved."],
   ]);
   // The form's limits differ: fifty million is a monthly income, not a pledge.
   assert.deepEqual(problems({ monthly_income: "50000000", pledge_amount: "50000000" }), [
-    ["Pledge Amt(If Applicable)", "warning", "This amount is above the 9,999,999.99 the member form allows, so it was imported as blank rather than leaving a member who cannot be saved."],
+    ["Pledge Amt(If Applicable)", "warning", "This amount is above the 9,999,999.99 the member form allows, so it will be imported as blank rather than leaving a member who cannot be saved."],
   ]);
 });
 
@@ -91,9 +91,9 @@ test("a birthdate the server blanks or flags warns here, in its words", () => {
     memberFieldProblems({ birthdate: iso, ...extra }, { ...CONTEXT, dates: { birthdate: iso, ...(extra.date_hired ? { date_hired: extra.date_hired } : {}) } })
       .map((problem) => [problem.label, problem.severity, problem.message]);
 
-  assert.deepEqual(birthdate("2026-12-01"), [["Birthdate", "warning", '"2026-12-01" is in the future, which cannot be a birthdate, so it was imported as blank.']]);
-  assert.deepEqual(birthdate("1850-04-03"), [["Birthdate", "warning", '"1850-04-03" is before 1900 and was imported as blank.']]);
-  const under18 = '"2008-11-26" makes this member under 18. The record was imported as-is because it is a fact on the coop\'s books, but the member form requires 18+, so this member cannot be saved in the app until the birthdate is corrected.';
+  assert.deepEqual(birthdate("2026-12-01"), [["Birthdate", "warning", '"2026-12-01" is in the future, which cannot be a birthdate, so it will be imported as blank.']]);
+  assert.deepEqual(birthdate("1850-04-03"), [["Birthdate", "warning", '"1850-04-03" is before 1900, so it will be imported as blank.']]);
+  const under18 = '"2008-11-26" makes this member under 18. The record will be imported as-is because it is a fact on the coop\'s books, but the member form requires 18+, so this member can\'t be saved in the app until the birthdate is corrected.';
   assert.deepEqual(birthdate("2008-11-26"), [["Birthdate", "warning", under18]]);
   assert.deepEqual(birthdate("2008-11-25"), [], "eighteen today");
   assert.deepEqual(birthdate("1900-01-01"), []);

@@ -124,6 +124,18 @@ export const ISSUE_CATEGORY_WORDS: Readonly<Record<string, string>> = {
   exception: "Could not be written",
 };
 
+/**
+ * A skipped row's title for a note that names what the import did to a cell:
+ * the row was not imported, so nothing was left blank, cut or stored (finish
+ * run, round 5). Imported rows keep the titles above. The server's download
+ * uses the same words (`IssueCategoryWords::SKIPPED_WORDS`).
+ */
+export const SKIPPED_CATEGORY_WORDS: Readonly<Record<string, string>> = {
+  enum_unmapped: "Value not recognised",
+  truncated: "Longer than the field holds",
+  membership_number_spaces: "Membership number has spaces",
+};
+
 /** The prefix of a loan whose product has no match; the product follows it. */
 const UNMAPPED_PRODUCT = "unmapped_product:";
 
@@ -133,8 +145,9 @@ function spaced(code: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-/** A report category in words. */
-export function categoryWords(code: string): string {
+/** A report category in words, for a line of this severity. */
+export function categoryWords(code: string, severity?: string | null): string {
+  if (severity === "skipped" && Object.hasOwn(SKIPPED_CATEGORY_WORDS, code)) return SKIPPED_CATEGORY_WORDS[code];
   if (code.startsWith(UNMAPPED_PRODUCT)) {
     const product = code.slice(UNMAPPED_PRODUCT.length);
     return product === "(blank)" ? "No loan product" : `Loan product not matched: ${product}`;

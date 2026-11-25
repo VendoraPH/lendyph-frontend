@@ -483,7 +483,7 @@ export function parseImportDate(
     const dayFirst = isRealDate(year, second, first) ? toISO(year, second, first) : null;
     const warning =
       dayFirst !== null && dayFirst !== chosen
-        ? `"${value}" could be read as ${chosen} (month first, which is what was used) or as ${dayFirst} (day first). Check it against the source workbook.`
+        ? `"${value}" could be read as ${chosen} (month first, which is what will be used) or as ${dayFirst} (day first). Check it against the source workbook.`
         : null;
     return { ok: true, iso: chosen, warning };
   }
@@ -500,7 +500,7 @@ export function parseImportDate(
       return {
         ok: true,
         iso: read,
-        warning: `"${value}" is an Excel serial date number and was read as ${read}. Confirm it against the source workbook.`,
+        warning: `"${value}" is an Excel serial date number and will be read as ${read}. Confirm it against the source workbook.`,
       };
     }
   }

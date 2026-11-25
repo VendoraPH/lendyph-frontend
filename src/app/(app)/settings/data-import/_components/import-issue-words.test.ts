@@ -104,9 +104,26 @@ test("the result report shows the words, never the codes", () => {
     join(process.cwd(), "src/app/(app)/settings/data-import/_components/import-errors-table.tsx"),
     "utf8",
   );
-  assert.match(source, /categoryWords\(stat\.category\)/);
-  assert.match(source, /categoryWords\(issue\.category\)/);
+  assert.match(source, /categoryWords\(stat\.category, stat\.severity\)/);
+  assert.match(source, /categoryWords\(issue\.category, issue\.severity\)/);
   assert.match(source, /fieldWords\(issue\)/);
   // Shown as text, that is; a React key may still carry the code (`${stat.category}`).
   assert.doesNotMatch(source, /(?<!\$)\{stat\.category\}|(?<!\$)\{issue\.category\}|\{issue\.field \|\| "—"\}/);
+});
+
+test("a skipped row's title never says what the import did to the cell; imported rows keep theirs", () => {
+  // The row was not imported, so nothing was left blank, cut or stored.
+  assert.equal(categoryWords("enum_unmapped", "skipped"), "Value not recognised");
+  assert.equal(categoryWords("truncated", "skipped"), "Longer than the field holds");
+  assert.equal(categoryWords("membership_number_spaces", "skipped"), "Membership number has spaces");
+
+  assert.equal(categoryWords("enum_unmapped", "warning"), "Value not recognised, left blank");
+  assert.equal(categoryWords("enum_unmapped"), "Value not recognised, left blank");
+  assert.equal(categoryWords("truncated", "warning"), "Shortened to fit");
+  // A title that claims nothing reads the same either way.
+  assert.equal(categoryWords("email_invalid", "skipped"), categoryWords("email_invalid", "warning"));
+
+  for (const code of BACKEND_CODES) {
+    assert.doesNotMatch(categoryWords(code, "skipped"), /left blank|Shortened|stored/, code);
+  }
 });

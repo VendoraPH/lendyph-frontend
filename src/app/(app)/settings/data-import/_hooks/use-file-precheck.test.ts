@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import test from "node:test";
 import type { CsvRecord } from "@/lib/csv-parse";
 import {
@@ -120,7 +122,7 @@ test("a member's amounts are read as the server reads them, in its words", () =>
   assert.equal(result.failingRows, 1);
   assert.deepEqual(result.issues.map((issue) => [issue.column, issue.severity, issue.message]), [
     ["Monthly Income", "error", '"1234.500" has more than 2 decimal places. Round it to centavos in the source file — this importer will not round it for you.'],
-    ["Pledge Amt(If Applicable)", "warning", "This amount is above the 9,999,999.99 the member form allows, so it was imported as blank rather than leaving a member who cannot be saved."],
+    ["Pledge Amt(If Applicable)", "warning", "This amount is above the 9,999,999.99 the member form allows, so it will be imported as blank rather than leaving a member who cannot be saved."],
   ]);
 });
 
@@ -503,7 +505,7 @@ test("a date read with the server's warning warns, in its words, and the row imp
 
   assert.equal(result.failingRows, 0);
   assert.deepEqual(result.issues.map((issue) => [issue.column, issue.severity, issue.category, issue.message]), [
-    ["Birthdate", "warning", "date", '"32874" is an Excel serial date number and was read as 1990-01-01. Confirm it against the source workbook.'],
+    ["Birthdate", "warning", "date", '"32874" is an Excel serial date number and will be read as 1990-01-01. Confirm it against the source workbook.'],
   ]);
 });
 
@@ -1389,4 +1391,31 @@ test("an empty share capital file says it can be left out", async () => {
   assert.deepEqual(computeFindings({ share_capital: inspection }, {}, {}).share_capital?.blockers, [
     "Share capital file (share-capital.csv): The only row in this file is the header row, so there is nothing to import. The share capital file is optional: leave it out when there is no share capital to bring over.",
   ]);
+});
+
+// ---------------------------------------------------------------------------
+// Before an import, nothing has been imported yet
+// ---------------------------------------------------------------------------
+
+test("no Check step note says the import already happened, in any of the three files", () => {
+  // The Check step runs before anything is uploaded, so a note copied from the
+  // server reads in the future ("will be imported as blank"), never as done.
+  const sources = [
+    "src/lib/import-member-fields.ts",
+    "src/lib/import-loan-fields.ts",
+    "src/lib/import-share-capital.ts",
+    "src/lib/import-date.ts",
+    "src/lib/import-schema.ts",
+    "src/lib/import-server-values.ts",
+    "src/app/(app)/settings/data-import/_hooks/use-file-precheck.ts",
+  ];
+  const done = /\b(?:was|were) (?:imported|read as|kept|stored|left|shortened|cut|dropped)\b|which is what was used/;
+  for (const path of sources) {
+    const text = readFileSync(join(process.cwd(), path), "utf8");
+    // The notes are the string and template literals, never the comments.
+    const code = text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    for (const literal of code.match(/(["`])(?:\\.|(?!\1)[^\\])*\1/g) ?? []) {
+      assert.doesNotMatch(literal, done, `${path}: ${literal}`);
+    }
+  }
 });

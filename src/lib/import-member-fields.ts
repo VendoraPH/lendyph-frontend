@@ -91,21 +91,22 @@ export function memberFieldProblems(row: ImportRow, context: MemberFieldContext)
 
   // The birthdate as `CustomerRowNormalizer::birthdate()` holds it, once read:
   // in the future or before 1900 it is imported blank, and under 18 it warns.
+  // In the server's words, said before the import: "will be", never "was".
   // Both are `YYYY-MM-DD`, so the strings compare as the dates do.
   const read = context.dates.birthdate;
   let birthdate = read;
   if (read && read > context.today) {
-    add("birthdate", "warning", "date", `"${read}" is in the future, which cannot be a birthdate, so it was imported as blank.`);
+    add("birthdate", "warning", "date", `"${read}" is in the future, which cannot be a birthdate, so it will be imported as blank.`);
     birthdate = undefined;
   } else if (read && read < "1900-01-01") {
-    add("birthdate", "warning", "date", `"${read}" is before 1900 and was imported as blank.`);
+    add("birthdate", "warning", "date", `"${read}" is before 1900, so it will be imported as blank.`);
     birthdate = undefined;
   } else if (read && read > yearsBefore(context.today, 18)) {
     add(
       "birthdate",
       "warning",
       "date",
-      `"${read}" makes this member under 18. The record was imported as-is because it is a fact on the coop's books, but the member form requires 18+, so this member cannot be saved in the app until the birthdate is corrected.`,
+      `"${read}" makes this member under 18. The record will be imported as-is because it is a fact on the coop's books, but the member form requires 18+, so this member can't be saved in the app until the birthdate is corrected.`,
     );
   }
 
@@ -119,7 +120,7 @@ export function memberFieldProblems(row: ImportRow, context: MemberFieldContext)
         key,
         "warning",
         "value",
-        `This amount is above the ${mostWords} the member form allows, so it was imported as blank rather than leaving a member who cannot be saved.`,
+        `This amount is above the ${mostWords} the member form allows, so it will be imported as blank rather than leaving a member who cannot be saved.`,
       );
     }
   }
