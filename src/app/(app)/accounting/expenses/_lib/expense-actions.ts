@@ -59,6 +59,37 @@ export function hasPayments(expense: Pick<Expense, "payments">): boolean {
   return (expense.payments?.length ?? 0) > 0;
 }
 
+/**
+ * What a row's More menu holds. Pay stays on the row as its primary action;
+ * the rest sit in the menu, each by the same rules as on their own:
+ * Payments once there is any, Edit while the server allows it, Reverse
+ * expense shown or disabled with the server's reason, and Attachments for
+ * everyone who can see the list.
+ */
+export interface ExpenseMenu {
+  payments: boolean;
+  edit: boolean;
+  reverse: ExpenseActionState;
+  attachments: true;
+}
+
+export function expenseMenu(
+  expense: Pick<Expense, "payments" | "can_edit" | "status" | "can_reverse" | "reverse_blocked_reason">,
+  can: Can,
+): ExpenseMenu {
+  return {
+    payments: hasPayments(expense),
+    edit: canEditExpense(expense, can),
+    reverse: reverseExpenseState(expense, can),
+    attachments: true,
+  };
+}
+
+/** The More menu button's name, per row. */
+export function moreActionsLabel(payee: string): string {
+  return `More actions for ${payee}`;
+}
+
 /** A payment's state in words. */
 export function paymentStatusLabel(payment: Pick<ExpensePayment, "reversed">): string {
   return payment.reversed ? "Reversed" : "Paid";

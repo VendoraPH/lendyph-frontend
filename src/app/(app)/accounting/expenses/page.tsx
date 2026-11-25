@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Inbox, Plus, Search } from "lucide-react";
 import { PermissionGate, RouteGuard, TablePagination } from "@/components/common";
+import { VISIBLE_SCROLLBAR } from "@/components/amla/visible-scrollbar";
 import { hasIllustration, Illustration } from "@/components/common/illustration";
 import { FillSection, PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Card, CardContent } from "@/components/ui/card";
@@ -243,7 +244,9 @@ function ExpensesContent() {
                   {rows.length === 0 ? (
                     <EmptyExpenses filtered={filtered} />
                   ) : (
-                    <ScrollBox>
+                    // Focusable and named: on a narrow window the list scrolls
+                    // sideways here, with Actions pinned in view.
+                    <ScrollBox className={VISIBLE_SCROLLBAR} tabIndex={0} role="region" aria-label="Expenses, scrolls sideways">
                       <ExpenseTable
                         rows={rows}
                         onPay={setPaying}

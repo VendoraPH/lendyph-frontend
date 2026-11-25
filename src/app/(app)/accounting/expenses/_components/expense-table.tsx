@@ -13,12 +13,14 @@ import {
 import { usePermission } from "@/hooks";
 import { formatCentavos } from "@/lib/accounting/money";
 import { formatDate } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import type { Expense, ExpenseStatus } from "@/types";
 import { expenseStatusLabel } from "../../_lib/display-labels";
 import { centavosOrDash } from "../../_lib/server-figure";
-import { JournalActionButton } from "../../journals/_components/journal-action-button";
-import { canEditExpense, hasPayments, reverseExpenseState } from "../_lib/expense-actions";
+import { STICKY_ACTIONS_CELL, STICKY_ACTIONS_HEAD } from "../../interbranch-transfers/_lib/table-scroll";
+import { expenseMenu } from "../_lib/expense-actions";
 import { canPayExpense } from "../_lib/expense-forms";
+import { ExpenseRowMenu } from "./expense-row-menu";
 
 const STATUS_STYLES: Record<ExpenseStatus, string> = {
   unpaid: "bg-slate-500/10 text-slate-700 border-slate-500/30",
@@ -44,7 +46,10 @@ interface ExpenseTableProps {
 /**
  * One server page of expenses. Balance is the server's `amount_due`, and
  * which actions each row offers is the server's word (`can_edit`,
- * `can_reverse`) with the user's permissions.
+ * `can_reverse`) with the user's permissions. Pay, the row's primary action,
+ * stays on the row; the others sit in its More menu. The Actions column is
+ * pinned to the right edge, so it stays in view while a narrow window
+ * scrolls the rest of the row sideways inside the list.
  */
 export function ExpenseTable({ rows, onPay, onPayments, onEdit, onReverse, onAttachments }: ExpenseTableProps) {
   const { can } = usePermission();
@@ -64,12 +69,12 @@ export function ExpenseTable({ rows, onPay, onPayments, onEdit, onReverse, onAtt
           <TableHead className="w-32">Status</TableHead>
           <TableHead className="w-32 text-right">Amount</TableHead>
           <TableHead className="w-32 text-right">Balance</TableHead>
-          <TableHead className="w-80 text-right">Actions</TableHead>
+          <TableHead className={cn("text-right", STICKY_ACTIONS_HEAD)}>Actions</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {rows.map((expense) => {
-          const reverse = reverseExpenseState(expense, can);
+          const menu = expenseMenu(expense, can);
           return (
             <TableRow key={expense.id}>
               <TableCell className="text-sm">{formatDate(expense.date)}</TableCell>
@@ -96,8 +101,8 @@ export function ExpenseTable({ rows, onPay, onPayments, onEdit, onReverse, onAtt
               <TableCell className="text-right font-mono text-sm font-medium">
                 {centavosOrDash(expense.amount_due)}
               </TableCell>
-              <TableCell className="text-right">
-                <div className="flex justify-end gap-1">
+              <TableCell className={cn("w-px text-right", STICKY_ACTIONS_CELL)}>
+                <div className="flex items-center justify-end gap-1">
                   {canPay && canPayExpense(expense) && (
                     <Button
                       size="sm"
@@ -108,45 +113,14 @@ export function ExpenseTable({ rows, onPay, onPayments, onEdit, onReverse, onAtt
                       Pay
                     </Button>
                   )}
-                  {hasPayments(expense) && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => onPayments(expense)}
-                      aria-label={`Payments for ${expense.payee}`}
-                    >
-                      Payments
-                    </Button>
-                  )}
-                  {canEditExpense(expense, can) && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => onEdit(expense)}
-                      aria-label={`Edit ${expense.payee}`}
-                    >
-                      Edit
-                    </Button>
-                  )}
-                  {reverse.shown && (
-                    <JournalActionButton
-                      state={reverse}
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => onReverse(expense)}
-                      aria-label={`Reverse ${expense.payee}`}
-                    >
-                      Reverse
-                    </JournalActionButton>
-                  )}
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => onAttachments(expense)}
-                    aria-label={`Attachments for ${expense.payee}`}
-                  >
-                    Attachments
-                  </Button>
+                  <ExpenseRowMenu
+                    expense={expense}
+                    menu={menu}
+                    onPayments={onPayments}
+                    onEdit={onEdit}
+                    onReverse={onReverse}
+                    onAttachments={onAttachments}
+                  />
                 </div>
               </TableCell>
             </TableRow>

@@ -5,7 +5,9 @@ import {
   REVERSAL_REASON_MAX,
   canEditExpense,
   canReversePayment,
+  expenseMenu,
   hasPayments,
+  moreActionsLabel,
   paymentStatusLabel,
   reversalReason,
   reversalText,
@@ -123,4 +125,40 @@ test("a reason is required, trimmed and kept within the server's limit", () => {
   assert.equal(reversalReason("   "), null);
   assert.equal(reversalReason("a".repeat(REVERSAL_REASON_MAX)), "a".repeat(300));
   assert.equal(reversalReason("a".repeat(REVERSAL_REASON_MAX + 1)), null);
+});
+
+test("the More menu holds Payments, Edit, Reverse expense and Attachments by their own rules", () => {
+  const all = holding("expenses:update", "journals:reverse", "expenses:pay");
+  assert.deepEqual(expenseMenu(EXPENSE, all), {
+    payments: true,
+    edit: true,
+    reverse: { shown: true, disabledReason: "Reverse its payments first: ₱4,000.00 paid in 1 payment." },
+    attachments: true,
+  });
+  // A reversed expense: its payments and attachments stay; Edit and Reverse go.
+  const reversed = {
+    ...EXPENSE,
+    status: "reversed" as const,
+    can_edit: false,
+    can_reverse: false,
+    reverse_blocked_reason: null,
+  };
+  assert.deepEqual(expenseMenu(reversed, all), {
+    payments: true,
+    edit: false,
+    reverse: { shown: false, disabledReason: null },
+    attachments: true,
+  });
+  // A viewer: payments to read and attachments, nothing to change.
+  assert.deepEqual(expenseMenu(EXPENSE, holding()), {
+    payments: true,
+    edit: false,
+    reverse: { shown: false, disabledReason: null },
+    attachments: true,
+  });
+  assert.equal(expenseMenu({ ...EXPENSE, payments: [] }, all).payments, false);
+});
+
+test("each row's More button is named for its payee", () => {
+  assert.equal(moreActionsLabel("Meralco"), "More actions for Meralco");
 });
