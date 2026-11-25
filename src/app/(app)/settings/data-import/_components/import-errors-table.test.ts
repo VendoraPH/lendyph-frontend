@@ -1,9 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  IMPORT_SEVERITY_LEGEND,
   categoryExample,
   categoryWordingNote,
   errorReportFilename,
+  severityBadges,
 } from "./import-errors-table";
 import { todayISO } from "@/lib/format";
 import { MAX_PER_PAGE } from "@/lib/paginate";
@@ -68,4 +70,23 @@ test("the largest page this screen asks for is the server's own ceiling", () => 
   // Asking for more is not an error and not a warning — it is fewer rows in a
   // response shaped exactly like a complete one.
   assert.equal(MAX_PER_PAGE, 100);
+});
+
+test("the grouped report counts a row that was not imported as skipped, never as a warning", () => {
+  assert.deepEqual(severityBadges({ error: 7, skipped: 6, warning: 1 }), [
+    { severity: "error", text: "7 errors" },
+    { severity: "skipped", text: "6 skipped" },
+    { severity: "warning", text: "1 warning" },
+  ]);
+  // A severity with nothing in it, or one an older server did not send, has no badge.
+  assert.deepEqual(severityBadges({ error: 2, warning: 0 }), [{ severity: "error", text: "2 errors" }]);
+});
+
+test("the legend says what each severity means, skipped included", () => {
+  assert.match(IMPORT_SEVERITY_LEGEND, /^Errors are why a row was not imported\./);
+  assert.match(
+    IMPORT_SEVERITY_LEGEND,
+    /Skipped marks the other lines of a row that was not imported: why it was skipped, and what would happen to its cells once it is fixed and imported\./
+  );
+  assert.match(IMPORT_SEVERITY_LEGEND, /Warnings mean the row WAS imported with something adjusted/);
 });

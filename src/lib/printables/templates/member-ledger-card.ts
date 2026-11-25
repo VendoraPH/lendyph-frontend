@@ -100,6 +100,8 @@ export function buildMemberLedgerCardDoc(
 
   const totalReleased = pickNumber(totals, ["total_portfolio", "total_released", "total_principal"]);
   const totalPaid = pickNumber(totals, ["total_paid", "total_amount_paid"]);
+  // Inside Total paid: what imported loans' files say was paid before the import.
+  const paidBeforeImport = pickNumber(totals, ["paid_before_import"]);
   const totalOutstanding = pickNumber(totals, ["total_outstanding"]);
   const loanCount =
     pickNumber(totals, ["total_loans", "loan_count"]) ?? loanRows.length;
@@ -137,6 +139,9 @@ export function buildMemberLedgerCardDoc(
         { label: "Loan accounts on record", amount: String(loanCount) },
         { label: "Total released", amount: currencyOrDash(totalReleased) },
         { label: "Total paid", amount: currencyOrDash(totalPaid), indent: true },
+        ...(paidBeforeImport !== null && paidBeforeImport > 0
+          ? [{ label: "Of which paid before the import", amount: currencyOrDash(paidBeforeImport), indent: true }]
+          : []),
         {
           label: "TOTAL OUTSTANDING",
           amount: currencyOrDash(totalOutstanding),

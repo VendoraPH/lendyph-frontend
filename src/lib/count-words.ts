@@ -25,9 +25,9 @@ export function piecesOnServer(received: number, total: number, name: string): s
   return `${formatCount(received)} of ${formatCountOf(total, "piece")} of ${name} ${received === 1 ? "is" : "are"} already on the server.`;
 }
 
-/** The grouped report's header badge: "1 warning", "3 errors". */
-export function severityCount(count: number, severity: "error" | "warning"): string {
-  return formatCountOf(count, severity);
+/** The grouped report's header badge: "1 warning", "3 errors", "2 skipped". */
+export function severityCount(count: number, severity: "error" | "skipped" | "warning"): string {
+  return severity === "skipped" ? formatCountOf(count, "skipped", "skipped") : formatCountOf(count, severity);
 }
 
 /** The processing bar: "3 of 40 rows", "1 of 1 row". */

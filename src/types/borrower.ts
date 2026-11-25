@@ -41,7 +41,9 @@ export interface BorrowerBranch {
  * - `outstanding_principal` is the principal alone;
  * - `overdue_amount` is only what is past due, not a late loan's whole balance.
  * `total_paid` is everything the member paid, premium included, and
- * `insurance_paid` is the premium part of it. `current_loans` is released plus
+ * `insurance_paid` is the premium part of it; on imported loans it also holds
+ * what their files say was paid before the import (`paid_before_import`).
+ * `current_loans` is released plus
  * ongoing; `counts` has every status. The newer figures are optional so an
  * older server shows a dash rather than a wrong number.
  */
@@ -51,6 +53,7 @@ export interface BorrowerLoanSummary {
   outstanding_principal?: number;
   overdue_amount?: number;
   total_paid: number;
+  paid_before_import?: number;
   insurance_paid?: number;
   current_loans: number;
   counts: Record<string, number>;

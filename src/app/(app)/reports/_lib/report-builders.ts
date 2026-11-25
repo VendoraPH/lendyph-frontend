@@ -23,6 +23,7 @@ import type {
   ReportSection,
 } from "./types";
 import type { LoanStatus } from "@/types/loan";
+import { paidBeforeImportNote } from "@/lib/paid-before-import";
 
 /**
  * Pure payload → ReportDocument builders.
@@ -1422,6 +1423,10 @@ export function buildStatementOfAccountDoc(raw: unknown): ReportDocument {
   const totalPaid =
     pick(summary, ["total_paid", "amount_paid", "total_amount_paid"]) ??
     pick(obj, ["total_paid"]);
+  // On an imported loan Total Paid also holds what its file says was paid
+  // before the import, which no receipt line carries; said in words.
+  const paidBeforeImport = pick(summary, ["paid_before_import"]);
+  const totalPaidNote = paidBeforeImportNote(paidBeforeImport);
 
   const overdueAmount = pick(summary, ["overdue_amount"]);
 
@@ -1437,7 +1442,10 @@ export function buildStatementOfAccountDoc(raw: unknown): ReportDocument {
     title: "Balance Summary",
     items: [
       kpi("Principal", currencyOrDash(pick(loan, ["principal_amount", "principal"]))),
-      kpi("Total Paid", currencyOrDash(totalPaid), { tone: "positive" }),
+      kpi("Total Paid", currencyOrDash(totalPaid), {
+        tone: "positive",
+        ...(totalPaidNote ? { hint: totalPaidNote } : {}),
+      }),
       kpi("Outstanding Balance", currencyOrDash(outstanding), {
         tone: owedTone(outstanding),
         hint: "Principal, interest, penalty and insurance premium still owed",
@@ -1467,6 +1475,10 @@ export function buildStatementOfAccountDoc(raw: unknown): ReportDocument {
         ? [{ label: "Overpayment", value: currencyOrDash(pick(summary, ["overpayment_paid"])) }]
         : []),
       { label: "Total Paid", value: currencyOrDash(totalPaid) },
+      // Inside Total Paid (and the principal and interest above it).
+      ...(totalPaidNote
+        ? [{ label: "Of Which Paid Before the Import", value: currencyOrDash(paidBeforeImport) }]
+        : []),
     ],
   });
 
@@ -1529,10 +1541,11 @@ export function buildStatementOfAccountDoc(raw: unknown): ReportDocument {
             {
               column: "amount_paid",
               label: "Total",
-              // Every posted receipt is on a line, so Total Paid is this column's
-              // total when the lines' isn't sent. The Credit total is smaller:
-              // Debit less Credit is what is owed.
-              value: currencyOrDash(pick(transactionTotals, ["amount_paid"]) ?? totalPaid),
+              // The server's total of the receipts on the lines. Never Total
+              // Paid in its place: on an imported loan that also holds what was
+              // paid before the import. The Credit total is smaller: Debit less
+              // Credit is what is owed.
+              value: currencyOrDash(pick(transactionTotals, ["amount_paid"])),
             },
             { column: "debit", value: currencyOrDash(pick(transactionTotals, ["debit"])) },
             { column: "credit", value: currencyOrDash(pick(transactionTotals, ["credit"])) },
@@ -1623,6 +1636,8 @@ export function buildSubsidiaryLedgerDoc(
   const loansTotals = asRecord(pick(obj, ["loans_totals"]));
   const totalPrincipal = pick(totals, ["total_principal"]);
   const totalPaid = pick(totals, ["total_paid"]);
+  // What imported loans' files say was paid before the import, inside Total Paid.
+  const totalPaidNote = paidBeforeImportNote(pick(totals, ["paid_before_import"]));
   const totalOutstanding = pick(totals, ["total_outstanding"]);
 
   const loanRows = asArray(pick(obj, ["loans", "accounts"])).map(normalizeLedgerLoanRow);
@@ -1651,7 +1666,10 @@ export function buildSubsidiaryLedgerDoc(
     items: [
       kpi("Total Loans", countOrDash(pick(totals, ["total_loans"]))),
       kpi("Total Released", currencyOrDash(totalPrincipal)),
-      kpi("Total Paid", currencyOrDash(totalPaid), { tone: "positive" }),
+      kpi("Total Paid", currencyOrDash(totalPaid), {
+        tone: "positive",
+        ...(totalPaidNote ? { hint: totalPaidNote } : {}),
+      }),
       kpi("Outstanding", currencyOrDash(totalOutstanding), { tone: "negative" }),
     ],
   });

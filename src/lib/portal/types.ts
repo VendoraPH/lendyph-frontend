@@ -213,6 +213,8 @@ export interface LoanDetail extends LoanRow {
   principal_paid: Pesos;
   interest_paid: Pesos;
   penalty_paid: Pesos;
+  /** Inside `total_repaid`: what an imported loan's file says was paid before the import. */
+  paid_before_import?: Pesos;
 }
 
 export interface MoneyParts {

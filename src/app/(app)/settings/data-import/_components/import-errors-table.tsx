@@ -125,8 +125,37 @@ const PER_PAGE_OPTIONS = [25, 50, MAX_PER_PAGE] as const;
 
 const SEVERITY_STYLE: Record<ImportIssueSeverity, string> = {
   error: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-900",
+  skipped: "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-500/15 dark:text-slate-300 dark:border-slate-800",
   warning: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-900",
 };
+
+/** The row's fate, worst first, as the server's `by_severity` orders it. */
+const SEVERITY_ORDER: readonly ImportIssueSeverity[] = ["error", "skipped", "warning"];
+
+/**
+ * The grouped view's header badges: one per severity the server counted
+ * ("7 errors", "6 skipped", "1 warning"), worst first. A severity with nothing
+ * in it, or one an older server did not send, has none.
+ */
+export function severityBadges(
+  bySeverity: Partial<Record<ImportIssueSeverity, number>> | null | undefined,
+): { severity: ImportIssueSeverity; text: string }[] {
+  return SEVERITY_ORDER.flatMap((severity) => {
+    const count = bySeverity?.[severity];
+    return typeof count === "number" && count > 0 ? [{ severity, text: severityCount(count, severity) }] : [];
+  });
+}
+
+/**
+ * What each severity means. A row that was not imported is counted as skipped,
+ * never as a warning, and its notes say what would happen to its cells (the
+ * server words them, so the downloaded report reads the same).
+ */
+export const IMPORT_SEVERITY_LEGEND =
+  "Errors are why a row was not imported. Skipped marks the other lines of a row that was not imported: " +
+  "why it was skipped, and what would happen to its cells once it is fixed and imported. Warnings mean the row " +
+  "WAS imported with something adjusted — a contact number that was not a Philippine format is cleared and the " +
+  "member still lands — so a warning is not a failure and is not counted as one in the tiles above.";
 
 export interface ImportErrorsTableProps {
   runId: number | string;
@@ -240,27 +269,18 @@ export function ImportErrorsTable({
         </Button>
       </div>
 
-      <p className="-mt-2 text-xs text-muted-foreground">
-        Errors mean the row was not imported. Warnings mean it WAS imported with
-        something adjusted — a contact number that was not a Philippine format is
-        cleared and the member still lands — so a warning here is not a failure
-        and is not counted as one in the tiles above.
-      </p>
+      <p className="-mt-2 text-xs text-muted-foreground">{IMPORT_SEVERITY_LEGEND}</p>
 
       {/* The grouped view: what an admin actually acts on. */}
       {stats && stats.by_category.length > 0 ? (
         <div className="rounded-lg border">
           <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
             <span className="text-sm font-medium">Grouped by reason</span>
-            {(["error", "warning"] as const).map((severity) => {
-              const count = stats.by_severity?.[severity];
-              if (typeof count !== "number" || count === 0) return null;
-              return (
-                <Badge key={severity} variant="outline" className={SEVERITY_STYLE[severity]}>
-                  {severityCount(count, severity)}
-                </Badge>
-              );
-            })}
+            {severityBadges(stats.by_severity).map(({ severity, text }) => (
+              <Badge key={severity} variant="outline" className={SEVERITY_STYLE[severity]}>
+                {text}
+              </Badge>
+            ))}
           </div>
           <ul className="divide-y">
             {stats.by_category.map((stat) => {
