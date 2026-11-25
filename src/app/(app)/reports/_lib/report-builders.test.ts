@@ -4783,6 +4783,41 @@ test("an adjustment line shows its credit or debit, and a dash in every applied 
   assert.equal(formatCell(table.rows[4], table.columns.find((c) => c.key === "penalty_applied")!), DASH);
 });
 
+test("the line for what an imported loan was paid before the import shows its parts, and no receipt", () => {
+  const paidBeforeImport = {
+    type: "paid_before_import",
+    kind: "adjustment",
+    date: "2026-02-01",
+    description: "Paid before the loan was imported",
+    amount_paid: 0,
+    debit: null,
+    credit: 23600,
+    voided: false,
+    principal_applied: 20000,
+    interest_applied: 3600,
+    penalty_applied: 0,
+    insurance_applied: 0,
+    build_up_applied: 0,
+    overpayment_applied: 0,
+    principal_balance: 30000,
+  };
+  const table = namedTable(
+    buildStatementOfAccountDoc({ ...SOA_FULL, transactions: [...SOA_FULL.transactions, paidBeforeImport] }, RANGE),
+    "Transaction History"
+  );
+  const row = table.rows[4];
+  const cell = (key: string) => formatCell(row, table.columns.find((c) => c.key === key)!);
+
+  // Money paid, so its parts add up to its credit, like a payment's.
+  assert.equal(cell("credit"), "₱23,600.00");
+  assert.equal(cell("principal_applied"), "₱20,000.00");
+  assert.equal(cell("interest_applied"), "₱3,600.00");
+  assert.equal(cell("penalty_applied"), "₱0.00");
+  // It has no receipt.
+  assert.equal(cell("amount_paid"), DASH);
+  assert.equal(cell("debit"), DASH);
+});
+
 test("a payment line keeps its parts as the server sent them", () => {
   const table = namedTable(buildStatementOfAccountDoc(SOA_FULL, RANGE), "Transaction History");
   assert.equal(table.rows[3].principal_applied, 1700);

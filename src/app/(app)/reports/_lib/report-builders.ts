@@ -1265,7 +1265,10 @@ function normalizeTransactionRow(raw: Record<string, unknown>): Record<string, u
  *
  * Only a payment line shows its receipt amount and applied parts. The server
  * gives a release or charge negative parts ("-₱60,000.00"), which say the same as
- * its debit, so those lines show the debit and a dash in each part.
+ * its debit, so those lines show the debit and a dash in each part. An imported
+ * loan's "Paid before the loan was imported" line (`paid_before_import`) is money
+ * paid with no receipt: it shows its parts, which add up to its credit, and a
+ * dash for the receipt.
  *
  * A voided payment stays listed and moves nothing: its receipt's amount is in
  * the mark, never under Credit, and the server's totals leave it out.
@@ -1282,7 +1285,8 @@ function normalizeSoaTransactionRow(raw: Record<string, unknown>): Record<string
   const voided = pick(raw, ["voided"]) === true;
   const type = pick(raw, ["type"]);
   const isPayment = typeof type !== "string" || /payment/.test(type);
-  const part = (key: string) => (isPayment ? toNumber(pick(raw, [key])) : null);
+  const showsParts = isPayment || type === "paid_before_import";
+  const part = (key: string) => (showsParts ? toNumber(pick(raw, [key])) : null);
 
   return {
     ...line,
