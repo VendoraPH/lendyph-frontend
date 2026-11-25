@@ -8,8 +8,8 @@
  * unchanged.
  */
 
-import { isCalendarDate } from "@/lib/calendar-date";
-import { formatDate, todayISO } from "@/lib/format";
+import { dateHiredError } from "@/lib/date-hired";
+import { todayISO } from "@/lib/format";
 import { errorMessages, stepErrorsOf, type FormStepDef, type StepErrors } from "@/lib/form-stepper";
 import { formatValidationMessage } from "@/lib/validation-message";
 import { validateValidIds, type ValidIdDraft } from "@/lib/valid-id";
@@ -101,27 +101,17 @@ export function requiredMemberFieldErrors(form: MemberFormData): Record<string, 
   return missing;
 }
 
-/** The server's own words for Date Hired (HasBorrowerRules), so the form and a refusal read alike. */
-const DATE_HIRED_FORMAT = "The date hired must be a date written as year-month-day, such as 2020-06-01.";
-const DATE_HIRED_FUTURE = "The date hired cannot be in the future.";
-
 /**
  * Fields the form refuses for what they hold rather than for being empty, as
- * full sentences. Date Hired (finish run round 2, decision 15) is optional,
- * written year-month-day, not after today (Manila) and not before the
- * birthdate, the members import's rule.
+ * full sentences. Date Hired (finish run round 2, decision 15) is optional and
+ * held to the server's rules, in its words (`dateHiredError`): written
+ * year-month-day, after 1900, not after today (Manila) and not before the
+ * birthdate.
  */
 export function memberFieldErrors(form: MemberFormData, today: string): Record<string, string> {
   const errors: Record<string, string> = {};
-  const hired = form.date_hired.trim();
-  if (hired === "") return errors;
-
-  // Both are `YYYY-MM-DD`, so the strings compare as the dates do.
-  if (!isCalendarDate(hired)) errors.date_hired = DATE_HIRED_FORMAT;
-  else if (hired > today) errors.date_hired = DATE_HIRED_FUTURE;
-  else if (isCalendarDate(form.birthdate) && hired < form.birthdate) {
-    errors.date_hired = `The date hired can't be before the member's birthdate (${formatDate(form.birthdate)}).`;
-  }
+  const hired = dateHiredError(form.date_hired, form.birthdate, today);
+  if (hired !== null) errors.date_hired = hired;
   return errors;
 }
 

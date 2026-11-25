@@ -2,7 +2,9 @@
 "use client";
 
 import { useState, type Dispatch, type SetStateAction } from "react";
+import { dateHiredError } from "@/lib/date-hired";
 import { todayISO } from "@/lib/format";
+import { formatValidationMessage } from "@/lib/validation-message";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Info } from "lucide-react";
@@ -143,7 +145,8 @@ function validateContact(d: StepTwoData): Partial<Record<keyof StepTwoData, stri
 }
 
 function validateEmployment(
-  d: StepEmploymentData
+  d: StepEmploymentData,
+  birthdate: string
 ): Partial<Record<keyof StepEmploymentData, string>> {
   const errs: Partial<Record<keyof StepEmploymentData, string>> = {};
   if (d.monthly_income && Number(d.monthly_income) < 0) {
@@ -152,10 +155,10 @@ function validateEmployment(
   if (d.pledge_amount && Number(d.pledge_amount) < 0) {
     errs.pledge_amount = "Pledge amount cannot be negative";
   }
-  // Both are YYYY-MM-DD, so a plain string compare works; today is Manila's.
-  if (d.date_hired && d.date_hired > todayISO()) {
-    errs.date_hired = "Date hired cannot be in the future";
-  }
+  // By the server's rules, in its words: after 1900, not after today (Manila)
+  // and not before the birthdate given on Personal Info.
+  const hired = dateHiredError(d.date_hired, birthdate, todayISO());
+  if (hired !== null) errs.date_hired = hired;
   return errs;
 }
 
@@ -253,9 +256,12 @@ export default function RegisterPage() {
   }
 
   function handleNextEmployment() {
-    const errs = validateEmployment(employment);
+    const errs = validateEmployment(employment, personal.birthdate);
     if (Object.keys(errs).length) {
-      notifyValidation(labelsFor(errs));
+      // The amounts read by name; Date Hired's refusal is the server's sentence.
+      const { date_hired: hired, ...named } = errs;
+      const names = Object.keys(named).length > 0 ? formatValidationMessage(labelsFor(named)) : "";
+      toast.error([names, hired ?? ""].filter(Boolean).join(" "));
       return;
     }
     goToStep(5);

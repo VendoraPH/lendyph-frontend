@@ -761,6 +761,8 @@ export interface ApplicationLink {
   status_label: string;
   /** Test links stay out of the dashboard, and only they show staging test codes. */
   is_test: boolean;
+  /** False once the link has applications: the server keeps its Test setting (finish run round 5). */
+  can_change_test: boolean;
   branch_id: number | null;
   branch_name: string | null;
   loan_product_ids: number[];

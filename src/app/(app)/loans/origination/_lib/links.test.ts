@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { NO_ADDRESS, TEST_LINK_NOTE, emptyLinkInput, linkInputFrom } from "./links";
+import { NO_ADDRESS, TEST_LINK_NOTE, TEST_LOCKED_NOTE, emptyLinkInput, linkInputFrom, testSettingLocked } from "./links";
 import type { ApplicationLink } from "@/types/loan-origination";
 
 const link: ApplicationLink = {
@@ -12,6 +12,7 @@ const link: ApplicationLink = {
   status: "active",
   status_label: "Active",
   is_test: true,
+  can_change_test: true,
   branch_id: 2,
   branch_name: "Main",
   loan_product_ids: [5],
@@ -46,6 +47,20 @@ test("a new link is live, not a test, in the branch given", () => {
 
 test("a link with no public address says why instead of offering an empty copy", () => {
   assert.match(NO_ADDRESS, /public address/);
+});
+
+test("the Test link switch locks once the server says the link has applications; a new link never locks", () => {
+  assert.equal(testSettingLocked({ ...link, can_change_test: false }), true);
+  assert.equal(testSettingLocked({ ...link, is_test: false, can_change_test: false }), true);
+  assert.equal(testSettingLocked(link), false);
+  assert.equal(testSettingLocked(null), false);
+});
+
+test("a locked Test link switch says why, in the server's words", () => {
+  assert.equal(
+    TEST_LOCKED_NOTE,
+    "This link already has applications, so it can't be changed to or from a test link. Make a new link instead.",
+  );
 });
 
 test("the test link note says who sees test codes: origination staff's own numbers, on an open test link only", () => {

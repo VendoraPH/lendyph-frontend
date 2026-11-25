@@ -259,20 +259,21 @@ test("Date Hired sits on the Employment step, in both forms", () => {
   }
 });
 
-test("Date Hired is optional, written year-month-day, not after today and not before the birthdate", () => {
+test("Date Hired is optional, written year-month-day, after 1900, not after today and not before the birthdate, in the server's words", () => {
   const problem = (overrides: Partial<NewMemberFormData>) => memberFieldErrors(filledForm(overrides), TODAY).date_hired;
   assert.equal(problem({ date_hired: "" }), undefined);
   assert.equal(problem({ date_hired: "2026-11-24" }), undefined);
   assert.equal(problem({ date_hired: "1990-01-02" }), undefined, "the birthdate itself is not before the birthdate");
   assert.equal(problem({ date_hired: "2026-11-25" }), "The date hired cannot be in the future.");
-  assert.equal(problem({ date_hired: "1990-01-01" }), "The date hired can't be before the member's birthdate (Jan 2, 1990).");
+  assert.equal(problem({ date_hired: "1990-01-01" }), "The date hired cannot be before the birthdate.");
   assert.equal(
     problem({ date_hired: "2015-02-30" }),
     "The date hired must be a date written as year-month-day, such as 2020-06-01.",
   );
   assert.equal(problem({ date_hired: "06/01/2015" }), "The date hired must be a date written as year-month-day, such as 2020-06-01.");
-  // Without a birthdate there is nothing to compare with.
+  // Without a birthdate there is nothing to compare with, but 1900 still holds.
   assert.equal(problem({ birthdate: "", date_hired: "1950-01-01" }), undefined);
+  assert.equal(problem({ birthdate: "", date_hired: "1900-01-01" }), "The date hired field must be a date after 1900-01-01.");
 });
 
 test("the Employment step checks Date Hired on Next; the other steps don't", () => {

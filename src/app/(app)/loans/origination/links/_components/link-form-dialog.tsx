@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Lock } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,7 +16,7 @@ import { useAuthStore } from "@/store";
 import type { ApplicationLink, ApplicationLinkInput } from "@/types/loan-origination";
 import { useLoanProducts } from "../../../reminders/_hooks/use-loan-products";
 import { ActionDialog } from "../../_components/action-dialog";
-import { TEST_LINK_NOTE, emptyLinkInput, linkInputFrom } from "../../_lib/links";
+import { TEST_LINK_NOTE, TEST_LOCKED_NOTE, emptyLinkInput, linkInputFrom, testSettingLocked } from "../../_lib/links";
 
 const orNull = (v: string) => (v.trim() === "" ? null : v);
 
@@ -46,6 +47,8 @@ export function LinkFormDialog({
     setForm(link ? linkInputFrom(link) : emptyLinkInput(working ?? (ownBranchOnly ? (picker.branches[0]?.id ?? null) : null)));
   }
   const set = (patch: Partial<ApplicationLinkInput>) => setForm((f) => ({ ...f, ...patch }));
+  // Once the link has applications the server keeps its Test setting.
+  const testLocked = testSettingLocked(link);
   const toggleProduct = (id: number, on: boolean) =>
     set({ loan_product_ids: on ? [...form.loan_product_ids, id] : form.loan_product_ids.filter((x) => x !== id) });
 
@@ -143,10 +146,22 @@ export function LinkFormDialog({
         Accepting applications
       </label>
       <label className="flex items-start gap-2 text-sm">
-        <Switch className="mt-0.5" checked={form.is_test} onCheckedChange={(is_test) => set({ is_test })} />
+        <Switch
+          className="mt-0.5"
+          checked={form.is_test}
+          disabled={testLocked}
+          aria-describedby={testLocked ? "link-test-locked" : undefined}
+          onCheckedChange={(is_test) => set({ is_test })}
+        />
         <span>
           Test link
           <span className="block text-xs text-muted-foreground">{TEST_LINK_NOTE}</span>
+          {testLocked && (
+            <span id="link-test-locked" className="mt-1 flex items-start gap-1.5 text-xs text-muted-foreground">
+              <Lock className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              {TEST_LOCKED_NOTE}
+            </span>
+          )}
         </span>
       </label>
     </ActionDialog>

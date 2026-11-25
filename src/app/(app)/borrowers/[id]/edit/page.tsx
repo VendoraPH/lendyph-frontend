@@ -409,8 +409,8 @@ function EditBorrowerContent() {
       return;
     }
 
-    // Date Hired, when given: written year-month-day, not after today and not
-    // before the birthdate.
+    // Date Hired, when given, by the server's rules and in its words: written
+    // year-month-day, after 1900, not after today and not before the birthdate.
     const fieldProblems = memberFieldErrors(form, todayISO());
     if (Object.keys(fieldProblems).length > 0) {
       toast.error(sentencesMessage(Object.values(fieldProblems)));
