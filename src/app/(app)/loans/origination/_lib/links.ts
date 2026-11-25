@@ -15,6 +15,18 @@ export const NO_ADDRESS =
 export const TEST_LINK_NOTE =
   "Its applications stay out of the dashboard. On staging, only an open test link shows test codes: for the mobile number on an active staff account that works on loan origination (Settings → Profile, or User Management), or another allowed staff number.";
 
+/** Why the Test link switch is off limits, in the server's words (`OriginationLink::TEST_LOCKED`). */
+export const TEST_LOCKED_NOTE =
+  "This link already has applications, so it can't be changed to or from a test link. Make a new link instead.";
+
+/**
+ * Whether the form's Test link switch is locked: on an existing link the server
+ * says has applications (`can_change_test` false). A new link has none.
+ */
+export function testSettingLocked(link: ApplicationLink | null): boolean {
+  return link !== null && link.can_change_test === false;
+}
+
 export function emptyLinkInput(branchId: number | null): ApplicationLinkInput {
   return {
     name: "",
