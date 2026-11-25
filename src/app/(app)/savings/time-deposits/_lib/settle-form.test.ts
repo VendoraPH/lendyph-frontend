@@ -89,3 +89,15 @@ test("interest after maturity reads its days, or no days when the server couldn'
   assert.equal(postMaturityLabel({ post_maturity_days: 1 }), "Interest after maturity (1 day)");
   assert.equal(postMaturityLabel({ post_maturity_days: null }), "Interest after maturity");
 });
+
+test("a payout over the counter sends its reference; one into savings or a full rollover doesn't", () => {
+  assert.deepEqual(payoutFields("gcash", "", " GC-9 "), { payout_method: "gcash", payout_reference: "GC-9" });
+  assert.deepEqual(payoutFields("savings", "6", "GC-9"), { payout_method: "savings", payout_account_id: 6 });
+  assert.deepEqual(settleBody("2026-11-10", "payout", "bank_transfer", "payout", "", "BDO-1"), {
+    date: "2026-11-10",
+    action: "payout",
+    payout_method: "bank_transfer",
+    payout_reference: "BDO-1",
+  });
+  assert.equal("payout_reference" in settleBody("2026-11-10", "rollover_all", "gcash", "payout", "", "GC-9"), false);
+});

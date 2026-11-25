@@ -462,6 +462,8 @@ export interface CloseSavingsAccountInput {
   reason: string;
   /** How the balance and the interest credited at close are paid out. */
   payout_method: SavingsMethod;
+  /** The payout's reference: required for bank transfer, GCash and Maya (finish run round 5). */
+  payout_reference?: string;
 }
 
 /** `GET …/{id}/closing-quote`: what closing today credits and pays. */
@@ -615,6 +617,8 @@ export interface TimeDeposit {
   settled_tax: MoneyString | null;
   settled_amount: MoneyString | null;
   payout_method: SavingsMethod | null;
+  /** The payout's reference, when it left by bank transfer, GCash or Maya (or a cash payout was given one). */
+  payout_reference?: string | null;
   /** Null when the system settled it (shown as "System"). */
   settled_by: SavingsUserRef | null;
   /**
@@ -706,6 +710,8 @@ export interface SettleTimeDepositInput {
    * account is used.
    */
   payout_account_id?: number;
+  /** The payout's reference: required for bank transfer, GCash and Maya; none into savings or on a full rollover (finish run round 5). */
+  payout_reference?: string;
   /** On a rollover: the new placement's instruction (the original's when left out). */
   next_instruction?: MaturityInstruction;
 }
@@ -717,6 +723,8 @@ export interface PreterminateTimeDepositInput {
   payout_method: SavingsMethod;
   /** With `payout_method` savings: the account to pay into (backend S6). */
   payout_account_id?: number;
+  /** The payout's reference: required for bank transfer, GCash and Maya; none into savings (finish run round 5). */
+  payout_reference?: string;
 }
 
 /** `GET …/{id}/pretermination-quote?date=`: what breaking it on `date` pays. */

@@ -30,7 +30,7 @@ import { printTimeDepositCertificate } from "../_lib/print-certificate";
 import { postMaturityLabel } from "../../_lib/settle-form";
 import { PreterminateDialog } from "./preterminate-dialog";
 import { SettleDialog } from "./settle-dialog";
-import { referenceRow } from "../../_lib/detail-rows";
+import { payoutReferenceRow, referenceRow } from "../../_lib/detail-rows";
 
 export function TimeDepositDetail({ depositId }: { depositId: number }) {
   const router = useRouter();
@@ -201,6 +201,8 @@ function Terms({ td }: { td: TimeDeposit }) {
   if (td.rolled_over_to_id)
     rows.push(["Rolled over into", <Link key="to" className="hover:underline" href={`/savings/time-deposits/${td.rolled_over_to_id}`}>New placement</Link>]);
   if (td.payout_method) rows.push(["Paid out by", labelOf(METHOD_LABELS, td.payout_method)]);
+  const payoutReference = payoutReferenceRow(td);
+  if (payoutReference) rows.push(payoutReference);
   if (td.settled_on) rows.push(["Settled by", actorName(td.settled_by)]);
   rows.push(["Placed by", actorName(td.created_by)]);
 

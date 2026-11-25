@@ -27,12 +27,16 @@ test("each savings form with a typed reference labels it by the method, as the s
     "src/app/(app)/savings/time-deposits/_components/place-time-deposit-dialog.tsx",
     // A member's portal request paid out or opened through the savings teller.
     "src/app/(app)/member-portal/requests/_components/decision-dialog.tsx",
+    // Payouts at closing, at maturity and on pre-termination (`payout_reference`).
+    "src/app/(app)/savings/accounts/[id]/_components/close-account-dialog.tsx",
+    "src/app/(app)/savings/time-deposits/[id]/_components/settle-dialog.tsx",
+    "src/app/(app)/savings/time-deposits/[id]/_components/preterminate-dialog.tsx",
   ]) {
     const source = readFileSync(resolve(process.cwd(), file), "utf8");
     // Finish run round 5: required for bank transfer, GCash and Maya, so "(optional)" follows the method.
     assert.doesNotMatch(source, /"Reference \(optional\)"/, file);
     assert.match(source, /referenceLabel\(/, file);
-    assert.match(source, /serverFieldError\(err, "reference"\)|decisionReferenceRefusal\(request\.type, err\)/, file);
+    assert.match(source, /serverFieldError\(err, "(?:payout_)?reference"\)|decisionReferenceRefusal\(request\.type, err\)/, file);
     assert.match(source, /error=\{referenceError \?\? /, file);
   }
 });

@@ -2,11 +2,13 @@
  * A savings entry paid by bank transfer, GCash or Maya needs the reference of
  * that payment (finish run round 5), as the server checks it
  * (`SavingsReference`): a deposit, a withdrawal, an opening deposit, a time
- * deposit placement and a Member Portal payout. Cash needs none (a counter
- * receipt; the server numbers a cash time deposit), nor does `savings` (a
- * placement paid from the member's own savings), nor an opening deposit of
- * ₱0.00. The words are the server's, so the field reads the same before and
- * after sending. Dependency-free, so it runs under `tsx --test`.
+ * deposit placement, a Member Portal payout, and a payout at closing, at a
+ * time deposit's maturity or on its pre-termination (`payout_reference`).
+ * Cash needs none (a counter receipt; the server numbers a cash time
+ * deposit), nor does `savings` (a placement paid from, or a payout into, the
+ * member's own savings), nor an opening deposit of ₱0.00 or a full rollover.
+ * The words are the server's, so the field reads the same before and after
+ * sending. Dependency-free, so it runs under `tsx --test`.
  */
 
 import type { SavingsMethod } from "@/types";
@@ -56,4 +58,10 @@ export function savingsReferenceError(
   const words = neededMethodWords(method, paid);
   if (words === null || reference.trim() !== "") return null;
   return `Enter the ${words} reference for ${ENTRY_WORDS[entry]}.`;
+}
+
+/** A payout's `payout_reference` as sent: the typed reference, or nothing when blank or paid into savings. */
+export function payoutReferenceField(method: MethodChoice, reference: string): { payout_reference?: string } {
+  const typed = reference.trim();
+  return method === "savings" || typed === "" ? {} : { payout_reference: typed };
 }
