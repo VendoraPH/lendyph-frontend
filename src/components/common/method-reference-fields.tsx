@@ -44,7 +44,10 @@ export function MethodReferenceFields<M extends string>({
   const hint = autoReference?.hint ?? problem;
   return (
     <div className={className}>
-      <div className="space-y-1.5 min-w-0">
+      {/* Columns with a gap, not space-y: the select puts a hidden input after
+          its trigger, which would take the spacing and leave the method 6 px
+          taller than the fields beside it. */}
+      <div className="flex min-w-0 flex-col gap-1.5">
         <Label id={`${idPrefix}-method-label`}>
           {methodLabel} <span className="text-red-500">*</span>
         </Label>
@@ -68,7 +71,7 @@ export function MethodReferenceFields<M extends string>({
           </SelectContent>
         </Select>
       </div>
-      <div className="space-y-1.5 min-w-0">
+      <div className="flex min-w-0 flex-col gap-1.5">
         <Label htmlFor={`${idPrefix}-reference`}>
           Reference Number
           {referenceRequired && <span className="text-red-500"> *</span>}

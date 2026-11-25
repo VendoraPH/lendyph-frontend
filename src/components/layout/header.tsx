@@ -44,6 +44,7 @@ import {
 } from "@/lib/page-titles";
 import { SIDEBAR_NAV } from "@/constants";
 import { navItemAllowed, navItemHref } from "@/constants/navigation";
+import { OWN_PROFILE_HREF, accountSettingsHref } from "@/lib/account-menu";
 import type { Permission } from "@/types";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -135,6 +136,8 @@ const QUICK_ACTIONS: { title: string; href: string; icon: typeof FilePlus; permi
 export function Header({ onMenuClick }: HeaderProps) {
   const { user, clearAuth } = useAuth();
   const { can } = usePermission();
+  // The account menu's Settings: the first Settings page this user can open.
+  const settingsHref = accountSettingsHref(SIDEBAR_NAV, can);
   const router = useRouter();
   const [commandOpen, setCommandOpen] = useState(false);
 
@@ -235,18 +238,16 @@ export function Header({ onMenuClick }: HeaderProps) {
                 </DropdownMenuLabel>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => router.push("/settings/profile")}
-              >
+              <DropdownMenuItem onClick={() => router.push(OWN_PROFILE_HREF)}>
                 <User className="mr-2 h-4 w-4" />
                 Profile
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => router.push("/settings/loan-products")}
-              >
-                <Settings className="mr-2 h-4 w-4" />
-                Settings
-              </DropdownMenuItem>
+              {settingsHref !== null && (
+                <DropdownMenuItem onClick={() => router.push(settingsHref)}>
+                  <Settings className="mr-2 h-4 w-4" />
+                  Settings
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleLogout}>
                 <LogOut className="mr-2 h-4 w-4" />

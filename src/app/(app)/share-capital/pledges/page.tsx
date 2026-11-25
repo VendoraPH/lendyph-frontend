@@ -12,6 +12,7 @@ import { hasIllustration, Illustration } from "@/components/common/illustration"
 import { emptyArt } from "@/lib/illustrations";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -866,10 +867,13 @@ function PledgeEntryContent() {
                             <p className="text-sm font-medium">
                               Manual Pledge Entry — {pledge.borrower}
                             </p>
-                            <div className="flex flex-wrap items-end gap-4">
+                            {/* Every field has the same label, so aligned at the top the fields
+                                share one line whether or not the reference shows a note. */}
+                            <div className="flex flex-wrap items-start gap-4">
                               <div className="space-y-1.5">
-                                <p className="text-xs text-muted-foreground">Amount (₱)</p>
+                                <Label htmlFor={`pledge-${pledge.id}-amount`}>Amount (₱)</Label>
                                 <Input
+                                  id={`pledge-${pledge.id}-amount`}
                                   type="number"
                                   min="0.01"
                                   step="0.01"
@@ -885,8 +889,12 @@ function PledgeEntryContent() {
                                 />
                               </div>
                               <div className="space-y-1.5">
-                                <p className="text-xs text-muted-foreground">Transaction</p>
-                                <div className="flex h-8 overflow-hidden rounded-md border">
+                                <Label id={`pledge-${pledge.id}-transaction`}>Transaction</Label>
+                                <div
+                                  role="group"
+                                  aria-labelledby={`pledge-${pledge.id}-transaction`}
+                                  className="flex h-8 overflow-hidden rounded-md border"
+                                >
                                   <button
                                     type="button"
                                     className={`px-4 text-xs font-medium transition-colors ${
@@ -925,20 +933,24 @@ function PledgeEntryContent() {
                                 autoReference={manualAutoReference}
                                 className="grid w-full max-w-md gap-3 sm:grid-cols-2"
                               />
-                              <div className="flex gap-2">
-                                <Button
-                                  className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                                  disabled={manualSubmitting || !manualAmount || manualReferenceProblem !== null}
-                                  onClick={() => handleManualEntry(pledge.id)}
-                                >
-                                  Submit
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  onClick={() => setManualEntryId(null)}
-                                >
-                                  Cancel
-                                </Button>
+                              <div className="space-y-1.5">
+                                {/* A label's height, so the buttons sit on the fields' line. */}
+                                <span aria-hidden="true" className="block h-3.5" />
+                                <div className="flex gap-2">
+                                  <Button
+                                    className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                                    disabled={manualSubmitting || !manualAmount || manualReferenceProblem !== null}
+                                    onClick={() => handleManualEntry(pledge.id)}
+                                  >
+                                    Submit
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    onClick={() => setManualEntryId(null)}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </div>
                               </div>
                             </div>
                           </div>
