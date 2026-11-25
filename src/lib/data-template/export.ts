@@ -1,21 +1,22 @@
 import { csvBlob, toCsv } from "@/lib/csv";
 import { filledRows } from "./draft";
-import { TEMPLATE_FILE } from "./template";
 import type { TemplateDraft, TemplateSheet } from "./types";
 
 /**
  * Writing the template out.
  *
- * Two different things are downloadable on purpose. The workbook is the
- * artefact the cooperative was given and may already have circulated, so it is
- * served byte-for-byte from `public/` — never regenerated, because a rebuilt
- * copy would quietly lose the Data Dictionary sheet, the colour coding and the
- * macros the extension implies. The CSVs are what actually gets submitted, and
- * those are built from whatever is on screen.
+ * Two different things are downloadable on purpose. The workbook is the blank
+ * form, built from the template's own sheets (`./workbook`), so it carries
+ * every column the import reads, the Data Dictionary and Guidelines sheets and
+ * the colour coding. The CSVs are what actually gets submitted, and those are
+ * built from whatever is on screen.
  *
- * `file-saver` and `jszip` are imported dynamically for the reason the reports
- * page documents: nobody should pay for them on a page they never export from.
+ * `exceljs`, `file-saver` and `jszip` are imported dynamically for the reason
+ * the reports page documents: nobody should pay for them on a page they never
+ * export from.
  */
+
+const XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 /**
  * Guideline 3 asks for the header row to be removed before submitting. It is
@@ -35,14 +36,14 @@ export function sheetFilename(sheet: TemplateSheet): string {
   return `${sheet.name}.csv`;
 }
 
-/** The original workbook, untouched. */
+/** The blank workbook: every sheet's header row, and nothing typed in. */
 export async function downloadTemplateWorkbook(): Promise<void> {
-  const res = await fetch(TEMPLATE_FILE.url);
-  if (!res.ok) {
-    throw new Error(`Template unavailable (${res.status})`);
-  }
-  const { saveAs } = await import("file-saver");
-  saveAs(await res.blob(), TEMPLATE_FILE.filename);
+  const [{ buildTemplateWorkbook, TEMPLATE_WORKBOOK_FILENAME }, { saveAs }] = await Promise.all([
+    import("./workbook"),
+    import("file-saver"),
+  ]);
+  const buffer = await buildTemplateWorkbook().xlsx.writeBuffer();
+  saveAs(new Blob([buffer as BlobPart], { type: XLSX_TYPE }), TEMPLATE_WORKBOOK_FILENAME);
 }
 
 export async function downloadSheetCsv(sheet: TemplateSheet): Promise<void> {

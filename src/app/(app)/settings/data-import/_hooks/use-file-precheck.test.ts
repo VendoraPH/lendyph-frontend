@@ -9,6 +9,7 @@ import {
   describeIsoDate,
   fileBlockers,
   inspectFile,
+  runDateOrders,
   sessionAnswers,
   type DateColumnFinding,
   type FileInspection,
@@ -107,6 +108,20 @@ test("a contact number holding two numbers is a warning, not a failure", () => {
   assert.equal(result.warningCount, 1);
   assert.match(result.issues[0].message, /keeps 09171234567/);
   assert.match(result.issues[0].message, /drops 09181234567/);
+});
+
+test("a member's amounts are read as the server reads them, in its words", () => {
+  const row = [...CUSTOMER];
+  row[15] = "1234.500"; // Monthly Income: refused, as on the server
+  row[16] = "10,000,000.00"; // Pledge Amt: above the member form's limit, imported blank
+
+  const result = checkRows(customerRows([row]), CUSTOMER_CONTEXT);
+
+  assert.equal(result.failingRows, 1);
+  assert.deepEqual(result.issues.map((issue) => [issue.column, issue.severity, issue.message]), [
+    ["Monthly Income", "error", '"1234.500" has more than 2 decimal places. Round it to centavos in the source file — this importer will not round it for you.'],
+    ["Pledge Amt(If Applicable)", "warning", "This amount is above the 9,999,999.99 the member form allows, so it was imported as blank rather than leaving a member who cannot be saved."],
+  ]);
 });
 
 test("a value the server rejects is an error, next to a value it repairs", () => {
@@ -229,7 +244,7 @@ test("a row of the wrong width is reported once, as a whole-row problem", () => 
 
 test("an unrecognised gender or civil status warns that it will be imported blank, and quotes the options", () => {
   const gender = [...CUSTOMER];
-  gender[6] = "Lalake";
+  gender[6] = "Other";
   const civil = [...CUSTOMER];
   civil[0] = "2019-00102";
   civil[7] = "Live-in";
@@ -243,7 +258,7 @@ test("an unrecognised gender or civil status warns that it will be imported blan
       "Gender",
       "warning",
       "value",
-      'Gender "Lalake" isn\'t one the import recognises, so it will be imported blank; add it later on the member\'s page. Expected one of: Male, Female.',
+      'Gender "Other" isn\'t one the import recognises, so it will be imported blank; add it later on the member\'s page. Expected one of: Male, Female.',
     ],
     [
       "Civil Status",
@@ -254,10 +269,19 @@ test("an unrecognised gender or civil status warns that it will be imported blan
   ]);
 });
 
+test("Lalaki, Lalake and Babae read as a gender, as the server reads them, and raise nothing", () => {
+  for (const spelling of ["Lalaki", "LALAKE", "babae"]) {
+    const row = [...CUSTOMER];
+    row[6] = spelling;
+
+    assert.deepEqual(checkRows(customerRows([row]), CUSTOMER_CONTEXT).issues, [], spelling);
+  }
+});
+
 test("a gender or civil status the server imports blank warns, even a spelling a reader would know", () => {
   const cases: Array<[number, string, string]> = [
-    [6, "Gender", "Lalaki"],
-    [6, "Gender", "Babae"],
+    [6, "Gender", "Lalakii"],
+    [6, "Gender", "Babai"],
     [7, "Civil Status", "Maried"],
     [7, "Civil Status", "Marrried"],
     [7, "Civil Status", "Seperated"],
@@ -297,6 +321,156 @@ test("a duplicate identifier is a warning that points at the first row", () => {
 });
 
 // ---------------------------------------------------------------------------
+// The loans file follows the server (finish run round 4)
+// ---------------------------------------------------------------------------
+
+/** One loans row with the given cells changed, checked on its own. */
+function checkLoan(changes: Record<number, string>) {
+  return checkRows(customerRows([LOAN.map((cell, index) => changes[index] ?? cell)]), LOANS_CONTEXT);
+}
+
+/** Each issue as [column, severity, message]. */
+function described(result: ReturnType<typeof checkRows>) {
+  return result.issues.map((issue) => [issue.column, issue.severity, issue.message]);
+}
+
+test("a complete loans row raises nothing", () => {
+  assert.deepEqual(checkLoan({}).issues, []);
+});
+
+test("a blank Purpose or Loan Product warns and the loan imports, as on the server", () => {
+  const purpose = checkLoan({ 7: "" });
+  assert.equal(purpose.failingRows, 0);
+  assert.deepEqual(described(purpose), [["Purpose", "warning", "Purpose is blank. The loan will be imported with no purpose."]]);
+
+  const product = checkLoan({ 8: "  " });
+  assert.equal(product.failingRows, 0);
+  assert.deepEqual(described(product), [
+    ["Loan Product", "warning", "Loan Product is blank. The loan will still import: on the Processing step, choose a product for the loans with no product named."],
+  ]);
+
+  // Any other blank required cell still refuses the row.
+  const amount = checkLoan({ 2: "" });
+  assert.equal(amount.failingRows, 1);
+  assert.deepEqual(described(amount), [["Loan Amount", "error", "Loan Amount is blank, and this row cannot be imported without it."]]);
+});
+
+test("a Loan No. or Account No. longer than its 50-character column can't be imported; 50 can", () => {
+  const fifty = "LN-2023-".padEnd(50, "7");
+  assert.deepEqual(checkLoan({ 1: fifty }).issues, []);
+  assert.deepEqual(checkLoan({ 1: "LN-2023-ABCDEFGHIJKLM" }).issues, [], "21 characters, cut to 20 before round 4");
+
+  const long = checkLoan({ 1: `${fifty}7` });
+  assert.equal(long.failingRows, 1);
+  assert.deepEqual(described(long), [["Loan No.", "error", "Loan No. is 51 characters; this field holds 50."]]);
+
+  const account = "ACCT-".padEnd(51, "4");
+  assert.deepEqual(described(checkLoan({ 0: account })), [["Account No.", "error", "Account No. is 51 characters; this field holds 50."]]);
+  const member = [...CUSTOMER];
+  member[0] = account;
+  assert.deepEqual(described(checkRows(customerRows([member]), CUSTOMER_CONTEXT)), [
+    ["Account No.", "error", "Account No. is 51 characters; this field holds 50."],
+  ]);
+});
+
+/** The loans file's two dates, settled as written (year-month-day). */
+const LOAN_DATES: DateColumnFinding[] = [
+  { key: "date_released", label: "Date Released", inference: { status: "resolved", order: null, evidence: null, stats: {} as never }, order: null, chosen: false, blocked: false },
+  { key: "maturity_date", label: "Maturity Date", inference: { status: "resolved", order: null, evidence: null, stats: {} as never }, order: null, chosen: false, blocked: false },
+];
+
+test("amounts the server refuses can't be imported here either, in its words", () => {
+  const negative = checkLoan({ 3: "-500.00", 14: "(1,000.00)" });
+  assert.equal(negative.failingRows, 1);
+  assert.deepEqual(described(negative), [
+    ["Loan Balance", "error", '"-500.00" is a negative amount, which cannot be imported.'],
+    ["Processing Fee", "error", '"(1,000.00)" is written in accounting notation for a negative amount. Negative amounts cannot be imported.'],
+  ]);
+
+  assert.deepEqual(described(checkLoan({ 2: "0.00", 3: "0", 14: "", 15: "" })), [
+    ["Loan Amount", "error", "The loan amount must be greater than zero."],
+  ]);
+  assert.deepEqual(described(checkLoan({ 5: "1234.500" })), [
+    ["Interest Amount", "error", '"1234.500" has more than 2 decimal places. Round it to centavos in the source file — this importer will not round it for you.'],
+  ]);
+  // A rate written with its percent sign reads, as on the server.
+  assert.deepEqual(checkLoan({ 4: "2%" }).issues, []);
+});
+
+test("a balance above its amount, or fees above the principal, can't be imported", () => {
+  assert.deepEqual(described(checkLoan({ 3: "50,000.01", 6: "12,000.01" })), [
+    ["Loan Balance", "error", "The loan balance is larger than the loan amount. A balance cannot exceed the principal that was released."],
+    ["Interest Balance", "error", "The interest balance is larger than the total interest. A balance cannot exceed what was charged."],
+  ]);
+
+  const fees = checkLoan({ 14: "40,000.00", 15: "10,000.00", 16: "Notarial", 17: "0.01" });
+  assert.equal(fees.failingRows, 1);
+  assert.deepEqual(described(fees), [
+    [null, "error", "The fees on this loan add up to more than the principal, which would make its net proceeds negative. Check the Processing Fee, Service Fee and Other Fee Amount cells."],
+  ]);
+});
+
+test("a maturity date on or before the date released can't be imported, on the dates as read", () => {
+  const result = checkRows(customerRows([LOAN.map((cell, index) => (index === 13 ? "2025-01-15" : cell))]), { ...LOANS_CONTEXT, dates: LOAN_DATES });
+  assert.equal(result.failingRows, 1);
+  assert.deepEqual(described(result), [
+    ["Maturity Date", "error", "The maturity date (2025-01-15) is not after the date released (2025-01-15), so no payment schedule can be built."],
+  ]);
+  assert.deepEqual(checkRows(customerRows([LOAN]), { ...LOANS_CONTEXT, dates: LOAN_DATES }).issues, []);
+});
+
+test("a long Loan Product or Other Fee Detail, and an other fee with no description, warn and the loan imports", () => {
+  const long = checkLoan({ 8: "p".repeat(256), 16: "d".repeat(300), 17: "150.00" });
+  assert.equal(long.failingRows, 0);
+  assert.deepEqual(described(long), [
+    ["Loan Product", "warning", "Loan Product is 256 characters. The import keeps the first 255."],
+    ["Other Fee Detail", "warning", "Other Fee Detail is 300 characters. The import keeps the first 255."],
+  ]);
+
+  const unexplained = checkLoan({ 17: "150.00" });
+  assert.equal(unexplained.failingRows, 0);
+  assert.deepEqual(described(unexplained), [
+    ["Other Fee Detail", "warning", "An other-fee amount was given with no description. The disclosure statement has to itemise every deduction, so a description will need to be added."],
+  ]);
+});
+
+test("a Purpose longer than 500 characters warns that the import keeps the first 500", () => {
+  assert.deepEqual(checkLoan({ 7: "p".repeat(500) }).issues, []);
+
+  const long = checkLoan({ 7: "p".repeat(1000) });
+  assert.equal(long.failingRows, 0);
+  assert.deepEqual(described(long), [["Purpose", "warning", "Purpose is 1000 characters. The import keeps the first 500."]]);
+});
+
+test("Term in Months is a whole number of months from 1 to 120, else the row can't be imported", () => {
+  for (const term of ["1", "120", " 12 ", "006"]) {
+    assert.deepEqual(checkLoan({ 9: term }).issues, [], term);
+  }
+  for (const term of ["0", "121", "240"]) {
+    const result = checkLoan({ 9: term });
+    assert.equal(result.failingRows, 1, term);
+    assert.deepEqual(described(result), [["Term in Months", "error", `"${term}" is outside the accepted range 1–120.`]], term);
+  }
+  for (const term of ["12.5", "12.0", "-6", "₱12", "12 months", "twelve"]) {
+    const result = checkLoan({ 9: term });
+    assert.equal(result.failingRows, 1, term);
+    assert.deepEqual(described(result), [["Term in Months", "error", `"${term}" is not a whole number.`]], term);
+  }
+});
+
+test("a payment frequency or interest type the server doesn't read can't be imported, and names the ones it takes", () => {
+  assert.deepEqual(checkLoan({ 10: "Bi-Weekly", 11: "Straight (Fixed)" }).issues, []);
+  assert.deepEqual(checkLoan({ 10: "UPON MATURITY", 11: "Upon Maturity" }).issues, []);
+
+  const result = checkLoan({ 10: "Fortnightly", 11: "Reducing" });
+  assert.equal(result.failingRows, 1);
+  assert.deepEqual(described(result), [
+    ["Payment Frequency", "error", '"Fortnightly" is not a value Payment Frequency accepts. Expected one of: Daily, Weekly, Bi-Weekly, Semi-Monthly, Monthly, Upon Maturity.'],
+    ["Interest Type", "error", '"Reducing" is not a value Interest Type accepts. Expected one of: Straight (Fixed), Diminishing, Upon Maturity.'],
+  ]);
+});
+
+// ---------------------------------------------------------------------------
 // Dates
 // ---------------------------------------------------------------------------
 
@@ -318,6 +492,31 @@ test("dates are checked against the settled order, and an impossible one fails",
   const dates = result.issues.filter((issue) => issue.category === "date");
   assert.equal(dates.length, 1);
   assert.match(dates[0].message, /not a real date read day-first/);
+});
+
+test("a date read with the server's warning warns, in its words, and the row imports", () => {
+  const BIRTHDATE_AS_WRITTEN: DateColumnFinding = { ...BIRTHDATE_DMY, order: null };
+  const row = [...CUSTOMER];
+  row[5] = "32874";
+
+  const result = checkRows(customerRows([row]), { ...CUSTOMER_CONTEXT, dates: [BIRTHDATE_AS_WRITTEN] });
+
+  assert.equal(result.failingRows, 0);
+  assert.deepEqual(result.issues.map((issue) => [issue.column, issue.severity, issue.category, issue.message]), [
+    ["Birthdate", "warning", "date", '"32874" is an Excel serial date number and was read as 1990-01-01. Confirm it against the source workbook.'],
+  ]);
+});
+
+test("a date the server doesn't read can't be imported, in its words", () => {
+  const BIRTHDATE_AS_WRITTEN: DateColumnFinding = { ...BIRTHDATE_DMY, order: null };
+  for (const cell of ["1990-3-4", "1990.03.04", "17673", "1990-03-04 00:00:00"]) {
+    const row = [...CUSTOMER];
+    row[5] = cell;
+    const result = checkRows(customerRows([row]), { ...CUSTOMER_CONTEXT, dates: [BIRTHDATE_AS_WRITTEN] });
+    assert.deepEqual(result.issues.map((issue) => [issue.column, issue.severity, issue.message]), [
+      ["Birthdate", "error", `"${cell}" is not a date this importer recognises. Use YYYY-MM-DD.`],
+    ], cell);
+  }
 });
 
 test("an ambiguous column with no choice yet produces no row issues at all", () => {
@@ -694,7 +893,7 @@ test("a date column of one unreadable value says 1 value, not 1 values", () => {
 
   const [blocker] = fileBlockers(inspectionStub(), customerRows([CUSTOMER]), [unusable]);
 
-  assert.match(blocker, /Of 1 value, 1 is not a date at all \(soon\)\./);
+  assert.match(blocker, /Of 1 value, 1 isn't written in a form the import reads \(soon\)\./);
 });
 
 test("a members file at neither layout's width is blocked, and the blocker names both", () => {
@@ -740,7 +939,7 @@ test("the row total is the complete parse even when checks stop at the ceiling",
 test("a members file with only these warnings isn't counted as failing, and nothing holds it up", () => {
   const changes: Array<Record<number, string>> = [
     { 0: "2019-00201", 5: "" }, // Birthdate blank
-    { 0: "2019-00202", 6: "Lalake" }, // a gender the server doesn't recognise
+    { 0: "2019-00202", 6: "Other" }, // a gender the server doesn't recognise
     { 0: "2019-00203", 17: "", 19: "" }, // married, spouse names blank
     { 0: "2019-00204", 9: "", 13: "" }, // email and Province blank
   ];
@@ -951,6 +1150,31 @@ test("a file with no date columns still records its header answer", () => {
 });
 
 // ---------------------------------------------------------------------------
+// runDateOrders — what the run carries to the server (finish run round 4)
+// ---------------------------------------------------------------------------
+
+test("the run carries exactly the date order the Check step settled for each date column", () => {
+  const settled = sessionAnswers([
+    answer("customers", true, { birthdate: "dmy", date_hired: null }),
+    answer("loans", false, { date_released: "dmy", maturity_date: "mdy" }),
+  ]);
+
+  // Day-first or month-first, and null where the column needed no order.
+  assert.deepEqual(runDateOrders(settled.dateFormat), {
+    customers: { birthdate: "dmy", date_hired: null },
+    loans: { date_released: "dmy", maturity_date: "mdy" },
+  });
+});
+
+test("only the members and loans files carry date orders, and a file with none sends none", () => {
+  assert.deepEqual(runDateOrders({}), {});
+  assert.deepEqual(
+    runDateOrders({ customers: { birthdate: ISO_DATE_FORMAT }, share_capital: { transaction_date: ISO_DATE_FORMAT } }),
+    { customers: { birthdate: null } },
+  );
+});
+
+// ---------------------------------------------------------------------------
 // The share capital file (finish run round 2, decision 13)
 // ---------------------------------------------------------------------------
 
@@ -1008,18 +1232,48 @@ test("the transaction date is written year-month-day, from 1900 and not after to
   assert.equal(checkRows(shareRows([share({ 1: "1900-01-01" })]), SHARE_CONTEXT).errorCount, 0);
 });
 
-test("the amount is above ₱0.00 with at most two decimals", () => {
-  const zero = checkRows(shareRows([share({ 4: "0.00" })]), SHARE_CONTEXT);
-  assert.equal(zero.errorCount, 1);
-  assert.equal(zero.issues[0].message, "Amount is ₱0.00. A share capital entry moves money, so its amount must be above ₱0.00.");
+/**
+ * The share capital Amount as the server reads it (lendyph-backend,
+ * app/Services/CsvImport), written out. `ShareCapitalRowNormalizer::amount()`
+ * reads it with `ValueNormalizer::centavos()`, required, after a trim:
+ *  1. starts with "(" or ends with ")": refused, accounting notation;
+ *  2. with "₱", ",", spaces and "php" (any case) removed and leading "+"
+ *     dropped, starts or ends with "-": refused, negative;
+ *  3. matches /^\d*\.\d{3,}$/: refused, more than 2 decimal places;
+ *  4. doesn't match /^(\d+(\.\d{1,2})?|\.\d{1,2})$/: refused, not an amount;
+ *  5. above 999,999,999,999 centavos: refused, too large;
+ * and then refuses ₱0.00. A blank is the required check's.
+ */
+test("the amount is read as the server reads it, in its words, and must be above ₱0.00", () => {
+  for (const amount of ["1500.00", "₱1,000.50", "PHP 250", "php250", "+500", ".50", "1 000", "9,999,999,999.99"]) {
+    assert.deepEqual(checkRows(shareRows([share({ 4: amount })]), SHARE_CONTEXT).issues, [], amount);
+  }
 
-  const negative = checkRows(shareRows([share({ 4: "-500" })]), SHARE_CONTEXT);
-  assert.equal(negative.errorCount, 1);
-  assert.equal(negative.issues[0].message, 'Amount "-500" is a negative amount, which can\'t be imported. A withdrawal is written as a positive amount with Transaction Type Withdrawal.');
+  const refusals: Array<[string, string]> = [
+    ["0.00", "The amount is ₱0.00. A share capital entry moves money, so its amount must be above ₱0.00."],
+    ["0", "The amount is ₱0.00. A share capital entry moves money, so its amount must be above ₱0.00."],
+    ["(500.00)", '"(500.00)" is written in accounting notation for a negative amount. Negative amounts cannot be imported.'],
+    ["-500", '"-500" is a negative amount, which cannot be imported.'],
+    ["500-", '"500-" is a negative amount, which cannot be imported.'],
+    ["1.005", '"1.005" has more than 2 decimal places. Round it to centavos in the source file — this importer will not round it for you.'],
+    ["1234.500", '"1234.500" has more than 2 decimal places. Round it to centavos in the source file — this importer will not round it for you.'],
+    ["$500", '"$500" is not a valid amount.'],
+    ["P500", '"P500" is not a valid amount.'],
+    ["five hundred", '"five hundred" is not a valid amount.'],
+    ["₱", '"₱" is not a valid amount.'],
+    ["10000000000", '"10000000000" is larger than the maximum this system stores (9,999,999,999.99).'],
+  ];
+  for (const [amount, message] of refusals) {
+    const result = checkRows(shareRows([share({ 4: amount })]), SHARE_CONTEXT);
+    assert.equal(result.failingRows, 1, amount);
+    assert.deepEqual(result.issues.map((issue) => [issue.column, issue.severity, issue.message]), [["Amount", "error", message]], amount);
+  }
+});
 
-  assert.equal(checkRows(shareRows([share({ 4: "1.005" })]), SHARE_CONTEXT).issues[0].message, "Amount has more decimal places than this field stores (2).");
-  assert.equal(checkRows(shareRows([share({ 4: "five hundred" })]), SHARE_CONTEXT).errorCount, 1);
-  assert.equal(checkRows(shareRows([share({ 4: "(500.00)" })]), SHARE_CONTEXT).errorCount, 1);
+test("a repeated row is one with the same amount as the server reads it", () => {
+  // `₱1,000.50` and `1000.5` are one amount; the second row, with no reference, repeats the first.
+  const result = checkRows(shareRows([share({ 2: "", 4: "₱1,000.50" }), share({ 2: "", 4: "1000.5" })]), SHARE_CONTEXT);
+  assert.deepEqual(result.issues.map((issue) => [issue.line, issue.category]), [[3, "duplicate"]]);
 });
 
 test("an unknown transaction type quotes the two it takes", () => {

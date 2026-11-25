@@ -8,9 +8,16 @@
  * `resolveRowEnums`'; a membership number used twice in one file is the row
  * check's, since only it sees every row. What is left needs the row's dates as
  * read, which is why the caller passes them in.
+ *
+ * A member's two amounts, Monthly Income and Pledge Amt, are read here too, as
+ * `CustomerRowNormalizer::cappedAmount()` reads them (finish run round 4): the
+ * server's money rules (`./import-server-values`) refuse the row, in its
+ * words, and an amount above what the member form allows is imported blank,
+ * with its warning.
  */
 
 import { canonicalMemberNumber, columnsFor, type ImportRow } from "./import-schema";
+import { readCentavos } from "./import-server-values";
 
 export interface MemberFieldProblem {
   key: string;
@@ -33,6 +40,27 @@ export interface MemberFieldContext {
    * that on top of importing, as the server rules (`borrowers:update`).
    */
   membershipAllowed: boolean;
+}
+
+/**
+ * Each amount, the most the member form allows in centavos, and that limit as
+ * the server words it (`CustomerRowNormalizer`).
+ */
+const MEMBER_AMOUNTS: ReadonlyArray<readonly [string, bigint, string]> = [
+  ["monthly_income", BigInt("9999999999"), "99,999,999.99"],
+  ["pledge_amount", BigInt("999999999"), "9,999,999.99"],
+];
+
+/**
+ * Today less `years`, as `Carbon::today()->subYears()` gives it: 29 February
+ * overflows into 1 March in a common year.
+ */
+function yearsBefore(today: string, years: number): string {
+  const [year, month, day] = today.split("-").map(Number);
+  const target = year - years;
+  const leap = target % 4 === 0 && (target % 100 !== 0 || target % 400 === 0);
+  const [m, d] = month === 2 && day === 29 && !leap ? [3, 1] : [month, day];
+  return `${String(target).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
 /** The CDA membership columns. Date Hired is an ordinary member field. */
@@ -61,9 +89,44 @@ export function memberFieldProblems(row: ImportRow, context: MemberFieldContext)
   const add = (key: string, severity: MemberFieldProblem["severity"], category: MemberFieldProblem["category"], message: string) =>
     problems.push({ key, label: labelOf(key), severity, category, message, raw: cell(key) });
 
+  // The birthdate as `CustomerRowNormalizer::birthdate()` holds it, once read:
+  // in the future or before 1900 it is imported blank, and under 18 it warns.
   // Both are `YYYY-MM-DD`, so the strings compare as the dates do.
+  const read = context.dates.birthdate;
+  let birthdate = read;
+  if (read && read > context.today) {
+    add("birthdate", "warning", "date", `"${read}" is in the future, which cannot be a birthdate, so it was imported as blank.`);
+    birthdate = undefined;
+  } else if (read && read < "1900-01-01") {
+    add("birthdate", "warning", "date", `"${read}" is before 1900 and was imported as blank.`);
+    birthdate = undefined;
+  } else if (read && read > yearsBefore(context.today, 18)) {
+    add(
+      "birthdate",
+      "warning",
+      "date",
+      `"${read}" makes this member under 18. The record was imported as-is because it is a fact on the coop's books, but the member form requires 18+, so this member cannot be saved in the app until the birthdate is corrected.`,
+    );
+  }
+
+  for (const [key, mostCentavos, mostWords] of MEMBER_AMOUNTS) {
+    if (!cell(key)) continue; // Both are optional.
+    const reading = readCentavos(cell(key));
+    if (!reading.ok) {
+      add(key, "error", "value", reading.message);
+    } else if (reading.value > mostCentavos) {
+      add(
+        key,
+        "warning",
+        "value",
+        `This amount is above the ${mostWords} the member form allows, so it was imported as blank rather than leaving a member who cannot be saved.`,
+      );
+    }
+  }
+
+  // Both are `YYYY-MM-DD`, so the strings compare as the dates do. A birthdate
+  // imported blank is not held against the date hired, as on the server.
   const hired = context.dates.date_hired;
-  const birthdate = context.dates.birthdate;
   if (hired) {
     const raw = cell("date_hired");
     if (hired <= "1900-01-01") {

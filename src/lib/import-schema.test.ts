@@ -21,7 +21,6 @@ import {
   fieldSizeProblems,
   headerKey,
   normaliseRow,
-  normaliseNumericValue,
   resolveEnumValue,
   resolveRowEnums,
   SHARE_CAPITAL_COLUMNS,
@@ -169,16 +168,32 @@ test("a married member's blank spouse cells are asked for, never refused", () =>
   );
 });
 
-test("the loans and share capital files still refuse every blank required cell", () => {
-  for (const shape of ["loans", "share_capital"] as const) {
-    const missing = missingRequiredFields(normaliseRow([], shape), shape);
-    assert.deepEqual(
-      missing.map((field) => field.label),
-      columnsFor(shape).filter((c) => c.required).map((c) => c.label),
-      shape,
-    );
-    assert.ok(missing.every((field) => field.refused), shape);
-  }
+test("the share capital file still refuses every blank required cell", () => {
+  const missing = missingRequiredFields(normaliseRow([], "share_capital"), "share_capital");
+  assert.deepEqual(
+    missing.map((field) => field.label),
+    columnsFor("share_capital").filter((c) => c.required).map((c) => c.label),
+  );
+  assert.ok(missing.every((field) => field.refused));
+});
+
+test("a blank loan cell is refused but in Purpose and Loan Product, which the server imports (finish run round 4)", () => {
+  const missing = missingRequiredFields(normaliseRow([], "loans"), "loans");
+  assert.deepEqual(
+    missing.map((field) => [field.label, field.refused]),
+    columnsFor("loans").filter((c) => c.required).map((c) => [c.label, c.key !== "purpose" && c.key !== "loan_product"]),
+  );
+  // What becomes of each, said where the Check step shows it.
+  assert.deepEqual(
+    missing.filter((field) => !field.refused).map((field) => [field.label, field.whenBlank]),
+    [
+      ["Purpose", "The loan will be imported with no purpose."],
+      ["Loan Product", "The loan will still import: on the Processing step, choose a product for the loans with no product named."],
+    ],
+  );
+  // `required` stays the workbook's colours: both are still blue.
+  assert.equal(column("loans", "purpose").required, true);
+  assert.equal(column("loans", "loan_product").required, true);
 });
 
 // ── Header detection ───────────────────────────────────────────────────────
@@ -711,8 +726,11 @@ test("II is offered by the dropdown now, as the client's own spec forgot to", ()
 });
 
 /** Size problems for one cell, by setting that column and leaving the rest valid. */
+/** A plausible share capital row: its Amount is the one column left on generic limits. */
+const SHARE_CAPITAL_ROW = ["2020-0041", "2026-11-24", "CSH-0001-2026-0001", "Contribution", "500.00", "Monthly build-up"];
+
 function sizeProblem(shape: ImportShape, index: number, value: string) {
-  const base = shape === "customer" ? [...CUSTOMER_ROW] : [...LOANS_ROW];
+  const base = shape === "customer" ? [...CUSTOMER_ROW] : shape === "loans" ? [...LOANS_ROW] : [...SHARE_CAPITAL_ROW];
   base[index] = value;
   const problems = fieldSizeProblems(normaliseRow(base, shape), shape);
   return problems;
@@ -812,10 +830,9 @@ test("real rejections stay errors — only the repairable one is downgraded", ()
   // The audit that matters: a reason is an error if and only if the server
   // refuses the row. Getting this backwards in either direction is a bug.
   const cases: [ImportShape, number, string, string][] = [
-    ["customer", 16, "50000000", "too-large"],
-    ["loans", 2, "1234.567", "too-precise"],
-    ["loans", 2, "N/A", "not-a-number"],
     ["customer", 1, "x".repeat(256), "too-long"],
+    ["loans", 1, "x".repeat(51), "too-long"],
+    ["share_capital", 0, "7".repeat(51), "too-long"],
     ["customer", 4, "a".repeat(21), "too-long"],
   ];
   for (const [shape, index, value, reason] of cases) {
@@ -829,28 +846,55 @@ test("real rejections stay errors — only the repairable one is downgraded", ()
 test("blockingSizeProblems keeps errors and drops warnings from a mixed row", () => {
   const messy = [...CUSTOMER_ROW];
   messy[8] = "09171234567/09181234567";
-  messy[16] = "50000000";
+  messy[1] = "x".repeat(256);
   const problems = fieldSizeProblems(normaliseRow(messy, "customer"), "customer");
   assert.equal(problems.length, 2);
   assert.deepEqual(
     blockingSizeProblems(problems).map((p) => p.label),
-    ["Pledge Amt(If Applicable)"],
+    ["Last Name"],
   );
 });
 
-test("Purpose is the one 500-character column, and it is the one that needs it", () => {
-  assert.deepEqual(sizeProblem("loans", 7, "Additional capital for the sari-sari store. ".repeat(11).slice(0, 500)), []);
-  const problems = sizeProblem("loans", 7, "x".repeat(501));
-  assert.equal(problems[0].label, "Purpose");
-  assert.equal(problems[0].limit, 500);
-  // Other Fee Detail sits on the ordinary 255 beside it.
-  assert.equal(sizeProblem("loans", 16, "x".repeat(256))[0].limit, 255);
+test("a long Purpose, Loan Product or Other Fee Detail is never a size refusal: the server cuts them, and the loan rules say so", () => {
+  // `./import-loan-fields` warns past 500 and 255; nothing here refuses the row.
+  assert.deepEqual(sizeProblem("loans", 7, "x".repeat(1000)), []);
+  assert.deepEqual(sizeProblem("loans", 8, "x".repeat(1000)), []);
+  assert.deepEqual(sizeProblem("loans", 16, "x".repeat(1000)), []);
+  for (const key of ["purpose", "loan_product", "other_fee_detail"]) {
+    assert.equal(column("loans", key).maxLength, undefined, key);
+  }
 });
 
-test("account and loan numbers are varchar(50), not 255", () => {
-  assert.equal(sizeProblem("customer", 0, "x".repeat(51))[0].limit, 50);
-  assert.equal(sizeProblem("loans", 1, "x".repeat(51))[0].label, "Loan No.");
-  assert.deepEqual(sizeProblem("loans", 1, "x".repeat(50)), []);
+test("an Account No. in either file, and a Loan No., are refused past their 50-character columns, never cut", () => {
+  const fifty = "x".repeat(50);
+  for (const [shape, index, label] of [["customer", 0, "Account No."], ["loans", 0, "Account No."], ["loans", 1, "Loan No."]] as const) {
+    assert.deepEqual(sizeProblem(shape, index, fifty), [], `${shape} ${label}: 50`);
+    assert.deepEqual(
+      sizeProblem(shape, index, `${fifty}x`).map((p) => [p.label, p.reason, p.severity, p.limit]),
+      [[label, "too-long", "error", 50]],
+      `${shape} ${label}: 51`,
+    );
+  }
+  // Twenty-one characters, which the server cut to 20 before round 4, read whole.
+  assert.deepEqual(sizeProblem("loans", 1, "LN-2023-ABCDEFGHIJKLM"), []);
+  // Characters as the server counts them (mb_strlen), not UTF-16 units: fifty
+  // Ñ or fifty 🌾 fit, and fifty-one don't.
+  for (const character of ["Ñ", "🌾"]) {
+    assert.deepEqual(sizeProblem("loans", 1, character.repeat(50)), [], `50 ${character}`);
+    assert.deepEqual(sizeProblem("customer", 0, character.repeat(50)), [], `50 ${character}`);
+    assert.deepEqual(sizeProblem("loans", 1, character.repeat(51)).map((p) => [p.reason, p.limit]), [["too-long", 50]], `51 ${character}`);
+  }
+});
+
+test("no amount is a size question: every file's amounts are read as the server reads them", () => {
+  // `./import-server-values`, through the members, loans and share capital
+  // files' own rules (`./import-member-fields`, `./import-loan-fields`,
+  // `./import-share-capital`), in the server's words.
+  for (const written of ["-500", "(500)", "1234.500", "$500", "P500", "N/A", "3%", "10000000000"]) {
+    for (const [shape, index] of [["customer", 15], ["customer", 16], ["loans", 2], ["loans", 4], ["share_capital", 4]] as const) {
+      assert.deepEqual(sizeProblem(shape, index, written), [], `${shape} ${index} "${written}"`);
+    }
+  }
 });
 
 test("names and addresses are varchar(255)", () => {
@@ -859,84 +903,11 @@ test("names and addresses are varchar(255)", () => {
   assert.equal(sizeProblem("customer", 12, "x".repeat(256))[0].label, "City/Municipality");
 });
 
-test("Loan Product has no confirmed width, so nothing is invented for it", () => {
-  // Deliberately unconstrained until someone reads the migration. Guessing 255
-  // would either be right by luck or reject valid data for no reason.
-  assert.equal(column("loans", "loan_product").maxLength, undefined);
-  assert.deepEqual(sizeProblem("loans", 8, "x".repeat(1000)), []);
-});
-
-// ── Numbers: precision, not length ─────────────────────────────────────────
-
-test("numbers are measured after normalisation, never as raw text", () => {
-  assert.equal(normaliseNumericValue("₱50,000.00"), "50000.00");
-  assert.equal(normaliseNumericValue("PHP 50,000.00"), "50000.00");
-  assert.equal(normaliseNumericValue("P5,000"), "5000");
-  assert.equal(normaliseNumericValue("50 000"), "50000");
-  assert.equal(normaliseNumericValue(" 1234.5 "), "1234.5");
-  for (const written of ["₱50,000.00", "PHP 50,000.00", "50 000.00", "50000"]) {
-    assert.deepEqual(sizeProblem("loans", 2, written), [], `"${written}" should be accepted`);
+test("Term in Months is the loan rules' question, not a size one", () => {
+  // `./import-loan-fields` reads it as the server does: 1 to 120 whole months.
+  for (const written of ["12", "121", "12.5", "₱12"]) {
+    assert.deepEqual(sizeProblem("loans", 9, written), [], written);
   }
-});
-
-test("more decimal places than the column stores is caught", () => {
-  // A coop system exporting 3dp. Seven characters long and still unstorable —
-  // no character count would find this.
-  const problems = sizeProblem("loans", 2, "1234.567");
-  assert.equal(problems.length, 1);
-  assert.equal(problems[0].reason, "too-precise");
-  assert.equal(problems[0].limit, 2);
-});
-
-test("trailing zeros are two decimal places written badly, not three", () => {
-  assert.deepEqual(sizeProblem("loans", 2, "1234.500"), []);
-  assert.deepEqual(sizeProblem("loans", 2, "1234.5000000"), []);
-  assert.deepEqual(sizeProblem("loans", 2, "1234.00"), []);
-});
-
-test("Interest Rate is decimal(8,4) — basis points overflow it by design", () => {
-  assert.deepEqual(sizeProblem("loans", 4, "9999.9999"), []);
-  assert.deepEqual(sizeProblem("loans", 4, "3.1416"), []);
-  assert.equal(sizeProblem("loans", 4, "10000")[0].reason, "too-large");
-  // Four places are fine; five are not.
-  assert.equal(sizeProblem("loans", 4, "3.14159")[0].reason, "too-precise");
-});
-
-test("Pledge Amt has a TIGHTER ceiling than Monthly Income, and that is deliberate", () => {
-  // Same decimal(12,2) column, different validation rules. A value legal in one
-  // is illegal in the other, which is exactly the kind of asymmetry a single
-  // shared "money" limit would have flattened.
-  const fiftyMillion = "50000000";
-  assert.deepEqual(sizeProblem("customer", 15, fiftyMillion), [], "legal as Monthly Income");
-  const pledge = sizeProblem("customer", 16, fiftyMillion);
-  assert.equal(pledge.length, 1, "illegal as Pledge Amt");
-  assert.equal(pledge[0].reason, "too-large");
-  assert.equal(pledge[0].limit, 9999999.99);
-
-  assert.deepEqual(sizeProblem("customer", 15, "99999999.99"), []);
-  assert.equal(sizeProblem("customer", 15, "100000000")[0].reason, "too-large");
-});
-
-test("money columns take the full decimal(12,2) capacity", () => {
-  assert.deepEqual(sizeProblem("loans", 2, "9,999,999,999.99"), []);
-  assert.equal(sizeProblem("loans", 2, "10000000000")[0].reason, "too-large");
-});
-
-test("Term in Months is a whole number under 65535", () => {
-  assert.deepEqual(sizeProblem("loans", 9, "12"), []);
-  assert.deepEqual(sizeProblem("loans", 9, "65535"), []);
-  assert.equal(sizeProblem("loans", 9, "65536")[0].reason, "too-large");
-  assert.equal(sizeProblem("loans", 9, "12.5")[0].reason, "too-precise");
-});
-
-test("a numeric column holding text is reported, not coerced to zero", () => {
-  const problems = sizeProblem("loans", 2, "N/A");
-  assert.equal(problems.length, 1);
-  assert.equal(problems[0].reason, "not-a-number");
-  assert.equal(problems[0].raw, "N/A");
-  assert.equal(problems[0].limit, null);
-  // A bare currency symbol is not a number either.
-  assert.equal(sizeProblem("loans", 2, "₱")[0].reason, "not-a-number");
 });
 
 test("a blank cell is a required-field question, not a size one", () => {
@@ -993,11 +964,11 @@ test("an unresolvable cell keeps its original text AND is reported", () => {
 
 test("an unrecognised gender or civil status is imported blank; any other closed vocabulary refuses the row", () => {
   const member = [...CUSTOMER_ROW, "", "", "Premium", ""];
-  member[6] = "Lalake";
+  member[6] = "Other";
   member[7] = "Live-in";
   assert.deepEqual(
     resolveRowEnums(normaliseRow(member, "customer"), "customer").unknown.map((value) => [value.label, value.raw, value.refused]),
-    [["Gender", "Lalake", false], ["Civil Status", "Live-in", false], ["Member Type", "Premium", true]],
+    [["Gender", "Other", false], ["Civil Status", "Live-in", false], ["Member Type", "Premium", true]],
   );
 
   const loan = [...LOANS_ROW];
@@ -1019,8 +990,11 @@ test("an unrecognised gender or civil status is imported blank; any other closed
 const SERVER_GENDER_MAP: Record<string, string> = {
   male: "male",
   m: "male",
+  lalaki: "male",
+  lalake: "male",
   female: "female",
   f: "female",
+  babae: "female",
 };
 const SERVER_CIVIL_STATUS_MAP: Record<string, string> = {
   single: "single",
@@ -1046,9 +1020,19 @@ test("every word the server reads for a member's gender and civil status resolve
   }
 });
 
+test("Lalaki and Lalake read as Male and Babae as Female, in any case, as the server reads them", () => {
+  const gender = column("customer", "gender");
+  for (const spelling of ["Lalaki", "LALAKI", "lalake", " Lalake. "]) {
+    assert.deepEqual(resolveEnumValue(gender, spelling), { ok: true, value: "male", label: "Male" }, spelling);
+  }
+  for (const spelling of ["Babae", "BABAE", " babae "]) {
+    assert.deepEqual(resolveEnumValue(gender, spelling), { ok: true, value: "female", label: "Female" }, spelling);
+  }
+});
+
 test("a member's gender or civil status the server doesn't read isn't read here either", () => {
   const gender = column("customer", "gender");
-  for (const spelling of ["Lalaki", "Babae", "Fe male", "Ma-le"]) {
+  for (const spelling of ["Lalakii", "Babai", "Fe male", "Ma-le", "La-laki"]) {
     assert.equal(resolveEnumValue(gender, spelling).ok, false, spelling);
   }
   const civil = column("customer", "civil_status");
@@ -1069,6 +1053,82 @@ test("the loans sheet's enums resolve on a real row", () => {
   assert.deepEqual(unknown, []);
   assert.equal(row.payment_frequency, "monthly");
   assert.equal(row.interest_type, "diminishing");
+});
+
+/**
+ * The server's own words for a loan's Payment Frequency and Interest Type
+ * (lendyph-backend, app/Services/CsvImport/LoanRowNormalizer.php):
+ * `frequencyMap()`, which keys each `LoanFrequency` with its words spaced and
+ * run together, and `INTEREST_TYPE_MAP`, keyed after
+ * `CsvImportSchema::normalizeLabel()`. Written out here, not imported, so the
+ * client's copy is checked against the server's list (finish run round 4).
+ */
+const SERVER_FREQUENCY_MAP: Record<string, string> = {
+  daily: "daily",
+  weekly: "weekly",
+  "bi weekly": "bi_weekly",
+  biweekly: "bi_weekly",
+  "semi monthly": "semi_monthly",
+  semimonthly: "semi_monthly",
+  monthly: "monthly",
+  "upon maturity": "upon_maturity",
+  uponmaturity: "upon_maturity",
+};
+const SERVER_INTEREST_TYPE_MAP: Record<string, string> = {
+  "straight fixed": "straight",
+  straight: "straight",
+  fixed: "straight",
+  flat: "straight",
+  diminishing: "diminishing",
+  "diminishing balance": "diminishing",
+  "upon maturity": "upon_maturity",
+};
+
+test("every word the server reads for a loan's payment frequency and interest type resolves to the server's value", () => {
+  for (const [key, map] of [["payment_frequency", SERVER_FREQUENCY_MAP], ["interest_type", SERVER_INTEREST_TYPE_MAP]] as const) {
+    const vocabulary = column("loans", key);
+    for (const [word, value] of Object.entries(map)) {
+      // As the server keys a cell: any case, punctuation between words or at the ends.
+      for (const spelling of [word, word.toUpperCase(), ` ${word}. `, word.replace(" ", "-"), word.replace(" ", "_")]) {
+        const result = resolveEnumValue(vocabulary, spelling);
+        assert.equal(result.ok ? result.value : null, value, `${key} "${spelling}"`);
+      }
+    }
+  }
+  assert.deepEqual(resolveEnumValue(column("loans", "interest_type"), "Straight (Fixed)"), {
+    ok: true, value: "straight", label: "Straight (Fixed)",
+  });
+  assert.deepEqual(resolveEnumValue(column("loans", "interest_type"), "Upon Maturity"), {
+    ok: true, value: "upon_maturity", label: "Upon Maturity",
+  });
+});
+
+test("a payment frequency or interest type the server doesn't read refuses the row here too", () => {
+  const frequency = column("loans", "payment_frequency");
+  for (const spelling of ["Fortnightly", "Twice monthly", "Bullet", "Balloon", "Lump sum", "Maturity", "Quarterly", "Semi Monthy", "Bi-Week"]) {
+    assert.equal(resolveEnumValue(frequency, spelling).ok, false, spelling);
+  }
+  const interest = column("loans", "interest_type");
+  for (const spelling of ["Reducing", "Decreasing", "Add-on", "Fixed Rate", "StraightFixed", "Diminishing-Balance-Rate"]) {
+    assert.equal(resolveEnumValue(interest, spelling).ok, false, spelling);
+  }
+
+  const loan = [...LOANS_ROW];
+  loan[10] = "Fortnightly";
+  loan[11] = "Reducing";
+  assert.deepEqual(
+    resolveRowEnums(normaliseRow(loan, "loans"), "loans").unknown.map((value) => [value.label, value.raw, value.refused]),
+    [["Payment Frequency", "Fortnightly", true], ["Interest Type", "Reducing", true]],
+  );
+});
+
+test("an unknown interest type names the three the import takes", () => {
+  const result = resolveEnumValue(column("loans", "interest_type"), "Compound");
+  assert.equal(result.ok, false);
+  assert.deepEqual(
+    result.ok ? [] : result.options.map((option) => option.label),
+    ["Straight (Fixed)", "Diminishing", "Upon Maturity"],
+  );
 });
 
 // ── The share capital file (finish run round 2, decision 13) ───────────────

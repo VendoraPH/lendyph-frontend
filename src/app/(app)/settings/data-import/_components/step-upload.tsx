@@ -58,6 +58,7 @@ import {
   type DigestMismatch,
 } from "../_hooks/use-chunk-upload";
 import { keepsRunForUpload } from "../_hooks/use-import-reattach";
+import { runDateOrders } from "../_hooks/use-file-precheck";
 
 /* ------------------------------------------------------------------ */
 /* The seam                                                             */
@@ -240,6 +241,8 @@ export function StepUpload({
           branch_id: branchId,
           as_of_date: todayISO(),
           files: declaredFiles(picked, digests),
+          // The server reads each date column with the order settled here.
+          date_orders: runDateOrders(precheck.dateFormat),
         });
 
         const id = created?.run?.id;

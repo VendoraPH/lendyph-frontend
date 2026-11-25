@@ -24,12 +24,13 @@
 import {
   CIVIL_STATUS_OPTIONS,
   GENDER_OPTIONS,
-  INTEREST_TYPE_OPTIONS,
+  INTEREST_METHOD_LABELS,
   MEMBER_TYPE_OPTIONS,
   PAYMENT_FREQUENCY_OPTIONS,
   SUFFIX_OPTIONS,
 } from "@/constants";
 import { looksLikeDate } from "./import-date";
+import { serverLength } from "./import-server-values";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -56,22 +57,6 @@ export interface EnumOption {
   readonly label: string;
 }
 
-/**
- * The limits of a numeric column — a PRECISION question, not a length one.
- *
- * `decimal(12,2)` does not reject a long string; it rejects too many total
- * digits or more than two places after the point. `1234.567` is a real case (a
- * coop system exporting three decimal places) and no character count catches
- * it. `max` is the *validated* ceiling where the app's rules are tighter than
- * the column itself, which they sometimes are — see Pledge Amt.
- */
-export interface NumericLimits {
-  /** Largest accepted magnitude. */
-  readonly max: number;
-  /** Digits permitted after the decimal point. */
-  readonly decimalPlaces: number;
-}
-
 export interface ImportColumn {
   /**
    * Field name on the normalised row. These name the FILE's fields, not the
@@ -90,16 +75,23 @@ export interface ImportColumn {
   readonly required: boolean;
   /**
    * Whether the SERVER refuses a row that leaves this cell blank. Absent, it
-   * is `required`, as the loans and share capital files hold it.
+   * is `required`, as the share capital file holds it.
    *
-   * Set on the members file, where the two differ: the server refuses a member
-   * row only when Account No., Last Name or First Name is blank
-   * (`CustomerRowNormalizer`), and imports the workbook's other required cells
-   * blank, for staff to complete on the member's page. The pre-check follows
-   * the server: a blank here is an error, and a blank in any other required
-   * cell, or in a married member's spouse cell, is a warning.
+   * Set where the two differ. The server refuses a member row only when
+   * Account No., Last Name or First Name is blank (`CustomerRowNormalizer`),
+   * and imports the workbook's other required cells blank, for staff to
+   * complete on the member's page. It imports a loan with a blank Purpose or
+   * Loan Product (`LoanRowNormalizer`). The pre-check follows the server: a
+   * blank here is an error, and a blank in any other required cell, or in a
+   * married member's spouse cell, is a warning.
    */
   readonly refusedWhenBlank?: boolean;
+  /**
+   * What the import does with this cell left blank, in words, where it takes
+   * the row anyway (`refusedWhenBlank: false`). Absent, the members file's:
+   * the member is imported without it, to complete on their page.
+   */
+  readonly whenBlank?: string;
   /**
    * For a closed vocabulary, whether the SERVER refuses a row whose value it
    * doesn't recognise. Absent, it does (Member Type, Payment Frequency,
@@ -125,8 +117,6 @@ export interface ImportColumn {
    * for nothing, which is the honest outcome.
    */
   readonly maxLength?: number;
-  /** What a numeric column can actually store. See `NumericLimits`. */
-  readonly numeric?: NumericLimits;
   /**
    * A repair the SERVER performs on this column before storing it. Declared
    * here so the pre-check can predict the outcome instead of judging the raw
@@ -157,11 +147,20 @@ const IF_MARRIED = { field: "civil_status", equals: "married" } as const;
  * Every spelling the server reads for a member's Gender and Civil Status, and
  * the value each stores: `CustomerRowNormalizer::GENDER_MAP` and
  * `::CIVIL_STATUS_MAP`, copied. Anything else is imported blank (finish run
- * round 3), so the members import reads these and no others. The member form
- * and the Data Template keep the app's own lists (`GENDER_OPTIONS`,
+ * round 3), so the members import reads these and no others. Gender reads the
+ * Filipino Lalaki (or Lalake) and Babae too (finish run round 4). The member
+ * form and the Data Template keep the app's own lists (`GENDER_OPTIONS`,
  * `CIVIL_STATUS_OPTIONS`).
  */
-const MEMBER_GENDER_WORDS = { male: "male", m: "male", female: "female", f: "female" } as const;
+const MEMBER_GENDER_WORDS = {
+  male: "male",
+  m: "male",
+  lalaki: "male",
+  lalake: "male",
+  female: "female",
+  f: "female",
+  babae: "female",
+} as const;
 const MEMBER_CIVIL_STATUS_WORDS = {
   single: "single",
   married: "married",
@@ -173,23 +172,51 @@ const MEMBER_CIVIL_STATUS_WORDS = {
   divorced: "divorced",
 } as const;
 
-// Numeric limits, named for the role rather than the column type, so the use
-// site reads as the rule it is. All from the migrations and the validation
-// rules — see the note on PLEDGE_CEILING for the one asymmetry.
-/** `decimal(12,2)` at full column capacity. */
-const MONEY = { max: 9999999999.99, decimalPlaces: 2 } as const;
-/** `decimal(12,2)` but validated `max:99999999.99` — tighter than the column. */
-const INCOME_CEILING = { max: 99999999.99, decimalPlaces: 2 } as const;
 /**
- * Validated `max:9999999.99` — an order of magnitude BELOW Monthly Income
- * despite sharing the same `decimal(12,2)` column. That asymmetry is in the
- * existing validation rules and is deliberate, not a typo; do not "fix" it.
+ * Every spelling the server reads for a loan's Payment Frequency and Interest
+ * Type, and the value each stores: `LoanRowNormalizer::frequencyMap()`, which
+ * keys each `LoanFrequency` with its words spaced and run together, and
+ * `::INTEREST_TYPE_MAP`, copied. The server refuses a row with any other
+ * (finish run round 4), so the loans import reads these and no others.
  */
-const PLEDGE_CEILING = { max: 9999999.99, decimalPlaces: 2 } as const;
-/** `decimal(8,4)`. A rate given in basis points overflows this, by design. */
-const RATE = { max: 9999.9999, decimalPlaces: 4 } as const;
-/** Feeds an `unsignedSmallInteger`. Anything past a few hundred is nonsense. */
-const TERM = { max: 65535, decimalPlaces: 0 } as const;
+const LOAN_FREQUENCY_WORDS = {
+  daily: "daily",
+  weekly: "weekly",
+  "bi weekly": "bi_weekly",
+  biweekly: "bi_weekly",
+  "semi monthly": "semi_monthly",
+  semimonthly: "semi_monthly",
+  monthly: "monthly",
+  "upon maturity": "upon_maturity",
+  uponmaturity: "upon_maturity",
+} as const;
+const LOAN_INTEREST_TYPE_WORDS = {
+  "straight fixed": "straight",
+  straight: "straight",
+  fixed: "straight",
+  flat: "straight",
+  diminishing: "diminishing",
+  "diminishing balance": "diminishing",
+  "upon maturity": "upon_maturity",
+} as const;
+
+/**
+ * The interest types a loans file carries, in words: the app's two
+ * (`INTEREST_TYPE_OPTIONS`) and Upon Maturity, which the server imports too.
+ * The Data Template's Interest Type list reads these.
+ */
+export const LOAN_INTEREST_TYPE_OPTIONS: readonly EnumOption[] = Object.entries(INTEREST_METHOD_LABELS).map(
+  ([value, label]) => ({ value, label }),
+);
+
+/**
+ * What the loans import does with a blank Purpose or Loan Product: it takes
+ * the loan (`LoanRowNormalizer`), and a blank product is one of the products
+ * the Processing step maps.
+ */
+const PURPOSE_WHEN_BLANK = "The loan will be imported with no purpose.";
+const LOAN_PRODUCT_WHEN_BLANK =
+  "The loan will still import: on the Processing step, choose a product for the loans with no product named.";
 
 // `required` is the workbook's blue; `refusedWhenBlank` is what the server
 // does with a blank (finish run round 3). Only the three names refuse a row.
@@ -211,8 +238,10 @@ export const CUSTOMER_COLUMNS = [
   { key: "city", label: "City/Municipality", required: true, refusedWhenBlank: false, type: "text", maxLength: 255 },
   { key: "province", label: "Province", required: true, refusedWhenBlank: false, type: "text", maxLength: 255 },
   { key: "employer_or_business", label: "Employer/Business Name", required: false, type: "text", maxLength: 255 },
-  { key: "monthly_income", label: "Monthly Income", required: false, type: "number", numeric: INCOME_CEILING },
-  { key: "pledge_amount", label: "Pledge Amt(If Applicable)", required: false, type: "number", numeric: PLEDGE_CEILING },
+  // Read as the server reads them, with the member form's limits, by
+  // `./import-member-fields` (finish run round 4).
+  { key: "monthly_income", label: "Monthly Income", required: false, type: "number" },
+  { key: "pledge_amount", label: "Pledge Amt(If Applicable)", required: false, type: "number" },
   { key: "spouse_first_name", label: "Spouse FName (If Married)", required: false, type: "text", maxLength: 255, requiredWhen: IF_MARRIED },
   { key: "spouse_middle_name", label: "Spouse MName (If Married)", required: false, type: "text", maxLength: 255 },
   { key: "spouse_last_name", label: "Spouse LName (If Married)", required: false, type: "text", maxLength: 255, requiredWhen: IF_MARRIED },
@@ -228,28 +257,33 @@ export const CUSTOMER_COLUMNS = [
   { key: "membership_number", label: "Membership Number", required: false, type: "text", maxLength: 30, serverRepair: "member-number" },
 ] as const satisfies readonly ImportColumn[];
 
+// The server's rules (`LoanRowNormalizer`, finish run round 4). A blank Purpose
+// or Loan Product imports (`refusedWhenBlank`). The amounts, Interest Rate and
+// Term in Months carry no limits here: `./import-loan-fields` reads them as the
+// server does, with the checks between cells, and says what the server cuts
+// (Purpose past 500, Loan Product and Other Fee Detail past 255).
 export const LOAN_COLUMNS = [
+  // The two identifiers are refused past their 50-character columns, never cut
+  // short: an account number tells one member from another, a loan number one
+  // loan from another.
   { key: "account_no", label: "Account No.", required: true, type: "text", maxLength: 50 },
   { key: "loan_no", label: "Loan No.", required: true, type: "text", maxLength: 50 },
-  { key: "loan_amount", label: "Loan Amount", required: true, type: "number", numeric: MONEY },
-  { key: "loan_balance", label: "Loan Balance", required: true, type: "number", numeric: MONEY },
-  { key: "interest_rate", label: "Interest Rate", required: true, type: "number", numeric: RATE },
-  { key: "interest_amount", label: "Interest Amount", required: true, type: "number", numeric: MONEY },
-  { key: "interest_balance", label: "Interest Balance", required: true, type: "number", numeric: MONEY },
-  // The only 500 in either file, and the field most likely to hold a sentence.
-  { key: "purpose", label: "Purpose", required: true, type: "text", maxLength: 500 },
-  // No confirmed width for Loan Product — deliberately left unconstrained
-  // rather than assumed to be 255. Add it once the migration is checked.
-  { key: "loan_product", label: "Loan Product", required: true, type: "text" },
-  { key: "term_months", label: "Term in Months", required: true, type: "number", numeric: TERM },
-  { key: "payment_frequency", label: "Payment Frequency", required: true, type: "enum", options: PAYMENT_FREQUENCY_OPTIONS },
-  { key: "interest_type", label: "Interest Type", required: true, type: "enum", options: INTEREST_TYPE_OPTIONS },
+  { key: "loan_amount", label: "Loan Amount", required: true, type: "number" },
+  { key: "loan_balance", label: "Loan Balance", required: true, type: "number" },
+  { key: "interest_rate", label: "Interest Rate", required: true, type: "number" },
+  { key: "interest_amount", label: "Interest Amount", required: true, type: "number" },
+  { key: "interest_balance", label: "Interest Balance", required: true, type: "number" },
+  { key: "purpose", label: "Purpose", required: true, refusedWhenBlank: false, whenBlank: PURPOSE_WHEN_BLANK, type: "text" },
+  { key: "loan_product", label: "Loan Product", required: true, refusedWhenBlank: false, whenBlank: LOAN_PRODUCT_WHEN_BLANK, type: "text" },
+  { key: "term_months", label: "Term in Months", required: true, type: "number" },
+  { key: "payment_frequency", label: "Payment Frequency", required: true, type: "enum", options: PAYMENT_FREQUENCY_OPTIONS, serverVocabulary: LOAN_FREQUENCY_WORDS },
+  { key: "interest_type", label: "Interest Type", required: true, type: "enum", options: LOAN_INTEREST_TYPE_OPTIONS, serverVocabulary: LOAN_INTEREST_TYPE_WORDS },
   { key: "date_released", label: "Date Released", required: true, type: "date" },
   { key: "maturity_date", label: "Maturity Date", required: true, type: "date" },
-  { key: "processing_fee", label: "Processing Fee", required: false, type: "number", numeric: MONEY },
-  { key: "service_fee", label: "Service Fee", required: false, type: "number", numeric: MONEY },
-  { key: "other_fee_detail", label: "Other Fee Detail", required: false, type: "text", maxLength: 255 },
-  { key: "other_fee_amount", label: "Other Fee Amount", required: false, type: "number", numeric: MONEY },
+  { key: "processing_fee", label: "Processing Fee", required: false, type: "number" },
+  { key: "service_fee", label: "Service Fee", required: false, type: "number" },
+  { key: "other_fee_detail", label: "Other Fee Detail", required: false, type: "text" },
+  { key: "other_fee_amount", label: "Other Fee Amount", required: false, type: "number" },
 ] as const satisfies readonly ImportColumn[];
 
 /**
@@ -277,7 +311,8 @@ export const SHARE_CAPITAL_COLUMNS = [
   { key: "transaction_date", label: "Transaction Date", required: true, type: "text" },
   { key: "reference_number", label: "Reference Number", required: false, type: "text", maxLength: 100 },
   { key: "transaction_type", label: "Transaction Type", required: true, type: "enum", options: TRANSACTION_TYPE_OPTIONS },
-  { key: "amount", label: "Amount", required: true, type: "number", numeric: MONEY },
+  // Read as the server reads it, by `./import-share-capital` (finish run round 4).
+  { key: "amount", label: "Amount", required: true, type: "number" },
   { key: "remarks", label: "Remarks", required: false, type: "text" },
 ] as const satisfies readonly ImportColumn[];
 
@@ -439,21 +474,12 @@ export function headerKey(label: string): string {
  * admin to map. Fuzzy matching is not used at all: an edit-distance guess is a
  * guess, and this importer does not make those.
  *
- * A member's Gender and Civil Status have none: they read the server's own
- * words and nothing else (`serverVocabulary`), since the server imports any
- * other spelling blank.
+ * A member's Gender and Civil Status, and a loan's Payment Frequency and
+ * Interest Type, have none: they read the server's own words and nothing else
+ * (`serverVocabulary`), since the server imports any other gender or civil
+ * status blank and refuses any other frequency or interest type.
  */
 const VOCAB_ALIASES: Record<string, Record<string, string>> = {
-  // `fixed` is what INTEREST_TYPE.FIXED calls this same thing, and "flat" is
-  // the term most PH lenders print on their own forms.
-  interest_type: {
-    fixed: "straight",
-    flat: "straight",
-    reducing: "diminishing",
-    decreasing: "diminishing",
-  },
-  // "bullet" and "balloon" are named as synonyms for Upon Maturity by the
-  // comment on PAYMENT_FREQUENCY_OPTIONS itself.
   // Normalising only — Suffix is open, so anything not listed still passes
   // through verbatim. `jr`/`JR`/`Jr` already fold onto `Jr.` via vocabKey.
   suffix: {
@@ -463,14 +489,6 @@ const VOCAB_ALIASES: Record<string, Record<string, string>> = {
     "3rd": "III",
     "4th": "IV",
     "5th": "V",
-  },
-  payment_frequency: {
-    fortnightly: "bi_weekly",
-    twicemonthly: "semi_monthly",
-    bullet: "upon_maturity",
-    balloon: "upon_maturity",
-    lumpsum: "upon_maturity",
-    maturity: "upon_maturity",
   },
   // The server's own words (`ShareCapitalRowNormalizer::TYPES`). Credit and
   // Debit already match the options' values.
@@ -641,6 +659,8 @@ export interface MissingField {
    * imported. `false`: the server imports it with this field not set.
    */
   refused: boolean;
+  /** For a blank the server takes, what becomes of it, when the column says. */
+  whenBlank?: string;
 }
 
 /**
@@ -658,7 +678,12 @@ export function missingRequiredFields(
   const columns = columnsFor(shape);
   const missing: MissingField[] = [];
   const add = (column: ImportColumn) =>
-    missing.push({ key: column.key, label: column.label, refused: column.refusedWhenBlank ?? column.required });
+    missing.push({
+      key: column.key,
+      label: column.label,
+      refused: column.refusedWhenBlank ?? column.required,
+      ...(column.whenBlank !== undefined && { whenBlank: column.whenBlank }),
+    });
   for (const column of columns) {
     if ((row[column.key] ?? "").trim()) continue;
     if (column.required) {
@@ -683,18 +708,13 @@ export interface FieldSizeProblem {
   label: string;
   /**
    * `too-long`        more characters than the column holds.
-   * `too-large`       past the numeric ceiling.
-   * `too-precise`     more decimal places than the column stores.
-   * `not-a-number`    a numeric column holding something that is not one.
    * `multiple-values` more than one value in a single-value column. Repaired
    *                   server-side, so a warning rather than a failure.
+   *
+   * Amounts, rates and whole numbers are read as the server reads them, by
+   * each file's own rules (`./import-server-values`), not here.
    */
-  reason:
-    | "too-long"
-    | "too-large"
-    | "too-precise"
-    | "not-a-number"
-    | "multiple-values";
+  reason: "too-long" | "multiple-values";
   /**
    * `error`   the server REJECTS the row; it will not import as it stands.
    * `warning` the server REPAIRS the value and imports the row anyway. Show
@@ -704,7 +724,7 @@ export interface FieldSizeProblem {
   severity: "error" | "warning";
   /** The cell as it appeared, for the error report. */
   raw: string;
-  /** Characters, ceiling, or decimal places — whichever was exceeded. */
+  /** The characters the column holds. */
   limit: number | null;
   /** For a repaired value: what the server will store. */
   kept?: string;
@@ -751,35 +771,14 @@ export function blockingSizeProblems(
 }
 
 /**
- * Strip the decoration a spreadsheet puts on a number.
- *
- * `₱50,000.00`, `PHP 50,000.00`, `P5,000` and `50 000` all name the same
- * amount. Measuring any of them as raw text answers the wrong question, so
- * every numeric check below runs on the output of this, never on the cell.
- * Exported because the value posted to the API has to be normalised too, and
- * two implementations of this would drift.
- */
-export function normaliseNumericValue(raw: string): string {
-  return String(raw ?? "")
-    .trim()
-    .replace(/^(?:php|p)\s*/i, "")
-    .replace(/[₱$,\s]/g, "");
-}
-
-const NUMBER_SHAPE = /^-?(\d+)(?:\.(\d*))?$/;
-
-/**
  * Everything the database will reject on size, found before a single row ships.
  *
  * This is worth real money on a migration: without it the import 422s on row
  * 3,000 after 2,999 rows have already been written, and the admin has no way to
  * see which cell was too long.
  *
- * Length and precision are genuinely different questions. `decimal(12,2)` does
- * not care how long the string is — it rejects too many total digits, or more
- * than two places after the point. A rate of `3.14159` is 7 characters and
- * still unstorable. Trailing zeros are stripped before counting, because
- * `1234.500` is two decimal places written badly, not three.
+ * Amounts, rates and whole numbers are not measured here: each file's own rules
+ * read them as the server does (`./import-server-values`), in its words.
  *
  * Blanks are skipped: emptiness is `missingRequiredFields`' question, and
  * answering it here would report the same cell twice. Call this on the RESOLVED
@@ -787,8 +786,8 @@ const NUMBER_SHAPE = /^-?(\d+)(?:\.(\d*))?$/;
  * length.
  *
  * Every problem is classified by what the SERVER will do, not by what the cell
- * looks like. `too-large`, `too-precise` and `not-a-number` are genuine
- * rejections and are errors. A contact cell holding two numbers is repaired
+ * looks like. A value too long for its column is a genuine rejection and an
+ * error. A contact cell holding two numbers is repaired
  * server-side — the first is kept — so it is a warning, and reporting it as a
  * failure would be worse than not reporting it at all: it tells the admin their
  * data is broken when it is not, on the one screen whose whole job is to be
@@ -822,7 +821,7 @@ export function fieldSizeProblems(
     // characters once its space is gone.
     if (column.serverRepair === "member-number") {
       const kept = canonicalMemberNumber(raw);
-      if (column.maxLength !== undefined && kept.length > column.maxLength) {
+      if (column.maxLength !== undefined && serverLength(kept) > column.maxLength) {
         at("too-long", column.maxLength, "error", { kept });
       }
       continue;
@@ -836,29 +835,14 @@ export function fieldSizeProblems(
       if (dropped.length > 0) {
         at("multiple-values", column.maxLength ?? null, "warning", { kept, dropped });
       }
-      if (column.maxLength !== undefined && kept.length > column.maxLength) {
+      if (column.maxLength !== undefined && serverLength(kept) > column.maxLength) {
         at("too-long", column.maxLength);
       }
       continue;
     }
 
-    if (column.numeric) {
-      const parts = NUMBER_SHAPE.exec(normaliseNumericValue(raw));
-      if (!parts) {
-        at("not-a-number", null);
-        continue;
-      }
-      const places = (parts[2] ?? "").replace(/0+$/, "").length;
-      if (places > column.numeric.decimalPlaces) {
-        at("too-precise", column.numeric.decimalPlaces);
-      }
-      if (Math.abs(Number(normaliseNumericValue(raw))) > column.numeric.max) {
-        at("too-large", column.numeric.max);
-      }
-      continue;
-    }
-
-    if (column.maxLength !== undefined && raw.length > column.maxLength) {
+    // Characters as the server counts them (`mb_strlen`), not UTF-16 units.
+    if (column.maxLength !== undefined && serverLength(raw) > column.maxLength) {
       at("too-long", column.maxLength);
     }
   }

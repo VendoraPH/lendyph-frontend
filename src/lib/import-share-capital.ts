@@ -4,19 +4,22 @@
  * the pre-check says which rows it will refuse before a byte is uploaded. A
  * prediction only: the server decides, and nothing here rewrites the file.
  *
- * Required cells, lengths, the amount's form and the transaction type's words
- * are the shared checks' (`missingRequiredFields`, `fieldSizeProblems`,
- * `resolveRowEnums`). What is left:
+ * Required cells, lengths and the transaction type's words are the shared
+ * checks' (`missingRequiredFields`, `fieldSizeProblems`, `resolveRowEnums`).
+ * What is left:
  *  - Transaction Date written year-month-day, a real date, from 1900 and not
  *    after today;
- *  - an amount above ₱0.00 (a withdrawal is a positive amount);
+ *  - Amount as the server reads it (`ValueNormalizer::centavos()`, through
+ *    `./import-server-values`), in its words, and above ₱0.00 (finish run
+ *    round 4);
  *  - Remarks past 255 characters, which the server shortens (a warning);
  *  - a row repeating an earlier row of the file (`shareCapitalRepeats`).
  *
  * Pure, so it runs under `tsx --test`.
  */
 
-import { columnsFor, normaliseNumericValue, type ImportRow } from "./import-schema";
+import { columnsFor, type ImportRow } from "./import-schema";
+import { readCentavos } from "./import-server-values";
 
 export interface ShareCapitalFieldProblem {
   key: string;
@@ -36,8 +39,6 @@ const EARLIEST_DATE = "1900-01-01";
 
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-/** An amount as `normaliseNumericValue` leaves it: digits, a point, a sign. */
-const AMOUNT = /^(-?)(\d*)(?:\.(\d*))?$/;
 
 function labelOf(key: string): string {
   return columnsFor("share_capital").find((column) => column.key === key)?.label ?? key;
@@ -52,17 +53,10 @@ export function isCalendarDateISO(value: string): boolean {
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
 
-/**
- * An amount cell in centavos, exactly (no float on the way), or null when it
- * isn't an amount `fieldSizeProblems` would let through. `-500` is -50000.
- */
-export function amountCentavos(raw: string): number | null {
-  const parts = AMOUNT.exec(normaliseNumericValue(raw));
-  if (!parts || (parts[2] === "" && (parts[3] ?? "") === "")) return null;
-  const fraction = (parts[3] ?? "").replace(/0+$/, "");
-  if (fraction.length > 2) return null;
-  const centavos = Number(parts[2] || "0") * 100 + Number(fraction.padEnd(2, "0"));
-  return parts[1] === "-" ? -centavos : centavos;
+/** An amount cell in whole centavos as the server reads it, or null when it refuses it. */
+function amountCentavos(raw: string): bigint | null {
+  const reading = readCentavos(raw);
+  return reading.ok ? reading.value : null;
 }
 
 /** Every rule of the class docblock this row breaks, but the repeat. */
@@ -84,11 +78,14 @@ export function shareCapitalFieldProblems(row: ImportRow, today: string): ShareC
     }
   }
 
-  const centavos = cell("amount") ? amountCentavos(cell("amount")) : null;
-  if (centavos !== null && centavos < 0) {
-    add("amount", "error", "value", `Amount "${cell("amount")}" is a negative amount, which can't be imported. A withdrawal is written as a positive amount with Transaction Type Withdrawal.`);
-  } else if (centavos === 0) {
-    add("amount", "error", "value", "Amount is ₱0.00. A share capital entry moves money, so its amount must be above ₱0.00.");
+  // `ShareCapitalRowNormalizer::amount()`: the server's money reading, then
+  // above ₱0.00. A blank is the required check's.
+  const amount = cell("amount");
+  const reading = amount ? readCentavos(amount) : null;
+  if (reading && !reading.ok) {
+    add("amount", "error", "value", reading.message);
+  } else if (reading?.ok && reading.value === BigInt(0)) {
+    add("amount", "error", "value", "The amount is ₱0.00. A share capital entry moves money, so its amount must be above ₱0.00.");
   }
 
   const remarks = cell("remarks");
