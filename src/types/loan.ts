@@ -394,6 +394,18 @@ export interface LoanAmountDueNow {
   schedule_id: number | null;
 }
 
+/**
+ * A printed loan document whose terms changed since it was printed
+ * (`printed_documents_outdated` on `GET /loans/{id}`).
+ */
+export interface PrintedDocumentOutdated {
+  document: "disclosure" | "promissory_note";
+  /** "Disclosure Statement" or "Promissory Note". */
+  label: string;
+  /** When that latest print was made (an ISO timestamp). */
+  printed_at: string;
+}
+
 export interface Loan {
   id: number;
   application_number?: string;
@@ -505,6 +517,13 @@ export interface Loan {
    * screen never works it out.
    */
   can_send_back_approved?: boolean;
+  /**
+   * `GET /loans/{id}` only: while the loan is approved, each printed
+   * disclosure statement or promissory note whose terms changed since it was
+   * printed. The release is refused until it is printed again. Empty when
+   * nothing is out of date; absent on other answers.
+   */
+  printed_documents_outdated?: PrintedDocumentOutdated[];
   rejection_remarks?: string;
   rejected_at?: string;
   amortization_schedules?: ApiScheduleRow[];

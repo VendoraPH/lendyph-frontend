@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { api } from "@/lib/api-client";
-import { logPrint, printLogRequest } from "./print-log";
+import { logPrint, printLogRequest, printedTermsOf } from "./print-log";
 import type { PrintableDocument, PrintableId } from "./types";
 
 /**
@@ -93,4 +93,58 @@ test("a refused or failed call is swallowed", async () => {
     post.restore();
     process.off("unhandledRejection", onRejection);
   }
+});
+
+// Reprint after a change: the print records the terms its paper shows, as the
+// document's payload stated them, not the terms when Print was pressed.
+const HEX = "0123456789abcdef".repeat(4);
+
+test("a print sends the terms its payload stated, as they were", () => {
+  assert.deepEqual(
+    printLogRequest({ ...doc("disclosure_statement", 42), printedTerms: { terms_fingerprint: HEX, terms_version: 1 } }),
+    { url: "/loans/42/print-log", body: { document: "disclosure", terms_fingerprint: HEX, terms_version: 1 } },
+  );
+});
+
+test("a document without terms (an older API) sends none, so the server works them out", () => {
+  assert.deepEqual(printLogRequest(doc("disclosure_statement", 42))?.body, { document: "disclosure" });
+});
+
+test("logging a print posts the printed terms with it", async () => {
+  const post = stubPost(async () => ({ logged: true }));
+  try {
+    logPrint({ ...doc("promissory_note", 9), printedTerms: { terms_fingerprint: HEX, terms_version: 1 } });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(post.sent, [
+      { url: "/loans/9/print-log", body: { document: "promissory_note", terms_fingerprint: HEX, terms_version: 1 } },
+    ]);
+  } finally {
+    post.restore();
+  }
+});
+
+test("only well-formed terms are kept from a payload; anything else sends none", () => {
+  assert.deepEqual(printedTermsOf({ terms_fingerprint: HEX, terms_version: 1, loan_terms: {} }), {
+    terms_fingerprint: HEX,
+    terms_version: 1,
+  });
+  const malformed: unknown[] = [
+    // No terms to state: nothing is sent and the server works them out (it
+    // refuses an explicit null, which would be no print to compare).
+    { terms_fingerprint: null, terms_version: 1 },
+    null,
+    undefined,
+    "terms",
+    [],
+    {},
+    { terms_fingerprint: HEX },
+    { terms_version: 1 },
+    { terms_fingerprint: HEX.toUpperCase(), terms_version: 1 },
+    { terms_fingerprint: HEX.slice(1), terms_version: 1 },
+    { terms_fingerprint: `${HEX}0`, terms_version: 1 },
+    { terms_fingerprint: HEX, terms_version: "1" },
+    { terms_fingerprint: HEX, terms_version: 1.5 },
+    { terms_fingerprint: HEX, terms_version: 0 },
+  ];
+  for (const raw of malformed) assert.equal(printedTermsOf(raw), undefined, JSON.stringify(raw));
 });
