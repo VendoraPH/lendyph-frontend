@@ -21,7 +21,9 @@ import {
   releaseBlockedReason,
   releaseDocumentsRefusal,
   releaseReadyState,
+  releaseStepInstruction,
   reprintNotice,
+  waitingForReleasePhrase,
   waitingForReprintLine,
 } from "./reprint-notice";
 import type { PrintedDocumentOutdated } from "@/types/loan";
@@ -115,13 +117,47 @@ test("once every approver has signed off, the line waits on the reprint exactly 
   assert.equal(waitingForReprintLine([]), null);
   assert.equal(
     waitingForReprintLine([DISCLOSURE]),
-    "All approvers have signed off. Release waits until the Disclosure Statement is printed again and the member signs the new copy.",
+    "All approvers have signed off. The release waits until the Disclosure Statement is printed again and the member signs the new copy.",
   );
   assert.equal(
     waitingForReprintLine([DISCLOSURE, NOTE]),
-    "All approvers have signed off. Release waits until the Disclosure Statement and the Promissory Note are printed " +
+    "All approvers have signed off. The release waits until the Disclosure Statement and the Promissory Note are printed " +
       "again and the member signs the new copies.",
   );
+});
+
+test("the release step's line and the waiting line say the release waits exactly while it is held", () => {
+  assert.equal(releaseStepInstruction([]), "open the release dialog to complete the loan release.");
+  assert.equal(
+    releaseStepInstruction([DISCLOSURE]),
+    "the release waits until the Disclosure Statement is printed again and the member signs the new copy.",
+  );
+  assert.equal(
+    releaseStepInstruction([DISCLOSURE, NOTE]),
+    "the release waits until the Disclosure Statement and the Promissory Note are printed again and the member " +
+      "signs the new copies.",
+  );
+  assert.equal(waitingForReleasePhrase([]), "to release the loan");
+  assert.equal(
+    waitingForReleasePhrase([NOTE]),
+    "to release the loan once the Promissory Note is printed again and the member signs the new copy",
+  );
+
+  // One rule: each says the release waits exactly while the button is held.
+  for (const items of [[], [DISCLOSURE], [NOTE], [DISCLOSURE, NOTE]]) {
+    const held = releaseBlockedReason(items) !== null;
+    assert.equal(releaseStepInstruction(items).startsWith("the release waits"), held);
+    assert.equal(waitingForReleasePhrase(items) !== "to release the loan", held);
+    assert.equal(releaseReadyState(true, items) === "waiting_for_reprint", held);
+  }
+});
+
+test("no line on the approval card invites the release while it is held", () => {
+  const page = readFileSync(join(process.cwd(), "src/app/(app)/loans/[id]/page.tsx"), "utf8");
+  assert.ok(page.includes('{currentStep.kind === "release" && ` — ${releaseStepInstruction(outdatedDocuments)}`}'));
+  assert.doesNotMatch(page, /open the release dialog to complete the loan release/);
+  assert.ok(page.includes("? waitingForReleasePhrase(outdatedDocuments)"));
+  assert.doesNotMatch(page, /\? "to release the loan"/);
 });
 
 test("the approval card shows the ready line or the waiting line, never both", () => {

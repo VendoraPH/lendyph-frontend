@@ -104,11 +104,6 @@ test("a print sends the terms its payload stated, as they were", () => {
     printLogRequest({ ...doc("disclosure_statement", 42), printedTerms: { terms_fingerprint: HEX, terms_version: 1 } }),
     { url: "/loans/42/print-log", body: { document: "disclosure", terms_fingerprint: HEX, terms_version: 1 } },
   );
-  // A payload whose terms couldn't be worked out stated none: null is sent, and kept.
-  assert.deepEqual(
-    printLogRequest({ ...doc("promissory_note", 42), printedTerms: { terms_fingerprint: null, terms_version: 1 } })?.body,
-    { document: "promissory_note", terms_fingerprint: null, terms_version: 1 },
-  );
 });
 
 test("a document without terms (an older API) sends none, so the server works them out", () => {
@@ -133,8 +128,10 @@ test("only well-formed terms are kept from a payload; anything else sends none",
     terms_fingerprint: HEX,
     terms_version: 1,
   });
-  assert.deepEqual(printedTermsOf({ terms_fingerprint: null, terms_version: 2 }), { terms_fingerprint: null, terms_version: 2 });
   const malformed: unknown[] = [
+    // No terms to state: nothing is sent and the server works them out (it
+    // refuses an explicit null, which would be no print to compare).
+    { terms_fingerprint: null, terms_version: 1 },
     null,
     undefined,
     "terms",

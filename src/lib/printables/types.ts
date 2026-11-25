@@ -164,8 +164,8 @@ export type PrintBlock =
  * paper shows rather than the terms when Print was pressed.
  */
 export interface PrintedTerms {
-  /** 64 lowercase hexadecimal characters, or null when the server couldn't work them out. */
-  terms_fingerprint: string | null;
+  /** 64 lowercase hexadecimal characters. */
+  terms_fingerprint: string;
   terms_version: number;
 }
 

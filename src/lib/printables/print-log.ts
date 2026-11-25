@@ -19,17 +19,18 @@ const FINGERPRINT = /^[0-9a-f]{64}$/;
 
 /**
  * The terms a document payload states, when it carries them well formed:
- * `terms_fingerprint` (64 lowercase hexadecimal characters, or null) with its
- * whole-number `terms_version`. Anything else is none, and the print log then
- * lets the server work the terms out.
+ * `terms_fingerprint` (64 lowercase hexadecimal characters) with its
+ * whole-number `terms_version`. Anything else, null included, is none: the
+ * print log then sends neither and the server works the terms out (it refuses
+ * an explicit null, which would be no print to compare).
  */
 export function printedTermsOf(raw: unknown): PrintedTerms | undefined {
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return undefined;
   const { terms_fingerprint: fingerprint, terms_version: version } = raw as Record<string, unknown>;
-  const fingerprintOk = fingerprint === null || (typeof fingerprint === "string" && FINGERPRINT.test(fingerprint));
+  const fingerprintOk = typeof fingerprint === "string" && FINGERPRINT.test(fingerprint);
   const versionOk = typeof version === "number" && Number.isInteger(version) && version >= 1;
   return fingerprintOk && versionOk
-    ? { terms_fingerprint: fingerprint as string | null, terms_version: version as number }
+    ? { terms_fingerprint: fingerprint, terms_version: version as number }
     : undefined;
 }
 

@@ -130,7 +130,9 @@ import {
   releaseBlockedReason,
   releaseDocumentsRefusal,
   releaseReadyState,
+  releaseStepInstruction,
   reprintNotice,
+  waitingForReleasePhrase,
   waitingForReprintLine,
 } from "./_lib/reprint-notice";
 import { useRereadOnReturn } from "./_hooks/use-reread-on-return";
@@ -2962,8 +2964,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
                                     ? ", or send the loan back to any earlier step for revision."
                                     : "."
                                 }`)}
-                          {currentStep.kind === "release" &&
-                            " — open the release dialog to complete the loan release."}
+                          {/* While Release is held for a reprint, it says the release waits. */}
+                          {currentStep.kind === "release" && ` — ${releaseStepInstruction(outdatedDocuments)}`}
                         </p>
                         {showsApprovalEdit && (
                           <p className="text-xs text-muted-foreground mt-1">
@@ -3197,7 +3199,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                         {currentStep.kind === "submit"
                           ? "to submit the draft"
                           : currentStep.kind === "release"
-                            ? "to release the loan"
+                            ? waitingForReleasePhrase(outdatedDocuments)
                             : "to approve"}
                       </p>
                       <p className="text-muted-foreground mt-0.5">

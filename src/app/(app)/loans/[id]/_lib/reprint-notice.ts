@@ -85,14 +85,43 @@ export function releaseReadyState(
   return releaseBlockedReason(items) === null ? "ready" : "waiting_for_reprint";
 }
 
-/** The waiting line, naming each document; null when nothing is out of date. */
-export function waitingForReprintLine(items: PrintedDocumentOutdated[]): string | null {
-  if (items.length === 0) return null;
-
+/**
+ * What the release waits on, naming each document: "the Disclosure Statement
+ * is printed again and the member signs the new copy". Every line that would
+ * otherwise invite the release says it while Release is held.
+ */
+function awaitedReprint(items: PrintedDocumentOutdated[]): string {
   const names = joinedWithAnd(items.map((item) => `the ${nameOf(item)}`));
   return items.length === 1
-    ? `All approvers have signed off. Release waits until ${names} is printed again and the member signs the new copy.`
-    : `All approvers have signed off. Release waits until ${names} are printed again and the member signs the new copies.`;
+    ? `${names} is printed again and the member signs the new copy`
+    : `${names} are printed again and the member signs the new copies`;
+}
+
+/** The waiting line, naming each document; null when nothing is out of date. */
+export function waitingForReprintLine(items: PrintedDocumentOutdated[]): string | null {
+  if (releaseBlockedReason(items) === null) return null;
+  return `All approvers have signed off. The release waits until ${awaitedReprint(items)}.`;
+}
+
+/**
+ * What the Release step tells the user who holds it, after "Signed in as …":
+ * to open the release dialog, or, exactly while Release is held, that the
+ * release waits on the reprint.
+ */
+export function releaseStepInstruction(items: PrintedDocumentOutdated[]): string {
+  return releaseBlockedReason(items) === null
+    ? "open the release dialog to complete the loan release."
+    : `the release waits until ${awaitedReprint(items)}.`;
+}
+
+/**
+ * What "Waiting for <step>" says to everyone else on the Release step: "to
+ * release the loan", and while Release is held, once the reprint is done.
+ */
+export function waitingForReleasePhrase(items: PrintedDocumentOutdated[]): string {
+  return releaseBlockedReason(items) === null
+    ? "to release the loan"
+    : `to release the loan once ${awaitedReprint(items)}`;
 }
 
 /**
