@@ -9,6 +9,7 @@
  */
 
 import type { FormStepDef } from "@/lib/form-stepper";
+import type { ParsedAmount } from "@/lib/money-input";
 import type { OpenSavingsAccountInput } from "@/types";
 import { presentErrors } from "./step-errors";
 
@@ -49,6 +50,8 @@ export interface OpenAccountCheck {
   productError: string | null;
   dateError: string | null;
   amountError: string | null;
+  /** A non-cash opening deposit with no reference, in the server's words (`savingsReferenceError`). */
+  referenceError: string | null;
   /** The first opening-details problem: "Other" chosen with nothing typed. */
   sourceError: string | null;
 }
@@ -60,6 +63,17 @@ export function openAccountErrors(c: OpenAccountCheck): Record<string, string> {
     product_id: c.productError,
     opened_at: c.dateError,
     initial_deposit: c.amountError,
+    reference: c.referenceError,
     source_of_funds_other: c.sourceError,
   });
+}
+
+/**
+ * Whether the opening deposit typed pays anything, for its reference: not when
+ * it reads ₱0.00 (the server takes no deposit then). One that can't be read
+ * counts as paid, as on the server, so both problems show at once. Compares
+ * the typed text only; nothing is worked out.
+ */
+export function openingDepositPays(amount: ParsedAmount): boolean {
+  return !(amount.ok && amount.value === "0.00");
 }
