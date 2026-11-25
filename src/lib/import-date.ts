@@ -31,36 +31,18 @@ import { formatDateISO, todayISO } from "./format";
 
 /**
  * Excel's 1900 date system counts days from 1899-12-30, so serial 1 is
- * 1900-01-01. (Excel also believes 1900-02-29 existed, which throws serials
- * 1..60 out by a day. Still irrelevant: the accepted range starts at 3654, so
- * the phantom day is never in reach.) A CSV exported from the client's `.xlsm` turns any cell Excel considered
- * a real date into one of these integers, which is the single most common
- * artefact we will see.
+ * 1900-01-01. A CSV exported from the client's workbook turns any cell Excel
+ * considered a real date into one of these integers.
  */
 const EXCEL_EPOCH = { year: 1899, month: 11, day: 30 } as const;
 
 /**
- * Accepted serial range: 3654 (1910-01-01) to 60000 (2064-04-08).
- *
- * The floor is about plausible member ages, NOT about telling a date apart from
- * an account number. It is tempting to narrow it for that second reason, and
- * the first draft did — but serial detection only ever runs on a column already
- * identified as a date column, so amounts, account numbers and monthly incomes
- * are never handed to this path and the false positive it guarded against is
- * unreachable. All a narrow floor bought was a bug: at 20000 the window started
- * in Oct 1954, so any member aged 72 or over — entirely ordinary in a
- * cooperative — had their birthdate reported as `unrecognised`.
- *
- * Anything nonsensical that gets through is caught downstream by the column's
- * own rules (`after:1900-01-01`, `before_or_equal:today` for Birthdate), which
- * is the right layer for it: those know which column they are validating.
+ * The serial window the server reads (`ValueNormalizer::EXCEL_SERIAL_MIN` and
+ * `MAX`): 20000 (3 October 1954) to 60000 (8 April 2064). The server refuses a
+ * number outside it, so the Check step does too (finish run round 4).
  */
-export const MIN_EXCEL_SERIAL = 3654;
+export const MIN_EXCEL_SERIAL = 20000;
 export const MAX_EXCEL_SERIAL = 60000;
-
-/** Years outside this are typos, not data. Applies to every parsed date. */
-const MIN_YEAR = 1900;
-const MAX_YEAR = 2100;
 
 /** How many worked examples the ambiguity prompt shows the admin. */
 export const AMBIGUITY_SAMPLE_LIMIT = 5;
@@ -81,6 +63,7 @@ export type DateOrder = "dmy" | "mdy";
 export type DateShape =
   | "blank"
   | "iso"
+  | "named"
   | "pair"
   | "serial"
   | "short-year"
@@ -92,6 +75,8 @@ export interface DateColumnStats {
   total: number;
   blank: number;
   iso: number;
+  /** Written with the month's name: `04-Mar-1990`, `4 Mar 1990`, `Mar 4, 1990`. */
+  named: number;
   pair: number;
   serial: number;
   shortYear: number;
@@ -145,41 +130,50 @@ export type DateFormatInference =
 
 export type DateParseFailure =
   | "blank"
-  /** Reads both ways and no order was supplied. */
-  | "ambiguous"
-  /** Date-shaped, but not a date that exists (or outside 1900-2100). */
+  /** Date-shaped, but not a date that exists. */
   | "impossible"
   /** `03/04/55` — the century is not knowable, and we will not invent one. */
   | "two-digit-year"
-  /** Not a date in any shape we recognise. */
+  /** Not a date in any shape the server reads. */
   | "unrecognised";
 
+/**
+ * A cell read as the server reads it (`ValueNormalizer::date()`), with the
+ * server's words: the date and any warning it gives, or why it refuses it.
+ */
 export type ParsedImportDate =
-  | { ok: true; iso: string }
-  | { ok: false; reason: DateParseFailure };
+  | { ok: true; iso: string; warning: string | null }
+  | { ok: false; reason: DateParseFailure; message: string };
 
 // ---------------------------------------------------------------------------
 // Classification
 // ---------------------------------------------------------------------------
 
-const ISO_SHAPE = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/;
+/** The server's `Y-m-d` and `Y/m/d`: a four-digit year, a two-digit month and day. */
+const ISO_SHAPE = /^(\d{4})([-/])(\d{2})\2(\d{2})$/;
+/**
+ * A day and month then a four-digit year, split by "/", "-" or ".": what the
+ * server reads in the column's chosen order.
+ */
 const PAIR_SHAPE = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/;
+/** With no order, the server's `m/d/Y` (both padded) and `n/j/Y` (neither). */
+const PADDED_SLASH = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+const BARE_SLASH = /^([1-9]\d?)\/([1-9]\d?)\/(\d{4})$/;
 const SHORT_YEAR_SHAPE = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2})$/;
 const INTEGER_SHAPE = /^\d+$/;
 
-/**
- * Excel writes date-formatted cells to CSV with the time still attached
- * (`03/04/2020 00:00:00`), and anything that has been through a JSON round trip
- * arrives as `2020-03-04T00:00:00.000Z`. The time is dropped, NOT converted:
- * the number in the cell is a wall clock the client typed, so the date beside
- * it is the date they meant. Converting a `Z` instant to local time here would
- * reintroduce the off-by-one-day bug from the other direction.
- */
-const TRAILING_TIME = /[ T]\d{1,2}:\d{2}(:\d{2})?(\.\d+)?\s*([ap]\.?m\.?)?\s*(z|[+-]\d{2}:?\d{2})?$/i;
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTH = `(${MONTH_NAMES.join("|")})`;
+/** The server's `d-M-Y`, `j M Y` and `M j, Y`, exactly as PHP writes them back. */
+const NAMED_SHAPES: ReadonlyArray<{ shape: RegExp; day: number; month: number; year: number }> = [
+  { shape: new RegExp(`^(\\d{2})-${MONTH}-(\\d{4})$`), day: 1, month: 2, year: 3 },
+  { shape: new RegExp(`^([1-9]\\d?) ${MONTH} (\\d{4})$`), day: 1, month: 2, year: 3 },
+  { shape: new RegExp(`^${MONTH} ([1-9]\\d?), (\\d{4})$`), day: 2, month: 1, year: 3 },
+];
 
 type Classified =
-  | { shape: Exclude<DateShape, "pair" | "iso" | "serial">; value: string }
-  | { shape: "iso"; value: string; year: number; month: number; day: number }
+  | { shape: Exclude<DateShape, "pair" | "iso" | "named" | "serial">; value: string }
+  | { shape: "iso" | "named"; value: string; year: number; month: number; day: number }
   | { shape: "serial"; value: string; serial: number }
   | {
       shape: "pair";
@@ -193,32 +187,50 @@ type Classified =
       mdy: boolean;
     };
 
-/** Does this Y/M/D name a day that actually happened? */
-function isRealDate(year: number, month: number, day: number): boolean {
-  if (year < MIN_YEAR || year > MAX_YEAR) return false;
-  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
-  // Round-trip through Date: `new Date(2020, 1, 31)` silently becomes 2 March,
-  // which is precisely the overflow an import must never perform quietly.
-  const probe = new Date(year, month - 1, day);
-  return (
-    probe.getFullYear() === year &&
-    probe.getMonth() === month - 1 &&
-    probe.getDate() === day
-  );
+function isLeapYear(year: number): boolean {
+  return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
 }
 
-/** `YYYY-MM-DD` from calendar parts, via local fields — never `toISOString`. */
+/**
+ * Does this Y/M/D name a day that exists? Arithmetic, never `new Date`, which
+ * reads years 0 to 99 as 1900 to 1999. `minYear` is 0 for a date read back
+ * through PHP's formats and 1 for PHP's `checkdate()`, which the server uses
+ * for a date read in a chosen order.
+ */
+function isRealDate(year: number, month: number, day: number, minYear = 0): boolean {
+  if (year < minYear || month < 1 || month > 12 || day < 1) return false;
+  const days = [31, isLeapYear(year) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1];
+  return day <= days;
+}
+
+/** `YYYY-MM-DD` from calendar parts, as text: any year, never through `Date`. */
 function toISO(year: number, month: number, day: number): string {
-  return formatDateISO(new Date(year, month - 1, day));
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+/** A cell as the server's `ValueNormalizer::text()` leaves it. */
+function cellText(raw: string): string {
+  return String(raw ?? "").replace(/\uFEFF/g, "").replace(/\u00A0/g, " ").trim();
+}
+
+/** A month-name date the server reads, as its parts, or null. */
+function namedParts(value: string): { year: number; month: number; day: number } | null {
+  for (const { shape, day, month, year } of NAMED_SHAPES) {
+    const parts = shape.exec(value);
+    if (parts) {
+      return { year: Number(parts[year]), month: MONTH_NAMES.indexOf(parts[month]) + 1, day: Number(parts[day]) };
+    }
+  }
+  return null;
 }
 
 function classify(raw: string): Classified {
-  const value = String(raw ?? "").trim().replace(TRAILING_TIME, "").trim();
+  const value = cellText(raw);
   if (!value) return { shape: "blank", value: "" };
 
   const iso = ISO_SHAPE.exec(value);
   if (iso) {
-    const [year, month, day] = [Number(iso[1]), Number(iso[2]), Number(iso[3])];
+    const [year, month, day] = [Number(iso[1]), Number(iso[3]), Number(iso[4])];
     return isRealDate(year, month, day)
       ? { shape: "iso", value, year, month, day }
       : { shape: "invalid", value };
@@ -229,13 +241,21 @@ function classify(raw: string): Classified {
     const first = Number(pair[1]);
     const second = Number(pair[2]);
     const year = Number(pair[3]);
-    const dmy = isRealDate(year, second, first);
-    const mdy = isRealDate(year, first, second);
+    // In a chosen order the server reads with `checkdate()`: no year 0.
+    const dmy = isRealDate(year, second, first, 1);
+    const mdy = isRealDate(year, first, second, 1);
     // Valid under neither reading (`31/13/2020`, `30/02/2020`) is an impossible
     // date, not evidence of an order. Treating it as evidence is how one bad
     // row would decide a whole column, or fake a conflict that is not there.
     if (!dmy && !mdy) return { shape: "invalid", value };
     return { shape: "pair", value, first, second, year, dmy, mdy };
+  }
+
+  const named = namedParts(value);
+  if (named) {
+    return isRealDate(named.year, named.month, named.day)
+      ? { shape: "named", value, ...named }
+      : { shape: "invalid", value };
   }
 
   if (SHORT_YEAR_SHAPE.test(value)) return { shape: "short-year", value };
@@ -255,7 +275,7 @@ function classify(raw: string): Classified {
 /** True for anything this module could turn into a date. Used by wrong-slot detection. */
 export function looksLikeDate(value: string): boolean {
   const shape = classify(value).shape;
-  return shape === "iso" || shape === "pair" || shape === "serial";
+  return shape === "iso" || shape === "named" || shape === "pair" || shape === "serial";
 }
 
 // ---------------------------------------------------------------------------
@@ -297,14 +317,15 @@ function pushSample(into: string[], value: string): void {
  *    convention. Conflicted; block it.
  *  - values valid under both readings prove nothing. If that is all there is,
  *    the column is ambiguous and only the admin can settle it.
- *  - ISO and Excel serials carry their own meaning, so a column made only of
- *    those is resolved with no order to choose.
+ *  - ISO, month-name dates and Excel serials carry their own meaning, so a
+ *    column made only of those is resolved with no order to choose.
  */
 export function inferDateFormat(values: readonly string[]): DateFormatInference {
   const stats: DateColumnStats = {
     total: values.length,
     blank: 0,
     iso: 0,
+    named: 0,
     pair: 0,
     serial: 0,
     shortYear: 0,
@@ -327,6 +348,9 @@ export function inferDateFormat(values: readonly string[]): DateFormatInference 
         break;
       case "iso":
         stats.iso += 1;
+        break;
+      case "named":
+        stats.named += 1;
         break;
       case "serial":
         stats.serial += 1;
@@ -369,7 +393,7 @@ export function inferDateFormat(values: readonly string[]): DateFormatInference 
   if (ambiguous.length > 0) {
     return { status: "ambiguous", samples: previewAmbiguity(ambiguous), stats };
   }
-  if (stats.iso > 0 || stats.serial > 0) {
+  if (stats.iso > 0 || stats.named > 0 || stats.serial > 0) {
     return { status: "resolved", order: null, evidence: null, stats };
   }
   return { status: "unusable", stats };
@@ -402,56 +426,91 @@ function previewAmbiguity(cells: Classified[]): AmbiguityPreview[] {
 // Parsing
 // ---------------------------------------------------------------------------
 
+/** The server's refusal of a cell it doesn't read, in its words. */
+function notReadMessage(value: string): string {
+  return `"${value}" is not a date this importer recognises. Use YYYY-MM-DD.`;
+}
+
 /**
- * Turn one cell into a `YYYY-MM-DD` calendar date, or say why it cannot be.
+ * Read one cell exactly as the server reads it (`ValueNormalizer::date()`), in
+ * its words. The rules, in the server's order, after a trim:
+ *  1. With the column's order (`dmy` or `mdy`): a day and month then a
+ *     four-digit year, split by "/", "-" or ".", read in that order, and the
+ *     date must exist (PHP's `checkdate()`, no year 0). No warning: a person
+ *     decided it.
+ *  2. Otherwise the server's formats, each read back exactly as written:
+ *     `Y-m-d`, `Y/m/d`, `m/d/Y`, `n/j/Y`, `d-M-Y`, `j M Y`, `M j, Y`. A
+ *     month-first slash date that also reads day-first warns that it reads
+ *     two ways.
+ *  3. Otherwise a whole number from 20000 to 60000 is an Excel serial date,
+ *     read with a warning.
+ *  4. Anything else is refused.
  *
- * `order` is honoured STRICTLY. A cell of `31/03/2020` parsed as `mdy` fails as
- * `impossible` rather than quietly swapping itself to the reading that works —
- * a per-row swap is the same silent re-dating as a wrong column verdict, just
- * harder to spot. `inferDateFormat` never produces an order that contradicts
- * its own column, so this only fires on an admin override, which is exactly
- * when they need telling.
- *
- * ISO and Excel serials are self-describing and parse identically under any
- * order, so `order` governs only the two-component family.
+ * `order` is honoured strictly: a cell that isn't a real date in it is refused,
+ * never swapped to the reading that works. A per-row swap is the same silent
+ * re-dating as a wrong column verdict, just harder to spot.
  */
 export function parseImportDate(
   raw: string,
   order: DateOrder | null,
 ): ParsedImportDate {
-  const cell = classify(raw);
-  switch (cell.shape) {
-    case "blank":
-      return { ok: false, reason: "blank" };
-    case "iso":
-      return { ok: true, iso: toISO(cell.year, cell.month, cell.day) };
-    case "serial":
-      return { ok: true, iso: fromExcelSerial(cell.serial) };
-    case "short-year":
-      return { ok: false, reason: "two-digit-year" };
-    case "invalid":
-      return { ok: false, reason: "impossible" };
-    case "unrecognised":
-      return { ok: false, reason: "unrecognised" };
-    case "pair": {
-      if (order === "dmy") {
-        return cell.dmy
-          ? { ok: true, iso: toISO(cell.year, cell.second, cell.first) }
-          : { ok: false, reason: "impossible" };
-      }
-      if (order === "mdy") {
-        return cell.mdy
-          ? { ok: true, iso: toISO(cell.year, cell.first, cell.second) }
-          : { ok: false, reason: "impossible" };
-      }
-      // No order given. A value that reads only one way is not a guess, so it
-      // is allowed through; one that reads both ways is refused.
-      if (cell.dmy && cell.mdy) return { ok: false, reason: "ambiguous" };
-      return cell.dmy
-        ? { ok: true, iso: toISO(cell.year, cell.second, cell.first) }
-        : { ok: true, iso: toISO(cell.year, cell.first, cell.second) };
+  const value = cellText(raw);
+  if (!value) return { ok: false, reason: "blank", message: "This date is required and the cell is blank." };
+
+  const pair = PAIR_SHAPE.exec(value);
+  if (order && pair) {
+    const [first, second, year] = [Number(pair[1]), Number(pair[2]), Number(pair[3])];
+    const [day, month] = order === "dmy" ? [first, second] : [second, first];
+    if (isRealDate(year, month, day, 1)) return { ok: true, iso: toISO(year, month, day), warning: null };
+    return {
+      ok: false,
+      reason: "impossible",
+      message: `"${value}" is not a real date read ${order === "dmy" ? "day-first" : "month-first"}, the order chosen for this column.`,
+    };
+  }
+
+  const iso = ISO_SHAPE.exec(value);
+  if (iso && isRealDate(Number(iso[1]), Number(iso[3]), Number(iso[4]))) {
+    return { ok: true, iso: toISO(Number(iso[1]), Number(iso[3]), Number(iso[4])), warning: null };
+  }
+
+  for (const slash of [PADDED_SLASH, BARE_SLASH]) {
+    const parts = slash.exec(value);
+    if (!parts) continue;
+    const [first, second, year] = [Number(parts[1]), Number(parts[2]), Number(parts[3])];
+    if (!isRealDate(year, first, second)) continue;
+    const chosen = toISO(year, first, second);
+    const dayFirst = isRealDate(year, second, first) ? toISO(year, second, first) : null;
+    const warning =
+      dayFirst !== null && dayFirst !== chosen
+        ? `"${value}" could be read as ${chosen} (month first, which is what was used) or as ${dayFirst} (day first). Check it against the source workbook.`
+        : null;
+    return { ok: true, iso: chosen, warning };
+  }
+
+  const named = namedParts(value);
+  if (named && isRealDate(named.year, named.month, named.day)) {
+    return { ok: true, iso: toISO(named.year, named.month, named.day), warning: null };
+  }
+
+  if (INTEGER_SHAPE.test(value)) {
+    const serial = Number(value);
+    if (serial >= MIN_EXCEL_SERIAL && serial <= MAX_EXCEL_SERIAL) {
+      const read = fromExcelSerial(serial);
+      return {
+        ok: true,
+        iso: read,
+        warning: `"${value}" is an Excel serial date number and was read as ${read}. Confirm it against the source workbook.`,
+      };
     }
   }
+
+  const shape = classify(value).shape;
+  return {
+    ok: false,
+    reason: shape === "short-year" ? "two-digit-year" : shape === "invalid" ? "impossible" : "unrecognised",
+    message: notReadMessage(value),
+  };
 }
 
 /**

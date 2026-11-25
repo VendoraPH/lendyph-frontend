@@ -68,12 +68,32 @@ test("the members sheet's closed lists and dates carry their dictionary and form
   assert.equal(byId.get("member_type")?.hint, "Blank means Regular");
 });
 
-test("the loans sheet is unchanged", () => {
+test("the loans sheet is the loans import's own column table, so the two can't drift", () => {
   const loans = sheet("loans");
   assert.equal(loans.name, "Loans");
   assert.deepEqual(
-    loans.columns.map((c) => c.header),
-    LOAN_COLUMNS.map((c) => c.label)
+    loans.columns.map((c) => [c.id, c.header, c.required]),
+    LOAN_COLUMNS.map((c) => [c.key, c.label, c.required])
+  );
+  // The workbook's colours: Purpose and Loan Product stay blue, though the
+  // import takes them blank.
+  assert.deepEqual(
+    loans.columns.filter((c) => !c.required).map((c) => c.header),
+    ["Processing Fee", "Service Fee", "Other Fee Detail", "Other Fee Amount"]
+  );
+  const byId = new Map(loans.columns.map((c) => [c.id, c]));
+  assert.equal(byId.get("payment_frequency")?.dictionary, "payment_frequency");
+  assert.equal(byId.get("interest_type")?.dictionary, "interest_type");
+  // The interest types the loans import takes, Upon Maturity included.
+  assert.deepEqual(DATA_DICTIONARY.interest_type.values, ["Straight (Fixed)", "Diminishing", "Upon Maturity"]);
+  assert.deepEqual(DATA_DICTIONARY.payment_frequency.values, [
+    "Daily", "Weekly", "Bi-Weekly", "Semi-Monthly", "Monthly", "Upon Maturity",
+  ]);
+  assert.equal(byId.get("date_released")?.hint, "YYYY-MM-DD");
+  assert.equal(byId.get("maturity_date")?.hint, "YYYY-MM-DD");
+  assert.deepEqual(
+    loans.columns.filter((c) => c.hint || c.dictionary || c.requiredWhen).map((c) => c.id),
+    ["payment_frequency", "interest_type", "date_released", "maturity_date"]
   );
 });
 

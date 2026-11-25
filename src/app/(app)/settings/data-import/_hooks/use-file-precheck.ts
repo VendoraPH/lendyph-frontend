@@ -43,6 +43,8 @@ import {
 } from "@/lib/csv-parse";
 import { readCsvFile, type CsvFileNotice } from "@/lib/csv-read";
 import { todayISO } from "@/lib/format";
+import { loanFieldProblems } from "@/lib/import-loan-fields";
+import { serverLength } from "@/lib/import-server-values";
 import { memberFieldProblems } from "@/lib/import-member-fields";
 import { shareCapitalFieldProblems, shareCapitalRepeats } from "@/lib/import-share-capital";
 import {
@@ -447,14 +449,9 @@ function quoteOptions(options: readonly { label: string }[]): string {
 function sizeMessage(problem: FieldSizeProblem): string {
   switch (problem.reason) {
     case "too-long":
-      // Measured on what the server stores, which `kept` holds when it differs.
-      return `${problem.label} is ${(problem.kept ?? problem.raw).length} characters; this field holds ${problem.limit}.`;
-    case "too-large":
-      return `${problem.label} is larger than this field can store (limit ${problem.limit}).`;
-    case "too-precise":
-      return `${problem.label} has more decimal places than this field stores (${problem.limit}).`;
-    case "not-a-number":
-      return `${problem.label} is "${problem.raw}", which is not a number.`;
+      // Measured on what the server stores, which `kept` holds when it differs,
+      // in characters as the server counts them.
+      return `${problem.label} is ${serverLength(problem.kept ?? problem.raw)} characters; this field holds ${problem.limit}.`;
     case "multiple-values":
       // `kept` is the server's own predicted output, so an empty one means the
       // cell had no digits at all and this is not really "two numbers" — it is
@@ -473,21 +470,6 @@ function sizeMessage(problem: FieldSizeProblem): string {
       return `${problem.label} holds more than one number. The import keeps ${problem.kept}${
         problem.dropped?.length ? ` and drops ${problem.dropped.join(", ")}` : ""
       }.`;
-  }
-}
-
-function dateMessage(label: string, raw: string, reason: string, order: DateOrder | null | undefined): string {
-  switch (reason) {
-    case "impossible": {
-      const reading = order === "dmy" ? " read day-first" : order === "mdy" ? " read month-first" : "";
-      return `${label} "${raw}" is not a real date${reading}.`;
-    }
-    case "two-digit-year":
-      return `${label} "${raw}" has a two-digit year, so the century cannot be known. Write the year in full.`;
-    case "unrecognised":
-      return `${label} "${raw}" is not a date.`;
-    default:
-      return `${label} "${raw}" could not be read as a date.`;
   }
 }
 
@@ -556,10 +538,10 @@ interface RowCheckTotals {
  *  - anything `fieldSizeProblems` marks `warning`. The severity is decided
  *    there, by what the SERVER will do with the value, and re-deciding it at
  *    the call site is how a repairable value lands in a failure total.
- *  - a member cell the server imports blank: a blank one the workbook asks for
- *    (a birthdate), or a gender or civil status it doesn't recognise. Only the
- *    cells it refuses a row for are errors (`refusedWhenBlank`,
- *    `refusedWhenUnrecognised`).
+ *  - a cell the server imports blank: a member's blank one the workbook asks
+ *    for (a birthdate), or a gender or civil status it doesn't recognise, and
+ *    a loan's blank Purpose or Loan Product. Only the cells it refuses a row
+ *    for are errors (`refusedWhenBlank`, `refusedWhenUnrecognised`).
  */
 export function checkRows(
   rows: readonly CsvRecord[],
@@ -661,7 +643,7 @@ export function checkRows(
         category: "required",
         message: missing.refused
           ? `${missing.label} is blank, and this row cannot be imported without it.`
-          : `${missing.label} is blank. The member will be imported without it; add it later on their page.`,
+          : `${missing.label} is blank. ${missing.whenBlank ?? "The member will be imported without it; add it later on their page."}`,
         value: null,
       });
     }
@@ -691,16 +673,20 @@ export function checkRows(
       const index = dateIndex.get(date.key) ?? -1;
       const cell = String(fields[index] ?? "").trim();
       if (!cell) continue; // Blank is `missingRequiredFields`' question.
+      // Read as the server reads it, in its words (`parseImportDate`).
       const parsed = parseImportDate(cell, date.order);
       if (parsed.ok) {
         readDates[date.key] = parsed.iso;
+        if (parsed.warning) {
+          add(line, reference, { column: date.label, severity: "warning", category: "date", message: parsed.warning, value: cell });
+        }
         continue;
       }
       add(line, reference, {
         column: date.label,
         severity: "error",
         category: "date",
-        message: dateMessage(date.label, cell, parsed.reason, date.order),
+        message: parsed.message,
         value: cell,
       });
     }
@@ -731,6 +717,18 @@ export function checkRows(
             value: (row.membership_number ?? "").trim(),
           });
         }
+      }
+    }
+
+    if (context.shape === "loans") {
+      for (const problem of loanFieldProblems(row, { dates: readDates })) {
+        add(line, reference, {
+          column: problem.label,
+          severity: problem.severity,
+          category: problem.category,
+          message: problem.message,
+          value: problem.raw,
+        });
       }
     }
 
@@ -905,7 +903,7 @@ function describeUnusable(inference: DateFormatInference): string {
   }
   if (stats.unrecognised > 0) {
     bits.push(
-      `${formatCount(stats.unrecognised)} ${stats.unrecognised === 1 ? "is not a date at all" : "are not dates at all"} (${stats.unrecognisedSamples.join(", ")})`,
+      `${formatCount(stats.unrecognised)} ${stats.unrecognised === 1 ? "isn't written in a form the import reads" : "aren't written in a form the import reads"} (${stats.unrecognisedSamples.join(", ")})`,
     );
   }
   return bits.length > 0 ? `Of ${formatCountOf(stats.total, "value")}, ${bits.join("; ")}.` : "";
@@ -1041,6 +1039,33 @@ export function sessionAnswers(
   }
 
   return { hasHeaderRow, dateFormat };
+}
+
+/** The files whose date columns the server reads with an order. */
+const DATED_FILES = ["customers", "loans"] as const;
+
+/**
+ * The date order the Check step settled for each date column, as the run that
+ * imports the files carries it to the server (`date_orders`, finish run round
+ * 4): `dmy` or `mdy`, or `null` where the column needed none (ISO dates and
+ * spreadsheet date numbers). The server reads those columns with it.
+ *
+ * Read back from the patterns `sessionAnswers` wrote, so the run says exactly
+ * what the session recorded. The share capital file's dates are written
+ * year-month-day, so it carries none.
+ */
+export function runDateOrders(
+  dateFormat: SessionAnswers["dateFormat"],
+): Partial<Record<(typeof DATED_FILES)[number], Record<string, DateOrder | null>>> {
+  const orderOf = (pattern: string): DateOrder | null =>
+    (Object.keys(DATE_FORMAT_PATTERNS) as DateOrder[]).find((order) => DATE_FORMAT_PATTERNS[order] === pattern) ?? null;
+  const orders: Partial<Record<(typeof DATED_FILES)[number], Record<string, DateOrder | null>>> = {};
+  for (const kind of DATED_FILES) {
+    const columns = dateFormat[kind];
+    if (!columns) continue;
+    orders[kind] = Object.fromEntries(Object.entries(columns).map(([column, pattern]) => [column, orderOf(pattern)]));
+  }
+  return orders;
 }
 
 // ---------------------------------------------------------------------------
