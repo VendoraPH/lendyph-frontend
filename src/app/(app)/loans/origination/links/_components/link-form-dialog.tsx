@@ -15,7 +15,7 @@ import { useAuthStore } from "@/store";
 import type { ApplicationLink, ApplicationLinkInput } from "@/types/loan-origination";
 import { useLoanProducts } from "../../../reminders/_hooks/use-loan-products";
 import { ActionDialog } from "../../_components/action-dialog";
-import { emptyLinkInput, linkInputFrom } from "../../_lib/links";
+import { TEST_LINK_NOTE, emptyLinkInput, linkInputFrom } from "../../_lib/links";
 
 const orNull = (v: string) => (v.trim() === "" ? null : v);
 
@@ -146,9 +146,7 @@ export function LinkFormDialog({
         <Switch className="mt-0.5" checked={form.is_test} onCheckedChange={(is_test) => set({ is_test })} />
         <span>
           Test link
-          <span className="block text-xs text-muted-foreground">
-            Its applications stay out of the dashboard. On staging, only a test link shows test codes to the allowed staff numbers.
-          </span>
+          <span className="block text-xs text-muted-foreground">{TEST_LINK_NOTE}</span>
         </span>
       </label>
     </ActionDialog>

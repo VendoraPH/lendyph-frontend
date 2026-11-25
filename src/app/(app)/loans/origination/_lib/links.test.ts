@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { NO_ADDRESS, emptyLinkInput, linkInputFrom } from "./links";
+import { NO_ADDRESS, TEST_LINK_NOTE, emptyLinkInput, linkInputFrom } from "./links";
 import type { ApplicationLink } from "@/types/loan-origination";
 
 const link: ApplicationLink = {
@@ -46,4 +46,10 @@ test("a new link is live, not a test, in the branch given", () => {
 
 test("a link with no public address says why instead of offering an empty copy", () => {
   assert.match(NO_ADDRESS, /public address/);
+});
+
+test("the test link note says who sees test codes: an active staff account's mobile number, on a test link only", () => {
+  assert.match(TEST_LINK_NOTE, /only a test link shows test codes/);
+  assert.match(TEST_LINK_NOTE, /mobile number on an active staff account/);
+  assert.match(TEST_LINK_NOTE, /Settings → Profile/);
 });
