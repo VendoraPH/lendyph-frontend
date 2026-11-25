@@ -83,12 +83,24 @@ export interface NavItem {
    * who only decides requests still needs the menu.
    */
   anyOf?: Permission[];
+  /**
+   * When set, the section shows for anyone who can open one of its pages,
+   * each by that page's own gate (`navChildAllowed`), instead of `permission`.
+   * Settings holds every module's settings page behind its own key, so its
+   * pages decide who sees it, rather than a second list of their keys that a
+   * new page could miss.
+   */
+  opensForItsPages?: boolean;
   children?: NavSubItem[];
 }
 
-/** Whether the menu shows a section: its permission and everything it also requires. */
+/** Whether the menu shows a section: its permission (or one of its pages) and everything it also requires. */
 export function navItemAllowed(item: NavItem, can: (permission: Permission) => boolean): boolean {
-  const opens = item.anyOf ? item.anyOf.some(can) : can(item.permission);
+  const opens = item.opensForItsPages
+    ? (item.children ?? []).some((child) => navChildAllowed(child, can))
+    : item.anyOf
+      ? item.anyOf.some(can)
+      : can(item.permission);
   return opens && (item.alsoRequires ?? []).every(can);
 }
 
@@ -97,12 +109,6 @@ export function navChildAllowed(child: NavSubItem, can: (permission: Permission)
   return (!child.permission || meetsPermission(child.permission, can)) && (child.alsoRequires ?? []).every(can);
 }
 
-/**
- * Where a section's own link goes (the collapsed rail's icon, the command
- * palette). A section that opens on any of several permissions (`anyOf`)
- * goes to the first page the user can open, so a cashier who only decides
- * Member Portal requests lands on the queue, not on a page they can't open.
- */
 /**
  * Whether a top-level menu link is the current page's: its own path or a page
  * under it, unless another menu link matches the page more closely. On
@@ -118,8 +124,15 @@ export function navItemMatches(
   return !menu.some((other) => other.href !== href && other.href.startsWith(`${href}/`) && matches(other.href));
 }
 
+/**
+ * Where a section's own link goes (the collapsed rail's icon, the command
+ * palette). A section that opens on any of several permissions (`anyOf`), or
+ * on its pages, goes to the first page the user can open, so a cashier who
+ * only decides Member Portal requests lands on the queue, not on a page they
+ * can't open.
+ */
 export function navItemHref(item: NavItem, can: (permission: Permission) => boolean): string {
-  if (!item.anyOf) return item.href;
+  if (!item.anyOf && !item.opensForItsPages) return item.href;
   return (item.children ?? []).find((child) => navChildAllowed(child, can))?.href ?? item.href;
 }
 
@@ -218,20 +231,6 @@ export const MODULE_SETTINGS_NAV: NavSubItem[] = [
         { title: "Credit Scoring", href: "/settings/credit-scoring", permission: "credit_scoring:settings" as const },
       ]
     : []),
-];
-
-/**
- * Any one of these opens Settings: its own key, a module's settings key, or
- * `imports:process`, which Data Import's page guards on, so a role that can
- * run imports without `settings:view` still has its menu link.
- */
-const SETTINGS_SECTION_PERMISSIONS: Permission[] = [
-  "settings:view",
-  "accounting:settings",
-  "imports:process",
-  ...(env.features.savings ? (["savings:settings"] as const) : []),
-  ...(env.features.cda ? (["cda:view"] as const) : []),
-  ...(env.features.creditScoring ? (["credit_scoring:settings"] as const) : []),
 ];
 
 /**
@@ -567,11 +566,12 @@ export const SIDEBAR_NAV: NavItem[] = [
     permission: "settings:view",
     /**
      * Every module's settings live here, each behind its own permission, so
-     * the section also opens for someone who holds only a module's settings
-     * key (an accountant with `accounting:settings`). Children therefore name
-     * their permission: one left blank would be offered to all of them.
+     * the section opens for anyone who can open one of its pages: an
+     * accountant with only `accounting:settings`, a role that runs imports
+     * with only `imports:process`. Children therefore name their permission:
+     * one left blank would be offered to everyone the section shows for.
      */
-    anyOf: SETTINGS_SECTION_PERMISSIONS,
+    opensForItsPages: true,
     children: [
       { title: "Profile", href: "/settings/profile", permission: "settings:view" },
       { title: "Branding", href: "/settings/branding", permission: "settings:view" },

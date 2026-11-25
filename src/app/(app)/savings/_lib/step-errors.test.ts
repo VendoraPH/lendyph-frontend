@@ -25,6 +25,8 @@ test("each savings form with a typed reference reads it as optional, as the serv
     "src/app/(app)/savings/accounts/[id]/_components/transaction-dialog.tsx",
     "src/app/(app)/savings/_components/open-account-dialog.tsx",
     "src/app/(app)/savings/time-deposits/_components/place-time-deposit-dialog.tsx",
+    // A member's portal request paid out or opened through the savings teller.
+    "src/app/(app)/member-portal/requests/_components/decision-dialog.tsx",
   ]) {
     const source = readFileSync(resolve(process.cwd(), file), "utf8");
     assert.match(source, /"Reference \(optional\)"/, file);
