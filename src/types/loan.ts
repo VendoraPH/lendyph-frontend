@@ -395,16 +395,22 @@ export interface LoanAmountDueNow {
 }
 
 /**
- * A printed loan document whose terms changed since it was printed
- * (`printed_documents_outdated` on `GET /loans/{id}`).
+ * The latest print of a loan document (`printed_documents` on
+ * `GET /loans/{id}`), whatever terms it was printed with.
  */
-export interface PrintedDocumentOutdated {
+export interface PrintedDocument {
   document: "disclosure" | "promissory_note";
   /** "Disclosure Statement" or "Promissory Note". */
   label: string;
   /** When that latest print was made (an ISO timestamp). */
   printed_at: string;
 }
+
+/**
+ * A printed loan document whose terms changed since it was printed
+ * (`printed_documents_outdated` on `GET /loans/{id}`).
+ */
+export type PrintedDocumentOutdated = PrintedDocument;
 
 export interface Loan {
   id: number;
@@ -524,6 +530,14 @@ export interface Loan {
    * nothing is out of date; absent on other answers.
    */
   printed_documents_outdated?: PrintedDocumentOutdated[];
+  /**
+   * `GET /loans/{id}` only: while the loan is approved, the latest print of the
+   * disclosure statement and of the promissory note, any print. The Release
+   * dialog reminds the cashier to print one again after release when a change
+   * made there isn't on it. Empty when nothing was printed or the loan isn't
+   * approved; absent on other answers.
+   */
+  printed_documents?: PrintedDocument[];
   rejection_remarks?: string;
   rejected_at?: string;
   amortization_schedules?: ApiScheduleRow[];
