@@ -82,6 +82,7 @@ export const expenseStatusItems: readonly SelectItemOption[] = [
   { value: "partially_paid", label: "Partially paid" },
   { value: "paid", label: "Paid" },
   { value: "overdue", label: "Overdue" },
+  { value: "reversed", label: "Reversed" },
 ];
 
 /**

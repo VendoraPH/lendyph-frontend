@@ -98,3 +98,21 @@ test("every Settings page names its permission, since the section opens on sever
   for (const child of settings().children ?? []) assert.ok(child.permission, child.href);
   for (const child of MODULE_SETTINGS_NAV) assert.ok(child.permission, child.href);
 });
+
+test("a role that can run imports but holds no Settings key sees Settings with just Data Import", () => {
+  const can = holds("imports:process", "borrowers:view", "loans:view");
+  assert.equal(navItemAllowed(settings(), can), true);
+  const visible = (settings().children ?? []).filter((child) => navChildAllowed(child, can)).map((c) => c.href);
+  assert.deepEqual(visible, ["/settings/data-import"]);
+  assert.equal(navItemHref(settings(), can), "/settings/data-import");
+});
+
+test("the Data Import link needs what its page's RouteGuard needs, and that alone shows it", () => {
+  const guard = read("src/app/(app)/settings/data-import/page.tsx").match(/<RouteGuard permission="([^"]+)"/)?.[1];
+  assert.ok(guard, "no RouteGuard on the Data Import page");
+  const link = (settings().children ?? []).find((child) => child.href === "/settings/data-import");
+  assert.ok(link);
+  assert.equal(link.permission, guard);
+  const can = holds(guard as Permission);
+  assert.equal(navItemAllowed(settings(), can) && navChildAllowed(link, can), true);
+});

@@ -11,7 +11,7 @@ import { expenseStatusLabel } from "../../_lib/display-labels";
 export const EXPENSE_PAGE_SIZE = 25;
 
 /** In the Status filter's order. */
-const EXPENSE_STATUSES: readonly ExpenseStatus[] = ["unpaid", "partially_paid", "paid", "overdue"];
+const EXPENSE_STATUSES: readonly ExpenseStatus[] = ["unpaid", "partially_paid", "paid", "overdue", "reversed"];
 
 export interface ExpenseListFilters {
   /** A status, or the filter's "any". */
@@ -60,4 +60,17 @@ export function expenseStatusCounts(
     label: expenseStatusLabel(status),
     count: stats[status] as number,
   }));
+}
+
+/**
+ * The line of counts under the cards. Reversed expenses are listed but the
+ * server leaves them out of every total, so their count says so.
+ */
+export function expenseCountsLine(counts: readonly ExpenseStatusCount[], searching: boolean): string {
+  if (counts.length === 0) return "";
+  const parts = counts.map((c) => {
+    const text = `${c.count} ${c.label.toLowerCase()}`;
+    return c.status === "reversed" && c.count > 0 ? `${text} (not in the totals)` : text;
+  });
+  return parts.join(" · ") + (searching ? ", matching the search" : "");
 }

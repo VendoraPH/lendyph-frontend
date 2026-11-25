@@ -33,7 +33,7 @@ import {
   type OpeningDetailsDraft,
 } from "../_lib/opening-draft";
 import { OPEN_ACCOUNT_STEPS, openAccountErrors } from "../_lib/open-account-steps";
-import { errorsForStep, serverStepErrors } from "../_lib/step-errors";
+import { errorsForStep, serverFieldError, serverStepErrors } from "../_lib/step-errors";
 import { ALIGNED_FIELDS, FormField } from "./field";
 import { MemberCheckPanel } from "./member-check-panel";
 import { OpeningDetailsFields } from "./opening-details-fields";
@@ -62,6 +62,9 @@ export function OpenAccountDialog({ open, onOpenChange, onOpened }: OpenAccountD
   const [submitted, setSubmitted] = useState(false);
   // Steps whose errors show: one that failed Next shows its own, before any save.
   const [checkedSteps, setCheckedSteps] = useState<ReadonlySet<string>>(new Set());
+  // The server's refusal of the reference (one already on record for the
+  // method, say), shown on the field until the reference or method changes.
+  const [referenceError, setReferenceError] = useState<string | null>(null);
   const stepperRef = useRef<FormStepperHandle>(null);
   const { submitting, run } = useSubmitGuard();
   if (useDialogOpening(open, null)) {
@@ -69,6 +72,7 @@ export function OpenAccountDialog({ open, onOpenChange, onOpened }: OpenAccountD
     setDetails(EMPTY_OPENING_DETAILS);
     setSubmitted(false);
     setCheckedSteps(new Set());
+    setReferenceError(null);
   }
 
   const fetchProducts = useCallback(() => savingsService.products(), []);
@@ -140,6 +144,7 @@ export function OpenAccountDialog({ open, onOpenChange, onOpened }: OpenAccountD
         onOpened(account);
       })
       .catch((err: unknown) => {
+        setReferenceError(serverFieldError(err, "reference"));
         stepperRef.current?.showErrors(serverStepErrors(err));
         notifyError(err, "Couldn't open the account.");
       });
@@ -254,15 +259,21 @@ export function OpenAccountDialog({ open, onOpenChange, onOpened }: OpenAccountD
                   <OptionSelect
                     id="sv-method"
                     value={form.method}
-                    onChange={(v) => set("method", v as (typeof EMPTY)["method"])}
+                    onChange={(v) => {
+                      set("method", v as (typeof EMPTY)["method"]);
+                      setReferenceError(null);
+                    }}
                     options={PAYMENT_METHOD_OPTIONS}
                   />
                 </FormField>
-                <FormField id="sv-ref" field="reference" label="Reference (optional)">
+                <FormField id="sv-ref" field="reference" label="Reference (optional)" error={referenceError}>
                   <Input
                     id="sv-ref"
                     value={form.reference}
-                    onChange={(e) => set("reference", e.target.value)}
+                    onChange={(e) => {
+                      set("reference", e.target.value);
+                      setReferenceError(null);
+                    }}
                     placeholder="OR / transfer no."
                   />
                 </FormField>

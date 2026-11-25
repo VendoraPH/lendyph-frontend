@@ -1,5 +1,5 @@
 import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
+import autoTable, { type HookData } from "jspdf-autotable";
 import { saveAs } from "file-saver";
 import { todayISO } from "@/lib/format";
 import { formatCell } from "@/lib/report-format";
@@ -415,17 +415,54 @@ function drawKpiGrid(doc: jsPDF, section: ReportSection, startY: number): number
   return y + rowsUsed * (cardH + gap) + 8;
 }
 
+/** A table title's line and the gap under it. */
+const TABLE_TITLE_HEIGHT = 14;
+
+function drawTableTitle(doc: jsPDF, title: string, y: number) {
+  doc.setTextColor(...FOREGROUND);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.text(title, PAGE_MARGIN_X, y + 4);
+}
+
+/**
+ * `willDrawPage` for a table that keeps its title with its first rows
+ * (`keepTitleWithRows`): on the table's first page it draws the title above
+ * the column headings. When the headings and the first row (with the total,
+ * when that row is the last) don't fit under the title, or autoTable has
+ * already moved the table to a new page, the title starts that page with them
+ * rather than stranding at the foot of the page before.
+ */
+function titleWithFirstRows(doc: jsPDF, title: string): (data: HookData) => void {
+  const page = doc.getCurrentPageInfo().pageNumber;
+  let drawn = false;
+  return ({ table, settings, cursor }) => {
+    if (drawn || !cursor) return;
+    drawn = true;
+    const block =
+      table.getHeadHeight(table.columns) +
+      (table.body[0]?.getMaxCellHeight(table.columns) ?? 0) +
+      (table.body.length === 1 ? table.getFootHeight(table.columns) : 0);
+    let moved = doc.getCurrentPageInfo().pageNumber !== page;
+    if (!moved && cursor.y + block > doc.internal.pageSize.getHeight() - settings.margin.bottom) {
+      doc.addPage();
+      moved = true;
+    }
+    if (moved) cursor.y = settings.margin.top + TABLE_TITLE_HEIGHT;
+    drawTableTitle(doc, title, cursor.y - TABLE_TITLE_HEIGHT);
+  };
+}
+
 function drawTable(doc: jsPDF, section: ReportSection, startY: number): number {
   if (section.kind !== "table") return startY;
   const pageWidth = doc.internal.pageSize.getWidth();
 
+  // A title kept with its first rows is drawn with them, where autoTable puts them.
+  const keptTitle = section.keepTitleWithRows && section.rows.length > 0 ? section.title : undefined;
   let y = startY;
   if (section.title) {
-    doc.setTextColor(...FOREGROUND);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.text(section.title, PAGE_MARGIN_X, y + 4);
-    y += 14;
+    if (!keptTitle) drawTableTitle(doc, section.title, y);
+    y += TABLE_TITLE_HEIGHT;
   }
 
   if (section.rows.length === 0) {
@@ -500,6 +537,7 @@ function drawTable(doc: jsPDF, section: ReportSection, startY: number): number {
       }
       data.cell.styles.halign = section.columns[data.column.index]?.align ?? "left";
     },
+    ...(keptTitle ? { willDrawPage: titleWithFirstRows(doc, keptTitle) } : {}),
   });
 
   // jspdf-autotable mutates doc with lastAutoTable.

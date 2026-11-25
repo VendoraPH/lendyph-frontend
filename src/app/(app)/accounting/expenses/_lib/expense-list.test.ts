@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   EXPENSE_PAGE_SIZE,
+  expenseCountsLine,
   expenseListQuery,
   expensePageToStepBackTo,
   expenseStatusCounts,
@@ -20,6 +21,14 @@ test("the status filter goes to the server", () => {
     page: 2,
     per_page: 25,
     status: "overdue",
+  });
+});
+
+test("the Reversed filter goes to the server", () => {
+  assert.deepEqual(expenseListQuery({ status: "reversed", search: "", page: 1 }), {
+    page: 1,
+    per_page: 25,
+    status: "reversed",
   });
 });
 
@@ -49,13 +58,27 @@ test("a page left empty by a payment or a filter steps back, never forward", () 
 
 test("the status counts are the server's stats, in the filter's order and words", () => {
   assert.deepEqual(
-    expenseStatusCounts({ unpaid: 4, partially_paid: 1, paid: 12, overdue: 2 }),
+    expenseStatusCounts({ unpaid: 4, partially_paid: 1, paid: 12, overdue: 2, reversed: 3 }),
     [
       { status: "unpaid", label: "Unpaid", count: 4 },
       { status: "partially_paid", label: "Partially paid", count: 1 },
       { status: "paid", label: "Paid", count: 12 },
       { status: "overdue", label: "Overdue", count: 2 },
+      { status: "reversed", label: "Reversed", count: 3 },
     ],
   );
   assert.deepEqual(expenseStatusCounts(undefined), []);
+});
+
+test("the counts line says reversed expenses are not in the totals", () => {
+  const counts = expenseStatusCounts({ unpaid: 4, partially_paid: 1, paid: 12, overdue: 2, reversed: 3 });
+  assert.equal(
+    expenseCountsLine(counts, false),
+    "4 unpaid · 1 partially paid · 12 paid · 2 overdue · 3 reversed (not in the totals)",
+  );
+  assert.equal(
+    expenseCountsLine(expenseStatusCounts({ unpaid: 1, partially_paid: 0, paid: 0, overdue: 0, reversed: 0 }), true),
+    "1 unpaid · 0 partially paid · 0 paid · 0 overdue · 0 reversed, matching the search",
+  );
+  assert.equal(expenseCountsLine([], false), "");
 });

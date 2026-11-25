@@ -63,9 +63,11 @@ export function StepIndicator({ current, labels }: StepIndicatorProps) {
             >
               {isDone ? <Check className="h-4 w-4" /> : stepNum}
             </div>
+            {/* Below sm the labels run together, so there the dots stand alone
+                and each page's "Step 2 of 5 — Contact" line names the step. */}
             <span
               className={cn(
-                "text-xs font-medium text-center whitespace-nowrap",
+                "text-xs font-medium text-center whitespace-nowrap max-sm:hidden",
                 isActive || isDone
                   ? "text-brand-orange"
                   : "text-muted-foreground"

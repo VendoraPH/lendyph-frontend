@@ -181,6 +181,8 @@ export function buildProfitSharingDoc(raw: unknown, range: DateRange): ReportDoc
     sections.push({
       kind: "table",
       title: "Members' Shares",
+      // It follows two statements, so it often starts near a page's foot.
+      keepTitleWithRows: true,
       columns: MEMBER_COLUMNS,
       rows,
       totals:

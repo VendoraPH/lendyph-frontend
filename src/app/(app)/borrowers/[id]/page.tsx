@@ -272,17 +272,23 @@ function BorrowerDetailContent() {
       )}
 
       <Tabs defaultValue="overview" className={FIT_CLASSES.section}>
-        <TabsList variant="line" className="shrink-0">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="loans">Loans ({loans.length})</TabsTrigger>
-          <TabsTrigger value="payments">Payments ({payments.length})</TabsTrigger>
-          <TabsTrigger value="co-makers">Co-Makers ({coMakers.length})</TabsTrigger>
-          <TabsTrigger value="documents">Documents &amp; IDs</TabsTrigger>
-          <TabsTrigger value="ledger">Ledger</TabsTrigger>
-          <TabsTrigger value="share-capital">Share Capital</TabsTrigger>
-          <TabsTrigger value="collaterals">Collaterals</TabsTrigger>
-          {env.features.savings && can("savings:view") && <TabsTrigger value="savings">Savings</TabsTrigger>}
-        </TabsList>
+        {/* Below sm the tabs are wider than the screen, so they scroll sideways
+            in their own box and the page never does. The box is not the tab
+            list itself: the active tab's underline sits just below the list,
+            and the padding keeps it inside the scroll box. */}
+        <div className="flex shrink-0 max-sm:overflow-x-auto max-sm:pb-1.5">
+          <TabsList variant="line" className="shrink-0">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="loans">Loans ({loans.length})</TabsTrigger>
+            <TabsTrigger value="payments">Payments ({payments.length})</TabsTrigger>
+            <TabsTrigger value="co-makers">Co-Makers ({coMakers.length})</TabsTrigger>
+            <TabsTrigger value="documents">Documents &amp; IDs</TabsTrigger>
+            <TabsTrigger value="ledger">Ledger</TabsTrigger>
+            <TabsTrigger value="share-capital">Share Capital</TabsTrigger>
+            <TabsTrigger value="collaterals">Collaterals</TabsTrigger>
+            {env.features.savings && can("savings:view") && <TabsTrigger value="savings">Savings</TabsTrigger>}
+          </TabsList>
+        </div>
 
         <TabsContent value="overview" className={cn("pt-4", FIT_CLASSES.section)}>
           <ScrollBox className="p-px">

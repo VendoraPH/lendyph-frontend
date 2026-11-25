@@ -42,6 +42,7 @@ import { env } from "@/config/env";
 import { FormulaExpressionField } from "./_components/formula-expression-field";
 import { useFormulaCheck } from "./_hooks/use-formula-check";
 import { FEE_STEPS, FORMULA_CHECK_PENDING, feeStepErrors, isWrittenFormula, type FeeStepInput } from "./_lib/fee-steps";
+import { feeProductsRead, feeProductsText } from "./_lib/fee-products";
 
 // Formula fees written as an expression, where the backend evaluates them.
 const FEE_FORMULAS = env.features.feeFormulas;
@@ -539,8 +540,9 @@ function FeesContent() {
   const [deleteTarget, setDeleteTarget] = useState<Fee | null>(null);
   const [reloadCount, setReloadCount] = useState(0);
   // Fees are scoped to loan products, and listing those needs `loans:view`.
-  // Without it the list is not asked for, and fee editing stays off exactly as
-  // it does when the list cannot be loaded.
+  // Without it the list isn't asked for (`feeProductsRead`): the fees show,
+  // their products read in words, and adding or editing a fee, which picks
+  // its products, stays off as it does when the list can't be loaded.
   const canListProducts = usePermission().can("loans:view");
 
   // Runs on mount and on every `reload`, which first puts the page back to the
@@ -551,19 +553,17 @@ function FeesContent() {
     // failure must not hide successfully loaded fees.
     Promise.allSettled([
       feeService.listAll().then(completeRows),
-      canListProducts ? loanProductService.listAll().then(completeRows) : null,
+      feeProductsRead(canListProducts, () => loanProductService.listAll()).then(completeRows),
     ]).then(([feesResult, productsResult]) => {
       if (feesResult.status === "fulfilled") {
         setFees(feesResult.value);
       } else {
         setLoadError(getErrorMessage(feesResult.reason));
       }
-      if (productsResult.status === "rejected") {
-        setProductsError(getErrorMessage(productsResult.reason));
-      } else if (productsResult.value === null) {
-        setProductsError("You don't have permission to view them.");
-      } else {
+      if (productsResult.status === "fulfilled") {
         setProducts(productsResult.value);
+      } else {
+        setProductsError(getErrorMessage(productsResult.reason));
       }
       setLoading(false);
     });
@@ -577,7 +577,8 @@ function FeesContent() {
     setReloadCount((n) => n + 1);
   }
 
-  const productNameById = new Map(products.map((p) => [p.id, p.name]));
+  // Null when the products weren't read: a scoped fee then reads its count in words.
+  const productNameById = canListProducts ? new Map(products.map((p) => [p.id, p.name])) : null;
 
   const filtered = fees.filter((f) => {
     if (!search.trim()) return true;
@@ -619,7 +620,7 @@ function FeesContent() {
           </div>
           <PermissionButton
             permission="fees:create"
-            disabled={!!productsError || !!loadError}
+            disabled={!!productsError || !!loadError || !canListProducts}
             className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
             onClick={handleAdd}
           >
@@ -634,6 +635,11 @@ function FeesContent() {
             {productsError && <p>Loan products could not be loaded. {productsError} Fee editing is unavailable until they load.</p>}
             <Button variant="outline" size="sm" onClick={reload}>Retry</Button>
           </div>
+        )}
+        {!canListProducts && !loadError && (
+          <p className="shrink-0 text-sm text-muted-foreground">
+            Product names need loan access. Adding or editing a fee needs it too, since a fee picks its loan products.
+          </p>
         )}
         {!loadError && <>
         <div className="grid shrink-0 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -701,19 +707,6 @@ function FeesContent() {
                 </TableHeader>
                 <TableBody>
                   {filtered.map((fee) => {
-                    // Fall back to a placeholder rather than dropping the id.
-                    // An id that did not resolve used to be filtered out, and an empty
-                    // list renders as "All products" below — so a fee scoped to
-                    // ONE product was displayed as applying to EVERY product, a
-                    // false statement about what borrowers are charged.
-                    //
-                    // Not a rare edge case: productNameById is built from a
-                    // separate products load that can fail on its own, and
-                    // when it does every product-scoped fee is unresolved at
-                    // once.
-                    const productNames =
-                      (fee.applicable_product_ids ?? [])
-                        .map((id) => productNameById.get(id) ?? `Product #${id}`);
                     return (
                       <TableRow key={fee.id}>
                         <TableCell className="font-medium">{fee.name}</TableCell>
@@ -733,11 +726,7 @@ function FeesContent() {
                           {formatFeeValue(fee)}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          {productNames.length === 0
-                            ? "All products"
-                            : productNames.length <= 2
-                              ? productNames.join(", ")
-                              : `${productNames.slice(0, 2).join(", ")} +${productNames.length - 2}`}
+                          {feeProductsText(fee.applicable_product_ids, productNameById)}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {formatConditions(fee.conditions)}
@@ -746,7 +735,7 @@ function FeesContent() {
                           <div className="flex items-center justify-end gap-2">
                             <PermissionButton
                               permission="fees:update"
-                              disabled={!!productsError}
+                              disabled={!!productsError || !canListProducts}
                               variant="outline"
                               size="sm"
                               className="h-7 gap-1 text-xs"

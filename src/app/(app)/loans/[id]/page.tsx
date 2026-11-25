@@ -135,6 +135,8 @@ import {
   waitingForReleasePhrase,
   waitingForReprintLine,
 } from "./_lib/reprint-notice";
+import { coMakerReprintReminder, insuranceReprintReminder } from "./_lib/release-reminders";
+import { ReleaseReminder } from "./_components/release-reminder";
 import { useRereadOnReturn } from "./_hooks/use-reread-on-return";
 import { DisabledReason } from "@/components/common/disabled-reason";
 import { stepConflictMessage } from "./_lib/step-conflict";
@@ -1584,6 +1586,12 @@ function LoanDetail({ loanId }: { loanId: number }) {
   const canConfirmRelease =
     releaseAnswer !== null && !releaseExceedsNet && releaseReferenceProblem === null && !actionLoading;
   const loanReleaseMethod = releaseMethodDetails(loan);
+  // Changes made in the dialog after a print: an insurance premium the printed
+  // disclosure statement doesn't show, a co-maker the printed promissory note
+  // doesn't name. Reminders to print it again after release; Confirm Release
+  // never waits on them.
+  const releaseInsuranceReminder = insuranceReprintReminder(releaseInsurance, loan);
+  const releaseCoMakerReminder = coMakerReprintReminder(loan, currentUser?.id ?? null);
 
   const handleRelease = async () => {
     if (releaseAnswer === null || !canConfirmRelease) return;
@@ -3086,10 +3094,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
                         )}
                         {currentStep.kind === "approve" && (
                           <>
+                            {/* 32 px, like the send-back select in the same row. */}
                             {showsApprovalEdit && (
                               <Button
                                 variant="outline"
-                                size="sm"
                                 className="w-full sm:w-auto"
                                 disabled={stepActionLoading}
                                 nativeButton={false}
@@ -3136,7 +3144,6 @@ function LoanDetail({ loanId }: { loanId: number }) {
                             )}
                             <Button
                               variant="outline"
-                              size="sm"
                               className="w-full sm:w-auto border-red-500/30 text-red-700 hover:bg-red-50 dark:text-red-400"
                               onClick={() =>
                                 handleStepSendBack(
@@ -3156,7 +3163,6 @@ function LoanDetail({ loanId }: { loanId: number }) {
                               Send Back for Revision
                             </Button>
                             <Button
-                              size="sm"
                               className="w-full sm:w-auto bg-green-600 text-white hover:bg-green-700"
                               onClick={handleStepApprove}
                               disabled={stepActionLoading || !clientCanActOnCurrentStep}
@@ -4428,7 +4434,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
               disabled={actionLoading}
             />
 
-            <ReleaseCoMakers loan={loan} onLoanChange={setLoan} />
+            <div className="space-y-2">
+              <ReleaseCoMakers loan={loan} onLoanChange={setLoan} />
+              <ReleaseReminder text={releaseCoMakerReminder} />
+            </div>
 
             {/* Dates the release will store: the loan's maturity and the
                 server schedule's first instalment. */}
@@ -4447,14 +4456,17 @@ function LoanDetail({ loanId }: { loanId: number }) {
               </div>
             </div>
 
-            <InsurancePremiumSection
-              value={insurancePremium}
-              onChange={setInsurancePremium}
-              view={insurancePreview}
-              premiumAmount={insurancePremiumAmount}
-              onRetry={retryInsurancePreview}
-              disabled={actionLoading}
-            />
+            <div className="space-y-2">
+              <InsurancePremiumSection
+                value={insurancePremium}
+                onChange={setInsurancePremium}
+                view={insurancePreview}
+                premiumAmount={insurancePremiumAmount}
+                onRetry={retryInsurancePreview}
+                disabled={actionLoading}
+              />
+              <ReleaseReminder text={releaseInsuranceReminder} />
+            </div>
 
             {/* Amortization Preview: the server's preview rows */}
             <div className="space-y-2">

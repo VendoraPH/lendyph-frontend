@@ -31,7 +31,7 @@ import { useBooksReady } from "../../_hooks/use-books-ready";
 import { productChoice, productPlaceholder, termChoice } from "@/lib/savings/product-choice";
 import { METHOD_LABELS, PAYMENT_METHOD_OPTIONS } from "../../_lib/savings-rules";
 import { MATURITY_INSTRUCTION_OPTIONS, termsOfferedText } from "../../_lib/time-deposit-rules";
-import { errorsForStep, serverStepErrors } from "../../_lib/step-errors";
+import { errorsForStep, serverFieldError, serverStepErrors } from "../../_lib/step-errors";
 import { checkPlacement, type PlacementForm } from "../_lib/placement-form";
 import { PLACEMENT_STEPS, placementErrors } from "../_lib/placement-steps";
 import { PlacementPreview } from "./placement-preview";
@@ -68,6 +68,9 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
   const [submitted, setSubmitted] = useState(false);
   // Steps whose errors show: one that failed Next shows its own, before any save.
   const [checkedSteps, setCheckedSteps] = useState<ReadonlySet<string>>(new Set());
+  // The server's refusal of the reference (one already on record for the
+  // method, say), shown on the field until the reference or method changes.
+  const [referenceError, setReferenceError] = useState<string | null>(null);
   const stepperRef = useRef<FormStepperHandle>(null);
   const { submitting, run } = useSubmitGuard();
   // Cash placements are numbered by the server (TD-…): while Cash is chosen
@@ -88,6 +91,7 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
     setForm({ ...EMPTY, placementDate: todayISO() });
     setSubmitted(false);
     setCheckedSteps(new Set());
+    setReferenceError(null);
   }
 
   const fetchProducts = useCallback(() => savingsService.products(), []);
@@ -138,6 +142,7 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
         onPlaced(td);
       })
       .catch((err: unknown) => {
+        setReferenceError(serverFieldError(err, "reference"));
         stepperRef.current?.showErrors(serverStepErrors(err));
         notifyError(err, "Couldn't place the time deposit.");
       });
@@ -260,6 +265,7 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
                     value={form.method}
                     onChange={(v) => {
                       set("method", v as SavingsMethod);
+                      setReferenceError(null);
                       // A number typed for one method never carries over to another.
                       if (serverNumbersCash) set("reference", "");
                     }}
@@ -288,6 +294,7 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
                     field="reference"
                     label={autoReference ? "Reference" : "Reference (optional)"}
                     hint={autoReference?.hint}
+                    error={referenceError}
                   >
                     {autoReference ? (
                       <Input
@@ -301,7 +308,10 @@ export function PlaceTimeDepositDialog({ open, onOpenChange, onPlaced }: PlaceTi
                       <Input
                         id="td-ref"
                         value={form.reference}
-                        onChange={(e) => set("reference", e.target.value)}
+                        onChange={(e) => {
+                          set("reference", e.target.value);
+                          setReferenceError(null);
+                        }}
                         placeholder="OR / transfer no."
                         maxLength={100}
                       />
