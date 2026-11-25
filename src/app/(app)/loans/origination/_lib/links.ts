@@ -11,6 +11,10 @@ import type { ApplicationLink, ApplicationLinkInput } from "@/types/loan-origina
 export const NO_ADDRESS =
   "No link to share yet: the server's public address for online applications isn't set up. An administrator sets it on the server.";
 
+/** Under the form's Test link switch: who sees a code on screen, as the server decides it (`TestCodes::serves()`). */
+export const TEST_LINK_NOTE =
+  "Its applications stay out of the dashboard. On staging, only an open test link shows test codes: for the mobile number on an active staff account that works on loan origination (Settings → Profile, or User Management), or another allowed staff number.";
+
 export function emptyLinkInput(branchId: number | null): ApplicationLinkInput {
   return {
     name: "",

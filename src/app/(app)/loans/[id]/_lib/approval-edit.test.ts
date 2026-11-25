@@ -79,3 +79,32 @@ test("the approval card's action rows wrap from sm up, so no button is pushed ou
   assert.equal(page.split("className={APPROVAL_ACTIONS_ROW}").length - 1, 2, "both approval card rows use it");
   assert.doesNotMatch(page, /<div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">/);
 });
+
+// The approve step's buttons share their row with the 32 px "Send back to"
+// select, so they are 32 px too (the field-height rule: the Button's default
+// h-8, never its 28 px size="sm"). The other rows' buttons keep their size
+// (finish run round 4).
+test("the approve step's buttons are 32 px like the send-back select beside them; other rows keep theirs", () => {
+  const page = readFileSync(resolve(process.cwd(), "src/app/(app)/loans/[id]/page.tsx"), "utf8");
+  const block = (from: string, to: string) => {
+    const start = page.indexOf(from);
+    const end = page.indexOf(to, start);
+    assert.ok(start > -1 && end > start, from);
+    return page.slice(start, end);
+  };
+  const submit = block('{currentStep.kind === "submit" && (', '{currentStep.kind === "approve" && (');
+  const approve = block('{currentStep.kind === "approve" && (', '{currentStep.kind === "release" && (');
+  const release = block('{currentStep.kind === "release" && (', "Release Loan");
+
+  assert.match(approve, /<SelectTrigger\s+id="send-back-target"/);
+  for (const label of ["Edit Loan", "Send Back for Revision", "Approve & Forward"]) {
+    assert.ok(approve.includes(label), label);
+  }
+  assert.equal(approve.match(/<Button\b/g)?.length, 3);
+  assert.doesNotMatch(approve, /size="sm"|\bh-7\b/);
+
+  // Unchanged: the submit step's three buttons and the Release step's one.
+  assert.equal(submit.match(/<Button\b/g)?.length, 3);
+  assert.equal(submit.match(/size="sm"/g)?.length, 3);
+  assert.equal(release.match(/size="sm"/g)?.length, 1);
+});
