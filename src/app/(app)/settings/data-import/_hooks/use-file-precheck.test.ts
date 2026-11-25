@@ -494,6 +494,31 @@ test("dates are checked against the settled order, and an impossible one fails",
   assert.match(dates[0].message, /not a real date read day-first/);
 });
 
+test("a date read with the server's warning warns, in its words, and the row imports", () => {
+  const BIRTHDATE_AS_WRITTEN: DateColumnFinding = { ...BIRTHDATE_DMY, order: null };
+  const row = [...CUSTOMER];
+  row[5] = "32874";
+
+  const result = checkRows(customerRows([row]), { ...CUSTOMER_CONTEXT, dates: [BIRTHDATE_AS_WRITTEN] });
+
+  assert.equal(result.failingRows, 0);
+  assert.deepEqual(result.issues.map((issue) => [issue.column, issue.severity, issue.category, issue.message]), [
+    ["Birthdate", "warning", "date", '"32874" is an Excel serial date number and was read as 1990-01-01. Confirm it against the source workbook.'],
+  ]);
+});
+
+test("a date the server doesn't read can't be imported, in its words", () => {
+  const BIRTHDATE_AS_WRITTEN: DateColumnFinding = { ...BIRTHDATE_DMY, order: null };
+  for (const cell of ["1990-3-4", "1990.03.04", "17673", "1990-03-04 00:00:00"]) {
+    const row = [...CUSTOMER];
+    row[5] = cell;
+    const result = checkRows(customerRows([row]), { ...CUSTOMER_CONTEXT, dates: [BIRTHDATE_AS_WRITTEN] });
+    assert.deepEqual(result.issues.map((issue) => [issue.column, issue.severity, issue.message]), [
+      ["Birthdate", "error", `"${cell}" is not a date this importer recognises. Use YYYY-MM-DD.`],
+    ], cell);
+  }
+});
+
 test("an ambiguous column with no choice yet produces no row issues at all", () => {
   const pending: DateColumnFinding = { ...BIRTHDATE_DMY, order: undefined, blocked: false };
   const row = [...CUSTOMER];
@@ -868,7 +893,7 @@ test("a date column of one unreadable value says 1 value, not 1 values", () => {
 
   const [blocker] = fileBlockers(inspectionStub(), customerRows([CUSTOMER]), [unusable]);
 
-  assert.match(blocker, /Of 1 value, 1 is not a date at all \(soon\)\./);
+  assert.match(blocker, /Of 1 value, 1 isn't written in a form the import reads \(soon\)\./);
 });
 
 test("a members file at neither layout's width is blocked, and the blocker names both", () => {

@@ -51,6 +51,18 @@ const MEMBER_AMOUNTS: ReadonlyArray<readonly [string, bigint, string]> = [
   ["pledge_amount", BigInt("999999999"), "9,999,999.99"],
 ];
 
+/**
+ * Today less `years`, as `Carbon::today()->subYears()` gives it: 29 February
+ * overflows into 1 March in a common year.
+ */
+function yearsBefore(today: string, years: number): string {
+  const [year, month, day] = today.split("-").map(Number);
+  const target = year - years;
+  const leap = target % 4 === 0 && (target % 100 !== 0 || target % 400 === 0);
+  const [m, d] = month === 2 && day === 29 && !leap ? [3, 1] : [month, day];
+  return `${String(target).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
 /** The CDA membership columns. Date Hired is an ordinary member field. */
 const MEMBERSHIP_KEYS = ["membership_date", "member_type", "membership_number"] as const;
 
@@ -77,6 +89,26 @@ export function memberFieldProblems(row: ImportRow, context: MemberFieldContext)
   const add = (key: string, severity: MemberFieldProblem["severity"], category: MemberFieldProblem["category"], message: string) =>
     problems.push({ key, label: labelOf(key), severity, category, message, raw: cell(key) });
 
+  // The birthdate as `CustomerRowNormalizer::birthdate()` holds it, once read:
+  // in the future or before 1900 it is imported blank, and under 18 it warns.
+  // Both are `YYYY-MM-DD`, so the strings compare as the dates do.
+  const read = context.dates.birthdate;
+  let birthdate = read;
+  if (read && read > context.today) {
+    add("birthdate", "warning", "date", `"${read}" is in the future, which cannot be a birthdate, so it was imported as blank.`);
+    birthdate = undefined;
+  } else if (read && read < "1900-01-01") {
+    add("birthdate", "warning", "date", `"${read}" is before 1900 and was imported as blank.`);
+    birthdate = undefined;
+  } else if (read && read > yearsBefore(context.today, 18)) {
+    add(
+      "birthdate",
+      "warning",
+      "date",
+      `"${read}" makes this member under 18. The record was imported as-is because it is a fact on the coop's books, but the member form requires 18+, so this member cannot be saved in the app until the birthdate is corrected.`,
+    );
+  }
+
   for (const [key, mostCentavos, mostWords] of MEMBER_AMOUNTS) {
     if (!cell(key)) continue; // Both are optional.
     const reading = readCentavos(cell(key));
@@ -92,9 +124,9 @@ export function memberFieldProblems(row: ImportRow, context: MemberFieldContext)
     }
   }
 
-  // Both are `YYYY-MM-DD`, so the strings compare as the dates do.
+  // Both are `YYYY-MM-DD`, so the strings compare as the dates do. A birthdate
+  // imported blank is not held against the date hired, as on the server.
   const hired = context.dates.date_hired;
-  const birthdate = context.dates.birthdate;
   if (hired) {
     const raw = cell("date_hired");
     if (hired <= "1900-01-01") {

@@ -66,11 +66,12 @@ const ORDER_HEADINGS: Record<DateOrder, string> = {
 function StatsLine({ stats }: { stats: DateColumnStats }) {
   const parts: string[] = [];
   if (stats.iso > 0) parts.push(`${formatCount(stats.iso)} already YYYY-MM-DD`);
+  if (stats.named > 0) parts.push(`${formatCount(stats.named)} written with the month's name`);
   if (stats.pair > 0) parts.push(`${formatCount(stats.pair)} written with slashes`);
   if (stats.serial > 0) parts.push(`${formatCount(stats.serial)} Excel date numbers`);
   if (stats.shortYear > 0) parts.push(`${formatCount(stats.shortYear)} with a two-digit year`);
   if (stats.invalid > 0) parts.push(`${formatCount(stats.invalid)} not real dates`);
-  if (stats.unrecognised > 0) parts.push(`${formatCount(stats.unrecognised)} not dates at all`);
+  if (stats.unrecognised > 0) parts.push(`${formatCount(stats.unrecognised)} not in a form the import reads`);
   if (stats.blank > 0) parts.push(`${formatCount(stats.blank)} blank`);
 
   return (
@@ -251,7 +252,7 @@ function ColumnVerdict({
           <StatsLine stats={inference.stats} />
           <Samples label="Two-digit years" values={inference.stats.shortYearSamples} />
           <Samples label="Not real dates" values={inference.stats.invalidSamples} />
-          <Samples label="Not dates" values={inference.stats.unrecognisedSamples} />
+          <Samples label="Not in a form the import reads" values={inference.stats.unrecognisedSamples} />
         </div>
       </div>
 

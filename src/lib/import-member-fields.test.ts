@@ -78,3 +78,25 @@ test("the amounts are checked whatever the person importing may edit", () => {
     ['"-1" is a negative amount, which cannot be imported.'],
   );
 });
+
+/**
+ * A birthdate as `CustomerRowNormalizer::birthdate()` holds it, once read:
+ *  - after today: imported blank, with a warning;
+ *  - before 1900-01-01: imported blank, with a warning;
+ *  - later than today less 18 years: imported, with a warning (under 18).
+ * A birthdate imported blank is not compared with Date Hired.
+ */
+test("a birthdate the server blanks or flags warns here, in its words", () => {
+  const birthdate = (iso: string, extra: Record<string, string> = {}) =>
+    memberFieldProblems({ birthdate: iso, ...extra }, { ...CONTEXT, dates: { birthdate: iso, ...(extra.date_hired ? { date_hired: extra.date_hired } : {}) } })
+      .map((problem) => [problem.label, problem.severity, problem.message]);
+
+  assert.deepEqual(birthdate("2026-12-01"), [["Birthdate", "warning", '"2026-12-01" is in the future, which cannot be a birthdate, so it was imported as blank.']]);
+  assert.deepEqual(birthdate("1850-04-03"), [["Birthdate", "warning", '"1850-04-03" is before 1900 and was imported as blank.']]);
+  const under18 = '"2008-11-26" makes this member under 18. The record was imported as-is because it is a fact on the coop\'s books, but the member form requires 18+, so this member cannot be saved in the app until the birthdate is corrected.';
+  assert.deepEqual(birthdate("2008-11-26"), [["Birthdate", "warning", under18]]);
+  assert.deepEqual(birthdate("2008-11-25"), [], "eighteen today");
+  assert.deepEqual(birthdate("1900-01-01"), []);
+  // Imported blank, so a date hired is not held to it.
+  assert.deepEqual(birthdate("2026-12-01", { date_hired: "2020-01-01" }).map(([label]) => label), ["Birthdate"]);
+});

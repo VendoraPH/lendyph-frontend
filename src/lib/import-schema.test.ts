@@ -877,6 +877,13 @@ test("an Account No. in either file, and a Loan No., are refused past their 50-c
   }
   // Twenty-one characters, which the server cut to 20 before round 4, read whole.
   assert.deepEqual(sizeProblem("loans", 1, "LN-2023-ABCDEFGHIJKLM"), []);
+  // Characters as the server counts them (mb_strlen), not UTF-16 units: fifty
+  // Ñ or fifty 🌾 fit, and fifty-one don't.
+  for (const character of ["Ñ", "🌾"]) {
+    assert.deepEqual(sizeProblem("loans", 1, character.repeat(50)), [], `50 ${character}`);
+    assert.deepEqual(sizeProblem("customer", 0, character.repeat(50)), [], `50 ${character}`);
+    assert.deepEqual(sizeProblem("loans", 1, character.repeat(51)).map((p) => [p.reason, p.limit]), [["too-long", 50]], `51 ${character}`);
+  }
 });
 
 test("no amount is a size question: every file's amounts are read as the server reads them", () => {

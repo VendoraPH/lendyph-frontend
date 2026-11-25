@@ -30,6 +30,7 @@ import {
   SUFFIX_OPTIONS,
 } from "@/constants";
 import { looksLikeDate } from "./import-date";
+import { serverLength } from "./import-server-values";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -820,7 +821,7 @@ export function fieldSizeProblems(
     // characters once its space is gone.
     if (column.serverRepair === "member-number") {
       const kept = canonicalMemberNumber(raw);
-      if (column.maxLength !== undefined && kept.length > column.maxLength) {
+      if (column.maxLength !== undefined && serverLength(kept) > column.maxLength) {
         at("too-long", column.maxLength, "error", { kept });
       }
       continue;
@@ -834,13 +835,14 @@ export function fieldSizeProblems(
       if (dropped.length > 0) {
         at("multiple-values", column.maxLength ?? null, "warning", { kept, dropped });
       }
-      if (column.maxLength !== undefined && kept.length > column.maxLength) {
+      if (column.maxLength !== undefined && serverLength(kept) > column.maxLength) {
         at("too-long", column.maxLength);
       }
       continue;
     }
 
-    if (column.maxLength !== undefined && raw.length > column.maxLength) {
+    // Characters as the server counts them (`mb_strlen`), not UTF-16 units.
+    if (column.maxLength !== undefined && serverLength(raw) > column.maxLength) {
       at("too-long", column.maxLength);
     }
   }

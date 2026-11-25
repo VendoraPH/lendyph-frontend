@@ -94,6 +94,7 @@ export const ISSUE_CATEGORY_WORDS: Readonly<Record<string, string>> = {
   // number, and an account number in any file (the share capital file's
   // account number or member ID included).
   loan_no_too_long: "Loan number too long",
+  loan_no_shortened_earlier: "Loan number shortened by an earlier import",
   account_no_too_long: "Account number too long",
 
   // A share capital entry

@@ -47,8 +47,9 @@ const BACKEND_CODES = [
   "member_withdrawn", "not_a_member", "reference_number_too_long", "share_capital_needs_permission",
   "transaction_date_future", "transaction_date_implausible", "transaction_type_invalid",
   "transaction_type_required", "withdrawal_exceeds_balance",
-  // A Loan No. longer than 20 is refused, never cut (finish run round 4).
-  "loan_no_too_long",
+  // A Loan No. past its column is refused, never cut, and one an earlier
+  // import cut to the same first 20 characters is refused (finish run round 4).
+  "loan_no_too_long", "loan_no_shortened_earlier",
 ];
 
 test("every code the backend can send has its words", () => {
@@ -78,6 +79,7 @@ test("an identifier past its column reads the same in every file: never cut, ref
   // share capital file's account number or member ID.
   assert.equal(categoryWords("account_no_too_long"), "Account number too long");
   assert.equal(categoryWords("loan_no_too_long"), "Loan number too long");
+  assert.equal(categoryWords("loan_no_shortened_earlier"), "Loan number shortened by an earlier import");
 });
 
 test("an unmatched loan product reads with its name", () => {
