@@ -21,6 +21,7 @@ import type { MaturityInstruction, SavingsMethod, TimeDeposit } from "@/types";
 import { FormField } from "../../../_components/field";
 import { OptionSelect } from "../../../_components/option-select";
 import { MATURITY_INSTRUCTION_OPTIONS } from "../../../_lib/time-deposit-rules";
+import { serverFieldError } from "../../../_lib/step-errors";
 import { defaultPayoutAccount, payoutOptions, postMaturityLabel, settleBody } from "../../_lib/settle-form";
 import { PayoutAccountField, usePayoutAccounts } from "./payout-account-field";
 
@@ -39,7 +40,11 @@ export function SettleDialog({ open, deposit, onOpenChange, onSettled }: SettleD
   const [method, setMethod] = useState<SavingsMethod>(methods[0].value);
   const [next, setNext] = useState<MaturityInstruction>(deposit.maturity_instruction);
   const [accountId, setAccountId] = useState("");
+  const [reference, setReference] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  // The server's refusal of the payout reference (one already on record, say),
+  // shown on the field until the reference or method changes.
+  const [referenceError, setReferenceError] = useState<string | null>(null);
   const { submitting, run } = useSubmitGuard();
   if (useDialogOpening(open, deposit)) {
     setDate(todayISO());
@@ -47,7 +52,9 @@ export function SettleDialog({ open, deposit, onOpenChange, onSettled }: SettleD
     setNext(deposit.maturity_instruction);
     setMethod(methods[0].value);
     setAccountId("");
+    setReference("");
     setSubmitted(false);
+    setReferenceError(null);
   }
 
   const tooEarly = date !== "" && date < deposit.maturity_date;
@@ -58,11 +65,13 @@ export function SettleDialog({ open, deposit, onOpenChange, onSettled }: SettleD
   // The placement's own payout account is picked until staff choose another.
   const payoutAccount = accountId || defaultPayoutAccount(deposit, accounts.offered);
   const accountError = intoSavings && !payoutAccount ? "Choose the savings account to pay into." : null;
+  // Paid out over the counter, its reference is optional: it exists only once the money is sent (round 5).
+  const overTheCounter = paysOut && !intoSavings;
 
   function submit() {
     setSubmitted(true);
     if (!date || tooEarly || accountError) return;
-    const body = settleBody(date, action, method, next, payoutAccount);
+    const body = settleBody(date, action, method, next, payoutAccount, reference);
     run((key) => timeDepositService.settle(deposit.id, body, key))
       ?.then((result) => {
         const next = result.kind === "posted" ? result.record : null;
@@ -73,7 +82,10 @@ export function SettleDialog({ open, deposit, onOpenChange, onSettled }: SettleD
         onOpenChange(false);
         onSettled(next);
       })
-      .catch((err: unknown) => notifyError(err, "Couldn't settle the time deposit."));
+      .catch((err: unknown) => {
+        setReferenceError(serverFieldError(err, "payout_reference"));
+        notifyError(err, "Couldn't settle the time deposit.");
+      });
   }
 
   return (
@@ -121,12 +133,29 @@ export function SettleDialog({ open, deposit, onOpenChange, onSettled }: SettleD
                 <OptionSelect
                   id="st-method"
                   value={method}
-                  onChange={(v) => setMethod(v as SavingsMethod)}
+                  onChange={(v) => {
+                    setMethod(v as SavingsMethod);
+                    setReferenceError(null);
+                  }}
                   options={methods}
                 />
               </FormField>
             )}
           </div>
+          {overTheCounter && (
+            <FormField id="st-ref" label="Reference (optional)" error={referenceError}>
+              <Input
+                id="st-ref"
+                value={reference}
+                maxLength={100}
+                onChange={(e) => {
+                  setReference(e.target.value);
+                  setReferenceError(null);
+                }}
+                placeholder="OR / transfer no."
+              />
+            </FormField>
+          )}
           {intoSavings && (
             <PayoutAccountField
               id="st-account"
