@@ -35,6 +35,7 @@ import { centavosOrDash } from "../_lib/server-figure";
 import type { ExpenseEditPayload } from "./_lib/expense-forms";
 import {
   EXPENSE_PAGE_SIZE,
+  expenseCountsLine,
   expenseListQuery,
   expensePageToStepBackTo,
   expenseStatusCounts,
@@ -202,8 +203,7 @@ function ExpensesContent() {
 
               {counts.length > 0 && (
                 <p className="text-sm text-muted-foreground">
-                  {counts.map((c) => `${c.count} ${c.label.toLowerCase()}`).join(" · ")}
-                  {search.trim() ? ", matching the search" : ""}
+                  {expenseCountsLine(counts, search.trim() !== "")}
                 </p>
               )}
 

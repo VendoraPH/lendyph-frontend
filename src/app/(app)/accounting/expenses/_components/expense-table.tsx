@@ -23,6 +23,8 @@ const STATUS_STYLES: Record<ExpenseStatus, string> = {
   partially_paid: "bg-amber-500/10 text-amber-700 border-amber-500/30",
   paid: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30",
   overdue: "bg-red-500/10 text-red-700 border-red-500/30",
+  // The Journals screen's Reversed badge.
+  reversed: "bg-orange-500/10 text-orange-700 border-orange-500/30",
 };
 
 interface ExpenseTableProps {
