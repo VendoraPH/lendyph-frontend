@@ -157,6 +157,18 @@ export type PrintBlock =
   | { kind: "spacer"; height?: string }
   | { kind: "page_break" };
 
+/**
+ * The terms a printed loan document states, as its payload sent them
+ * (`terms_fingerprint` and `terms_version` on the disclosure and promissory
+ * note endpoints). The print log sends them, so the print records what the
+ * paper shows rather than the terms when Print was pressed.
+ */
+export interface PrintedTerms {
+  /** 64 lowercase hexadecimal characters, or null when the server couldn't work them out. */
+  terms_fingerprint: string | null;
+  terms_version: number;
+}
+
 export interface PrintableDocument {
   id: PrintableId;
   /**
@@ -164,6 +176,12 @@ export interface PrintableDocument {
    * the record was read: a blank form is not that record's document.
    */
   subjectId?: number;
+  /**
+   * The terms the payload this document was built from stated. The catalog
+   * sets it, only from a payload that carries them; absent otherwise (other
+   * documents, a blank form, an older API), and the print log then sends none.
+   */
+  printedTerms?: PrintedTerms;
   org: PrintableOrg;
   title: string;
   /**

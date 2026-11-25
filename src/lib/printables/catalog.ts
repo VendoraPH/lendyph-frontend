@@ -53,6 +53,7 @@ import {
   fetchTimeDepositPayload,
 } from "./savings-fetchers";
 import { PRINTABLE_TITLES } from "@/lib/page-titles";
+import { printedTermsOf } from "./print-log";
 import { refusedOrNull } from "./refusal";
 
 export { PrintableRefusedError } from "./refusal";
@@ -89,7 +90,10 @@ function printableBuilder(fetcher: SubjectFetcher, build: TemplateBuilder) {
     if (!ctx.subjectId) return build(null, { org: ctx.org });
     const raw = await fetcher(ctx.subjectId).catch(refusedOrNull);
     const doc = build(raw, { org: ctx.org });
-    return raw === null ? doc : { ...doc, subjectId: ctx.subjectId };
+    if (raw === null) return doc;
+    // The terms this payload states, for the print log (disclosure and note).
+    const printedTerms = printedTermsOf(raw);
+    return printedTerms ? { ...doc, subjectId: ctx.subjectId, printedTerms } : { ...doc, subjectId: ctx.subjectId };
   };
 }
 

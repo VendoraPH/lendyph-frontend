@@ -129,7 +129,9 @@ import {
   outdatedPrints,
   releaseBlockedReason,
   releaseDocumentsRefusal,
+  releaseReadyState,
   reprintNotice,
+  waitingForReprintLine,
 } from "./_lib/reprint-notice";
 import { useRereadOnReturn } from "./_hooks/use-reread-on-return";
 import { DisabledReason } from "@/components/common/disabled-reason";
@@ -1723,6 +1725,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
     currentStep?.kind === "approve" && nextStep?.kind === "release";
   const allStepsApproved =
     approvalSteps.length > 0 && approvalSteps.every((s) => s.status === "approved");
+  // Ready for release once every approver has signed off, unless a printed
+  // document is out of date: then it waits on the reprint, as Release does.
+  const releaseReady = releaseReadyState(readyForRelease(loan.status, allStepsApproved), outdatedDocuments);
   // THE SERVER DECIDES. `can_act` is the same rule the endpoints enforce,
   // evaluated for the requesting user; the client role check is only a fallback
   // for a payload that omits the flag.
@@ -3222,11 +3227,21 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 </div>
               )}
 
-              {readyForRelease(loan.status, allStepsApproved) && (
+              {/* Ready for release, or, while Release is held for a reprint, waiting
+                  on it: one line, from the same list as the button. */}
+              {releaseReady === "ready" && (
                 <div className="rounded-lg border border-green-200 bg-green-50 p-3 flex items-start gap-2 dark:border-green-800/40 dark:bg-green-900/10">
                   <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
                   <p className="text-sm text-green-700 dark:text-green-400">
                     All approvers have signed off. The loan is ready for release.
+                  </p>
+                </div>
+              )}
+              {releaseReady === "waiting_for_reprint" && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 flex items-start gap-2 dark:border-amber-700 dark:bg-amber-900/10">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                  <p className="text-sm text-amber-700 dark:text-amber-400">
+                    {waitingForReprintLine(outdatedDocuments)}
                   </p>
                 </div>
               )}

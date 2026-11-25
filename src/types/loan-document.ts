@@ -168,6 +168,13 @@ export interface LoanDisclosure {
    */
   amortization_schedule: LoanDocumentScheduleRow[];
   co_makers: LoanDisclosureCoMaker[];
+  /**
+   * The terms this statement states, for `POST /loans/{loan}/print-log`: the
+   * print records what the paper shows. Null when the server couldn't work
+   * them out; absent from an older API.
+   */
+  terms_fingerprint?: string | null;
+  terms_version?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -250,4 +257,7 @@ export interface LoanPromissoryNote {
   payment_schedule_summary: LoanPromissoryNoteScheduleSummary;
   branch: LoanPromissoryNoteBranch;
   signatures: LoanPromissoryNoteSignatures;
+  /** As on the disclosure: the terms this note states, for the print log. */
+  terms_fingerprint?: string | null;
+  terms_version?: number;
 }

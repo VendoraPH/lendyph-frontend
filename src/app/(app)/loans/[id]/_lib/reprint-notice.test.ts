@@ -20,7 +20,9 @@ import {
   outdatedPrints,
   releaseBlockedReason,
   releaseDocumentsRefusal,
+  releaseReadyState,
   reprintNotice,
+  waitingForReprintLine,
 } from "./reprint-notice";
 import type { PrintedDocumentOutdated } from "@/types/loan";
 
@@ -98,6 +100,38 @@ test("a release refused on documents gives the server's sentence; any other answ
   assert.equal(releaseDocumentsRefusal(refused(422)), null);
   assert.equal(releaseDocumentsRefusal(new Error("Network Error")), null);
   assert.equal(releaseDocumentsRefusal(null), null);
+});
+
+test("once every approver has signed off, the line waits on the reprint exactly while Release is held", () => {
+  assert.equal(releaseReadyState(false, []), null);
+  assert.equal(releaseReadyState(false, [DISCLOSURE]), null);
+  assert.equal(releaseReadyState(true, []), "ready");
+  assert.equal(releaseReadyState(true, [NOTE]), "waiting_for_reprint");
+
+  for (const items of [[], [DISCLOSURE], [NOTE], [DISCLOSURE, NOTE]]) {
+    assert.equal(releaseReadyState(true, items) === "waiting_for_reprint", releaseBlockedReason(items) !== null);
+  }
+
+  assert.equal(waitingForReprintLine([]), null);
+  assert.equal(
+    waitingForReprintLine([DISCLOSURE]),
+    "All approvers have signed off. Release waits until the Disclosure Statement is printed again and the member signs the new copy.",
+  );
+  assert.equal(
+    waitingForReprintLine([DISCLOSURE, NOTE]),
+    "All approvers have signed off. Release waits until the Disclosure Statement and the Promissory Note are printed " +
+      "again and the member signs the new copies.",
+  );
+});
+
+test("the approval card shows the ready line or the waiting line, never both", () => {
+  const page = readFileSync(join(process.cwd(), "src/app/(app)/loans/[id]/page.tsx"), "utf8");
+  assert.ok(page.includes("const releaseReady = releaseReadyState(readyForRelease(loan.status, allStepsApproved), outdatedDocuments);"));
+  const ready = page.indexOf("All approvers have signed off. The loan is ready for release.");
+  assert.ok(ready > -1);
+  assert.match(page.slice(ready - 500, ready), /\{releaseReady === "ready" && \(/);
+  assert.ok(page.includes('{releaseReady === "waiting_for_reprint" && ('));
+  assert.ok(page.includes("{waitingForReprintLine(outdatedDocuments)}"));
 });
 
 test("the loan page shows the notice, holds Release with the reason, reads the loan again on return, and says a refusal", () => {

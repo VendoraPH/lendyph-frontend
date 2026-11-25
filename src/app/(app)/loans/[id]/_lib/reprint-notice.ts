@@ -72,6 +72,30 @@ export function releaseBlockedReason(items: PrintedDocumentOutdated[]): string |
 }
 
 /**
+ * The approval card's line once every approver has signed off on an approved
+ * loan (`ready`, from `readyForRelease`): "ready" for release, or, exactly
+ * while Release is held (`releaseBlockedReason`), waiting on the reprint.
+ * Null when the loan isn't ready.
+ */
+export function releaseReadyState(
+  ready: boolean,
+  items: PrintedDocumentOutdated[],
+): "ready" | "waiting_for_reprint" | null {
+  if (!ready) return null;
+  return releaseBlockedReason(items) === null ? "ready" : "waiting_for_reprint";
+}
+
+/** The waiting line, naming each document; null when nothing is out of date. */
+export function waitingForReprintLine(items: PrintedDocumentOutdated[]): string | null {
+  if (items.length === 0) return null;
+
+  const names = joinedWithAnd(items.map((item) => `the ${nameOf(item)}`));
+  return items.length === 1
+    ? `All approvers have signed off. Release waits until ${names} is printed again and the member signs the new copy.`
+    : `All approvers have signed off. Release waits until ${names} are printed again and the member signs the new copies.`;
+}
+
+/**
  * The sentence a release refused on `documents` (422) carries, in words; null
  * for any other answer, which the release dialog handles as before.
  */

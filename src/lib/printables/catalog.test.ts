@@ -37,6 +37,36 @@ test("the blank form a failed read falls back to carries no loan", async () => {
   }
 });
 
+test("the disclosure and the promissory note keep the terms their payload stated", async () => {
+  const hex = "b".repeat(64);
+  const disclosure = loanDocumentService.disclosure;
+  const note = loanDocumentService.promissoryNote;
+  loanDocumentService.disclosure = (async () => ({ terms_fingerprint: hex, terms_version: 1 })) as unknown as typeof disclosure;
+  // An older API states none: the print then sends none and the server works them out.
+  loanDocumentService.promissoryNote = (async () => ({})) as unknown as typeof note;
+  try {
+    const printed = await findPrintable("disclosure_statement")!.build({ subjectId: 42, org });
+    assert.deepEqual(printed.printedTerms, { terms_fingerprint: hex, terms_version: 1 });
+    assert.equal((await findPrintable("promissory_note")!.build({ subjectId: 42, org })).printedTerms, undefined);
+  } finally {
+    loanDocumentService.disclosure = disclosure;
+    loanDocumentService.promissoryNote = note;
+  }
+});
+
+test("the blank form a failed read falls back to carries no terms", async () => {
+  const original = loanDocumentService.disclosure;
+  loanDocumentService.disclosure = (async () => {
+    throw new Error("network");
+  }) as unknown as typeof original;
+  try {
+    const doc = await findPrintable("disclosure_statement")!.build({ subjectId: 42, org });
+    assert.equal(doc.printedTerms, undefined);
+  } finally {
+    loanDocumentService.disclosure = original;
+  }
+});
+
 function httpError(status: number, data: unknown) {
   return { isAxiosError: true, response: { status, data } };
 }
