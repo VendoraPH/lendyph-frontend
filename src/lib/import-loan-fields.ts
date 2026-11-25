@@ -24,6 +24,7 @@
  */
 
 import { columnsFor, type ImportRow } from "./import-schema";
+import { readCentavos, readInteger, readRate, serverLength, serverText, type Reading } from "./import-server-values";
 
 export interface LoanFieldProblem {
   /** The column at fault, or `null` for the whole row. */
@@ -54,82 +55,15 @@ export const LOAN_PRODUCT_MAX = 255;
 /** What the server keeps of an Other Fee Detail (`LoanRowNormalizer`). */
 export const OTHER_FEE_DETAIL_MAX = 255;
 
-/** `ValueNormalizer::MAX_CENTAVOS`: ₱9,999,999,999.99. Whole centavos are BigInt, exact at any length. */
-const MAX_CENTAVOS = BigInt("999999999999");
 const ZERO = BigInt(0);
-const CENTAVOS_PER_PESO = BigInt(100);
-
-/** `decimal(8,4)`, as `ValueNormalizer::rate()` caps it. */
-const MAX_RATE = 9999.9999;
-
-type Reading<T> = { ok: true; value: T } | { ok: false; message: string };
 
 function labelOf(key: string): string {
   return columnsFor("loans").find((column) => column.key === key)?.label ?? key;
 }
 
-/** Characters as the server counts them (`mb_strlen`), not UTF-16 units. */
-function characters(value: string): number {
-  return [...value].length;
-}
-
-/**
- * A cell as `ValueNormalizer::text()` leaves it: byte-order marks dropped, a
- * non-breaking space a space, trimmed.
- */
-function serverText(raw: string): string {
-  return raw.replace(/\uFEFF/g, "").replace(/\u00A0/g, " ").trim();
-}
-
-/** `ValueNormalizer::centavos()`: an amount in whole centavos, or its refusal. */
-function readCentavos(original: string): Reading<bigint> {
-  if (original.startsWith("(") || original.endsWith(")")) {
-    return { ok: false, message: `"${original}" is written in accounting notation for a negative amount. Negative amounts cannot be imported.` };
-  }
-  const value = original.replace(/[₱, \u00A0]/g, "").replace(/php/gi, "").replace(/^\++/, "");
-  if (value.startsWith("-") || value.endsWith("-")) {
-    return { ok: false, message: `"${original}" is a negative amount, which cannot be imported.` };
-  }
-  if (/^\d*\.\d{3,}$/.test(value)) {
-    return {
-      ok: false,
-      message: `"${original}" has more than 2 decimal places. Round it to centavos in the source file — this importer will not round it for you.`,
-    };
-  }
-  if (!/^(\d+(\.\d{1,2})?|\.\d{1,2})$/.test(value)) {
-    return { ok: false, message: `"${original}" is not a valid amount.` };
-  }
-  const [whole, fraction = ""] = value.split(".");
-  const centavos = BigInt(whole === "" ? "0" : whole) * CENTAVOS_PER_PESO + BigInt(fraction.padEnd(2, "0"));
-  if (centavos > MAX_CENTAVOS) {
-    return { ok: false, message: `"${original}" is larger than the maximum this system stores (9,999,999,999.99).` };
-  }
-  return { ok: true, value: centavos };
-}
-
-/** `ValueNormalizer::rate()`: percent signs, spaces and commas dropped. */
-function readRate(original: string): Reading<string> {
-  const value = original.replace(/[% ,]/g, "").trimEnd();
-  if (!/^\d+(\.\d{1,4})?$/.test(value)) {
-    return { ok: false, message: `"${original}" is not a valid interest rate.` };
-  }
-  if (Number(value) > MAX_RATE) {
-    return { ok: false, message: `"${original}" is larger than the maximum interest rate this system stores.` };
-  }
-  return { ok: true, value };
-}
-
-/** `ValueNormalizer::integer()`, held to 1 to `TERM_MONTHS_MAX`. */
+/** `ValueNormalizer::integer()` for Term in Months, 1 to `TERM_MONTHS_MAX`. */
 function readTerm(original: string): Reading<number> {
-  const value = original.replace(/[, ]/g, "");
-  if (!/^\d+$/.test(value)) {
-    return { ok: false, message: `"${original}" is not a whole number.` };
-  }
-  const months = Number(value);
-  if (months < 1 || months > TERM_MONTHS_MAX) {
-    return { ok: false, message: `"${original}" is outside the accepted range 1–${TERM_MONTHS_MAX}.` };
-  }
-  return { ok: true, value: months };
+  return readInteger(original, 1, TERM_MONTHS_MAX);
 }
 
 /** How the server reads each cell these rules check, by column key. */
@@ -173,8 +107,8 @@ export function loanFieldProblems(row: ImportRow, context: LoanFieldContext): Lo
     const original = cell(key);
     if (!original) continue; // Blank is `missingRequiredFields`' question.
     const keeps = CUT_AT[key];
-    if (keeps !== undefined && characters(original) > keeps) {
-      add(key, "warning", "size", `${labelOf(key)} is ${characters(original)} characters. The import keeps the first ${keeps}.`);
+    if (keeps !== undefined && serverLength(original) > keeps) {
+      add(key, "warning", "size", `${labelOf(key)} is ${serverLength(original)} characters. The import keeps the first ${keeps}.`);
     }
     const reading = READERS[key]?.(original);
     if (reading && !reading.ok) add(key, "error", "value", reading.message);

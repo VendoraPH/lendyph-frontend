@@ -1056,6 +1056,33 @@ export function sessionAnswers(
   return { hasHeaderRow, dateFormat };
 }
 
+/** The files whose date columns the server reads with an order. */
+const DATED_FILES = ["customers", "loans"] as const;
+
+/**
+ * The date order the Check step settled for each date column, as the run that
+ * imports the files carries it to the server (`date_orders`, finish run round
+ * 4): `dmy` or `mdy`, or `null` where the column needed none (ISO dates and
+ * spreadsheet date numbers). The server reads those columns with it.
+ *
+ * Read back from the patterns `sessionAnswers` wrote, so the run says exactly
+ * what the session recorded. The share capital file's dates are written
+ * year-month-day, so it carries none.
+ */
+export function runDateOrders(
+  dateFormat: SessionAnswers["dateFormat"],
+): Partial<Record<(typeof DATED_FILES)[number], Record<string, DateOrder | null>>> {
+  const orderOf = (pattern: string): DateOrder | null =>
+    (Object.keys(DATE_FORMAT_PATTERNS) as DateOrder[]).find((order) => DATE_FORMAT_PATTERNS[order] === pattern) ?? null;
+  const orders: Partial<Record<(typeof DATED_FILES)[number], Record<string, DateOrder | null>>> = {};
+  for (const kind of DATED_FILES) {
+    const columns = dateFormat[kind];
+    if (!columns) continue;
+    orders[kind] = Object.fromEntries(Object.entries(columns).map(([column, pattern]) => [column, orderOf(pattern)]));
+  }
+  return orders;
+}
+
 // ---------------------------------------------------------------------------
 // The hook
 // ---------------------------------------------------------------------------

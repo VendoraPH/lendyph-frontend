@@ -8,9 +8,16 @@
  * `resolveRowEnums`'; a membership number used twice in one file is the row
  * check's, since only it sees every row. What is left needs the row's dates as
  * read, which is why the caller passes them in.
+ *
+ * A member's two amounts, Monthly Income and Pledge Amt, are read here too, as
+ * `CustomerRowNormalizer::cappedAmount()` reads them (finish run round 4): the
+ * server's money rules (`./import-server-values`) refuse the row, in its
+ * words, and an amount above what the member form allows is imported blank,
+ * with its warning.
  */
 
 import { canonicalMemberNumber, columnsFor, type ImportRow } from "./import-schema";
+import { readCentavos } from "./import-server-values";
 
 export interface MemberFieldProblem {
   key: string;
@@ -34,6 +41,15 @@ export interface MemberFieldContext {
    */
   membershipAllowed: boolean;
 }
+
+/**
+ * Each amount, the most the member form allows in centavos, and that limit as
+ * the server words it (`CustomerRowNormalizer`).
+ */
+const MEMBER_AMOUNTS: ReadonlyArray<readonly [string, bigint, string]> = [
+  ["monthly_income", BigInt("9999999999"), "99,999,999.99"],
+  ["pledge_amount", BigInt("999999999"), "9,999,999.99"],
+];
 
 /** The CDA membership columns. Date Hired is an ordinary member field. */
 const MEMBERSHIP_KEYS = ["membership_date", "member_type", "membership_number"] as const;
@@ -60,6 +76,21 @@ export function memberFieldProblems(row: ImportRow, context: MemberFieldContext)
   const cell = (key: string) => (row[key] ?? "").trim();
   const add = (key: string, severity: MemberFieldProblem["severity"], category: MemberFieldProblem["category"], message: string) =>
     problems.push({ key, label: labelOf(key), severity, category, message, raw: cell(key) });
+
+  for (const [key, mostCentavos, mostWords] of MEMBER_AMOUNTS) {
+    if (!cell(key)) continue; // Both are optional.
+    const reading = readCentavos(cell(key));
+    if (!reading.ok) {
+      add(key, "error", "value", reading.message);
+    } else if (reading.value > mostCentavos) {
+      add(
+        key,
+        "warning",
+        "value",
+        `This amount is above the ${mostWords} the member form allows, so it was imported as blank rather than leaving a member who cannot be saved.`,
+      );
+    }
+  }
 
   // Both are `YYYY-MM-DD`, so the strings compare as the dates do.
   const hired = context.dates.date_hired;

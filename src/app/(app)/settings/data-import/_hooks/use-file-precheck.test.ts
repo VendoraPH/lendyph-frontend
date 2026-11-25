@@ -9,6 +9,7 @@ import {
   describeIsoDate,
   fileBlockers,
   inspectFile,
+  runDateOrders,
   sessionAnswers,
   type DateColumnFinding,
   type FileInspection,
@@ -107,6 +108,20 @@ test("a contact number holding two numbers is a warning, not a failure", () => {
   assert.equal(result.warningCount, 1);
   assert.match(result.issues[0].message, /keeps 09171234567/);
   assert.match(result.issues[0].message, /drops 09181234567/);
+});
+
+test("a member's amounts are read as the server reads them, in its words", () => {
+  const row = [...CUSTOMER];
+  row[15] = "1234.500"; // Monthly Income: refused, as on the server
+  row[16] = "10,000,000.00"; // Pledge Amt: above the member form's limit, imported blank
+
+  const result = checkRows(customerRows([row]), CUSTOMER_CONTEXT);
+
+  assert.equal(result.failingRows, 1);
+  assert.deepEqual(result.issues.map((issue) => [issue.column, issue.severity, issue.message]), [
+    ["Monthly Income", "error", '"1234.500" has more than 2 decimal places. Round it to centavos in the source file — this importer will not round it for you.'],
+    ["Pledge Amt(If Applicable)", "warning", "This amount is above the 9,999,999.99 the member form allows, so it was imported as blank rather than leaving a member who cannot be saved."],
+  ]);
 });
 
 test("a value the server rejects is an error, next to a value it repairs", () => {
@@ -1107,6 +1122,31 @@ test("a file with no date columns still records its header answer", () => {
   const written = sessionAnswers([answer("customers", true, {})]);
   assert.equal(written.hasHeaderRow.customers, true);
   assert.deepEqual(written.dateFormat.customers, {});
+});
+
+// ---------------------------------------------------------------------------
+// runDateOrders — what the run carries to the server (finish run round 4)
+// ---------------------------------------------------------------------------
+
+test("the run carries exactly the date order the Check step settled for each date column", () => {
+  const settled = sessionAnswers([
+    answer("customers", true, { birthdate: "dmy", date_hired: null }),
+    answer("loans", false, { date_released: "dmy", maturity_date: "mdy" }),
+  ]);
+
+  // Day-first or month-first, and null where the column needed no order.
+  assert.deepEqual(runDateOrders(settled.dateFormat), {
+    customers: { birthdate: "dmy", date_hired: null },
+    loans: { date_released: "dmy", maturity_date: "mdy" },
+  });
+});
+
+test("only the members and loans files carry date orders, and a file with none sends none", () => {
+  assert.deepEqual(runDateOrders({}), {});
+  assert.deepEqual(
+    runDateOrders({ customers: { birthdate: ISO_DATE_FORMAT }, share_capital: { transaction_date: ISO_DATE_FORMAT } }),
+    { customers: { birthdate: null } },
+  );
 });
 
 // ---------------------------------------------------------------------------

@@ -235,19 +235,12 @@ const PURPOSE_WHEN_BLANK = "The loan will be imported with no purpose.";
 const LOAN_PRODUCT_WHEN_BLANK =
   "The loan will still import: on the Processing step, choose a product for the loans with no product named.";
 
-// Numeric limits, named for the role rather than the column type, so the use
-// site reads as the rule it is. All from the migrations and the validation
-// rules — see the note on PLEDGE_CEILING for the one asymmetry.
-/** `decimal(12,2)` at full column capacity. */
-const MONEY = { max: 9999999999.99, decimalPlaces: 2 } as const;
-/** `decimal(12,2)` but validated `max:99999999.99` — tighter than the column. */
-const INCOME_CEILING = { max: 99999999.99, decimalPlaces: 2 } as const;
 /**
- * Validated `max:9999999.99` — an order of magnitude BELOW Monthly Income
- * despite sharing the same `decimal(12,2)` column. That asymmetry is in the
- * existing validation rules and is deliberate, not a typo; do not "fix" it.
+ * `decimal(12,2)` at full column capacity: the share capital file's Amount.
+ * The members and loans files' amounts are read as the server reads them
+ * instead (`./import-member-fields`, `./import-loan-fields`).
  */
-const PLEDGE_CEILING = { max: 9999999.99, decimalPlaces: 2 } as const;
+const MONEY = { max: 9999999999.99, decimalPlaces: 2 } as const;
 
 // `required` is the workbook's blue; `refusedWhenBlank` is what the server
 // does with a blank (finish run round 3). Only the three names refuse a row.
@@ -269,8 +262,10 @@ export const CUSTOMER_COLUMNS = [
   { key: "city", label: "City/Municipality", required: true, refusedWhenBlank: false, type: "text", maxLength: 255 },
   { key: "province", label: "Province", required: true, refusedWhenBlank: false, type: "text", maxLength: 255 },
   { key: "employer_or_business", label: "Employer/Business Name", required: false, type: "text", maxLength: 255 },
-  { key: "monthly_income", label: "Monthly Income", required: false, type: "number", numeric: INCOME_CEILING },
-  { key: "pledge_amount", label: "Pledge Amt(If Applicable)", required: false, type: "number", numeric: PLEDGE_CEILING },
+  // Read as the server reads them, with the member form's limits, by
+  // `./import-member-fields` (finish run round 4).
+  { key: "monthly_income", label: "Monthly Income", required: false, type: "number" },
+  { key: "pledge_amount", label: "Pledge Amt(If Applicable)", required: false, type: "number" },
   { key: "spouse_first_name", label: "Spouse FName (If Married)", required: false, type: "text", maxLength: 255, requiredWhen: IF_MARRIED },
   { key: "spouse_middle_name", label: "Spouse MName (If Married)", required: false, type: "text", maxLength: 255 },
   { key: "spouse_last_name", label: "Spouse LName (If Married)", required: false, type: "text", maxLength: 255, requiredWhen: IF_MARRIED },

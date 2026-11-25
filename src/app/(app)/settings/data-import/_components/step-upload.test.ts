@@ -37,6 +37,17 @@ test("a run declares the share capital file when picked, with or without the mem
   );
 });
 
+test("the run carries the date orders the Check step settled, which the server reads the dates with", () => {
+  const source = readFileSync(
+    join(process.cwd(), "src/app/(app)/settings/data-import/_components/step-upload.tsx"),
+    "utf8",
+  );
+  // In the body that opens the run, beside the files.
+  const body = source.slice(source.indexOf("api.rawPost<CreateRunBody>"), source.indexOf("const id = created?.run?.id"));
+  assert.match(body, /files: declaredFiles\(/);
+  assert.match(body, /date_orders: runDateOrders\(precheck\.dateFormat\)/);
+});
+
 test("the upload step opens a run without waiting for a loans file", () => {
   const source = readFileSync(
     join(process.cwd(), "src/app/(app)/settings/data-import/_components/step-upload.tsx"),

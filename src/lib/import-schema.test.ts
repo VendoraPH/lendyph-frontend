@@ -727,8 +727,11 @@ test("II is offered by the dropdown now, as the client's own spec forgot to", ()
 });
 
 /** Size problems for one cell, by setting that column and leaving the rest valid. */
+/** A plausible share capital row: its Amount is the one column left on generic limits. */
+const SHARE_CAPITAL_ROW = ["2020-0041", "2026-11-24", "CSH-0001-2026-0001", "Contribution", "500.00", "Monthly build-up"];
+
 function sizeProblem(shape: ImportShape, index: number, value: string) {
-  const base = shape === "customer" ? [...CUSTOMER_ROW] : [...LOANS_ROW];
+  const base = shape === "customer" ? [...CUSTOMER_ROW] : shape === "loans" ? [...LOANS_ROW] : [...SHARE_CAPITAL_ROW];
   base[index] = value;
   const problems = fieldSizeProblems(normaliseRow(base, shape), shape);
   return problems;
@@ -828,9 +831,9 @@ test("real rejections stay errors — only the repairable one is downgraded", ()
   // The audit that matters: a reason is an error if and only if the server
   // refuses the row. Getting this backwards in either direction is a bug.
   const cases: [ImportShape, number, string, string][] = [
-    ["customer", 16, "50000000", "too-large"],
-    ["customer", 15, "1234.567", "too-precise"],
-    ["customer", 15, "N/A", "not-a-number"],
+    ["share_capital", 4, "10000000000", "too-large"],
+    ["share_capital", 4, "1234.567", "too-precise"],
+    ["share_capital", 4, "N/A", "not-a-number"],
     ["customer", 1, "x".repeat(256), "too-long"],
     ["customer", 4, "a".repeat(21), "too-long"],
   ];
@@ -845,12 +848,12 @@ test("real rejections stay errors — only the repairable one is downgraded", ()
 test("blockingSizeProblems keeps errors and drops warnings from a mixed row", () => {
   const messy = [...CUSTOMER_ROW];
   messy[8] = "09171234567/09181234567";
-  messy[16] = "50000000";
+  messy[1] = "x".repeat(256);
   const problems = fieldSizeProblems(normaliseRow(messy, "customer"), "customer");
   assert.equal(problems.length, 2);
   assert.deepEqual(
     blockingSizeProblems(problems).map((p) => p.label),
-    ["Pledge Amt(If Applicable)"],
+    ["Last Name"],
   );
 });
 
@@ -902,38 +905,34 @@ test("numbers are measured after normalisation, never as raw text", () => {
   assert.equal(normaliseNumericValue("50 000"), "50000");
   assert.equal(normaliseNumericValue(" 1234.5 "), "1234.5");
   for (const written of ["₱50,000.00", "PHP 50,000.00", "50 000.00", "50000"]) {
-    assert.deepEqual(sizeProblem("customer", 15, written), [], `"${written}" should be accepted`);
+    assert.deepEqual(sizeProblem("share_capital", 4, written), [], `"${written}" should be accepted`);
   }
 });
 
 test("more decimal places than the column stores is caught", () => {
   // A coop system exporting 3dp. Seven characters long and still unstorable —
   // no character count would find this.
-  const problems = sizeProblem("customer", 15, "1234.567");
+  const problems = sizeProblem("share_capital", 4, "1234.567");
   assert.equal(problems.length, 1);
   assert.equal(problems[0].reason, "too-precise");
   assert.equal(problems[0].limit, 2);
 });
 
 test("trailing zeros are two decimal places written badly, not three", () => {
-  assert.deepEqual(sizeProblem("customer", 15, "1234.500"), []);
-  assert.deepEqual(sizeProblem("customer", 15, "1234.5000000"), []);
-  assert.deepEqual(sizeProblem("customer", 15, "1234.00"), []);
+  assert.deepEqual(sizeProblem("share_capital", 4, "1234.500"), []);
+  assert.deepEqual(sizeProblem("share_capital", 4, "1234.5000000"), []);
+  assert.deepEqual(sizeProblem("share_capital", 4, "1234.00"), []);
 });
 
-test("Pledge Amt has a TIGHTER ceiling than Monthly Income, and that is deliberate", () => {
-  // Same decimal(12,2) column, different validation rules. A value legal in one
-  // is illegal in the other, which is exactly the kind of asymmetry a single
-  // shared "money" limit would have flattened.
-  const fiftyMillion = "50000000";
-  assert.deepEqual(sizeProblem("customer", 15, fiftyMillion), [], "legal as Monthly Income");
-  const pledge = sizeProblem("customer", 16, fiftyMillion);
-  assert.equal(pledge.length, 1, "illegal as Pledge Amt");
-  assert.equal(pledge[0].reason, "too-large");
-  assert.equal(pledge[0].limit, 9999999.99);
-
-  assert.deepEqual(sizeProblem("customer", 15, "99999999.99"), []);
-  assert.equal(sizeProblem("customer", 15, "100000000")[0].reason, "too-large");
+test("a member's amounts have no limits here: the member rules read them as the server does", () => {
+  // `./import-member-fields` (`CustomerRowNormalizer::cappedAmount`), the
+  // form's tighter ceiling on Pledge Amt included.
+  for (const key of ["monthly_income", "pledge_amount"]) {
+    assert.equal(column("customer", key).numeric, undefined, key);
+  }
+  for (const written of ["50000000", "1234.500", "$500", "-500"]) {
+    assert.deepEqual(sizeProblem("customer", 16, written), [], written);
+  }
 });
 
 test("Term in Months is the loan rules' question, not a size one", () => {
@@ -944,13 +943,13 @@ test("Term in Months is the loan rules' question, not a size one", () => {
 });
 
 test("a numeric column holding text is reported, not coerced to zero", () => {
-  const problems = sizeProblem("customer", 15, "N/A");
+  const problems = sizeProblem("share_capital", 4, "N/A");
   assert.equal(problems.length, 1);
   assert.equal(problems[0].reason, "not-a-number");
   assert.equal(problems[0].raw, "N/A");
   assert.equal(problems[0].limit, null);
   // A bare currency symbol is not a number either.
-  assert.equal(sizeProblem("customer", 15, "₱")[0].reason, "not-a-number");
+  assert.equal(sizeProblem("share_capital", 4, "₱")[0].reason, "not-a-number");
 });
 
 test("a blank cell is a required-field question, not a size one", () => {
