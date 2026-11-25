@@ -638,3 +638,7 @@ test("every action the backend writes has its own words", () => {
   };
   for (const [key, label] of Object.entries(words)) assert.equal(auditActionLabel(key), label, key);
 });
+
+test("a payout's reference recorded after the transfer reads in words", () => {
+  assert.equal(auditActionLabel("savings_payout_reference_recorded"), "Payout reference recorded");
+});
