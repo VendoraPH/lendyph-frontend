@@ -220,10 +220,15 @@ export const MODULE_SETTINGS_NAV: NavSubItem[] = [
     : []),
 ];
 
-/** Any one of these opens Settings: its own key, or a module's settings key. */
+/**
+ * Any one of these opens Settings: its own key, a module's settings key, or
+ * `imports:process`, which Data Import's page guards on, so a role that can
+ * run imports without `settings:view` still has its menu link.
+ */
 const SETTINGS_SECTION_PERMISSIONS: Permission[] = [
   "settings:view",
   "accounting:settings",
+  "imports:process",
   ...(env.features.savings ? (["savings:settings"] as const) : []),
   ...(env.features.cda ? (["cda:view"] as const) : []),
   ...(env.features.creditScoring ? (["credit_scoring:settings"] as const) : []),

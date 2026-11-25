@@ -927,7 +927,6 @@ function PledgeEntryContent() {
                               />
                               <div className="flex gap-2">
                                 <Button
-                                  size="sm"
                                   className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
                                   disabled={manualSubmitting || !manualAmount || manualReferenceProblem !== null}
                                   onClick={() => handleManualEntry(pledge.id)}
@@ -936,7 +935,6 @@ function PledgeEntryContent() {
                                 </Button>
                                 <Button
                                   variant="outline"
-                                  size="sm"
                                   onClick={() => setManualEntryId(null)}
                                 >
                                   Cancel

@@ -18,6 +18,14 @@ export function serverStepErrors(err: unknown): Record<string, string[]> {
   return out;
 }
 
+/**
+ * The server's message for one field of a 422, shown under that field (a
+ * refused duplicate reference, say); null for any other answer.
+ */
+export function serverFieldError(err: unknown, field: string): string | null {
+  return serverStepErrors(err)[field]?.[0] ?? null;
+}
+
 /** The entries that hold a message, so a form's `{ field: null }` reads as no error. */
 export function presentErrors(errors: Record<string, string | null>): Record<string, string> {
   const out: Record<string, string> = {};

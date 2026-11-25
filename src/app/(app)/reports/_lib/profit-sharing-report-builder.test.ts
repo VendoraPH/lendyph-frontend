@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { DASH } from "@/lib/report-format";
 import { buildProfitSharingDoc } from "./profit-sharing-report-builder";
+import { renderReportPdf } from "./report-pdf";
 import type { DateRange, ReportDocument, ReportSection } from "./types";
 
 type Table = Extract<ReportSection, { kind: "table" }>;
@@ -227,4 +228,37 @@ test("a failed request says the figures didn't load, never that nobody holds sha
   const all = notes(doc);
   assert.deepEqual(all, ["The profit sharing figures couldn't be loaded. Please generate the report again."]);
   assert.equal(JSON.stringify(doc).includes("No member holds share capital"), false);
+});
+
+test("Members' Shares keeps its title with its first rows in the PDF", () => {
+  assert.equal(tableTitled(buildProfitSharingDoc(payload(), RANGE), "Members' Shares")?.keepTitleWithRows, true);
+});
+
+/** Each PDF page's drawing commands, in order. */
+function pdfPages(doc: ReportDocument): string[] {
+  const pdf = renderReportPdf(doc);
+  const pages = (pdf.internal as unknown as { pages: string[][] }).pages;
+  return Array.from({ length: pdf.getNumberOfPages() }, (_, i) => pages[i + 1].join("\n"));
+}
+
+test("wherever it lands, the PDF prints Members' Shares on the page of its headings and first row", () => {
+  const first = (payload().rows as Record<string, unknown>[])[0];
+  const oneMember = payload({ rows: [first], totals: { ...(payload().totals as Record<string, unknown>), member_count: 1 } });
+  for (const [who, raw] of [["three members", payload()], ["one member", oneMember]] as const) {
+    const built = buildProfitSharingDoc(raw, RANGE);
+    const at = built.sections.findIndex((s) => s.kind === "table" && s.title === "Members' Shares");
+    // A note before the table moves it down the page a line at a time, past the foot of page 1.
+    for (let lines = 0; lines <= 30; lines++) {
+      const sections = [...built.sections];
+      if (lines > 0) sections.splice(at, 0, { kind: "note", text: Array.from({ length: lines }, () => "Spacer").join("\n") });
+      const pages = pdfPages({ ...built, sections });
+      const pageOf = (text: string) => pages.findIndex((page) => page.includes(`(${text}) Tj`));
+      const title = pageOf("Members' Shares");
+      assert.notEqual(title, -1, `${who}, ${lines} lines: no title`);
+      assert.equal(pageOf("Member ID"), title, `${who}, ${lines} lines: the headings left the title`);
+      assert.equal(pageOf("BRW-000001"), title, `${who}, ${lines} lines: the first row left the title`);
+      // One member: the total prints under the only row, so it comes along too.
+      if (who === "one member") assert.equal(pageOf("Total"), title, `${lines} lines: the total left the title`);
+    }
+  }
 });
