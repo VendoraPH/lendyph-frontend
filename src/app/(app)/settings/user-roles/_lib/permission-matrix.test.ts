@@ -289,3 +289,15 @@ test("AMLA's toggle-all leaves sanctions and the AMLA log to their own checkboxe
   assert.equal(swept.includes("audit" as never), false);
   assert.equal(swept.length, 11);
 });
+
+// Menu Visibility (finish run round 6): one permission, offered beside Settings,
+// read as "Manage menu visibility" everywhere (roles screen, users, audit).
+test("the matrix offers menu_visibility:manage, right after Settings, in words", () => {
+  assert.deepEqual(MODULE_ACTIONS["menu_visibility" as keyof typeof MODULE_ACTIONS], ["manage"]);
+  const modules = Object.keys(MODULE_ACTIONS);
+  assert.equal(modules.indexOf("menu_visibility"), modules.indexOf("settings") + 1);
+  assert.equal(moduleActionLabel("menu_visibility" as keyof typeof MODULE_ACTIONS, "manage"), "Manage menu visibility");
+  assert.equal(PERMISSION_ACTION_WORDS["menu_visibility:manage"], "Manage menu visibility");
+  const page = readFileSync(resolve(process.cwd(), "src/app/(app)/settings/user-roles/page.tsx"), "utf8");
+  assert.ok(page.indexOf("\n  menu_visibility: {") > page.indexOf("\n  settings: {"));
+});

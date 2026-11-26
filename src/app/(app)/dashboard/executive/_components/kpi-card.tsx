@@ -1,5 +1,7 @@
 "use client";
 
+import { useMenuVisibility } from "@/hooks/use-menu-visibility";
+import { linkShown } from "@/lib/hidden-module-parts";
 import { useId } from "react";
 import Link from "next/link";
 import { ArrowDownRight, ArrowUpRight, Info, Minus } from "lucide-react";
@@ -25,6 +27,8 @@ const TITLE_CLASS = "text-left text-xs font-medium text-muted-foreground after:a
  */
 export function KpiCard({ card, onOpenPar }: { card: CardView; onOpenPar: (() => void) | null }) {
   const describedBy = useId();
+  // A card whose page or report Menu Visibility hides keeps its figure, unlinked.
+  const { isHidden } = useMenuVisibility();
   const ChangeIcon = card.changeTone === "flat" ? Minus : card.changeText?.startsWith("+") ? ArrowUpRight : ArrowDownRight;
   const ready = card.state === "ready";
 
@@ -40,10 +44,12 @@ export function KpiCard({ card, onOpenPar }: { card: CardView; onOpenPar: (() =>
             ) : (
               <span className="text-xs font-medium text-muted-foreground">{card.label}</span>
             )
-          ) : (
+          ) : linkShown(card.href, isHidden) ? (
             <Link href={card.href} className={TITLE_CLASS} aria-describedby={describedBy}>
               {card.label}
             </Link>
+          ) : (
+            <span className="text-xs font-medium text-muted-foreground">{card.label}</span>
           )}
           {card.formula ? (
             <TooltipProvider>

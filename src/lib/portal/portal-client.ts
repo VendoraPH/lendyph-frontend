@@ -3,6 +3,7 @@ import { env } from "@/config/env";
 import { parseTokenLifetime, tokenLifetime, type TokenLifetime } from "@/lib/session-token";
 import { PORTAL_ENDPOINTS, PORTAL_PUBLIC_PATHS } from "./endpoints";
 import { filenameFrom } from "@/lib/content-disposition";
+import { PORTAL_HIDDEN_WORDS, configAnswerHidden, markPortalHidden } from "./portal-hidden";
 
 /**
  * The member portal's own HTTP client (carried over from #511 by Augustin,
@@ -159,11 +160,37 @@ portalHttp.interceptors.response.use(
         endPortalSession(SESSION_END_WORDS[code]);
       } else if (status === 403 && code === "terms_required" && typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent(PORTAL_TERMS_REQUIRED_EVENT));
+      } else if (status === 404) {
+        checkPortalHidden();
       }
     }
     return Promise.reject(error);
   },
 );
+
+let hiddenCheck: Promise<void> | null = null;
+
+/**
+ * A signed-in page got a 404. If the public config answers 404 too, Menu
+ * Visibility has hidden the portal: the session ends with "The member portal
+ * isn't available right now." A record that is merely missing leaves the
+ * config answering, and nothing changes.
+ */
+function checkPortalHidden(): void {
+  hiddenCheck ??= portalHttp
+    .get(PORTAL_ENDPOINTS.CONFIG)
+    .then(
+      () => undefined,
+      (err: unknown) => {
+        if (!configAnswerHidden(err)) return;
+        markPortalHidden();
+        if (portalTokens.get() !== null) endPortalSession(PORTAL_HIDDEN_WORDS);
+      },
+    )
+    .finally(() => {
+      hiddenCheck = null;
+    });
+}
 
 interface Envelope<T> {
   success?: boolean;

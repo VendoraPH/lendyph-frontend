@@ -37,7 +37,8 @@ export interface LoanTableProps {
   sort: { key: LoanSortKey; dir: SortDir };
   onSortChange: (key: LoanSortKey) => void;
   onRowClick: (id: number) => void;
-  onAutoPayClick: (loan: Loan) => void;
+  /** Turns Auto-Pay on or off; without it (Menu Visibility hides Auto-Pay) the column is left out. */
+  onAutoPayClick?: (loan: Loan) => void;
   /** The picture over the "nothing found" row: the module's while unfiltered. */
   emptyIllustration?: EmptyIllustrationName;
 }
@@ -101,7 +102,7 @@ export function LoanTable({
             );
           })}
           <TableHead className="text-right">Outstanding Balance</TableHead>
-          <TableHead>Auto-Pay</TableHead>
+          {onAutoPayClick && <TableHead>Auto-Pay</TableHead>}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -143,44 +144,46 @@ export function LoanTable({
             <TableCell className="text-right font-medium tabular-nums">
               {loanOutstandingText(loan)}
             </TableCell>
-            <TableCell onClick={(e) => e.stopPropagation()}>
-              {offersAutoPay(loan.status) ? (
-                <PermissionButton
-                  permission={AUTO_PAY_TOGGLE_GATE.permission}
-                  tooltip={AUTO_PAY_TOGGLE_GATE.tooltip}
-                  variant="outline"
-                  size="xs"
-                  className="gap-1.5 rounded-full px-2.5 font-medium"
-                  onClick={() => onAutoPayClick(loan)}
-                >
-                  <Zap
-                    className={cn(
-                      "h-3 w-3",
-                      loan.auto_pay_enabled
-                        ? "text-blue-600"
-                        : "text-muted-foreground",
-                    )}
-                  />
-                  <span
-                    className={
-                      loan.auto_pay_enabled
-                        ? "text-blue-700 dark:text-blue-300"
-                        : "text-muted-foreground"
-                    }
+            {onAutoPayClick && (
+              <TableCell onClick={(e) => e.stopPropagation()}>
+                {offersAutoPay(loan.status) ? (
+                  <PermissionButton
+                    permission={AUTO_PAY_TOGGLE_GATE.permission}
+                    tooltip={AUTO_PAY_TOGGLE_GATE.tooltip}
+                    variant="outline"
+                    size="xs"
+                    className="gap-1.5 rounded-full px-2.5 font-medium"
+                    onClick={() => onAutoPayClick(loan)}
                   >
-                    {loan.auto_pay_enabled ? "Enabled" : "Enable"}
-                  </span>
-                </PermissionButton>
-              ) : (
-                <span className="text-xs text-muted-foreground">—</span>
-              )}
-            </TableCell>
+                    <Zap
+                      className={cn(
+                        "h-3 w-3",
+                        loan.auto_pay_enabled
+                          ? "text-blue-600"
+                          : "text-muted-foreground",
+                      )}
+                    />
+                    <span
+                      className={
+                        loan.auto_pay_enabled
+                          ? "text-blue-700 dark:text-blue-300"
+                          : "text-muted-foreground"
+                      }
+                    >
+                      {loan.auto_pay_enabled ? "Enabled" : "Enable"}
+                    </span>
+                  </PermissionButton>
+                ) : (
+                  <span className="text-xs text-muted-foreground">—</span>
+                )}
+              </TableCell>
+            )}
           </TableRow>
         ))}
         {loans.length === 0 && (
           <TableRow>
             <TableCell
-              colSpan={COLUMNS.length + 2}
+              colSpan={COLUMNS.length + (onAutoPayClick ? 2 : 1)}
               className="h-24 text-center text-muted-foreground"
             >
               {emptyIllustration && hasIllustration(emptyIllustration) && (

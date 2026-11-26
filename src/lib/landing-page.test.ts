@@ -17,8 +17,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Permission } from "@/types";
-import { MEMBER_PORTAL_NAV, SIDEBAR_NAV, type NavItem } from "@/constants/navigation";
-import { firstAllowedPage } from "./landing-page";
+import { moduleHidden } from "@/constants/menu-modules";
+import { MEMBER_PORTAL_NAV, SIDEBAR_NAV, visibleNav, type NavItem } from "@/constants/navigation";
+import { dashboardLanding, firstAllowedPage } from "./landing-page";
 
 const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
 
@@ -93,8 +94,40 @@ test("a user the menu offers nothing has no page to land on", () => {
 
 test("the dashboard sends a user without dashboard:view on, and the sign-in page doesn't", () => {
   const page = read("src/app/(app)/dashboard/page.tsx");
-  assert.match(page, /can\("dashboard:view"\) \? null : firstAllowedPage\(SIDEBAR_NAV, can\)/);
-  assert.match(page, /if \(landing !== null\) router\.replace\(landing\);/);
+  assert.match(page, /dashboardLanding\(menu, can, isHidden\("dashboard"\)\)/);
+  assert.match(page, /const goTo = landing\.kind === "go" \? landing\.href : null;/);
+  assert.match(page, /if \(goTo !== null\) router\.replace\(goTo\);/);
+  assert.match(page, /if \(landing\.kind === "not_found"\) notFound\(\);/);
   assert.match(page, /<RouteGuard permission="dashboard:view" pageName="Dashboard">/);
   assert.doesNotMatch(read("src/app/(auth)/login/page.tsx"), /firstAllowedPage/);
+});
+
+// Menu Visibility (finish run round 6): with Dashboard hidden, signing in (and
+// every link to the dashboard) lands on the first visible menu.
+const hidingKeys = (...keys: string[]) => (key: string) => moduleHidden(key, new Set(keys));
+const ADMIN = (p: Permission) => p !== "loans:edit_in_approval";
+
+test("a dashboard holder stays on the dashboard while it is shown", () => {
+  assert.deepEqual(dashboardLanding(visibleNav(SIDEBAR_NAV, hidingKeys()), ADMIN, false), { kind: "dashboard" });
+});
+
+test("with Dashboard hidden, everyone lands on the first visible menu", () => {
+  const menu = visibleNav(SIDEBAR_NAV, hidingKeys("dashboard"));
+  assert.deepEqual(dashboardLanding(menu, ADMIN, true), { kind: "go", href: "/borrowers" });
+  const more = visibleNav(SIDEBAR_NAV, hidingKeys("dashboard", "members", "loans"));
+  assert.deepEqual(dashboardLanding(more, ADMIN, true), { kind: "go", href: "/payments" });
+});
+
+test("a user without dashboard:view skips hidden menus too", () => {
+  const menu = visibleNav(SIDEBAR_NAV, hidingKeys("members"));
+  assert.deepEqual(dashboardLanding(menu, LOAN_PROCESSOR, false), { kind: "go", href: "/loans" });
+});
+
+test("with Dashboard hidden and nothing else to offer, the dashboard reads not found", () => {
+  const menu = visibleNav(SIDEBAR_NAV, hidingKeys("dashboard"));
+  assert.deepEqual(dashboardLanding(menu, holding("dashboard:view"), true), { kind: "not_found" });
+});
+
+test("without dashboard:view and nothing to offer, the dashboard's own guard answers", () => {
+  assert.deepEqual(dashboardLanding(SIDEBAR_NAV, holding(), false), { kind: "dashboard" });
 });

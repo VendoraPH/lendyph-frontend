@@ -32,6 +32,8 @@ test("every signed-in user opens their own Profile: no permission, as GET and PA
   ]);
   const header = read("src/components/layout/header.tsx");
   assert.match(header, /router\.push\(OWN_PROFILE_HREF\)/);
-  assert.match(header, /accountSettingsHref\(SIDEBAR_NAV, can\)/);
+  // The menu Menu Visibility leaves (round 6), so a hidden module's settings page is never the link.
+  assert.match(header, /const menu = useVisibleNav\(\);/);
+  assert.match(header, /accountSettingsHref\(menu, can\)/);
   assert.doesNotMatch(header, /"\/settings\/loan-products"/);
 });

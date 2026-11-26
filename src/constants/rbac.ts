@@ -214,6 +214,9 @@ const EVERY_PERMISSION: Permission[] = [
   "loan_origination:assess",
   "loan_origination:convert",
   "loan_origination:settings",
+  // Settings → Menu Visibility (finish run round 6). Seeded for admin and
+  // super_admin only; the page also needs the administrator password.
+  "menu_visibility:manage",
 ];
 
 /**

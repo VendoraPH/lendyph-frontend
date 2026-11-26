@@ -11,6 +11,8 @@
  * rules (./import-files).
  */
 
+import { useMenuVisibility } from "@/hooks/use-menu-visibility";
+import { dataImportParts } from "@/lib/hidden-module-parts";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, Building2, Download, RotateCw } from "lucide-react";
@@ -304,7 +306,10 @@ export function StepPrepare({
   onNext,
 }: StepPrepareProps) {
   const [branchReload, setBranchReload] = useState(0);
-  const shareCapitalAllowed = useAuthStore((s) => s.hasPermission("share_capital:create"));
+  // The share capital file goes while Menu Visibility hides Share Capital.
+  const { isHidden } = useMenuVisibility();
+  const shareCapitalAllowed =
+    useAuthStore((s) => s.hasPermission("share_capital:create")) && dataImportParts(isHidden).shareCapitalFile;
 
   const problem = filesProblem(files, shareCapitalAllowed);
   const loansOnly = Boolean(files.loans && !files.customers);

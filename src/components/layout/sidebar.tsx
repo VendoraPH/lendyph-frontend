@@ -3,9 +3,9 @@
 import { Suspense, useState, useEffect, useMemo, useRef, useCallback, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { SIDEBAR_NAV } from "@/constants";
 import { LINDA_NAV, navChildAllowed, navItemAllowed, navItemHref, navItemMatches, type NavItem } from "@/constants/navigation";
 import { usePermission } from "@/hooks";
+import { useMenuVisibility, useVisibleNav } from "@/hooks/use-menu-visibility";
 import { useRegistrations } from "@/hooks/use-registrations";
 import {
   pendingApprovalsBadgeEnabled,
@@ -26,6 +26,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { BrandLogo } from "@/components/common";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Icon3D } from "@/components/common/icon-3d";
 import { ICON_3D_TILE_CLASS } from "@/lib/icons-3d";
 import { LindaAvatar } from "@/components/linda/linda-avatar";
@@ -146,7 +147,7 @@ function NavLink({
   childUnseen?: Record<string, number>;
 }) {
   const { can } = usePermission();
-  // Children are filtered, not just the parent. `SIDEBAR_NAV.filter` below
+  // Children are filtered, not just the parent. `menu.filter` below
   // gates the top-level item on ITS permission, which for Settings is
   // `settings:view` — so a child that guards on something stricter used to be
   // offered to everyone who could open the parent, and clicking it landed on
@@ -351,6 +352,24 @@ function ActivePathWithQuery({ pathname, children }: { pathname: string; childre
   return children(navActivePath(pathname, useSearchParams().get("edit")));
 }
 
+/**
+ * The menu's place while Menu Visibility's first answer is on its way, so a
+ * hidden entry never shows for a moment. Rows the size of menu entries.
+ */
+function SidebarSkeleton({ collapsed }: { collapsed: boolean }) {
+  return (
+    <div aria-hidden="true" className={cn("flex flex-col gap-1.5", collapsed && "items-center")}>
+      {Array.from({ length: 8 }, (_, i) => (
+        <div key={i} className={cn("flex items-center gap-3", collapsed ? "p-2" : "px-3 py-1")}>
+          <Skeleton className={cn("shrink-0 rounded-xl", collapsed ? "h-9 w-9" : "h-8 w-8")} />
+          {!collapsed && <Skeleton className="h-3.5 flex-1" />}
+        </div>
+      ))}
+      <span className="sr-only">Loading the menu</span>
+    </div>
+  );
+}
+
 // ── Sidebar Content ──
 
 function SidebarContent({
@@ -364,6 +383,10 @@ function SidebarContent({
 }) {
   const pathname = usePathname();
   const { can } = usePermission();
+  // The menu without the modules Menu Visibility hides, and whether its first
+  // answer is in yet (until then the menu is a skeleton).
+  const menu = useVisibleNav();
+  const { loaded: visibilityLoaded } = useMenuVisibility();
   // `per_page: 1` on purpose: this badge renders one integer off `meta.total`,
   // which is the count for the whole filtered query at any page size. Pulling
   // the default 100 BorrowerResource rows to read it also mints 100 signed
@@ -382,7 +405,7 @@ function SidebarContent({
   // loans:view); the server limits the count to the user's own steps.
   const pendingLoanApprovals = usePendingLoanApprovals(pendingApprovalsBadgeEnabled(can));
   // "New" badges: unread notifications per section, until the user opens them.
-  const unseen = useUnseenNavBadges(SIDEBAR_NAV, pathname, can);
+  const unseen = useUnseenNavBadges(menu, pathname, can);
   const [apiStatus, setApiStatus] = useState<"checking" | "ok" | "down">("checking");
 
   useEffect(() => {
@@ -420,7 +443,8 @@ function SidebarContent({
 
   /** The menu's links, highlighting `activePath`. */
   function renderNavLinks(activePath: string) {
-    return SIDEBAR_NAV.filter((item) => navItemAllowed(item, can)).map((item) => (
+    if (!visibilityLoaded) return <SidebarSkeleton collapsed={collapsed} />;
+    return menu.filter((item) => navItemAllowed(item, can)).map((item) => (
       <NavLink
         key={item.href}
         item={item}

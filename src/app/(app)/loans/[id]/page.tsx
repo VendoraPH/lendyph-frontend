@@ -1,5 +1,7 @@
 "use client";
 
+import { useMenuVisibility } from "@/hooks/use-menu-visibility";
+import { loanPageParts } from "@/lib/hidden-module-parts";
 import { Fragment, useState, useMemo, useEffect, useCallback, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -951,7 +953,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
   const canUpdateLoan = usePermission().can("loans:update");
   // Roles read by their display name on the approval panel, never their key.
   const roleLabel = useRoleLabels();
-  const canToggleAutoPay = usePermission().can("auto_pay:toggle");
+  // Menu Visibility: the credit scoring card, the reminders card and Auto-Pay
+  // go while their menus are hidden (their API answers 404 then).
+  const { isHidden } = useMenuVisibility();
+  const parts = loanPageParts(isHidden);
+  const canToggleAutoPay = usePermission().can("auto_pay:toggle") && parts.autoPay;
   const { can } = usePermission();
 
   // Save AO assignment. This goes through its own endpoint, not `update`: PUT
@@ -3724,7 +3730,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
           {/* Auto-Pay Status Card: the loans the backend's toggle accepts
               (Loan::ACTIVE_STATUSES, released and ongoing), which both read
               "Current". */}
-          {["released", "ongoing", "current"].includes(loan.status) && (
+          {parts.autoPay && ["released", "ongoing", "current"].includes(loan.status) && (
             <CollapsibleCard
               title="Auto-Pay"
               headerExtra={
@@ -4096,10 +4102,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
         {/* Attached documents — available for every loan, including drafts so
             the policy exception letter is reachable from the very first save. */}
         <LoanDocumentsCard loanId={loan.id} canUpload={canUpdateLoan} canDelete={canDeleteDocuments} />
-        <CreditAssessmentCard loanId={loan.id} status={loan.status} />
+        {parts.creditAssessment && <CreditAssessmentCard loanId={loan.id} status={loan.status} />}
 
         {/* Reminders need a schedule, so only released loans have any. */}
-        {hasServerLoanData && <LoanRemindersCard loanId={loan.id} />}
+        {hasServerLoanData && parts.reminders && <LoanRemindersCard loanId={loan.id} />}
 
         {/* Ledger — shown for every status that has server-side repayment data
             (incl. current / past_due), matching the Adjustments & History card. */}

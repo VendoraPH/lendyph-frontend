@@ -1,5 +1,6 @@
 "use client";
 
+import { useMenuVisibility } from "@/hooks/use-menu-visibility";
 import { Suspense, useEffect, useId, useState } from "react";
 import { LOADING_BRANCHES } from "@/lib/branch-filter";
 import Link from "next/link";
@@ -164,8 +165,10 @@ function ReportDetailContent({
   // A report this deployment or user can't open is never loaded, so its data is
   // never requested. One that is switched off reads "not found", the same as an
   // unknown id; one the user lacks the permission for says so.
-  const report = visibleReports(hasPermission).find((r) => r.id === (reportId as ReportId));
-  const access = reportAccess(reportId ?? "", hasPermission);
+  // A report of a menu Menu Visibility hides reads "not found" too.
+  const { isHidden } = useMenuVisibility();
+  const report = visibleReports(hasPermission, isHidden).find((r) => r.id === (reportId as ReportId));
+  const access = reportAccess(reportId ?? "", hasPermission, isHidden);
 
   // A link's `?from=&to=` opens the report on that period, as a custom range,
   // on reports that have date controls. It only presets them; nothing runs

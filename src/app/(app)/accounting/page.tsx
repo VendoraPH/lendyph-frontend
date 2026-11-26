@@ -1,5 +1,7 @@
 "use client";
 
+import { useMenuVisibility } from "@/hooks/use-menu-visibility";
+import { accountingDashboardParts } from "@/lib/hidden-module-parts";
 import { useCallback, useState } from "react";
 import Link from "next/link";
 import {
@@ -163,6 +165,9 @@ function DashboardBody({
   onTabChange: (tab: DashboardTab) => void;
 }) {
   const periodLabel = periodRangeLabel(data.period);
+  // Menu Visibility: the savings books banner goes while Savings is hidden.
+  const { isHidden } = useMenuVisibility();
+  const parts = accountingDashboardParts(isHidden);
   return (
     <FillSection className="gap-4">
       {/*
@@ -203,7 +208,7 @@ function DashboardBody({
         </CardContent>
       </Card>
 
-      <SavingsGlBannerCard data={data} />
+      {parts.savingsBanner && <SavingsGlBannerCard data={data} />}
 
       {/*
         Like the main dashboard: the balance check above stays put, and the

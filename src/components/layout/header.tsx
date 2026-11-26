@@ -43,7 +43,8 @@ import {
   subPageTitle,
 } from "@/lib/page-titles";
 import { SIDEBAR_NAV } from "@/constants";
-import { navItemAllowed, navItemHref } from "@/constants/navigation";
+import { useMenuVisibility, useVisibleNav } from "@/hooks/use-menu-visibility";
+import { breadcrumbParentShown, breadcrumbShown, paletteLinks, visibleByPath } from "@/lib/menu-visibility";
 import { OWN_PROFILE_HREF, accountSettingsHref } from "@/lib/account-menu";
 import type { Permission } from "@/types";
 import { toast } from "sonner";
@@ -69,9 +70,11 @@ function getPageTitle(segment: string): string {
 /** `editParam`: the `?edit=` value, so the loan form's edit page reads its own title. */
 function Breadcrumb({ editParam }: { editParam: string | null }) {
   const pathname = usePathname();
+  const { isPathHidden } = useMenuVisibility();
   const segments = pathname.split("/").filter(Boolean);
 
-  if (segments.length === 0) return null;
+  // A page of a module Menu Visibility hides is never named.
+  if (segments.length === 0 || !breadcrumbShown(pathname, isPathHidden)) return null;
 
   const firstSegment = segments[0];
   const pageTitle = getPageTitle(firstSegment);
@@ -104,10 +107,17 @@ function Breadcrumb({ editParam }: { editParam: string | null }) {
   // On a narrow screen a three-part trail keeps only its last part, and any
   // part truncates, so the header never pushes the account menu off-screen.
   const narrowHidden = nestedLabel === null ? "" : "max-sm:hidden";
+  // A section whose own page Menu Visibility hides isn't named (Dashboard
+  // above Executive Dashboard while Dashboard is hidden).
+  const parentShown = breadcrumbParentShown(pathname, isPathHidden);
   return (
     <div className="flex min-w-0 items-center gap-1.5 text-sm">
-      <span className={`truncate text-muted-foreground ${narrowHidden}`}>{pageTitle}</span>
-      <ChevronRight className={`h-3.5 w-3.5 shrink-0 text-muted-foreground/60 ${narrowHidden}`} />
+      {parentShown && (
+        <>
+          <span className={`truncate text-muted-foreground ${narrowHidden}`}>{pageTitle}</span>
+          <ChevronRight className={`h-3.5 w-3.5 shrink-0 text-muted-foreground/60 ${narrowHidden}`} />
+        </>
+      )}
       {nestedLabel === null ? (
         <span className="truncate font-medium text-foreground">{subLabel}</span>
       ) : (
@@ -136,8 +146,12 @@ const QUICK_ACTIONS: { title: string; href: string; icon: typeof FilePlus; permi
 export function Header({ onMenuClick }: HeaderProps) {
   const { user, clearAuth } = useAuth();
   const { can } = usePermission();
+  // The menu without the modules Menu Visibility hides: the palette and the
+  // account menu's Settings follow it, as the side menu does.
+  const menu = useVisibleNav();
+  const { isPathHidden } = useMenuVisibility();
   // The account menu's Settings: the first Settings page this user can open.
-  const settingsHref = accountSettingsHref(SIDEBAR_NAV, can);
+  const settingsHref = accountSettingsHref(menu, can);
   const router = useRouter();
   const [commandOpen, setCommandOpen] = useState(false);
 
@@ -264,10 +278,10 @@ export function Header({ onMenuClick }: HeaderProps) {
         <CommandList>
           <CommandEmpty>No results found.</CommandEmpty>
           <CommandGroup heading="Navigation">
-            {SIDEBAR_NAV.filter((item) => navItemAllowed(item, can)).map((item) => (
+            {paletteLinks(menu, can).map(({ item, href }) => (
               <CommandItem
                 key={item.href}
-                onSelect={() => handleSelect(navItemHref(item, can))}
+                onSelect={() => handleSelect(href)}
               >
                 <item.icon className="mr-2 h-4 w-4" />
                 {item.title}
@@ -275,7 +289,7 @@ export function Header({ onMenuClick }: HeaderProps) {
             ))}
           </CommandGroup>
           <CommandGroup heading="Quick Actions">
-            {QUICK_ACTIONS.filter((action) => can(action.permission)).map((action) => (
+            {visibleByPath(QUICK_ACTIONS, isPathHidden).filter((action) => can(action.permission)).map((action) => (
               <CommandItem
                 key={action.href}
                 onSelect={() => handleSelect(action.href)}

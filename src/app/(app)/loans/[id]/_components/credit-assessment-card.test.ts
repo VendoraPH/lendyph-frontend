@@ -46,7 +46,10 @@ test("the loan page gains exactly one import and one render line, after the docu
   const imports = page.split("\n").filter((l) => l.includes("credit-assessment-card"));
   assert.deepEqual(imports, ['import { CreditAssessmentCard } from "./_components/credit-assessment-card";']);
   const renders = page.split("\n").filter((l) => l.includes("CreditAssessmentCard") && !l.startsWith("import"));
-  assert.deepEqual(renders.map((l) => l.trim()), ["<CreditAssessmentCard loanId={loan.id} status={loan.status} />"]);
+  // Menu Visibility (round 6) leaves it out while Credit Scoring is hidden.
+  assert.deepEqual(renders.map((l) => l.trim()), [
+    "{parts.creditAssessment && <CreditAssessmentCard loanId={loan.id} status={loan.status} />}",
+  ]);
   const lines = page.split("\n");
   const at = lines.findIndex((l) => l.includes("<CreditAssessmentCard"));
   assert.match(lines[at - 1], /<LoanDocumentsCard /);

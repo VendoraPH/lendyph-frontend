@@ -14,6 +14,7 @@ import {
   membersRequired,
   runFileKinds,
   writtenTo,
+  dataImportIntro,
 } from "./import-files";
 
 const STEPS = "src/app/(app)/settings/data-import/_components";
@@ -196,4 +197,11 @@ test("Prepare, Processing and the result word the run by its files", () => {
   assert.match(result, /cancelled before anything was written to \$\{writtenTo\(kinds\)\}\./);
   assert.match(result, /<OutcomeTiles/);
   assert.doesNotMatch(read("file-slot.tsx"), /The members and loans files go in separate slots/);
+});
+
+test("the intro names share capital only while Share Capital shows (Menu Visibility)", () => {
+  assert.match(dataImportIntro(true), /member, loan and share capital book/);
+  assert.match(dataImportIntro(true), /real members, loans and share capital entries/);
+  assert.doesNotMatch(dataImportIntro(false), /share capital/i);
+  assert.match(dataImportIntro(false), /member and loan book/);
 });

@@ -379,3 +379,10 @@ test("Escape and Enter are left to an IME that is composing", () => {
   assert.equal(isImeComposing({ isComposing: false, keyCode: 229 }), true);
   assert.equal(isImeComposing({ isComposing: false, keyCode: 27 }), false);
 });
+
+test("Linda is unavailable while Menu Visibility hides her, whatever the flag and permission", () => {
+  const can = () => true;
+  assert.equal(lindaAvailable(true, can, false), true);
+  assert.equal(lindaAvailable(true, can, true), false);
+  assert.equal(lindaAvailable(true, can), true);
+});

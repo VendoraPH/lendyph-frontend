@@ -82,6 +82,7 @@ import {
   ArrowLeftRight,
   FileInput,
   ShieldAlert,
+  EyeOff,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -277,6 +278,13 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
       "View settings pages (profile, branches, roles)",
       "Update settings and system configuration",
     ],
+  },
+  menu_visibility: {
+    label: "Menu Visibility",
+    description:
+      "Which menus this deployment shows. Opening it also needs the administrator password, which the server checks.",
+    icon: EyeOff,
+    features: ["Show or hide menus, with their pages and settings, after entering the administrator password"],
   },
   audit_logs: {
     label: "Audit Trail",

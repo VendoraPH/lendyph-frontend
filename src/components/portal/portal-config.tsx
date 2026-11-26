@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { DEFAULT_PASSWORD_RULES } from "@/lib/portal/password-rules";
 import { portalService } from "@/lib/portal/portal-api";
+import { configAnswerHidden, hiddenPortalConfig, markPortalHidden, resetPortalHidden } from "@/lib/portal/portal-hidden";
 import type { PortalConfig } from "@/lib/portal/types";
 
 interface PortalConfigValue {
@@ -26,10 +27,17 @@ export function PortalConfigProvider({ children }: { children: React.ReactNode }
     portalService
       .config()
       .then((config) => {
+        resetPortalHidden();
         if (!cancelled) setState({ config, loaded: true });
       })
-      .catch(() => {
-        if (!cancelled) setState({ config: null, loaded: true });
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        // Menu Visibility hides the portal: its config answers 404, and the
+        // sign-in page shows its "not available" state instead of the form.
+        if (configAnswerHidden(err)) {
+          markPortalHidden();
+          setState({ config: hiddenPortalConfig(), loaded: true });
+        } else setState({ config: null, loaded: true });
       });
     return () => {
       cancelled = true;

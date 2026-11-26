@@ -1,5 +1,7 @@
 "use client";
 
+import { useMenuVisibility } from "@/hooks/use-menu-visibility";
+import { approvalWorkflowParts } from "@/lib/hidden-module-parts";
 import { useState, useEffect, useMemo } from "react";
 import { RouteGuard } from "@/components/common";
 import { PageFill, PageLoader, ScrollBox } from "@/components/common/page-fill";
@@ -341,7 +343,10 @@ function ApprovalWorkflowContent() {
   const canListRoles = can("users:view");
   // The CDA review chain (backend B6): saving it needs cda:settings with
   // every branch, so the tab shows only to those users, and only with CDA on.
-  const showCda = env.features.cda && can("cda:settings") && can("branches:view_all");
+  // Menu Visibility hides it with CDA (its API answers 404 then).
+  const { isHidden } = useMenuVisibility();
+  const showCda =
+    env.features.cda && approvalWorkflowParts(isHidden).cdaChain && can("cda:settings") && can("branches:view_all");
 
   // Normal flow state
   const [normalSteps, setNormalSteps] = useState<ApprovalChainStep[]>([]);
@@ -652,7 +657,7 @@ function ApprovalWorkflowContent() {
         )}
       </div>
 
-      {activeTab === "cda" ? (
+      {activeTab === "cda" && showCda ? (
         <CdaReviewChain roles={roles} />
       ) : (
         <>

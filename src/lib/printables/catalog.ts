@@ -1,3 +1,5 @@
+import type { MenuModuleKey } from "@/constants/menu-modules";
+import { catalogEntryShown } from "@/lib/hidden-module-parts";
 import {
   BellRing,
   BookUser,
@@ -135,7 +137,7 @@ async function fetchShareCapitalStatement(borrowerId: number): Promise<unknown> 
 }
 
 /** Savings documents need `savings:view` and the deployment's savings switch. */
-const SAVINGS_DOCUMENT = { permission: "savings:view", available: env.features.savings } as const;
+const SAVINGS_DOCUMENT = { permission: "savings:view", available: env.features.savings, modules: ["savings"] } as const;
 
 // ---------------------------------------------------------------------------
 // Exported catalog
@@ -217,6 +219,7 @@ export const PRINTABLE_CATALOG: PrintableDefinition[] = [
       "Member's share capital ledger with running balance and closing balance.",
     subject: "borrower",
     icon: Landmark,
+    modules: ["share_capital"],
     build: printableBuilder(
       fetchShareCapitalStatement,
       buildShareCapitalCertificateDoc
@@ -316,8 +319,13 @@ export const PRINTABLE_CATALOG: PrintableDefinition[] = [
  * The documents this user may open: their module is switched on for this
  * deployment, and they hold any extra permission the document's data needs.
  */
-export function visiblePrintables(can: (permission: Permission) => boolean): PrintableDefinition[] {
-  return PRINTABLE_CATALOG.filter((p) => p.available !== false && (!p.permission || can(p.permission)));
+export function visiblePrintables(
+  can: (permission: Permission) => boolean,
+  isHidden: (key: MenuModuleKey) => boolean = () => false,
+): PrintableDefinition[] {
+  return PRINTABLE_CATALOG.filter(
+    (p) => p.available !== false && catalogEntryShown(p.modules, isHidden) && (!p.permission || can(p.permission)),
+  );
 }
 
 /** Catalog lookup by id, for the detail route. */

@@ -1,3 +1,5 @@
+import type { MenuModuleKey } from "@/constants/menu-modules";
+import { catalogEntryShown } from "@/lib/hidden-module-parts";
 import {
   Activity,
   AlertTriangle,
@@ -165,7 +167,7 @@ function pointInTimeBuilder(fetcher: Fetcher, map: Mapper) {
 const listParams = { per_page: LIST_PAGE_SIZE };
 
 /** Savings reports need `savings:view` and the deployment's savings switch. */
-const SAVINGS_REPORT = { permission: "savings:view", available: env.features.savings } as const;
+const SAVINGS_REPORT = { permission: "savings:view", available: env.features.savings, modules: ["savings"] } as const;
 
 /** The members behind the Member Report's cards; a paginator envelope, so getRaw. */
 const MEMBER_LIST_ENDPOINT = "/reports/borrowers/list";
@@ -274,6 +276,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     // Its totals and member roster need `share_capital:view` on top of
     // `reports:view` (Phase 6 decision 10); the server answers 403 without it.
     permission: "share_capital:view",
+    modules: ["share_capital"],
     build: reportBuilder(reportService.shareCapital, buildShareCapitalDoc),
   },
   {
@@ -300,6 +303,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     // Each figure's source: share capital, expenses, the books, and every
     // branch. The server answers 403 without any one of them.
     permissions: ["share_capital:view", "expenses:view", "accounting:view", "branches:view_all"],
+    modules: ["share_capital", "accounting"],
     // One cutoff date, sent as itself: the server works out the period from it.
     build: async (ctx) => {
       const raw = await reportService.profitSharing({ cutoff_date: ctx.range.to }).catch(() => null);
@@ -740,8 +744,11 @@ export const AMLA_REPORT_CATALOG: AmlaReportDefinition[] = [
  * AMLA switch is off, and none without `amla:view`, since their pages sit
  * under /amla.
  */
-export function visibleAmlaReports(can: (permission: Permission) => boolean): AmlaReportDefinition[] {
-  if (!can(AMLA_ROUTE_PERMISSION)) return [];
+export function visibleAmlaReports(
+  can: (permission: Permission) => boolean,
+  isHidden: (key: MenuModuleKey) => boolean = () => false,
+): AmlaReportDefinition[] {
+  if (!can(AMLA_ROUTE_PERMISSION) || isHidden("amla")) return [];
   return AMLA_REPORT_CATALOG.filter((r) => amlaReportAccess(r, can) === "open");
 }
 
@@ -754,8 +761,13 @@ function holdsReportPermissions(report: ReportDefinition, can: (permission: Perm
  * The reports this user may open: their module is switched on for this
  * deployment, and they hold every extra permission the report's data needs.
  */
-export function visibleReports(can: (permission: Permission) => boolean): ReportDefinition[] {
-  return REPORT_CATALOG.filter((r) => r.available !== false && holdsReportPermissions(r, can));
+export function visibleReports(
+  can: (permission: Permission) => boolean,
+  isHidden: (key: MenuModuleKey) => boolean = () => false,
+): ReportDefinition[] {
+  return REPORT_CATALOG.filter(
+    (r) => r.available !== false && catalogEntryShown(r.modules, isHidden) && holdsReportPermissions(r, can),
+  );
 }
 
 /**
@@ -778,8 +790,9 @@ export function categoryDescription(category: ReportCategory, visible: readonly 
 export function reportAccess(
   id: string,
   can: (permission: Permission) => boolean,
+  isHidden: (key: MenuModuleKey) => boolean = () => false,
 ): "open" | "no_access" | "not_found" {
   const report = REPORT_CATALOG.find((r) => r.id === id);
-  if (!report || report.available === false) return "not_found";
+  if (!report || report.available === false || !catalogEntryShown(report.modules, isHidden)) return "not_found";
   return holdsReportPermissions(report, can) ? "open" : "no_access";
 }

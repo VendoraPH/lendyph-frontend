@@ -195,3 +195,13 @@ export function filesProblem(
     ? "Pick the members file or the share capital file to continue."
     : "Pick the members file to continue.";
 }
+
+/**
+ * The page's intro. It names share capital only while Menu Visibility shows
+ * Share Capital, as Prepare offers its file only then.
+ */
+export function dataImportIntro(shareCapital: boolean): string {
+  return shareCapital
+    ? "Bring an existing member, loan and share capital book into Lendyph from CSV. This creates real members, loans and share capital entries — it is not a preview, and there is no undo, so work through the checks before uploading."
+    : "Bring an existing member and loan book into Lendyph from CSV. This creates real members and loans — it is not a preview, and there is no undo, so work through the checks before uploading.";
+}

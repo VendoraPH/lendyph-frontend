@@ -59,8 +59,13 @@ export const LINDA_MESSAGES = {
  * (NEXT_PUBLIC_ENABLE_LINDA) and `linda:use`, as the server checks. Revoking
  * the permission in the role editor hides every entry at once.
  */
-export function lindaAvailable(enabled: boolean, can: (permission: Permission) => boolean): boolean {
-  return enabled && can("linda:use");
+export function lindaAvailable(
+  enabled: boolean,
+  can: (permission: Permission) => boolean,
+  /** Menu Visibility hides Linda on this deployment (finish run round 6). */
+  hidden = false,
+): boolean {
+  return enabled && !hidden && can("linda:use");
 }
 
 /** Linda's own page. The floating button hides there: it is Linda already. */

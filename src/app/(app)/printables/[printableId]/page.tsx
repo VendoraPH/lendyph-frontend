@@ -1,5 +1,6 @@
 "use client";
 
+import { useMenuVisibility } from "@/hooks/use-menu-visibility";
 import { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -41,7 +42,8 @@ export default function PrintableDetailPage() {
   const { can } = usePermission();
   // A document this deployment or user can't open answers "not found", the
   // same as an unknown id, so its data is never requested.
-  const catalog = visiblePrintables(can);
+  const { isHidden } = useMenuVisibility();
+  const catalog = visiblePrintables(can, isHidden);
   const printable = catalog.find((p) => p.id === printableId);
 
   const [subjectId, setSubjectId] = useState<number | null>(null);

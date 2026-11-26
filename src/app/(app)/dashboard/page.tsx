@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { notFound, useRouter } from "next/navigation";
 import { RouteGuard } from "@/components/common";
 import { ExpandableCard } from "@/components/common/expandable-card";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
@@ -10,8 +10,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FIT_CLASSES } from "@/lib/page-fill";
 import { NoBranchBanner } from "@/components/common/no-branch-banner";
 import { useIsClient, usePermission } from "@/hooks";
-import { SIDEBAR_NAV } from "@/constants/navigation";
-import { firstAllowedPage } from "@/lib/landing-page";
+import { useMenuVisibility, useVisibleNav } from "@/hooks/use-menu-visibility";
+import { dashboardParts, linkShown } from "@/lib/hidden-module-parts";
+import { dashboardLanding } from "@/lib/landing-page";
 import { AreaChart, Area } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -142,10 +143,24 @@ function formatCompactCurrency(amount: number): string {
   return formatCurrency(amount);
 }
 
+/** A KPI card's link to its page, or a plain block when Menu Visibility hides that page. */
+function KpiLink({ href, children }: { href: string | null; children: React.ReactNode }) {
+  if (href === null) return <div className="group">{children}</div>;
+  return (
+    <Link href={href} className="group">
+      {children}
+    </Link>
+  );
+}
+
 function DashboardContent() {
   const mounted = useIsClient();
   const kpiClasses = dashboardKpiClasses();
-  const canViewShareCapital = usePermission().can("share_capital:view");
+  // Menu Visibility: the Share Capital card (GET /share-capital/members) goes
+  // while Share Capital is hidden, and a card whose page is hidden isn't a link.
+  const { isHidden } = useMenuVisibility();
+  const shareCapitalShown = dashboardParts(isHidden).shareCapital;
+  const canViewShareCapital = usePermission().can("share_capital:view") && shareCapitalShown;
   const [shareCapitalTotal, setShareCapitalTotal] = useState<string>("—");
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [dailyDues, setDailyDues] = useState<DueItemView[]>([]);
@@ -253,12 +268,12 @@ function DashboardContent() {
       {/* Row 1: KPI Cards (compact, natural height)                        */}
       {/* ----------------------------------------------------------------- */}
       <div className={kpiClasses.grid}>
-        {KPI_CARD_STRUCTURE.map((kpi) => {
+        {KPI_CARD_STRUCTURE.filter((kpi) => kpi.key !== "share_capital" || shareCapitalShown).map((kpi) => {
           // Only draw a trend line when the backend actually sent that
           // series — no decorative curve next to a real figure.
           const series = sparklinePoints(kpi.sparkKey ? stats?.sparklines?.[kpi.sparkKey] : undefined);
           return (
-            <Link key={kpi.label} href={kpi.href} className="group">
+            <KpiLink key={kpi.label} href={linkShown(kpi.href, isHidden) ? kpi.href : null}>
               <Card
                 size="sm"
                 className={cn(
@@ -288,7 +303,7 @@ function DashboardContent() {
                   )}
                 </CardContent>
               </Card>
-            </Link>
+            </KpiLink>
           );
         })}
       </div>
@@ -350,16 +365,21 @@ function DashboardContent() {
 export default function DashboardPage() {
   const { can } = usePermission();
   const router = useRouter();
+  const menu = useVisibleNav();
+  const { isHidden } = useMenuVisibility();
   // Signing in lands everyone here. A user who can't see the dashboard (the
-  // seeded loan processor, manager and board roles) goes on to the first page
-  // the side menu offers them instead of "Access Restricted", which still
-  // shows when the menu offers them nothing.
-  const landing = can("dashboard:view") ? null : firstAllowedPage(SIDEBAR_NAV, can);
+  // seeded loan processor, manager and board roles), or anyone while Menu
+  // Visibility hides it, goes on to the first page the side menu offers them
+  // instead of "Access Restricted", which still shows when the menu offers
+  // them nothing (not found, when the dashboard is hidden).
+  const landing = dashboardLanding(menu, can, isHidden("dashboard"));
+  const goTo = landing.kind === "go" ? landing.href : null;
   useEffect(() => {
-    if (landing !== null) router.replace(landing);
-  }, [landing, router]);
+    if (goTo !== null) router.replace(goTo);
+  }, [goTo, router]);
 
-  if (landing !== null) return null;
+  if (landing.kind === "not_found") notFound();
+  if (landing.kind !== "dashboard") return null;
   return (
     <RouteGuard permission="dashboard:view" pageName="Dashboard">
       <DashboardPageFill />

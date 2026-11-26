@@ -1,5 +1,7 @@
 "use client";
 
+import { useMenuVisibility } from "@/hooks/use-menu-visibility";
+import { executiveDashboardParts } from "@/lib/hidden-module-parts";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
@@ -46,6 +48,10 @@ const INITIAL_PRESET: ExecutivePreset = "this_month";
 const CARD_PLACES = 14;
 
 function ExecutiveDashboard() {
+  // Menu Visibility: Share Capital Control goes with Share Capital, and the
+  // "← Dashboard" link with Dashboard.
+  const { isHidden } = useMenuVisibility();
+  const parts = executiveDashboardParts(isHidden);
   // A preset by name, or a custom range: the server works out the dates in Manila.
   // `choice` is what the controls show; `sent` is the last complete one, so a
   // custom range missing a date sends nothing and says what's missing.
@@ -84,7 +90,10 @@ function ExecutiveDashboard() {
   const data = useExecutiveDashboard({ period, branchId, pageFilters: filterIds }, reloadCount, periodRefused !== null);
   // The server's today (the branch table's balances date): balances follow the cards' as-of rule.
   const pastPeriod = period !== null && isPastPeriod(period, branchesData?.balances_as_of ?? todayISO());
-  const cards = overview ? cardViews(overview) : [];
+  // Menu Visibility: the Share Capital card goes while Share Capital is hidden.
+  const cards = (overview ? cardViews(overview) : []).filter(
+    (card) => card.key !== "share_capital" || parts.shareCapitalFigures,
+  );
   const loading =
     endpoints.overview.state === "loading" ||
     endpoints.branches.state === "loading" ||
@@ -109,9 +118,11 @@ function ExecutiveDashboard() {
     <PageFill className="gap-4">
       <div className={`${L.pinned} flex flex-wrap items-end justify-between gap-2`}>
         <div>
-          <Link href="/dashboard" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="size-3" /> Dashboard
-          </Link>
+          {parts.dashboardLink && (
+            <Link href="/dashboard" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+              <ArrowLeft className="size-3" /> Dashboard
+            </Link>
+          )}
           <h1 className="text-xl font-semibold">Executive Dashboard</h1>
           <p className="text-sm text-muted-foreground">
             {captionText(period, periodRefused)}
@@ -189,6 +200,7 @@ function ExecutiveDashboard() {
               <CollectionSection data={data} pastPeriod={pastPeriod} />
               <FinancialSection
                 data={data}
+                showShareCapital={parts.shareCapitalFigures}
                 allowance={cardFigureText(overview, "required_allowance")}
                 capitalNotes={{
                   shareCapital: cardFilterNote(overview, "share_capital"),
@@ -199,7 +211,7 @@ function ExecutiveDashboard() {
               <TurnaroundSection source={endpoints.turnaround} sentFilters={sentFilterKeys} />
               <OperationsSection data={data} sentFilters={sentFilterKeys} />
               <BranchSection source={endpoints.branches} sentFilters={sentFilterKeys} />
-              <ShareCapitalControlSection source={endpoints.shareCapitalControl} sentFilters={sentFilterKeys} />
+              {parts.shareCapitalControl && <ShareCapitalControlSection source={endpoints.shareCapitalControl} sentFilters={sentFilterKeys} />}
             </div>
             <aside className={`${L.cell} xl:sticky xl:top-0 xl:self-start`}>
               <AttentionPanel source={endpoints.attention} sentFilters={sentFilterKeys} />

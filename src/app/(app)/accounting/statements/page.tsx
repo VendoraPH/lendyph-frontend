@@ -1,5 +1,7 @@
 "use client";
 
+import { useMenuVisibility } from "@/hooks/use-menu-visibility";
+import { accountingStatementsParts } from "@/lib/hidden-module-parts";
 import { useState } from "react";
 import { RouteGuard } from "@/components/common";
 import { PageFill } from "@/components/common/page-fill";
@@ -64,7 +66,9 @@ export default function FinancialStatementsPage() {
   const [to, setTo] = useState(todayISO());
   const [branch, setBranch] = useBranchFilter();
   const { can } = usePermission();
-  const showNotes = canSeeStatementNotes(can, env.features.cda);
+  // The Notes tab quotes CDA's PESOS rating, so it goes while Menu Visibility hides CDA.
+  const { isHidden } = useMenuVisibility();
+  const showNotes = canSeeStatementNotes(can, env.features.cda && accountingStatementsParts(isHidden).pesosNotes);
   const notesTab = showNotes && tab === "notes";
 
   const branchId = branchParam(branch);
