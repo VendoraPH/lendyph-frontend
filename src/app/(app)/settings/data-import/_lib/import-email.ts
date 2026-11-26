@@ -127,9 +127,11 @@ const ONLY_SYMBOLS_OR_CONTROL = /^[\p{S}\p{C}]+$/u;
 interface Token {
   value: string;
   type: number;
+  /** Where it starts in the value, in UTF-16 units. */
+  offset: number;
 }
 
-const NULL_TOKEN: Token = { value: "", type: T.EMPTY };
+const NULL_TOKEN: Token = { value: "", type: T.EMPTY, offset: -1 };
 
 /** egulias's `EmailLexer` on doctrine's `AbstractLexer`, as far as the parser reads it. */
 class Lexer {
@@ -142,7 +144,7 @@ class Lexer {
 
   constructor(input: string) {
     for (const match of input.matchAll(TOKEN_PATTERN)) {
-      this.tokens.push({ value: match[0], type: this.typeOf(match[0]) });
+      this.tokens.push({ value: match[0], type: this.typeOf(match[0]), offset: match.index });
     }
   }
 
@@ -358,8 +360,10 @@ export function isAcceptedEmail(value: string): boolean {
 
   if (!localPart(lexer)) return false;
 
-  const at = lexer.tokens.slice(0, lexer.position - 1).reduce((length, token) => length + token.value.length, 0);
-  return domainPart(lexer, value.slice(at + 1));
+  // The local part stops on its "@" (or on the end, which has no domain):
+  // the domain is everything after that token.
+  const at = lexer.current;
+  return domainPart(lexer, at.type === T.AT ? value.slice(at.offset + at.value.length) : "");
 }
 
 /** The cell as `ValueNormalizer::text()` reads it: BOM dropped, NBSP a space, PHP's `trim()`. */

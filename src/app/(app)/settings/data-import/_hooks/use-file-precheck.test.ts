@@ -126,6 +126,21 @@ test("a malformed email warns that it will be imported as blank, and the row sti
   assert.match(result.issues[0].message, /will be imported as blank/);
 });
 
+test("an email over 255 characters warns that it will be imported as blank, and the row still imports", () => {
+  const row = [...CUSTOMER];
+  row[9] = `${"a".repeat(250)}@b.com`;
+
+  const result = checkRows(customerRows([row]), CUSTOMER_CONTEXT);
+
+  assert.equal(result.errorCount, 0);
+  assert.equal(result.failingRows, 0);
+  assert.deepEqual(result.issues.map((issue) => [issue.column, issue.severity]), [["email", "warning"]]);
+  assert.equal(
+    result.issues[0].message,
+    "email is 256 characters; this field holds 255, so it will be imported as blank. The row still imports; shorten it in the file to keep it, or add it later on the member's page.",
+  );
+});
+
 test("an email the server accepts raises nothing, however unusual", () => {
   for (const email of ["juan@localhost", '"juan dela cruz"@example.com', "juan @example.com"]) {
     const row = [...CUSTOMER];

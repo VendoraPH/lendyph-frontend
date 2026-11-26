@@ -452,7 +452,10 @@ function sizeMessage(problem: FieldSizeProblem): string {
     case "too-long":
       // Measured on what the server stores, which `kept` holds when it differs,
       // in characters as the server counts them.
-      return `${problem.label} is ${serverLength(problem.kept ?? problem.raw)} characters; this field holds ${problem.limit}.`;
+      return problem.severity === "warning"
+        ? // A column the server imports blank when too long (the email).
+          `${problem.label} is ${serverLength(problem.kept ?? problem.raw)} characters; this field holds ${problem.limit}, so it will be imported as blank. The row still imports; shorten it in the file to keep it, or add it later on the member's page.`
+        : `${problem.label} is ${serverLength(problem.kept ?? problem.raw)} characters; this field holds ${problem.limit}.`;
     case "multiple-values":
       // `kept` is the server's own predicted output, so an empty one means the
       // cell had no digits at all and this is not really "two numbers" — it is

@@ -131,3 +131,16 @@ test("the cell is read as PHP's text() reads it", () => {
   assert.equal(serverText(" maria@example.com"), " maria@example.com");
   assert.equal(isAcceptedEmail(" maria@example.com"), true);
 });
+
+test("a domain may hold 253 bytes, never 254, counted after its own @", () => {
+  // Five 20-letter "é" labels (40 bytes and a dot each), then "a"s to the
+  // length wanted: well under 255 characters, so only the domain rule
+  // decides. The server takes the 253-byte one and refuses the 254-byte one.
+  const domain = (bytes: number) => {
+    const labels = `${"é".repeat(20)}.`.repeat(5);
+    return labels + "a".repeat(bytes - new TextEncoder().encode(labels).length);
+  };
+  assert.equal(isAcceptedEmail(`a@${domain(253)}`), true);
+  assert.equal(isAcceptedEmail(`a@${domain(254)}`), false);
+  assert.equal(isAcceptedEmail(`"x@y"@${domain(254)}`), false);
+});

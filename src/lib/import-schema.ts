@@ -126,6 +126,12 @@ export interface ImportColumn {
    * with it: capitals, with its spaces removed (`canonicalMemberNumber`).
    */
   readonly serverRepair?: "contact-number" | "member-number";
+  /**
+   * The server imports a value longer than `maxLength` blank, with a warning,
+   * instead of refusing the row: the email (`ValueNormalizer::email()`, whose
+   * `max:255` blanks it like any email it refuses).
+   */
+  readonly blankWhenTooLong?: true;
   /** Required only when `field` resolves to `equals`. */
   readonly requiredWhen?: { readonly field: string; readonly equals: string };
   /**
@@ -232,7 +238,7 @@ export const CUSTOMER_COLUMNS = [
   // 20 is the tight one: two PH mobiles joined by a slash is 23 characters, so
   // a cell holding `0917.../0918...` is reported here rather than truncated.
   { key: "contact_number", label: "Contact Number", required: true, refusedWhenBlank: false, type: "text", maxLength: 20, serverRepair: "contact-number" },
-  { key: "email", label: "email", required: true, refusedWhenBlank: false, type: "text", maxLength: 255 },
+  { key: "email", label: "email", required: true, refusedWhenBlank: false, type: "text", maxLength: 255, blankWhenTooLong: true },
   { key: "street_address", label: "Street Address", required: false, type: "text", maxLength: 255 },
   { key: "barangay", label: "Barangay", required: true, refusedWhenBlank: false, type: "text", maxLength: 255 },
   { key: "city", label: "City/Municipality", required: true, refusedWhenBlank: false, type: "text", maxLength: 255 },
@@ -791,7 +797,9 @@ export function blockingSizeProblems(
  * server-side — the first is kept — so it is a warning, and reporting it as a
  * failure would be worse than not reporting it at all: it tells the admin their
  * data is broken when it is not, on the one screen whose whole job is to be
- * believed. Use `blockingSizeProblems` for anything that counts.
+ * believed. An email too long for its column is imported blank by the server,
+ * so it is a warning too (`blankWhenTooLong`). Use `blockingSizeProblems` for
+ * anything that counts.
  */
 export function fieldSizeProblems(
   row: ImportRow,
@@ -843,7 +851,7 @@ export function fieldSizeProblems(
 
     // Characters as the server counts them (`mb_strlen`), not UTF-16 units.
     if (column.maxLength !== undefined && serverLength(raw) > column.maxLength) {
-      at("too-long", column.maxLength);
+      at("too-long", column.maxLength, column.blankWhenTooLong ? "warning" : "error");
     }
   }
   return problems;
