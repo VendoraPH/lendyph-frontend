@@ -31,4 +31,8 @@ export const loanAdjustmentService = {
 
   apply: (id: number) =>
     api.patch<LoanAdjustment>(API_ENDPOINTS.LOAN_ADJUSTMENTS.APPLY(id)),
+
+  /** Cancel an approved adjustment that isn't applied yet, with the reason (5 to 500 characters). */
+  cancel: (id: number, data: { reason: string }) =>
+    api.patch<LoanAdjustment>(API_ENDPOINTS.LOAN_ADJUSTMENTS.CANCEL(id), data),
 };

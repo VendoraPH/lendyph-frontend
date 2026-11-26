@@ -147,6 +147,7 @@ export const API_ENDPOINTS = {
     APPROVE: (id: number) => `/loan-adjustments/${id}/approve`,
     REJECT: (id: number) => `/loan-adjustments/${id}/reject`,
     APPLY: (id: number) => `/loan-adjustments/${id}/apply`,
+    CANCEL: (id: number) => `/loan-adjustments/${id}/cancel`,
   },
   REPAYMENTS: {
     LIST: (loanId: number) => `/loans/${loanId}/repayments`,
