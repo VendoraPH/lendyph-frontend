@@ -26,18 +26,11 @@ import { notifyError } from "@/lib/notify";
 import { shareCapitalService } from "@/services";
 import { Zap, AlertTriangle, CheckCircle2, AlertCircle } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
-import { formatCurrency, formatDateTime, todayISO } from "@/lib/format";
+import { formatCurrency, formatDateTime } from "@/lib/format";
 import { currencyOrDash } from "@/lib/report-format";
 import { autoCreditGroups, serverTotalToCredit, type AutoCreditGroups } from "./_lib/auto-credit-groups";
-import {
-  AUTO_CREDIT_CYCLE_OPTIONS,
-  autoCreditCycleWords,
-  defaultAutoCreditCycle,
-  isAutoCreditCycle,
-  runCompletedMessage,
-} from "./_lib/auto-credit-cycle";
+import { cycleOptions, previewCycle, runCompletedMessage, type CycleChoice } from "./_lib/auto-credit-cycle";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import type { AutoCreditCycle } from "@/types/share-capital";
 import { MethodReferenceFields } from "@/components/common/method-reference-fields";
 import { useDialogOpening } from "@/hooks/use-dialog-opening";
 import {
@@ -50,10 +43,12 @@ import {
 const NO_GROUPS: AutoCreditGroups = autoCreditGroups({});
 
 function AutoCreditContent() {
-  // The half of the month the run is for (finish run round 8), suggested by
-  // today's date in Manila. The preview, the skipped list and the total are
-  // the server's for this half.
-  const [cycle, setCycle] = useState<AutoCreditCycle>(() => defaultAutoCreditCycle(todayISO()));
+  // The cycle the run is for (finish run round 8): the one picked, else the
+  // server's current cycle. The choices, the preview, the skipped list and
+  // the total are the server's for it, and the run sends the preview's own.
+  const [picked, setPicked] = useState<string | null>(null);
+  const [shown, setShown] = useState<{ date: string; label: string } | null>(null);
+  const [options, setOptions] = useState<CycleChoice[]>([]);
   const latestRequest = useRef(0);
   const [groups, setGroups] = useState<AutoCreditGroups>(NO_GROUPS);
   const [loading, setLoading] = useState(true);
@@ -78,9 +73,11 @@ function AutoCreditContent() {
     const requested = ++latestRequest.current;
     try {
       setLoading(true);
-      const raw = (await shareCapitalService.autoCreditStatus(cycle)) as unknown as Record<string, unknown>;
-      // A preview for a half no longer picked is dropped.
+      const raw = (await shareCapitalService.autoCreditStatus(picked ?? undefined)) as unknown as Record<string, unknown>;
+      // A preview for a cycle no longer picked is dropped.
       if (requested !== latestRequest.current) return;
+      setShown(previewCycle(raw));
+      setOptions(cycleOptions(raw));
       // The server's own groups and counts: a pledge with no amount is not
       // one whose auto-credit is off.
       setGroups(autoCreditGroups(raw));
@@ -93,10 +90,10 @@ function AutoCreditContent() {
           ? (lastRunRaw as Record<string, unknown>).processed_at as string
           : lastRunRaw as string;
         const runCycle = typeof lastRunRaw === "object" && lastRunRaw !== null
-          ? (lastRunRaw as Record<string, unknown>).cycle
+          ? (lastRunRaw as Record<string, unknown>).cycle_label
           : null;
         if (runDate) {
-          setLastRun(formatDateTime(runDate) + (isAutoCreditCycle(runCycle) ? `, for ${autoCreditCycleWords(runCycle)}` : ""));
+          setLastRun(formatDateTime(runDate) + (typeof runCycle === "string" && runCycle !== "" ? `, for ${runCycle}` : ""));
         }
       }
     } catch (err) {
@@ -105,7 +102,7 @@ function AutoCreditContent() {
     } finally {
       if (requested === latestRequest.current) setLoading(false);
     }
-  }, [cycle]);
+  }, [picked]);
 
   useEffect(() => {
     fetchStatus();
@@ -118,26 +115,26 @@ function AutoCreditContent() {
   }
 
   async function handleConfirm() {
+    if (!shown) return;
     setProcessing(true);
     try {
       const result = await shareCapitalService.autoCreditProcess({
-        cycle,
+        cycle_date: shown.date,
         ...paymentMethodFields(settlementMethod, settlementReference),
       });
       setConfirmOpen(false);
-      const ran = isAutoCreditCycle(result.cycle) ? result.cycle : cycle;
-      setLastRun(`${formatDateTime(result.processed_at ?? new Date())}, for ${autoCreditCycleWords(ran)}`);
+      setLastRun(`${formatDateTime(result.processed_at ?? new Date())}, for ${result.cycle_label ?? shown.label}`);
       toast.success(
         runCompletedMessage(
           result,
-          cycle,
+          shown.label,
           currencyOrDash(result.total_amount ?? totalToCredit),
           result.processed_count ?? activeMembers.length,
         ),
       );
       fetchStatus();
     } catch (err) {
-      // A 422 (half, method or reference) or the 409 that posted nothing: in
+      // A 422 (cycle, method or reference) or the 409 that posted nothing: in
       // the server's words.
       notifyError(err, "We couldn't process auto-credit. Please try again.");
     } finally {
@@ -150,7 +147,7 @@ function AutoCreditContent() {
       <div className="shrink-0">
         <h1 className="text-2xl font-bold tracking-tight">Auto-Credit</h1>
         <p className="text-muted-foreground">
-          Credit active pledges for one half of the month: the 15th or the 30th
+          Credit active pledges for one cycle: a month&apos;s 15th or its 30th
         </p>
       </div>
 
@@ -165,23 +162,21 @@ function AutoCreditContent() {
               <div>
                 <h2 className="text-lg font-semibold">Auto-Credit Share Capital</h2>
                 <p className="text-sm text-muted-foreground mt-1 max-w-md">
-                  This will credit the active pledges due in the half you pick to
+                  This will credit the active pledges due in the cycle you pick to
                   their members&apos; share capital accounts. A pledge is credited
-                  once per half.
+                  once per cycle; a missed cycle can still be run.
                 </p>
               </div>
               <label className="flex items-center gap-2 text-sm text-muted-foreground">
                 Run for
                 <NativeSelect
                   aria-label="Run for"
-                  value={cycle}
-                  onChange={(e) => {
-                    if (isAutoCreditCycle(e.target.value)) setCycle(e.target.value);
-                  }}
-                  disabled={processing}
-                  className="w-32"
+                  value={shown?.date ?? picked ?? ""}
+                  onChange={(e) => setPicked(e.target.value)}
+                  disabled={processing || options.length === 0}
+                  className="w-48"
                 >
-                  {AUTO_CREDIT_CYCLE_OPTIONS.map((option) => (
+                  {options.map((option) => (
                     <NativeSelectOption key={option.value} value={option.value}>
                       {option.label}
                     </NativeSelectOption>
@@ -190,7 +185,7 @@ function AutoCreditContent() {
               </label>
               <Button
                 onClick={handleInitiate}
-                disabled={loading}
+                disabled={loading || !shown}
                 size="lg"
                 className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark mt-2"
               >
@@ -251,7 +246,7 @@ function AutoCreditContent() {
                     <div className="flex-1">
                       <p className="text-sm font-medium">Skipped by This Run</p>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        {groups.skippedCount} member{groups.skippedCount === 1 ? "" : "s"} the run for {autoCreditCycleWords(cycle)} skips
+                        {groups.skippedCount} member{groups.skippedCount === 1 ? "" : "s"} the {shown?.label ?? "chosen"} run skips
                       </p>
                       <button
                         className="text-xs text-brand-orange hover:underline mt-1"
@@ -324,7 +319,7 @@ function AutoCreditContent() {
               Confirm Auto-Credit
             </DialogTitle>
             <DialogDescription>
-              The following total amount will be credited to {activeMembers.length} active members, for {autoCreditCycleWords(cycle)}.
+              The following total amount will be credited to {activeMembers.length} active members, for {shown?.label}.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col items-center py-6">
@@ -422,7 +417,7 @@ function AutoCreditContent() {
           <DialogHeader>
             <DialogTitle>Skipped by This Run</DialogTitle>
             <DialogDescription>
-              The run for {autoCreditCycleWords(cycle)} skips these members, each for the reason shown.
+              The {shown?.label ?? "chosen"} run skips these members, each for the reason shown.
             </DialogDescription>
           </DialogHeader>
           <ScrollBox always className="max-h-[50vh]">

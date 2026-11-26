@@ -1,73 +1,74 @@
 /**
- * The half of the month a share capital auto-credit run is for (finish run
- * round 8): the 15th or the 30th, as the savings auto-credit picks its cycle.
+ * The cycle a share capital auto-credit run is for (finish run round 8): a
+ * month's 15th or its 30th, as the savings auto-credit picks its cycle.
  *
- * WHAT THIS PROVES: the choice defaults by today's date in Manila (the 1st to
- * the 15th suggests the 15th); the choice reads in words; the server's own
- * cycle is read back only when it is one of the two; the result names the
- * half the server says it ran; and the page sends the choice with the preview
- * and the run, and ignores a preview for a choice no longer picked.
- * WHAT IT DOES NOT PROVE: which pledges a half credits (backend tests).
+ * WHAT THIS PROVES: "Run for" lists the server's allowed cycles (the current
+ * one first, marked, then the missed ones it allows), in the server's words,
+ * never a future one it didn't send; the preview's own cycle is what the page
+ * shows and the run sends; the result names the cycle the server ran; and a
+ * preview for a cycle no longer picked is dropped.
+ * WHAT IT DOES NOT PROVE: which cycles are allowed, or which pledges a cycle
+ * credits (backend tests).
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  AUTO_CREDIT_CYCLE_OPTIONS,
-  autoCreditCycleWords,
-  defaultAutoCreditCycle,
-  isAutoCreditCycle,
-  runCompletedMessage,
-} from "./auto-credit-cycle";
+import { cycleOptions, previewCycle, runCompletedMessage } from "./auto-credit-cycle";
 
-test("the choice defaults by today's date: the 1st to the 15th suggests the 15th", () => {
-  assert.equal(defaultAutoCreditCycle("2026-11-01"), "15");
-  assert.equal(defaultAutoCreditCycle("2026-11-15"), "15");
-  assert.equal(defaultAutoCreditCycle("2026-11-16"), "30");
-  assert.equal(defaultAutoCreditCycle("2026-02-28"), "30");
-  assert.equal(defaultAutoCreditCycle("2026-12-31"), "30");
-});
+const STATUS = {
+  cycle_date: "2026-11-15",
+  cycle_label: "November 15",
+  cycle_options: [
+    { date: "2026-11-30", label: "November 30" },
+    { date: "2026-11-15", label: "November 15" },
+    { date: "2026-10-31", label: "October 31" },
+  ],
+};
 
-test("the two halves read in words", () => {
-  assert.deepEqual(AUTO_CREDIT_CYCLE_OPTIONS, [
-    { value: "15", label: "The 15th" },
-    { value: "30", label: "The 30th" },
+test("the choices are the server's cycles, the current one first and marked", () => {
+  assert.deepEqual(cycleOptions(STATUS), [
+    { value: "2026-11-30", label: "November 30 (current)" },
+    { value: "2026-11-15", label: "November 15" },
+    { value: "2026-10-31", label: "October 31" },
   ]);
-  assert.equal(autoCreditCycleWords("15"), "the 15th");
-  assert.equal(autoCreditCycleWords("30"), "the 30th");
 });
 
-test("only 15 and 30 are halves", () => {
-  assert.ok(isAutoCreditCycle("15"));
-  assert.ok(isAutoCreditCycle("30"));
-  for (const other of [15, "31", "", null, undefined, ["15"]]) assert.ok(!isAutoCreditCycle(other));
+test("unreadable choices are left out, and none sent means none offered", () => {
+  assert.deepEqual(cycleOptions({ cycle_options: [{ date: "2026-11-30" }, { label: "x" }, null, "2026-11-15"] }), []);
+  assert.deepEqual(cycleOptions({}), []);
 });
 
-test("the result names the half the server ran, else the one sent", () => {
+test("the preview's own cycle is read back, with its label", () => {
+  assert.deepEqual(previewCycle(STATUS), { date: "2026-11-15", label: "November 15" });
+  assert.equal(previewCycle({ cycle_date: "2026-11-15" }), null);
+  assert.equal(previewCycle({}), null);
+});
+
+test("the result names the cycle the server ran, else the one sent", () => {
   assert.equal(
-    runCompletedMessage({ cycle: "30", skipped_count: 2 }, "15", "₱700.00", 3),
-    "Auto-credit for the 30th completed: ₱700.00 credited to 3 members; 2 skipped (see the reasons on the page).",
+    runCompletedMessage({ cycle_label: "November 30", skipped_count: 2 }, "November 15", "₱700.00", 3),
+    "Auto-credit for November 30 completed: ₱700.00 credited to 3 members; 2 skipped (see the reasons on the page).",
   );
   assert.equal(
-    runCompletedMessage({ skipped_count: 0 }, "15", "₱500.00", 1),
-    "Auto-credit for the 15th completed: ₱500.00 credited to 1 member.",
+    runCompletedMessage({ skipped_count: 0 }, "November 15", "₱500.00", 1),
+    "Auto-credit for November 15 completed: ₱500.00 credited to 1 member.",
   );
 });
 
 const page = readFileSync(join(process.cwd(), "src/app/(app)/share-capital/auto-credit/page.tsx"), "utf8");
 
-test("the page offers the choice beside its label, defaulting by today in Manila", () => {
-  assert.ok(page.includes("defaultAutoCreditCycle(todayISO())"));
+test("the page offers the server's cycles beside its label; the default is the server's current one", () => {
   assert.match(page, /Run for\s*<NativeSelect/);
-  assert.ok(page.includes("AUTO_CREDIT_CYCLE_OPTIONS.map"));
+  assert.ok(page.includes("options.map((option)"));
+  assert.ok(page.includes("shareCapitalService.autoCreditStatus(picked ?? undefined)"));
+  assert.ok(!page.includes("todayISO"), "the browser never works out the cycle");
 });
 
-test("the preview and the run send the choice", () => {
-  assert.ok(page.includes("shareCapitalService.autoCreditStatus(cycle)"));
-  assert.match(page, /autoCreditProcess\(\{\s*cycle,/);
+test("the run sends the preview's own cycle", () => {
+  assert.match(page, /autoCreditProcess\(\{\s*cycle_date: shown\.date,/);
 });
 
-test("a preview for a choice no longer picked is dropped", () => {
+test("a preview for a cycle no longer picked is dropped", () => {
   assert.ok(page.includes("if (requested !== latestRequest.current) return;"));
 });
