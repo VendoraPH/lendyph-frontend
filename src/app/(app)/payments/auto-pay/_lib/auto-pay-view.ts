@@ -8,6 +8,7 @@ import type {
   AutoPaySummary,
 } from "@/types";
 import { formatCurrency } from "@/lib/format";
+import { loanNumberLabel } from "@/lib/loan-number";
 
 export interface PreviewTotals {
   principal: number;
@@ -95,7 +96,7 @@ export interface LoanIssueView {
 export function loanIssues(issues: readonly AutoPayLoanIssue[] | undefined): LoanIssueView[] {
   return (issues ?? []).map((i) => ({
     loanId: i.loan_id,
-    account: i.loan_account_number || `Loan #${i.loan_id}`,
+    account: loanNumberLabel(i, `Loan #${i.loan_id}`),
     reason: i.reason,
   }));
 }

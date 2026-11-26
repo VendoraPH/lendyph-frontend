@@ -105,8 +105,8 @@ export function buildOfficialReceiptDoc(
     pick(payment, ["borrower_name"]) ??
     pick(loan, ["borrower_name"]);
   const accountNumber =
-    pick(payment, ["loan_account_number"]) ??
-    pick(loan, ["loan_account_number", "application_number"]);
+    pick(payment, ["loan_display_number", "loan_account_number"]) ??
+    pick(loan, ["display_number", "loan_account_number", "external_loan_no", "application_number"]);
 
   const breakdown: PrintChargeLine[] = [
     { label: "Applied to Principal", amount: currencyOrDash(principal), indent: true },

@@ -438,3 +438,28 @@ test("a loan's build-up, read from scb_amount wherever the loan is shown", () =>
   assert.equal(loanHasBuildUp(undefined), null);
   assert.equal(loanHasBuildUp(null), null);
 });
+
+test("an imported loan reads by its display number, never a made-up LN-<id>", () => {
+  // Round 7: the server's `display_number` (the file's Loan No.).
+  const imported = mapLoanToActiveLoan(
+    summaryRow({ id: 6, loan_account_number: null, application_number: "LA-000006", display_number: "OLD-2023-0041" }),
+  );
+  assert.equal(imported.display_number, "OLD-2023-0041");
+  assert.equal(imported.loan_account_number, null);
+
+  // A payload without it: the file's Loan No., else the application number.
+  const older = mapLoanToActiveLoan(
+    summaryRow({ id: 6, loan_account_number: null, application_number: "LA-000006", external_loan_no: "BC-07" }),
+  );
+  assert.equal(older.display_number, "BC-07");
+  const bare = mapLoanToActiveLoan(summaryRow({ id: 6, loan_account_number: null, application_number: "LA-000006" }));
+  assert.equal(bare.display_number, "LA-000006");
+
+  assert.equal(mapLoanToActiveLoan(summaryRow()).display_number, "LN-7");
+});
+
+test("Payment Entry shows the display number on its list, its form and its toast", () => {
+  const page = readFileSync(join(process.cwd(), "src/app/(app)/payments/page.tsx"), "utf8");
+  assert.doesNotMatch(page, /\.loan_account_number/);
+  assert.equal(page.match(/\.display_number/g)?.length, 4);
+});

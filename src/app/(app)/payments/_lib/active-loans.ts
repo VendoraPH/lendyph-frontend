@@ -7,6 +7,7 @@ import { currencyOrDash, toNumber } from "@/lib/report-format";
 import { interestMethodLabel } from "@/app/(app)/loans/new/_lib/loan-preview";
 import { dueAmountCell, readAmountDueNow, type AmountDueNow } from "@/lib/payment-figures";
 import { isRecoveryPayment } from "@/lib/recovery-payment";
+import { loanNumberLabel } from "@/lib/loan-number";
 
 /**
  * The `status` this screen sends: loans that can take a payment.
@@ -157,7 +158,10 @@ export function pageAfterEmptyAnswer(answer: {
  */
 export interface ActiveLoan {
   id: number;
-  loan_account_number: string;
+  /** The loan's LN- number as sent; null on an imported loan, which has none. */
+  loan_account_number: string | null;
+  /** The number the loan is shown by (`loanNumberLabel`): an imported loan's Loan No. from the file. */
+  display_number: string;
   application_number: string;
   borrower_name: string;
   borrower_id: number;
@@ -249,7 +253,8 @@ export function mapLoanToActiveLoan(loan: Loan): ActiveLoan {
   const interestType = l.interest_method ?? l.interest_type;
   return {
     id: l.id,
-    loan_account_number: l.loan_account_number || `LN-${l.id}`,
+    loan_account_number: l.loan_account_number || null,
+    display_number: loanNumberLabel(l),
     application_number: l.application_number || `LA-${l.id}`,
     borrower_name: l.borrower?.full_name ?? l.borrower?.name ?? l.borrower_name ?? "—",
     borrower_id: l.borrower?.id ?? l.borrower_id ?? 0,

@@ -38,6 +38,7 @@ import {
   groupValue,
   type RegisterSortState,
 } from "../_lib/register";
+import { loanNumberLabel } from "@/lib/loan-number";
 
 const TAGGED_BADGE = "bg-amber-500/15 text-amber-700 hover:bg-amber-500/15";
 const UNKNOWN_TEXT = "text-amber-700 dark:text-amber-500";
@@ -173,7 +174,7 @@ function CollateralRow({ collateral: c, onDelete }: CollateralRowProps) {
               size="icon-sm"
               nativeButton={false}
               render={<Link href={`/loans/${holder.id}`} />}
-              aria-label={`Go to loan ${holder.loan_account_number ?? `#${holder.id}`}`}
+              aria-label={`Go to loan ${loanNumberLabel(holder, `#${holder.id}`)}`}
             >
               <ArrowRight className="h-4 w-4" />
             </Button>

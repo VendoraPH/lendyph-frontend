@@ -153,3 +153,10 @@ test("without branches:manage plus view_all, nobody acts", () => {
   });
   assert.equal(closureActions(info(), branch, ME, false).request, false);
 });
+
+test("the round 7 loan adjustments line reads in the server's words", () => {
+  assert.equal(
+    checklistItemWords({ key: "loan_adjustments", label: "Loan adjustments to approve, cancel or apply", count: 2, amount: null, clear: false }),
+    "Loan adjustments to approve, cancel or apply: 2",
+  );
+});

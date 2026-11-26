@@ -11,3 +11,27 @@ export function importedLoanNo(loan: { external_loan_no?: string | null } | null
   const value = loan?.external_loan_no;
   return typeof value === "string" && value.trim() !== "" ? value : null;
 }
+
+/**
+ * Whether the loan came in by Data Import: the server's `is_imported`, else
+ * (an older payload) a Loan No. from the file.
+ */
+export function isImportedLoan(
+  loan: { is_imported?: boolean | null; external_loan_no?: string | null } | null | undefined,
+): boolean {
+  if (typeof loan?.is_imported === "boolean") return loan.is_imported;
+  return importedLoanNo(loan) !== null;
+}
+
+/**
+ * The approval card's note for an imported loan (finish run round 7): it was
+ * approved in the cooperative's own records before it came in, so it has no
+ * approval chain here. It replaces "Approval chain unavailable", which read as
+ * if something were missing.
+ */
+export const IMPORTED_APPROVAL_TITLE = "Imported from the cooperative's records";
+
+export function importedApprovalNote(loan: { external_loan_no?: string | null } | null | undefined): string {
+  const loanNo = importedLoanNo(loan);
+  return `This loan was imported from the cooperative's records${loanNo === null ? "" : ` (Loan No. ${loanNo})`}, so it has no approval chain in Lendy. It was approved before it was imported.`;
+}

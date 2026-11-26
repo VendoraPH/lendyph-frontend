@@ -135,6 +135,7 @@ import {
   readTermUnit,
   termUnitNoun,
 } from "@/lib/loan-terms";
+import { loanNumberLabel } from "@/lib/loan-number";
 
 // ── Local types ──────────────────────────────────────────────────────────────
 
@@ -903,7 +904,7 @@ function RestructureLoanInner() {
                       }
                     >
                       {selectedSourceLoan
-                        ? `${selectedSourceLoan.loan_account_number ?? selectedSourceLoan.application_number} — Principal Balance ${currencyOrDash((selectedSourceLoan as LoanWithPrincipalBalance).outstanding_principal)}`
+                        ? `${loanNumberLabel(selectedSourceLoan)} — Principal Balance ${currencyOrDash((selectedSourceLoan as LoanWithPrincipalBalance).outstanding_principal)}`
                         : borrowerId
                         ? borrowerLoans.length === 0
                           ? "No eligible loans"
@@ -920,7 +921,7 @@ function RestructureLoanInner() {
                             {borrowerLoans.map((l) => (
                               <CommandItem
                                 key={l.id}
-                                value={`${l.loan_account_number ?? l.application_number} ${l.principal_amount}`}
+                                value={`${loanNumberLabel(l)} ${l.principal_amount}`}
                                 onSelect={() => {
                                   setSourceLoanId(l.id === sourceLoanId ? null : l.id);
                                   setLoanOpen(false);
@@ -931,7 +932,7 @@ function RestructureLoanInner() {
                                 />
                                 <div className="flex flex-col">
                                   <span className="font-mono text-sm">
-                                    {l.loan_account_number ?? l.application_number}
+                                    {loanNumberLabel(l)}
                                   </span>
                                   <span className="text-xs text-muted-foreground">
                                     {formatCurrency(l.principal_amount)} ·{" "}

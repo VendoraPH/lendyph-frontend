@@ -66,6 +66,7 @@ import {
   formatDate,
   formatDateTime,
 } from "@/lib/format";
+import { loanNumberLabel } from "@/lib/loan-number";
 
 // ── Types ──
 
@@ -100,7 +101,9 @@ function mapRepaymentToRow(r: Repayment): MockPayment {
   const loanRel = p.loan as
     | {
         id?: number;
+        display_number?: string | null;
         loan_account_number?: string;
+        external_loan_no?: string | null;
         application_number?: string;
         borrower?: { id?: number; full_name?: string; name?: string; first_name?: string; last_name?: string };
         borrower_id?: number;
@@ -128,8 +131,8 @@ function mapRepaymentToRow(r: Repayment): MockPayment {
       (p.borrower_id as number) ??
       0,
     loan_account:
-      loanRel?.loan_account_number ||
-      loanRel?.application_number ||
+      (p.loan_display_number as string) ||
+      loanNumberLabel(loanRel, "") ||
       (p.loan_account_number as string) ||
       (p.loan_account as string) ||
       "—",

@@ -48,6 +48,7 @@ function loanStatusText(value: unknown): unknown {
 function normalizeLoanRow(raw: Record<string, unknown>): Record<string, unknown> {
   return {
     loan_account_number: pick(raw, [
+      "display_number",
       "loan_account_number",
       "account_number",
       "application_number",
@@ -72,7 +73,7 @@ function normalizePaymentRow(raw: Record<string, unknown>): Record<string, unkno
   return {
     date: pick(raw, ["date", "payment_date", "paid_at"]),
     reference: pick(raw, ["receipt_number", "reference", "reference_number"]),
-    loan_account_number: pick(raw, ["loan_account_number", "account_number"]),
+    loan_account_number: pick(raw, ["display_number", "loan_account_number", "account_number"]),
     principal: pick(raw, ["principal_applied", "principal_paid", "principal"]),
     interest: pick(raw, ["interest_applied", "interest_paid", "interest"]),
     penalty: pick(raw, ["penalty_applied", "penalty_paid", "penalty"]),

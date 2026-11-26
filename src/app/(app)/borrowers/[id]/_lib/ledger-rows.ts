@@ -5,6 +5,7 @@ import type {
   BorrowerLedgerEntry,
   BorrowerLedgerResponse,
 } from "@/types/borrower";
+import { loanNumberLabel } from "@/lib/loan-number";
 
 export interface LedgerRowCells {
   loan: string;
@@ -39,7 +40,7 @@ function differingAmountPaid(entry: BorrowerLedgerEntry): string | null {
  */
 export function ledgerRowCells(entry: BorrowerLedgerEntry): LedgerRowCells {
   return {
-    loan: entry.loan_account_number || "—",
+    loan: loanNumberLabel(entry),
     reference: entry.reference || "—",
     debit: entry.debit ? formatCurrency(entry.debit) : "—",
     credit: entry.credit ? formatCurrency(entry.credit) : "—",

@@ -13,6 +13,7 @@ import { paymentReferenceCell, statusInWords } from "@/app/(app)/borrowers/_comp
 import { ScrollBox } from "@/components/common/page-fill";
 import { FIT_CLASSES } from "@/lib/page-fill";
 import { cn } from "@/lib/utils";
+import { loanNumberLabel } from "@/lib/loan-number";
 
 const paymentMethodLabels: Record<string, string> = {
   cash: "Cash",
@@ -53,7 +54,7 @@ export function PaymentsTab({ payments, loans, summary }: PaymentsTabProps) {
 
   const loanLabelMap = new Map(loans.map((l) => [
     l.id,
-    l.loan_account_number ?? l.application_number ?? (l.loan_product?.name ?? l.loan_product_name ?? `Loan ${l.id}`),
+    loanNumberLabel(l, l.loan_product?.name ?? l.loan_product_name ?? `Loan ${l.id}`),
   ]));
 
   return (

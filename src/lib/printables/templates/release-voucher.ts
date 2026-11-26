@@ -46,7 +46,7 @@ export function buildReleaseVoucherDoc(
   const borrowerName =
     pick(borrower, ["full_name", "name"]) ?? pick(loan, ["borrower_name"]);
   const accountNumber =
-    pick(loan, ["loan_account_number", "application_number"]) ?? null;
+    pick(loan, ["display_number", "loan_account_number", "external_loan_no", "application_number"]) ?? null;
 
   const principal = pickNumber(loan, ["principal_amount", "principal"]);
 

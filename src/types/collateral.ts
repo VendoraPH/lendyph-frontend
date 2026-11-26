@@ -29,6 +29,8 @@ export interface CollateralType {
 export interface ActiveLoanRef {
   id: number;
   loan_account_number: string | null;
+  /** The number the loan is shown by (`loanNumberLabel`): an imported loan's Loan No. */
+  display_number?: string | null;
 }
 
 export interface Collateral {

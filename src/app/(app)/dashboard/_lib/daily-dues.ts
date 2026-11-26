@@ -1,4 +1,5 @@
 import { formatCurrency } from "@/lib/format";
+import { loanNumberLabel } from "@/lib/loan-number";
 
 /** One item of GET /dashboard/daily-dues `data`, read defensively. */
 export interface DailyDueItem {
@@ -41,7 +42,7 @@ export function dueItemViews(items: DailyDueItem[]): DueItemView[] {
   return items.map((item, i) => ({
     id: Number(item.id ?? i + 1),
     borrower: item.borrower ?? item.borrower_name ?? "—",
-    loanId: String(item.loan_account_number ?? item.loan_id ?? "—"),
+    loanId: loanNumberLabel(item, String(item.loan_id ?? "—")),
     amountDue: amount(item.amount_due),
     amountPaid: amount(item.amount_paid),
     status: STATUS[item.status ?? "pending"] ?? "pending",

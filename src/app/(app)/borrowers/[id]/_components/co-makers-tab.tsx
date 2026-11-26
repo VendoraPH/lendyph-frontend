@@ -26,6 +26,7 @@ import { CoMakerDocumentsDialog } from "./co-maker-documents-dialog";
 import { coMakerName } from "@/lib/co-maker-name";
 import { relationshipInWords } from "@/lib/co-maker-relationship";
 import { formatCurrency } from "@/lib/format";
+import { loanNumberLabel } from "@/lib/loan-number";
 
 interface CoMakersTabProps {
   coMakers: CoMaker[];
@@ -95,7 +96,7 @@ export function CoMakersTab({
                             className="text-xs"
                             render={<Link href={`/loans/${loan.id}`} />}
                           >
-                            {loan.loan_account_number ?? loan.application_number}
+                            {loanNumberLabel(loan)}
                           </Badge>
                         ))}
                       </div>

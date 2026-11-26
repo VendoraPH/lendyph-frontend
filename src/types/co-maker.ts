@@ -15,6 +15,8 @@ export interface CoMakerLoan {
   id: number;
   application_number: string;
   loan_account_number: string | null;
+  /** The number the loan is shown by (`loanNumberLabel`): an imported loan's Loan No. */
+  display_number?: string | null;
   status: LoanStatus;
 }
 
