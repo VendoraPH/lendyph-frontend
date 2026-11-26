@@ -90,7 +90,10 @@ function ExecutiveDashboard() {
   const data = useExecutiveDashboard({ period, branchId, pageFilters: filterIds }, reloadCount, periodRefused !== null);
   // The server's today (the branch table's balances date): balances follow the cards' as-of rule.
   const pastPeriod = period !== null && isPastPeriod(period, branchesData?.balances_as_of ?? todayISO());
-  const cards = overview ? cardViews(overview) : [];
+  // Menu Visibility: the Share Capital card goes while Share Capital is hidden.
+  const cards = (overview ? cardViews(overview) : []).filter(
+    (card) => card.key !== "share_capital" || parts.shareCapitalFigures,
+  );
   const loading =
     endpoints.overview.state === "loading" ||
     endpoints.branches.state === "loading" ||
@@ -197,6 +200,7 @@ function ExecutiveDashboard() {
               <CollectionSection data={data} pastPeriod={pastPeriod} />
               <FinancialSection
                 data={data}
+                showShareCapital={parts.shareCapitalFigures}
                 allowance={cardFigureText(overview, "required_allowance")}
                 capitalNotes={{
                   shareCapital: cardFilterNote(overview, "share_capital"),

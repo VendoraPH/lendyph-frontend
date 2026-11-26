@@ -66,8 +66,10 @@ test("Pledge Entry: the Auto-Credit switch, stat, filter and column go, and the 
 });
 
 test("Executive Dashboard: Share Capital Control, and the Dashboard link", () => {
-  assert.deepEqual(executiveDashboardParts(none), { shareCapitalControl: true, dashboardLink: true });
+  assert.deepEqual(executiveDashboardParts(none), { shareCapitalControl: true, shareCapitalFigures: true, dashboardLink: true });
   assert.equal(executiveDashboardParts(hiding("share_capital")).shareCapitalControl, false);
+  // The overview's Share Capital card and Financial Performance's figure.
+  assert.equal(executiveDashboardParts(hiding("share_capital")).shareCapitalFigures, false);
   assert.equal(executiveDashboardParts(hiding("dashboard")).dashboardLink, false);
 });
 

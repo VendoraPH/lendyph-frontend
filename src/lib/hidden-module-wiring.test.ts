@@ -104,3 +104,14 @@ test("the override dialog doesn't promise 15 minutes", () => {
   assert.doesNotMatch(dialog, /15 minutes/);
   assert.match(dialog, /for a limited time/);
 });
+
+test("the Executive Dashboard drops the Share Capital card and figure, and Data Import's intro its share capital", () => {
+  const exec = read("src/app/(app)/dashboard/executive/page.tsx");
+  assert.match(exec, /card\.key !== "share_capital" \|\| parts\.shareCapitalFigures/);
+  assert.match(exec, /showShareCapital=\{parts\.shareCapitalFigures\}/);
+  const financial = read("src/app/(app)/dashboard/executive/_components/financial-section.tsx");
+  assert.match(financial, /\{showShareCapital && \(/);
+  assert.match(read("src/app/(app)/settings/data-import/page.tsx"), /<DataImportIntro \/>/);
+  const intro = read("src/app/(app)/settings/data-import/_components/data-import-intro.tsx");
+  assert.match(intro, /dataImportIntro\(dataImportParts\(isHidden\)\.shareCapitalFile\)/);
+});

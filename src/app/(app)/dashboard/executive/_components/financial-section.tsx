@@ -27,12 +27,15 @@ export function FinancialSection({
   data,
   allowance,
   capitalNotes,
+  showShareCapital,
 }: {
   data: ExecutiveData;
   /** The overview's Required Allowance card in words: the figure the allowance posting books. */
   allowance: string;
   /** Each figure's filter note, from its overview card's own filter list. */
   capitalNotes: { shareCapital: string | null; allowance: string | null };
+  /** False while Menu Visibility hides Share Capital: its figure goes. */
+  showShareCapital: boolean;
 }) {
   const acc = readyData(data.accounting);
   const books = acc ? financialBooks(acc) : null;
@@ -95,7 +98,9 @@ export function FinancialSection({
         <div className={`${L.cell} space-y-2`}>
           <h3 className="text-sm font-medium">Capital and allowance</h3>
           <div className={L.tiles}>
-            <Figure label="Share capital" value={figureText(data.shareCapital, toNumber(share?.closing_balance), "currency")} hint="Closing balance" note={capitalNotes.shareCapital} />
+            {showShareCapital && (
+              <Figure label="Share capital" value={figureText(data.shareCapital, toNumber(share?.closing_balance), "currency")} hint="Closing balance" note={capitalNotes.shareCapital} />
+            )}
             <Figure
               label="Required allowance"
               value={allowance}

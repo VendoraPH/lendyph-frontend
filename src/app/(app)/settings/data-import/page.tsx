@@ -6,6 +6,7 @@ import { PageFill } from "@/components/common/page-fill";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
+import { DataImportIntro } from "./_components/data-import-intro";
 import { DataImportView } from "./_components/data-import-view";
 
 export const metadata: Metadata = {
@@ -66,12 +67,7 @@ export default function DataImportPage() {
       <PageFill className="gap-4">
         <header className="shrink-0">
           <h1 className="text-2xl font-semibold">Data Import</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Bring an existing member, loan and share capital book into Lendyph
-            from CSV. This creates real members, loans and share capital entries
-            — it is not a preview, and there is no undo, so work through the
-            checks before uploading.
-          </p>
+          <DataImportIntro />
         </header>
 
         <Suspense fallback={<WizardFallback />}>

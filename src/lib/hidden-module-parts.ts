@@ -50,9 +50,17 @@ export function pledgeEntryParts(isHidden: IsHidden) {
   return { autoCredit: !isHidden("share_capital.auto_credit"), manualEntryLockedByAutoCredit: true };
 }
 
-/** The Executive Dashboard: Share Capital Control, and its "← Dashboard" link. */
+/**
+ * The Executive Dashboard: Share Capital Control, the overview's Share
+ * Capital card and Financial Performance's share capital figure, and its
+ * "← Dashboard" link.
+ */
 export function executiveDashboardParts(isHidden: IsHidden) {
-  return { shareCapitalControl: !isHidden("share_capital"), dashboardLink: !isHidden("dashboard") };
+  return {
+    shareCapitalControl: !isHidden("share_capital"),
+    shareCapitalFigures: !isHidden("share_capital"),
+    dashboardLink: !isHidden("dashboard"),
+  };
 }
 
 /** Settings → Data Import: the share capital file (its slot, template and rule). */
