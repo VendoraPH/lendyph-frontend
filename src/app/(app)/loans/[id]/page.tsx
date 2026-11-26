@@ -71,7 +71,14 @@ import {
   type ScheduleTotals,
 } from "./_lib/server-schedule";
 import { ledgerShowsScb, readLoanLedger, type LedgerView } from "./_lib/loan-ledger";
-import { IMPORTED_LOAN_NO_LABEL, importedLoanNo } from "./_lib/imported-loan";
+import {
+  IMPORTED_APPROVAL_TITLE,
+  IMPORTED_LOAN_NO_LABEL,
+  importedApprovalNote,
+  importedLoanNo,
+  isImportedLoan,
+} from "./_lib/imported-loan";
+import { loanNumberLabel } from "@/lib/loan-number";
 import {
   countedUntilHint,
   paymentDateRefusal,
@@ -2507,6 +2514,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
 
 
   const displayStatus = loanDisplayStatus(loan);
+  // The number the loan is shown by (an imported loan's Loan No. from the
+  // file, which has no LN- number), and whether it came in by Data Import.
+  const loanNumber = loanNumberLabel(loan);
+  const loanIsImported = isImportedLoan(loan);
   // The approver only names a step while the loan is under approval; at approved
   // the label comes from the pending Release step. Past Due is the server's.
   const headerStatusBadge = (
@@ -2536,10 +2547,10 @@ function LoanDetail({ loanId }: { loanId: number }) {
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
-            {loan.loan_account_number && (
+            {loanNumber !== loan.application_number && (
               <div className="flex items-center gap-2 mb-1">
                 <span className="font-mono text-xl font-bold text-brand-orange">
-                  {loan.loan_account_number}
+                  {loanNumber}
                 </span>
                 {headerStatusBadge}
               </div>
@@ -2547,11 +2558,11 @@ function LoanDetail({ loanId }: { loanId: number }) {
             <div className="flex items-center gap-3 flex-wrap">
               <span className={cn(
                 "font-mono font-semibold",
-                loan.loan_account_number ? "text-sm text-muted-foreground" : "text-lg text-brand-orange"
+                loanNumber !== loan.application_number ? "text-sm text-muted-foreground" : "text-lg text-brand-orange"
               )}>
                 {loan.application_number}
               </span>
-              {!loan.loan_account_number && headerStatusBadge}
+              {loanNumber === loan.application_number && headerStatusBadge}
             </div>
             <p className="text-lg text-foreground">{loanBorrowerName}</p>
           </div>
@@ -2684,12 +2695,25 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 </div>
               )}
 
+              {/* An imported loan was approved in the cooperative's own records
+                  before it came in, so it has no chain here: say so, instead of
+                  "Approval chain unavailable" (finish run round 7). */}
+              {!approvalLoading && loanIsImported && approvalSteps.length === 0 && (
+                <div className="rounded-lg border border-dashed bg-muted/30 p-3 flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                  <div className="text-xs">
+                    <p className="font-medium">{IMPORTED_APPROVAL_TITLE}</p>
+                    <p className="text-muted-foreground mt-0.5">{importedApprovalNote(loan)}</p>
+                  </div>
+                </div>
+              )}
+
               {/* The read failed — 404 while the endpoint is still shipping, or a
                   loan whose chain was never seeded. Says so rather than drawing a
                   chain from `loans.status`: a chain assembled in the browser is a
                   claim about who signed off that nobody can check, which is the
                   whole reason this moved off localStorage. */}
-              {!approvalLoading && approvalUnavailable && (
+              {!approvalLoading && !loanIsImported && approvalUnavailable && (
                 <div className="rounded-lg border border-dashed bg-muted/30 p-3 flex items-start gap-2">
                   <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
                   <div className="text-xs">
@@ -2781,7 +2805,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   not unwritten. The server answers 200 with empty arrays either
                   way, so the hook cannot tell them apart — the loan's own status
                   is what distinguishes them. */}
-              {!approvalLoading && !approvalUnavailable && approvalSteps.length === 0
+              {!approvalLoading && !loanIsImported && !approvalUnavailable && approvalSteps.length === 0
                 && loanShouldHaveAChain(loan.status) && (
                 <div className="rounded-lg border border-dashed bg-muted/30 p-3 flex items-start gap-2">
                   <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
@@ -4714,8 +4738,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
             </DialogTitle>
             <DialogDescription className="break-words">
               {paymentMode === "advance"
-                ? `Recording an advance payment for loan ${loan.loan_account_number || loan.application_number}. Excess will be applied to upcoming scheduled installments.`
-                : `Record a repayment for loan ${loan.loan_account_number || loan.application_number}.`}
+                ? `Recording an advance payment for loan ${loanNumber}. Excess will be applied to upcoming scheduled installments.`
+                : `Record a repayment for loan ${loanNumber}.`}
             </DialogDescription>
           </DialogHeader>
 
@@ -4729,7 +4753,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   {loan.borrower?.full_name ?? loan.borrower?.name ?? loan.borrower_name ?? "—"}
                 </p>
                 <p className="text-xs text-muted-foreground truncate">
-                  {loan.loan_account_number || loan.application_number} &middot;{" "}
+                  {loanNumber} &middot;{" "}
                   {loan.loan_product?.name ?? loan.loan_product_name ?? "—"}
                 </p>
               </div>
@@ -5832,7 +5856,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
           <DialogHeader>
             <DialogTitle>Create Loan Adjustment</DialogTitle>
             <DialogDescription>
-              Submit an adjustment request for loan {loan.loan_account_number || loan.application_number}.
+              Submit an adjustment request for loan {loanNumber}.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 pt-2">
@@ -5974,7 +5998,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
       {loan && (
         <AutoPayToggleDialog
           loanId={loan.id}
-          loanAccountNumber={loan.loan_account_number}
+          loanAccountNumber={loanNumber}
           currentEnabled={loan.auto_pay_enabled ?? false}
           currentCbsReference={loan.auto_pay_cbs_reference}
           open={autoPayDialogOpen}

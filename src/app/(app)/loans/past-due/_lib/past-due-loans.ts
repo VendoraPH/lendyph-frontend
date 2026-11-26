@@ -68,7 +68,7 @@ export function mapRow(raw: RawPastDueRow): PastDueLoan {
   return {
     loanId,
     loanNumber: str(
-      raw.loan_account_number ?? raw.loan_number ?? raw.loanNumber ?? raw.loan?.loan_account_number,
+      raw.display_number ?? raw.loan_account_number ?? raw.loan_number ?? raw.loanNumber ?? raw.loan?.loan_account_number,
       loanId ? `#${loanId}` : "—",
     ),
     memberId: str(

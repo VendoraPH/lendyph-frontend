@@ -184,7 +184,10 @@ export interface Profile {
 
 export interface LoanRow {
   id: number;
-  loan_account_number: string;
+  /** The LN- number; null on an imported loan, which has none. */
+  loan_account_number: string | null;
+  /** The loan's title (`loanNumberLabel`): an imported loan's Loan No. from the file. */
+  display_number?: string | null;
   product_name: string | null;
   display_status: string | null;
   release_date: string | null;
@@ -251,6 +254,8 @@ export interface LoanSchedule {
 export interface LoanPayment {
   receipt_number: string | null;
   loan_account_number: string | null;
+  /** The loan's number as shown (`loanNumberLabel`). */
+  loan_display_number?: string | null;
   payment_date: string | null;
   amount_paid: Pesos;
   principal: Pesos;

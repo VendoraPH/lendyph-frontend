@@ -64,7 +64,7 @@ export function buildDemandLetterDoc(
   const borrowerName =
     pick(borrower, ["full_name", "name"]) ?? pick(root, ["borrower_name"]);
   const accountNumber =
-    pick(loan, ["loan_account_number", "application_number"]) ?? null;
+    pick(loan, ["display_number", "loan_account_number", "external_loan_no", "application_number"]) ?? null;
 
   // The rows the server marks `is_overdue`: due before today with something
   // still owed. `status` is not trusted for that (it only turns 'overdue' when

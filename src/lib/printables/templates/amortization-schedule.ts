@@ -70,7 +70,7 @@ function restructuredText(loan: Record<string, unknown> | null): string | null {
   })
     .map((f) => ` ${f.label}: ${writeOffFigureText(f.amount)}.`)
     .join("");
-  const successorNumber = pick(successor, ["loan_account_number", "application_number"]);
+  const successorNumber = pick(successor, ["display_number", "loan_account_number", "external_loan_no", "application_number"]);
   return (
     (restructuredAt
       ? `This loan was restructured on ${dateOrDash(restructuredAt)}`
@@ -110,7 +110,7 @@ export function buildAmortizationScheduleDoc(
   const borrowerName =
     pick(borrower, ["full_name", "name"]) ?? pick(loan, ["borrower_name"]);
   const accountNumber =
-    pick(loan, ["loan_account_number", "application_number"]) ?? null;
+    pick(loan, ["display_number", "loan_account_number", "external_loan_no", "application_number"]) ?? null;
   const rate = pickNumber(loan, ["interest_rate", "rate"]);
   const scheduleTotals = asRecord(pick(loan, ["amortization_schedule_totals"]));
   // This document used to print "% per month" beside a term counted in

@@ -7,6 +7,7 @@ import {
   type SearchPage,
   type SearchView,
 } from "./use-search-page";
+import { loanNumberLabel } from "@/lib/loan-number";
 
 /** Rows per search, and what shows before typing. The status line says when there are more. */
 export const LOAN_PAGE_SIZE = 25;
@@ -22,7 +23,7 @@ export interface LoanOption {
 export function toLoanOption(loan: Loan): LoanOption {
   return {
     id: loan.id,
-    label: loan.loan_account_number ?? loan.application_number ?? `Loan #${loan.id}`,
+    label: loanNumberLabel(loan, `Loan #${loan.id}`),
     hint: loan.borrower?.full_name ?? loan.borrower?.name,
   };
 }

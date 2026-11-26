@@ -3,6 +3,7 @@ import { readablePaymentRemarks } from "@/lib/printables/legacy-remarks";
 import { receiptExtraLines, type ReceiptExtraLine } from "@/lib/receipt-extras";
 import { voidedByName } from "../history/_lib/payment-history";
 import type { Repayment } from "@/types";
+import { loanNumberLabel } from "@/lib/loan-number";
 
 /**
  * One payment receipt as the receipt card shows it. The staff page
@@ -62,7 +63,9 @@ export function mapPaymentToReceipt(payment: Repayment): ReceiptData {
   const p = payment as Repayment & Record<string, unknown>;
   const loanRel = p.loan as
     | {
+        display_number?: string | null;
         loan_account_number?: string;
+        external_loan_no?: string | null;
         application_number?: string;
         loan_product?: { name?: string };
         loan_product_name?: string;
@@ -82,9 +85,10 @@ export function mapPaymentToReceipt(payment: Repayment): ReceiptData {
       borrowerRel?.name ||
       (p.borrower_name as string) ||
       "—",
+    // The loan's display number (round 7): an imported loan's Loan No.
     loan_account_number:
-      loanRel?.loan_account_number ||
-      loanRel?.application_number ||
+      (p.loan_display_number as string) ||
+      loanNumberLabel(loanRel, "") ||
       (p.loan_account_number as string) ||
       "—",
     loan_product_name:

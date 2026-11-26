@@ -23,6 +23,8 @@ export interface AutoPayPartialRow {
 export interface AutoPayLoanIssue {
   loan_id: number;
   loan_account_number: string | null;
+  /** The number the loan is shown by (`loanNumberLabel`): an imported loan's Loan No. */
+  display_number?: string | null;
   reason: string;
 }
 
@@ -30,6 +32,8 @@ export interface AutoPayLoanIssue {
 export interface AutoPayLoanRow {
   loan_id: number;
   loan_account_number: string | null;
+  /** The number the loan is shown by (`loanNumberLabel`): an imported loan's Loan No. */
+  display_number?: string | null;
   borrower_name: string;
   total_principal: number;
   total_interest: number;

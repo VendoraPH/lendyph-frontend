@@ -378,8 +378,8 @@ function PaymentsContent() {
       const scbCredited = repayment?.scb_paid ?? 0;
       toast.success("Payment posted", {
         description: scbCredited > 0
-          ? `${formatCurrency(body.amount_paid)} recorded for ${loan.borrower_name} (${loan.loan_account_number}). ${formatCurrency(scbCredited)} credited to share capital.`
-          : `${formatCurrency(body.amount_paid)} recorded for ${loan.borrower_name} (${loan.loan_account_number})`,
+          ? `${formatCurrency(body.amount_paid)} recorded for ${loan.borrower_name} (${loan.display_number}). ${formatCurrency(scbCredited)} credited to share capital.`
+          : `${formatCurrency(body.amount_paid)} recorded for ${loan.borrower_name} (${loan.display_number})`,
         action: receiptId
           ? { label: "View Receipt", onClick: () => router.push(`/payments/${receiptId}`) }
           : undefined,
@@ -609,7 +609,7 @@ function PaymentsContent() {
                           <TableCell>
                             <div>
                               <p className="font-medium text-sm">{loan.borrower_name}</p>
-                              <p className="text-xs text-muted-foreground">{loan.loan_account_number}</p>
+                              <p className="text-xs text-muted-foreground">{loan.display_number}</p>
                             </div>
                           </TableCell>
                           <TableCell className="hidden sm:table-cell">
@@ -700,7 +700,7 @@ function PaymentsContent() {
                 <div>
                   <p className="font-semibold">{selectedLoan.borrower_name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {selectedLoan.loan_account_number} &middot; {selectedLoan.loan_product_name}
+                    {selectedLoan.display_number} &middot; {selectedLoan.loan_product_name}
                   </p>
                 </div>
                 <PaymentStatusPill loan={selectedLoan} size="md" />

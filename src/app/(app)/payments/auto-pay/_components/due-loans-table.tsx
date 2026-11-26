@@ -13,6 +13,7 @@ import { formatCurrency } from "@/lib/format";
 import { currencyOrDash } from "@/lib/report-format";
 import type { AutoPayLoanRow } from "@/types";
 import { loanInsurance, type PreviewTotals } from "../_lib/auto-pay-view";
+import { loanNumberLabel } from "@/lib/loan-number";
 
 interface DueLoansTableProps {
   loans: AutoPayLoanRow[];
@@ -40,7 +41,7 @@ export function DueLoansTable({ loans, totals }: DueLoansTableProps) {
           {loans.map((loan) => (
             <TableRow key={loan.loan_id}>
               <TableCell className="font-mono text-sm">
-                {loan.loan_account_number ?? `Loan #${loan.loan_id}`}
+                {loanNumberLabel(loan, `Loan #${loan.loan_id}`)}
               </TableCell>
               <TableCell className="font-medium">{loan.borrower_name}</TableCell>
               <TableCell className="text-right tabular-nums">{formatCurrency(loan.total_principal)}</TableCell>

@@ -340,6 +340,8 @@ interface RestructureLinkedLoan {
   id: number;
   application_number: string;
   loan_account_number: string | null;
+  /** The number it is shown by (`loanNumberLabel`). */
+  display_number?: string | null;
   status: LoanStatus;
   principal_amount: number;
 }
@@ -416,8 +418,16 @@ export interface Loan {
   id: number;
   application_number?: string;
   loan_account_number?: string;
+  /**
+   * The number the loan is shown by, from the server (`Loan::displayNumber()`):
+   * its LN- number, else an imported loan's Loan No. from the file, else its
+   * application number. Read it through `loanNumberLabel`.
+   */
+  display_number?: string | null;
   /** An imported loan's own Loan No. in the cooperative's file; null on any other loan. */
   external_loan_no?: string | null;
+  /** True when the loan came in by Data Import (it has no approval chain here). */
+  is_imported?: boolean;
   /** An imported loan's as-of date (`Y-m-d`): its file counts payments up to this day, so a payment on or before it is refused. Null on any other loan. */
   payments_counted_until?: string | null;
   // Nested relations from API

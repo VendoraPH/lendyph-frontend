@@ -74,6 +74,8 @@ export interface BorrowerLedgerEntry {
   balance?: number | null;
   loan_id?: number | null;
   loan_account_number?: string | null;
+  /** The number the loan is shown by (`loanNumberLabel`): an imported loan's Loan No. */
+  display_number?: string | null;
   kind?: string | null;
   repayment_id?: number | null;
   /** Payment rows: what the member handed over, which can exceed the credit. */

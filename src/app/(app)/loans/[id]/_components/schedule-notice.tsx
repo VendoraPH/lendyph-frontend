@@ -9,6 +9,7 @@ import { formatCurrencyExact, formatDate } from "@/lib/format";
 import { restructureSuccessor } from "@/lib/loan-restructure";
 import type { Loan } from "@/types/loan";
 import { restructureWriteOffFigures, writeOffFigureText } from "@/lib/restructure-write-off";
+import { loanNumberLabel } from "@/lib/loan-number";
 
 /** Where the schedule request stands. Rows only ever come from `loaded`. */
 export type ScheduleLoad = "loading" | "failed" | "loaded";
@@ -78,7 +79,7 @@ function RestructuredNotice({ loan }: { loan: Loan }) {
               href={`/loans/${successor.id}`}
               className="font-mono font-medium text-brand-orange hover:underline"
             >
-              {successor.loan_account_number || successor.application_number}
+              {loanNumberLabel(successor)}
             </Link>
           </>
         ) : (

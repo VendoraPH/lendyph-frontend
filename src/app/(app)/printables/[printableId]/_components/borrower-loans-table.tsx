@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { readTermUnit, termUnitNoun } from "@/lib/loan-terms";
 import type { Loan } from "@/types";
 import { Check } from "lucide-react";
+import { loanNumberLabel } from "@/lib/loan-number";
 
 /**
  * One member's loans, one of them chosen.
@@ -27,7 +28,7 @@ import { Check } from "lucide-react";
 /** The loan's account number, falling back the way the rest of the app does. */
 export function loanNumber(loan: Loan): string {
   return (
-    loan.loan_account_number ?? loan.application_number ?? `Loan #${loan.id}`
+    loanNumberLabel(loan, `Loan #${loan.id}`)
   );
 }
 

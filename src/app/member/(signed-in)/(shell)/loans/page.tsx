@@ -15,6 +15,7 @@ import { LOAN_STATUS, LOAN_STATUS_TONE, NONE } from "@/lib/portal/labels";
 import { portalService } from "@/lib/portal/portal-api";
 import type { LoanRow } from "@/lib/portal/types";
 import { penaltyMonthsText } from "@/lib/portal/words";
+import { loanNumberLabel } from "@/lib/loan-number";
 
 /** The member's own released loans (never a co-maker's or a draft), as the server lists them. */
 export default function LoansPage() {
@@ -53,7 +54,7 @@ function LoanCard({ loan }: { loan: LoanRow }) {
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <Link href={`/member/loans/${loan.id}`} className="font-semibold break-words hover:underline">
-              {loan.loan_account_number}
+              {loanNumberLabel(loan)}
             </Link>
             <p className="text-xs text-muted-foreground">{loan.product_name ?? NONE}</p>
           </div>
@@ -110,7 +111,7 @@ function LoanCard({ loan }: { loan: LoanRow }) {
         {penaltyMonthsText(loan.penalty_months) && <p className="text-xs text-destructive">{penaltyMonthsText(loan.penalty_months)}</p>}
         <Link href={`/member/loans/${loan.id}`} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
           Details, schedule and payments
-          <span className="sr-only"> for {loan.loan_account_number}</span>
+          <span className="sr-only"> for {loanNumberLabel(loan)}</span>
           <ChevronRight className="h-3.5 w-3.5" aria-hidden />
         </Link>
       </CardContent>
