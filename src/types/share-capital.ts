@@ -108,6 +108,9 @@ export interface AutoCreditStatus {
   active_members: AutoCreditMember[];
   disabled_members: AutoCreditMember[];
   no_pledge_members: AutoCreditMember[];
+  /** Already credited by hand this month, each with the reason the run skips it (finish run round 7). */
+  skipped_members?: (AutoCreditMember & { reason: string })[];
+  skipped_count?: number;
   total_amount: number;
   last_run_at?: string | null;
 }
@@ -138,6 +141,9 @@ export interface AutoCreditProcessResult {
   processed_count: number;
   total_amount: number;
   processed_at: string;
+  /** Pledges already credited by hand this month, which the run skipped (finish run round 7). */
+  skipped_count?: number;
+  skipped?: { pledge_id: number; borrower_name: string | null; amount: number; reason: string }[];
 }
 
 /**

@@ -13,6 +13,14 @@ export interface AutoCreditListMember {
   autoCredit: boolean;
 }
 
+/** A pledge the run skips this month, with the server's reason in words (finish run round 7). */
+export interface AutoCreditSkippedMember {
+  id: number;
+  borrower: string;
+  pledgeAmount: number;
+  reason: string;
+}
+
 export interface AutoCreditGroups {
   active: AutoCreditListMember[];
   disabled: AutoCreditListMember[];
@@ -21,9 +29,12 @@ export interface AutoCreditGroups {
   /** "N members will not be credited": pledges whose auto-credit is off, only. */
   disabledCount: number;
   noPledgeCount: number;
+  /** This month's credits already in (by hand or an earlier run), so the run skips them; never in `active`. */
+  skipped: AutoCreditSkippedMember[];
+  skippedCount: number;
 }
 
-type Row = Partial<AutoCreditMember> & { id: number; amount?: number };
+type Row = Partial<AutoCreditMember> & { id: number; amount?: number; reason?: unknown };
 
 function member(row: Row, autoCredit: boolean): AutoCreditListMember {
   return {
@@ -50,6 +61,10 @@ export function autoCreditGroups(status: Record<string, unknown>): AutoCreditGro
   // The no-pledge list carries no auto-credit flag: it is off exactly when the
   // same pledge is in the disabled list.
   const noPledge = rows(status.no_pledge_members).map((r) => member(r, !disabledIds.has(r.id)));
+  const skipped = rows(status.skipped_members).map((r) => {
+    const { id, borrower, pledgeAmount } = member(r, true);
+    return { id, borrower, pledgeAmount, reason: typeof r.reason === "string" ? r.reason : "" };
+  });
   return {
     active,
     disabled,
@@ -57,6 +72,8 @@ export function autoCreditGroups(status: Record<string, unknown>): AutoCreditGro
     activeCount: count(status.active_count, active.length),
     disabledCount: count(status.disabled_count, disabled.length),
     noPledgeCount: count(status.no_pledge_count, noPledge.length),
+    skipped,
+    skippedCount: count(status.skipped_count, skipped.length),
   };
 }
 

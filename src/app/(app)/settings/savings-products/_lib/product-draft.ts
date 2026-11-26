@@ -27,6 +27,8 @@ export interface ProductDraft {
   active: boolean;
   /** Regular products: offered for new-account requests in the member portal (finish run round 6). */
   portalRequests: boolean;
+  /** Regular products: the member portal takes withdrawal requests from its accounts (finish run round 7). */
+  portalWithdrawals: boolean;
   // Rules (regular products; a time deposit keeps only eligibility). Blank is no limit.
   maxBalance: string;
   minDeposit: string;
@@ -65,6 +67,8 @@ export function toDraft(p: SavingsProduct | null, kind: SavingsProductKind = "re
     // A new product starts off: the server turns it on only once the books are ready.
     active: p?.is_active ?? false,
     portalRequests: p?.portal_account_requests ?? false,
+    // On unless the server says off: the column's default since the portal shipped.
+    portalWithdrawals: p?.portal_withdrawal_requests ?? true,
     maxBalance: p?.max_balance ?? "",
     minDeposit: p?.min_deposit ?? "",
     maxDeposit: p?.max_deposit ?? "",
@@ -171,7 +175,7 @@ function readTerms(d: ProductDraft): { input: SavingsProductUpdateInput; problem
     minimum_adb_for_interest: td ? "0.00" : moneyField(d.minAdb, "Minimum average daily balance to earn interest", problems),
     is_active: d.active,
     // Only a regular product can be requested from the member portal (the server refuses it on a time deposit).
-    ...(td ? {} : { portal_account_requests: d.portalRequests }),
+    ...(td ? {} : { portal_account_requests: d.portalRequests, portal_withdrawal_requests: d.portalWithdrawals }),
     // The time-deposit fields go only on a time deposit; the server refuses them on a regular product.
     ...(td
       ? {

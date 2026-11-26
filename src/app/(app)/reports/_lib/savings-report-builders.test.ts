@@ -174,6 +174,29 @@ test("savings transactions: types and methods in words, money in and out are the
   assert.equal(total(doc, "debit"), formatCurrency(1234.5));
 });
 
+test("savings transactions: the typed reference beside the SVT- number, a dash when none", () => {
+  const doc = buildSavingsTransactionsDoc(
+    {
+      data: [
+        { date: "2026-11-03", reference: "SVT-20261103-000001", external_reference: "BDO-55120", type: "deposit", method: "bank_transfer", credit: "500.00", debit: "0.00" },
+        { date: "2026-11-03", reference: "SVT-20261103-000002", external_reference: null, type: "deposit", method: "cash", credit: "50.00", debit: "0.00" },
+        { date: "2026-11-03", reference: "SVT-20261103-000003", external_reference: "  ", type: "deposit", method: "cash", credit: "5.00", debit: "0.00" },
+        { date: "2026-11-03", reference: "SVT-20261103-000004", type: "deposit", method: "cash", credit: "1.00", debit: "0.00" },
+      ],
+      meta: { total: 4 },
+    },
+    RANGE,
+  );
+  const columns = table(doc).columns.map((c) => [c.key, c.header]);
+  assert.deepEqual(columns.slice(0, 3), [["date", "Date"], ["reference", "Number"], ["external_reference", "Reference"]]);
+  assert.deepEqual(table(doc).rows.map((r) => [r.reference, r.external_reference]), [
+    ["SVT-20261103-000001", "BDO-55120"],
+    ["SVT-20261103-000002", DASH],
+    ["SVT-20261103-000003", DASH],
+    ["SVT-20261103-000004", DASH],
+  ]);
+});
+
 test("savings transactions: no totals means dashes", () => {
   const doc = buildSavingsTransactionsDoc({ data: [{ type: "deposit", credit: "5.00", debit: "0.00" }] }, RANGE);
   assert.equal(kpiValue(doc, "Money In"), DASH);

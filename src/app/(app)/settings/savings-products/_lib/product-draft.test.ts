@@ -171,3 +171,23 @@ test("a time deposit product never sends the portal switch: it can't be requeste
   assert.equal("portal_account_requests" in readCreateDraft({ ...td(), portalRequests: true }).input, false);
   assert.equal("portal_account_requests" in readUpdateDraft({ ...td(), portalRequests: true }).input, false);
 });
+
+test("a regular product says whether the member portal takes withdrawal requests, on by default as the server stores it", () => {
+  assert.equal(toDraft(null).portalWithdrawals, true);
+  assert.equal(readCreateDraft(regular()).input.portal_withdrawal_requests, true);
+  assert.equal(readCreateDraft({ ...regular(), portalWithdrawals: false }).input.portal_withdrawal_requests, false);
+
+  const stored = { ...toDraft(null), code: "RS", name: "Regular" };
+  const product = { ...readCreateDraft(stored).input, id: 9, current_rates: [], account_count: 0, can_delete: true, portal_withdrawal_requests: false } as unknown as SavingsProduct;
+  assert.equal(toDraft(product).portalWithdrawals, false);
+  assert.equal(readUpdateDraft({ ...toDraft(product), portalWithdrawals: true }).input.portal_withdrawal_requests, true);
+
+  // A product the server sent without the field (before round 7) reads on, as stored.
+  const older = { ...product, portal_withdrawal_requests: undefined } as unknown as SavingsProduct;
+  assert.equal(toDraft(older).portalWithdrawals, true);
+});
+
+test("a time deposit product never sends the withdrawal-requests switch", () => {
+  assert.equal("portal_withdrawal_requests" in readCreateDraft({ ...td(), portalWithdrawals: false }).input, false);
+  assert.equal("portal_withdrawal_requests" in readUpdateDraft({ ...td(), portalWithdrawals: false }).input, false);
+});

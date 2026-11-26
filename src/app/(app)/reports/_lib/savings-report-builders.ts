@@ -1,6 +1,6 @@
 import { asArray, asRecord, pick } from "@/lib/api-payload";
 import { formatRate } from "@/lib/format";
-import { countOrDash, currencyOrDash, formatGeneratedAt, formatValue } from "@/lib/report-format";
+import { countOrDash, currencyOrDash, DASH, formatGeneratedAt, formatValue } from "@/lib/report-format";
 import {
   ACCOUNT_STATUS_LABELS,
   INTEREST_RUN_STATUS_LABELS,
@@ -127,7 +127,10 @@ export function buildSavingsBalancesDoc(raw: unknown): ReportDocument {
 
 const TRANSACTION_COLUMNS: ReportColumn[] = [
   { key: "date", header: "Date", format: "date", width: 90 },
-  { key: "reference", header: "Reference", format: "text", width: 140 },
+  // The SVT- number, then the reference typed for the money (bank, GCash or
+  // Maya), as the Savings Transactions list shows them (finish run round 7).
+  { key: "reference", header: "Number", format: "text", width: 140 },
+  { key: "external_reference", header: "Reference", format: "text", width: 120 },
   { key: "account_number", header: "Account #", format: "text", width: 120 },
   { key: "borrower_name", header: "Member", format: "text", width: 170 },
   { key: "type", header: "Type", format: "text", width: 100 },
@@ -137,13 +140,22 @@ const TRANSACTION_COLUMNS: ReportColumn[] = [
   { key: "balance_after", header: "Balance", format: "currency", align: "right", width: 120 },
 ];
 
+/** The reference typed for a transaction's money, or a dash when none was typed. */
+function typedReferenceOrDash(value: unknown): string {
+  const typed = typeof value === "string" ? value.trim() : "";
+  return typed === "" ? DASH : typed;
+}
+
 /**
  * Every savings transaction posted in the period
  * (`GET /reports/savings/transactions`), oldest first.
  */
 export function buildSavingsTransactionsDoc(raw: unknown, range: DateRange): ReportDocument {
   const { rows: rawRows, totals, totalRows } = readListEnvelope(raw);
-  const rows = rawRows.map((r) => inWords(r, { type: TRANSACTION_TYPE_LABELS, method: METHOD_LABELS }));
+  const rows = rawRows.map((r) => ({
+    ...inWords(r, { type: TRANSACTION_TYPE_LABELS, method: METHOD_LABELS }),
+    external_reference: typedReferenceOrDash(r.external_reference),
+  }));
   const credit = pick(totals, ["total_credit"]);
   const debit = pick(totals, ["total_debit"]);
 

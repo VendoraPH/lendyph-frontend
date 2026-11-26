@@ -107,3 +107,9 @@ test("a 422 opens the step that holds its field, dotted keys included", () => {
 test("a problem the form doesn't know stays off every step", () => {
   assert.deepEqual(productProblemErrors(["Something new"]), {});
 });
+
+test("a server refusal on the portal withdrawal-requests switch opens the Details step", () => {
+  assert.equal(owners("portal_withdrawal_requests", productSteps("regular")), 1);
+  const [details] = productSteps("regular");
+  assert.ok(details?.fields?.includes("portal_withdrawal_requests"));
+});

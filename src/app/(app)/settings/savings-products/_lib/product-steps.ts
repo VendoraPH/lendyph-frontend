@@ -19,7 +19,7 @@ import type { SavingsProductKind } from "@/types";
  */
 export function productSteps(kind: SavingsProductKind): FormStepDef[] {
   const steps: FormStepDef[] = [
-    { id: "details", title: "Details", fields: ["kind", "code", "name", "is_active", "portal_account_requests"] },
+    { id: "details", title: "Details", fields: ["kind", "code", "name", "is_active", "portal_account_requests", "portal_withdrawal_requests"] },
     {
       id: "interest",
       title: "Interest & balances",
