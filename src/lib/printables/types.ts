@@ -241,6 +241,8 @@ export interface PrintableDefinition {
   permission?: import("@/types").Permission;
   /** False when the document's module is switched off for this deployment. */
   available?: boolean;
+  /** The menus it reads (Savings, Share Capital); hidden by Menu Visibility, it is not listed. */
+  modules?: readonly import("@/constants/menu-modules").MenuModuleKey[];
   /**
    * Fetch + map. Fails soft the way report builders do: a rejected request
    * still yields a document, with blanks where the data would have been, so a

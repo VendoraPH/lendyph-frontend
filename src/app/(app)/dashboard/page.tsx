@@ -11,6 +11,7 @@ import { FIT_CLASSES } from "@/lib/page-fill";
 import { NoBranchBanner } from "@/components/common/no-branch-banner";
 import { useIsClient, usePermission } from "@/hooks";
 import { useMenuVisibility, useVisibleNav } from "@/hooks/use-menu-visibility";
+import { dashboardParts, linkShown } from "@/lib/hidden-module-parts";
 import { dashboardLanding } from "@/lib/landing-page";
 import { AreaChart, Area } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
@@ -142,10 +143,24 @@ function formatCompactCurrency(amount: number): string {
   return formatCurrency(amount);
 }
 
+/** A KPI card's link to its page, or a plain block when Menu Visibility hides that page. */
+function KpiLink({ href, children }: { href: string | null; children: React.ReactNode }) {
+  if (href === null) return <div className="group">{children}</div>;
+  return (
+    <Link href={href} className="group">
+      {children}
+    </Link>
+  );
+}
+
 function DashboardContent() {
   const mounted = useIsClient();
   const kpiClasses = dashboardKpiClasses();
-  const canViewShareCapital = usePermission().can("share_capital:view");
+  // Menu Visibility: the Share Capital card (GET /share-capital/members) goes
+  // while Share Capital is hidden, and a card whose page is hidden isn't a link.
+  const { isHidden } = useMenuVisibility();
+  const shareCapitalShown = dashboardParts(isHidden).shareCapital;
+  const canViewShareCapital = usePermission().can("share_capital:view") && shareCapitalShown;
   const [shareCapitalTotal, setShareCapitalTotal] = useState<string>("—");
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [dailyDues, setDailyDues] = useState<DueItemView[]>([]);
@@ -253,12 +268,12 @@ function DashboardContent() {
       {/* Row 1: KPI Cards (compact, natural height)                        */}
       {/* ----------------------------------------------------------------- */}
       <div className={kpiClasses.grid}>
-        {KPI_CARD_STRUCTURE.map((kpi) => {
+        {KPI_CARD_STRUCTURE.filter((kpi) => kpi.key !== "share_capital" || shareCapitalShown).map((kpi) => {
           // Only draw a trend line when the backend actually sent that
           // series — no decorative curve next to a real figure.
           const series = sparklinePoints(kpi.sparkKey ? stats?.sparklines?.[kpi.sparkKey] : undefined);
           return (
-            <Link key={kpi.label} href={kpi.href} className="group">
+            <KpiLink key={kpi.label} href={linkShown(kpi.href, isHidden) ? kpi.href : null}>
               <Card
                 size="sm"
                 className={cn(
@@ -288,7 +303,7 @@ function DashboardContent() {
                   )}
                 </CardContent>
               </Card>
-            </Link>
+            </KpiLink>
           );
         })}
       </div>

@@ -1,5 +1,7 @@
 "use client";
 
+import { useMenuVisibility } from "@/hooks/use-menu-visibility";
+import { loanListParts } from "@/lib/hidden-module-parts";
 import { useState, useMemo, useEffect, useCallback, useRef, useLayoutEffect } from "react";
 import { RouteGuard, PermissionGate, TablePagination } from "@/components/common";
 import { NoBranchBanner } from "@/components/common/no-branch-banner";
@@ -188,6 +190,9 @@ function LoansContent() {
   const [products, setProducts] = useState<LoanProduct[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [searchDraft, setSearchDraft] = useState(q);
+  // Menu Visibility: the Auto-Pay column goes while Auto-Pay is hidden.
+  const { isHidden } = useMenuVisibility();
+  const listParts = loanListParts(isHidden);
   const [autoPayTarget, setAutoPayTarget] = useState<{
     loanId: number;
     loanAccountNumber?: string | null;
@@ -554,13 +559,16 @@ function LoansContent() {
                     "emptyLoans",
                     Boolean(search) || tab !== "all" || productId != null || dateFrom != null || dateTo != null,
                   )}
-                  onAutoPayClick={(loan) =>
-                    setAutoPayTarget({
-                      loanId: loan.id,
-                      loanAccountNumber: loan.loan_account_number,
-                      enabled: loan.auto_pay_enabled ?? false,
-                      cbsReference: loan.auto_pay_cbs_reference,
-                    })
+                  onAutoPayClick={
+                    listParts.autoPay
+                      ? (loan) =>
+                          setAutoPayTarget({
+                            loanId: loan.id,
+                            loanAccountNumber: loan.loan_account_number,
+                            enabled: loan.auto_pay_enabled ?? false,
+                            cbsReference: loan.auto_pay_cbs_reference,
+                          })
+                      : undefined
                   }
                 />
               </ScrollBox>

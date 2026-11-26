@@ -1,5 +1,7 @@
 "use client";
 
+import { useMenuVisibility } from "@/hooks/use-menu-visibility";
+import { memberPageParts } from "@/lib/hidden-module-parts";
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -68,6 +70,9 @@ function BorrowerDetailContent() {
   // neither of which this page implies. Without one, that list is not asked
   // for and its tab shows none.
   const { can } = usePermission();
+  // Menu Visibility: the Savings tab goes while Savings is hidden.
+  const { isHidden } = useMenuVisibility();
+  const parts = memberPageParts(isHidden);
   const canListLoans = can("loans:view");
   const canListPayments = can("payments:view");
   const [transferOpen, setTransferOpen] = useState(false);
@@ -286,7 +291,7 @@ function BorrowerDetailContent() {
             <TabsTrigger value="ledger">Ledger</TabsTrigger>
             <TabsTrigger value="share-capital">Share Capital</TabsTrigger>
             <TabsTrigger value="collaterals">Collaterals</TabsTrigger>
-            {env.features.savings && can("savings:view") && <TabsTrigger value="savings">Savings</TabsTrigger>}
+            {env.features.savings && parts.savingsTab && can("savings:view") && <TabsTrigger value="savings">Savings</TabsTrigger>}
           </TabsList>
         </div>
 
@@ -342,7 +347,7 @@ function BorrowerDetailContent() {
           </ScrollBox>
         </TabsContent>
 
-        {env.features.savings && can("savings:view") && (
+        {env.features.savings && parts.savingsTab && can("savings:view") && (
           <TabsContent value="savings" className={cn("pt-4", FIT_CLASSES.section)}>
             <ScrollBox className="p-px">
               <SavingsTab borrowerId={borrower.id} />

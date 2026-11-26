@@ -251,7 +251,8 @@ test("with the AMLA switch off, no AMLA report is listed or opens", async () => 
 
 test("the Reports page lists the AMLA reports in its own section, in its search and in its count", () => {
   const page = readFileSync(resolve(process.cwd(), "src/app/(app)/reports/page.tsx"), "utf8");
-  assert.match(page, /visibleAmlaReports\(hasPermission\)/);
+  // Menu Visibility (round 6) leaves them out while AMLA is hidden.
+  assert.match(page, /visibleAmlaReports\(hasPermission, isHidden\)/);
   assert.match(page, /\{catalog\.length \+ amlaReports\.length\} reports available/);
   assert.match(page, /<AmlaSection /);
   assert.match(page, /href=\{report\.href\}/);

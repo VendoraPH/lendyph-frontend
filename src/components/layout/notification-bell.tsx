@@ -1,5 +1,7 @@
 "use client";
 
+import { useMenuVisibility } from "@/hooks/use-menu-visibility";
+import { linkShown } from "@/lib/hidden-module-parts";
 import { useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -110,6 +112,8 @@ export function NotificationBell() {
 
 function NotificationBellPanel({ enabled }: { enabled: boolean }) {
   const router = useRouter();
+  // A notice about a menu Menu Visibility hides stays in the list but leads nowhere.
+  const { isHidden } = useMenuVisibility();
   const bell = useNotificationBell(enabled);
   const [open, setOpen] = useState(false);
   const feed = useMemo(() => buildFeed(bell.rows, bell.loadedAt), [bell.rows, bell.loadedAt]);
@@ -123,7 +127,7 @@ function NotificationBellPanel({ enabled }: { enabled: boolean }) {
 
   const openItem = (item: NotificationFeedItem) => {
     if (item.unread) bell.markRead(item.id);
-    if (item.href) {
+    if (item.href && linkShown(item.href, isHidden)) {
       setOpen(false);
       router.push(item.href);
     }

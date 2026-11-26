@@ -1,5 +1,7 @@
 "use client";
 
+import { useMenuVisibility } from "@/hooks/use-menu-visibility";
+import { memberPageParts } from "@/lib/hidden-module-parts";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { formatDate } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
@@ -53,8 +55,14 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
   const [preview, setPreview] = useState<{ title: string; images: PreviewImage[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { can } = usePermission();
-  // "Share with member" (Member Portal): member_portal:manage and borrowers:view, as the server checks.
-  const canShare = env.features.memberPortal && can("member_portal:manage") && can("borrowers:view");
+  const { isHidden } = useMenuVisibility();
+  // "Share with member" (Member Portal): member_portal:manage and borrowers:view, as the server checks,
+  // and not while Menu Visibility hides the Member Portal.
+  const canShare =
+    env.features.memberPortal &&
+    memberPageParts(isHidden).portalAccess &&
+    can("member_portal:manage") &&
+    can("borrowers:view");
   const [sharedById, setSharedById] = useState<Record<number, boolean>>({});
 
   const fetchData = useCallback(async () => {

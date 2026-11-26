@@ -1,5 +1,7 @@
 "use client";
 
+import { useMenuVisibility } from "@/hooks/use-menu-visibility";
+import { pledgeEntryParts } from "@/lib/hidden-module-parts";
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { AlertTriangle } from "lucide-react";
 import { PermissionButton, RouteGuard } from "@/components/common";
@@ -110,6 +112,10 @@ function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: 
 
 function PledgeEntryContent() {
   const { can } = usePermission();
+  // Menu Visibility: while Auto-Credit is hidden, its switch, stat, filter and
+  // column go, and a pledge's auto-credit mark no longer locks manual entry.
+  const { isHidden } = useMenuVisibility();
+  const autoCreditShown = pledgeEntryParts(isHidden).autoCredit;
   // The amount, the schedule and auto-credit save through PUT /pledges/{id}
   // and the auto-credit toggle, which both need share_capital:update.
   const canUpdatePledge = can(PLEDGE_UPDATE_GATE.permission);
@@ -575,14 +581,16 @@ function PledgeEntryContent() {
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="py-4 fit:py-0">
-            <div className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-green-600">Active Auto-Credit</span>
-              <span className="text-2xl font-bold text-green-600">{activeCount}</span>
-            </div>
-          </CardContent>
-        </Card>
+        {autoCreditShown && (
+          <Card>
+            <CardContent className="py-4 fit:py-0">
+              <div className="flex flex-col gap-1">
+                <span className="text-sm font-medium text-green-600">Active Auto-Credit</span>
+                <span className="text-2xl font-bold text-green-600">{activeCount}</span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
         <Card>
           <CardContent className="py-4 fit:py-0">
             <div className="flex flex-col gap-1">
@@ -655,21 +663,23 @@ function PledgeEntryContent() {
                   ))}
                 </SelectContent>
               </Select>
-              {/* Filter: Status */}
-              <Select value={filterStatus} onValueChange={(v) => { setFilterStatus(v as string); setPage(1); }}>
-                <SelectTrigger className="w-32 h-8 text-xs">
-                  <SelectValue>
-                    {(value: string | null) =>
-                      value === "all" ? "All Status" : value === "active" ? "Active" : "Inactive"
-                    }
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="inactive">Inactive</SelectItem>
-                </SelectContent>
-              </Select>
+              {/* Filter: auto-credit status */}
+              {autoCreditShown && (
+                <Select value={filterStatus} onValueChange={(v) => { setFilterStatus(v as string); setPage(1); }}>
+                  <SelectTrigger className="w-32 h-8 text-xs">
+                    <SelectValue>
+                      {(value: string | null) =>
+                        value === "all" ? "All Status" : value === "active" ? "Active" : "Inactive"
+                      }
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -713,15 +723,17 @@ function PledgeEntryContent() {
                       <SortIcon field="schedule" sortField={sortField} sortDir={sortDir} />
                     </span>
                   </TableHead>
-                  <TableHead
-                    className="cursor-pointer select-none hover:text-foreground"
-                    onClick={() => toggleSort("autoCredit")}
-                  >
-                    <span className="flex items-center">
-                      Auto-Credit
-                      <SortIcon field="autoCredit" sortField={sortField} sortDir={sortDir} />
-                    </span>
-                  </TableHead>
+                  {autoCreditShown && (
+                    <TableHead
+                      className="cursor-pointer select-none hover:text-foreground"
+                      onClick={() => toggleSort("autoCredit")}
+                    >
+                      <span className="flex items-center">
+                        Auto-Credit
+                        <SortIcon field="autoCredit" sortField={sortField} sortDir={sortDir} />
+                      </span>
+                    </TableHead>
+                  )}
                   <TableHead className="w-12" />
                 </TableRow>
               </TableHeader>
@@ -826,20 +838,22 @@ function PledgeEntryContent() {
                           </DisabledReason>
                         )}
                       </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <DisabledReason reason={pledgeUpdateReason}>
-                            <Switch
-                              checked={pledge.autoCredit}
-                              disabled={!canUpdatePledge}
-                              onCheckedChange={() => handleToggleAutoCredit(pledge.id)}
-                            />
-                          </DisabledReason>
-                          <span className={`text-xs font-medium ${pledge.autoCredit ? "text-green-600" : "text-muted-foreground"}`}>
-                            {pledge.autoCredit ? "Active" : "Inactive"}
-                          </span>
-                        </div>
-                      </TableCell>
+                      {autoCreditShown && (
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <DisabledReason reason={pledgeUpdateReason}>
+                              <Switch
+                                checked={pledge.autoCredit}
+                                disabled={!canUpdatePledge}
+                                onCheckedChange={() => handleToggleAutoCredit(pledge.id)}
+                              />
+                            </DisabledReason>
+                            <span className={`text-xs font-medium ${pledge.autoCredit ? "text-green-600" : "text-muted-foreground"}`}>
+                              {pledge.autoCredit ? "Active" : "Inactive"}
+                            </span>
+                          </div>
+                        </TableCell>
+                      )}
                       <TableCell>
                         <PermissionButton
                           permission={PLEDGE_ENTRY_CREATE_GATE.permission}
@@ -847,8 +861,8 @@ function PledgeEntryContent() {
                           variant="ghost"
                           size="sm"
                           className="text-xs text-brand-orange hover:text-brand-orange disabled:text-muted-foreground disabled:opacity-50"
-                          disabled={pledge.autoCredit}
-                          title={pledge.autoCredit ? "Auto-credit is active — manual entry disabled" : "Create manual entry"}
+                          disabled={autoCreditShown && pledge.autoCredit}
+                          title={autoCreditShown && pledge.autoCredit ? "Auto-credit is active — manual entry disabled" : "Create manual entry"}
                           onClick={() =>
                             manualEntryId === pledge.id
                               ? setManualEntryId(null)
@@ -862,7 +876,7 @@ function PledgeEntryContent() {
                     </TableRow>
                     {manualEntryId === pledge.id && (
                       <TableRow>
-                        <TableCell colSpan={6} className="p-0">
+                        <TableCell colSpan={autoCreditShown ? 6 : 5} className="p-0">
                           <div className="border-t border-b border-brand-orange/20 bg-brand-orange/5 px-6 py-4 space-y-3">
                             <p className="text-sm font-medium">
                               Manual Pledge Entry — {pledge.borrower}
@@ -961,14 +975,14 @@ function PledgeEntryContent() {
                 ))}
                 {paginated.length === 0 && loading && (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                    <TableCell colSpan={autoCreditShown ? 6 : 5} className="h-24 text-center text-muted-foreground">
                       <Spinner className="mx-auto size-5" />
                     </TableCell>
                   </TableRow>
                 )}
                 {paginated.length === 0 && !loading && (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                    <TableCell colSpan={autoCreditShown ? 6 : 5} className="h-24 text-center text-muted-foreground">
                       {!failed && hasIllustration(emptyPicture) && (
                         <Illustration name={emptyPicture} className="mx-auto mb-3 block" />
                       )}

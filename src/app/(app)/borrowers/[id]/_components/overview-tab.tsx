@@ -1,5 +1,7 @@
 "use client";
 
+import { useMenuVisibility } from "@/hooks/use-menu-visibility";
+import { memberPageParts } from "@/lib/hidden-module-parts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { User, MapPin, Briefcase, CreditCard } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -40,9 +42,17 @@ export function OverviewTab({ borrower, loans, coMakers, summary, onMembershipSa
   const money = (amount: number | undefined) => (amount === undefined ? "—" : formatCurrency(amount));
   const count = (n: number | undefined) => (n === undefined ? "—" : String(n));
   const { can } = usePermission();
+  // Menu Visibility: the portal access card and the reminder preferences go
+  // while their menus (Member Portal, Loans → Reminders) are hidden.
+  const { isHidden } = useMenuVisibility();
+  const parts = memberPageParts(isHidden);
   // Members only: an applicant still pending (or rejected) has no portal access to manage.
   const showPortal =
-    env.features.memberPortal && can("member_portal:view") && borrower.status !== "pending" && borrower.status !== "rejected";
+    env.features.memberPortal &&
+    parts.portalAccess &&
+    can("member_portal:view") &&
+    borrower.status !== "pending" &&
+    borrower.status !== "rejected";
 
   const totalCoMakers = coMakers.length;
   const loansNeedingCoMaker = loans.filter(loanNeedsCoMaker).length;
@@ -149,7 +159,7 @@ export function OverviewTab({ borrower, loans, coMakers, summary, onMembershipSa
         </CardContent>
       </Card>
 
-      <NotificationPreferencesCard borrowerId={borrower.id} />
+      {parts.reminderPreferences && <NotificationPreferencesCard borrowerId={borrower.id} />}
 
       {showPortal && <PortalAccessCard borrowerId={borrower.id} memberName={borrower.full_name} />}
     </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useMenuVisibility } from "@/hooks/use-menu-visibility";
 import { useState } from "react";
 import Link from "next/link";
 import { RouteGuard } from "@/components/common";
@@ -29,9 +30,11 @@ export default function ReportsPage() {
   const { hasPermission } = useAuth();
   // A score of reports, filtered per render: cheap, and never stale when the
   // user's permissions change.
-  const catalog = visibleReports(hasPermission);
+  // Menu Visibility leaves out the reports of hidden menus (Savings, Share Capital, Accounting, AMLA).
+  const { isHidden } = useMenuVisibility();
+  const catalog = visibleReports(hasPermission, isHidden);
   // The AMLA reports are made by the server on their own pages, so they sit in their own section (AMLA-B7).
-  const amlaReports = visibleAmlaReports(hasPermission);
+  const amlaReports = visibleAmlaReports(hasPermission, isHidden);
   const needle = query.trim().toLowerCase();
   const amlaShown = amlaReports.filter((r) => matches(r, needle));
 

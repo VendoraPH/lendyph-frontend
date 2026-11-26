@@ -369,6 +369,12 @@ export interface ReportDefinition {
   permissions?: readonly Permission[];
   /** False when the report's module is switched off for this deployment. */
   available?: boolean;
+  /**
+   * The menus whose figures it reads besides Reports (Savings, Share Capital,
+   * Accounting). While Menu Visibility hides any one, the report is not listed
+   * and its page reads not found.
+   */
+  modules?: readonly import("@/constants/menu-modules").MenuModuleKey[];
   build: (ctx: ReportContext) => Promise<ReportDocument>;
 }
 

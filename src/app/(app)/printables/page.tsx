@@ -1,5 +1,6 @@
 "use client";
 
+import { useMenuVisibility } from "@/hooks/use-menu-visibility";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { RouteGuard } from "@/components/common";
@@ -64,8 +65,10 @@ const IMPORT_TEMPLATE = {
 export default function PrintablesPage() {
   const [query, setQuery] = useState("");
   const { can } = usePermission();
-  // Savings documents only where savings is switched on, for savings:view.
-  const catalog = visiblePrintables(can);
+  // Savings documents only where savings is switched on, for savings:view, and
+  // no document of a menu Menu Visibility hides.
+  const { isHidden } = useMenuVisibility();
+  const catalog = visiblePrintables(can, isHidden);
 
   const grouped = useMemo(() => {
     const needle = query.trim().toLowerCase();
