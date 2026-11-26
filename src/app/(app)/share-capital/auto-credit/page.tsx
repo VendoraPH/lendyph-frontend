@@ -26,10 +26,17 @@ import { notifyError } from "@/lib/notify";
 import { shareCapitalService } from "@/services";
 import { Zap, AlertTriangle, CheckCircle2, AlertCircle } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
-import { formatCurrency, formatDateTime } from "@/lib/format";
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import { currencyOrDash } from "@/lib/report-format";
 import { autoCreditGroups, serverTotalToCredit, type AutoCreditGroups } from "./_lib/auto-credit-groups";
-import { cycleOptions, previewCycle, runCompletedMessage, type CycleChoice } from "./_lib/auto-credit-cycle";
+import {
+  cycleOptions,
+  cycleRunState,
+  membersCount,
+  previewCycle,
+  runCompletedMessage,
+  type CycleChoice,
+} from "./_lib/auto-credit-cycle";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { MethodReferenceFields } from "@/components/common/method-reference-fields";
 import { useDialogOpening } from "@/hooks/use-dialog-opening";
@@ -49,6 +56,8 @@ function AutoCreditContent() {
   const [picked, setPicked] = useState<string | null>(null);
   const [shown, setShown] = useState<{ date: string; label: string } | null>(null);
   const [options, setOptions] = useState<CycleChoice[]>([]);
+  // The chosen cycle's own state, never another cycle's last run.
+  const [cycleState, setCycleState] = useState<{ done: boolean; text: string } | null>(null);
   const latestRequest = useRef(0);
   const [groups, setGroups] = useState<AutoCreditGroups>(NO_GROUPS);
   const [loading, setLoading] = useState(true);
@@ -76,7 +85,9 @@ function AutoCreditContent() {
       const raw = (await shareCapitalService.autoCreditStatus(picked ?? undefined)) as unknown as Record<string, unknown>;
       // A preview for a cycle no longer picked is dropped.
       if (requested !== latestRequest.current) return;
-      setShown(previewCycle(raw));
+      const preview = previewCycle(raw);
+      setShown(preview);
+      setCycleState(preview ? cycleRunState(raw, preview.label, formatDate) : null);
       setOptions(cycleOptions(raw));
       // The server's own groups and counts: a pledge with no amount is not
       // one whose auto-credit is off.
@@ -174,7 +185,6 @@ function AutoCreditContent() {
                   value={shown?.date ?? picked ?? ""}
                   onChange={(e) => setPicked(e.target.value)}
                   disabled={processing || options.length === 0}
-                  className="w-48"
                 >
                   {options.map((option) => (
                     <NativeSelectOption key={option.value} value={option.value}>
@@ -227,8 +237,8 @@ function AutoCreditContent() {
             <CardContent className="py-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-muted-foreground">Status</span>
-                <Badge variant="outline" className={lastRun ? "bg-green-500/10 text-green-700 border-green-500/30" : "bg-muted text-muted-foreground"}>
-                  {lastRun ? "Completed" : "Pending"}
+                <Badge variant="outline" className={cycleState?.done ? "bg-green-500/10 text-green-700 border-green-500/30" : "bg-muted text-muted-foreground"}>
+                  {loading || !cycleState ? "—" : cycleState.text}
                 </Badge>
               </div>
             </CardContent>
@@ -319,14 +329,14 @@ function AutoCreditContent() {
               Confirm Auto-Credit
             </DialogTitle>
             <DialogDescription>
-              The following total amount will be credited to {activeMembers.length} active members, for {shown?.label}.
+              The following total amount will be credited to {membersCount(activeMembers.length)}, for {shown?.label}.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col items-center py-6">
             <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Total Pledge Amount</p>
             <p className="text-5xl font-bold text-brand-orange">{currencyOrDash(totalToCredit)}</p>
             <p className="text-sm text-muted-foreground mt-2">
-              {activeMembers.length} member{activeMembers.length > 1 ? "s" : ""}
+              {membersCount(activeMembers.length)}
             </p>
             {groups.skippedCount > 0 && (
               <p className="text-xs text-muted-foreground mt-1">

@@ -14,7 +14,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { cycleOptions, previewCycle, runCompletedMessage } from "./auto-credit-cycle";
+import { cycleOptions, cycleRunState, membersCount, previewCycle, runCompletedMessage } from "./auto-credit-cycle";
 
 const STATUS = {
   cycle_date: "2026-11-15",
@@ -56,6 +56,27 @@ test("the result names the cycle the server ran, else the one sent", () => {
   );
 });
 
+test("the status is the chosen cycle's own: not run yet, or completed on the day its run was made", () => {
+  const day = (value: string) => `day(${value})`;
+  assert.deepEqual(cycleRunState({ cycle_run: null }, "November 30", day), { done: false, text: "Not run yet for November 30" });
+  assert.deepEqual(cycleRunState({}, "November 30", day), { done: false, text: "Not run yet for November 30" });
+  assert.deepEqual(
+    cycleRunState({ cycle_run: { id: 4, processed_at: "2026-11-27 09:15:00", status: "completed" } }, "November 15", day),
+    { done: true, text: "Completed on day(2026-11-27 09:15:00)" },
+  );
+  // Another cycle's last run never reads as this cycle's.
+  assert.deepEqual(
+    cycleRunState({ cycle_run: null, last_run: { processed_at: "2026-11-27 09:15:00", status: "completed" } }, "November 30", day),
+    { done: false, text: "Not run yet for November 30" },
+  );
+});
+
+test("member counts read in the plural except for one", () => {
+  assert.equal(membersCount(0), "0 members");
+  assert.equal(membersCount(1), "1 member");
+  assert.equal(membersCount(12), "12 members");
+});
+
 const page = readFileSync(join(process.cwd(), "src/app/(app)/share-capital/auto-credit/page.tsx"), "utf8");
 
 test("the page offers the server's cycles beside its label; the default is the server's current one", () => {
@@ -67,6 +88,17 @@ test("the page offers the server's cycles beside its label; the default is the s
 
 test("the run sends the preview's own cycle", () => {
   assert.match(page, /autoCreditProcess\(\{\s*cycle_date: shown\.date,/);
+});
+
+test("the status badge is the chosen cycle's, and the select fits its longest label", () => {
+  assert.ok(page.includes("cycleRunState(raw,"));
+  assert.ok(!page.includes('lastRun ? "Completed" : "Pending"'));
+  assert.doesNotMatch(page, /aria-label="Run for"[^>]*className="w-/);
+});
+
+test("the confirmation counts members in words", () => {
+  assert.ok(page.includes("membersCount(activeMembers.length)"));
+  assert.doesNotMatch(page, /member\{activeMembers\.length > 1 \? "s" : ""\}/);
 });
 
 test("a preview for a cycle no longer picked is dropped", () => {

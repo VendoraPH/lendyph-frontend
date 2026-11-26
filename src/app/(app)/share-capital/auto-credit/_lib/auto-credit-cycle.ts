@@ -49,3 +49,28 @@ export function runCompletedMessage(
     (skipped > 0 ? `; ${skipped} skipped (see the reasons on the page).` : ".")
   );
 }
+
+/**
+ * The status card for the chosen cycle (finish run round 8): its own run
+ * (`cycle_run`), never another cycle's last run. `formatDay` reads the run's
+ * time as a date in the app's time zone.
+ */
+export function cycleRunState(
+  status: Record<string, unknown>,
+  cycleLabel: string,
+  formatDay: (value: string) => string,
+): { done: boolean; text: string } {
+  const run = status.cycle_run;
+  if (typeof run === "object" && run !== null) {
+    const { processed_at: processedAt, status: runStatus } = run as Record<string, unknown>;
+    if (runStatus === "completed" && typeof processedAt === "string" && processedAt !== "") {
+      return { done: true, text: `Completed on ${formatDay(processedAt)}` };
+    }
+  }
+  return { done: false, text: `Not run yet for ${cycleLabel}` };
+}
+
+/** "0 members", "1 member", "12 members". */
+export function membersCount(count: number): string {
+  return `${count} member${count === 1 ? "" : "s"}`;
+}
