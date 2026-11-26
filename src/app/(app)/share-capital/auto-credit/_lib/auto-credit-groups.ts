@@ -29,7 +29,7 @@ export interface AutoCreditGroups {
   /** "N members will not be credited": pledges whose auto-credit is off, only. */
   disabledCount: number;
   noPledgeCount: number;
-  /** Already credited by hand this month, so the run skips them; never in `active`. */
+  /** This month's credits already in (by hand or an earlier run), so the run skips them; never in `active`. */
   skipped: AutoCreditSkippedMember[];
   skippedCount: number;
 }

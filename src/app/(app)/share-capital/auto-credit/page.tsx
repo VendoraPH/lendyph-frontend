@@ -105,7 +105,7 @@ function AutoCreditContent() {
       const skipped = result.skipped_count ?? 0;
       toast.success(
         `Auto-credit completed: ${currencyOrDash(result.total_amount ?? totalToCredit)} credited to ${result.processed_count ?? activeMembers.length} members` +
-          (skipped > 0 ? `; ${skipped} skipped, already credited by hand this month` : "")
+          (skipped > 0 ? `; ${skipped} skipped, already credited this month` : "")
       );
       fetchStatus();
     } catch (err) {
@@ -204,7 +204,7 @@ function AutoCreditContent() {
                     <div className="flex-1">
                       <p className="text-sm font-medium">Skipped This Month</p>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        {groups.skippedCount} member{groups.skippedCount === 1 ? " was" : "s were"} already credited by hand this month
+                        {groups.skippedCount} member{groups.skippedCount === 1 ? " was" : "s were"} already credited this month
                       </p>
                       <button
                         className="text-xs text-brand-orange hover:underline mt-1"
@@ -288,7 +288,7 @@ function AutoCreditContent() {
             </p>
             {groups.skippedCount > 0 && (
               <p className="text-xs text-muted-foreground mt-1">
-                {groups.skippedCount} already credited by hand this month {groups.skippedCount === 1 ? "is" : "are"} skipped.
+                {groups.skippedCount} already credited this month {groups.skippedCount === 1 ? "is" : "are"} skipped.
               </p>
             )}
           </div>
@@ -375,7 +375,7 @@ function AutoCreditContent() {
           <DialogHeader>
             <DialogTitle>Skipped This Month</DialogTitle>
             <DialogDescription>
-              These members were already credited by hand this month, so auto-credit skips them until next month.
+              These members already have this month&apos;s credits, by hand or by an earlier run, so auto-credit skips them until next month.
             </DialogDescription>
           </DialogHeader>
           <ScrollBox always className="max-h-[50vh]">
