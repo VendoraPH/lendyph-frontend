@@ -78,6 +78,7 @@ import {
   importedLoanNo,
   isImportedLoan,
 } from "./_lib/imported-loan";
+import { approvalChipLabel } from "./_lib/approval-chip";
 import { loanNumberLabel } from "@/lib/loan-number";
 import {
   countedUntilHint,
@@ -2658,19 +2659,15 @@ function LoanDetail({ loanId }: { loanId: number }) {
                     <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
                     Loan Approval Process
                     <Badge variant="outline" className="text-xs font-normal">
-                      {approvalLoading
-                        ? "Loading..."
-                        : approvalUnavailable
-                          ? "Unavailable"
-                          : allStepsApproved
-                            ? "Complete"
-                            : currentStep
-                              ? `Step ${currentStepIndex + 1} of ${approvalSteps.length}`
-                              : approvalSteps.length === 0
-                                ? loan.status === "draft"
-                                  ? "Not submitted"
-                                  : "No steps found"
-                                : `${approvalSteps.length} steps`}
+                      {approvalChipLabel({
+                        loading: approvalLoading,
+                        unavailable: approvalUnavailable,
+                        allApproved: allStepsApproved,
+                        currentStepIndex,
+                        stepCount: approvalSteps.length,
+                        status: loan.status,
+                        imported: loanIsImported,
+                      })}
                     </Badge>
                     <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-aria-expanded/trigger:rotate-180 shrink-0" />
                   </CardTitle>

@@ -308,6 +308,13 @@ test("the footer carries the reference and the generated stamp", () => {
   );
 });
 
+test("a document may name its reference in the footer its own way", () => {
+  const html = renderPrintable(doc({ footerNote: "Withdrawal Slip", referenceLabel: "No." }));
+
+  assert.match(html, /Withdrawal Slip &bull; No\. OR-20260826-0142 &bull; Generated:/);
+  assert.doesNotMatch(html, /Ref: /);
+});
+
 test("a document generated before chrome ran still prints", () => {
   const html = renderPrintable(doc({ reference: null, generatedAt: "" }));
 

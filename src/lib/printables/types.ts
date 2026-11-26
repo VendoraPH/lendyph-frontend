@@ -189,6 +189,12 @@ export interface PrintableDocument {
    * `print-chrome`, not by the template.
    */
   reference?: string | null;
+  /**
+   * The words printed before `reference` in the footer: "Ref:" unless the
+   * document calls its number something else (the withdrawal slip's "No.",
+   * as its fields read).
+   */
+  referenceLabel?: string;
   generatedAt: string;
   /**
    * Labelled copies of the same body, e.g.

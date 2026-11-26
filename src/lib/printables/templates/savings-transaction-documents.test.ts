@@ -62,6 +62,41 @@ test("the slip prints the withdrawal in figures and words, with its fee as a sep
   assert.match(renderPrintable(doc), /Teller Tess/);
 });
 
+test("the slip prints the SVT- number under Number and the typed reference under Reference (round 8)", () => {
+  const cash = buildSavingsWithdrawalSlipDoc({ transaction: WITHDRAWAL, account: ACCOUNT });
+  assert.equal(fieldValue(cash, "Number"), "SVT-2026-00031");
+  assert.equal(fieldValue(cash, "Reference"), "—");
+  assert.equal(titleBlock(cash).subtitle, "Number SVT-2026-00031");
+
+  const gcash = buildSavingsWithdrawalSlipDoc({
+    transaction: { ...WITHDRAWAL, method: "gcash", external_reference: "GC-778899" },
+    account: ACCOUNT,
+  });
+  assert.equal(fieldValue(gcash, "Number"), "SVT-2026-00031");
+  assert.equal(fieldValue(gcash, "Reference"), "GC-778899");
+  assert.ok(gcash.blocks.every((b) => b.kind !== "fields" || b.items.every((i) => i.label !== "Reference No.")));
+});
+
+test("the slip's footer names its SVT- number as the fields do, never \"Ref:\" (BC18)", () => {
+  const html = renderPrintable(buildSavingsWithdrawalSlipDoc({ transaction: WITHDRAWAL, account: ACCOUNT }));
+  assert.match(html, /No\. SVT-2026-00031/);
+  assert.doesNotMatch(html, /Ref: SVT-/);
+});
+
+test("\"count your cash\" shows only on a cash withdrawal (BC18)", () => {
+  const COUNT = /count your cash/i;
+  assert.match(renderPrintable(buildSavingsWithdrawalSlipDoc({ transaction: WITHDRAWAL, account: ACCOUNT })), COUNT);
+
+  for (const method of ["gcash", "bank_transfer", "maya"]) {
+    const html = renderPrintable(buildSavingsWithdrawalSlipDoc({
+      transaction: { ...WITHDRAWAL, method, external_reference: "X-1" },
+      account: ACCOUNT,
+    }));
+    assert.doesNotMatch(html, COUNT, method);
+    assert.match(html, /Keep this slip for your records\./, method);
+  }
+});
+
 test("a reversed withdrawal is stamped on every copy", () => {
   const doc = buildSavingsWithdrawalSlipDoc({ transaction: { ...WITHDRAWAL, reversed_by_transaction_id: 40 }, account: ACCOUNT });
   assert.match(titleBlock(doc).subtitle ?? "", /REVERSED/);
@@ -75,6 +110,9 @@ test("a row that isn't a withdrawal, or couldn't be read, prints a blank slip an
     assert.equal(doc.incomplete, true);
     assert.equal(chargeAmount(doc, "AMOUNT WITHDRAWN"), "_______________");
     assert.ok(isBlankField(doc, "Amount in words"));
+    // A blank slip leaves both numbers to be written in.
+    assert.ok(isBlankField(doc, "Number"));
+    assert.ok(isBlankField(doc, "Reference"));
   }
 });
 

@@ -75,7 +75,9 @@ test("prints the ledger oldest first with the server's running balance", () => {
   assertPrintableShape(doc, "savings_passbook");
   assert.equal(doc.reference, "SA-2026-00009");
   const rows = tableBlock(doc, "Transactions").rows;
-  assert.deepEqual(rows.map((r) => r.reference), ["REF-1", "REF-2", "REF-3"]);
+  // Number is the ledger's own (SVT-) number; Reference is the typed one, a dash when none.
+  assert.deepEqual(rows.map((r) => r.number), ["REF-1", "REF-2", "REF-3"]);
+  assert.deepEqual(rows.map((r) => r.reference), ["—", "—", "—"]);
   assert.deepEqual(rows.map((r) => r.code), ["DEP", "WDL", "INT"]);
   assert.deepEqual(rows.map((r) => r.balance), ["5000.00", "4500.00", "4600.00"]);
   // The side a line doesn't touch is blank, not 0.00.
@@ -115,4 +117,15 @@ test("an account with no lines still prints, with the empty text", () => {
   const table = tableBlock(doc, "Transactions");
   assert.equal(table.rows.length, 0);
   assert.ok(table.emptyText);
+});
+
+test("a line's typed reference prints under Reference and its SVT- number under Number (round 8)", () => {
+  const gcash = { ...line(4, "2026-11-02", "deposit", "0.00", "250.00", "4850.00"), method: "gcash", external_reference: "GC-778899" } as SavingsTransaction;
+  const doc = buildSavingsPassbookDoc(ACCOUNT, [gcash], { now: NOW });
+  const table = tableBlock(doc, "Transactions");
+  const headers = table.columns.map((c) => c.header);
+
+  assert.deepEqual(headers.slice(2, 4), ["Number", "Reference"]);
+  assert.equal(table.rows[0].number, "REF-4");
+  assert.equal(table.rows[0].reference, "GC-778899");
 });
