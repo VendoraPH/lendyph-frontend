@@ -41,6 +41,15 @@ export interface SavingsPassbookOptions extends PrintableBuildOptions {
   truncated?: boolean;
 }
 
+/**
+ * The reference typed for the money (bank, GCash or Maya), a dash when none.
+ * The ledger's own SVT- number prints under Number (finish run round 8).
+ */
+function typedReference(value: string | null | undefined): string {
+  const typed = (value ?? "").trim();
+  return typed === "" ? "—" : typed;
+}
+
 /** A debit or credit cell: blank, not a dash, on the side a line doesn't touch. */
 function amountCell(value: string): string {
   return isNilAmount(value) ? " " : value;
@@ -59,7 +68,8 @@ export function buildSavingsPassbookDoc(
   const rows = ordered.map((t) => ({
     date: t.date,
     code: TYPE_CODES[t.type] ?? "OTH",
-    reference: t.reference,
+    number: t.reference,
+    reference: typedReference(t.external_reference),
     withdrawal: amountCell(t.debit),
     deposit: amountCell(t.credit),
     balance: t.balance_after,
@@ -87,13 +97,14 @@ export function buildSavingsPassbookDoc(
       kind: "table",
       title: "Transactions",
       columns: [
-        { key: "date", header: "Date", format: "date", width: "13%" },
-        { key: "code", header: "Code", width: "7%" },
-        { key: "reference", header: "Reference", width: "18%" },
-        { key: "withdrawal", header: "Withdrawal", format: "currency", align: "right", width: "15%" },
-        { key: "deposit", header: "Deposit", format: "currency", align: "right", width: "15%" },
-        { key: "balance", header: "Balance", format: "currency", align: "right", width: "16%" },
-        { key: "teller", header: "Teller", width: "16%" },
+        { key: "date", header: "Date", format: "date", width: "11%" },
+        { key: "code", header: "Code", width: "6%" },
+        { key: "number", header: "Number", width: "14%" },
+        { key: "reference", header: "Reference", width: "14%" },
+        { key: "withdrawal", header: "Withdrawal", format: "currency", align: "right", width: "13%" },
+        { key: "deposit", header: "Deposit", format: "currency", align: "right", width: "13%" },
+        { key: "balance", header: "Balance", format: "currency", align: "right", width: "14%" },
+        { key: "teller", header: "Teller", width: "15%" },
       ],
       rows,
       emptyText: "No transactions on this account yet.",

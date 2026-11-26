@@ -21,6 +21,7 @@ import { rateWithPeriod, readTermUnit } from "@/lib/loan-terms";
 import { statusInWords } from "@/app/(app)/borrowers/_components/utils";
 import { loanNeedsCoMaker } from "../_lib/co-maker-recommendation";
 import { loanOutstandingCell } from "../_lib/loan-outstanding-cell";
+import { memberLoanNumber } from "../_lib/member-loan-number";
 import { scheduleToRead } from "../_lib/schedule-to-read";
 import { ScrollBox } from "@/components/common/page-fill";
 import { FIT_CLASSES } from "@/lib/page-fill";
@@ -111,6 +112,7 @@ export function LoansTab({ loans }: LoansTabProps) {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-8" />
+                <TableHead>Loan No.</TableHead>
                 <TableHead>Purpose</TableHead>
                 <TableHead className="text-right">Principal</TableHead>
                 <TableHead>Rate</TableHead>
@@ -151,6 +153,7 @@ export function LoansTab({ loans }: LoansTabProps) {
                             <ChevronRight className="h-4 w-4 text-muted-foreground" />
                           ))}
                       </TableCell>
+                      <TableCell className="font-mono text-xs whitespace-nowrap">{memberLoanNumber(loan)}</TableCell>
                       <TableCell className="font-medium">{loan.purpose || "—"}</TableCell>
                       <TableCell className="text-right tabular-nums">{formatCurrency(loan.principal_amount)}</TableCell>
                       <TableCell>{rateWithPeriod(loan.interest_rate, loan.interest_rate_frequency)}</TableCell>
@@ -189,7 +192,7 @@ export function LoansTab({ loans }: LoansTabProps) {
                     </TableRow>
                     {isExpanded && (
                       <TableRow key={`${loan.id}-details`}>
-                        <TableCell colSpan={10} className="p-0">
+                        <TableCell colSpan={11} className="p-0">
                           {/* Co-maker info */}
                           {loanCoMakers.length > 0 && (
                             <div className="mx-4 mt-4 mb-2 rounded-lg border bg-green-50/50 p-3">
@@ -239,7 +242,7 @@ export function LoansTab({ loans }: LoansTabProps) {
               })}
               {loans.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
+                  <TableCell colSpan={11} className="h-24 text-center text-muted-foreground">
                     No loans found.
                   </TableCell>
                 </TableRow>

@@ -29,6 +29,7 @@ import {
 } from "../../../_lib/savings-rules";
 import { printSavingsReceipt } from "../_lib/print-receipt";
 import { postedByText } from "../_lib/account-details";
+import { ledgerNumbers } from "../_lib/ledger-numbers";
 import { WITHDRAWAL_SLIP } from "@/lib/savings/documents";
 import { printSavingsDocument } from "@/lib/savings/print-document";
 
@@ -78,6 +79,7 @@ export function TransactionsTable({ account, onChanged }: { account: SavingsAcco
                   <TableRow>
                     <TableHead>Date</TableHead>
                     <TableHead>Type</TableHead>
+                    <TableHead>Number</TableHead>
                     <TableHead>Reference</TableHead>
                     <TableHead>Method</TableHead>
                     <TableHead>Remarks</TableHead>
@@ -102,7 +104,8 @@ export function TransactionsTable({ account, onChanged }: { account: SavingsAcco
                         )}
                       </TableCell>
                       <TableCell>{labelOf(TRANSACTION_TYPE_LABELS, t.type)}</TableCell>
-                      <TableCell className="font-mono text-xs">{t.reference}</TableCell>
+                      <TableCell className="font-mono text-xs">{ledgerNumbers(t).number}</TableCell>
+                      <TableCell className="font-mono text-xs">{ledgerNumbers(t).reference}</TableCell>
                       <TableCell>{t.method ? labelOf(METHOD_LABELS, t.method) : "—"}</TableCell>
                       <TableCell className="max-w-64 truncate">{t.remarks ?? "—"}</TableCell>
                       <TableCell className="text-right tabular-nums">
