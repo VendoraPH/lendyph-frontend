@@ -29,6 +29,7 @@ import {
   ProgressValue,
 } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
+import { todayISO } from "@/lib/format";
 import { clearImportSession, type ImportSession } from "@/lib/import-session";
 import { FIT_CLASSES } from "@/lib/page-fill";
 import { cn } from "@/lib/utils";
@@ -254,6 +255,10 @@ export function DataImportView() {
 
   const [step, setStep] = useState<ImportStep>("prepare");
   const [branchId, setBranchId] = useState<number | null>(null);
+  // The run's `as_of_date`: today unless the admin says otherwise.
+  const [asOfDate, setAsOfDate] = useState<string>(todayISO);
+  // The server's refusal of that date, shown on the field (step 1).
+  const [asOfRefusal, setAsOfRefusal] = useState<string | null>(null);
   const [files, setFiles] = useState<ImportFiles>(NO_FILES);
   const [precheck, setPrecheck] = useState<PrecheckOutcome | null>(null);
   const [runId, setRunId] = useState<number | null>(null);
@@ -306,6 +311,13 @@ export function DataImportView() {
     setRunId(null);
   }, []);
 
+  // Stable, because the upload step's open-the-run effect lists it: a new
+  // function each render would re-run that effect after a failed open.
+  const refuseAsOfDate = useCallback((message: string) => {
+    setAsOfRefusal(message);
+    setStep("prepare");
+  }, []);
+
   const currentIndex = IMPORT_STEPS.indexOf(step);
   const stepLabels = useMemo(
     () => IMPORT_STEPS.map((key) => STEP_LABELS[key]),
@@ -337,6 +349,12 @@ export function DataImportView() {
           <StepPrepare
             branchId={branchId}
             onBranchChange={setBranchId}
+            asOfDate={asOfDate}
+            onAsOfDateChange={(date) => {
+              setAsOfDate(date);
+              setAsOfRefusal(null);
+            }}
+            asOfRefusal={asOfRefusal}
             files={files}
             onFilesChange={setFiles}
             priorRun={priorRun}
@@ -391,6 +409,8 @@ export function DataImportView() {
         return (
           <StepUpload
             branchId={branchId}
+            asOfDate={asOfDate}
+            onAsOfDateRefused={refuseAsOfDate}
             files={files}
             precheck={precheck}
             runId={runId}

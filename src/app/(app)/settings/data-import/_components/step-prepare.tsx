@@ -17,6 +17,7 @@ import { AlertTriangle, ArrowRight, Building2, Download, RotateCw } from "lucide
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -30,7 +31,7 @@ import { useBranches } from "@/hooks";
 import { branchPicker } from "@/lib/user-branches";
 import { importBranchChoice } from "./import-branch";
 import { useAuthStore } from "@/store";
-import { formatDate } from "@/lib/format";
+import { formatDate, todayISO } from "@/lib/format";
 import {
   downloadImportTemplate,
   importTemplates,
@@ -41,6 +42,7 @@ import { notifyError } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import type { ImportRunStatus } from "@/types/data-import";
 
+import { BALANCES_AS_OF_EARLIEST, BALANCES_AS_OF_HINT, balancesAsOfProblem } from "../_lib/balances-as-of";
 import { FileSlot } from "./file-slot";
 import { fileSlots, filesProblem, filesRule, membersRequired } from "./import-files";
 import type { ImportFiles } from "./data-import-view";
@@ -58,6 +60,11 @@ const CAUTION =
 export interface StepPrepareProps {
   branchId: number | null;
   onBranchChange: (branchId: number | null) => void;
+  /** "Balances as of", `YYYY-MM-DD`: the run's `as_of_date`. */
+  asOfDate: string;
+  onAsOfDateChange: (date: string) => void;
+  /** The server's refusal of the date, in its words, shown on the field. */
+  asOfRefusal: string | null;
   files: ImportFiles;
   onFilesChange: (files: ImportFiles) => void;
   /**
@@ -231,12 +238,65 @@ function BranchGate({
 }
 
 // ---------------------------------------------------------------------------
+// Balances as of
+// ---------------------------------------------------------------------------
+
+/**
+ * The run's `as_of_date` (finish run round 6). Imported loans refuse payments
+ * dated on or before it, so the usual cut-over is the last day before going
+ * live. Today by default; the rule is the server's (`../_lib/balances-as-of`),
+ * and the server's own refusal shows here too.
+ */
+function BalancesAsOfField({
+  value,
+  today,
+  onChange,
+  error,
+}: {
+  value: string;
+  today: string;
+  onChange: (date: string) => void;
+  error: string | null;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor="import-as-of" className="text-sm font-medium">
+        Balances as of <span className="text-destructive" aria-hidden="true">*</span>
+      </Label>
+      <Input
+        id="import-as-of"
+        type="date"
+        required
+        className="w-full sm:w-72"
+        value={value}
+        min={BALANCES_AS_OF_EARLIEST}
+        max={today}
+        onChange={(event) => onChange(event.target.value)}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? "import-as-of-hint import-as-of-error" : "import-as-of-hint"}
+      />
+      <p id="import-as-of-hint" className="text-xs text-muted-foreground">
+        {BALANCES_AS_OF_HINT}
+      </p>
+      {error ? (
+        <p id="import-as-of-error" role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Step
 // ---------------------------------------------------------------------------
 
 export function StepPrepare({
   branchId,
   onBranchChange,
+  asOfDate,
+  onAsOfDateChange,
+  asOfRefusal,
   files,
   onFilesChange,
   priorRun,
@@ -248,7 +308,9 @@ export function StepPrepare({
 
   const problem = filesProblem(files, shareCapitalAllowed);
   const loansOnly = Boolean(files.loans && !files.customers);
-  const canContinue = branchId !== null && problem === null;
+  const today = todayISO();
+  const dateProblem = balancesAsOfProblem(asOfDate, today);
+  const canContinue = branchId !== null && problem === null && dateProblem === null && asOfRefusal === null;
 
   return (
     <div className="space-y-5">
@@ -292,6 +354,13 @@ export function StepPrepare({
         onChange={onBranchChange}
         onRetry={() => setBranchReload((n) => n + 1)}
       >
+        <BalancesAsOfField
+          value={asOfDate}
+          today={today}
+          onChange={onAsOfDateChange}
+          error={asOfRefusal ?? dateProblem}
+        />
+
         <fieldset className="space-y-3">
           <legend className="text-sm font-medium">Files</legend>
           <p className="text-xs text-muted-foreground">
@@ -363,7 +432,7 @@ export function StepPrepare({
               visible text instead — which also answers it for everyone else. */}
           {!canContinue ? (
             <p className="text-xs text-muted-foreground">
-              {branchId === null ? "Choose a branch to continue." : problem}
+              {branchId === null ? "Choose a branch to continue." : (problem ?? "Fix the Balances as of date to continue.")}
             </p>
           ) : null}
           <Button type="button" onClick={onNext} disabled={!canContinue}>

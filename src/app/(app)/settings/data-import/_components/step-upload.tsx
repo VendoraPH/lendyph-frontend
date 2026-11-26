@@ -39,7 +39,6 @@ import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { api } from "@/lib/api-client";
 import { getErrorMessage, httpStatusOf } from "@/lib/api-error";
 import { CSV_FILE_ACCEPT } from "@/lib/csv-file";
-import { todayISO } from "@/lib/format";
 import {
   loadImportSession,
   recordUploadedChunk,
@@ -59,6 +58,7 @@ import {
 } from "../_hooks/use-chunk-upload";
 import { keepsRunForUpload } from "../_hooks/use-import-reattach";
 import { runDateOrders } from "../_hooks/use-file-precheck";
+import { balancesAsOfRefusal } from "../_lib/balances-as-of";
 
 /* ------------------------------------------------------------------ */
 /* The seam                                                             */
@@ -75,6 +75,10 @@ import { piecesAccepted } from "@/lib/count-words";
 export interface StepUploadProps {
   /** The branch the members and loans are created under. Null on a resume. */
   branchId: number | null;
+  /** "Balances as of", sent as the run's `as_of_date` when this step opens it. */
+  asOfDate: string;
+  /** The server refused that date: back to step 1, its words on the field. */
+  onAsOfDateRefused: (message: string) => void;
   /** The picked files. Both null on a resume — this step asks for them again. */
   files: ImportFiles;
   /** What step 2 settled. Null on a resume; the run already carries it. */
@@ -156,6 +160,8 @@ interface CreateRunBody {
 
 export function StepUpload({
   branchId,
+  asOfDate,
+  onAsOfDateRefused,
   files,
   precheck,
   runId,
@@ -239,7 +245,7 @@ export function StepUpload({
          */
         const created = await api.rawPost<CreateRunBody>(API_ENDPOINTS.DATA_IMPORT.RUNS, {
           branch_id: branchId,
-          as_of_date: todayISO(),
+          as_of_date: asOfDate,
           files: declaredFiles(picked, digests),
           // The server reads each date column with the order settled here.
           date_orders: runDateOrders(precheck.dateFormat),
@@ -288,13 +294,18 @@ export function StepUpload({
         onRunCreated(id);
       } catch (err) {
         openingRef.current = false;
+        const refusedDate = balancesAsOfRefusal(err);
+        if (refusedDate) {
+          onAsOfDateRefused(refusedDate);
+          return;
+        }
         setOpenError(getErrorMessage(err, "Could not open the import."));
         notifyError(err, "Could not open the import.");
       } finally {
         setOpening(false);
       }
     })();
-  }, [runId, branchId, merged, precheck, onRunCreated]);
+  }, [runId, branchId, asOfDate, merged, precheck, onRunCreated, onAsOfDateRefused]);
 
   /* -------------------- the upload -------------------- */
 

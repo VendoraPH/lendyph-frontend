@@ -903,6 +903,16 @@ test("names and addresses are varchar(255)", () => {
   assert.equal(sizeProblem("customer", 12, "x".repeat(256))[0].label, "City/Municipality");
 });
 
+test("an email over 255 characters is imported blank, so it warns rather than refuses", () => {
+  // ValueNormalizer::email(): `email` and `max:255` refuse it, and the server
+  // stores the member without it, with a warning.
+  const long = `${"a".repeat(250)}@b.com`;
+  assert.deepEqual(sizeProblem("customer", 9, `${"a".repeat(249)}@b.com`), []);
+  assert.deepEqual(sizeProblem("customer", 9, long).map((p) => [p.label, p.reason, p.limit, p.severity]), [["email", "too-long", 255, "warning"]]);
+  // Other columns keep their refusal.
+  assert.equal(sizeProblem("customer", 1, "x".repeat(256))[0].severity, "error");
+});
+
 test("Term in Months is the loan rules' question, not a size one", () => {
   // `./import-loan-fields` reads it as the server does: 1 to 120 whole months.
   for (const written of ["12", "121", "12.5", "₱12"]) {
