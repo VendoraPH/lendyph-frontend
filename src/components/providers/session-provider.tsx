@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store";
 import { renewAccessToken, tokenManager } from "@/lib/axios-client";
 import { isRenewalDue } from "@/lib/session-token";
+import { forgetRememberMe } from "@/lib/remember-me";
 import { env } from "@/config/env";
 import {
   Dialog,
@@ -60,10 +61,6 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   const timeoutMs = env.auth.sessionTimeout * 60 * 1000; // Convert minutes to ms
 
-  const isRememberMe =
-    typeof window !== "undefined" &&
-    localStorage.getItem("lendy_remember_me") === "true";
-
   const clearTimers = useCallback(() => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     if (warningRef.current) clearTimeout(warningRef.current);
@@ -89,7 +86,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   );
 
   const resetTimer = useCallback(() => {
-    if (!isAuthenticated || isRememberMe) return;
+    if (!isAuthenticated) return;
 
     clearTimers();
     showWarningRef.current = false;
@@ -115,7 +112,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     timeoutRef.current = setTimeout(() => {
       performLogout("inactivity");
     }, timeoutMs);
-  }, [isAuthenticated, isRememberMe, timeoutMs, performLogout, clearTimers]);
+  }, [isAuthenticated, timeoutMs, performLogout, clearTimers]);
 
   // Keep the server's token ahead of the idle window. It expires a fixed time
   // after it was issued and can only be renewed while still valid, so waiting
@@ -146,9 +143,15 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     performLogout("inactivity");
   };
 
+  // "Remember me" is gone (finish run round 7): every session follows the
+  // idle rule below. Clear the flag an older sign-in left, once on load.
+  useEffect(() => {
+    forgetRememberMe(window.localStorage);
+  }, []);
+
   // Listen for user activity
   useEffect(() => {
-    if (!isAuthenticated || isRememberMe) return;
+    if (!isAuthenticated) return;
 
     const handleActivity = () => {
       // While the warning is up the only way back is the dialog's own button,
@@ -183,7 +186,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       });
       clearTimers();
     };
-  }, [isAuthenticated, isRememberMe, resetTimer, clearTimers, maybeRenew, performLogout, timeoutMs]);
+  }, [isAuthenticated, resetTimer, clearTimers, maybeRenew, performLogout, timeoutMs]);
 
   // Listen for forced logout from the 401 interceptor, which fires when the
   // token refresh is rejected outright. This used to log out on the spot: the

@@ -185,7 +185,6 @@ export function Header({ onMenuClick }: HeaderProps) {
       forgetWorkingBranch: () => forgetUserWorkingBranch(user?.id),
       logout: authService.logout,
     });
-    localStorage.removeItem("lendy_remember_me");
     clearAuth();
     toast.success("Logged out");
     router.replace("/login");

@@ -149,6 +149,8 @@ const ACTION_LABELS: Record<string, string> = {
   menu_visibility_override_refused: "Menu Visibility password refused",
   menu_visibility_changed: "Menu visibility changed",
   menu_visibility_override_ended: "Menu Visibility access ended",
+  // Finish run round 7: "Remember me" removed, open remembered sign-ins cut.
+  remembered_sign_ins_shortened: "Remembered sign-ins shortened",
 };
 
 /**
