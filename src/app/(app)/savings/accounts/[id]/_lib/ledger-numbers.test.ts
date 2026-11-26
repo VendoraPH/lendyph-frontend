@@ -31,3 +31,16 @@ test("the account page's ledger heads Number before Reference, as the Savings Tr
   // The SVT- number is never printed under Reference.
   assert.doesNotMatch(table, /<TableCell className="font-mono text-xs">\{t\.reference\}<\/TableCell>/);
 });
+
+test("the ledger fits its box at 1440 px: icon-sized actions and a narrower Remarks column (BC18)", () => {
+  const table = readFileSync(
+    join(process.cwd(), "src/app/(app)/savings/accounts/[id]/_components/transactions-table.tsx"),
+    "utf8",
+  );
+
+  // Print receipt, print slip and Reverse: each icon-sized, so the row's last
+  // icon isn't cut off at the box's edge.
+  assert.equal(table.match(/size="icon-sm"/g)?.length, 3);
+  assert.doesNotMatch(table, /size="sm"/);
+  assert.match(table, /className="max-w-48 truncate"/);
+});

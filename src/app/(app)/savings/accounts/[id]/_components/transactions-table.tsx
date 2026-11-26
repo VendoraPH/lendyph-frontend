@@ -107,7 +107,7 @@ export function TransactionsTable({ account, onChanged }: { account: SavingsAcco
                       <TableCell className="font-mono text-xs">{ledgerNumbers(t).number}</TableCell>
                       <TableCell className="font-mono text-xs">{ledgerNumbers(t).reference}</TableCell>
                       <TableCell>{t.method ? labelOf(METHOD_LABELS, t.method) : "—"}</TableCell>
-                      <TableCell className="max-w-64 truncate">{t.remarks ?? "—"}</TableCell>
+                      <TableCell className="max-w-48 truncate">{t.remarks ?? "—"}</TableCell>
                       <TableCell className="text-right tabular-nums">
                         {isNilAmount(t.debit) ? "" : formatCurrency(t.debit)}
                       </TableCell>
@@ -126,7 +126,7 @@ export function TransactionsTable({ account, onChanged }: { account: SavingsAcco
                       <TableCell className="whitespace-nowrap">
                         {isReceiptTransaction(t) && (
                           <Button
-                            size="sm"
+                            size="icon-sm"
                             variant="ghost"
                             disabled={printingId === t.id}
                             onClick={() => printReceipt(t)}
@@ -138,7 +138,7 @@ export function TransactionsTable({ account, onChanged }: { account: SavingsAcco
                         )}
                         {t.type === "withdrawal" && (
                           <Button
-                            size="sm"
+                            size="icon-sm"
                             variant="ghost"
                             disabled={printingId === t.id}
                             onClick={() => printSlip(t)}
@@ -150,7 +150,7 @@ export function TransactionsTable({ account, onChanged }: { account: SavingsAcco
                         )}
                         <ActionButton
                           permission="savings:transact"
-                          size="sm"
+                          size="icon-sm"
                           variant="ghost"
                           blockedReason={reversalBlocker(t)}
                           onClick={() => setReversing(t)}

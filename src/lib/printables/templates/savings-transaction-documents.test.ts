@@ -77,6 +77,26 @@ test("the slip prints the SVT- number under Number and the typed reference under
   assert.ok(gcash.blocks.every((b) => b.kind !== "fields" || b.items.every((i) => i.label !== "Reference No.")));
 });
 
+test("the slip's footer names its SVT- number as the fields do, never \"Ref:\" (BC18)", () => {
+  const html = renderPrintable(buildSavingsWithdrawalSlipDoc({ transaction: WITHDRAWAL, account: ACCOUNT }));
+  assert.match(html, /No\. SVT-2026-00031/);
+  assert.doesNotMatch(html, /Ref: SVT-/);
+});
+
+test("\"count your cash\" shows only on a cash withdrawal (BC18)", () => {
+  const COUNT = /count your cash/i;
+  assert.match(renderPrintable(buildSavingsWithdrawalSlipDoc({ transaction: WITHDRAWAL, account: ACCOUNT })), COUNT);
+
+  for (const method of ["gcash", "bank_transfer", "maya"]) {
+    const html = renderPrintable(buildSavingsWithdrawalSlipDoc({
+      transaction: { ...WITHDRAWAL, method, external_reference: "X-1" },
+      account: ACCOUNT,
+    }));
+    assert.doesNotMatch(html, COUNT, method);
+    assert.match(html, /Keep this slip for your records\./, method);
+  }
+});
+
 test("a reversed withdrawal is stamped on every copy", () => {
   const doc = buildSavingsWithdrawalSlipDoc({ transaction: { ...WITHDRAWAL, reversed_by_transaction_id: 40 }, account: ACCOUNT });
   assert.match(titleBlock(doc).subtitle ?? "", /REVERSED/);

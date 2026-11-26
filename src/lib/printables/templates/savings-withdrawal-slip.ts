@@ -104,7 +104,9 @@ export function buildSavingsWithdrawalSlipDoc(raw: unknown, options: PrintableBu
       kind: "note",
       text: reversed
         ? "REVERSED — retained for audit purposes only."
-        : "Please count your cash before leaving the counter. Keep this slip for your records.",
+        : method === "cash"
+          ? "Please count your cash before leaving the counter. Keep this slip for your records."
+          : "Keep this slip for your records.",
     },
   );
 
@@ -114,10 +116,12 @@ export function buildSavingsWithdrawalSlipDoc(raw: unknown, options: PrintableBu
     title: reversed ? "Withdrawal Slip (REVERSED)" : "Withdrawal Slip",
     // The ledger reference is the slip's number, so a reprint never mints a second one.
     reference,
+    // The footer names it as the fields do ("No. SVT-…"), never "Ref:".
+    referenceLabel: "No.",
     generatedAt: generatedAt(options.now),
     copies: reversed ? COPIES.map((label) => `REVERSED — ${label}`) : COPIES,
     blocks,
-    footerNote: reference ? `Withdrawal Slip • ${reference}` : undefined,
+    footerNote: reference ? "Withdrawal Slip" : undefined,
     ...(txn ? {} : { incomplete: true }),
   };
 }
