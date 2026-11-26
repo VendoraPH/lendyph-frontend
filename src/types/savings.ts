@@ -245,6 +245,8 @@ export interface SavingsProduct extends Partial<SavingsProductRules> {
   is_active: boolean;
   /** Offered for new-account requests in the member portal (regular products only; finish run round 6). */
   portal_account_requests?: boolean;
+  /** The member portal takes withdrawal requests from its accounts (regular products only; on by default; finish run round 7). */
+  portal_withdrawal_requests?: boolean;
   /** The rate in force today, one per term (one row on a regular product). */
   current_rates: SavingsProductRate[];
   /** Accounts and time deposits on this product. */
@@ -269,6 +271,8 @@ export interface SavingsProductCreateInput extends SavingsProductRulesInput {
   is_active: boolean;
   /** Regular products only: the server refuses `true` on a time deposit product. */
   portal_account_requests?: boolean;
+  /** Regular products only: the server refuses `true` on a time deposit product. */
+  portal_withdrawal_requests?: boolean;
   annual_interest_rate: string;
 }
 

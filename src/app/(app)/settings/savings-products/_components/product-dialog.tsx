@@ -213,6 +213,24 @@ export function ProductDialog({ open, product, products, onOpenChange, onSaved }
                   />
                 </div>
               )}
+              {!td && (
+                <div
+                  data-field="portal_withdrawal_requests"
+                  className="flex items-center justify-between rounded-lg border p-3"
+                >
+                  <div>
+                    <Label htmlFor="pd-portal-withdrawals">Accept withdrawal requests from the member portal</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Members can ask to withdraw from these accounts in the portal; staff still approve and pay out each request.
+                    </p>
+                  </div>
+                  <Switch
+                    id="pd-portal-withdrawals"
+                    checked={draft.portalWithdrawals}
+                    onCheckedChange={(v) => set("portalWithdrawals", Boolean(v))}
+                  />
+                </div>
+              )}
             </FormStep>
 
             <FormStep id="interest">
