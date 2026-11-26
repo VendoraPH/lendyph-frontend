@@ -27,6 +27,7 @@ import type {
   SavingsAccountsResponse,
   SavingsClosingQuote,
   SavingsHold,
+  PayoutMissingReference,
   SavingsOpeningCheck,
   SavingsProduct,
   SavingsProductCreateInput,
@@ -177,6 +178,18 @@ export const savingsService = {
   /** Always 202 with the approval: a reversal posts only once someone else approves it. */
   requestReversal: (id: number, reason: string, key: string | null) =>
     postMoney<SavingsTransaction>(E.TRANSACTION_REVERSE(id), { reason }, key),
+  /**
+   * A withdrawal's or closing payout's reference, recorded after the transfer
+   * (finish run round 6). Once only; moves no money. Answers the transaction.
+   */
+  recordReference: (id: number, reference: string) =>
+    api.post<SavingsTransaction>(E.TRANSACTION_REFERENCE(id), { reference }),
+  /**
+   * Non-cash payouts still without a reference, 25 a page, `getRaw` so `meta`
+   * survives. Params: `page`, `branch_id`, `date_from`, `date_to`, `method`.
+   */
+  payoutsMissingReference: (params?: Record<string, unknown>) =>
+    api.getRaw<PaginatedResponse<PayoutMissingReference>>(E.PAYOUTS_MISSING_REFERENCE, { params }),
 
   // ── Servicing (gap round S3 and S4) ──
 

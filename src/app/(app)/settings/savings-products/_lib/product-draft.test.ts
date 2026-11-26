@@ -155,3 +155,19 @@ test("an edited product's draft shows its stored rules, and saves them back unch
   assert.deepEqual(input.eligible_member_types, ["regular"]);
   assert.deepEqual(input.eligible_branch_ids, [4]);
 });
+
+test("a regular product says whether the member portal offers it for new-account requests, off by default", () => {
+  assert.equal(toDraft(null).portalRequests, false);
+  assert.equal(readCreateDraft(regular()).input.portal_account_requests, false);
+  assert.equal(readCreateDraft({ ...regular(), portalRequests: true }).input.portal_account_requests, true);
+
+  const stored = { ...toDraft(null), code: "RS", name: "Regular" };
+  const product = { ...readCreateDraft(stored).input, id: 9, current_rates: [], account_count: 0, can_delete: true, portal_account_requests: true } as unknown as SavingsProduct;
+  assert.equal(toDraft(product).portalRequests, true);
+  assert.equal(readUpdateDraft({ ...toDraft(product), portalRequests: false }).input.portal_account_requests, false);
+});
+
+test("a time deposit product never sends the portal switch: it can't be requested from the portal", () => {
+  assert.equal("portal_account_requests" in readCreateDraft({ ...td(), portalRequests: true }).input, false);
+  assert.equal("portal_account_requests" in readUpdateDraft({ ...td(), portalRequests: true }).input, false);
+});

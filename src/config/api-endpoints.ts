@@ -541,6 +541,9 @@ export const API_ENDPOINTS = {
     TRANSACTIONS: "/savings/transactions",
     TRANSACTION: (id: number) => `/savings/transactions/${id}`,
     TRANSACTION_REVERSE: (id: number) => `/savings/transactions/${id}/reverse`,
+    // A payout's reference recorded after the transfer, and the payouts still missing one (finish run round 6).
+    TRANSACTION_REFERENCE: (id: number) => `/savings/transactions/${id}/reference`,
+    PAYOUTS_MISSING_REFERENCE: "/savings/payouts/missing-reference",
 
     APPROVALS: "/savings/approvals",
     APPROVAL_APPROVE: (id: number) => `/savings/approvals/${id}/approve`,
@@ -554,6 +557,7 @@ export const API_ENDPOINTS = {
     TIME_DEPOSIT_NEXT_CASH_REFERENCE: "/savings/time-deposits/cash-reference/next",
     TIME_DEPOSIT_SETTLE: (id: number) => `/savings/time-deposits/${id}/settle`,
     TIME_DEPOSIT_PRETERMINATE: (id: number) => `/savings/time-deposits/${id}/preterminate`,
+    TIME_DEPOSIT_PAYOUT_REFERENCE: (id: number) => `/savings/time-deposits/${id}/payout-reference`,
     TIME_DEPOSIT_PRETERMINATION_QUOTE: (id: number) =>
       `/savings/time-deposits/${id}/pretermination-quote`,
 

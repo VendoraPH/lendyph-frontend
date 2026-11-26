@@ -52,6 +52,8 @@ export interface SavingsDashboardKpis {
   time_deposit_interest_paid: { gross: MoneyString; tax: MoneyString };
   maturing_30_days: { count: number; principal: MoneyString; maturity_amount: MoneyString };
   gl_control: SavingsDashboardGlControl;
+  /** Non-cash payouts still without a reference, today, in the same branches (finish run round 6). */
+  payouts_missing_reference?: number;
 }
 
 /** One month of the series, oldest first; the last month closes at `date_to`. */

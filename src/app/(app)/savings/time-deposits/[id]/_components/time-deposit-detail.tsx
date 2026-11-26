@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Ban, HandCoins, Printer } from "lucide-react";
+import { ArrowLeft, Ban, FilePenLine, HandCoins, Printer } from "lucide-react";
 import { DataState } from "@/components/common/data-state";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,8 @@ import { timeDepositService } from "@/services";
 import type { TimeDeposit } from "@/types";
 import { ActionButton } from "../../../_components/action-button";
 import { DocumentsMenu } from "../../../_components/documents-menu";
+import { RecordReferenceDialog, type RecordReferenceTarget } from "../../../_components/record-reference-dialog";
+import { recordReferenceLabel } from "../../../_lib/payout-reference";
 import { timeDepositDocuments } from "@/lib/savings/documents";
 import { METHOD_LABELS, actorName, labelOf } from "../../../_lib/savings-rules";
 import {
@@ -32,6 +34,19 @@ import { PreterminateDialog } from "./preterminate-dialog";
 import { SettleDialog } from "./settle-dialog";
 import { payoutReferenceRow, referenceRow } from "../../_lib/detail-rows";
 
+/** The payout whose reference "Record reference" fills in, in words (finish run round 6). */
+function payoutTarget(td: TimeDeposit): RecordReferenceTarget {
+  const kind = td.status === "preterminated" ? "Pre-termination payout" : "Payout at maturity";
+  const amount = td.settled_amount ? ` of ${formatCurrency(td.settled_amount)}` : "";
+  const on = td.settled_on ? ` on ${formatDate(td.settled_on)}` : "";
+  return {
+    source: "time_deposit",
+    id: td.id,
+    number: td.certificate_number,
+    description: `${kind} by ${labelOf(METHOD_LABELS, td.payout_method)}${amount}${on}`,
+  };
+}
+
 export function TimeDepositDetail({ depositId }: { depositId: number }) {
   const router = useRouter();
   const fetcher = useCallback(() => timeDepositService.get(depositId), [depositId]);
@@ -39,6 +54,7 @@ export function TimeDepositDetail({ depositId }: { depositId: number }) {
   const [settling, setSettling] = useState(false);
   const [breaking, setBreaking] = useState(false);
   const [printing, setPrinting] = useState(false);
+  const [recording, setRecording] = useState<RecordReferenceTarget | null>(null);
 
   function print(td: TimeDeposit) {
     setPrinting(true);
@@ -103,6 +119,15 @@ export function TimeDepositDetail({ depositId }: { depositId: number }) {
                     <Printer className="h-4 w-4" /> {printing ? "Preparing…" : "Print certificate"}
                   </Button>
                   <DocumentsMenu documents={timeDepositDocuments(td.status)} subjectId={td.id} />
+                  {td.can_record_reference && (
+                    <Button
+                      variant="outline"
+                      onClick={() => setRecording(payoutTarget(td))}
+                      aria-label={recordReferenceLabel(td.certificate_number)}
+                    >
+                      <FilePenLine className="h-4 w-4" /> Record reference
+                    </Button>
+                  )}
                   {(td.status === "active" || td.status === "matured") && (
                     <>
                       <ActionButton
@@ -134,6 +159,11 @@ export function TimeDepositDetail({ depositId }: { depositId: number }) {
 
               <SettleDialog open={settling} deposit={td} onOpenChange={setSettling} onSettled={settled} />
               <PreterminateDialog open={breaking} deposit={td} onOpenChange={setBreaking} onDone={() => resource.refetch()} />
+              <RecordReferenceDialog
+                target={recording}
+                onOpenChange={(open) => !open && setRecording(null)}
+                onRecorded={() => resource.refetch()}
+              />
             </>
           );
         }}
