@@ -21,6 +21,7 @@ import { usePermission } from "@/hooks";
 import { useBranchFilter, useBranchFollowingPage } from "@/hooks/use-working-branch";
 import { ALL_BRANCHES, branchIdParam } from "@/lib/branch-filter";
 import { auditLoadRestriction, auditTrailRestriction } from "./_lib/audit-access";
+import { AUDIT_DETAIL_ACTION_BADGE, AUDIT_DETAIL_CELL } from "./_lib/audit-detail-layout";
 import {
   AUDIT_BRANCH_NOTE,
   auditBranchFilterShown,
@@ -178,13 +179,13 @@ function AuditDetailDrawer({
               Event Summary
             </h4>
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
+              <div className={AUDIT_DETAIL_CELL}>
                 <p className="text-xs text-muted-foreground">Action</p>
-                <Badge variant="outline" className={actionColor}>
+                <Badge variant="outline" className={cn(AUDIT_DETAIL_ACTION_BADGE, actionColor)}>
                   {auditActionLabel(log.action)}
                 </Badge>
               </div>
-              <div className="space-y-1">
+              <div className={AUDIT_DETAIL_CELL}>
                 <p className="text-xs text-muted-foreground">Module</p>
                 <p className="text-sm font-medium">
                   {auditModuleLabel(log)}

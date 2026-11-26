@@ -635,6 +635,7 @@ test("every action the backend writes has its own words", () => {
     profile_updated: "Profile updated",
     savings_approval_cancelled: "Request cancelled",
     scorecard_reviewed: "Scorecard reviewed",
+    remembered_sign_ins_shortened: "Remembered sign-ins shortened",
   };
   for (const [key, label] of Object.entries(words)) assert.equal(auditActionLabel(key), label, key);
 });
