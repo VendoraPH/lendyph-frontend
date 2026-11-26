@@ -104,11 +104,20 @@ export interface Pledge {
   updated_at?: string;
 }
 
+/**
+ * The half of the month a share capital auto-credit run is for (finish run
+ * round 8): the 15th run credits "15" and "15/30" pledges, the 30th run "30"
+ * and "15/30".
+ */
+export type AutoCreditCycle = "15" | "30";
+
 export interface AutoCreditStatus {
+  /** The half this preview is for: as asked, else by today in Manila. */
+  cycle?: AutoCreditCycle;
   active_members: AutoCreditMember[];
   disabled_members: AutoCreditMember[];
   no_pledge_members: AutoCreditMember[];
-  /** Already credited by hand this month, each with the reason the run skips it (finish run round 7). */
+  /** The pledges this half's run skips, each with the server's reason in words (finish run rounds 7 and 8). */
   skipped_members?: (AutoCreditMember & { reason: string })[];
   skipped_count?: number;
   total_amount: number;
@@ -133,6 +142,8 @@ export interface AutoCreditMember {
  * through (Bank, `bank_transfer`, when left out) and an optional reference.
  */
 export interface AutoCreditProcessData {
+  /** The half of the month the run is for, required. */
+  cycle: AutoCreditCycle;
   method?: AutoCreditMethod;
   reference_number?: string;
 }
@@ -141,7 +152,9 @@ export interface AutoCreditProcessResult {
   processed_count: number;
   total_amount: number;
   processed_at: string;
-  /** Pledges already credited by hand this month, which the run skipped (finish run round 7). */
+  /** The half the run was for. */
+  cycle?: AutoCreditCycle;
+  /** The pledges the run skipped, each with the server's reason (finish run rounds 7 and 8). */
   skipped_count?: number;
   skipped?: { pledge_id: number; borrower_name: string | null; amount: number; reason: string }[];
 }

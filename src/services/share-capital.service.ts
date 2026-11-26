@@ -17,7 +17,7 @@ import type {
   BulkPledgeEntryData,
   PaginatedResponse,
 } from "@/types";
-import type { AutoCreditProcessData } from "@/types/share-capital";
+import type { AutoCreditCycle, AutoCreditProcessData } from "@/types/share-capital";
 
 export const shareCapitalService = {
   // ── Ledger ──
@@ -156,10 +156,11 @@ export const shareCapitalService = {
 
   // ── Auto-Credit ──
 
-  autoCreditStatus: () =>
-    api.get<AutoCreditStatus>(API_ENDPOINTS.AUTO_CREDIT.STATUS),
+  /** The run's preview for one half of the month (`?cycle=`); the server defaults it by today when left out. */
+  autoCreditStatus: (cycle?: AutoCreditCycle) =>
+    api.get<AutoCreditStatus>(API_ENDPOINTS.AUTO_CREDIT.STATUS, cycle ? { params: { cycle } } : undefined),
 
-  /** One journal per member, through the settlement account picked (Bank by default). */
-  autoCreditProcess: (data: AutoCreditProcessData = {}) =>
+  /** One journal per member credited in the half picked, through the settlement account picked (Bank by default). */
+  autoCreditProcess: (data: AutoCreditProcessData) =>
     api.post<AutoCreditProcessResult>(API_ENDPOINTS.AUTO_CREDIT.PROCESS, data),
 };

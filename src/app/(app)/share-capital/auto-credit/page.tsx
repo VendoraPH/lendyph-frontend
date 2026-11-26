@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { RouteGuard } from "@/components/common";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Card, CardContent } from "@/components/ui/card";
@@ -26,9 +26,18 @@ import { notifyError } from "@/lib/notify";
 import { shareCapitalService } from "@/services";
 import { Zap, AlertTriangle, CheckCircle2, AlertCircle } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
-import { formatCurrency, formatDateTime } from "@/lib/format";
+import { formatCurrency, formatDateTime, todayISO } from "@/lib/format";
 import { currencyOrDash } from "@/lib/report-format";
 import { autoCreditGroups, serverTotalToCredit, type AutoCreditGroups } from "./_lib/auto-credit-groups";
+import {
+  AUTO_CREDIT_CYCLE_OPTIONS,
+  autoCreditCycleWords,
+  defaultAutoCreditCycle,
+  isAutoCreditCycle,
+  runCompletedMessage,
+} from "./_lib/auto-credit-cycle";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import type { AutoCreditCycle } from "@/types/share-capital";
 import { MethodReferenceFields } from "@/components/common/method-reference-fields";
 import { useDialogOpening } from "@/hooks/use-dialog-opening";
 import {
@@ -41,6 +50,11 @@ import {
 const NO_GROUPS: AutoCreditGroups = autoCreditGroups({});
 
 function AutoCreditContent() {
+  // The half of the month the run is for (finish run round 8), suggested by
+  // today's date in Manila. The preview, the skipped list and the total are
+  // the server's for this half.
+  const [cycle, setCycle] = useState<AutoCreditCycle>(() => defaultAutoCreditCycle(todayISO()));
+  const latestRequest = useRef(0);
   const [groups, setGroups] = useState<AutoCreditGroups>(NO_GROUPS);
   const [loading, setLoading] = useState(true);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -61,9 +75,12 @@ function AutoCreditContent() {
   }
 
   const fetchStatus = useCallback(async () => {
+    const requested = ++latestRequest.current;
     try {
       setLoading(true);
-      const raw = (await shareCapitalService.autoCreditStatus()) as unknown as Record<string, unknown>;
+      const raw = (await shareCapitalService.autoCreditStatus(cycle)) as unknown as Record<string, unknown>;
+      // A preview for a half no longer picked is dropped.
+      if (requested !== latestRequest.current) return;
       // The server's own groups and counts: a pledge with no amount is not
       // one whose auto-credit is off.
       setGroups(autoCreditGroups(raw));
@@ -75,14 +92,20 @@ function AutoCreditContent() {
         const runDate = typeof lastRunRaw === "object" && lastRunRaw !== null
           ? (lastRunRaw as Record<string, unknown>).processed_at as string
           : lastRunRaw as string;
-        if (runDate) setLastRun(formatDateTime(runDate));
+        const runCycle = typeof lastRunRaw === "object" && lastRunRaw !== null
+          ? (lastRunRaw as Record<string, unknown>).cycle
+          : null;
+        if (runDate) {
+          setLastRun(formatDateTime(runDate) + (isAutoCreditCycle(runCycle) ? `, for ${autoCreditCycleWords(runCycle)}` : ""));
+        }
       }
-    } catch {
-      toast.error("We couldn't load the auto-credit status. Please try again.");
+    } catch (err) {
+      if (requested !== latestRequest.current) return;
+      notifyError(err, "We couldn't load the auto-credit status. Please try again.");
     } finally {
-      setLoading(false);
+      if (requested === latestRequest.current) setLoading(false);
     }
-  }, []);
+  }, [cycle]);
 
   useEffect(() => {
     fetchStatus();
@@ -97,20 +120,25 @@ function AutoCreditContent() {
   async function handleConfirm() {
     setProcessing(true);
     try {
-      const result = await shareCapitalService.autoCreditProcess(
-        paymentMethodFields(settlementMethod, settlementReference),
-      );
+      const result = await shareCapitalService.autoCreditProcess({
+        cycle,
+        ...paymentMethodFields(settlementMethod, settlementReference),
+      });
       setConfirmOpen(false);
-      setLastRun(formatDateTime(result.processed_at ?? new Date()));
-      const skipped = result.skipped_count ?? 0;
+      const ran = isAutoCreditCycle(result.cycle) ? result.cycle : cycle;
+      setLastRun(`${formatDateTime(result.processed_at ?? new Date())}, for ${autoCreditCycleWords(ran)}`);
       toast.success(
-        `Auto-credit completed: ${currencyOrDash(result.total_amount ?? totalToCredit)} credited to ${result.processed_count ?? activeMembers.length} members` +
-          (skipped > 0 ? `; ${skipped} skipped, already credited this month` : "")
+        runCompletedMessage(
+          result,
+          cycle,
+          currencyOrDash(result.total_amount ?? totalToCredit),
+          result.processed_count ?? activeMembers.length,
+        ),
       );
       fetchStatus();
     } catch (err) {
-      // A 422 (method or reference) or the 409 that posted nothing: in the
-      // server's words.
+      // A 422 (half, method or reference) or the 409 that posted nothing: in
+      // the server's words.
       notifyError(err, "We couldn't process auto-credit. Please try again.");
     } finally {
       setProcessing(false);
@@ -122,7 +150,7 @@ function AutoCreditContent() {
       <div className="shrink-0">
         <h1 className="text-2xl font-bold tracking-tight">Auto-Credit</h1>
         <p className="text-muted-foreground">
-          Initiate auto-credit of all active pledge entries
+          Credit active pledges for one half of the month: the 15th or the 30th
         </p>
       </div>
 
@@ -137,10 +165,29 @@ function AutoCreditContent() {
               <div>
                 <h2 className="text-lg font-semibold">Auto-Credit Share Capital</h2>
                 <p className="text-sm text-muted-foreground mt-1 max-w-md">
-                  This will credit all active pledge amounts to their respective
-                  members&apos; share capital accounts.
+                  This will credit the active pledges due in the half you pick to
+                  their members&apos; share capital accounts. A pledge is credited
+                  once per half.
                 </p>
               </div>
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                Run for
+                <NativeSelect
+                  aria-label="Run for"
+                  value={cycle}
+                  onChange={(e) => {
+                    if (isAutoCreditCycle(e.target.value)) setCycle(e.target.value);
+                  }}
+                  disabled={processing}
+                  className="w-32"
+                >
+                  {AUTO_CREDIT_CYCLE_OPTIONS.map((option) => (
+                    <NativeSelectOption key={option.value} value={option.value}>
+                      {option.label}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </label>
               <Button
                 onClick={handleInitiate}
                 disabled={loading}
@@ -202,9 +249,9 @@ function AutoCreditContent() {
                   <div className="flex items-start gap-3">
                     <AlertCircle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
                     <div className="flex-1">
-                      <p className="text-sm font-medium">Skipped This Month</p>
+                      <p className="text-sm font-medium">Skipped by This Run</p>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        {groups.skippedCount} member{groups.skippedCount === 1 ? " was" : "s were"} already credited this month
+                        {groups.skippedCount} member{groups.skippedCount === 1 ? "" : "s"} the run for {autoCreditCycleWords(cycle)} skips
                       </p>
                       <button
                         className="text-xs text-brand-orange hover:underline mt-1"
@@ -277,7 +324,7 @@ function AutoCreditContent() {
               Confirm Auto-Credit
             </DialogTitle>
             <DialogDescription>
-              The following total amount will be credited to {activeMembers.length} active members.
+              The following total amount will be credited to {activeMembers.length} active members, for {autoCreditCycleWords(cycle)}.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col items-center py-6">
@@ -288,7 +335,7 @@ function AutoCreditContent() {
             </p>
             {groups.skippedCount > 0 && (
               <p className="text-xs text-muted-foreground mt-1">
-                {groups.skippedCount} already credited this month {groups.skippedCount === 1 ? "is" : "are"} skipped.
+                {groups.skippedCount} {groups.skippedCount === 1 ? "is" : "are"} skipped by this run (the reasons are on the page).
               </p>
             )}
           </div>
@@ -369,13 +416,13 @@ function AutoCreditContent() {
         </DialogContent>
       </Dialog>
 
-      {/* Skipped This Month Dialog: the server's reason for each */}
+      {/* Skipped by This Run Dialog: the server's reason for each */}
       <Dialog open={showSkipped} onOpenChange={setShowSkipped}>
         <DialogContent size="md">
           <DialogHeader>
-            <DialogTitle>Skipped This Month</DialogTitle>
+            <DialogTitle>Skipped by This Run</DialogTitle>
             <DialogDescription>
-              These members already have this month&apos;s credits, by hand or by an earlier run, so auto-credit skips them until next month.
+              The run for {autoCreditCycleWords(cycle)} skips these members, each for the reason shown.
             </DialogDescription>
           </DialogHeader>
           <ScrollBox always className="max-h-[50vh]">
