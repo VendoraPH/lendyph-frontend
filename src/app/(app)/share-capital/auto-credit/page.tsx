@@ -235,9 +235,12 @@ function AutoCreditContent() {
           </Card>
           <Card>
             <CardContent className="py-4">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
                 <span className="text-sm font-medium text-muted-foreground">Status</span>
-                <Badge variant="outline" className={cycleState?.done ? "bg-green-500/10 text-green-700 border-green-500/30" : "bg-muted text-muted-foreground"}>
+                <Badge
+                  variant="outline"
+                  className={`h-auto max-w-full whitespace-normal ${cycleState?.done ? "bg-green-500/10 text-green-700 border-green-500/30" : "bg-muted text-muted-foreground"}`}
+                >
                   {loading || !cycleState ? "—" : cycleState.text}
                 </Badge>
               </div>
