@@ -11,6 +11,8 @@ import {
   approvalWorkflowParts,
   catalogEntryShown,
   dashboardParts,
+  dataImportParts,
+  executiveDashboardParts,
   loanListParts,
   loanPageParts,
   memberPageParts,
@@ -25,7 +27,13 @@ const hiding = (...keys: string[]) => {
 const none = hiding();
 
 test("member page: the Savings tab, the portal access card and share control, the reminder preferences", () => {
-  assert.deepEqual(memberPageParts(none), { savingsTab: true, portalAccess: true, reminderPreferences: true });
+  assert.deepEqual(memberPageParts(none), {
+    savingsTab: true,
+    portalAccess: true,
+    reminderPreferences: true,
+    shareCapitalTab: true,
+  });
+  assert.equal(memberPageParts(hiding("share_capital")).shareCapitalTab, false);
   assert.equal(memberPageParts(hiding("savings")).savingsTab, false);
   assert.equal(memberPageParts(hiding("member_portal")).portalAccess, false);
   assert.equal(memberPageParts(hiding("loans.reminders")).reminderPreferences, false);
@@ -47,9 +55,25 @@ test("loan list: the Auto-Pay column", () => {
   assert.equal(loanListParts(hiding("payments.auto_pay")).autoPay, false);
 });
 
-test("Pledge Entry: the Auto-Credit switch, stat and filter", () => {
-  assert.equal(pledgeEntryParts(none).autoCredit, true);
-  assert.equal(pledgeEntryParts(hiding("share_capital.auto_credit")).autoCredit, false);
+test("Pledge Entry: the Auto-Credit switch, stat, filter and column go, and the manual-entry lock stays", () => {
+  assert.deepEqual(pledgeEntryParts(none), { autoCredit: true, manualEntryLockedByAutoCredit: true });
+  // Hiding never changes how money moves: a pledge set to auto-credit still
+  // takes no manual entry, or the next run could credit a month twice.
+  assert.deepEqual(pledgeEntryParts(hiding("share_capital.auto_credit")), {
+    autoCredit: false,
+    manualEntryLockedByAutoCredit: true,
+  });
+});
+
+test("Executive Dashboard: Share Capital Control, and the Dashboard link", () => {
+  assert.deepEqual(executiveDashboardParts(none), { shareCapitalControl: true, dashboardLink: true });
+  assert.equal(executiveDashboardParts(hiding("share_capital")).shareCapitalControl, false);
+  assert.equal(executiveDashboardParts(hiding("dashboard")).dashboardLink, false);
+});
+
+test("Data Import: the share capital file", () => {
+  assert.equal(dataImportParts(none).shareCapitalFile, true);
+  assert.equal(dataImportParts(hiding("share_capital")).shareCapitalFile, false);
 });
 
 test("Approval Workflow: the CDA review chain", () => {

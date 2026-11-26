@@ -9,7 +9,7 @@ import { resolve } from "node:path";
 import { moduleForPath, moduleHidden } from "@/constants/menu-modules";
 import { SIDEBAR_NAV, visibleNav } from "@/constants/navigation";
 import type { Permission } from "@/types";
-import { breadcrumbShown, paletteLinks, routeVisibility, visibleByPath } from "./menu-visibility";
+import { breadcrumbParentShown, breadcrumbShown, paletteLinks, routeVisibility, visibleByPath } from "./menu-visibility";
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
 const hiding = (...keys: string[]) => {
@@ -80,4 +80,11 @@ test("the app shell loads the source, gates its pages and the menus read the vis
   assert.doesNotMatch(header, /SIDEBAR_NAV\.filter/);
   const gate = read("src/components/layout/hidden-module-gate.tsx");
   assert.match(gate, /notFound\(\)/);
+});
+
+test("the breadcrumb leaves out a parent whose own page is hidden (Dashboard above Executive Dashboard)", () => {
+  assert.equal(breadcrumbParentShown("/dashboard/executive", hiding("dashboard")), false);
+  assert.equal(breadcrumbParentShown("/dashboard/executive", hiding()), true);
+  assert.equal(breadcrumbParentShown("/payments/history", hiding("payments.auto_pay")), true);
+  assert.match(read("src/components/layout/header.tsx"), /breadcrumbParentShown\(pathname, isPathHidden\)/);
 });

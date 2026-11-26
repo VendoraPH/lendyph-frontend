@@ -27,6 +27,8 @@ test("each screen asks its parts' gate", () => {
     ["src/app/(app)/loans/[id]/page.tsx", /loanPageParts\(isHidden\)/],
     ["src/app/(app)/loans/page.tsx", /loanListParts\(isHidden\)/],
     ["src/app/(app)/share-capital/pledges/page.tsx", /pledgeEntryParts\(isHidden\)/],
+    ["src/app/(app)/dashboard/executive/page.tsx", /executiveDashboardParts\(isHidden\)/],
+    ["src/app/(app)/settings/data-import/_components/step-prepare.tsx", /dataImportParts\(isHidden\)\.shareCapitalFile/],
     ["src/app/(app)/settings/approval-workflow/page.tsx", /approvalWorkflowParts\(isHidden\)/],
     ["src/app/(app)/accounting/page.tsx", /accountingDashboardParts\(isHidden\)/],
     ["src/app/(app)/accounting/statements/page.tsx", /accountingStatementsParts\(isHidden\)\.pesosNotes/],
@@ -80,4 +82,25 @@ test("links on the dashboards and in the bell skip hidden pages", () => {
   assert.match(read("src/app/(app)/dashboard/page.tsx"), /linkShown\(kpi\.href, isHidden\)/);
   assert.match(read("src/app/(app)/dashboard/executive/_components/kpi-card.tsx"), /linkShown\(card\.href, isHidden\)/);
   assert.match(read("src/components/layout/notification-bell.tsx"), /linkShown\(item\.href, isHidden\)/);
+});
+
+test("Pledge Entry keeps its manual-entry lock while Auto-Credit is hidden, with a reason that doesn't name the menu", () => {
+  const page = read("src/app/(app)/share-capital/pledges/page.tsx");
+  assert.match(page, /disabled=\{pledge\.autoCredit\}/);
+  assert.doesNotMatch(page, /autoCreditShown && pledge\.autoCredit/);
+  assert.match(page, /This pledge is set to auto-credit; manual entry is off\./);
+});
+
+test("the member page leaves out the Share Capital tab, and the Executive Dashboard its section and Dashboard link", () => {
+  const member = read("src/app/(app)/borrowers/[id]/page.tsx");
+  assert.match(member, /parts\.shareCapitalTab && <TabsTrigger value="share-capital">/);
+  const exec = read("src/app/(app)/dashboard/executive/page.tsx");
+  assert.match(exec, /parts\.shareCapitalControl && <ShareCapitalControlSection/);
+  assert.match(exec, /parts\.dashboardLink && \(/);
+});
+
+test("the override dialog doesn't promise 15 minutes", () => {
+  const dialog = read("src/app/(app)/settings/menu-visibility/_components/override-password-dialog.tsx");
+  assert.doesNotMatch(dialog, /15 minutes/);
+  assert.match(dialog, /for a limited time/);
 });

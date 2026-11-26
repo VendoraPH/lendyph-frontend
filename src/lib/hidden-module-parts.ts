@@ -12,12 +12,16 @@ import { moduleForPath, type MenuModuleKey } from "@/constants/menu-modules";
  */
 type IsHidden = (key: MenuModuleKey) => boolean;
 
-/** The member page: the Savings tab, the portal access card and "Share with member", the reminder preferences. */
+/**
+ * The member page: the Savings tab, the portal access card and "Share with
+ * member", the reminder preferences, and the Share Capital tab.
+ */
 export function memberPageParts(isHidden: IsHidden) {
   return {
     savingsTab: !isHidden("savings"),
     portalAccess: !isHidden("member_portal"),
     reminderPreferences: !isHidden("loans.reminders"),
+    shareCapitalTab: !isHidden("share_capital"),
   };
 }
 
@@ -35,9 +39,25 @@ export function loanListParts(isHidden: IsHidden) {
   return { autoPay: !isHidden("payments.auto_pay") };
 }
 
-/** Pledge Entry: the Auto-Credit switch, its stat and its filter. */
+/**
+ * Pledge Entry: the Auto-Credit switch, its stat, filter and column. Hiding
+ * never changes how money moves, so a pledge set to auto-credit keeps its
+ * manual-entry lock either way: the auto-credit run doesn't look for manual
+ * entries, and unlocking could credit a month twice once Auto-Credit shows
+ * again.
+ */
 export function pledgeEntryParts(isHidden: IsHidden) {
-  return { autoCredit: !isHidden("share_capital.auto_credit") };
+  return { autoCredit: !isHidden("share_capital.auto_credit"), manualEntryLockedByAutoCredit: true };
+}
+
+/** The Executive Dashboard: Share Capital Control, and its "← Dashboard" link. */
+export function executiveDashboardParts(isHidden: IsHidden) {
+  return { shareCapitalControl: !isHidden("share_capital"), dashboardLink: !isHidden("dashboard") };
+}
+
+/** Settings → Data Import: the share capital file (its slot, template and rule). */
+export function dataImportParts(isHidden: IsHidden) {
+  return { shareCapitalFile: !isHidden("share_capital") };
 }
 
 /** Settings → Approval Workflow: the CDA review chain. */

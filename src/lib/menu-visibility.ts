@@ -42,3 +42,12 @@ export function visibleByPath<T extends { href: string }>(links: readonly T[], i
 export function breadcrumbShown(pathname: string, isPathHidden: (pathname: string) => boolean): boolean {
   return !isPathHidden(pathname);
 }
+
+/**
+ * Whether the breadcrumb names a page's section: not when the section's own
+ * page is hidden (Dashboard above Executive Dashboard while Dashboard is).
+ */
+export function breadcrumbParentShown(pathname: string, isPathHidden: (pathname: string) => boolean): boolean {
+  const first = pathname.split("/").filter(Boolean)[0];
+  return first === undefined || !isPathHidden(`/${first}`);
+}

@@ -113,7 +113,8 @@ function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: 
 function PledgeEntryContent() {
   const { can } = usePermission();
   // Menu Visibility: while Auto-Credit is hidden, its switch, stat, filter and
-  // column go, and a pledge's auto-credit mark no longer locks manual entry.
+  // column go. A pledge set to auto-credit still takes no manual entry, so a
+  // month is never credited twice once Auto-Credit shows again.
   const { isHidden } = useMenuVisibility();
   const autoCreditShown = pledgeEntryParts(isHidden).autoCredit;
   // The amount, the schedule and auto-credit save through PUT /pledges/{id}
@@ -861,8 +862,8 @@ function PledgeEntryContent() {
                           variant="ghost"
                           size="sm"
                           className="text-xs text-brand-orange hover:text-brand-orange disabled:text-muted-foreground disabled:opacity-50"
-                          disabled={autoCreditShown && pledge.autoCredit}
-                          title={autoCreditShown && pledge.autoCredit ? "Auto-credit is active — manual entry disabled" : "Create manual entry"}
+                          disabled={pledge.autoCredit}
+                          title={pledge.autoCredit ? "This pledge is set to auto-credit; manual entry is off." : "Create manual entry"}
                           onClick={() =>
                             manualEntryId === pledge.id
                               ? setManualEntryId(null)

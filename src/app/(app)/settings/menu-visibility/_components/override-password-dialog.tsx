@@ -87,7 +87,7 @@ export function OverridePasswordDialog({ open, onOpenChange, onUnlocked, onDenie
             </DialogTitle>
             <DialogDescription>
               Menu Visibility changes which menus everyone on this deployment sees. Enter the administrator password to
-              open it for 15 minutes.
+              open it for a limited time; the page then shows when access ends.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">

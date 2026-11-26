@@ -70,7 +70,7 @@ function BorrowerDetailContent() {
   // neither of which this page implies. Without one, that list is not asked
   // for and its tab shows none.
   const { can } = usePermission();
-  // Menu Visibility: the Savings tab goes while Savings is hidden.
+  // Menu Visibility: the Savings and Share Capital tabs go while their menus are hidden.
   const { isHidden } = useMenuVisibility();
   const parts = memberPageParts(isHidden);
   const canListLoans = can("loans:view");
@@ -289,7 +289,7 @@ function BorrowerDetailContent() {
             <TabsTrigger value="co-makers">Co-Makers ({coMakers.length})</TabsTrigger>
             <TabsTrigger value="documents">Documents &amp; IDs</TabsTrigger>
             <TabsTrigger value="ledger">Ledger</TabsTrigger>
-            <TabsTrigger value="share-capital">Share Capital</TabsTrigger>
+            {parts.shareCapitalTab && <TabsTrigger value="share-capital">Share Capital</TabsTrigger>}
             <TabsTrigger value="collaterals">Collaterals</TabsTrigger>
             {env.features.savings && parts.savingsTab && can("savings:view") && <TabsTrigger value="savings">Savings</TabsTrigger>}
           </TabsList>
@@ -337,9 +337,11 @@ function BorrowerDetailContent() {
           <LedgerTab borrowerId={borrower.id} />
         </TabsContent>
 
-        <TabsContent value="share-capital" className={cn("pt-4", FIT_CLASSES.section)}>
-          <ShareCapitalTab borrowerId={borrower.id} />
-        </TabsContent>
+        {parts.shareCapitalTab && (
+          <TabsContent value="share-capital" className={cn("pt-4", FIT_CLASSES.section)}>
+            <ShareCapitalTab borrowerId={borrower.id} />
+          </TabsContent>
+        )}
 
         <TabsContent value="collaterals" className={cn("pt-4", FIT_CLASSES.section)}>
           <ScrollBox className="p-px">

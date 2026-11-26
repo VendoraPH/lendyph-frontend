@@ -44,7 +44,7 @@ import {
 } from "@/lib/page-titles";
 import { SIDEBAR_NAV } from "@/constants";
 import { useMenuVisibility, useVisibleNav } from "@/hooks/use-menu-visibility";
-import { breadcrumbShown, paletteLinks, visibleByPath } from "@/lib/menu-visibility";
+import { breadcrumbParentShown, breadcrumbShown, paletteLinks, visibleByPath } from "@/lib/menu-visibility";
 import { OWN_PROFILE_HREF, accountSettingsHref } from "@/lib/account-menu";
 import type { Permission } from "@/types";
 import { toast } from "sonner";
@@ -107,10 +107,17 @@ function Breadcrumb({ editParam }: { editParam: string | null }) {
   // On a narrow screen a three-part trail keeps only its last part, and any
   // part truncates, so the header never pushes the account menu off-screen.
   const narrowHidden = nestedLabel === null ? "" : "max-sm:hidden";
+  // A section whose own page Menu Visibility hides isn't named (Dashboard
+  // above Executive Dashboard while Dashboard is hidden).
+  const parentShown = breadcrumbParentShown(pathname, isPathHidden);
   return (
     <div className="flex min-w-0 items-center gap-1.5 text-sm">
-      <span className={`truncate text-muted-foreground ${narrowHidden}`}>{pageTitle}</span>
-      <ChevronRight className={`h-3.5 w-3.5 shrink-0 text-muted-foreground/60 ${narrowHidden}`} />
+      {parentShown && (
+        <>
+          <span className={`truncate text-muted-foreground ${narrowHidden}`}>{pageTitle}</span>
+          <ChevronRight className={`h-3.5 w-3.5 shrink-0 text-muted-foreground/60 ${narrowHidden}`} />
+        </>
+      )}
       {nestedLabel === null ? (
         <span className="truncate font-medium text-foreground">{subLabel}</span>
       ) : (
