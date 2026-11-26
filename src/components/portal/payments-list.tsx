@@ -3,6 +3,7 @@ import { formatDate } from "@/lib/format";
 import { isNilAmount } from "@/lib/savings/amount-text";
 import { NONE, PAYMENT_METHOD, labelOf } from "@/lib/portal/labels";
 import type { LoanPayment } from "@/lib/portal/types";
+import { loanNumberLabel } from "@/lib/loan-number";
 
 const PARTS: { key: keyof LoanPayment; label: string }[] = [
   { key: "principal", label: "Principal" },
@@ -23,7 +24,7 @@ export function PaymentsList({ payments, showLoan = false }: { payments: LoanPay
               <p className="text-sm font-medium">{p.payment_date ? formatDate(p.payment_date) : NONE}</p>
               <p className="text-xs text-muted-foreground break-words">
                 Receipt {p.receipt_number ?? NONE}
-                {showLoan && p.loan_account_number ? ` · ${p.loan_account_number}` : ""}
+                {showLoan && loanNumberLabel(p, "") ? ` · ${loanNumberLabel(p, "")}` : ""}
                 {` · ${labelOf(PAYMENT_METHOD, p.method)}`}
                 {p.reference_number ? ` · Ref. ${p.reference_number}` : ""}
               </p>

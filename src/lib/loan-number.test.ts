@@ -42,3 +42,21 @@ test("no screen invents a loan number from the loan's id", () => {
   );
   assert.deepEqual(offenders, []);
 });
+
+test("the member portal titles a loan and its payments by the display number", () => {
+  const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
+  const detail = read("src/app/member/(signed-in)/(shell)/loans/[id]/page.tsx");
+  const list = read("src/app/member/(signed-in)/(shell)/loans/page.tsx");
+  const payments = read("src/components/portal/payments-list.tsx");
+
+  assert.match(detail, /title=\{loanNumberLabel\(data\)\}/);
+  assert.match(detail, /statement-of-account-\$\{loanNumberLabel\(data\)\}\.pdf/);
+  assert.equal(list.match(/loanNumberLabel\(loan\)/g)?.length, 2);
+  assert.match(payments, /loanNumberLabel\(p, ""\)/);
+  for (const source of [detail, list, payments]) assert.doesNotMatch(source, /\.loan_account_number/);
+});
+
+test("the Loans list's Auto-Pay dialog names the loan by its display number", () => {
+  const page = readFileSync(join(process.cwd(), "src/app/(app)/loans/page.tsx"), "utf8");
+  assert.match(page, /loanAccountNumber: loanNumberLabel\(loan\)/);
+});

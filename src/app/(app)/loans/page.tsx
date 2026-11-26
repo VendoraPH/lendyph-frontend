@@ -47,6 +47,7 @@ import {
   type SortDir,
 } from "./_components/utils";
 import { emptyArt } from "@/lib/illustrations";
+import { loanNumberLabel } from "@/lib/loan-number";
 
 const PER_PAGE_OPTIONS = [10, 20, 50] as const;
 const SORT_KEYS: LoanSortKey[] = [
@@ -564,7 +565,7 @@ function LoansContent() {
                       ? (loan) =>
                           setAutoPayTarget({
                             loanId: loan.id,
-                            loanAccountNumber: loan.loan_account_number,
+                            loanAccountNumber: loanNumberLabel(loan),
                             enabled: loan.auto_pay_enabled ?? false,
                             cbsReference: loan.auto_pay_cbs_reference,
                           })

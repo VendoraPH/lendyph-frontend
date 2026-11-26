@@ -19,6 +19,7 @@ import { usePortalSession } from "@/lib/portal/portal-session";
 import { LoanSummary } from "./_components/loan-summary";
 import { LoanPayments } from "./_components/loan-payments";
 import { LoanSchedule } from "./_components/loan-schedule";
+import { loanNumberLabel } from "@/lib/loan-number";
 
 /**
  * One loan: the server's summary, its schedule and payments, and the Statement
@@ -42,7 +43,7 @@ export default function LoanPage() {
         {data && (
           <>
             <PortalPageHeader
-              title={data.loan_account_number}
+              title={loanNumberLabel(data)}
               description={
                 <span className="inline-flex flex-wrap items-center gap-2">
                   {data.product_name}
@@ -51,7 +52,7 @@ export default function LoanPage() {
               }
               actions={
                 featureOn(features, "statements") ? (
-                  <DownloadButton download={() => portalService.loanStatement(loanId)} fileName={`statement-of-account-${data.loan_account_number}.pdf`}>
+                  <DownloadButton download={() => portalService.loanStatement(loanId)} fileName={`statement-of-account-${loanNumberLabel(data)}.pdf`}>
                     Statement of Account (PDF)
                   </DownloadButton>
                 ) : undefined
