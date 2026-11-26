@@ -104,11 +104,26 @@ export interface Pledge {
   updated_at?: string;
 }
 
+/**
+ * A cycle a share capital auto-credit run may take (finish run round 8): a
+ * month's 15th or its 30th (YYYY-MM-DD) and its name ("November 30"). A 15th
+ * credits "15" and "15/30" pledges, a 30th "30" and "15/30".
+ */
+export interface AutoCreditCycleOption {
+  date: string;
+  label: string;
+}
+
 export interface AutoCreditStatus {
+  /** The cycle this preview is for: as asked, else the current one by today in Manila. */
+  cycle_date?: string;
+  cycle_label?: string;
+  /** The cycles a run may take now: the current one first, then the missed ones allowed. */
+  cycle_options?: AutoCreditCycleOption[];
   active_members: AutoCreditMember[];
   disabled_members: AutoCreditMember[];
   no_pledge_members: AutoCreditMember[];
-  /** Already credited by hand this month, each with the reason the run skips it (finish run round 7). */
+  /** The pledges this half's run skips, each with the server's reason in words (finish run rounds 7 and 8). */
   skipped_members?: (AutoCreditMember & { reason: string })[];
   skipped_count?: number;
   total_amount: number;
@@ -133,6 +148,8 @@ export interface AutoCreditMember {
  * through (Bank, `bank_transfer`, when left out) and an optional reference.
  */
 export interface AutoCreditProcessData {
+  /** The cycle the run is for (YYYY-MM-DD), required. */
+  cycle_date: string;
   method?: AutoCreditMethod;
   reference_number?: string;
 }
@@ -141,7 +158,10 @@ export interface AutoCreditProcessResult {
   processed_count: number;
   total_amount: number;
   processed_at: string;
-  /** Pledges already credited by hand this month, which the run skipped (finish run round 7). */
+  /** The cycle the run was for, and its name. */
+  cycle_date?: string;
+  cycle_label?: string;
+  /** The pledges the run skipped, each with the server's reason (finish run rounds 7 and 8). */
   skipped_count?: number;
   skipped?: { pledge_id: number; borrower_name: string | null; amount: number; reason: string }[];
 }

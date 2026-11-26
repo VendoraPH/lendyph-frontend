@@ -156,10 +156,11 @@ export const shareCapitalService = {
 
   // ── Auto-Credit ──
 
-  autoCreditStatus: () =>
-    api.get<AutoCreditStatus>(API_ENDPOINTS.AUTO_CREDIT.STATUS),
+  /** The run's preview for one cycle (`?cycle_date=`); left out, the server's current cycle. */
+  autoCreditStatus: (cycleDate?: string) =>
+    api.get<AutoCreditStatus>(API_ENDPOINTS.AUTO_CREDIT.STATUS, cycleDate ? { params: { cycle_date: cycleDate } } : undefined),
 
-  /** One journal per member, through the settlement account picked (Bank by default). */
-  autoCreditProcess: (data: AutoCreditProcessData = {}) =>
+  /** One journal per member credited for the cycle picked, through the settlement account picked (Bank by default). */
+  autoCreditProcess: (data: AutoCreditProcessData) =>
     api.post<AutoCreditProcessResult>(API_ENDPOINTS.AUTO_CREDIT.PROCESS, data),
 };

@@ -25,6 +25,8 @@ interface Seen {
 let server: Server;
 let routes: Record<string, [number, unknown]> = {};
 const seen: Seen[] = [];
+/** Each request's query string, in order beside `seen`. */
+const queries: string[] = [];
 let loanService: typeof import("./loan.service").loanService;
 let shareCapitalService: typeof import("./share-capital.service").shareCapitalService;
 
@@ -33,7 +35,9 @@ before(async () => {
     let raw = "";
     req.on("data", (chunk) => (raw += chunk));
     req.on("end", () => {
-      const path = new URL(req.url ?? "/", "http://127.0.0.1").pathname.replace(/^\/api/, "");
+      const url = new URL(req.url ?? "/", "http://127.0.0.1");
+      const path = url.pathname.replace(/^\/api/, "");
+      queries.push(url.search);
       seen.push({ method: req.method ?? "", path, body: raw ? JSON.parse(raw) : null });
       const [status, body] = routes[`${req.method} ${path}`] ?? [404, { message: "not stubbed" }];
       res.statusCode = status;
@@ -55,6 +59,7 @@ after(() => {
 beforeEach(() => {
   routes = {};
   seen.length = 0;
+  queries.length = 0;
 });
 
 test("the release sends the method and reference with the fingerprint", async () => {
@@ -142,18 +147,27 @@ test("the bulk batch sends one method and reference beside its entries", async (
 
 test("an auto-credit run sends the settlement account and reference picked", async () => {
   routes["POST /auto-credit/process"] = [200, { data: { processed_count: 4, total_amount: 2000, processed_at: "2026-11-09T01:00:00Z" } }];
-  await shareCapitalService.autoCreditProcess({ method: "bank_transfer", reference_number: "BANK-11" });
+  await shareCapitalService.autoCreditProcess({ cycle_date: "2026-11-15", method: "bank_transfer", reference_number: "BANK-11" });
   assert.deepEqual(seen[0], {
     method: "POST",
     path: "/auto-credit/process",
-    body: { method: "bank_transfer", reference_number: "BANK-11" },
+    body: { cycle_date: "2026-11-15", method: "bank_transfer", reference_number: "BANK-11" },
   });
 });
 
-test("an auto-credit run with nothing picked lets the server take Bank", async () => {
+test("an auto-credit run with no account picked sends only its cycle, so the server takes Bank", async () => {
   routes["POST /auto-credit/process"] = [200, { data: { processed_count: 0, total_amount: 0, processed_at: "2026-11-09T01:00:00Z" } }];
-  await shareCapitalService.autoCreditProcess();
-  assert.deepEqual(seen[0].body, {});
+  await shareCapitalService.autoCreditProcess({ cycle_date: "2026-11-30" });
+  assert.deepEqual(seen[0].body, { cycle_date: "2026-11-30" });
+});
+
+test("the auto-credit preview asks for the cycle picked, or the server's current one", async () => {
+  routes["GET /auto-credit/status"] = [200, { data: { cycle_date: "2026-10-31", active_members: [] } }];
+  await shareCapitalService.autoCreditStatus("2026-10-31");
+  await shareCapitalService.autoCreditStatus();
+  assert.equal(seen[0].path, "/auto-credit/status");
+  assert.equal(queries[0], "?cycle_date=2026-10-31");
+  assert.equal(queries[1], "");
 });
 
 test("send back for approval: PATCH with the reason, answering the reloaded loan", async () => {
