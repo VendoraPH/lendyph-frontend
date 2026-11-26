@@ -16,6 +16,16 @@ import { asRecord, dateField, field, pick } from "./shared";
 
 export type Payload = Record<string, unknown> | null;
 
+/**
+ * The reference typed for a line's money (bank, GCash or Maya,
+ * `external_reference`), a dash when none. The ledger's own SVT- number
+ * prints under "Number" (finish run round 8), as on the account page.
+ */
+export function typedReference(value: string | null | undefined): string {
+  const typed = (value ?? "").trim();
+  return typed === "" ? "—" : typed;
+}
+
 /** A part of the catalog's composite payload (`{account, member, …}`), or null. */
 export function part(raw: unknown, key: string): Payload {
   return asRecord(pick(asRecord(raw), [key]));

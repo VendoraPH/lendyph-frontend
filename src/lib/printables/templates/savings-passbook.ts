@@ -22,6 +22,7 @@ import {
   presentFields,
   type PrintableBuildOptions,
 } from "./shared";
+import { typedReference } from "./savings-shared";
 
 const TYPE_CODES: Record<SavingsTransactionType, string> = {
   deposit: "DEP",
@@ -39,15 +40,6 @@ const TYPE_CODES: Record<SavingsTransactionType, string> = {
 export interface SavingsPassbookOptions extends PrintableBuildOptions {
   /** True when the ledger had more lines than were fetched. */
   truncated?: boolean;
-}
-
-/**
- * The reference typed for the money (bank, GCash or Maya), a dash when none.
- * The ledger's own SVT- number prints under Number (finish run round 8).
- */
-function typedReference(value: string | null | undefined): string {
-  const typed = (value ?? "").trim();
-  return typed === "" ? "—" : typed;
 }
 
 /** A debit or credit cell: blank, not a dash, on the side a line doesn't touch. */

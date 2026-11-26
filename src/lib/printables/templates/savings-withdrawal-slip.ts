@@ -29,7 +29,7 @@ import {
   toNumber,
   type PrintableBuildOptions,
 } from "./shared";
-import { part, productName, str } from "./savings-shared";
+import { part, productName, str, typedReference } from "./savings-shared";
 
 const COPIES = ["Depositor's Copy", "File Copy"];
 
@@ -50,7 +50,7 @@ export function buildSavingsWithdrawalSlipDoc(raw: unknown, options: PrintableBu
     {
       kind: "title",
       text: "Withdrawal Slip",
-      subtitle: reversed ? "REVERSED — NO LONGER IN EFFECT" : reference ? `Reference ${reference}` : undefined,
+      subtitle: reversed ? "REVERSED — NO LONGER IN EFFECT" : reference ? `Number ${reference}` : undefined,
     },
   ];
   if (reversed) {
@@ -67,14 +67,14 @@ export function buildSavingsWithdrawalSlipDoc(raw: unknown, options: PrintableBu
       columns: 2,
       items: presentFields([
         dateField("Date", str(txn, "date")),
-        field("Reference", reference),
+        field("Number", reference),
+        field("Reference", txn ? typedReference(str(txn, "external_reference")) : null),
         field("Account No.", str(account, "account_number") ?? str(txn, "account_number")),
         field("Depositor", depositor),
         field("Member No.", str(account, "borrower_code")),
         field("Product", productName(account)),
         field("Branch", str(account, "branch_name")),
         field("Payment method", method ? labelOf(METHOD_LABELS, method) : null),
-        str(txn, "external_reference") ? field("Reference No.", str(txn, "external_reference")) : null,
       ]),
     },
     {
