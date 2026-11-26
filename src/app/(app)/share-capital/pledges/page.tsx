@@ -63,6 +63,12 @@ import { currencyOrDash } from "@/lib/report-format";
 import { notifyError } from "@/lib/notify";
 import { bulkEntryAmounts, parsePledgeAmount } from "./_lib/pledge-amount";
 import { bulkEntriesRequest, manualEntryRequest } from "./_lib/pledge-entry-request";
+import {
+  AUTO_CREDIT_ENTRY_LOCK_REASON,
+  canTickForManualEntry,
+  manualEntrySelection,
+  pageSelectionState,
+} from "./_lib/manual-entry-selection";
 import { MethodReferenceFields } from "@/components/common/method-reference-fields";
 import { PAYMENT_METHOD_OPTIONS, type RecordPaymentMethod } from "@/constants/payment-methods";
 import { paymentReferenceError } from "@/lib/payment-reference";
@@ -231,7 +237,9 @@ function PledgeEntryContent() {
   );
   const manualAutoReference = cashAutoReference(cashNumbering, manualMethod, cashPreview);
   // Each selected row is its own entry, numbered in turn from the preview.
-  const bulkAutoReference = cashAutoReference(cashNumbering, bulkMethod, cashPreview, selectedIds.size);
+  // The ticked pledges an entry goes to, and those set to auto-credit left out.
+  const entrySelection = manualEntrySelection(pledges, selectedIds);
+  const bulkAutoReference = cashAutoReference(cashNumbering, bulkMethod, cashPreview, entrySelection.included.length);
 
   // ── Derived data ──
 
@@ -314,13 +322,16 @@ function PledgeEntryContent() {
       setPledges((prev) =>
         prev.map((p) => (p.id === id ? { ...p, autoCredit: !p.autoCredit } : p))
       );
+      // A pledge switched to auto-credit takes no entry by hand, so it leaves
+      // the bulk selection.
+      if (!pledge.autoCredit && selectedIds.has(id)) toggleSelect(id);
       toast.success(
         pledge.autoCredit
           ? `Auto-credit deactivated for ${pledge.borrower}`
           : `Auto-credit activated for ${pledge.borrower}`
       );
-    } catch {
-      toast.error("We couldn't toggle auto-credit. Please try again.");
+    } catch (err) {
+      notifyError(err, "We couldn't toggle auto-credit. Please try again.");
     }
   }
 
@@ -435,8 +446,11 @@ function PledgeEntryContent() {
   }
 
   // Selection helpers
-  const allPageSelected = paginated.length > 0 && paginated.every((p) => selectedIds.has(p.id));
-  const somePageSelected = paginated.some((p) => selectedIds.has(p.id));
+  // Only rows that take an entry by hand can be ticked: never a pledge set to
+  // auto-credit (finish run round 7).
+  const pageSelection = pageSelectionState(paginated, selectedIds);
+  const allPageSelected = pageSelection.all;
+  const somePageSelected = pageSelection.some;
 
   function toggleSelect(id: number) {
     setSelectedIds((prev) => {
@@ -472,7 +486,7 @@ function PledgeEntryContent() {
         const next = new Set(prev);
         setBulkEntries((e) => {
           const updated = { ...e };
-          for (const p of paginated) { next.add(p.id); if (!updated[p.id]) updated[p.id] = { amount: "", transaction: "credit" }; }
+          for (const p of pageSelection.tickable) { next.add(p.id); if (!updated[p.id]) updated[p.id] = { amount: "", transaction: "credit" }; }
           return updated;
         });
         return next;
@@ -489,9 +503,8 @@ function PledgeEntryContent() {
 
   /** Posts the batch; true once it has posted, so the dialog may close. */
   async function handleBulkSubmit(): Promise<boolean> {
-    const entries = Object.entries(bulkEntries).filter(
-      ([id]) => selectedIds.has(Number(id))
-    );
+    const included = new Set(entrySelection.included.map((p) => p.id));
+    const entries = Object.entries(bulkEntries).filter(([id]) => included.has(Number(id)));
     const parsed = bulkEntryAmounts(
       entries.map(([id, entry]) => [
         Number(id),
@@ -606,13 +619,19 @@ function PledgeEntryContent() {
       {selectedIds.size > 0 && (
         <div className="flex shrink-0 items-center gap-3 rounded-lg border border-brand-orange/30 bg-brand-orange/5 px-4 py-3">
           <span className="text-sm font-medium">
-            {selectedIds.size} member{selectedIds.size > 1 ? "s" : ""} selected
+            {entrySelection.included.length} member{entrySelection.included.length === 1 ? "" : "s"} selected
           </span>
+          {entrySelection.excluded.length > 0 && (
+            <span className="text-xs text-muted-foreground">
+              {entrySelection.excluded.length} set to auto-credit left out
+            </span>
+          )}
           <PermissionButton
             permission={PLEDGE_ENTRY_CREATE_GATE.permission}
             tooltip={PLEDGE_ENTRY_CREATE_GATE.tooltip}
             size="sm"
             className="h-8 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+            disabled={entrySelection.included.length === 0}
             onClick={() => setBulkDialogOpen(true)}
           >
             <PlusCircle className="h-3.5 w-3.5 mr-1" />
@@ -743,11 +762,14 @@ function PledgeEntryContent() {
                   <React.Fragment key={pledge.id}>
                     <TableRow>
                       <TableCell>
-                        <Checkbox
-                          checked={selectedIds.has(pledge.id)}
-                          onCheckedChange={() => toggleSelect(pledge.id)}
-                          aria-label={`Select ${pledge.borrower}`}
-                        />
+                        <DisabledReason reason={canTickForManualEntry(pledge) ? null : AUTO_CREDIT_ENTRY_LOCK_REASON}>
+                          <Checkbox
+                            checked={selectedIds.has(pledge.id) && canTickForManualEntry(pledge)}
+                            disabled={!canTickForManualEntry(pledge)}
+                            onCheckedChange={() => toggleSelect(pledge.id)}
+                            aria-label={`Select ${pledge.borrower}`}
+                          />
+                        </DisabledReason>
                       </TableCell>
                       <TableCell className="font-medium text-sm">{pledge.borrower}</TableCell>
                       <TableCell>
@@ -1059,8 +1081,7 @@ function PledgeEntryContent() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 max-h-80 overflow-y-auto py-2">
-            {pledges
-              .filter((p) => selectedIds.has(p.id))
+            {entrySelection.included
               .map((p) => {
                 const entry = bulkEntries[p.id] || { amount: "", transaction: "credit" };
                 return (
@@ -1105,6 +1126,18 @@ function PledgeEntryContent() {
                 );
               })}
           </div>
+          {entrySelection.excluded.length > 0 && (
+            <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs">
+              <p className="font-medium">Left out of this entry</p>
+              <ul className="mt-1 space-y-0.5 text-muted-foreground">
+                {entrySelection.excluded.map(({ pledge, reason }) => (
+                  <li key={pledge.id}>
+                    <span className="font-medium text-foreground">{pledge.borrower}</span>: {reason}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <MethodReferenceFields
             idPrefix="bulk-entry"
             options={PAYMENT_METHOD_OPTIONS}
@@ -1125,7 +1158,7 @@ function PledgeEntryContent() {
             </Button>
             <Button
               className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-              disabled={bulkSubmitting || bulkReferenceProblem !== null}
+              disabled={bulkSubmitting || bulkReferenceProblem !== null || entrySelection.included.length === 0}
               onClick={async () => {
                 // Closes only once the batch has posted: a missing field or a
                 // refusal keeps every row typed so far.

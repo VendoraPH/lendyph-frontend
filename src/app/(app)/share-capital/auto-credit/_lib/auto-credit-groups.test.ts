@@ -7,7 +7,7 @@
  * its auto-credit is on; and the counts are the server's when it sends them.
  * WHAT IT DOES NOT PROVE: who lands in which group (backend tests).
  */
-import { test } from "node:test";
+import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -82,4 +82,27 @@ test("the total to credit is read as the server sent it: 0 stays 0, nothing is n
   assert.equal(serverTotalToCredit({}), null);
   assert.equal(serverTotalToCredit({ total_to_credit: null }), null);
   assert.equal(serverTotalToCredit({ total_to_credit: "n/a" }), null);
+});
+
+describe("skipped this month (finish run round 7)", () => {
+  test("lists the server's skipped pledges with their reasons, apart from the active ones", () => {
+    const groups = autoCreditGroups({
+      active_members: [{ id: 2, borrower_name: "Ben Cruz", pledge_amount: 300 }],
+      skipped_members: [
+        { id: 1, borrower_name: "Ana Santos", pledge_amount: 500, reason: "Credited by hand on Nov 5, 2026 (CSH-0001-2026-0007), so auto-credit skips it this month." },
+      ],
+      skipped_count: 1,
+    });
+    assert.deepEqual(groups.skipped, [
+      { id: 1, borrower: "Ana Santos", pledgeAmount: 500, reason: "Credited by hand on Nov 5, 2026 (CSH-0001-2026-0007), so auto-credit skips it this month." },
+    ]);
+    assert.equal(groups.skippedCount, 1);
+    assert.deepEqual(groups.active.map((m) => m.id), [2]);
+  });
+
+  test("an older server without the list skips nothing", () => {
+    const groups = autoCreditGroups({});
+    assert.deepEqual(groups.skipped, []);
+    assert.equal(groups.skippedCount, 0);
+  });
 });

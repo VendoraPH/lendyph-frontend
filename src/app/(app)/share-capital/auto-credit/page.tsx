@@ -48,6 +48,7 @@ function AutoCreditContent() {
   const [lastRun, setLastRun] = useState<string | null>(null);
   const [showDisabled, setShowDisabled] = useState(false);
   const [showNoPledge, setShowNoPledge] = useState(false);
+  const [showSkipped, setShowSkipped] = useState(false);
   // The server's total, or null (a dash) when it sent none.
   const [totalToCredit, setTotalToCredit] = useState<number | null>(null);
   // The account the run is credited through (Bank by default) and an optional
@@ -101,8 +102,10 @@ function AutoCreditContent() {
       );
       setConfirmOpen(false);
       setLastRun(formatDateTime(result.processed_at ?? new Date()));
+      const skipped = result.skipped_count ?? 0;
       toast.success(
-        `Auto-credit completed: ${currencyOrDash(result.total_amount ?? totalToCredit)} credited to ${result.processed_count ?? activeMembers.length} members`
+        `Auto-credit completed: ${currencyOrDash(result.total_amount ?? totalToCredit)} credited to ${result.processed_count ?? activeMembers.length} members` +
+          (skipped > 0 ? `; ${skipped} skipped, already credited by hand this month` : "")
       );
       fetchStatus();
     } catch (err) {
@@ -191,8 +194,29 @@ function AutoCreditContent() {
         </div>
 
         {/* Warnings: Disabled & No Pledge */}
-        {(groups.disabledCount > 0 || groups.noPledgeCount > 0) && (
+        {(groups.disabledCount > 0 || groups.noPledgeCount > 0 || groups.skippedCount > 0) && (
           <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+            {groups.skippedCount > 0 && (
+              <Card className="border-amber-500/30">
+                <CardContent className="py-4">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">Skipped This Month</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {groups.skippedCount} member{groups.skippedCount === 1 ? " was" : "s were"} already credited by hand this month
+                      </p>
+                      <button
+                        className="text-xs text-brand-orange hover:underline mt-1"
+                        onClick={() => setShowSkipped(true)}
+                      >
+                        View accounts →
+                      </button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
             {groups.disabledCount > 0 && (
               <Card className="border-amber-500/30">
                 <CardContent className="py-4">
@@ -262,6 +286,11 @@ function AutoCreditContent() {
             <p className="text-sm text-muted-foreground mt-2">
               {activeMembers.length} member{activeMembers.length > 1 ? "s" : ""}
             </p>
+            {groups.skippedCount > 0 && (
+              <p className="text-xs text-muted-foreground mt-1">
+                {groups.skippedCount} already credited by hand this month {groups.skippedCount === 1 ? "is" : "are"} skipped.
+              </p>
+            )}
           </div>
           <MethodReferenceFields
             idPrefix="auto-credit"
@@ -332,6 +361,38 @@ function AutoCreditContent() {
                         Disabled
                       </Badge>
                     </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ScrollBox>
+        </DialogContent>
+      </Dialog>
+
+      {/* Skipped This Month Dialog: the server's reason for each */}
+      <Dialog open={showSkipped} onOpenChange={setShowSkipped}>
+        <DialogContent size="md">
+          <DialogHeader>
+            <DialogTitle>Skipped This Month</DialogTitle>
+            <DialogDescription>
+              These members were already credited by hand this month, so auto-credit skips them until next month.
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollBox always className="max-h-[50vh]">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Member</TableHead>
+                  <TableHead className="text-right">Pledge Amount</TableHead>
+                  <TableHead>Reason</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {groups.skipped.map((m) => (
+                  <TableRow key={m.id}>
+                    <TableCell className="font-medium text-sm">{m.borrower}</TableCell>
+                    <TableCell className="text-right text-sm">{formatCurrency(m.pledgeAmount)}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground whitespace-normal">{m.reason}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
