@@ -98,6 +98,7 @@ import { LOAN_DECISION_NOTE_MAX, adjustmentDecisionDialog, voidPaymentDialog } f
 import {
   ADJUSTMENT_CANCEL_REASON_MAX,
   cancelAdjustmentDialog,
+  cancelAllowed,
   cancellationLine,
   offersCancel,
 } from "./_lib/adjustment-cancel";
@@ -1072,7 +1073,6 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // `loans:view`). Without one, that history is not asked for and stays empty.
   const canViewPayments = usePermission().can("payments:view");
   const canViewAdjustments = usePermission().can("loan_adjustments:view");
-  const canDecideAdjustments = usePermission().can(LOAN_ADJUSTMENT_DECIDE_GATE.permission);
 
   // Fetch repayments for released+ loans. Each list row is the full
   // RepaymentResource — the same payload `GET /repayments/{id}` returns — and
@@ -4256,14 +4256,14 @@ function LoanDetail({ loanId }: { loanId: number }) {
                           >
                             Apply
                           </PermissionButton>
-                          {offersCancel(adj, canDecideAdjustments) && (
+                          {offersCancel(adj) && (
                             <PermissionButton
                               permission={LOAN_ADJUSTMENT_DECIDE_GATE.permission}
                               tooltip="Your role doesn't have permission to cancel loan adjustments"
                               size="sm"
                               variant="outline"
                               className="text-destructive hover:text-destructive"
-                              disabled={actionLoading}
+                              disabled={actionLoading || !cancelAllowed(adj)}
                               onClick={() => {
                                 setAdjustmentToCancel(adj);
                                 setCancelAdjustmentOpen(true);

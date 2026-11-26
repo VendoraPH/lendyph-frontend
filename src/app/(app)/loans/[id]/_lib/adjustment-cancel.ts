@@ -18,11 +18,20 @@ interface CancellableAdjustment {
 }
 
 /**
- * Cancel shows on an approved adjustment the server says can be cancelled,
- * to a user holding `loan_adjustments:approve`.
+ * Cancel shows on an approved adjustment from a server that sends
+ * `can_cancel`, to everyone who sees the card, as Apply does: a user without
+ * `loan_adjustments:approve` gets it disabled with the reason (PermissionButton).
  */
-export function offersCancel(adjustment: CancellableAdjustment, holdsApprove: boolean): boolean {
-  return holdsApprove && adjustment.status === "approved" && adjustment.can_cancel === true;
+export function offersCancel(adjustment: CancellableAdjustment): boolean {
+  return adjustment.status === "approved" && typeof adjustment.can_cancel === "boolean";
+}
+
+/**
+ * Whether Cancel is enabled for a user who holds the permission: only when the
+ * server says this adjustment can be cancelled now (`can_cancel`).
+ */
+export function cancelAllowed(adjustment: CancellableAdjustment): boolean {
+  return adjustment.can_cancel === true;
 }
 
 /** The Cancel dialog, naming the adjustment by its type's label ("adjustment" without one). */
