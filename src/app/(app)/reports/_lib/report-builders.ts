@@ -136,6 +136,9 @@ const DUE_COLUMNS: ReportColumn[] = [
 // borrower objects. The first key in each list is the one the API actually
 // sends today; the rest are legacy/defensive aliases.
 
+// A loan reads by the server's `display_number` first (the LN- number, else an
+// imported loan's Loan No., else the application number; backend #401), and by
+// its own numbers as before while the server doesn't send it.
 function normalizeReleaseRow(raw: Record<string, unknown>): Record<string, unknown> {
   const borrower = asRecord(raw.borrower);
   return {
@@ -144,7 +147,7 @@ function normalizeReleaseRow(raw: Record<string, unknown>): Record<string, unkno
       pick(borrower, ["release_date"]),
     application_number: pick(raw, ["application_number", "app_number"]),
     loan_account_number:
-      pick(raw, ["loan_account_number", "account_number", "application_number"]),
+      pick(raw, ["display_number", "loan_display_number", "loan_account_number", "account_number", "application_number"]),
     borrower_name:
       pick(raw, ["borrower_name", "borrower_full_name"]) ??
       pick(borrower, ["full_name", "name"]),
@@ -184,8 +187,8 @@ function normalizeRepaymentRow(raw: Record<string, unknown>): Record<string, unk
   return {
     paid_at: pick(raw, ["paid_at", "payment_date", "created_at"]),
     loan_account_number:
-      pick(raw, ["loan_account_number", "account_number"]) ??
-      pick(loan, ["loan_account_number", "account_number", "application_number"]),
+      pick(raw, ["display_number", "loan_display_number", "loan_account_number", "account_number"]) ??
+      pick(loan, ["display_number", "loan_display_number", "loan_account_number", "account_number", "application_number"]),
     borrower_name:
       pick(raw, ["borrower_name", "borrower_full_name"]) ??
       pick(borrower, ["full_name", "name"]),
@@ -206,8 +209,8 @@ function normalizeDueRow(raw: Record<string, unknown>): Record<string, unknown> 
     // The API sends days_overdue per schedule; it is never derived client-side.
     days_overdue: pick(raw, ["days_overdue", "days_past_due"]) ?? 0,
     loan_account_number:
-      pick(raw, ["loan_account_number", "account_number"]) ??
-      pick(loan, ["loan_account_number", "account_number", "application_number"]),
+      pick(raw, ["display_number", "loan_display_number", "loan_account_number", "account_number"]) ??
+      pick(loan, ["display_number", "loan_display_number", "loan_account_number", "account_number", "application_number"]),
     borrower_name:
       pick(raw, ["borrower_name", "borrower_full_name"]) ??
       pick(borrower, ["full_name", "name"]),
@@ -1339,7 +1342,7 @@ function accountFields(
     ["Member", pick(borrower, ["full_name", "name", "borrower_name"]), "text"],
     ["Member No.", pick(borrower, ["borrower_code", "member_no", "code"]), "text"],
     ["Address", pick(loan, ["member_address"]) ?? pick(borrower, ["address"]), "text"],
-    ["Loan Account No.", pick(loan, ["loan_account_number", "account_number"]), "text"],
+    ["Loan Account No.", pick(loan, ["display_number", "loan_display_number", "loan_account_number", "account_number"]), "text"],
     ["Application No.", pick(loan, ["application_number"]), "text"],
     ["Loan Product", pick(loan, ["product_name", "loan_product_name"]), "text"],
     ["Branch", pick(loan, ["branch_name"]), "text"],
@@ -1605,6 +1608,7 @@ const LEDGER_LOAN_COLUMNS: ReportColumn[] = [
 function normalizeLedgerLoanRow(raw: Record<string, unknown>): Record<string, unknown> {
   return {
     loan_account_number: pick(raw, [
+      "display_number",
       "loan_account_number",
       "account_number",
       "application_number",

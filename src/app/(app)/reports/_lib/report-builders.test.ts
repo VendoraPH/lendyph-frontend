@@ -5330,3 +5330,41 @@ test("statement of account lists each monthly penalty charge as its own server l
     ],
   );
 });
+
+// An imported loan has no LN- number: the server's `display_number` (backend
+// #401; `loan_display_number` on payment and adjustment rows) is its file's
+// Loan No. Read first; the old keys stay the fallback while it isn't sent.
+const IMPORTED = { loan_account_number: null, application_number: "APP-2026-0009" };
+
+test("Releases List: an imported loan reads its file's Loan No.", () => {
+  const rows = tableRows(buildReleasesListDoc({ data: [{ ...RELEASE_ROWS[0], ...IMPORTED, display_number: "BC-07" }, RELEASE_ROWS[1]], meta: { total: 2 } }, RANGE));
+  assert.deepEqual(rows.map((r) => r.loan_account_number), ["BC-07", RELEASE_ROWS[1].loan_account_number]);
+});
+
+test("Repayments: an imported loan reads its file's Loan No., from the row or its loan", () => {
+  const doc = buildRepaymentsListDoc(
+    {
+      data: [
+        { id: 1, ...IMPORTED, loan_display_number: "BC-07", borrower_name: "Ana Reyes", paid_at: "2026-08-05", amount: 100, method: "cash", status: "completed" },
+        { id: 2, loan: { ...IMPORTED, display_number: "BC-08" }, borrower_name: "Ben Cruz", paid_at: "2026-08-05", amount: 100, method: "cash", status: "completed" },
+        { id: 3, loan_account_number: "LN-2026-0003", borrower_name: "Cora Lim", paid_at: "2026-08-05", amount: 100, method: "cash", status: "completed" },
+      ],
+      meta: { total: 3 },
+    },
+    RANGE,
+  );
+  assert.deepEqual(tableRows(doc).map((r) => r.loan_account_number), ["BC-07", "BC-08", "LN-2026-0003"]);
+});
+
+test("Due/Past Due: an imported loan reads its file's Loan No.", () => {
+  const doc = buildDuePastDueListDoc(
+    { data: [{ ...DUE_ROWS[0], loan_account_number: undefined, loan: { ...IMPORTED, display_number: "BC-07" } }, DUE_ROWS[1]], meta: { total: 2 } },
+    RANGE,
+  );
+  assert.deepEqual(tableRows(doc).map((r) => r.loan_account_number), ["BC-07", DUE_ROWS[1].loan_account_number]);
+});
+
+test("Statement of Account: an imported loan's Loan Account No. is its file's Loan No.", () => {
+  const doc = buildStatementOfAccountDoc({ ...SOA_PAYLOAD, loan: { ...SOA_PAYLOAD.loan, ...IMPORTED, display_number: "BC-07" } }, RANGE);
+  assert.equal(fieldValue(doc, "Account Particulars", "Loan Account No."), "BC-07");
+});
