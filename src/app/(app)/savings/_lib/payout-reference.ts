@@ -75,3 +75,32 @@ export function missingReferenceCountText(count: number | null | undefined): str
     ? "1 payout by bank transfer, GCash or Maya has no reference yet."
     : `${count} payouts by bank transfer, GCash or Maya have no reference yet.`;
 }
+
+/** The method in the empty list's words. */
+const EMPTY_METHOD_WORDS: Readonly<Record<string, string>> = {
+  bank_transfer: "bank transfer",
+  gcash: "GCash",
+  maya: "Maya",
+};
+
+/**
+ * The empty "Payouts missing a reference" list: every payout has its reference
+ * only when no filter is on; otherwise none match the filters.
+ */
+export function missingReferenceEmptyText(filters: {
+  method: string;
+  branchFiltered: boolean;
+  dateFrom: string;
+  dateTo: string;
+}): string {
+  const methodWords = EMPTY_METHOD_WORDS[filters.method];
+  if (!methodWords && !filters.branchFiltered && !filters.dateFrom && !filters.dateTo) {
+    return "Every payout by bank transfer, GCash or Maya has its reference.";
+  }
+  return `No ${methodWords ? `${methodWords} ` : ""}payouts are missing a reference for these filters.`;
+}
+
+/** A Record reference button's accessible name, with its SVT- or TD- number. */
+export function recordReferenceLabel(number: string): string {
+  return `Record reference for ${number}`;
+}

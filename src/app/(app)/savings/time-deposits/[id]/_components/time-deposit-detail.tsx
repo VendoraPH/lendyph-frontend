@@ -15,6 +15,7 @@ import type { TimeDeposit } from "@/types";
 import { ActionButton } from "../../../_components/action-button";
 import { DocumentsMenu } from "../../../_components/documents-menu";
 import { RecordReferenceDialog, type RecordReferenceTarget } from "../../../_components/record-reference-dialog";
+import { recordReferenceLabel } from "../../../_lib/payout-reference";
 import { timeDepositDocuments } from "@/lib/savings/documents";
 import { METHOD_LABELS, actorName, labelOf } from "../../../_lib/savings-rules";
 import {
@@ -119,7 +120,11 @@ export function TimeDepositDetail({ depositId }: { depositId: number }) {
                   </Button>
                   <DocumentsMenu documents={timeDepositDocuments(td.status)} subjectId={td.id} />
                   {td.can_record_reference && (
-                    <Button variant="outline" onClick={() => setRecording(payoutTarget(td))}>
+                    <Button
+                      variant="outline"
+                      onClick={() => setRecording(payoutTarget(td))}
+                      aria-label={recordReferenceLabel(td.certificate_number)}
+                    >
                       <FilePenLine className="h-4 w-4" /> Record reference
                     </Button>
                   )}

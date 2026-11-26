@@ -20,7 +20,12 @@ import type { PayoutMissingReference } from "@/types";
 import { AlignedBranchFilter } from "../../_components/aligned-branch-filter";
 import { OptionSelect } from "../../_components/option-select";
 import { RecordReferenceDialog, type RecordReferenceTarget } from "../../_components/record-reference-dialog";
-import { MISSING_REFERENCE_METHOD_OPTIONS, missingReferenceParams } from "../../_lib/payout-reference";
+import {
+  MISSING_REFERENCE_METHOD_OPTIONS,
+  missingReferenceEmptyText,
+  missingReferenceParams,
+  recordReferenceLabel,
+} from "../../_lib/payout-reference";
 import { actorName } from "../../_lib/savings-rules";
 
 const PER_PAGE = 25;
@@ -97,7 +102,7 @@ export function MissingReferenceList() {
         endpoints={["GET /savings/payouts/missing-reference"]}
         summary="Payouts missing a reference will be listed here once the savings service is connected."
         isEmpty={(res) => res.data.length === 0}
-        emptyMessage="Every payout by bank transfer, GCash or Maya has its reference."
+        emptyMessage={missingReferenceEmptyText({ method, branchFiltered: branch !== ALL_BRANCHES, dateFrom, dateTo })}
         emptyIllustration={
           method !== "all" || branch !== ALL_BRANCHES || dateFrom || dateTo ? "noResults" : "emptySavings"
         }
@@ -149,7 +154,12 @@ export function MissingReferenceList() {
                         <TableCell className="min-w-24 whitespace-normal">{actorName(row.posted_by)}</TableCell>
                         <TableCell>
                           {row.can_record_reference ? (
-                            <Button size="sm" variant="outline" onClick={() => setRecording(targetOf(row))}>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setRecording(targetOf(row))}
+                              aria-label={recordReferenceLabel(row.reference)}
+                            >
                               <FilePenLine className="h-4 w-4" />
                               Record reference
                             </Button>

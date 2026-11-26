@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   MISSING_REFERENCE_HREF,
   MISSING_REFERENCE_METHOD_OPTIONS,
+  missingReferenceEmptyText,
+  recordReferenceLabel,
   RECORD_REFERENCE_MAX,
   missingReferenceCountText,
   missingReferenceParams,
@@ -87,4 +89,30 @@ test("the dashboard's count reads in words from the server's figure, never count
   assert.equal(missingReferenceCountText(1), "1 payout by bank transfer, GCash or Maya has no reference yet.");
   assert.equal(missingReferenceCountText(12), "12 payouts by bank transfer, GCash or Maya have no reference yet.");
   assert.equal(missingReferenceCountText(undefined), null);
+});
+
+test("the empty list says what it means: none missing at all, or none matching the filters", () => {
+  const none = { method: "all", branchFiltered: false, dateFrom: "", dateTo: "" };
+  assert.equal(missingReferenceEmptyText(none), "Every payout by bank transfer, GCash or Maya has its reference.");
+  assert.equal(
+    missingReferenceEmptyText({ ...none, method: "gcash" }),
+    "No GCash payouts are missing a reference for these filters.",
+  );
+  assert.equal(
+    missingReferenceEmptyText({ ...none, method: "bank_transfer" }),
+    "No bank transfer payouts are missing a reference for these filters.",
+  );
+  assert.equal(
+    missingReferenceEmptyText({ ...none, branchFiltered: true }),
+    "No payouts are missing a reference for these filters.",
+  );
+  assert.equal(
+    missingReferenceEmptyText({ ...none, dateFrom: "2026-11-01" }),
+    "No payouts are missing a reference for these filters.",
+  );
+});
+
+test("each Record reference button is named by its own number", () => {
+  assert.equal(recordReferenceLabel("SVT-20261126-000005"), "Record reference for SVT-20261126-000005");
+  assert.equal(recordReferenceLabel("TD-2026-000012"), "Record reference for TD-2026-000012");
 });

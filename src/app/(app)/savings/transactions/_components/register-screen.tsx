@@ -30,7 +30,7 @@ import { ActionButton } from "../../_components/action-button";
 import { OptionSelect } from "../../_components/option-select";
 import { RecordReferenceDialog, type RecordReferenceTarget } from "../../_components/record-reference-dialog";
 import { ReverseTransactionDialog } from "../../_components/reverse-transaction-dialog";
-import { registerViewOf, typedReference, type RegisterView } from "../../_lib/payout-reference";
+import { recordReferenceLabel, registerViewOf, typedReference, type RegisterView } from "../../_lib/payout-reference";
 import { MissingReferenceList } from "./missing-reference-list";
 import {
   METHOD_LABELS,
@@ -215,7 +215,7 @@ function RegisterList() {
                                 size="sm"
                                 variant="ghost"
                                 onClick={() => setRecording(recordTarget(t))}
-                                aria-label={`Record reference for ${t.reference}`}
+                                aria-label={recordReferenceLabel(t.reference)}
                                 title="Record reference"
                               >
                                 <FilePenLine className="h-4 w-4" />
