@@ -648,3 +648,7 @@ test("Menu Visibility's three actions read in words", () => {
   assert.equal(auditActionLabel("menu_visibility_override_refused"), "Menu Visibility password refused");
   assert.equal(auditActionLabel("menu_visibility_changed"), "Menu visibility changed");
 });
+
+test("ending Menu Visibility access with Lock reads in words", () => {
+  assert.equal(auditActionLabel("menu_visibility_override_ended"), "Menu Visibility access ended");
+});
