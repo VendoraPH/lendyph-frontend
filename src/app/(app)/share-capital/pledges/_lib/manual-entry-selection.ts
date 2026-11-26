@@ -43,3 +43,14 @@ export function pageSelectionState<T extends EntryPledge>(
   const ticked = tickable.filter((p) => selected.has(p.id)).length;
   return { all: tickable.length > 0 && ticked === tickable.length, some: ticked > 0, tickable };
 }
+
+/**
+ * The pledge's auto-credit switch as the server saved it
+ * (`PATCH /pledges/{pledge}/auto-credit` answers `{ message, auto_credit }`),
+ * or null when the answer doesn't carry it.
+ */
+export function autoCreditFromResponse(response: unknown): boolean | null {
+  if (!response || typeof response !== "object") return null;
+  const value = (response as { auto_credit?: unknown }).auto_credit;
+  return typeof value === "boolean" ? value : null;
+}

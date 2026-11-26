@@ -65,6 +65,7 @@ import { bulkEntryAmounts, parsePledgeAmount } from "./_lib/pledge-amount";
 import { bulkEntriesRequest, manualEntryRequest } from "./_lib/pledge-entry-request";
 import {
   AUTO_CREDIT_ENTRY_LOCK_REASON,
+  autoCreditFromResponse,
   canTickForManualEntry,
   manualEntrySelection,
   pageSelectionState,
@@ -318,17 +319,21 @@ function PledgeEntryContent() {
     const pledge = pledges.find((p) => p.id === id);
     if (!pledge) return;
     try {
-      await shareCapitalService.pledgeToggleAutoCredit(id);
-      setPledges((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, autoCredit: !p.autoCredit } : p))
-      );
+      const saved = autoCreditFromResponse(await shareCapitalService.pledgeToggleAutoCredit(id));
+      if (saved === null) {
+        // The server's answer didn't say where the switch landed: reload the list.
+        await fetchPledges();
+        return;
+      }
+      // The row takes the switch as the server saved it, never a local flip.
+      setPledges((prev) => prev.map((p) => (p.id === id ? { ...p, autoCredit: saved } : p)));
       // A pledge switched to auto-credit takes no entry by hand, so it leaves
       // the bulk selection.
-      if (!pledge.autoCredit && selectedIds.has(id)) toggleSelect(id);
+      if (saved && selectedIds.has(id)) toggleSelect(id);
       toast.success(
-        pledge.autoCredit
-          ? `Auto-credit deactivated for ${pledge.borrower}`
-          : `Auto-credit activated for ${pledge.borrower}`
+        saved
+          ? `Auto-credit activated for ${pledge.borrower}`
+          : `Auto-credit deactivated for ${pledge.borrower}`
       );
     } catch (err) {
       notifyError(err, "We couldn't toggle auto-credit. Please try again.");

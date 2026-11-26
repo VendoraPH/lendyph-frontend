@@ -8,6 +8,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import {
   AUTO_CREDIT_ENTRY_LOCK_REASON,
+  autoCreditFromResponse,
   canTickForManualEntry,
   manualEntrySelection,
   pageSelectionState,
@@ -59,5 +60,18 @@ describe("pageSelectionState", () => {
 
   test("is never all-ticked when no row on the page can be ticked", () => {
     assert.deepEqual(pageSelectionState([ana], new Set([1])), { all: false, some: false, tickable: [] });
+  });
+});
+
+describe("autoCreditFromResponse", () => {
+  test("reads the server's switch from PATCH /pledges/{pledge}/auto-credit", () => {
+    assert.equal(autoCreditFromResponse({ message: "Auto-credit enabled.", auto_credit: true }), true);
+    assert.equal(autoCreditFromResponse({ message: "Auto-credit disabled.", auto_credit: false }), false);
+  });
+
+  test("an answer without the switch reads as unknown, never a guess", () => {
+    assert.equal(autoCreditFromResponse({ message: "Auto-credit enabled." }), null);
+    assert.equal(autoCreditFromResponse(undefined), null);
+    assert.equal(autoCreditFromResponse({ auto_credit: "yes" }), null);
   });
 });

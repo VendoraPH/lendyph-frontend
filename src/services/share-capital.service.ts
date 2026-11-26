@@ -1,4 +1,5 @@
 import { api } from "@/lib/api-client";
+import axiosClient from "@/lib/axios-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { cashReferenceParams } from "@/lib/cash-reference";
 import { fetchAllPages, type DrainResult } from "@/lib/paginate";
@@ -136,8 +137,9 @@ export const shareCapitalService = {
   pledgeUpdate: (id: number, data: UpdatePledgeData) =>
     api.put<Pledge>(API_ENDPOINTS.PLEDGES.UPDATE(id), data),
 
-  pledgeToggleAutoCredit: (id: number) =>
-    api.patch<Pledge>(API_ENDPOINTS.PLEDGES.TOGGLE_AUTO_CREDIT(id)),
+  /** The whole answer, `{ message, auto_credit }`: it carries no `data`, so it isn't unwrapped. */
+  pledgeToggleAutoCredit: async (id: number): Promise<{ message?: string; auto_credit?: boolean }> =>
+    (await axiosClient.patch<{ message?: string; auto_credit?: boolean }>(API_ENDPOINTS.PLEDGES.TOGGLE_AUTO_CREDIT(id))).data,
 
   pledgeCreateEntry: (id: number, data: CreatePledgeEntryData) =>
     api.post<ShareCapitalLedgerEntry>(
