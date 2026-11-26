@@ -196,3 +196,14 @@ test("a reminder is a calm status note, not an alert", () => {
   assert.match(source, /<Alert role="status"/);
   assert.doesNotMatch(source, /role="alert"|variant="destructive"/);
 });
+
+test("co-maker: a short row (no member details, no added_by) still reminds, as added since (round 6)", () => {
+  // What a releaser without borrowers:view gets: the server's short row,
+  // which since round 6 says when the co-maker was added.
+  const shortRow = { id: 2, co_maker_code: "CMK-000002", full_name: "Co-maker 2", relationship_to_borrower: "Sibling", added_at: "2026-11-25T02:30:00.000000Z" } as LoanCoMaker;
+  assert.equal(
+    coMakerReprintReminder({ printed_documents: [NOTE], co_makers: [ON_THE_APPLICATION, shortRow] }, ME),
+    "The promissory note printed on Nov 25, 2026, 09:10 AM doesn't name the co-maker added since. " +
+      "Print it again after release for the member and the co-maker to sign.",
+  );
+});

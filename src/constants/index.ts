@@ -11,6 +11,7 @@ export const ADJUSTMENT_STATUS_LABELS: Record<string, string> = {
   approved: "Approved",
   rejected: "Rejected",
   applied: "Applied",
+  cancelled: "Cancelled",
 };
 
 export const TERM_UNIT_OPTIONS = [

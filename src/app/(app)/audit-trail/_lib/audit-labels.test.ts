@@ -639,6 +639,10 @@ test("every action the backend writes has its own words", () => {
   for (const [key, label] of Object.entries(words)) assert.equal(auditActionLabel(key), label, key);
 });
 
+test("a payout's reference recorded after the transfer reads in words", () => {
+  assert.equal(auditActionLabel("savings_payout_reference_recorded"), "Payout reference recorded");
+});
+
 test("Menu Visibility's three actions read in words", () => {
   assert.equal(auditActionLabel("menu_visibility_override_granted"), "Menu Visibility opened with the administrator password");
   assert.equal(auditActionLabel("menu_visibility_override_refused"), "Menu Visibility password refused");

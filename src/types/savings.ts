@@ -243,6 +243,8 @@ export interface SavingsProduct extends Partial<SavingsProductRules> {
   /** Time deposits only: the regular product whose rate pays an early termination. */
   pretermination_product_id: number | null;
   is_active: boolean;
+  /** Offered for new-account requests in the member portal (regular products only; finish run round 6). */
+  portal_account_requests?: boolean;
   /** The rate in force today, one per term (one row on a regular product). */
   current_rates: SavingsProductRate[];
   /** Accounts and time deposits on this product. */
@@ -265,6 +267,8 @@ export interface SavingsProductCreateInput extends SavingsProductRulesInput {
   /** Time deposits only; left out on a regular product. */
   pretermination_product_id?: number | null;
   is_active: boolean;
+  /** Regular products only: the server refuses `true` on a time deposit product. */
+  portal_account_requests?: boolean;
   annual_interest_rate: string;
 }
 
@@ -421,6 +425,36 @@ export interface SavingsTransaction {
   /** Null when the system posted it. */
   created_by: SavingsUserRef | null;
   created_at: string | null;
+  /**
+   * The server's answer to "may I record this payout's reference now?" (finish run round 6): a
+   * withdrawal or closing payout by bank transfer, GCash or Maya with no reference, not reversed,
+   * and the caller holds the permission that posts it.
+   */
+  can_record_reference?: boolean;
+}
+
+/** One row of "Payouts missing a reference" (`GET /savings/payouts/missing-reference`, finish run round 6). */
+export interface PayoutMissingReference {
+  /** `transaction-12` or `time_deposit-3`: unique across both sources. */
+  key: string;
+  source: "transaction" | "time_deposit";
+  id: number;
+  kind: "withdrawal" | "closing" | "time_deposit_maturity" | "time_deposit_pretermination";
+  kind_label: string;
+  date: string;
+  /** Name and code only. */
+  member: { id: number; name: string; code: string | null } | null;
+  account_id: number | null;
+  account_number: string | null;
+  time_deposit_id: number | null;
+  certificate_number: string | null;
+  /** The SVT- number of a transaction, or the TD- number of a time deposit. */
+  reference: string;
+  method: "bank_transfer" | "gcash" | "maya";
+  method_label: string;
+  amount: MoneyString;
+  posted_by: SavingsUserRef | null;
+  can_record_reference: boolean;
 }
 
 /** `GET …/{id}/transactions`: `meta.opening_balance` and `meta.totals` cover the filter. */
@@ -619,6 +653,8 @@ export interface TimeDeposit {
   payout_method: SavingsMethod | null;
   /** The payout's reference, when the teller gave one (optional: it exists only once the money is sent). */
   payout_reference?: string | null;
+  /** Whether the caller may record the payout's reference now (finish run round 6). */
+  can_record_reference?: boolean;
   /** Null when the system settled it (shown as "System"). */
   settled_by: SavingsUserRef | null;
   /**

@@ -418,6 +418,8 @@ export interface Loan {
   loan_account_number?: string;
   /** An imported loan's own Loan No. in the cooperative's file; null on any other loan. */
   external_loan_no?: string | null;
+  /** An imported loan's as-of date (`Y-m-d`): its file counts payments up to this day, so a payment on or before it is refused. Null on any other loan. */
+  payments_counted_until?: string | null;
   // Nested relations from API
   borrower?: {
     id: number;

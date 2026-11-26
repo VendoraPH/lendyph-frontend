@@ -142,6 +142,8 @@ const ACTION_LABELS: Record<string, string> = {
   portal_announcement_published: "Announcement published",
   portal_announcement_withdrawn: "Announcement withdrawn",
   portal_announcement_deleted: "Announcement draft deleted",
+  // Finish run round 6: a payout's reference recorded after the transfer.
+  savings_payout_reference_recorded: "Payout reference recorded",
   // Menu Visibility (finish run round 6). The password is never in the row.
   menu_visibility_override_granted: "Menu Visibility opened with the administrator password",
   menu_visibility_override_refused: "Menu Visibility password refused",

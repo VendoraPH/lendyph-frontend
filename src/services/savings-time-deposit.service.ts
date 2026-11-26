@@ -49,4 +49,7 @@ export const timeDepositService = {
   /** 201, or 202 with `{approval}` above the first tier. */
   preterminate: (id: number, data: PreterminateTimeDepositInput, key: string | null) =>
     postMoney<TimeDeposit>(E.TIME_DEPOSIT_PRETERMINATE(id), data, key),
+  /** The payout's reference, recorded after the transfer (finish run round 6). Once only; moves no money. */
+  recordPayoutReference: (id: number, reference: string) =>
+    api.post<TimeDeposit>(E.TIME_DEPOSIT_PAYOUT_REFERENCE(id), { reference }),
 };

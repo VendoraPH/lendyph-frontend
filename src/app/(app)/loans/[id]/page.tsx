@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { notifyError, notifyWarning } from "@/lib/notify";
-import { getErrorMessage } from "@/lib/api-error";
+import { getErrorMessage, validationErrors } from "@/lib/api-error";
 import { AxiosError } from "axios";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -70,6 +70,12 @@ import {
 } from "./_lib/server-schedule";
 import { ledgerShowsScb, readLoanLedger, type LedgerView } from "./_lib/loan-ledger";
 import { IMPORTED_LOAN_NO_LABEL, importedLoanNo } from "./_lib/imported-loan";
+import {
+  countedUntilHint,
+  paymentDateRefusal,
+  paymentDayBlocked,
+  paymentsCountedUntil,
+} from "./_lib/payments-counted-until";
 import { paidBeforeImportNote } from "@/lib/paid-before-import";
 import {
   interestAmountFigure,
@@ -89,6 +95,13 @@ import {
 import { PartialExtendPrompt } from "@/components/loans/partial-extend-prompt";
 import { ReasonDialog } from "@/components/common/reason-dialog";
 import { LOAN_DECISION_NOTE_MAX, adjustmentDecisionDialog, voidPaymentDialog } from "./_lib/decision-dialogs";
+import {
+  ADJUSTMENT_CANCEL_REASON_MAX,
+  cancelAdjustmentDialog,
+  cancelAllowed,
+  cancellationLine,
+  offersCancel,
+} from "./_lib/adjustment-cancel";
 import {
   RestructuredBalanceFigures,
   ScheduleNotice,
@@ -343,6 +356,7 @@ const adjustmentStatusColors: Record<string, string> = {
   approved: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-800",
   rejected: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
   applied: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
+  cancelled: "bg-muted text-muted-foreground border-border",
 };
 
 // ── Multi-Step Approval Chain ──
@@ -817,6 +831,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
     setPaymentReference("");
   }
   const [paymentDatePickerOpen, setPaymentDatePickerOpen] = useState(false);
+  // The server's words on the payment date (an imported loan's counted days),
+  // for the day it refused, shown under the field.
+  const [paymentDateServerError, setPaymentDateServerError] = useState<{ day: string; message: string } | null>(null);
   const [paymentPreview, setPaymentPreview] = useState<RepaymentPreview | null>(null);
   // The amount and date `paymentPreview` answers (previewRequestKey).
   const [paymentPreviewKey, setPaymentPreviewKey] = useState<string | null>(null);
@@ -869,6 +886,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
     action: "approve" | "reject";
   } | null>(null);
   const [adjustmentDecisionOpen, setAdjustmentDecisionOpen] = useState(false);
+  // The approved adjustment the Cancel dialog asks about.
+  const [adjustmentToCancel, setAdjustmentToCancel] = useState<LoanAdjustment | null>(null);
+  const [cancelAdjustmentOpen, setCancelAdjustmentOpen] = useState(false);
   const [voidTarget, setVoidTarget] = useState<number | null>(null);
   const [voidOpen, setVoidOpen] = useState(false);
   const [createAdjustmentOpen, setCreateAdjustmentOpen] = useState(false);
@@ -1480,6 +1500,14 @@ function LoanDetail({ loanId }: { loanId: number }) {
   // refuses it too).
   const paymentAmountCheck = checkPaymentAmount(paymentAmount);
   const paymentReferenceProblem = paymentReferenceError(paymentMethod, paymentReference);
+  // An imported loan's file already counts payments up to this day: the
+  // picker blocks it and every day before, and says why.
+  const countedUntil = paymentsCountedUntil(loan);
+  const paymentDayIsCounted = paymentDayBlocked(formatDateISO(paymentDate), countedUntil);
+  const paymentDateError =
+    paymentDateServerError !== null && paymentDateServerError.day === formatDateISO(paymentDate)
+      ? paymentDateServerError.message
+      : null;
   // The server refused the amount and date typed now: posting them would be
   // refused too, so its reason shows and Record Payment waits for a change.
   const paymentRefusal =
@@ -1535,6 +1563,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
         if (!cancelled) {
           const key = previewRequestKey(amt, paymentDateISO);
           const refusal = previewRefusalMessage(err);
+          const dateRefusal = paymentDateRefusal(validationErrors(err));
+          if (dateRefusal !== null) setPaymentDateServerError({ day: paymentDateISO, message: dateRefusal });
           setPaymentPreview(null);
           setPaymentPreviewKey(null);
           setPaymentPreviewFailedKey(key);
@@ -2068,6 +2098,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
       return true;
     } catch (err) {
       toast.error(recordPaymentErrorMessage(err));
+      const dateRefusal = paymentDateRefusal(validationErrors(err));
+      if (dateRefusal !== null) setPaymentDateServerError({ day: data.payment_date, message: dateRefusal });
       return false;
     } finally {
       setActionLoading(false);
@@ -2374,6 +2406,16 @@ function LoanDetail({ loanId }: { loanId: number }) {
       await loanAdjustmentService.reject(adjId, { remarks: remarks || undefined });
       toast.success("Adjustment rejected");
     }
+    await fetchAdjustments(loan.id);
+  };
+
+  // Cancel an approved adjustment before it is applied, with a reason. A
+  // refusal (applied or cancelled meanwhile, a 409 on a race) rejects, so the
+  // dialog keeps it on screen in the server's words. Nothing on the loan
+  // changes, so only the list is read again.
+  const cancelAdjustment = async (adjId: number, reason: string) => {
+    await loanAdjustmentService.cancel(adjId, { reason });
+    toast.success("Adjustment cancelled");
     await fetchAdjustments(loan.id);
   };
 
@@ -2740,7 +2782,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   <div className="text-xs">
                     <p className="font-medium">Approval chain unavailable</p>
                     <p className="text-muted-foreground mt-0.5">
-                      This loan is {LOAN_STATUS_LABELS[loan.status] ?? loan.status}, but its approval
+                      This loan is {LOAN_STATUS_LABELS[displayStatus] ?? displayStatus}, but its approval
                       steps could not be found. Approvals are recorded on the server —
                       ask an administrator to check this loan rather than re-approving
                       it.
@@ -3757,23 +3799,27 @@ function LoanDetail({ loanId }: { loanId: number }) {
           <CollapsibleCard
             icon={<Unlock className="h-4 w-4 text-cyan-600" />}
             title={
-              <>
+              <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                 Release Details
                 {loanSummary && (
                   <Badge variant="outline" className="text-[10px] bg-green-500/10 text-green-700 border-green-500/30">
                     Server-verified
                   </Badge>
                 )}
-              </>
+              </span>
             }
             headerExtra={
+              // A phone gets the short label, so the button is never cut off;
+              // its name stays "Statement of Account" for screen readers.
               <Button
                 variant="outline"
                 size="sm"
+                aria-label="Statement of Account"
                 onClick={handleOpenStatementOfAccount}
               >
                 <FileText className="mr-2 h-4 w-4" />
-                Statement of Account
+                <span className="sm:hidden">Statement</span>
+                <span className="hidden sm:inline">Statement of Account</span>
               </Button>
             }
           >
@@ -4167,6 +4213,9 @@ function LoanDetail({ loanId }: { loanId: number }) {
                             {adj.description || adj.remarks}
                           </p>
                         )}
+                        {cancellationLine(adj) !== null && (
+                          <p className="mt-1 text-sm text-muted-foreground break-words">{cancellationLine(adj)}</p>
+                        )}
                       </div>
                       {/* Disabled, with the reason, for a role without the
                           permission each request checks, as Void is. */}
@@ -4207,6 +4256,22 @@ function LoanDetail({ loanId }: { loanId: number }) {
                           >
                             Apply
                           </PermissionButton>
+                          {offersCancel(adj) && (
+                            <PermissionButton
+                              permission={LOAN_ADJUSTMENT_DECIDE_GATE.permission}
+                              tooltip="Your role doesn't have permission to cancel loan adjustments"
+                              size="sm"
+                              variant="outline"
+                              className="text-destructive hover:text-destructive"
+                              disabled={actionLoading || !cancelAllowed(adj)}
+                              onClick={() => {
+                                setAdjustmentToCancel(adj);
+                                setCancelAdjustmentOpen(true);
+                              }}
+                            >
+                              Cancel
+                            </PermissionButton>
+                          )}
                         </div>
                       )}
                     </div>
@@ -4997,6 +5062,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   <Calendar
                     mode="single"
                     selected={paymentDate}
+                    disabled={(day) => paymentDayBlocked(formatDateISO(day), countedUntil)}
                     onSelect={(date) => {
                       if (date) setPaymentDate(date);
                       setPaymentDatePickerOpen(false);
@@ -5004,6 +5070,14 @@ function LoanDetail({ loanId }: { loanId: number }) {
                   />
                 </PopoverContent>
               </Popover>
+              {countedUntil !== null && (
+                <p className="text-xs text-muted-foreground break-words">{countedUntilHint(countedUntil)}</p>
+              )}
+              {paymentDateError !== null && (
+                <p id="payment-date-error" role="alert" className="text-xs text-destructive break-words">
+                  {paymentDateError}
+                </p>
+              )}
             </div>
             <div className="space-y-1.5 min-w-0">
               <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -5214,7 +5288,7 @@ function LoanDetail({ loanId }: { loanId: number }) {
             );
           })()}
 
-          {paymentRefusal !== null && paymentAmountCheck.amount !== null && paymentAmountCheck.amount > 0 && (
+          {paymentRefusal !== null && paymentRefusal !== paymentDateError && paymentAmountCheck.amount !== null && paymentAmountCheck.amount > 0 && (
             <p
               role="alert"
               className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive break-words"
@@ -5482,7 +5556,8 @@ function LoanDetail({ loanId }: { loanId: number }) {
                 paymentAmountCheck.amount === null ||
                 paymentAmountCheck.amount <= 0 ||
                 paymentReferenceProblem !== null ||
-                paymentRefusal !== null
+                paymentRefusal !== null ||
+                paymentDayIsCounted
               }
             >
               {actionLoading ? (
@@ -5729,6 +5804,19 @@ function LoanDetail({ loanId }: { loanId: number }) {
           adjustmentDecision === null
             ? Promise.resolve()
             : decideAdjustment(adjustmentDecision.adjustment.id, adjustmentDecision.action, remarks)
+        }
+      />
+
+      {/* Cancel an approved adjustment before it is applied, with a reason */}
+      <ReasonDialog
+        open={cancelAdjustmentOpen}
+        onOpenChange={setCancelAdjustmentOpen}
+        {...cancelAdjustmentDialog(
+          adjustmentToCancel ? ADJUSTMENT_TYPE_LABELS[adjustmentToCancel.adjustment_type] : undefined,
+        )}
+        maxLength={ADJUSTMENT_CANCEL_REASON_MAX}
+        onConfirm={(reason) =>
+          adjustmentToCancel === null ? Promise.resolve() : cancelAdjustment(adjustmentToCancel.id, reason)
         }
       />
 

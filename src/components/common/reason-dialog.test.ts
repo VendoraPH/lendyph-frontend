@@ -12,3 +12,13 @@ test("the reason may be as long as its endpoint keeps, 500 unless the caller say
   assert.match(dialog, /<Textarea[\s\S]*?maxLength=\{maxLength\}/);
   assert.doesNotMatch(dialog, /maxLength=\{REASON_MAX_LENGTH\}/);
 });
+
+// A refusal ("The reason must be at least 5 characters.") answers the reason
+// as it was sent; once the reason is edited it no longer applies, so it clears
+// at once rather than waiting for the next submit (finish run round 6, BC10).
+test("editing the reason clears the last refusal", () => {
+  assert.match(
+    dialog,
+    /onChange=\{\(e\) => \{\s*setReason\(e\.target\.value\);\s*setRefusal\(null\);\s*\}\}/,
+  );
+});

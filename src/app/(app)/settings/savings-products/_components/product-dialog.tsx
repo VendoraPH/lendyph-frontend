@@ -195,6 +195,24 @@ export function ProductDialog({ open, product, products, onOpenChange, onSaved }
                 </div>
                 <Switch id="pd-active" checked={draft.active} onCheckedChange={(v) => set("active", Boolean(v))} />
               </div>
+              {!td && (
+                <div
+                  data-field="portal_account_requests"
+                  className="flex items-center justify-between rounded-lg border p-3"
+                >
+                  <div>
+                    <Label htmlFor="pd-portal">Accept new-account requests from the member portal</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Members can ask to open this product from the portal; staff still approve each request.
+                    </p>
+                  </div>
+                  <Switch
+                    id="pd-portal"
+                    checked={draft.portalRequests}
+                    onCheckedChange={(v) => set("portalRequests", Boolean(v))}
+                  />
+                </div>
+              )}
             </FormStep>
 
             <FormStep id="interest">

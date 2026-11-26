@@ -65,7 +65,14 @@ import {
   dueNowPeriodLabel,
   dueNowTiles,
 } from "@/lib/payment-figures";
-import { getErrorMessage } from "@/lib/api-error";
+import { getErrorMessage, validationErrors } from "@/lib/api-error";
+import {
+  countedUntilHint,
+  firstPaymentDay,
+  paymentDateRefusal,
+  paymentDayBlocked,
+  paymentsCountedUntil,
+} from "@/app/(app)/loans/[id]/_lib/payments-counted-until";
 import { notifyError } from "@/lib/notify";
 import {
   dispatchPartialExtend,
@@ -251,6 +258,9 @@ function PaymentsContent() {
   // Asks for the preview again after it failed, so a dropped request doesn't
   // hold a payment until the amount is changed.
   const [previewRound, setPreviewRound] = useState(0);
+  // The server's words on the payment date (an imported loan's counted
+  // days), for the loan and day it refused, shown under the field.
+  const [dateServerError, setDateServerError] = useState<{ key: string; message: string } | null>(null);
 
   // The server's preview of exactly this payment. It runs the real repayment
   // code and rolls it back, so its allocation and badge are what posting this
@@ -274,6 +284,12 @@ function PaymentsContent() {
   const currentPreview = previewResult?.key === previewKey ? previewResult : null;
   const serverPreview = currentPreview?.preview ?? null;
   const previewError = currentPreview?.error ?? null;
+  // An imported loan's file already counts payments up to this day: the date
+  // field starts after it and says why.
+  const entryCountedUntil = paymentsCountedUntil(selectedLoan);
+  const entryDayCounted = paymentDayBlocked(paymentDate, entryCountedUntil);
+  const entryDateError =
+    dateServerError !== null && dateServerError.key === `${selectedLoanId}|${paymentDate}` ? dateServerError.message : null;
 
   // The preview's outstanding balance (everything owed, premium included)
   // before and after this payment; a dash when the server sent none.
@@ -314,6 +330,8 @@ function PaymentsContent() {
         .catch((err: unknown) => {
           if (!cancelled) {
             setPreviewResult({ key: previewKey, preview: null, error: getErrorMessage(err) });
+            const dateRefusal = paymentDateRefusal(validationErrors(err));
+            if (dateRefusal !== null) setDateServerError({ key: `${selectedLoanId}|${paymentDate}`, message: dateRefusal });
           }
         });
     }, 350);
@@ -368,6 +386,8 @@ function PaymentsContent() {
       });
     } catch (err) {
       toast.error(postPaymentErrorMessage(err));
+      const dateRefusal = paymentDateRefusal(validationErrors(err));
+      if (dateRefusal !== null) setDateServerError({ key: `${loan.id}|${body.payment_date}`, message: dateRefusal });
       setIsSubmitting(false);
       return;
     }
@@ -793,10 +813,21 @@ function PaymentsContent() {
                     id="payment-date"
                     type="date"
                     value={paymentDate}
+                    min={firstPaymentDay(entryCountedUntil) ?? undefined}
                     onChange={(e) => setPaymentDate(e.target.value)}
+                    aria-invalid={entryDateError !== null || entryDayCounted}
+                    aria-describedby={entryDateError !== null ? "payment-date-error" : undefined}
                   />
                   <CalendarIcon className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
                 </div>
+                {entryCountedUntil !== null && (
+                  <p className="text-xs text-muted-foreground break-words">{countedUntilHint(entryCountedUntil)}</p>
+                )}
+                {entryDateError !== null && (
+                  <p id="payment-date-error" role="alert" className="text-xs text-destructive break-words">
+                    {entryDateError}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -891,7 +922,9 @@ function PaymentsContent() {
                 <p className="text-sm flex items-center gap-2 text-muted-foreground">
                   <CreditCard className="size-4" />
                   {previewError
-                    ? `Couldn't preview this payment: ${previewError}`
+                    ? previewError === entryDateError
+                      ? "Choose a payment date after the one the imported file counts."
+                      : `Couldn't preview this payment: ${previewError}`
                     : "Working out the allocation…"}
                 </p>
               </>
@@ -1175,6 +1208,7 @@ function PaymentsContent() {
                   isSubmitting ||
                   !selected.loaded ||
                   sendAmount === null ||
+                  entryDayCounted ||
                   (needsReference && !referenceNumber.trim())
                 }
                 onClick={handleSubmit}
