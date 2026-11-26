@@ -76,6 +76,7 @@ import {
 import { formatCount, formatCountOf } from "@/lib/report-format";
 import type { ImportFileKind, ImportIssueSeverity } from "@/types/data-import";
 import { FILE_LABELS, IMPORT_FILE_KINDS, fileNameInSentence } from "../_components/import-files";
+import { emailWarning } from "../_lib/import-email";
 
 // ---------------------------------------------------------------------------
 // Ceilings
@@ -451,7 +452,10 @@ function sizeMessage(problem: FieldSizeProblem): string {
     case "too-long":
       // Measured on what the server stores, which `kept` holds when it differs,
       // in characters as the server counts them.
-      return `${problem.label} is ${serverLength(problem.kept ?? problem.raw)} characters; this field holds ${problem.limit}.`;
+      return problem.severity === "warning"
+        ? // A column the server imports blank when too long (the email).
+          `${problem.label} is ${serverLength(problem.kept ?? problem.raw)} characters; this field holds ${problem.limit}, so it will be imported as blank. The row still imports; shorten it in the file to keep it, or add it later on the member's page.`
+        : `${problem.label} is ${serverLength(problem.kept ?? problem.raw)} characters; this field holds ${problem.limit}.`;
     case "multiple-values":
       // `kept` is the server's own predicted output, so an empty one means the
       // cell had no digits at all and this is not really "two numbers" — it is
@@ -539,7 +543,8 @@ interface RowCheckTotals {
  *    there, by what the SERVER will do with the value, and re-deciding it at
  *    the call site is how a repairable value lands in a failure total.
  *  - a cell the server imports blank: a member's blank one the workbook asks
- *    for (a birthdate), or a gender or civil status it doesn't recognise, and
+ *    for (a birthdate), a gender or civil status it doesn't recognise or an
+ *    email its rule refuses (`../_lib/import-email`), and
  *    a loan's blank Purpose or Loan Product. Only the cells it refuses a row
  *    for are errors (`refusedWhenBlank`, `refusedWhenUnrecognised`).
  */
@@ -692,6 +697,13 @@ export function checkRows(
     }
 
     if (context.shape === "customer") {
+      // Imported blank by the server, so a warning: the row still imports.
+      const emailCell = row.email ?? "";
+      const badEmail = emailWarning(emailCell);
+      if (badEmail) {
+        add(line, reference, { column: columns.find((column) => column.key === "email")?.label ?? "email", severity: "warning", category: "value", message: badEmail, value: emailCell.trim() });
+      }
+
       for (const problem of memberFieldProblems(row, { dates: readDates, today, membershipAllowed })) {
         add(line, reference, {
           column: problem.label,
