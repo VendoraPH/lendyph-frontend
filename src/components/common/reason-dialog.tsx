@@ -55,7 +55,7 @@ interface ReasonDialogProps {
  * Asks for a written reason before an audited action: suspending a branch,
  * moving the main office, asking to close one, rejecting a request. The
  * server's refusal stays in the dialog (announced to screen readers) so the
- * user can read it beside what they typed.
+ * user can read it beside what they typed, until they edit the reason.
  *
  * Import it by path: `@/components/common` is not tree-shaken.
  */
@@ -137,7 +137,10 @@ export function ReasonDialog({
             <Textarea
               id={fieldId}
               value={reason}
-              onChange={(e) => setReason(e.target.value)}
+              onChange={(e) => {
+                setReason(e.target.value);
+                setRefusal(null);
+              }}
               maxLength={maxLength}
               required={reasonRequired}
               aria-describedby={refusal ? errorId : undefined}
