@@ -14,7 +14,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { cycleOptions, cycleRunState, membersCount, previewCycle, runCompletedMessage } from "./auto-credit-cycle";
+import { cycleBranches, cycleOptions, cycleRunState, membersCount, previewCycle, runCompletedMessage } from "./auto-credit-cycle";
 
 const STATUS = {
   cycle_date: "2026-11-15",
@@ -69,6 +69,94 @@ test("the status is the chosen cycle's own: not run yet, or completed on the day
     cycleRunState({ cycle_run: null, last_run: { processed_at: "2026-11-27 09:15:00", status: "completed" } }, "November 30", day),
     { done: false, text: "Not run yet for November 30" },
   );
+});
+
+const branch = (name: string, runId: number | null, processedAt: string | null = null) => ({
+  branch_id: name.length,
+  branch_name: name,
+  run_id: runId,
+  processed_at: processedAt,
+});
+
+test("a cycle run for some branches only is partly done, naming the branches done and not yet", () => {
+  const day = (value: string) => `day(${value})`;
+  const status = {
+    cycle_run: null,
+    cycle_branches: [branch("Bacolod", 7, "2026-11-27 09:15:00"), branch("Iloilo", null), branch("Main", null)],
+  };
+  assert.deepEqual(cycleRunState(status, "November 30", day), {
+    done: false,
+    text: "Partly done for November 30: Bacolod done; not yet: Iloilo, Main",
+  });
+});
+
+test("the branch names are joined with commas, in the server's order", () => {
+  const day = (value: string) => `day(${value})`;
+  const status = {
+    cycle_run: null,
+    cycle_branches: [
+      branch("Bacolod", 7, "2026-11-27 09:15:00"),
+      branch("Cebu", null),
+      branch("Iloilo", 8, "2026-11-27 10:00:00"),
+      branch("Main", null),
+    ],
+  };
+  assert.equal(
+    cycleRunState(status, "November 30", day).text,
+    "Partly done for November 30: Bacolod, Iloilo done; not yet: Cebu, Main",
+  );
+});
+
+test("a cycle every branch has run is completed", () => {
+  const day = (value: string) => `day(${value})`;
+  // The run that covered every branch.
+  assert.deepEqual(
+    cycleRunState(
+      {
+        cycle_run: { id: 9, processed_at: "2026-11-27 11:00:00", status: "completed" },
+        cycle_branches: [branch("Bacolod", 9, "2026-11-27 11:00:00"), branch("Main", 9, "2026-11-27 11:00:00")],
+      },
+      "November 30",
+      day,
+    ),
+    { done: true, text: "Completed on day(2026-11-27 11:00:00)" },
+  );
+  // Each branch's own run, with no single run covering them all: done on the latest one's day.
+  assert.deepEqual(
+    cycleRunState(
+      {
+        cycle_run: null,
+        cycle_branches: [branch("Bacolod", 7, "2026-11-28 08:00:00"), branch("Main", 8, "2026-11-27 10:00:00")],
+      },
+      "November 30",
+      day,
+    ),
+    { done: true, text: "Completed on day(2026-11-28 08:00:00)" },
+  );
+});
+
+test("a cycle no branch has run is not run yet", () => {
+  const day = (value: string) => `day(${value})`;
+  for (const cycleBranches of [[], [branch("Bacolod", null), branch("Main", null)]]) {
+    assert.deepEqual(cycleRunState({ cycle_run: null, cycle_branches: cycleBranches }, "November 15", day), {
+      done: false,
+      text: "Not run yet for November 15",
+    });
+  }
+});
+
+test("an older API without cycle_branches reads as no branches", () => {
+  const day = (value: string) => `day(${value})`;
+  assert.deepEqual(cycleRunState({ cycle_run: null }, "November 15", day), { done: false, text: "Not run yet for November 15" });
+  assert.deepEqual(cycleRunState({ cycle_run: null, cycle_branches: null }, "November 15", day), {
+    done: false,
+    text: "Not run yet for November 15",
+  });
+  assert.deepEqual(cycleBranches({}), []);
+  // Unreadable rows are left out.
+  assert.deepEqual(cycleBranches({ cycle_branches: [null, { branch_name: "" }, branch("Main", 3, "2026-11-27 09:15:00")] }), [
+    { name: "Main", processedAt: "2026-11-27 09:15:00", done: true },
+  ]);
 });
 
 test("member counts read in the plural except for one", () => {

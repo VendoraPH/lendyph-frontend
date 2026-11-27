@@ -108,7 +108,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           h-dvh, not h-screen: on a phone the browser's own bar would hide the
           foot of the page. `data-app-shell` is what print CSS resets, and the
           floating Linda button sets `data-linda-fab` here while it shows, so
-          pinned controls keep clear of it (globals.css).
+          pinned controls, list ends and the foot of every page keep clear of
+          it (globals.css).
         */}
         <div data-app-shell className="flex h-dvh overflow-hidden">
           <Sidebar

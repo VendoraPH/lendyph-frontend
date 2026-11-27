@@ -50,10 +50,40 @@ export function runCompletedMessage(
   );
 }
 
+/** A branch of the caller's members on auto-credit, and its run for the cycle, if any. */
+export interface CycleBranch {
+  name: string;
+  /** When its run for the cycle was made, or null when it has none. */
+  processedAt: string | null;
+  done: boolean;
+}
+
+/**
+ * The server's `cycle_branches` (round 9): one row per branch of the caller's
+ * members on auto-credit, in the server's order (by name). An older API that
+ * sends none reads as no branches; unreadable rows are left out.
+ */
+export function cycleBranches(status: Record<string, unknown>): CycleBranch[] {
+  const raw = Array.isArray(status.cycle_branches) ? status.cycle_branches : [];
+  return raw.flatMap((row: unknown): CycleBranch[] => {
+    if (typeof row !== "object" || row === null) return [];
+    const { branch_name: name, run_id: runId, processed_at: processedAt } = row as Record<string, unknown>;
+    if (typeof name !== "string" || name === "") return [];
+    return [{
+      name,
+      processedAt: typeof processedAt === "string" && processedAt !== "" ? processedAt : null,
+      done: typeof runId === "number",
+    }];
+  });
+}
+
 /**
  * The status card for the chosen cycle (finish run round 8): its own run
- * (`cycle_run`), never another cycle's last run. `formatDay` reads the run's
- * time as a date in the app's time zone.
+ * (`cycle_run`), never another cycle's last run. Since round 9 `cycle_run` is
+ * only a run that covered every branch of the caller's members on
+ * auto-credit, so a cycle run for some branches only reads as partly done,
+ * naming the branches done and not yet. `formatDay` reads the run's time as a
+ * date in the app's time zone.
  */
 export function cycleRunState(
   status: Record<string, unknown>,
@@ -66,6 +96,19 @@ export function cycleRunState(
     if (runStatus === "completed" && typeof processedAt === "string" && processedAt !== "") {
       return { done: true, text: `Completed on ${formatDay(processedAt)}` };
     }
+  }
+  const branches = cycleBranches(status);
+  const done = branches.filter((branch) => branch.done);
+  const notYet = branches.filter((branch) => !branch.done);
+  if (done.length > 0 && notYet.length === 0) {
+    // Every branch has its own run for the cycle, though no single run
+    // covered them all: the cycle is done, on the day of its latest run.
+    const latest = done.map((branch) => branch.processedAt).filter((at): at is string => at !== null).sort().at(-1);
+    return { done: true, text: latest ? `Completed on ${formatDay(latest)}` : `Completed for ${cycleLabel}` };
+  }
+  if (done.length > 0) {
+    const names = (rows: CycleBranch[]) => rows.map((branch) => branch.name).join(", ");
+    return { done: false, text: `Partly done for ${cycleLabel}: ${names(done)} done; not yet: ${names(notYet)}` };
   }
   return { done: false, text: `Not run yet for ${cycleLabel}` };
 }

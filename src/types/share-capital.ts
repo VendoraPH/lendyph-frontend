@@ -128,6 +128,18 @@ export interface AutoCreditStatus {
   skipped_count?: number;
   total_amount: number;
   last_run_at?: string | null;
+  /** The chosen cycle's run, counted only when it covered every branch of the caller's members on auto-credit (round 9). */
+  cycle_run?: { id: number; processed_at: string; status: string } | null;
+  /** One row per branch of the caller's members on auto-credit, by name; [] when none (round 9). */
+  cycle_branches?: AutoCreditCycleBranch[];
+}
+
+/** A branch of the caller's members on auto-credit, and its run for the chosen cycle, if any. */
+export interface AutoCreditCycleBranch {
+  branch_id: number;
+  branch_name: string;
+  run_id: number | null;
+  processed_at: string | null;
 }
 
 export interface AutoCreditMember {

@@ -229,7 +229,11 @@
  *   the button and stays lined up with its column. A box followed by a pinned
  *   bar ends above the button and gets neither: no empty band under a list or
  *   a form step.
- * - Below fit the page itself scrolls, so the main area keeps room at its foot.
+ * - Every other page keeps room at the foot of the main area, so its last card
+ *   sits or scrolls clear of the button (round 9). At fit that is every page
+ *   but a fitted page (PageFill) whose own lists or pinned bars already clear
+ *   it, so those keep their full height. Below fit the page itself scrolls,
+ *   so the main area keeps the room on every page.
  */
 @media (min-width: 1024px) and (min-height: 640px) {
   [data-linda-fab] [data-fab-clear] {
@@ -243,6 +247,9 @@
   }
   [data-linda-fab] [data-slot="scroll-box"]:not(:has(~ [data-fab-clear]), :has(~ [data-fab-clear]) *) > [data-slot="table-container"] tr > :last-child {
     padding-right: calc(var(--linda-fab-clearance) - 1.5rem);
+  }
+  [data-linda-fab] [data-app-main]:not(:has([data-slot="page-fill"] :is([data-slot="scroll-box"], [data-fab-clear]))) {
+    padding-bottom: var(--linda-fab-clearance);
   }
 }
 
