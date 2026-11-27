@@ -130,13 +130,17 @@ export interface AutoCreditStatus {
   last_run_at?: string | null;
   /** The chosen cycle's run, counted only when it covered every branch of the caller's members on auto-credit (round 9). */
   cycle_run?: { id: number; processed_at: string; status: string } | null;
-  /** One row per branch of the caller's members on auto-credit, by name; [] when none (round 9). */
+  /** One row per branch of the caller's members on auto-credit, by name, plus a "No branch" row; [] when none (round 9). */
   cycle_branches?: AutoCreditCycleBranch[];
 }
 
-/** A branch of the caller's members on auto-credit, and its run for the chosen cycle, if any. */
+/**
+ * A branch of the caller's members on auto-credit, and its run for the chosen
+ * cycle, if any. Head office's members with no branch are one row with a null
+ * `branch_id`, named "No branch".
+ */
 export interface AutoCreditCycleBranch {
-  branch_id: number;
+  branch_id: number | null;
   branch_name: string;
   run_id: number | null;
   processed_at: string | null;
