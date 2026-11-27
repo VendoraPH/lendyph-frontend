@@ -57,7 +57,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           timeout: 120s
-          command_timeout: 20m
+          command_timeout: 45m
           script: |
             set -euo pipefail
 
@@ -263,7 +263,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           timeout: 120s
-          command_timeout: 20m
+          command_timeout: 45m
           script: |
             set -euo pipefail
 
