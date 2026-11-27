@@ -6,12 +6,14 @@ import { join } from "node:path";
 
 const source = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
 
-/** Documents whose legal text says "Borrower": R.A. 3765 and the loan contract use the term. */
+/** Files whose text must say "Borrower": R.A. 3765, the loan contract and CIC's code lists use the term. */
 const LEGAL_DOCUMENTS = [
   "src/lib/printables/templates/disclosure.ts",
   "src/lib/printables/templates/promissory-note.ts",
   "src/lib/printables/templates/demand-letter.ts",
   "src/lib/printables/templates/amortization-schedule.ts",
+  // CIC's own code list: role codes B and C are defined as "Borrower" and "Co-Borrower".
+  "src/lib/cic/domains.generated.ts",
 ];
 
 const sourceFiles = () =>
