@@ -14,7 +14,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { cycleOptions, cycleRunState, membersCount, previewCycle, runCompletedMessage } from "./auto-credit-cycle";
+import { cycleBranches, cycleOptions, cycleRunState, membersCount, previewCycle, runCompletedMessage } from "./auto-credit-cycle";
 
 const STATUS = {
   cycle_date: "2026-11-15",
@@ -68,6 +68,113 @@ test("the status is the chosen cycle's own: not run yet, or completed on the day
   assert.deepEqual(
     cycleRunState({ cycle_run: null, last_run: { processed_at: "2026-11-27 09:15:00", status: "completed" } }, "November 30", day),
     { done: false, text: "Not run yet for November 30" },
+  );
+});
+
+const branch = (name: string, runId: number | null, processedAt: string | null = null, branchId: number | null = name.length) => ({
+  branch_id: branchId,
+  branch_name: name,
+  run_id: runId,
+  processed_at: processedAt,
+});
+
+test("a cycle run for some branches only is partly done, naming the branches done and not yet", () => {
+  const day = (value: string) => `day(${value})`;
+  const status = {
+    cycle_run: null,
+    cycle_branches: [branch("Bacolod", 7, "2026-11-27 09:15:00"), branch("Iloilo", null), branch("Main", null)],
+  };
+  assert.deepEqual(cycleRunState(status, "November 30", day), {
+    done: false,
+    text: "Partly done for November 30: Bacolod done; not yet: Iloilo, Main",
+  });
+});
+
+test("head office's members with no branch are a row of their own, shown in not yet", () => {
+  const day = (value: string) => `day(${value})`;
+  const status = {
+    cycle_run: null,
+    cycle_branches: [branch("Bacolod", 7, "2026-11-27 09:15:00"), branch("Main", 8, "2026-11-27 10:00:00"), branch("No branch", null, null, null)],
+  };
+  assert.deepEqual(cycleRunState(status, "November 30", day), {
+    done: false,
+    text: "Partly done for November 30: Bacolod, Main done; not yet: No branch",
+  });
+});
+
+test("the branch names are joined with commas, in the server's order", () => {
+  const day = (value: string) => `day(${value})`;
+  const status = {
+    cycle_run: null,
+    cycle_branches: [
+      branch("Bacolod", 7, "2026-11-27 09:15:00"),
+      branch("Cebu", null),
+      branch("Iloilo", 8, "2026-11-27 10:00:00"),
+      branch("Main", null),
+    ],
+  };
+  assert.equal(
+    cycleRunState(status, "November 30", day).text,
+    "Partly done for November 30: Bacolod, Iloilo done; not yet: Cebu, Main",
+  );
+});
+
+test("Completed comes only from the server's cycle_run", () => {
+  const day = (value: string) => `day(${value})`;
+  assert.deepEqual(
+    cycleRunState(
+      {
+        cycle_run: { id: 9, processed_at: "2026-11-27 11:00:00", status: "completed" },
+        cycle_branches: [branch("Bacolod", 9, "2026-11-27 11:00:00"), branch("No branch", 9, "2026-11-27 11:00:00", null)],
+      },
+      "November 30",
+      day,
+    ),
+    { done: true, text: "Completed on day(2026-11-27 11:00:00)" },
+  );
+  // Every row has a run but the server sent no cycle_run: never Completed, and nothing is left to name as not yet.
+  assert.deepEqual(
+    cycleRunState(
+      {
+        cycle_run: null,
+        cycle_branches: [branch("Bacolod", 7, "2026-11-28 08:00:00"), branch("Main", 8, "2026-11-27 10:00:00")],
+      },
+      "November 30",
+      day,
+    ),
+    { done: false, text: "Partly done for November 30: Bacolod, Main done" },
+  );
+});
+
+test("a cycle no branch has run is not run yet", () => {
+  const day = (value: string) => `day(${value})`;
+  for (const cycleBranches of [[], [branch("Bacolod", null), branch("No branch", null, null, null)]]) {
+    assert.deepEqual(cycleRunState({ cycle_run: null, cycle_branches: cycleBranches }, "November 15", day), {
+      done: false,
+      text: "Not run yet for November 15",
+    });
+  }
+});
+
+test("an older API without cycle_branches reads as no branches", () => {
+  const day = (value: string) => `day(${value})`;
+  assert.deepEqual(cycleRunState({ cycle_run: null }, "November 15", day), { done: false, text: "Not run yet for November 15" });
+  assert.deepEqual(cycleRunState({ cycle_run: null, cycle_branches: null }, "November 15", day), {
+    done: false,
+    text: "Not run yet for November 15",
+  });
+  assert.deepEqual(cycleBranches({}), []);
+});
+
+test("only rows without a name are left out; the No branch row, with a null branch_id, is kept", () => {
+  assert.deepEqual(
+    cycleBranches({
+      cycle_branches: [null, { branch_id: 4, branch_name: "" }, { branch_id: 5 }, branch("No branch", 3, "2026-11-27 09:15:00", null), branch("Main", null)],
+    }),
+    [
+      { name: "No branch", done: true },
+      { name: "Main", done: false },
+    ],
   );
 });
 
