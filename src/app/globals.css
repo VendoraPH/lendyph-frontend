@@ -229,11 +229,19 @@
  *   the button and stays lined up with its column. A box followed by a pinned
  *   bar ends above the button and gets neither: no empty band under a list or
  *   a form step.
- * - Every other page keeps room at the foot of the main area, so its last card
- *   sits or scrolls clear of the button (round 9). At fit that is every page
- *   but a fitted page (PageFill) whose own lists or pinned bars already clear
- *   it, so those keep their full height. Below fit the page itself scrolls,
- *   so the main area keeps the room on every page.
+ * - Every other page keeps room at its foot, so no text or control is ever
+ *   left under the button (round 9). Below fit the page itself scrolls, so
+ *   the main area keeps the room on every page. At fit:
+ *   - a page with no PageFill flows normally, so the main area's end padding
+ *     does it;
+ *   - a fitted page (PageFill) with no scroll region or pinned bar of its own
+ *     (a form card, an empty or error state) gives up its fixed height for a
+ *     minimum one and keeps the room as its own end padding. Its content then
+ *     stays in flow, so a page taller than the screen scrolls in the main area
+ *     with the room below its last card, instead of spilling past a fixed-height
+ *     page where no end padding reaches. Screen only: print is unchanged;
+ *   - a fitted page with its own scroll region or pinned bar (lists, report
+ *     previews, stepped forms) keeps its full height: the rules above clear it.
  */
 @media (min-width: 1024px) and (min-height: 640px) {
   [data-linda-fab] [data-fab-clear] {
@@ -248,8 +256,16 @@
   [data-linda-fab] [data-slot="scroll-box"]:not(:has(~ [data-fab-clear]), :has(~ [data-fab-clear]) *) > [data-slot="table-container"] tr > :last-child {
     padding-right: calc(var(--linda-fab-clearance) - 1.5rem);
   }
-  [data-linda-fab] [data-app-main]:not(:has([data-slot="page-fill"] :is([data-slot="scroll-box"], [data-fab-clear]))) {
+  [data-linda-fab] [data-app-main]:not(:has([data-slot="page-fill"])) {
     padding-bottom: var(--linda-fab-clearance);
+  }
+}
+
+@media screen and (min-width: 1024px) and (min-height: 640px) {
+  [data-linda-fab] [data-slot="page-fill"]:not([data-slot="page-fill"] *):not(:has([data-slot="scroll-box"], [data-fab-clear], [class*="fit:overflow-auto"], [class*="fit:overflow-y-auto"])) {
+    height: auto;
+    min-height: 100%;
+    padding-bottom: calc(var(--linda-fab-clearance) - 1.5rem);
   }
 }
 

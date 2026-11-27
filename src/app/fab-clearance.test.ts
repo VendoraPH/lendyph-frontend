@@ -10,6 +10,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { scrollBoxClass } from "@/lib/page-fill";
 
 const css = readFileSync(new URL("./globals.css", import.meta.url), "utf8");
 const start = css.indexOf("Clearance for the floating Linda button");
@@ -33,11 +34,34 @@ test("a pinned totals row stays lined up: the gutter is on every row of the box'
   assert.ok(!block.includes("tr[data-total] > :last-child"), "no totals-only gutter");
 });
 
-test("at fit every page keeps room at its foot, except a fitted page whose own lists or pinned bars clear the button", () => {
-  const rule =
-    '[data-linda-fab] [data-app-main]:not(:has([data-slot="page-fill"] :is([data-slot="scroll-box"], [data-fab-clear]))) {\n    padding-bottom: var(--linda-fab-clearance);';
-  assert.ok(block.startsWith("Clearance for the floating Linda button") && block.includes("@media (min-width: 1024px) and (min-height: 640px)"), block);
-  assert.ok(block.includes(rule), block);
+test("at fit a page with no PageFill keeps room at the foot of the main area", () => {
+  assert.ok(block.includes("@media (min-width: 1024px) and (min-height: 640px)"), block);
+  assert.ok(
+    block.includes('[data-linda-fab] [data-app-main]:not(:has([data-slot="page-fill"])) {\n    padding-bottom: var(--linda-fab-clearance);'),
+    block,
+  );
+});
+
+const tallPage = (() => {
+  const at = block.indexOf("@media screen and (min-width: 1024px) and (min-height: 640px)");
+  return at === -1 ? "" : block.slice(at);
+})();
+
+test("a fitted page with no scroll region or pinned bar of its own keeps the room below its last card, however tall", () => {
+  assert.ok(tallPage !== "", "a screen-only fit block for fitted pages");
+  // The outermost PageFill only, and only where nothing of its own scrolls or is pinned.
+  assert.ok(
+    tallPage.includes(
+      '[data-linda-fab] [data-slot="page-fill"]:not([data-slot="page-fill"] *):not(:has([data-slot="scroll-box"], [data-fab-clear], [class*="fit:overflow-auto"], [class*="fit:overflow-y-auto"]))',
+    ),
+    tallPage,
+  );
+  // A minimum height instead of a fixed one, so its content stays in flow and the end padding lies below it.
+  assert.match(tallPage, /height: auto;\n\s+min-height: 100%;\n\s+padding-bottom: calc\(var\(--linda-fab-clearance\) - 1\.5rem\);/);
+});
+
+test("a scroll region built from scrollBoxClass is recognised as the page's own, so its page keeps its full height", () => {
+  assert.ok(scrollBoxClass().split(" ").includes("fit:overflow-auto"));
 });
 
 test("below fit every page's main area keeps room at its foot", () => {
