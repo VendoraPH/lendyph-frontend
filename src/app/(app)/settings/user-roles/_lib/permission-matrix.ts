@@ -48,8 +48,12 @@ import type { Action, Module } from "@/types";
  * `borrowers:transfer`, `interbranch_transfers:view|create|approve|receive`
  * and `loan_origination:view|update|assess|convert|settings`. An API older
  * than X0 refuses a save naming one with a 422, so this ships after X0.
+ *
+ * `cic` is not offered yet: the backend seeds no `cic:*` permission, and a
+ * save naming one would be refused with a 422. Offer it once it does
+ * (docs/CIC_BACKEND_HANDOFF.md).
  */
-export type UIModule = Exclude<Module, "collections" | "loan_adjustments" | "auto_credit">;
+export type UIModule = Exclude<Module, "collections" | "loan_adjustments" | "auto_credit" | "cic">;
 
 // Applicable actions per module — only the actions that make sense for each area
 export const MODULE_ACTIONS: Record<UIModule, Action[]> = {

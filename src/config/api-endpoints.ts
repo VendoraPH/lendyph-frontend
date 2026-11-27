@@ -602,6 +602,26 @@ export const API_ENDPOINTS = {
     LOAN_ASSESSMENT: (loanId: number) => `/credit-scoring/loans/${loanId}/assessment`,
   },
   /**
+   * CIC reporting (Phase 10). Not built in lendyph-backend yet: every route
+   * answers 404, which the screens show as "Not connected yet". Contract and
+   * permissions (cic:view|prepare|submit|review|settings) in
+   * docs/CIC_BACKEND_HANDOFF.md. Behind NEXT_PUBLIC_ENABLE_CIC.
+   */
+  CIC: {
+    SETTINGS: "/cic/settings",
+    PUBLIC_KEY: "/cic/settings/public-key",
+    PRODUCT_MAPPINGS: "/cic/product-mappings",
+    READINESS: "/cic/readiness",
+    SUBJECTS: "/cic/subjects",
+    CONTRACTS: "/cic/contracts",
+    SUBMISSIONS: "/cic/submissions",
+    SUBMISSION: (id: number) => `/cic/submissions/${id}`,
+    SUBMISSION_ENCRYPT: (id: number) => `/cic/submissions/${id}/encrypt`,
+    SUBMISSION_DOWNLOAD: (id: number) => `/cic/submissions/${id}/download`,
+    SUBMISSION_MARK_SUBMITTED: (id: number) => `/cic/submissions/${id}/mark-submitted`,
+    SUBMISSION_ACKNOWLEDGE: (id: number) => `/cic/submissions/${id}/acknowledgement`,
+  },
+  /**
    * Loan Origination, staff side: `routes/api/loan-origination/*` in the
    * backend (LO-B1 to LO-B4). The screens stay behind
    * NEXT_PUBLIC_ENABLE_LOAN_ORIGINATION. "Submit for approval" is the

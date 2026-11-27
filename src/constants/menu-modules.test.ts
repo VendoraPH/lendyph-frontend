@@ -56,6 +56,7 @@ const CONTRACT_KEYS = [
   "collateral",
   "gcash",
   "credit_scoring",
+  "cic",
   "cda",
   "member_portal",
   "amla",

@@ -3,6 +3,7 @@ import type { PermissionRequirement } from "@/lib/permission-requirement";
 import type { ComponentType } from "react";
 import type { Icon3DName } from "@/lib/icons-3d";
 import {
+  FileUp,
   LayoutDashboard,
   Users,
   FileText,
@@ -260,6 +261,9 @@ export const MODULE_SETTINGS_NAV: NavSubItem[] = [
         { title: "Credit Scoring", href: "/settings/credit-scoring", permission: "credit_scoring:settings" as const, module: "credit_scoring" as const },
       ]
     : []),
+  ...(env.features.cic
+    ? [{ title: "CIC", href: "/settings/cic", permission: "cic:settings" as const, module: "cic" as const }]
+    : []),
 ];
 
 /**
@@ -376,6 +380,33 @@ const CREDIT_SCORING_NAV: NavItem = {
     { title: "Credit Assessment", href: "/credit-scoring/assessment", permission: "credit_scoring:view" },
     { title: "Risk Monitoring", href: "/credit-scoring/risk-monitoring", permission: "credit_scoring:view" },
     { title: "Score History", href: "/credit-scoring/score-history", permission: "credit_scoring:view" },
+  ],
+};
+
+/**
+ * CIC reporting (Phase 10): the monthly Credit Submission Data File for the
+ * Credit Information Corporation. Gated on NEXT_PUBLIC_ENABLE_CIC; the routes
+ * also answer not found with the flag off (cic/layout.tsx).
+ *
+ * The backend seeds no `cic:*` permission yet, so no role sees this menu even
+ * with the flag on until it does (docs/CIC_BACKEND_HANDOFF.md). It has no
+ * Menu Visibility key either, for the same reason.
+ */
+const CIC_NAV: NavItem = {
+  title: "CIC Reporting",
+  href: "/cic",
+  icon: FileUp,
+  icon3d: "empty-compliance",
+  module: "cic",
+  permission: "cic:view",
+  children: [
+    { title: "Data Readiness", href: "/cic", permission: "cic:view" },
+    { title: "Subject Records", href: "/cic/subjects", permission: "cic:view" },
+    { title: "Contract Records", href: "/cic/contracts", permission: "cic:view" },
+    { title: "Validation", href: "/cic/validation", permission: "cic:view" },
+    { title: "Generate Report", href: "/cic/generate", permission: "cic:prepare" },
+    { title: "Corrections", href: "/cic/corrections", permission: "cic:view" },
+    { title: "Submission History", href: "/cic/submissions", permission: "cic:view" },
   ],
 };
 
@@ -530,6 +561,8 @@ export const SIDEBAR_NAV: NavItem[] = [
   // Gated on NEXT_PUBLIC_ENABLE_CREDIT_SCORING at build time. The routes also
   // answer not found when the flag is off (credit-scoring/layout.tsx).
   ...(env.features.creditScoring ? [CREDIT_SCORING_NAV] : []),
+  // Gated on NEXT_PUBLIC_ENABLE_CIC; cic/layout.tsx answers not found too.
+  ...(env.features.cic ? [CIC_NAV] : []),
   ...(env.features.cda ? [CDA_NAV] : []),
   ...(env.features.memberPortal ? [MEMBER_PORTAL_NAV] : []),
   ...(env.features.amla ? [AMLA_NAV] : []),

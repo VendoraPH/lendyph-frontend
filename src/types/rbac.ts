@@ -123,6 +123,16 @@ export type Module =
   // dead menu items out of production. Contract for building it:
   // `docs/CREDIT_SCORING_BACKEND_HANDOFF.md`.
   | "credit_scoring"
+  // ── CIC reporting (Phase 10) ──
+  //
+  // Credit Submission Data Files for the Credit Information Corporation.
+  // `view` = dashboard, readiness, records, validation and history;
+  // `prepare` = generate a file and run validation; `submit` = encrypt it
+  // and record it as sent; `review` = record CIC's acknowledgement, approve
+  // a correction; `settings` = provider code, public key, product mapping.
+  // Not seeded by lendyph-backend yet (docs/CIC_BACKEND_HANDOFF.md), so no
+  // role holds them and the menu stays hidden even with the flag on.
+  | "cic"
   // ── Automated due-date reminders ──
   //
   // `view` covers the dashboard, queue, message history and a loan's reminder
