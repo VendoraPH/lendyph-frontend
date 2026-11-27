@@ -18,6 +18,28 @@ export interface Repayment {
   scb_paid?: number;
   penalty_paid?: number;
   excess_amount?: number;
+  /** Insurance premium owed on the loan that this payment collected first. */
+  insurance_applied?: number;
+  /**
+   * What the payment credited to the member's Share Capital Build-Up, as a
+   * 2-decimal string or null (backend B-FU). Absent on older answers.
+   */
+  build_up_credited?: string | null;
+  /** What the payment kept as an advance or overpayment, likewise. */
+  overpayment_kept?: string | null;
+}
+
+/**
+ * `GET /repayments` `meta.totals`: SUM(amount_paid) of posted (`collected`)
+ * and voided (`voided`) repayments over the request's search, loan, member
+ * and date filters (its `status` filter is ignored). Summed in SQL; the
+ * browser shows them as sent.
+ */
+export interface RepaymentListTotals {
+  collected?: number | string | null;
+  voided?: number | string | null;
+  /** Insurance premium the posted payments collected (part of `collected`). */
+  total_insurance_applied?: number | string | null;
 }
 
 export interface CreateRepaymentData {

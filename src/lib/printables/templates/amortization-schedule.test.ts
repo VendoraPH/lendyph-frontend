@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { formatCurrency, formatValue } from "@/lib/report-format";
+import { DASH, formatCurrency, formatValue } from "@/lib/report-format";
 import { buildAmortizationScheduleDoc } from "./amortization-schedule";
 import {
   assertPrintableShape,
@@ -13,7 +13,10 @@ import {
   titleBlock,
 } from "./doc-assertions";
 
-/** `LoanResource` with `amortizationSchedules` eager-loaded. */
+/**
+ * `LoanResource` with `amortizationSchedules` eager-loaded, and the column
+ * totals the server adds up beside it.
+ */
 const LOAN = {
   id: 42,
   application_number: "APP-2026-0042",
@@ -33,6 +36,13 @@ const LOAN = {
     { id: 2, loan_id: 42, period_number: 2, due_date: "2026-10-01", beginning_balance: 33333.33, principal_due: 16666.67, interest_due: 666.67, penalty_amount: 250, total_due: 17333.34, remaining_balance: 16666.66, principal_paid: 0, interest_paid: 0, penalty_paid: 0, status: "overdue", amount_paid: 0 },
     { id: 3, loan_id: 42, period_number: 3, due_date: "2026-11-01", beginning_balance: 16666.66, principal_due: 16666.66, interest_due: 333.33, penalty_amount: 0, total_due: 16999.99, remaining_balance: 0, principal_paid: 0, interest_paid: 0, penalty_paid: 0, status: "pending", amount_paid: 0 },
   ],
+  amortization_schedule_totals: {
+    principal: 50000,
+    interest: 2000,
+    penalty: 250,
+    total_due: 52000,
+    amount_paid: 17666.67,
+  },
 };
 
 test("amortization schedule: the loan's terms head the document", () => {
@@ -40,7 +50,7 @@ test("amortization schedule: the loan's terms head the document", () => {
   assertPrintableShape(doc, "amortization_schedule");
 
   assert.equal(titleBlock(doc).text, "Amortization Schedule");
-  assert.equal(fieldValue(doc, "Borrower"), "Juana Dela Cruz");
+  assert.equal(fieldValue(doc, "Member"), "Juana Dela Cruz");
   assert.equal(fieldValue(doc, "Loan Account No."), "LN-2026-0042");
   assert.equal(fieldValue(doc, "Member No."), "MBR-0001");
   assert.equal(fieldValue(doc, "Loan Product"), "Regular Loan");
@@ -53,14 +63,15 @@ test("amortization schedule: the loan's terms head the document", () => {
   assert.equal(fieldValue(doc, "Maturity Date"), formatValue(new Date(2026, 10, 1), "date"));
 });
 
-test("amortization schedule: rate and term take their unit from the frequency", () => {
-  // The same numbers on a daily loan. This document used to print
-  // "1% per month" beside "30 period(s)" — one wrong, the other unitless, and
-  // the disclosure statement for the same loan said "30 month(s)".
+test("amortization schedule: rate and term each carry their own unit", () => {
+  // The same numbers on a 30-day daily loan. This document used to print
+  // "1% per month" beside "30 period(s)" — one wrong, the other unitless.
   const doc = buildAmortizationScheduleDoc({
     ...LOAN,
     interest_rate: 1,
+    interest_rate_frequency: "daily",
     term: 30,
+    term_unit: "days",
     frequency: "daily",
   });
 
@@ -85,29 +96,34 @@ test("amortization schedule: every period is rendered with its paid columns", ()
   assert.equal(table.rows[2]?.balance, 0);
 });
 
-test("amortization schedule: column totals reconcile with the rows", () => {
+test("amortization schedule: column totals are the server's", () => {
   const table = tableBlock(buildAmortizationScheduleDoc(LOAN));
 
-  const principal = 16666.67 + 16666.67 + 16666.66;
-  const interest = 1000 + 666.67 + 333.33;
-  const penalty = 250;
-
-  assert.equal(table.totals?.principal, formatCurrency(principal));
-  assert.equal(table.totals?.interest, formatCurrency(interest));
-  assert.equal(table.totals?.penalty, formatCurrency(penalty));
-  assert.equal(
-    table.totals?.total_due,
-    formatCurrency(17666.67 + 17333.34 + 16999.99)
-  );
+  assert.equal(table.totals?.principal, formatCurrency(50000));
+  assert.equal(table.totals?.interest, formatCurrency(2000));
+  assert.equal(table.totals?.penalty, formatCurrency(250));
+  assert.equal(table.totals?.total_due, formatCurrency(52000));
   assert.equal(table.totals?.amount_paid, formatCurrency(17666.67));
 
-  // The two checks a bookkeeper runs. Principal scheduled equals the principal
-  // borrowed; and `total_due` is principal + interest only — penalty accrues
-  // separately on top of the installment and is never folded into it, which is
-  // why it has a column of its own.
-  assert.equal(formatCurrency(principal), formatCurrency(50000));
-  assert.equal(formatCurrency(principal + interest), table.totals?.total_due);
-  assert.equal(table.totals?.penalty, formatCurrency(penalty));
+  // A server figure unlike the rows added up is printed as sent.
+  const sent = tableBlock(
+    buildAmortizationScheduleDoc({
+      ...LOAN,
+      amortization_schedule_totals: { ...LOAN.amortization_schedule_totals, interest: 2000.01 },
+    })
+  );
+  assert.equal(sent.totals?.interest, formatCurrency(2000.01));
+});
+
+test("amortization schedule: totals the server did not send are dashes, never sums", () => {
+  const { amortization_schedule_totals: _omitted, ...rest } = LOAN;
+  void _omitted;
+  const table = tableBlock(buildAmortizationScheduleDoc(rest));
+
+  assert.equal(table.rows.length, 3);
+  for (const key of ["principal", "interest", "penalty", "total_due", "amount_paid"]) {
+    assert.equal(table.totals?.[key], DASH, key);
+  }
 });
 
 test("amortization schedule: penalties are flagged as provisional", () => {
@@ -131,11 +147,85 @@ test("amortization schedule: an unreleased loan says so instead of showing nothi
   assert.match(table.emptyText ?? "", /A schedule is created when the loan is released\./);
 });
 
+test("amortization schedule: a restructured loan says where its balance went", () => {
+  // A restructure's release deletes every period nothing was paid on, so the
+  // source loan's schedule is empty for a reason "not released yet" misstates.
+  const table = tableBlock(
+    buildAmortizationScheduleDoc({
+      ...LOAN,
+      status: "restructured",
+      amortization_schedules: [],
+      restructured_at: "2026-09-20T02:30:00.000000Z",
+      restructured_balance: 33850.5,
+      write_off_amount: 850.5,
+      restructured_into: [
+        { id: 60, application_number: "APP-2026-0060", loan_account_number: null, status: "rejected", principal_amount: 33850.5, start_date: null },
+        { id: 61, application_number: "APP-2026-0061", loan_account_number: "LN-2026-0061", status: "released", principal_amount: 33000, start_date: "2026-09-20", restructure_written_off_principal: 400.25 },
+      ],
+    })
+  );
+  assert.equal(table.rows.length, 0);
+  // Two different figures, each labelled: the forgiveness approved, and the
+  // principal the books wrote off (the released restructure's).
+  assert.equal(
+    table.emptyText,
+    `This loan was restructured on ${formatValue(new Date("2026-09-20T02:30:00.000000Z"), "date")}, ` +
+      `and its remaining balance of ${formatCurrency(33850.5)} moved to loan LN-2026-0061. ` +
+      `Forgiven (approved): ${formatCurrency(850.5)}. ` +
+      `Principal written off in the books: ${formatCurrency(400.25)}. No instalments remain on it.`
+  );
+  assert.ok(!/less .* written off/.test(table.emptyText ?? ""));
+});
+
+test("amortization schedule: a restructured loan with no released successor names none", () => {
+  const table = tableBlock(
+    buildAmortizationScheduleDoc({
+      ...LOAN,
+      status: "restructured",
+      amortization_schedules: [],
+      restructured_at: null,
+      restructured_balance: 1200,
+      write_off_amount: 0,
+      restructured_into: [
+        { id: 70, application_number: "APP-2026-0070", loan_account_number: null, status: "void", principal_amount: 1200, start_date: null },
+      ],
+    })
+  );
+  assert.equal(
+    table.emptyText,
+    `This loan was restructured, and its remaining balance of ${formatCurrency(1200)} moved to a new loan. ` +
+      `Forgiven (approved): ${formatCurrency(0)}. Principal written off in the books: —. No instalments remain on it.`
+  );
+});
+
+test("amortization schedule: a restructured loan with paid rows still prints both figures", () => {
+  const doc = buildAmortizationScheduleDoc({
+    ...LOAN,
+    status: "restructured",
+    restructured_at: "2026-09-20T02:30:00.000000Z",
+    restructured_balance: 33850.5,
+    write_off_amount: 850.5,
+    restructured_into: [
+      { id: 61, application_number: "APP-2026-0061", loan_account_number: "LN-2026-0061", status: "released", principal_amount: 33000, start_date: "2026-09-20", restructure_written_off_principal: 400.25 },
+    ],
+  });
+  const notes = doc.blocks.filter((b): b is Extract<typeof b, { kind: "note" }> => b.kind === "note").map((b) => b.text);
+  const restructured = notes.find((text) => text.startsWith("This loan was restructured"));
+  assert.ok(restructured, "a note says where the balance went");
+  assert.match(restructured, /Forgiven \(approved\): ₱850\.50\./);
+  assert.match(restructured, /Principal written off in the books: ₱400\.25\./);
+});
+
+test("amortization schedule: an ordinary loan with rows prints no restructure note", () => {
+  const doc = buildAmortizationScheduleDoc(LOAN);
+  assert.ok(!doc.blocks.some((b) => b.kind === "note" && b.text.startsWith("This loan was restructured")));
+});
+
 test("amortization schedule: a null payload still prints a blank schedule form", () => {
   const doc = buildAmortizationScheduleDoc(null);
   assertPrintableShape(doc, "amortization_schedule");
 
-  assert.ok(isBlankField(doc, "Borrower"));
+  assert.ok(isBlankField(doc, "Member"));
   assert.ok(isBlankField(doc, "Loan Account No."));
   assert.ok(isBlankField(doc, "Interest Rate"));
   assert.equal(tableBlock(doc).rows.length, 0);

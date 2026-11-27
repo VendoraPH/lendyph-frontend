@@ -23,9 +23,11 @@
  */
 
 import { AlertTriangle, CircleAlert, FileSpreadsheet, HelpCircle, Info, ShieldCheck } from "lucide-react";
+import { isEarlierLayout } from "@/lib/import-schema";
 import { formatCount } from "@/lib/report-format";
 import { cn } from "@/lib/utils";
 import type { FileFindings, FileInspection } from "../_hooks/use-file-precheck";
+import { rowsLeftUnchecked } from "@/lib/count-words";
 
 export interface PrecheckFileSummary {
   inspection: FileInspection;
@@ -120,7 +122,13 @@ function FileSummary({ inspection, findings }: PrecheckFileSummary) {
         <Stat
           label="Columns"
           value={`${found} of ${expectedColumns}`}
-          hint={found === expectedColumns ? "as expected" : "does not match"}
+          hint={
+            found !== expectedColumns
+              ? "does not match"
+              : isEarlierLayout(inspection.shape, found)
+                ? "earlier layout"
+                : "as expected"
+          }
         />
         <Stat
           label="Separator"
@@ -168,8 +176,7 @@ function FileSummary({ inspection, findings }: PrecheckFileSummary) {
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden="true" />
           <span>
             Row checks cover the first {formatCount(findings.checkedRows)} of{" "}
-            {formatCount(findings.totalRows)} rows. The remaining{" "}
-            {formatCount(findings.rowsNotChecked)} were not checked here — they will still be
+            {formatCount(findings.totalRows)} rows. {rowsLeftUnchecked(findings.rowsNotChecked)} — they will still be
             imported, and any problems in them appear in the error report afterwards. The date
             format above was read from every row.
           </span>
@@ -284,7 +291,7 @@ export function PrecheckSummary({
           >
             <p className="text-muted-foreground">
               {totalWarnings > 0
-                ? "These rows import. The import repairs or matches the value; the note is so you know what it did."
+                ? "These rows import. Each note says what the import does with the value."
                 : "Nothing needs your attention beyond the rows above."}
             </p>
           </Banner>

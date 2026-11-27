@@ -2,6 +2,9 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { RouteGuard, PermissionGate, TablePagination } from "@/components/common";
+import { NoBranchBanner } from "@/components/common/no-branch-banner";
+import { PageFill } from "@/components/common/page-fill";
+import { hasIllustration, Illustration } from "@/components/common/illustration";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Users,
@@ -23,7 +26,9 @@ import { BorrowerTable } from "./_components/borrower-table";
 import { RegistrationsTab } from "./_components/registrations-tab";
 import { useRegistrations } from "@/hooks/use-registrations";
 import { cn } from "@/lib/utils";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { usePublicBranches } from "@/hooks/use-public-branches";
+import { emptyArt } from "@/lib/illustrations";
 
 /**
  * Global member counts, read from the list response's `meta.stats`.
@@ -63,16 +68,18 @@ function StatCard({
   iconBg: string;
 }) {
   return (
-    <Card>
-      <CardContent className="py-4">
+    // At fit the card is one compact line (label beside the figure), so the
+    // members list below keeps most of the screen.
+    <Card className="fit:py-2.5">
+      <CardContent className="py-4 fit:py-0">
         <div className="flex items-center justify-between">
-          <div>
+          <div className="fit:flex fit:items-baseline fit:gap-2">
             <p className="text-xs font-medium text-muted-foreground">{label}</p>
-            <p className={cn("text-2xl font-bold", valueClassName)}>
+            <p className={cn("text-2xl font-bold fit:text-xl", valueClassName)}>
               {value ?? "—"}
             </p>
           </div>
-          <div className={cn("rounded-full p-2.5", iconBg)}>{icon}</div>
+          <div className={cn("rounded-full p-2.5 fit:p-1.5", iconBg)}>{icon}</div>
         </div>
       </CardContent>
     </Card>
@@ -81,8 +88,10 @@ function StatCard({
 
 type MainTab = "members" | "pending" | "rejected";
 
-export default function BorrowersPage() {
+function BorrowersContent() {
   const [borrowers, setBorrowers] = useState<Borrower[]>([]);
+  // The filters row's spot for the table's Columns menu (see BorrowerTable).
+  const [columnsSlot, setColumnsSlot] = useState<HTMLDivElement | null>(null);
   const [total, setTotal] = useState(0);
   // null, not zeroes: "we do not know yet" is a different thing from "none".
   const [stats, setStats] = useState<MemberStats | null>(null);
@@ -214,7 +223,7 @@ export default function BorrowersPage() {
         // to the "No members yet" empty state, which tells the admin their
         // members are gone.
         setError("We couldn't load the members. Please try again.");
-        toast.error("We couldn't load the borrowers. Please try again.");
+        toast.error("We couldn't load the members. Please try again.");
       }
     } finally {
       if (requestId === requestIdRef.current && !clamping) setLoading(false);
@@ -285,41 +294,41 @@ export default function BorrowersPage() {
         await borrowerService.reactivate(id);
       }
       toast.success(
-        `Borrower ${borrower.status === "active" ? "deactivated" : "reactivated"}`
+        `Member ${borrower.status === "active" ? "deactivated" : "reactivated"}`
       );
       fetchBorrowers();
     } catch {
-      toast.error("We couldn't update the borrower status. Please try again.");
+      toast.error("We couldn't update the member status. Please try again.");
     }
   };
 
   const handleDelete = async (id: number) => {
     try {
       await borrowerService.delete(id);
-      toast.success("Borrower deleted");
+      toast.success("Member deleted");
       fetchBorrowers();
     } catch {
-      toast.error("We couldn't delete the borrower. Please try again.");
+      toast.error("We couldn't delete the member. Please try again.");
     }
   };
 
   const handleBulkDeactivate = async (ids: number[]) => {
     try {
       await borrowerService.bulkDeactivate(ids);
-      toast.success(`${ids.length} borrower(s) deactivated`);
+      toast.success(`${ids.length} member(s) deactivated`);
       fetchBorrowers();
     } catch {
-      toast.error("We couldn't deactivate some borrowers. Please try again.");
+      toast.error("We couldn't deactivate some members. Please try again.");
     }
   };
 
   const handleBulkDelete = async (ids: number[]) => {
     try {
       await borrowerService.bulkDelete(ids);
-      toast.success(`${ids.length} borrower(s) deleted`);
+      toast.success(`${ids.length} member(s) deleted`);
       fetchBorrowers();
     } catch {
-      toast.error("We couldn't delete some borrowers. Please try again.");
+      toast.error("We couldn't delete some members. Please try again.");
     }
   };
 
@@ -341,10 +350,10 @@ export default function BorrowersPage() {
   ];
 
   return (
-    <RouteGuard permission="borrowers:view" pageName="Members">
-    <div className="space-y-6">
+    <PageFill className="fit:gap-4">
+      <NoBranchBanner className="shrink-0" />
       {/* Header */}
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex shrink-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
             Member Management
@@ -365,7 +374,7 @@ export default function BorrowersPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid shrink-0 gap-4 md:grid-cols-4">
         <StatCard
           label="Total Members"
           value={memberCount}
@@ -396,7 +405,7 @@ export default function BorrowersPage() {
 
       {/* Main tab switcher */}
       <div
-        className="flex border-b border-border"
+        className="flex shrink-0 border-b border-border"
         role="group"
         aria-label="Members and applications"
       >
@@ -411,7 +420,7 @@ export default function BorrowersPage() {
               aria-controls={`${tab.value}-panel`}
               onClick={() => setMainTab(tab.value)}
               className={cn(
-                "flex items-center gap-2 px-5 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange/40",
+                "flex items-center gap-2 px-5 py-2.5 fit:py-1.5 text-sm font-semibold border-b-2 -mb-px transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange/40",
                 selected
                   ? "border-brand-orange text-brand-orange"
                   : "border-transparent text-muted-foreground hover:text-foreground"
@@ -440,29 +449,34 @@ export default function BorrowersPage() {
 
       {/* Filters + Table */}
       {mainTab === "members" && (
-      <Card id="members-panel" role="region" aria-labelledby="members-tab">
-        <div className="p-6 pb-0">
-          <BorrowerFilters
-            search={search}
-            onSearchChange={handleSearchChange}
-            statusFilter={statusFilter}
-            onStatusFilterChange={handleStatusFilterChange}
-            onClearFilters={handleClearFilters}
-            counts={{
-              all: memberCount,
-              active: stats?.active ?? null,
-              inactive: stats?.inactive ?? null,
-              blacklisted: stats?.blacklisted ?? null,
-            }}
-          />
+      <Card id="members-panel" role="region" aria-labelledby="members-tab" className={cn(FIT_CLASSES.section, "fit:gap-3 fit:py-3")}>
+        {/* The table's Columns menu joins the filters' row (columnsSlot), so
+            the list doesn't spend a row on it. */}
+        <div className="flex shrink-0 flex-col gap-3 p-6 pb-0 sm:flex-row sm:items-center fit:px-4 fit:pt-0">
+          <div className="min-w-0 flex-1">
+            <BorrowerFilters
+              search={search}
+              onSearchChange={handleSearchChange}
+              statusFilter={statusFilter}
+              onStatusFilterChange={handleStatusFilterChange}
+              onClearFilters={handleClearFilters}
+              counts={{
+                all: memberCount,
+                active: stats?.active ?? null,
+                inactive: stats?.inactive ?? null,
+                blacklisted: stats?.blacklisted ?? null,
+              }}
+            />
+          </div>
+          <div ref={setColumnsSlot} className="shrink-0 empty:hidden" />
         </div>
-        <CardContent className="pt-4">
+        <CardContent className={cn("pt-4 fit:pt-0", FIT_CLASSES.section)}>
           {loading ? (
-            <div className="flex items-center justify-center py-12">
+            <div className="flex items-center justify-center py-12 fit:flex-1">
               <Spinner className="size-6 text-muted-foreground" />
             </div>
           ) : error ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
+            <div className="flex flex-col items-center justify-center py-12 text-center fit:flex-1">
               <AlertTriangle className="h-8 w-8 text-destructive/60 mb-3" />
               <p className="text-sm text-muted-foreground">{error}</p>
               <button
@@ -473,8 +487,12 @@ export default function BorrowersPage() {
               </button>
             </div>
           ) : borrowers.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <Users className="h-10 w-10 text-muted-foreground/50 mb-3" />
+            <div className="flex flex-col items-center justify-center py-12 text-center fit:flex-1">
+              {hasIllustration(emptyArt("emptyMembers", hasFilters)) ? (
+                <Illustration name={emptyArt("emptyMembers", hasFilters)} className="mb-3" />
+              ) : (
+                <Users className="h-10 w-10 text-muted-foreground/50 mb-3" />
+              )}
               <p className="text-sm font-medium text-muted-foreground">
                 {hasFilters ? "No members match your filters" : "No members yet"}
               </p>
@@ -492,6 +510,7 @@ export default function BorrowersPage() {
               onDelete={handleDelete}
               onBulkDeactivate={handleBulkDeactivate}
               onBulkDelete={handleBulkDelete}
+              columnsSlot={columnsSlot}
             />
           )}
 
@@ -507,8 +526,8 @@ export default function BorrowersPage() {
       )}
 
       {mainTab === "pending" && (
-        <Card id="pending-panel" role="region" aria-labelledby="pending-tab">
-          <CardContent className="pt-6">
+        <Card id="pending-panel" role="region" aria-labelledby="pending-tab" className={FIT_CLASSES.section}>
+          <CardContent className={cn("pt-6", FIT_CLASSES.section)}>
             <RegistrationsTab
               status="pending"
               registrations={pending.registrations}
@@ -527,8 +546,8 @@ export default function BorrowersPage() {
       )}
 
       {mainTab === "rejected" && (
-        <Card id="rejected-panel" role="region" aria-labelledby="rejected-tab">
-          <CardContent className="pt-6">
+        <Card id="rejected-panel" role="region" aria-labelledby="rejected-tab" className={FIT_CLASSES.section}>
+          <CardContent className={cn("pt-6", FIT_CLASSES.section)}>
             <RegistrationsTab
               status="rejected"
               registrations={rejected.registrations}
@@ -545,7 +564,14 @@ export default function BorrowersPage() {
           </CardContent>
         </Card>
       )}
-    </div>
+    </PageFill>
+  );
+}
+
+export default function BorrowersPage() {
+  return (
+    <RouteGuard permission="borrowers:view" pageName="Members">
+      <BorrowersContent />
     </RouteGuard>
   );
 }

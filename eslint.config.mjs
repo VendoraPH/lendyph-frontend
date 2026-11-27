@@ -60,13 +60,13 @@ const listCalls = {
      * filter. Whatever the endpoint's default page size is (15), that is what
      * the caller gets, and every one of these was written expecting the lot.
      *
-     * Matched by suffix: `list`, `ledgerList`, `pledgeList`, `publicList` — any
-     * name ending in "list". Drains are excluded, and excluded for free, because
-     * this codebase names them `listAll` / `ledgerListAll` / `pledgeListAll`,
-     * which end in "All" instead. That is not a coincidence to lean on lightly:
-     * all five drains return `Promise<DrainResult<T>>`, and each one documents
-     * that "`page` and `per_page` are set by the drain — passing them in
-     * `params` has no effect". A bare `listAll()` is therefore not merely
+     * Matched by suffix: `list`, `ledgerList`, `pledgeList`, `accountsList` —
+     * any name ending in "list". Drains are excluded, and excluded for free,
+     * because this codebase names them `listAll` / `ledgerListAll` /
+     * `publicListAll` / `pendingListAll` / `accountsListAll`, which end in "All"
+     * instead. That is not a coincidence to lean on lightly: every drain returns
+     * `Promise<DrainResult<T>>`, and sets `page` and `per_page` itself — passing
+     * them has no effect. A bare `listAll()` is therefore not merely
      * acceptable, it is the ONLY correct way to call one; the rule previously
      * warned on three of them and told the author to pass arguments that the
      * function explicitly ignores. Advice that is wrong when followed is worse
@@ -79,9 +79,12 @@ const listCalls = {
      * the name was the bug". `listPage` is deliberately not matched here — it
      * ends in "Page" and says exactly what it hands back.
      *
-     * Advisory rather than fatal: several hits are genuinely small config
-     * resources (roles, fees, branches), so this flags the shape and leaves the
-     * judgement to a human.
+     * Advisory rather than fatal: it flags a shape, not a proven bug — an
+     * endpoint that answers every row with `->get()` looks exactly like this —
+     * so the judgement stays with a human. The small config resources that were
+     * once its usual hits (roles, fees, branches, loan products, collateral
+     * types) are drained too now, and read through `completeRows()` where a
+     * partial list has no safe rendering.
      */
     "no-unparameterised-list": {
       meta: {
@@ -93,7 +96,7 @@ const listCalls = {
         schema: [],
         messages: {
           unparameterised:
-            "`{{call}}()` takes no arguments, so it returns the endpoint's DEFAULT page (15 rows) — not the whole list. Pass an explicit `{ per_page: MAX_PER_PAGE }` for one page, or drain every page with fetchAllPages() from @/lib/paginate. By convention a drain lives on the service as an `…All` sibling returning DrainResult — but only five exist today, so check before reaching for one.",
+            "`{{call}}()` takes no arguments, so it returns the endpoint's DEFAULT page (15 rows) — not the whole list. Pass an explicit `{ per_page: MAX_PER_PAGE }` for one page, or drain every page with fetchAllPages() from @/lib/paginate. By convention a drain lives on the service as an `…All` sibling returning DrainResult (read it through completeRows() where a partial list has no safe rendering) — but not every service has one, so check before reaching for it.",
         },
       },
       create(context) {
@@ -105,10 +108,10 @@ const listCalls = {
               node,
               messageId: "unparameterised",
               // Deliberately NOT interpolating a suggested drain name here.
-              // `${name}All` reads plausibly and is wrong for most services:
-              // only borrower/loan/repayment `listAll` and share-capital's
-              // `ledgerListAll`/`pledgeListAll` exist, so naming e.g.
-              // `roleService.listAll()` would send the reader to write a
+              // `${name}All` reads plausibly and is still wrong for some
+              // services: audit, co-maker, loan-adjustment and registration
+              // each have a `list` and no `listAll`, so naming e.g.
+              // `auditService.listAll()` would send the reader to write a
               // runtime TypeError. Name the pattern, not an identifier.
               data: {
                 call: `${node.callee.object.name}.${node.callee.property.name}`,

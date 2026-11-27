@@ -2,17 +2,25 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import axios from "axios";
 import { useAuth, usePasswordChangeGuard } from "@/hooks";
+import { useAuthStore } from "@/store";
 import { authService } from "@/services";
 import { tokenManager } from "@/lib/axios-client";
+import { isSessionRejection, isTokenExpired } from "@/lib/session-token";
 import { SessionProvider } from "@/components/providers/session-provider";
+import { MenuVisibilityProvider } from "@/components/providers/menu-visibility-provider";
+import { HiddenModuleGate } from "@/components/layout/hidden-module-gate";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
+import { LindaFab } from "@/components/linda/linda-fab";
+import { LindaModal } from "@/components/linda/linda-modal";
+import { LindaPanel } from "@/components/linda/linda-panel";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-  const { user, isAuthenticated, setUser, clearAuth } = useAuth();
+  const { isAuthenticated, setUser, clearAuth } = useAuth();
   const router = useRouter();
 
   // This layout wraps every authenticated route, which makes it the one place
@@ -22,14 +30,37 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const initAuth = useCallback(async () => {
     const token = tokenManager.getAccessToken();
 
+    // No token, but the persisted user can outlive it: a session that ended
+    // (the interceptor clears the tokens and leaves the user for the "Session
+    // Expired" dialog) and was then reloaded, or a logout in another tab.
+    // Left authenticated, this layout would render the page for a moment and
+    // every one of its requests would go out with no token and 401.
     if (!token) {
+      clearAuth();
       setLoading(false);
       router.replace("/login");
       return;
     }
 
-    // Already have user in store — no need to fetch
-    if (user && isAuthenticated) {
+    // A token we know has expired, e.g. a tab reopened or reloaded after the
+    // user walked away. Rendering the page would fire every one of its
+    // requests with it and collect a 401 from each, so go straight to login
+    // without asking the API anything.
+    if (isTokenExpired(tokenManager.getAccessTokenLifetime(), Date.now())) {
+      tokenManager.clearTokens();
+      clearAuth();
+      setLoading(false);
+      router.replace("/login");
+      return;
+    }
+
+    // Already have the user — no need to fetch. Read from the store itself, not
+    // this render's `user`: on a full page load the first render is React
+    // hydrating from the store's initial, empty state, so `user` is still null
+    // here even when a signed-in user is persisted, and this used to call
+    // /auth/me on every load because of it.
+    const stored = useAuthStore.getState();
+    if (stored.user && stored.isAuthenticated) {
       setLoading(false);
       return;
     }
@@ -38,14 +69,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     try {
       const userData = await authService.me();
       setUser(userData);
-    } catch {
-      tokenManager.clearTokens();
-      clearAuth();
+    } catch (err) {
+      // Only a refused token ends the session. A throttled (429), failing or
+      // dropped /auth/me says nothing about it, and clearing the tokens over
+      // one signed people out mid-session; the next load simply asks again.
+      if (isSessionRejection(axios.isAxiosError(err) ? err.response?.status : undefined)) {
+        tokenManager.clearTokens();
+        clearAuth();
+      }
       router.replace("/login");
     } finally {
       setLoading(false);
     }
-  }, [user, isAuthenticated, setUser, clearAuth, router]);
+  }, [setUser, clearAuth, router]);
 
   useEffect(() => {
     initAuth();
@@ -66,16 +102,33 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <SessionProvider>
-      <div className="flex h-screen overflow-hidden">
-        <Sidebar
-          mobileOpen={sidebarOpen}
-          onMobileClose={() => setSidebarOpen(false)}
-        />
-        <div className="flex flex-1 flex-col min-w-0">
-          <Header onMenuClick={() => setSidebarOpen(true)} />
-          <main className="flex-1 overflow-y-auto bg-muted/40 p-4 sm:p-6">{children}</main>
+      {/* Which modules Menu Visibility hides: the menus, pages and Linda read it. */}
+      <MenuVisibilityProvider>
+        {/*
+          h-dvh, not h-screen: on a phone the browser's own bar would hide the
+          foot of the page. `data-app-shell` is what print CSS resets, and the
+          floating Linda button sets `data-linda-fab` here while it shows, so
+          pinned controls keep clear of it (globals.css).
+        */}
+        <div data-app-shell className="flex h-dvh overflow-hidden">
+          <Sidebar
+            mobileOpen={sidebarOpen}
+            onMobileClose={() => setSidebarOpen(false)}
+          />
+          <div data-app-column className="flex flex-1 flex-col min-w-0">
+            <Header onMenuClick={() => setSidebarOpen(true)} />
+            {/* Scrolls for pages not yet built to fit; a PageFill page fills it exactly. */}
+            <main data-app-main className="flex-1 overflow-y-auto bg-muted/40 p-4 sm:p-6">
+              <HiddenModuleGate>{children}</HiddenModuleGate>
+            </main>
+          </div>
+          {/* Beside the page, not over it: opening Linda narrows the content. */}
+          <LindaPanel />
+          {/* The floating button that opens the panel, and the panel's expanded chat. */}
+          <LindaFab />
+          <LindaModal />
         </div>
-      </div>
+      </MenuVisibilityProvider>
     </SessionProvider>
   );
 }

@@ -24,8 +24,13 @@ export const auditService = {
    *
    * Accepted params (`AuditLogController::index()` / `buildQuery()`): `page`,
    * `per_page` (clamped to `min(per_page, 100)` — note there is no `max(…, 1)`
-   * here, unlike `LoanController`), `search`, `user_id`, `action`,
-   * `auditable_type` (a LIKE, not an exact match) and `date_from`/`date_to`.
+   * here, unlike `LoanController`), `search`, `user_id`, `action`, `module`
+   * (the row's module name, as the screen's module filter sends it),
+   * `auditable_type` (a LIKE, not an exact match), `date_from`/`date_to` and
+   * `branch_id` (the audited record's branch, recorded on rows written since
+   * Phase 6 MB-BE6; needs `branches:view_all`, like the trail itself). The
+   * screen builds them, for the list and the CSV alike, with
+   * `audit-trail/_lib/audit-query.ts`.
    */
   list: (params?: Record<string, unknown>) =>
     api.getRaw<PaginatedResponse<AuditLog>>(API_ENDPOINTS.AUDIT_LOGS.LIST, {

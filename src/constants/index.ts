@@ -11,12 +11,25 @@ export const ADJUSTMENT_STATUS_LABELS: Record<string, string> = {
   approved: "Approved",
   rejected: "Rejected",
   applied: "Applied",
+  cancelled: "Cancelled",
 };
 
-export const PAST_DUE_TRANSFER_UNIT_OPTIONS = [
-  { value: "days", label: "Days" },
+export const TERM_UNIT_OPTIONS = [
   { value: "months", label: "Months" },
-  { value: "amortization_periods", label: "Amortization Periods" },
+  { value: "days", label: "Days" },
+] as const;
+
+// The period each interest rate figure is quoted per (e.g. "3% per month").
+// Mirrors payment frequency's vocabulary minus "upon_maturity", which is a
+// repayment schedule shape rather than a rate period, plus "annual" ("18% per
+// year"), which is a rate period only: no loan is paid yearly.
+export const INTEREST_RATE_FREQUENCY_OPTIONS = [
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
+  { value: "bi_weekly", label: "Bi-Weekly" },
+  { value: "semi_monthly", label: "Semi-Monthly" },
+  { value: "monthly", label: "Monthly" },
+  { value: "annual", label: "Annual" },
 ] as const;
 
 export const INTEREST_TYPE = {
@@ -72,6 +85,13 @@ export const INTEREST_TYPE_OPTIONS = [
   { value: "diminishing", label: "Diminishing" },
 ] as const;
 
+/** Every interest method a product or loan can carry, by its API value. */
+export const INTEREST_METHOD_LABELS: Record<string, string> = {
+  straight: "Straight (Fixed)",
+  diminishing: "Diminishing",
+  upon_maturity: "Upon Maturity",
+};
+
 export const PAYMENT_FREQUENCY_OPTIONS = [
   { value: "daily", label: "Daily" },
   { value: "weekly", label: "Weekly" },
@@ -105,6 +125,16 @@ export const CIVIL_STATUS_OPTIONS = [
 export const GENDER_OPTIONS = [
   { value: "male", label: "Male" },
   { value: "female", label: "Female" },
+] as const;
+
+/**
+ * The two member types the backend stores (`Borrower::MEMBER_TYPES`), with the
+ * words every screen shows for them. Here, like `GENDER_OPTIONS`, so the CSV
+ * import's Member Type column validates against one shared list.
+ */
+export const MEMBER_TYPE_OPTIONS = [
+  { value: "regular", label: "Regular" },
+  { value: "associate", label: "Associate" },
 ] as const;
 
 export const VALID_ID_OPTIONS = [
@@ -155,9 +185,14 @@ export const SUFFIX_OPTIONS = [
 export {
   LOAN_STATUS,
   LOAN_STATUS_LABELS,
+  loanStatusLabel,
   LOAN_STATUS_COLORS,
   ACTIVE_LOAN_STATUSES,
   isActiveLoanStatus,
+  COLLECTIBLE_LOAN_STATUSES,
+  isCollectibleLoanStatus,
+  EVER_RELEASED_LOAN_STATUSES,
+  isEverReleasedLoanStatus,
 } from "./loan-status";
 export { ROLES, ROLE_OPTIONS } from "./rbac";
 export { BRANCHES } from "./branches";

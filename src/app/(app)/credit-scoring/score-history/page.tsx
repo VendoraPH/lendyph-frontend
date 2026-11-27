@@ -1,108 +1,120 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { useRouter } from "next/navigation";
 import { RouteGuard } from "@/components/common/route-guard";
 import { DataState } from "@/components/common/data-state";
+import { TablePagination } from "@/components/common/table-pagination";
 import { useApiResource } from "@/hooks";
 import { creditScoringService } from "@/services";
+import { CREDIT_SCORING_PER_PAGE } from "@/services/credit-scoring.service";
+import { CREDIT_SCORING_PER_PAGE_OPTIONS } from "@/lib/credit-scoring/paging";
 import { CreditScoringPageHeader } from "../_components/page-header";
-import { BranchFilter, FilterBar, branchParam, ALL_BRANCHES } from "../_components/filters";
-import { RiskLevelBadge } from "../_components/risk-level-badge";
+import { BranchFilter, FilterBar, branchParam } from "../_components/filters";
+import { ScoreHistoryTable } from "../_components/score-history-table";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { formatDateTime } from "@/lib/format";
-import { borrowerLabel } from "@/lib/credit-scoring/borrower-label";
-import type { CreditScoreHistoryEntry, ScoreHistoryFilters } from "@/types/credit-scoring";
+import type { CreditScoreHistoryEntry, CreditScoringPage, ScoreHistoryFilters } from "@/types/credit-scoring";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
+import { useBranchFilter, useBranchFollowingPage } from "@/hooks/use-working-branch";
 
-export default function ScoreHistoryPage() {
-  const router = useRouter();
-  const [branch, setBranch] = useState(ALL_BRANCHES);
+function ScoreHistoryContent() {
+  const [branch, setBranch] = useBranchFilter();
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [page, setPage] = useBranchFollowingPage();
+  const [perPage, setPerPage] = useState<number>(CREDIT_SCORING_PER_PAGE);
 
-  const fetcher = useCallback((): Promise<CreditScoreHistoryEntry[]> => {
+  const fetcher = useCallback((): Promise<CreditScoringPage<CreditScoreHistoryEntry>> => {
     const filters: ScoreHistoryFilters = {
       branch_id: branchParam(branch),
       from: from || undefined,
       to: to || undefined,
     };
-    return creditScoringService.getScoreHistory(filters);
-  }, [branch, from, to]);
+    return creditScoringService.getScoreHistory(filters, { page, per_page: perPage });
+  }, [branch, from, to, page, perPage]);
 
-  const resource = useApiResource<CreditScoreHistoryEntry[]>(fetcher);
+  const resource = useApiResource<CreditScoringPage<CreditScoreHistoryEntry>>(fetcher);
 
   return (
-    <RouteGuard permission="credit_scoring:view" pageName="Score History">
-      <div className="space-y-6">
-        <CreditScoringPageHeader
-          title="Score History"
-          description="Every recorded score change, across all borrowers."
+    <PageFill>
+      <CreditScoringPageHeader
+        title="Score History"
+        description="Every recorded member score, newest first. A loan application's own scores are on that loan's Credit Assessment."
+      />
+
+      <FilterBar>
+        <BranchFilter
+          value={branch}
+          onChange={(v) => {
+            setBranch(v);
+            setPage(1);
+          }}
         />
+        <div className="space-y-1.5">
+          <Label htmlFor="score-history-from" className="text-xs text-muted-foreground">From</Label>
+          <Input
+            id="score-history-from"
+            type="date"
+            value={from}
+            onChange={(e) => {
+              setFrom(e.target.value);
+              setPage(1);
+            }}
+            className="w-[170px]"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="score-history-to" className="text-xs text-muted-foreground">To</Label>
+          <Input
+            id="score-history-to"
+            type="date"
+            value={to}
+            onChange={(e) => {
+              setTo(e.target.value);
+              setPage(1);
+            }}
+            className="w-[170px]"
+          />
+        </div>
+      </FilterBar>
 
-        <FilterBar>
-          <BranchFilter value={branch} onChange={setBranch} />
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">From</Label>
-            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-[170px]" />
+      <DataState
+        resource={resource}
+        summary="Score history across the portfolio, newest first."
+        endpoints={["GET /credit-scoring/score-history"]}
+        isEmpty={(res) => res.total === 0}
+        emptyMessage="No scores in this range."
+        emptyIllustration="noResults"
+      >
+        {(res) => (
+          <div className={cn("rounded-lg border p-2", FIT_CLASSES.section)}>
+            <ScrollBox>
+              <ScoreHistoryTable rows={res.data} />
+            </ScrollBox>
+            <TablePagination
+              page={res.current_page}
+              perPage={res.per_page}
+              total={res.total}
+              perPageOptions={CREDIT_SCORING_PER_PAGE_OPTIONS}
+              onPageChange={setPage}
+              onPerPageChange={(n) => {
+                setPerPage(n);
+                setPage(1);
+              }}
+            />
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">To</Label>
-            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-[170px]" />
-          </div>
-        </FilterBar>
+        )}
+      </DataState>
+    </PageFill>
+  );
+}
 
-        <DataState
-          resource={resource}
-          summary="Score change history across the portfolio will appear here once the backend is connected."
-          endpoints={["GET /credit-scoring/score-history"]}
-          isEmpty={(rows) => rows.length === 0}
-          emptyMessage="No score changes in this range."
-        >
-          {(rows) => (
-            <div className="rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Borrower</TableHead>
-                    <TableHead>Score</TableHead>
-                    <TableHead>Risk Level</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Reason</TableHead>
-                    <TableHead>Model</TableHead>
-                    <TableHead>Calculated</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.map((row) => (
-                    <TableRow
-                      key={row.id}
-                      className="cursor-pointer"
-                      onClick={() => router.push(`/credit-scoring/borrowers/${row.borrower_id}`)}
-                    >
-                      <TableCell className="font-medium">{borrowerLabel(row)}</TableCell>
-                      <TableCell>{row.score}</TableCell>
-                      <TableCell><RiskLevelBadge level={row.risk_level} /></TableCell>
-                      <TableCell className="capitalize">{row.score_type}</TableCell>
-                      <TableCell>{row.reason}</TableCell>
-                      <TableCell>{row.model_version}</TableCell>
-                      <TableCell>{formatDateTime(row.calculated_at)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </DataState>
-      </div>
+export default function ScoreHistoryPage() {
+  return (
+    <RouteGuard permission="credit_scoring:view" pageName="Score History">
+      <ScoreHistoryContent />
     </RouteGuard>
   );
 }

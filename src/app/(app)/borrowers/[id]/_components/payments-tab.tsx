@@ -6,12 +6,14 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Banknote, CalendarClock, AlertCircle, CheckCircle2 } from "lucide-react";
-import { formatCurrency, todayISO } from "@/lib/format";
-import type { Payment, Loan } from "@/types";
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
+import { formatCurrency, formatDate } from "@/lib/format";
+import type { BorrowerLoanSummary, Payment, Loan } from "@/types";
+import { memberPaymentFigures, memberTotalPaidNote } from "../_lib/member-payment-figures";
+import { paymentReferenceCell, statusInWords } from "@/app/(app)/borrowers/_components/utils";
+import { ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
+import { loanNumberLabel } from "@/lib/loan-number";
 
 const paymentMethodLabels: Record<string, string> = {
   cash: "Cash",
@@ -30,20 +32,19 @@ const paymentStatusColor: Record<string, string> = {
 interface PaymentsTabProps {
   payments: Payment[];
   loans: Loan[];
+  /** GET /borrowers/{id}/loan-summary; null while loading or after a failure. */
+  summary: BorrowerLoanSummary | null;
 }
 
-export function PaymentsTab({ payments, loans }: PaymentsTabProps) {
-  const completedPayments = payments.filter((p) => p.status === "completed");
-  const totalPaid = completedPayments.reduce((sum, p) => sum + (parseFloat(String(p.amount)) || 0), 0);
-  const totalOutstanding = loans.reduce((sum, l) => sum + (l.outstanding_balance ?? 0), 0);
+export function PaymentsTab({ payments, loans, summary }: PaymentsTabProps) {
+  // Every money card is the server's figure; a missing one shows a dash.
+  const figures = memberPaymentFigures(summary);
+  const totalPaidNote = memberTotalPaidNote(summary);
+  const hasOverdue = (summary?.overdue_amount ?? 0) > 0;
 
   const ongoingLoans = loans.filter((l) => l.status === "ongoing");
   const nextDueDates = ongoingLoans.map((l) => l.next_due_date).filter(Boolean).sort();
   const nextDueDate = nextDueDates[0];
-
-  const today = todayISO();
-  const overdueLoans = ongoingLoans.filter((l) => l.next_due_date && l.next_due_date < today);
-  const overdueAmount = overdueLoans.reduce((sum, l) => sum + (l.outstanding_balance ?? 0), 0);
 
   const sortedPayments = [...payments].sort((a, b) => {
     const dateA = a.paid_at ?? a.created_at;
@@ -53,18 +54,19 @@ export function PaymentsTab({ payments, loans }: PaymentsTabProps) {
 
   const loanLabelMap = new Map(loans.map((l) => [
     l.id,
-    l.loan_account_number ?? l.application_number ?? (l.loan_product?.name ?? l.loan_product_name ?? `Loan ${l.id}`),
+    loanNumberLabel(l, l.loan_product?.name ?? l.loan_product_name ?? `Loan ${l.id}`),
   ]));
 
   return (
-    <div className="space-y-4">
-      <div className="grid gap-4 md:grid-cols-4">
+    <div className={cn("gap-4", FIT_CLASSES.section)}>
+      <div className="grid shrink-0 gap-4 md:grid-cols-4">
         <Card>
           <CardContent className="py-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-muted-foreground">Total Paid</p>
-                <p className="text-2xl font-bold text-green-600">{formatCurrency(totalPaid)}</p>
+                <p className="text-2xl font-bold text-green-600">{figures.totalPaid}</p>
+                {totalPaidNote && <p className="text-xs text-muted-foreground">{totalPaidNote}</p>}
               </div>
               <CheckCircle2 className="h-8 w-8 text-green-600/30" />
             </div>
@@ -74,8 +76,8 @@ export function PaymentsTab({ payments, loans }: PaymentsTabProps) {
           <CardContent className="py-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground">Remaining Balance</p>
-                <p className="text-2xl font-bold text-brand-orange">{formatCurrency(totalOutstanding)}</p>
+                <p className="text-xs text-muted-foreground">Outstanding</p>
+                <p className="text-2xl font-bold text-brand-orange">{figures.outstanding}</p>
               </div>
               <Banknote className="h-8 w-8 text-brand-orange/30" />
             </div>
@@ -97,22 +99,22 @@ export function PaymentsTab({ payments, loans }: PaymentsTabProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-muted-foreground">Overdue</p>
-                <p className={`text-2xl font-bold ${overdueAmount > 0 ? "text-red-600" : ""}`}>
-                  {overdueAmount > 0 ? formatCurrency(overdueAmount) : "None"}
+                <p className={`text-2xl font-bold ${hasOverdue ? "text-red-600" : ""}`}>
+                  {figures.overdue}
                 </p>
               </div>
-              <AlertCircle className={`h-8 w-8 ${overdueAmount > 0 ? "text-red-600/30" : "text-muted-foreground/30"}`} />
+              <AlertCircle className={`h-8 w-8 ${hasOverdue ? "text-red-600/30" : "text-muted-foreground/30"}`} />
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <Card>
+      <Card className={FIT_CLASSES.section}>
         <CardHeader>
           <CardTitle className="text-sm font-medium">Payment History ({payments.length})</CardTitle>
         </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
+        <CardContent className={cn("p-0", FIT_CLASSES.section)}>
+          <ScrollBox>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -141,11 +143,11 @@ export function PaymentsTab({ payments, loans }: PaymentsTabProps) {
                     </TableCell>
                     <TableCell>{paymentMethodLabels[payment.method] ?? payment.method}</TableCell>
                     <TableCell className="text-muted-foreground font-mono text-xs">
-                      {payment.reference_number || payment.collected_by || "—"}
+                      {paymentReferenceCell(payment)}
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline" className={paymentStatusColor[payment.status]}>
-                        {payment.status}
+                        {statusInWords(payment.status)}
                       </Badge>
                     </TableCell>
                   </TableRow>
@@ -159,7 +161,7 @@ export function PaymentsTab({ payments, loans }: PaymentsTabProps) {
                 )}
               </TableBody>
             </Table>
-          </div>
+          </ScrollBox>
         </CardContent>
       </Card>
     </div>

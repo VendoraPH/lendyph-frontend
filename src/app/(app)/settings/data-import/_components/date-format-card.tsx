@@ -26,13 +26,13 @@
 import { AlertTriangle, CalendarDays, Check, HelpCircle, XCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { formatCount } from "@/lib/report-format";
+import { formatCount, formatCountOf } from "@/lib/report-format";
 import type { DateColumnStats, DateOrder } from "@/lib/import-date";
 import type { DateColumnFinding } from "../_hooks/use-file-precheck";
 import { describeIsoDate } from "../_hooks/use-file-precheck";
 
 export interface DateFormatCardProps {
-  /** "Customer Profile" / "Loans" — names the file the columns belong to. */
+  /** "Members file" / "Loans file" — names the file the columns belong to. */
   fileLabel: string;
   dates: readonly DateColumnFinding[];
   /** Called when the admin settles an ambiguous column. */
@@ -66,16 +66,17 @@ const ORDER_HEADINGS: Record<DateOrder, string> = {
 function StatsLine({ stats }: { stats: DateColumnStats }) {
   const parts: string[] = [];
   if (stats.iso > 0) parts.push(`${formatCount(stats.iso)} already YYYY-MM-DD`);
+  if (stats.named > 0) parts.push(`${formatCount(stats.named)} written with the month's name`);
   if (stats.pair > 0) parts.push(`${formatCount(stats.pair)} written with slashes`);
   if (stats.serial > 0) parts.push(`${formatCount(stats.serial)} Excel date numbers`);
   if (stats.shortYear > 0) parts.push(`${formatCount(stats.shortYear)} with a two-digit year`);
   if (stats.invalid > 0) parts.push(`${formatCount(stats.invalid)} not real dates`);
-  if (stats.unrecognised > 0) parts.push(`${formatCount(stats.unrecognised)} not dates at all`);
+  if (stats.unrecognised > 0) parts.push(`${formatCount(stats.unrecognised)} not in a form the import reads`);
   if (stats.blank > 0) parts.push(`${formatCount(stats.blank)} blank`);
 
   return (
     <p className="text-xs text-muted-foreground">
-      {formatCount(stats.total)} values: {parts.length > 0 ? parts.join(", ") : "none"}.
+      {formatCountOf(stats.total, "value")}: {parts.length > 0 ? parts.join(", ") : "none"}.
     </p>
   );
 }
@@ -251,7 +252,7 @@ function ColumnVerdict({
           <StatsLine stats={inference.stats} />
           <Samples label="Two-digit years" values={inference.stats.shortYearSamples} />
           <Samples label="Not real dates" values={inference.stats.invalidSamples} />
-          <Samples label="Not dates" values={inference.stats.unrecognisedSamples} />
+          <Samples label="Not in a form the import reads" values={inference.stats.unrecognisedSamples} />
         </div>
       </div>
 

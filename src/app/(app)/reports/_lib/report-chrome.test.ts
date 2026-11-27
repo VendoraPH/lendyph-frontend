@@ -2,8 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { siteConfig } from "@/config/site";
 import { useBrandingStore } from "@/store/branding-store";
-import { applyChrome, buildReference } from "./report-chrome";
-import type { ReportDocument } from "./types";
+import { SAVINGS_RECORD_PREFIXES, applyChrome, buildReference, statementReferenceKey } from "./report-chrome";
+import { orgDetailsLine, type ReportDocument } from "./types";
 
 /**
  * Chrome is what turns a data dump into a document: who ran it, under whose
@@ -70,17 +70,80 @@ test("a reference is minted when the caller supplies none", async () => {
   assert.match(doc.meta.reference!, /^AGE-\d{8}-\d{4}$/);
 });
 
-test("the reference is stamped from local calendar parts, not UTC", () => {
-  // 00:30 on Aug 7 in Manila is still Aug 6 in UTC. Formatting off the ISO
-  // string would date this report a day early.
-  const at = new Date(2026, 7, 7, 0, 30);
+test("the reference is stamped in Philippine time, whatever the computer is set to", () => {
+  // 00:30 on Aug 7 in Manila is still Aug 6 in UTC.
+  const at = new Date("2026-08-06T16:30:00Z");
   assert.equal(buildReference("statement_of_account", at), "SOA-20260807-0030");
 });
 
+test("finding 19: a statement's reference carries its loan number", () => {
+  const at = new Date("2026-11-05T01:12:00Z");
+  assert.equal(
+    buildReference("statement_of_account", at, "LN-000004"),
+    "SOA-LN-000004-20261105-091200"
+  );
+  assert.notEqual(
+    buildReference("statement_of_account", at, "LN-000006"),
+    buildReference("statement_of_account", at, "LN-000003")
+  );
+});
+
+test("finding 19: applying chrome uses the document's reference key", async () => {
+  const keyed = { ...baseDoc(), meta: { ...baseDoc().meta, referenceKey: "LN-000004" } };
+  const doc = await applyChrome(keyed, {});
+  assert.match(doc.meta.reference!, /^AGE-LN-000004-\d{8}-\d{6}$/);
+});
+
+test("finding 18: the organization's address and contact come from branding", async () => {
+  useBrandingStore.getState().hydrate({
+    logoUrl: null,
+    organizationName: "Binhi Coop",
+    address: "Butuan City",
+    contact: "0917 000 0000",
+  });
+  const doc = await applyChrome(baseDoc(), {});
+  assert.equal(doc.meta.orgAddress, "Butuan City");
+  assert.equal(doc.meta.orgContact, "0917 000 0000");
+  assert.equal(orgDetailsLine(doc.meta), "Butuan City  •  0917 000 0000");
+  useBrandingStore.setState({ organizationName: null, address: null, contact: null });
+});
+
+test("finding 18: no address or contact configured leaves no line", () => {
+  assert.equal(orgDetailsLine({ title: "", generatedAt: "", org: "" }), null);
+});
+
+test("finding 28: a statement signs with name and date lines, and the member's Received by", async () => {
+  const statement = { ...baseDoc(), reportId: "statement_of_account" as const };
+  const doc = await applyChrome(statement, {});
+  const last = doc.sections[doc.sections.length - 1];
+  assert.ok(last.kind === "signatures");
+  assert.deepEqual(last.roles, ["Prepared by", "Checked by", "Approved by", "Received by (Member)"]);
+  assert.deepEqual(last.lines, ["Name", "Date"]);
+});
+
 test("every report id has its own reference prefix", () => {
-  const at = new Date(2026, 7, 6, 9, 15);
+  const at = new Date("2026-08-06T01:15:00Z");
   assert.equal(buildReference("daily_collection", at), "DCR-20260806-0915");
   assert.equal(buildReference("subsidiary_ledger", at), "SLG-20260806-0915");
+});
+
+test("a savings report's reference can't be mistaken for a savings record's own number", () => {
+  const at = new Date("2026-11-10T14:05:00Z");
+  const ids = [
+    "savings_balances",
+    "savings_transactions",
+    "time_deposit_maturities",
+    "savings_interest_postings",
+    "savings_dormant",
+    "savings_statement",
+    "savings_gl_control",
+  ] as const;
+  for (const id of ids) {
+    const reference = buildReference(id, at);
+    for (const prefix of SAVINGS_RECORD_PREFIXES) assert.ok(!reference.startsWith(prefix), `${id}: ${reference}`);
+  }
+  assert.equal(buildReference("savings_transactions", at), "STR-20261110-2205");
+  assert.equal(buildReference("savings_balances", at), "SBR-20261110-2205");
 });
 
 test("the sign-off block closes the document", async () => {
@@ -182,4 +245,36 @@ test("a name the caller passes wins over the one branding holds", async () => {
   } finally {
     store.restore();
   }
+});
+
+test("a statement's reference carries the seconds, so two in one minute differ", () => {
+  const first = buildReference("statement_of_account", new Date("2026-11-07T07:54:05Z"), "LN-000008");
+  const second = buildReference("statement_of_account", new Date("2026-11-07T07:54:41Z"), "LN-000008");
+  assert.equal(first, "SOA-LN-000008-20261107-155405");
+  assert.notEqual(first, second);
+});
+
+test("round 6: an imported loan's statement reference carries the file's Loan No.", () => {
+  // The importer leaves an imported loan's LN- number empty on purpose, so its
+  // reference had no loan at all ("SOA-20261125-140500").
+  assert.equal(statementReferenceKey({ loan_account_number: "LN-000004", external_loan_no: "OLD-0041" }), "LN-000004");
+  assert.equal(statementReferenceKey({ loan_account_number: null, external_loan_no: "OLD-0041" }), "OLD-0041");
+  assert.equal(statementReferenceKey({ loan_account_number: "", external_loan_no: "  " }), undefined);
+  assert.equal(statementReferenceKey(null), undefined);
+
+  const at = new Date("2026-11-25T06:05:00Z");
+  assert.equal(
+    buildReference("statement_of_account", at, statementReferenceKey({ loan_account_number: null, external_loan_no: "OLD-0041" })),
+    "SOA-OLD-0041-20261125-140500",
+  );
+});
+
+test("round 6: the statement builder keys its reference on that number", async () => {
+  const { buildStatementOfAccountDoc } = await import("./report-builders");
+  const doc = buildStatementOfAccountDoc(
+    { loan: { loan_account_number: null, external_loan_no: "OLD-0041" }, schedule: [], transactions: [] },
+    { from: "", to: "" },
+  );
+  assert.equal(doc.meta.referenceKey, "OLD-0041");
+  assert.equal(doc.meta.subtitle, "Loan OLD-0041");
 });

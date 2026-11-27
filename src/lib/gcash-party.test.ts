@@ -77,6 +77,6 @@ describe("party adapters", () => {
   test("subtitle and noun follow the kind, so dialog copy reads right for both", () => {
     assert.equal(gcashPartySubtitle(member), "M-0042");
     assert.equal(gcashPartyNoun(member), "member");
-    assert.equal(gcashPartyNoun(walkIn), "non-member");
+    assert.equal(gcashPartyNoun(walkIn), "walk-in");
   });
 });

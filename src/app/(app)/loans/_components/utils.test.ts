@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import {
   ACTIVE_STATUSES,
   FILTER_TABS,
+  allCountFromStats,
+  currentCountFromStats,
+  loanListParams,
   TAB_VALUES,
   VIRTUAL_TAB_VALUES,
   tabFromParam,
@@ -10,6 +13,8 @@ import {
   dateOrNull,
   numOrNull,
   clampOneOf,
+  offersAutoPay,
+  loanOutstandingText,
 } from "./utils";
 
 // The loans screen keeps its entire state in the URL, so `?tab=` is a public,
@@ -23,10 +28,42 @@ test("a live tab value resolves to itself", () => {
   assert.equal(tabFromParam("active"), "active");
 });
 
-test("legacy ?tab=current lands on the tab it meant, not on All", () => {
-  // The Current tab was renamed, not removed: it filtered `status=current`,
-  // which no row can hold, and now filters `ongoing`.
-  assert.equal(tabFromParam("current"), "ongoing");
+test("?tab=current is the Current tab, which leaves past-due loans out", () => {
+  // The tab sends the API's `current` (released and ongoing, none past grace),
+  // and its badge reads `meta.stats.current`. A past-due loan sits in Past Due.
+  assert.equal(tabFromParam("current"), "current");
+  const current = FILTER_TABS.filter((t) => t.label === "Current");
+  assert.deepEqual(current, [{ value: "current", label: "Current" }]);
+  assert.ok(!FILTER_TABS.some((t) => t.value === "ongoing" || t.value === "released"));
+  assert.ok(!FILTER_TABS.some((t) => t.label === "Released"));
+});
+
+test("?tab=active keeps the Active Loans card's set, past-due loans included", () => {
+  // The card counts `meta.stats.active`, so what it selects has to be
+  // `status=active`, not the narrower Current tab.
+  assert.equal(tabFromParam("active"), "active");
+  assert.ok(!FILTER_TABS.some((t) => t.value === "active"));
+});
+
+test("old ?tab=ongoing and ?tab=released links land on the Current tab", () => {
+  assert.equal(tabFromParam("ongoing"), "current");
+  assert.equal(tabFromParam("released"), "current");
+});
+
+test("the Current count is the server's, and a dash when the server sent none", () => {
+  assert.equal(currentCountFromStats({ current: 4, active: 6 }), 4);
+  assert.equal(currentCountFromStats({ current: 0, active: 6 }), 0);
+  assert.equal(currentCountFromStats({ active: 6 }), null);
+});
+
+test("Total Applications never adds the Current roll-up to the statuses it rolls up", () => {
+  const stats = { draft: 1, released: 2, ongoing: 3, active: 5, current: 4, past_due: 1 };
+  assert.equal(allCountFromStats(stats), 6);
+  assert.equal(allCountFromStats({ ...stats, all: 99 }), 99);
+});
+
+test("TAB_VALUES lists each value once", () => {
+  assert.equal(new Set(TAB_VALUES).size, TAB_VALUES.length);
 });
 
 test("?tab=past_due lands on the Past Due tab again", () => {
@@ -46,16 +83,14 @@ test("unknown, empty and missing tab values fall back to All", () => {
 });
 
 test("tabFromParam only ever returns a value the tab strip can show", () => {
-  for (const raw of ["past_due", "current", "bogus", "", null, "ongoing", "active"]) {
+  for (const raw of ["past_due", "current", "bogus", "", null, "ongoing", "released", "active"]) {
     assert.ok(TAB_VALUES.includes(tabFromParam(raw)));
   }
 });
 
 test("every tab is either a storable status or a resolvable virtual value", () => {
-  // `current` is neither: no row can hold it and the API resolves nothing for
-  // it, which is exactly the shape of the tab that read 0 forever. `past_due`
-  // is also not a storable status, but it IS resolved server-side, so it is
-  // allowed here only by way of VIRTUAL_TAB_VALUES.
+  // Neither `current` nor `past_due` is a storable status. Both ARE resolved
+  // server-side, so they are allowed here only by way of VIRTUAL_TAB_VALUES.
   const notStorable = ["current", "past_due"];
   for (const { value } of FILTER_TABS) {
     const virtual = (VIRTUAL_TAB_VALUES as readonly string[]).includes(value);
@@ -64,7 +99,6 @@ test("every tab is either a storable status or a resolvable virtual value", () =
       `${value} is neither a storable status nor a virtual filter`,
     );
   }
-  assert.ok(!FILTER_TABS.some((t) => t.value === "current"));
 
   // The active set the KPI fallback SUMS must still be storable statuses only —
   // it adds up `meta.stats` keys, so a phantom member would contribute 0 and
@@ -83,7 +117,7 @@ test("past_due is not a subset of active, and nothing may assume it is", () => {
   assert.ok((VIRTUAL_TAB_VALUES as readonly string[]).includes("active"));
 });
 
-test("both virtual values are tab values, so neither can be summed as a status", () => {
+test("every virtual value is a tab value, so none can be summed as a status", () => {
   // AGGREGATE_STAT_KEYS on the loans page is derived from VIRTUAL_TAB_VALUES.
   // Anything in the tab strip that is a roll-up MUST be listed there, or the
   // "All" total double-counts the rows it overlaps.
@@ -102,6 +136,59 @@ test("ACTIVE_STATUSES tracks the backend constant", () => {
   // the API expands from its own copy. If the backend constant changes, this
   // test is the reminder to change this one with it.
   assert.deepEqual(ACTIVE_STATUSES, ["released", "ongoing"]);
+});
+
+const listState = {
+  tab: "all" as const,
+  page: 1,
+  perPage: 10,
+  sortKey: "created_at" as const,
+  sortDir: "desc" as const,
+  search: "",
+  productId: null,
+  dateFrom: null,
+  dateTo: null,
+};
+
+test("the Loans list asks for summary rows, which carry no schedules", () => {
+  assert.deepEqual(loanListParams(listState), {
+    view: "summary",
+    page: 1,
+    per_page: 10,
+    sort: "created_at",
+    dir: "desc",
+  });
+});
+
+test("each tab sends its own status, and All sends none", () => {
+  assert.equal(loanListParams({ ...listState, tab: "current" }).status, "current");
+  assert.equal(loanListParams({ ...listState, tab: "active" }).status, "active");
+  assert.equal(loanListParams({ ...listState, tab: "past_due" }).status, "past_due");
+  assert.equal(loanListParams({ ...listState, tab: "draft" }).status, "draft");
+  assert.equal("status" in loanListParams(listState), false);
+});
+
+test("the filters go up only when they are set", () => {
+  assert.deepEqual(
+    loanListParams({
+      ...listState,
+      search: "Ana",
+      productId: 3,
+      dateFrom: "2026-11-01",
+      dateTo: "2026-11-05",
+    }),
+    {
+      view: "summary",
+      page: 1,
+      per_page: 10,
+      sort: "created_at",
+      dir: "desc",
+      search: "Ana",
+      loan_product_id: 3,
+      date_from: "2026-11-01",
+      date_to: "2026-11-05",
+    },
+  );
 });
 
 test("isoDateOrNull keeps a valid day and rejects anything else", () => {
@@ -134,4 +221,27 @@ test("clampOneOf falls back rather than passing a value through", () => {
   assert.equal(clampOneOf("asc", ["asc", "desc"], "desc"), "asc");
   assert.equal(clampOneOf("sideways", ["asc", "desc"], "desc"), "desc");
   assert.equal(clampOneOf(999, [10, 20, 50], 10), 10);
+});
+
+test("every Current loan offers auto-pay, released or ongoing", () => {
+  // Both read "Current" and the backend's auto-pay covers both.
+  assert.equal(offersAutoPay("released"), true);
+  assert.equal(offersAutoPay("ongoing"), true);
+  for (const status of ["draft", "for_review", "approved", "completed", "defaulted", "restructured", "void", "current", "", null, undefined]) {
+    assert.equal(offersAutoPay(status), false, String(status));
+  }
+});
+
+test("loanOutstandingText: N/A before release, the server's figure after", () => {
+  for (const status of ["draft", "for_review", "approved", "rejected", "void"] as const) {
+    assert.equal(loanOutstandingText({ status, total_outstanding: 5000 }), "N/A", status);
+  }
+  for (const status of ["completed", "closed"] as const) {
+    assert.equal(loanOutstandingText({ status, total_outstanding: 0 }), "₱0.00", status);
+  }
+  // A completed loan is never forced to ₱0.00: the browser shows what the server sends.
+  assert.equal(loanOutstandingText({ status: "completed", total_outstanding: 12 }), "₱12.00");
+  assert.equal(loanOutstandingText({ status: "current", total_outstanding: 12345.5 }), "₱12,345.50");
+  assert.equal(loanOutstandingText({ status: "past_due", total_outstanding: "800" }), "₱800.00");
+  assert.equal(loanOutstandingText({ status: "released", total_outstanding: null }), "—");
 });

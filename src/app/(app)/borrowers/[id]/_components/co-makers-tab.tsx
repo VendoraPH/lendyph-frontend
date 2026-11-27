@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,31 +13,36 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Phone, MapPin, CreditCard, Users, Pencil, Trash2, Briefcase, Banknote, AlertTriangle, Paperclip } from "lucide-react";
-import type { CoMaker, Loan } from "@/types";
-import type { CreateCoMakerData, UpdateCoMakerData } from "@/services/co-maker.service";
+import type { CoMaker } from "@/types";
 import { VALID_ID_OPTIONS } from "@/constants";
-import { AddCoMakerDialog, EditCoMakerDialog } from "./co-maker-form-dialog";
+import {
+  AddCoMakerDialog,
+  EditCoMakerDialog,
+  type AddCoMakerHandler,
+  type AddCoMakerIdHandler,
+  type EditCoMakerHandler,
+} from "./co-maker-form-dialog";
 import { CoMakerDocumentsDialog } from "./co-maker-documents-dialog";
+import { coMakerName } from "@/lib/co-maker-name";
+import { relationshipInWords } from "@/lib/co-maker-relationship";
 import { formatCurrency } from "@/lib/format";
+import { loanNumberLabel } from "@/lib/loan-number";
 
 interface CoMakersTabProps {
   coMakers: CoMaker[];
-  loans: Loan[];
-  borrowerId: number;
-  onAdd: (data: CreateCoMakerData) => void;
-  onEdit: (id: number, data: UpdateCoMakerData) => void;
+  onAdd: AddCoMakerHandler;
+  onAddId: AddCoMakerIdHandler;
+  onEdit: EditCoMakerHandler;
   onDelete: (id: number) => void;
 }
 
 export function CoMakersTab({
   coMakers,
-  loans,
-  borrowerId,
   onAdd,
+  onAddId,
   onEdit,
   onDelete,
 }: CoMakersTabProps) {
-  const loanMap = new Map(loans.map((l) => [l.id, l]));
   const [editingCoMaker, setEditingCoMaker] = useState<CoMaker | null>(null);
   const [deletingCoMaker, setDeletingCoMaker] = useState<CoMaker | null>(null);
   const [docsCoMaker, setDocsCoMaker] = useState<CoMaker | null>(null);
@@ -49,11 +55,8 @@ export function CoMakersTab({
           {coMakers.length} co-maker{coMakers.length !== 1 ? "s" : ""} on file
         </p>
         <AddCoMakerDialog
-          loans={loans}
-          borrowerId={borrowerId}
-          coMakerCount={coMakers.length}
-          existingCoMakers={coMakers}
           onAdd={onAdd}
+          onAddId={onAddId}
         />
       </div>
 
@@ -71,7 +74,7 @@ export function CoMakersTab({
       {/* Co-maker cards */}
       <div className="grid gap-4 md:grid-cols-2">
         {coMakers.map((cm) => {
-          const loan = cm.loan_id ? loanMap.get(cm.loan_id) : undefined;
+          const coMakerLoans = cm.loans ?? [];
           const idLabel =
             VALID_ID_OPTIONS.find((o) => o.value === cm.valid_id_type)?.label ??
             cm.valid_id_type;
@@ -81,16 +84,25 @@ export function CoMakersTab({
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div>
-                    <CardTitle className="text-base">{cm.full_name ?? cm.name ?? ([cm.first_name, cm.middle_name, cm.last_name, cm.suffix].filter(Boolean).join(" ") || "—")}</CardTitle>
-                    <p className="text-sm text-muted-foreground capitalize">{cm.relationship_to_borrower ?? cm.relationship ?? "—"}</p>
+                    <CardTitle className="text-base">{coMakerName(cm) || "—"}</CardTitle>
+                    <p className="text-sm text-muted-foreground">{relationshipInWords(cm.relationship_to_borrower ?? cm.relationship)}</p>
                     {cm.co_maker_code && <p className="text-xs text-muted-foreground font-mono">{cm.co_maker_code}</p>}
+                    {coMakerLoans.length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {coMakerLoans.map((loan) => (
+                          <Badge
+                            key={loan.id}
+                            variant="outline"
+                            className="text-xs"
+                            render={<Link href={`/loans/${loan.id}`} />}
+                          >
+                            {loanNumberLabel(loan)}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-1">
-                    {loan && (
-                      <Badge variant="outline" className="text-xs mr-2">
-                        {loan.purpose ?? `Loan #${loan.id}`}
-                      </Badge>
-                    )}
                     <Button
                       variant="ghost"
                       size="icon-sm"
@@ -167,13 +179,11 @@ export function CoMakersTab({
       {editingCoMaker && (
         <EditCoMakerDialog
           coMaker={editingCoMaker}
-          loans={loans}
           open={!!editingCoMaker}
+          // The dialog closes itself once the save has finished — and only if it
+          // succeeded — through onOpenChange.
           onOpenChange={(v) => { if (!v) setEditingCoMaker(null); }}
-          onSave={(id, data) => {
-            onEdit(id, data);
-            setEditingCoMaker(null);
-          }}
+          onSave={onEdit}
         />
       )}
 

@@ -6,22 +6,49 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import type { ApiResource } from "@/hooks";
+import type { EmptyIllustrationName, IllustrationName } from "@/lib/illustrations";
+import { hasIllustration, Illustration } from "./illustration";
 
 interface DataStateProps<T> {
   resource: ApiResource<T>;
-  /** Endpoints this screen needs, shown when they are not built yet. */
+  /** Endpoints this screen needs. Development builds list them while they are not built yet. */
   endpoints: string[];
   /** What the screen would show, in the user's terms. */
   summary: string;
   /** True when the request succeeded but returned nothing. */
   isEmpty?: (data: T) => boolean;
   emptyMessage?: string;
+  /**
+   * The picture for the empty state, when one is set in `@/lib/illustrations`:
+   * "empty" (default), "noResults" for a search or filter that matched
+   * nothing, "allCaughtUp" for nothing overdue or waiting, or the module's
+   * own picture ("emptyLoans", "emptySavings", …) for a list with nothing in
+   * it yet.
+   */
+  emptyIllustration?: EmptyIllustrationName;
   children: (data: T) => ReactNode;
+}
+
+/** The slot's picture when it has one, otherwise the screen's own icon. */
+function Art({ name, icon }: { name: IllustrationName; icon: ReactNode }) {
+  return hasIllustration(name) ? <Illustration name={name} /> : <>{icon}</>;
+}
+
+/** DataState's loading spinner and words without its card, for a part of a screen inside a card. */
+export function LoadingContent() {
+  return (
+    <div role="status" className="flex flex-col items-center gap-4 py-12 text-center">
+      <Spinner className="h-6 w-6" />
+      <p className="text-sm text-muted-foreground">Loading…</p>
+    </div>
+  );
 }
 
 function Panel({ children }: { children: ReactNode }) {
   return (
-    <Card>
+    // `shrink-0`: in a page that fits the screen, a status card under tall
+    // fixed parts keeps its own height instead of shrinking and clipping.
+    <Card className="shrink-0">
       <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
         {children}
       </CardContent>
@@ -35,8 +62,9 @@ function Panel({ children }: { children: ReactNode }) {
  * `unavailable` is separated from `error` on purpose. Until the backend lands
  * every one of these screens gets a 404, and rendering that as a red failure
  * would make a module that is merely unfinished look broken. One says "not
- * connected yet" and names what it is waiting on; the other says something
- * went wrong and offers a retry.
+ * connected yet" (development builds also list the endpoints it is waiting
+ * on; users never see raw API paths); the other says something went wrong and
+ * offers a retry.
  */
 export function DataState<T>({
   resource,
@@ -44,6 +72,7 @@ export function DataState<T>({
   summary,
   isEmpty,
   emptyMessage = "Nothing to show for this selection.",
+  emptyIllustration = "empty",
   children,
 }: DataStateProps<T>) {
   const { data, loading, unavailable, error, refetch } = resource;
@@ -60,25 +89,32 @@ export function DataState<T>({
   if (unavailable) {
     return (
       <Panel>
-        <div className="rounded-full bg-muted p-3">
-          <Construction className="h-6 w-6 text-muted-foreground" />
-        </div>
+        <Art
+          name="notConnected"
+          icon={
+            <div className="rounded-full bg-muted p-3">
+              <Construction className="h-6 w-6 text-muted-foreground" />
+            </div>
+          }
+        />
         <div className="max-w-lg space-y-1">
           <p className="font-medium">Not connected yet</p>
           <p className="text-sm text-muted-foreground">{summary}</p>
         </div>
-        <div className="w-full max-w-lg rounded-lg border bg-muted/40 p-3 text-left">
-          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Waiting on
-          </p>
-          <ul className="space-y-1">
-            {endpoints.map((endpoint) => (
-              <li key={endpoint} className="font-mono text-xs text-muted-foreground">
-                {endpoint}
-              </li>
-            ))}
-          </ul>
-        </div>
+        {process.env.NODE_ENV === "development" && (
+          <div className="w-full max-w-lg rounded-lg border bg-muted/40 p-3 text-left">
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Waiting on
+            </p>
+            <ul className="space-y-1">
+              {endpoints.map((endpoint) => (
+                <li key={endpoint} className="font-mono text-xs text-muted-foreground">
+                  {endpoint}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </Panel>
     );
   }
@@ -86,9 +122,14 @@ export function DataState<T>({
   if (error) {
     return (
       <Panel>
-        <div className="rounded-full bg-destructive/10 p-3">
-          <AlertCircle className="h-6 w-6 text-destructive" />
-        </div>
+        <Art
+          name="error"
+          icon={
+            <div className="rounded-full bg-destructive/10 p-3">
+              <AlertCircle className="h-6 w-6 text-destructive" />
+            </div>
+          }
+        />
         <div className="max-w-lg space-y-1">
           <p className="font-medium">Something went wrong</p>
           <p className="text-sm text-muted-foreground">{error}</p>
@@ -104,9 +145,14 @@ export function DataState<T>({
   if (data === null || (isEmpty && isEmpty(data))) {
     return (
       <Panel>
-        <div className="rounded-full bg-muted p-3">
-          <Inbox className="h-6 w-6 text-muted-foreground" />
-        </div>
+        <Art
+          name={emptyIllustration}
+          icon={
+            <div className="rounded-full bg-muted p-3">
+              <Inbox className="h-6 w-6 text-muted-foreground" />
+            </div>
+          }
+        />
         <p className="text-sm text-muted-foreground">{emptyMessage}</p>
       </Panel>
     );

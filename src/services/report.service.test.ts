@@ -178,6 +178,24 @@ test("a rejected page propagates instead of returning a silent partial set", asy
   );
 });
 
+// The Past Due Loans cards read the server's totals, which describe the whole
+// filtered set on every page, so the first page's totals are kept as sent.
+test("keeps the first page's totals, as the server sent them", async () => {
+  const totals = { count: 3, total_due: 300, past_due_amount: 250.5, total_outstanding: 1_000 };
+  const res = await collectReportPages(async (page) => ({
+    data: rows(1, page),
+    totals: page === 1 ? totals : { count: 999 },
+    meta: { current_page: page, last_page: 2, total: 2 },
+  }));
+  assert.deepEqual(res.totals, totals);
+  assert.equal(res.rows.length, 2);
+});
+
+test("totals are null when the report sends none", async () => {
+  assert.equal((await collectReportPages(async () => rows(2))).totals, null);
+  assert.equal((await collectReportPages(async () => ({ data: rows(2), totals: [] }))).totals, null);
+});
+
 // ── The regression this fix exists for ──
 
 test("aggregating a loan whose schedules straddle a page boundary", async () => {

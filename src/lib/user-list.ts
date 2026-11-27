@@ -30,8 +30,8 @@ export interface UserList {
  * The users a screen holds after a load, and whether that is all of them.
  *
  * Takes the whole `DrainResult`, not `rows`, so it cannot be called in a way
- * that drops `truncated` — the same reason `toShareCapitalBalance()` does. A
- * shortfall is for the caller to render, never to swallow.
+ * that drops `truncated`. A shortfall is for the caller to render, never to
+ * swallow.
  */
 export function toUserList(drain: DrainResult<User>): UserList {
   return {

@@ -114,7 +114,7 @@ function renderTitle(title: string, subtitle?: string, legalRef?: string): strin
 function renderFooter(doc: PrintableDocument): string {
   const parts = [
     text(doc.footerNote) ?? "This is a system-generated document.",
-    text(doc.reference) ? `Ref: ${doc.reference}` : null,
+    text(doc.reference) ? `${text(doc.referenceLabel) ? doc.referenceLabel : "Ref:"} ${doc.reference}` : null,
     text(doc.generatedAt) ? `Generated: ${doc.generatedAt}` : null,
   ].filter((part): part is string => part !== null);
 
@@ -194,7 +194,7 @@ function renderTableBlock(block: Extract<PrintBlock, { kind: "table" }>): string
 
   return (
     `<div class="section">${title}` +
-    `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody>${foot}</table>` +
+    `<table${block.compact ? ' class="compact"' : ""}><thead><tr>${head}</tr></thead><tbody>${body}</tbody>${foot}</table>` +
     `</div>`
   );
 }

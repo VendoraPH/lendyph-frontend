@@ -1,6 +1,15 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import type { CoMaker } from "@/types";
+import type { BorrowerValidId } from "./borrower.service";
+
+/**
+ * A valid ID on file for a co-maker, as `GET /co-makers/{id}/valid-ids` lists
+ * it: front and back grouped into one entry, whose `id` is the front
+ * document's — the id to delete it by. The co-maker endpoints share the
+ * borrower ones' contract exactly, so it is the same shape.
+ */
+export type CoMakerValidId = BorrowerValidId;
 
 export interface CreateCoMakerData {
   first_name: string;
@@ -51,4 +60,15 @@ export const coMakerService = {
 
   delete: (id: number) =>
     api.delete(API_ENDPOINTS.CO_MAKERS.DELETE(id)),
+
+  /** Multipart — build the body with `coMakerIdFormData` (@/lib/co-maker-valid-id). */
+  uploadValidId: (id: number, formData: FormData) =>
+    api.upload(API_ENDPOINTS.CO_MAKERS.UPLOAD_VALID_ID(id), formData),
+
+  listValidIds: (id: number) =>
+    api.get<CoMakerValidId[]>(API_ENDPOINTS.CO_MAKERS.LIST_VALID_IDS(id)),
+
+  /** Removes the whole entry, front and back, by the `id` listValidIds gave it. */
+  deleteValidId: (id: number, validIdId: number) =>
+    api.delete(API_ENDPOINTS.CO_MAKERS.DELETE_VALID_ID(id, validIdId)),
 };

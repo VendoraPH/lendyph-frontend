@@ -24,6 +24,7 @@ import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import { AddressInfo } from "node:net";
 import type { JournalEntryDraft } from "../types/accounting";
+import { API_ENDPOINTS } from "../config/api-endpoints";
 import type { ListPage } from "./accounting.service";
 
 // ── The contract, mirrored ──────────────────────────────────────────────────
@@ -76,6 +77,69 @@ const LEDGER_COUNT = 250;
 const PERIOD_COUNT = 21;
 const CASH_ACCOUNT_COUNT = 18;
 const RECONCILIATION_COUNT = 23;
+const LOAN_AGING_COUNT = 31;
+
+/**
+ * The server's own figures over every matching row, merged into each page's
+ * `meta` (round B contracts, brief-b2 to brief-b4). The test reads them back to
+ * prove a page call returns `meta` whole rather than the rows alone.
+ */
+const PAGE_META: Record<string, Record<string, unknown>> = {
+  "/accounting/journals": {
+    totals: { count: JOURNAL_COUNT, total_debit: 137_000, total_credit: 137_000 },
+    stats: { draft: 2, posted: 130, reversed: 5 },
+  },
+  "/accounting/general-ledger": {
+    opening_balance: 50_000,
+    closing_balance: 75_000,
+    total_debit: 40_000,
+    total_credit: 15_000,
+  },
+  "/accounting/expenses": {
+    totals: { count: EXPENSE_COUNT, amount: 4_000_000, amount_paid: 0, amount_due: 4_000_000 },
+    stats: { unpaid: 40, partially_paid: 0, paid: 0, overdue: 0, reversed: 0 },
+  },
+  "/accounting/cash-accounts": {
+    totals: {
+      balance: 4_500_000,
+      by_kind: { cash: 1_000_000, bank: 3_000_000, gcash: 500_000, maya: 0, wallet: 0 },
+    },
+  },
+  "/accounting/loan-accounting/loans": {
+    totals: {
+      count: LOAN_AGING_COUNT,
+      outstanding_principal: 3_100_000,
+      total_outstanding: 3_400_000,
+      past_due_amount: 120_000,
+    },
+    stats: { current: 0, "1_30": 31, "31_60": 0, "61_90": 0, "91_120": 0, over_120: 0 },
+  },
+};
+
+/** Whole documents, answered as `{data}` and unwrapped by `api.get`. */
+const DOCUMENTS: Record<string, Record<string, unknown>> = {
+  "/accounting/statements/balance-sheet": { as_of: "2026-11-09", is_balanced: true },
+  "/accounting/statements/income-statement": { net_income: -2_500 },
+  "/accounting/loan-accounting/summary": { as_of: "2026-11-09" },
+  "/accounting/books/cash-receipts/columns": { kind: "cash_receipts", is_balanced: true },
+  "/accounting/books/cash-disbursements/columns": {
+    kind: "cash_disbursements",
+    is_balanced: true,
+  },
+  "/accounting/journals/9": { id: 9, journal_no: "JE-000009" },
+  "/accounting/expenses/4": { id: 4, amount_due: 25_000 },
+  "/accounting/accounts/12": { id: 12, code: "1010" },
+};
+
+const JOURNAL_PREVIEW = {
+  total_debit: 150_050,
+  total_credit: 100_000,
+  difference: 50_050,
+  out_by: 50_050,
+  heavier_side: "debit",
+  is_balanced: false,
+  line_count: 2,
+};
 
 const seedRows = (n: number, make: (i: number) => Record<string, unknown>): Row[] =>
   Array.from({ length: n }, (_, i) => ({ id: i + 1, ...make(i) }));
@@ -146,10 +210,20 @@ before(async () => {
         "/accounting/reconciliations": () =>
           seedRows(RECONCILIATION_COUNT, () => ({ account_id: 1 })),
         "/accounting/periods": () => seedRows(PERIOD_COUNT, () => ({ status: "open" })),
+        "/accounting/loan-accounting/loans": () =>
+          seedRows(LOAN_AGING_COUNT, (i) => ({ loan_id: i + 1, bucket: "1_30" })),
       };
 
       if (req.method === "GET" && lists[path]) {
-        return res.end(JSON.stringify(paginator(lists[path](), page, perPage)));
+        const pageBody = paginator(lists[path](), page, perPage);
+        return res.end(
+          JSON.stringify({ ...pageBody, meta: { ...pageBody.meta, ...PAGE_META[path] } }),
+        );
+      }
+
+      if (req.method === "GET" && DOCUMENTS[path]) {
+        // A whole document in `{data}`, as the statements and books answer.
+        return res.end(JSON.stringify({ data: DOCUMENTS[path] }));
       }
 
       if (req.method === "POST" && path === "/accounting/journals") {
@@ -158,6 +232,14 @@ before(async () => {
         return res.end(
           JSON.stringify({ success: true, data: { id: 1, ...(body as object) } }),
         );
+      }
+
+      if (req.method === "POST" && path === "/accounting/journals/preview") {
+        return res.end(JSON.stringify({ data: JOURNAL_PREVIEW }));
+      }
+
+      if (req.method === "PUT" || req.method === "POST") {
+        return res.end(JSON.stringify({ success: true, data: { id: 1, ...(body as object) } }));
       }
 
       return res.end(JSON.stringify({ data: [], links: {}, meta: { total: 0 } }));
@@ -286,12 +368,12 @@ describe("createJournal sends centavos, not the characters someone typed", () =>
     );
   });
 
-  test("totals travel with the lines, as they do on a reversal", async () => {
+  test("no totals travel with the lines: the server works them out", async () => {
     await accountingService.createJournal(capturedDraft());
 
     const body = lastBody();
-    assert.equal(body.total_debit, 150050);
-    assert.equal(body.total_credit, 150050);
+    assert.equal("total_debit" in body, false);
+    assert.equal("total_credit" in body, false);
     assert.equal(body.source, "manual");
     // "" is the form's empty reference; the API's empty is null.
     assert.equal(body.reference, null);
@@ -305,16 +387,14 @@ describe("createJournal sends centavos, not the characters someone typed", () =>
     assert.equal(bodyLines()[0].debit, 150050);
   });
 
-  test("an unbalanced draft is refused before anything is sent", async () => {
+  test("an unbalanced draft is sent as typed: the balance is the server's to judge", async () => {
+    // The form refuses it first, from the server's preview; posting refuses it
+    // again on the server. The browser never totals the lines.
     const draft = capturedDraft();
     draft.lines[1].credit = "1400.50";
 
-    await assert.rejects(
-      () => accountingService.createJournal(draft),
-      /differ by/,
-      "the service is the last gate before the ledger",
-    );
-    assert.equal(requests.length, 0, "nothing may reach the API");
+    await accountingService.createJournal(draft);
+    assert.equal(bodyLines()[1].credit, 140050);
   });
 
   test("an amount that is not an amount is refused, with the text quoted back", async () => {
@@ -379,72 +459,6 @@ describe("lists are drained, not read one page deep", () => {
     assert.equal(requests.length, 1, "64 rows fit in one page of 100");
   });
 
-  test("meta survives the service instead of being thrown away", async () => {
-    // `unwrapList` recognised the paginator envelope and returned `res.data`
-    // from it, discarding `meta` — so nothing downstream could even ask whether
-    // it had the whole list. `total` here is that answer, restored.
-    const { total } = await accountingService.journalsListAll();
-    assert.equal(total, JOURNAL_COUNT);
-  });
-
-  test("the journal register follows last_page to the end", async () => {
-    const { rows, pagesFetched } = await accountingService.journalsListAll();
-
-    assert.equal(rows.length, JOURNAL_COUNT);
-    assert.equal(pagesFetched, 2, "137 rows is two pages of 100");
-  });
-
-  test("REGRESSION: Outstanding was the total of the first 15 of 40 payables", async () => {
-    // eslint-disable-next-line pagination/no-unparameterised-list -- the defect, on purpose
-    const short = rowsOf(await accountingService.expensesList());
-    const shortTotal = short.reduce((t, r) => t + r.amount - r.amount_paid, 0);
-
-    const { rows } = await accountingService.expensesListAll();
-    const wholeTotal = rows.reduce((t, r) => t + r.amount - r.amount_paid, 0);
-
-    assert.equal(shortTotal, 15 * 100_000, "₱15,000.00 — the headline that shipped");
-    assert.equal(wholeTotal, EXPENSE_COUNT * 100_000, "₱40,000.00 — what is owed");
-    assert.ok(wholeTotal > shortTotal, "and the screen said nothing about the gap");
-  });
-
-  test("REGRESSION: the ledger's last visible running_balance was not the balance", async () => {
-    const short = rowsOf(
-      await accountingService.generalLedgerList({
-        account_id: 1,
-        from: "2026-01-01",
-        to: "2026-09-15",
-      }),
-    );
-    const shortLast = short[short.length - 1].running_balance;
-
-    const { rows } = await accountingService.generalLedgerListAll({
-      account_id: 1,
-      from: "2026-01-01",
-      to: "2026-09-15",
-    });
-    const wholeLast = rows[rows.length - 1].running_balance;
-
-    assert.equal(shortLast, 1500, "the balance after entry fifteen…");
-    assert.equal(wholeLast, LEDGER_COUNT * 100, "…presented as the account's position");
-    assert.equal(rows.length, LEDGER_COUNT);
-  });
-
-  test("the ledger drain keeps its filters on every page", async () => {
-    await accountingService.generalLedgerListAll({
-      account_id: 7,
-      from: "2026-01-01",
-      to: "2026-09-15",
-      branch_id: 3,
-    });
-
-    assert.ok(requests.length >= 2, "250 rows is three pages");
-    for (const req of requests) {
-      assert.equal(req.query.account_id, "7");
-      assert.equal(req.query.from, "2026-01-01");
-      assert.equal(req.query.branch_id, "3");
-    }
-  });
-
   test("every remaining list drains too", async () => {
     const cases: Array<[string, () => Promise<{ rows: unknown[] }>, number]> = [
       ["cash accounts", () => accountingService.cashAccountsListAll(), CASH_ACCOUNT_COUNT],
@@ -475,5 +489,563 @@ describe("lists are drained, not read one page deep", () => {
     assert.equal(drain.truncated, true, "incomplete, and admits it");
     assert.equal(drain.rows.length, 20);
     assert.equal(drain.total, LEDGER_COUNT, "and still knows how many exist");
+  });
+});
+
+// ── 3. Round B contracts: endpoints, documents and pages ────────────────────
+
+/** The one request a call made. Every call below makes exactly one. */
+function onlyRequest(): Recorded {
+  assert.equal(requests.length, 1, "one call, one request");
+  return requests[0];
+}
+
+describe("round B endpoints", () => {
+  test("the new paths match the backend contracts", () => {
+    const A = API_ENDPOINTS.ACCOUNTING;
+    assert.equal(A.BALANCE_SHEET, "/accounting/statements/balance-sheet");
+    assert.equal(A.INCOME_STATEMENT, "/accounting/statements/income-statement");
+    assert.equal(A.LOAN_ACCOUNTING_SUMMARY, "/accounting/loan-accounting/summary");
+    assert.equal(A.LOAN_ACCOUNTING_LOANS, "/accounting/loan-accounting/loans");
+    assert.equal(A.JOURNALS_PREVIEW, "/accounting/journals/preview");
+    assert.equal(A.ACCOUNTS_CREATE, "/accounting/accounts");
+    assert.deepEqual(A.BOOK_COLUMNS, {
+      cash_receipts: "/accounting/books/cash-receipts/columns",
+      cash_disbursements: "/accounting/books/cash-disbursements/columns",
+    });
+    assert.equal(A.RECONCILIATIONS_CREATE, "/accounting/reconciliations");
+  });
+
+  test("each id helper puts the id in the path", () => {
+    const A = API_ENDPOINTS.ACCOUNTING;
+    assert.equal(A.JOURNALS_SHOW(9), "/accounting/journals/9");
+    assert.equal(A.JOURNALS_UPDATE(9), "/accounting/journals/9");
+    assert.equal(A.ACCOUNTS_SHOW(12), "/accounting/accounts/12");
+    assert.equal(A.ACCOUNTS_UPDATE(12), "/accounting/accounts/12");
+    assert.equal(A.ACCOUNTS_DELETE(12), "/accounting/accounts/12");
+    assert.equal(A.EXPENSES_SHOW(4), "/accounting/expenses/4");
+    assert.equal(A.EXPENSES_UPDATE(4), "/accounting/expenses/4");
+    assert.equal(A.EXPENSES_PAY(4), "/accounting/expenses/4/pay");
+    assert.equal(A.EXPENSES_REVERSE(4), "/accounting/expenses/4/reverse");
+    assert.equal(A.EXPENSE_PAYMENT_REVERSE(4, 9), "/accounting/expenses/4/payments/9/reverse");
+    assert.equal(A.RECONCILIATIONS_SHOW(3), "/accounting/reconciliations/3");
+    assert.equal(A.RECONCILIATIONS_MATCH(3), "/accounting/reconciliations/3/match");
+  });
+});
+
+describe("round B statements and summaries are whole documents", () => {
+  test("balanceSheet sends as_of and the branch, and unwraps data", async () => {
+    const sheet = await accountingService.balanceSheet("2026-11-09", 3);
+    const req = onlyRequest();
+    assert.equal(req.method, "GET");
+    assert.equal(req.path, "/accounting/statements/balance-sheet");
+    assert.deepEqual(req.query, { as_of: "2026-11-09", branch_id: "3" });
+    assert.equal(sheet.is_balanced, true);
+  });
+
+  test("balanceSheet without a branch sends no branch_id", async () => {
+    await accountingService.balanceSheet("2026-11-09");
+    assert.deepEqual(onlyRequest().query, { as_of: "2026-11-09" });
+  });
+
+  test("incomeStatement sends from, to and the branch", async () => {
+    const statement = await accountingService.incomeStatement({
+      from: "2026-01-01",
+      to: "2026-11-09",
+      branch_id: 2,
+    });
+    const req = onlyRequest();
+    assert.equal(req.path, "/accounting/statements/income-statement");
+    assert.deepEqual(req.query, { from: "2026-01-01", to: "2026-11-09", branch_id: "2" });
+    assert.equal(statement.net_income, -2_500, "a loss arrives negative, as sent");
+  });
+
+  test("dashboard gains from; the old two-argument call sends none", async () => {
+    await accountingService.dashboard("2026-11-09", 3, "2026-10-01");
+    assert.deepEqual(onlyRequest().query, {
+      as_of: "2026-11-09",
+      branch_id: "3",
+      from: "2026-10-01",
+    });
+
+    requests = [];
+    await accountingService.dashboard("2026-11-09");
+    assert.deepEqual(onlyRequest().query, { as_of: "2026-11-09" });
+  });
+
+  test("loanAccountingSummary sends as_of and the branch", async () => {
+    const summary = await accountingService.loanAccountingSummary("2026-11-09", 5);
+    const req = onlyRequest();
+    assert.equal(req.path, "/accounting/loan-accounting/summary");
+    assert.deepEqual(req.query, { as_of: "2026-11-09", branch_id: "5" });
+    assert.equal(summary.as_of, "2026-11-09");
+  });
+
+  test("columnBook reads each kind's columns path with the period", async () => {
+    for (const kind of ["cash_receipts", "cash_disbursements"] as const) {
+      requests = [];
+      const book = await accountingService.columnBook(kind, {
+        from: "2026-10-01",
+        to: "2026-10-31",
+        branch_id: 1,
+      });
+      const req = onlyRequest();
+      assert.equal(req.path, API_ENDPOINTS.ACCOUNTING.BOOK_COLUMNS[kind]);
+      assert.deepEqual(req.query, { from: "2026-10-01", to: "2026-10-31", branch_id: "1" });
+      assert.equal(book.kind, kind);
+    }
+  });
+
+  test("journal, expense and account read one record by id", async () => {
+    assert.equal((await accountingService.journal(9)).journal_no, "JE-000009");
+    assert.equal(onlyRequest().path, "/accounting/journals/9");
+
+    requests = [];
+    assert.equal((await accountingService.expense(4)).amount_due, 25_000);
+    assert.equal(onlyRequest().path, "/accounting/expenses/4");
+
+    requests = [];
+    assert.equal((await accountingService.account(12)).code, "1010");
+    assert.equal(onlyRequest().path, "/accounting/accounts/12");
+  });
+});
+
+describe("round B pages keep their meta", () => {
+  test("journalsPage sends search and paging, and returns totals and stats", async () => {
+    const page = await accountingService.journalsPage({
+      search: "JE-0001",
+      status: "posted",
+      page: 2,
+      per_page: 25,
+    });
+    const req = onlyRequest();
+    assert.equal(req.path, "/accounting/journals");
+    assert.deepEqual(req.query, { search: "JE-0001", status: "posted", page: "2", per_page: "25" });
+    assert.equal(page.data.length, 25);
+    assert.deepEqual(page.meta.totals, PAGE_META["/accounting/journals"].totals);
+    assert.deepEqual(page.meta.stats, PAGE_META["/accounting/journals"].stats);
+    assert.equal(page.meta.total, JOURNAL_COUNT);
+  });
+
+  test("generalLedgerPage sends source, and returns the opening and closing balances", async () => {
+    const page = await accountingService.generalLedgerPage({
+      account_id: 7,
+      from: "2026-01-01",
+      to: "2026-11-09",
+      source: "loan_collection",
+      page: 1,
+      per_page: 25,
+    });
+    const req = onlyRequest();
+    assert.equal(req.path, "/accounting/general-ledger");
+    assert.deepEqual(req.query, {
+      account_id: "7",
+      from: "2026-01-01",
+      to: "2026-11-09",
+      source: "loan_collection",
+      page: "1",
+      per_page: "25",
+    });
+    assert.equal(page.meta.opening_balance, 50_000);
+    assert.equal(page.meta.closing_balance, 75_000);
+    assert.equal(page.meta.total_debit, 40_000);
+    assert.equal(page.meta.total_credit, 15_000);
+  });
+
+  test("expensesPage sends status and search, and returns totals with amount_due", async () => {
+    const page = await accountingService.expensesPage({
+      status: "unpaid",
+      search: "Meralco",
+      per_page: 25,
+    });
+    const req = onlyRequest();
+    assert.equal(req.path, "/accounting/expenses");
+    assert.deepEqual(req.query, { status: "unpaid", search: "Meralco", per_page: "25" });
+    assert.equal(page.meta.totals.amount_due, 4_000_000);
+    assert.equal(page.meta.stats.unpaid, 40);
+  });
+
+  test("cashAccountsPage returns the balance over every money account, by kind", async () => {
+    const page = await accountingService.cashAccountsPage({ branch_id: 2, per_page: 25 });
+    const req = onlyRequest();
+    assert.equal(req.path, "/accounting/cash-accounts");
+    assert.deepEqual(req.query, { branch_id: "2", per_page: "25" });
+    assert.equal(page.meta.totals.balance, 4_500_000);
+    assert.equal(page.meta.totals.by_kind.bank, 3_000_000);
+  });
+
+  test("loanAccountingLoans sends every filter, and returns totals and bucket stats", async () => {
+    const page = await accountingService.loanAccountingLoans({
+      as_of: "2026-11-09",
+      branch_id: 1,
+      bucket: "1_30",
+      past_due_only: true,
+      search: "LN-0001",
+      group: "member",
+      page: 1,
+      per_page: 25,
+    });
+    const req = onlyRequest();
+    assert.equal(req.path, "/accounting/loan-accounting/loans");
+    assert.deepEqual(req.query, {
+      as_of: "2026-11-09",
+      branch_id: "1",
+      bucket: "1_30",
+      past_due_only: "1",
+      search: "LN-0001",
+      group: "member",
+      page: "1",
+      per_page: "25",
+    });
+    assert.equal(page.meta.totals.count, LOAN_AGING_COUNT);
+    assert.equal(page.meta.stats["1_30"], 31);
+  });
+
+  test("loanAccountingLoans leaves past_due_only out when it is off", async () => {
+    await accountingService.loanAccountingLoans({ as_of: "2026-11-09", past_due_only: false });
+    assert.deepEqual(onlyRequest().query, { as_of: "2026-11-09" });
+  });
+});
+
+describe("round B writes", () => {
+  const draft = (): JournalEntryDraft => ({
+    date: "2026-11-09",
+    reference: "",
+    branch_id: null,
+    description: "Corrected draft",
+    lines: [
+      { account_id: 2, description: "", debit: "1,500.50", credit: "" },
+      { account_id: 33, description: "", debit: "", credit: "1500.50" },
+      { account_id: null, description: "", debit: "", credit: "" },
+    ],
+  });
+
+  test("updateJournal PUTs centavos through buildJournalPayload, as createJournal does", async () => {
+    await accountingService.updateJournal(9, draft());
+    const req = onlyRequest();
+    assert.equal(req.method, "PUT");
+    assert.equal(req.path, "/accounting/journals/9");
+    const lines = (req.body as { lines: WireLine[] }).lines;
+    assert.equal(lines.length, 2, "the blank spare row is dropped");
+    assert.equal(lines[0].debit, 150_050);
+    assert.equal(lines[1].credit, 150_050);
+  });
+
+  test("updateJournal refuses a malformed draft before sending anything", async () => {
+    // The balance is the server's (the form checks it with the preview), but a
+    // line that isn't an amount still never leaves the browser.
+    const bad = draft();
+    bad.lines[1].credit = "one thousand";
+    await assert.rejects(accountingService.updateJournal(9, bad));
+    assert.equal(requests.length, 0);
+  });
+
+  test("previewJournal sends only the lines and returns the server's figures", async () => {
+    const preview = await accountingService.previewJournal([
+      { account_id: 2, debit: 150_050, credit: 0 },
+      { account_id: null, debit: 0, credit: 100_000 },
+    ]);
+    const req = onlyRequest();
+    assert.equal(req.method, "POST");
+    assert.equal(req.path, "/accounting/journals/preview");
+    assert.deepEqual(req.body, {
+      lines: [
+        { account_id: 2, debit: 150_050, credit: 0 },
+        { account_id: null, debit: 0, credit: 100_000 },
+      ],
+    });
+    assert.deepEqual(preview, JOURNAL_PREVIEW);
+  });
+
+  test("updateExpense PUTs to the expense", async () => {
+    await accountingService.updateExpense(4, { payee: "Meralco" });
+    const req = onlyRequest();
+    assert.equal(req.method, "PUT");
+    assert.equal(req.path, "/accounting/expenses/4");
+    assert.deepEqual(req.body, { payee: "Meralco" });
+  });
+
+  test("payExpense POSTs the date, centavos and the paying account", async () => {
+    await accountingService.payExpense(4, { date: "2026-11-09", amount: 25_000, account_id: 12 });
+    const req = onlyRequest();
+    assert.equal(req.method, "POST");
+    assert.equal(req.path, "/accounting/expenses/4/pay");
+    assert.deepEqual(req.body, { date: "2026-11-09", amount: 25_000, account_id: 12 });
+  });
+
+  test("reverseExpense and reverseExpensePayment POST the reason to their paths", async () => {
+    await accountingService.reverseExpense(4, "Recorded twice");
+    let req = onlyRequest();
+    assert.equal(req.method, "POST");
+    assert.equal(req.path, "/accounting/expenses/4/reverse");
+    assert.deepEqual(req.body, { reason: "Recorded twice" });
+
+    requests = [];
+    await accountingService.reverseExpensePayment(4, 9, "Paid twice");
+    req = onlyRequest();
+    assert.equal(req.method, "POST");
+    assert.equal(req.path, "/accounting/expenses/4/payments/9/reverse");
+    assert.deepEqual(req.body, { reason: "Paid twice" });
+  });
+
+  test("createAccount, updateAccount and deleteAccount use the account paths", async () => {
+    await accountingService.createAccount({ code: "1015", name: "Petty Cash" });
+    let req = onlyRequest();
+    assert.equal(req.method, "POST");
+    assert.equal(req.path, "/accounting/accounts");
+    assert.deepEqual(req.body, { code: "1015", name: "Petty Cash" });
+
+    requests = [];
+    await accountingService.updateAccount(12, { name: "Cash on Hand - Main" });
+    req = onlyRequest();
+    assert.equal(req.method, "PUT");
+    assert.equal(req.path, "/accounting/accounts/12");
+    assert.deepEqual(req.body, { name: "Cash on Hand - Main" });
+
+    requests = [];
+    await accountingService.deleteAccount(12);
+    req = onlyRequest();
+    assert.equal(req.method, "DELETE");
+    assert.equal(req.path, "/accounting/accounts/12");
+  });
+});
+
+// ── 4. Round C contracts (brief-ac1 to brief-ac6) ───────────────────────────
+
+describe("round C endpoints", () => {
+  test("the new paths match the backend contracts", () => {
+    const A = API_ENDPOINTS.ACCOUNTING;
+    assert.equal(A.ACCOUNTS_SEED, "/accounting/accounts/seed");
+    assert.equal(A.OPENING_BALANCES, "/accounting/opening-balances");
+    assert.equal(A.OPENING_BALANCES_FINALISE, "/accounting/opening-balances/finalise");
+    assert.equal(A.YEAR_CLOSES, "/accounting/year-closes");
+    assert.equal(A.YEAR_CLOSES_PREVIEW, "/accounting/year-closes/preview");
+    assert.equal(A.ALLOWANCE_PREVIEW, "/accounting/allowance/preview");
+    assert.equal(A.ALLOWANCE_POSTINGS, "/accounting/allowance/postings");
+  });
+
+  test("each id helper puts the ids in the path", () => {
+    const A = API_ENDPOINTS.ACCOUNTING;
+    assert.equal(A.YEAR_CLOSES_REOPEN(5), "/accounting/year-closes/5/reopen");
+    assert.equal(
+      A.RECONCILIATION_LINE_EXPENSE(3, 41),
+      "/accounting/reconciliations/3/lines/41/expense",
+    );
+    assert.equal(
+      A.RECONCILIATION_LINE_TRANSFER(3, 41),
+      "/accounting/reconciliations/3/lines/41/transfer",
+    );
+    assert.equal(
+      A.RECONCILIATION_LINE_SUSPENSE(3, 41),
+      "/accounting/reconciliations/3/lines/41/suspense",
+    );
+    assert.equal(A.JOURNAL_ATTACHMENTS(9), "/accounting/journals/9/attachments");
+    assert.equal(A.JOURNAL_ATTACHMENT(9, 2), "/accounting/journals/9/attachments/2");
+    assert.equal(A.EXPENSE_ATTACHMENTS(4), "/accounting/expenses/4/attachments");
+    assert.equal(A.EXPENSE_ATTACHMENT(4, 2), "/accounting/expenses/4/attachments/2");
+  });
+});
+
+describe("round C chart templates", () => {
+  test("seedAccounts() with no template sends the same empty body as before", async () => {
+    await accountingService.seedAccounts();
+    const req = onlyRequest();
+    assert.equal(req.method, "POST");
+    assert.equal(req.path, "/accounting/accounts/seed");
+    assert.deepEqual(req.body, {});
+  });
+
+  test("seedAccounts(template) sends the template", async () => {
+    await accountingService.seedAccounts("cooperative");
+    const req = onlyRequest();
+    assert.equal(req.path, "/accounting/accounts/seed");
+    assert.deepEqual(req.body, { template: "cooperative" });
+  });
+});
+
+describe("round C opening balances", () => {
+  test("openingBalances reads the one entry", async () => {
+    await accountingService.openingBalances();
+    const req = onlyRequest();
+    assert.equal(req.method, "GET");
+    assert.equal(req.path, "/accounting/opening-balances");
+    assert.deepEqual(req.query, {});
+  });
+
+  test("saveOpeningBalances PUTs the date, the centavo lines and the version", async () => {
+    const draft = {
+      as_of: "2026-01-01",
+      lines: [
+        { account_id: 2, debit: 150_050, credit: 0 },
+        { account_id: 50, debit: 0, credit: 150_050 },
+      ],
+      edit_version: 3,
+    };
+    await accountingService.saveOpeningBalances(draft);
+    const req = onlyRequest();
+    assert.equal(req.method, "PUT");
+    assert.equal(req.path, "/accounting/opening-balances");
+    assert.deepEqual(req.body, draft);
+  });
+
+  test("saveOpeningBalances leaves edit_version out when the draft has none", async () => {
+    await accountingService.saveOpeningBalances({ as_of: "2026-01-01", lines: [] });
+    assert.deepEqual(onlyRequest().body, { as_of: "2026-01-01", lines: [] });
+  });
+
+  test("finaliseOpeningBalances POSTs only the version", async () => {
+    await accountingService.finaliseOpeningBalances(4);
+    const req = onlyRequest();
+    assert.equal(req.method, "POST");
+    assert.equal(req.path, "/accounting/opening-balances/finalise");
+    assert.deepEqual(req.body, { edit_version: 4 });
+  });
+});
+
+describe("round C year-end close", () => {
+  test("yearClosesPage sends paging and returns the whole page with meta", async () => {
+    const page = await accountingService.yearClosesPage({ page: 2, per_page: 25 });
+    const req = onlyRequest();
+    assert.equal(req.method, "GET");
+    assert.equal(req.path, "/accounting/year-closes");
+    assert.deepEqual(req.query, { page: "2", per_page: "25" });
+    assert.ok(Array.isArray(page.data));
+    assert.equal(page.meta.total, 0, "meta survives: the page is not unwrapped");
+  });
+
+  test("yearClosePreview sends the year", async () => {
+    await accountingService.yearClosePreview(2025);
+    const req = onlyRequest();
+    assert.equal(req.path, "/accounting/year-closes/preview");
+    assert.deepEqual(req.query, { year: "2025" });
+  });
+
+  test("closeYear POSTs the year", async () => {
+    await accountingService.closeYear(2025);
+    const req = onlyRequest();
+    assert.equal(req.method, "POST");
+    assert.equal(req.path, "/accounting/year-closes");
+    assert.deepEqual(req.body, { year: 2025 });
+  });
+
+  test("reopenYear POSTs the reason to the close's reopen path", async () => {
+    await accountingService.reopenYear(5, "Late supplier invoice");
+    const req = onlyRequest();
+    assert.equal(req.method, "POST");
+    assert.equal(req.path, "/accounting/year-closes/5/reopen");
+    assert.deepEqual(req.body, { reason: "Late supplier invoice" });
+  });
+});
+
+describe("round C allowance", () => {
+  test("allowancePreview sends as_of when given", async () => {
+    await accountingService.allowancePreview("2026-10-31");
+    const req = onlyRequest();
+    assert.equal(req.method, "GET");
+    assert.equal(req.path, "/accounting/allowance/preview");
+    assert.deepEqual(req.query, { as_of: "2026-10-31" });
+  });
+
+  test("allowancePreview without a date sends none, so the server uses today", async () => {
+    await accountingService.allowancePreview();
+    assert.deepEqual(onlyRequest().query, {});
+  });
+
+  test("postAllowance POSTs the date and the preview's adjustment in centavos", async () => {
+    await accountingService.postAllowance("2026-10-31", -12_550);
+    const req = onlyRequest();
+    assert.equal(req.method, "POST");
+    assert.equal(req.path, "/accounting/allowance/postings");
+    assert.deepEqual(req.body, { as_of: "2026-10-31", expected_adjustment: -12_550 });
+  });
+
+  test("allowancePostingsPage sends paging and returns the whole page with meta", async () => {
+    const page = await accountingService.allowancePostingsPage({ page: 1, per_page: 100 });
+    const req = onlyRequest();
+    assert.equal(req.method, "GET");
+    assert.equal(req.path, "/accounting/allowance/postings");
+    assert.deepEqual(req.query, { page: "1", per_page: "100" });
+    assert.equal(page.meta.total, 0, "meta survives: the page is not unwrapped");
+  });
+});
+
+describe("round C reconciliation actions", () => {
+  test("reconcileLineAsExpense POSTs the account, payee and description, and keeps created", async () => {
+    const body = { expense_account_id: 61, payee: "BDO", description: "Bank charge" };
+    const result = await accountingService.reconcileLineAsExpense(3, 41, body);
+    const req = onlyRequest();
+    assert.equal(req.method, "POST");
+    assert.equal(req.path, "/accounting/reconciliations/3/lines/41/expense");
+    assert.deepEqual(req.body, body);
+    assert.ok(result.data, "the answer is read whole, so `created` beside `data` survives");
+  });
+
+  test("reconcileLineAsTransfer POSTs the counter account", async () => {
+    await accountingService.reconcileLineAsTransfer(3, 41, { counter_account_id: 12 });
+    const req = onlyRequest();
+    assert.equal(req.path, "/accounting/reconciliations/3/lines/41/transfer");
+    assert.deepEqual(req.body, { counter_account_id: 12 });
+  });
+
+  test("reconcileLineToSuspense POSTs the description, or an empty body", async () => {
+    await accountingService.reconcileLineToSuspense(3, 41, { description: "Unknown deposit" });
+    let req = onlyRequest();
+    assert.equal(req.path, "/accounting/reconciliations/3/lines/41/suspense");
+    assert.deepEqual(req.body, { description: "Unknown deposit" });
+
+    requests = [];
+    await accountingService.reconcileLineToSuspense(3, 41);
+    req = onlyRequest();
+    assert.deepEqual(req.body, {});
+  });
+});
+
+describe("round C attachments", () => {
+  const file = () => new File(["%PDF-1.4"], "receipt.pdf", { type: "application/pdf" });
+
+  test("journalAttachments and expenseAttachments read the owner's list", async () => {
+    await accountingService.journalAttachments(9);
+    let req = onlyRequest();
+    assert.equal(req.method, "GET");
+    assert.equal(req.path, "/accounting/journals/9/attachments");
+
+    requests = [];
+    await accountingService.expenseAttachments(4);
+    req = onlyRequest();
+    assert.equal(req.path, "/accounting/expenses/4/attachments");
+  });
+
+  test("uploadJournalAttachment sends multipart with the file and the label", async () => {
+    await accountingService.uploadJournalAttachment(9, file(), "Official receipt");
+    const req = onlyRequest();
+    assert.equal(req.method, "POST");
+    assert.equal(req.path, "/accounting/journals/9/attachments");
+    const raw = String(req.body);
+    assert.match(raw, /name="file"; filename="receipt\.pdf"/);
+    assert.match(raw, /name="label"\r\n\r\nOfficial receipt/);
+  });
+
+  test("uploadExpenseAttachment without a label sends no label part", async () => {
+    await accountingService.uploadExpenseAttachment(4, file());
+    const req = onlyRequest();
+    assert.equal(req.path, "/accounting/expenses/4/attachments");
+    const raw = String(req.body);
+    assert.match(raw, /name="file"; filename="receipt\.pdf"/);
+    assert.doesNotMatch(raw, /name="label"/);
+  });
+
+  test("removing an attachment DELETEs it with the reason, or with no body", async () => {
+    await accountingService.removeJournalAttachment(9, 2, "Wrong file");
+    let req = onlyRequest();
+    assert.equal(req.method, "DELETE");
+    assert.equal(req.path, "/accounting/journals/9/attachments/2");
+    assert.deepEqual(req.body, { reason: "Wrong file" });
+
+    requests = [];
+    await accountingService.removeExpenseAttachment(4, 2);
+    req = onlyRequest();
+    assert.equal(req.method, "DELETE");
+    assert.equal(req.path, "/accounting/expenses/4/attachments/2");
+    assert.equal(req.body, null);
   });
 });

@@ -39,10 +39,11 @@ export function PartialRowsTable({
           <TableHeader>
             <TableRow>
               <TableHead className="w-12">Include</TableHead>
-              <TableHead>Borrower</TableHead>
+              <TableHead>Member</TableHead>
               <TableHead>Loan Account</TableHead>
               <TableHead>Due Date</TableHead>
               <TableHead>Period</TableHead>
+              <TableHead className="text-right">Penalty</TableHead>
               <TableHead className="text-right">Remaining</TableHead>
             </TableRow>
           </TableHeader>
@@ -67,6 +68,11 @@ export function PartialRowsTable({
                 <TableCell>{formatDate(row.due_date)}</TableCell>
                 <TableCell className="text-muted-foreground">
                   #{row.period_number}
+                </TableCell>
+                <TableCell className="text-right">
+                  {row.penalty_remaining === undefined
+                    ? "—"
+                    : formatCurrency(row.penalty_remaining)}
                 </TableCell>
                 <TableCell className="text-right font-medium">
                   {formatCurrency(row.remaining_balance)}

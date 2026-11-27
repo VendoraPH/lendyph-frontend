@@ -8,7 +8,6 @@ export const API_ENDPOINTS = {
   AUTH: {
     LOGIN: "/auth/login",
     LOGOUT: "/auth/logout",
-    REFRESH: "/auth/refresh",
     ME: "/auth/me",
     UPDATE_ME: "/auth/me",
     CHANGE_PASSWORD: "/auth/change-password",
@@ -40,6 +39,11 @@ export const API_ENDPOINTS = {
     DELETE_VALID_ID: (id: number, validIdId: number) =>
       `/borrowers/${id}/valid-ids/${validIdId}`,
     LEDGER: (id: number) => `/borrowers/${id}/ledger`,
+    LOAN_SUMMARY: (id: number) => `/borrowers/${id}/loan-summary`,
+    // Phase 6 MB-BE4: moving a member to another branch (borrowers:view and borrowers:transfer).
+    TRANSFER: (id: number) => `/borrowers/${id}/transfer`,
+    // Finish run round 2: the membership date, member type and number (borrowers:update).
+    MEMBERSHIP: (id: number) => `/borrowers/${id}/membership`,
   },
   REGISTRATIONS: {
     LIST: "/borrowers",
@@ -61,6 +65,11 @@ export const API_ENDPOINTS = {
     DETAIL: (id: number) => `/co-makers/${id}`,
     UPDATE: (id: number) => `/co-makers/${id}`,
     DELETE: (id: number) => `/co-makers/${id}`,
+    // Same contract as the BORROWERS valid-ID routes; only the parent differs.
+    UPLOAD_VALID_ID: (id: number) => `/co-makers/${id}/valid-ids`,
+    LIST_VALID_IDS: (id: number) => `/co-makers/${id}/valid-ids`,
+    DELETE_VALID_ID: (id: number, validIdId: number) =>
+      `/co-makers/${id}/valid-ids/${validIdId}`,
   },
   DOCUMENTS: {
     BORROWER_LIST: (borrowerId: number) => `/borrowers/${borrowerId}/documents`,
@@ -76,20 +85,34 @@ export const API_ENDPOINTS = {
     LIST: "/loans",
     DETAIL: (id: number) => `/loans/${id}`,
     CREATE: "/loans",
+    PREVIEW: "/loans/preview",
+    AMORTIZATION_CALCULATOR: "/loans/amortization-calculator",
+    AMORTIZATION_CALCULATOR_BINHS: "/loans/amortization-calculator/binhs",
     UPDATE: (id: number) => `/loans/${id}`,
     DELETE: (id: number) => `/loans/${id}`,
-    APPROVE: (id: number) => `/loans/${id}/approve`,
-    REJECT: (id: number) => `/loans/${id}/reject`,
     RELEASE: (id: number) => `/loans/${id}/release`,
+    RELEASE_PREVIEW: (id: number) => `/loans/${id}/release-preview`,
+    /** An approved, unreleased restructure back into review (`loans:release`). */
+    SEND_BACK_APPROVED: (id: number) => `/loans/${id}/send-back-approved`,
+    DEDUCTIONS_PREVIEW: (id: number) => `/loans/${id}/deductions-preview`,
     SUBMIT: (id: number) => `/loans/${id}/submit`,
     VOID: (id: number) => `/loans/${id}/void`,
     AMORTIZATION_PREVIEW: (id: number) => `/loans/${id}/amortization-preview`,
     AMORTIZATION_SCHEDULE: (id: number) => `/loans/${id}/amortization-schedule`,
+    AMORTIZATION_BALANCES: (id: number) => `/loans/${id}/amortization-balances`,
     SUMMARY: (id: number) => `/loans/${id}/summary`,
     EXTEND: (id: number) => `/loans/${id}/extend`,
+    EXTENSION_PREVIEW: (id: number) => `/loans/${id}/extension-preview`,
     TOGGLE_AUTO_PAY: (id: number) => `/loans/${id}/auto-pay`,
+    ACCOUNT_OFFICER: (id: number) => `/loans/${id}/account-officer`,
+    CO_MAKERS: (id: number) => `/loans/${id}/co-makers`,
     RESTRUCTURE: (id: number) => `/loans/${id}/restructure`,
     LEDGER_ENTRIES: (id: number) => `/loans/${id}/ledger-entries`,
+    LEDGER: (id: number) => `/loans/${id}/ledger`,
+    /** The Chairman/Chairwoman's edit at their approval step (`loans:edit_in_approval`): its state (GET) and save (PATCH). */
+    APPROVAL_EDIT: (id: number) => `/loans/${id}/approval-edit`,
+    /** The loan form's preview for that edit. */
+    APPROVAL_EDIT_PREVIEW: (id: number) => `/loans/${id}/approval-edit/preview`,
   },
   LOAN_DOCUMENTS: {
     DISCLOSURE: (loanId: number) => `/loans/${loanId}/disclosure`,
@@ -113,14 +136,18 @@ export const API_ENDPOINTS = {
       `/loans/${loanId}/approval-steps/${stepId}/approve`,
     SEND_BACK_STEP: (loanId: number, stepId: number | string) =>
       `/loans/${loanId}/approval-steps/${stepId}/send-back`,
+    /** Who the next step can be forwarded to (`forward_to_user_id` on submit and approve). */
+    FORWARD_CANDIDATES: (loanId: number) => `/loans/${loanId}/approval/forward-candidates`,
   },
   LOAN_ADJUSTMENTS: {
     LIST: (loanId: number) => `/loans/${loanId}/adjustments`,
     CREATE: (loanId: number) => `/loans/${loanId}/adjustments`,
+    BALANCE_PREVIEW: (loanId: number) => `/loans/${loanId}/balance-adjustment-preview`,
     DETAIL: (id: number) => `/loan-adjustments/${id}`,
     APPROVE: (id: number) => `/loan-adjustments/${id}/approve`,
     REJECT: (id: number) => `/loan-adjustments/${id}/reject`,
     APPLY: (id: number) => `/loan-adjustments/${id}/apply`,
+    CANCEL: (id: number) => `/loan-adjustments/${id}/cancel`,
   },
   REPAYMENTS: {
     LIST: (loanId: number) => `/loans/${loanId}/repayments`,
@@ -129,6 +156,9 @@ export const API_ENDPOINTS = {
     PREVIEW: (loanId: number) => `/loans/${loanId}/repayments/preview`,
     DETAIL: (id: number) => `/repayments/${id}`,
     VOID: (id: number) => `/repayments/${id}/void`,
+    /** The receipt's share link: GET its status, POST to make one (finish run round 2, decision 6). */
+    SHARE_LINK: (id: number) => `/repayments/${id}/share-link`,
+    SHARE_LINK_REVOKE: (id: number) => `/repayments/${id}/share-link/revoke`,
   },
   LOAN_PRODUCTS: {
     LIST: "/loan-products",
@@ -143,6 +173,18 @@ export const API_ENDPOINTS = {
     DETAIL: (id: number) => `/fees/${id}`,
     UPDATE: (id: number) => `/fees/${id}`,
     DELETE: (id: number) => `/fees/${id}`,
+    // Server check of a formula written as an expression, with the fee it
+    // gives on a sample loan. The browser never evaluates a formula.
+    FORMULA_CHECK: "/fees/formula-check",
+  },
+  // Settings → Penalties, behind NEXT_PUBLIC_ENABLE_PENALTY_CONFIGS.
+  PENALTY_CONFIGS: {
+    LIST: "/penalty-configs",
+    CREATE: "/penalty-configs",
+    DETAIL: (id: number) => `/penalty-configs/${id}`,
+    UPDATE: (id: number) => `/penalty-configs/${id}`,
+    STATUS: (id: number) => `/penalty-configs/${id}/status`,
+    DELETE: (id: number) => `/penalty-configs/${id}`,
   },
   COLLATERAL_TYPES: {
     LIST: "/collateral-types",
@@ -154,6 +196,7 @@ export const API_ENDPOINTS = {
   },
   COLLATERALS: {
     LIST: "/collaterals",
+    REGISTER: "/collaterals/register",
     CREATE: "/collaterals",
     DETAIL: (id: number) => `/collaterals/${id}`,
     UPDATE: (id: number) => `/collaterals/${id}`,
@@ -172,8 +215,10 @@ export const API_ENDPOINTS = {
     SUBSIDIARY_LEDGER: (borrowerId: number) => `/reports/subsidiary-ledger/${borrowerId}`,
     DAILY_COLLECTION: "/reports/daily-collection",
     INCOME: "/reports/income",
+    INCOME_BY_LOAN: "/reports/income/by-loan",
     AGING: "/reports/aging",
     BORROWERS: "/reports/borrowers",
+    BORROWERS_RELEASED: "/reports/borrowers/released",
     DISBURSEMENTS: "/reports/disbursements",
     CASH_FLOW: "/reports/cash-flow",
     COLLECTION_EFFICIENCY: "/reports/collection-efficiency",
@@ -181,6 +226,29 @@ export const API_ENDPOINTS = {
     SHARE_CAPITAL: "/reports/share-capital",
     PERFORMANCE: "/reports/performance",
     PROVISIONING: "/reports/provisioning",
+    // reports:view plus share_capital:view; the member rows also need reports:export.
+    PROFIT_SHARING: "/reports/profit-sharing",
+    // Savings & Deposits (savings design §2). reports:view plus savings:view;
+    // CSV needs reports:export. Totals cover the whole filter.
+    SAVINGS_BALANCES: "/reports/savings/balances",
+    SAVINGS_TRANSACTIONS: "/reports/savings/transactions",
+    TIME_DEPOSIT_MATURITIES: "/reports/savings/time-deposit-maturities",
+    SAVINGS_INTEREST_POSTINGS: "/reports/savings/interest-postings",
+    SAVINGS_DORMANT: "/reports/savings/dormant",
+    SAVINGS_STATEMENT: (accountId: number) => `/reports/savings/statement/${accountId}`,
+    SAVINGS_GL_CONTROL: "/reports/savings/gl-control",
+    SAVINGS_EXPORT: (report: string) => `/reports/savings/${report}/export`,
+    // The rest of the Savings task's deposit reports (gap round S5): every one
+    // takes `product_id`; the summary also `group_by` (branch or product).
+    SAVINGS_SUMMARY: "/reports/savings/summary",
+    SAVINGS_ACCOUNT_LIST: "/reports/savings/accounts",
+    SAVINGS_DEPOSITS: "/reports/savings/deposits",
+    SAVINGS_WITHDRAWALS: "/reports/savings/withdrawals",
+    SAVINGS_LARGE_TRANSACTIONS: "/reports/savings/large-transactions",
+    SAVINGS_TIME_DEPOSITS: "/reports/savings/time-deposits",
+    SAVINGS_INTEREST_ACCRUAL: "/reports/savings/interest-accrual",
+    SAVINGS_ACCOUNT_ACTIVITY: "/reports/savings/account-activity",
+    SAVINGS_MEMBER_STATEMENT: (borrowerId: number) => `/reports/savings/member-statement/${borrowerId}`,
     // Running-balance statement for one member. Separate from SHARE_CAPITAL
     // (the org-wide summary) and from SHARE_CAPITAL.LEDGER_LIST, whose
     // paginator caps at 100 rows and carries no opening/closing balance.
@@ -195,6 +263,18 @@ export const API_ENDPOINTS = {
     COLLECTIONS_TREND: "/dashboard/collections-trend",
     DAILY_DUES: "/dashboard/daily-dues",
     RECENT_TRANSACTIONS: "/dashboard/recent-transactions",
+    // The executive dashboard (Phase 6 EB-D1): dashboard:analytics, plus each
+    // figure's source permission. PAR loans also need reports:view and loans:view.
+    EXECUTIVE_OVERVIEW: "/dashboard/executive/overview",
+    EXECUTIVE_BRANCHES: "/dashboard/executive/branches",
+    EXECUTIVE_PAR_LOANS: "/dashboard/executive/par-loans",
+    // EB-D2: trends and turnaround need reports:view; the share capital
+    // control needs accounting:view and share_capital:view. These take a
+    // custom range as `from` and `to`.
+    EXECUTIVE_TRENDS: "/dashboard/executive/trends",
+    EXECUTIVE_ATTENTION: "/dashboard/executive/attention",
+    EXECUTIVE_TURNAROUND: "/dashboard/executive/turnaround",
+    EXECUTIVE_SHARE_CAPITAL_CONTROL: "/dashboard/executive/share-capital-control",
   },
   USERS: {
     LIST: "/users",
@@ -204,6 +284,10 @@ export const API_ENDPOINTS = {
     DEACTIVATE: (id: number) => `/users/${id}/deactivate`,
     REACTIVATE: (id: number) => `/users/${id}/reactivate`,
     RESET_PASSWORD: (id: number) => `/users/${id}/reset-password`,
+    BRANCH_HISTORY: (id: number) => `/users/${id}/branch-history`,
+  },
+  STAFF: {
+    LIST: "/staff",
   },
   AUDIT_LOGS: {
     LIST: "/audit-logs",
@@ -225,10 +309,37 @@ export const API_ENDPOINTS = {
     DETAIL: (id: number) => `/branches/${id}`,
     CREATE: "/branches",
     UPDATE: (id: number) => `/branches/${id}`,
+    // Suspend or reactivate, with a reason (Phase 6 MB-BE1). `PUT UPDATE`
+    // refuses a changed `is_active` (422). branches:manage plus view_all.
+    STATUS: (id: number) => `/branches/${id}/status`,
+    // Multi-branch (MB-BE1), each needing branches:manage plus view_all:
+    // move the main-office flag (with a reason), and the closure: GET the
+    // checklist and waiting request, POST to ask, DELETE to cancel, and
+    // approve or reject by a different user.
+    MAIN_OFFICE: (id: number) => `/branches/${id}/main-office`,
+    CLOSURE: (id: number) => `/branches/${id}/closure`,
+    CLOSURE_APPROVE: (id: number) => `/branches/${id}/closure/approve`,
+    CLOSURE_REJECT: (id: number) => `/branches/${id}/closure/reject`,
+  },
+  // Money moved between branches through 1190 (Phase 6 MB-BE5). Each step's
+  // permission is checked by the server; approve, receive and reverse take an
+  // Idempotency-Key.
+  INTERBRANCH_TRANSFERS: {
+    LIST: "/interbranch-transfers",
+    CREATE: "/interbranch-transfers",
+    IN_TRANSIT: "/interbranch-transfers/in-transit",
+    DETAIL: (id: number) => `/interbranch-transfers/${id}`,
+    ACTION: (id: number, action: "approve" | "reject" | "cancel" | "receive" | "reverse") =>
+      `/interbranch-transfers/${id}/${action}`,
+    // The §15 branch counts (dashboard:analytics; each figure null without its source's permission).
+    BRANCH_COUNTS: "/branch-counts",
   },
   SHARE_CAPITAL: {
     LEDGER_LIST: "/share-capital/ledger",
     LEDGER_CREATE: "/share-capital/ledger",
+    MEMBERS: "/share-capital/members",
+    // Preview of the next CSH-[admin id]-[year]-[0001] cash reference.
+    NEXT_CASH_REFERENCE: "/share-capital/cash-reference/next",
   },
   PLEDGES: {
     LIST: "/pledges",
@@ -248,6 +359,7 @@ export const API_ENDPOINTS = {
   GCASH: {
     TRANSACTIONS_LIST: "/gcash/transactions",
     TRANSACTIONS_CREATE: "/gcash/transactions",
+    TRANSACTIONS_PREVIEW: "/gcash/transactions/preview",
     TRANSACTIONS_MARK_PAID: (id: number) => `/gcash/transactions/${id}/paid`,
     NON_MEMBERS_LIST: "/gcash/non-members",
     NON_MEMBERS_CREATE: "/gcash/non-members",
@@ -269,19 +381,19 @@ export const API_ENDPOINTS = {
     PUBLIC: "/branding/public",
   },
   /**
-   * Accounting — NOT YET IN SWAGGER.
+   * Accounting. The backend serves every path here under `/accounting`; its
+   * `routes/api.php` (and its `routes/accounting/*.php` partials) is the source
+   * of truth. Paths are listed alongside the service method that needs them;
+   * the reconciliation create, show and match routes are listed ahead of the
+   * screen that will call them.
    *
-   * Every path below is a proposal, written here so the service layer has one
-   * place to be wrong rather than thirteen. None of them answer today; the
-   * handoff covering payloads and responses went to the backend team. Re-check
-   * against the spec before trusting any of these.
-   *
-   * The three that matter most, because they cannot be done from the client at
-   * all: POST /accounting/journals/{id}/post, /reverse, and the automatic
-   * postings raised by loan release and collection. A journal has to be written
-   * in the same database transaction as the lending event that caused it — do
-   * it in a second request and a crash between the two leaves the books
-   * disagreeing with the portfolio, with nothing to point at the difference.
+   * Posting and reversing are verbs on the server (POST
+   * /accounting/journals/{id}/post and /reverse), and the automatic postings
+   * for loan release and collection happen there too, never from the client.
+   * A journal has to be written in the same database transaction as the
+   * lending event that caused it — do it in a second request and a crash
+   * between the two leaves the books disagreeing with the portfolio, with
+   * nothing to point at the difference.
    */
   ACCOUNTING: {
     // Dashboard
@@ -289,33 +401,38 @@ export const API_ENDPOINTS = {
 
     // Chart of accounts
     ACCOUNTS_LIST: "/accounting/accounts",
-    ACCOUNTS_DETAIL: (id: number) => `/accounting/accounts/${id}`,
     ACCOUNTS_CREATE: "/accounting/accounts",
+    ACCOUNTS_SEED: "/accounting/accounts/seed",
+    ACCOUNTS_SHOW: (id: number) => `/accounting/accounts/${id}`,
     ACCOUNTS_UPDATE: (id: number) => `/accounting/accounts/${id}`,
     ACCOUNTS_DELETE: (id: number) => `/accounting/accounts/${id}`,
-    ACCOUNTS_SEED: "/accounting/accounts/seed",
 
     // Journals. Posting and reversing are separate verbs, not a PUT on the
     // entry — a posted journal is immutable, and `reverse` writes a second
     // entry rather than editing the first.
     JOURNALS_LIST: "/accounting/journals",
-    JOURNALS_DETAIL: (id: number) => `/accounting/journals/${id}`,
     JOURNALS_CREATE: "/accounting/journals",
+    JOURNALS_SHOW: (id: number) => `/accounting/journals/${id}`,
+    /** Drafts only: the server refuses anything that is not a draft. */
     JOURNALS_UPDATE: (id: number) => `/accounting/journals/${id}`,
+    /** The server's totals for lines being typed. Writes nothing. */
+    JOURNALS_PREVIEW: "/accounting/journals/preview",
     JOURNALS_POST: (id: number) => `/accounting/journals/${id}/post`,
     JOURNALS_REVERSE: (id: number) => `/accounting/journals/${id}/reverse`,
 
     // Reporting
     GENERAL_LEDGER: "/accounting/general-ledger",
     TRIAL_BALANCE: "/accounting/trial-balance",
-    // No BALANCE_SHEET / INCOME_STATEMENT entry, deliberately. Both statements
-    // are derived in the browser from TRIAL_BALANCE by
-    // `src/lib/accounting/statements.ts` (two reads: closing and opening), and
-    // the backend documents the absence of those routes as intentional. Listing
-    // them here only implies server work nobody wants.
+    BALANCE_SHEET: "/accounting/statements/balance-sheet",
+    INCOME_STATEMENT: "/accounting/statements/income-statement",
     CASH_FLOW: "/accounting/statements/cash-flow",
     EQUITY_CHANGES: "/accounting/statements/equity-changes",
+    STATEMENT_NOTES: "/accounting/statements/notes",
     RECEIVABLE_AGING: "/accounting/loans/aging",
+
+    // Loan Accounting: the summary is one document, the loans list pages.
+    LOAN_ACCOUNTING_SUMMARY: "/accounting/loan-accounting/summary",
+    LOAN_ACCOUNTING_LOANS: "/accounting/loan-accounting/loans",
 
     // BIR books. One path per book, keyed by `BookKind`, so the books screen
     // can pick by tab without a switch statement per call site.
@@ -325,6 +442,11 @@ export const API_ENDPOINTS = {
       cash_receipts: "/accounting/books/cash-receipts",
       cash_disbursements: "/accounting/books/cash-disbursements",
     },
+    // The two cash books in columns, one per mapped account role.
+    BOOK_COLUMNS: {
+      cash_receipts: "/accounting/books/cash-receipts/columns",
+      cash_disbursements: "/accounting/books/cash-disbursements/columns",
+    },
 
     // Cash and bank
     CASH_ACCOUNTS_LIST: "/accounting/cash-accounts",
@@ -332,15 +454,18 @@ export const API_ENDPOINTS = {
 
     // Expenses and payables
     EXPENSES_LIST: "/accounting/expenses",
-    EXPENSES_DETAIL: (id: number) => `/accounting/expenses/${id}`,
     EXPENSES_CREATE: "/accounting/expenses",
+    EXPENSES_SHOW: (id: number) => `/accounting/expenses/${id}`,
     EXPENSES_UPDATE: (id: number) => `/accounting/expenses/${id}`,
     EXPENSES_PAY: (id: number) => `/accounting/expenses/${id}/pay`,
+    EXPENSES_REVERSE: (id: number) => `/accounting/expenses/${id}/reverse`,
+    EXPENSE_PAYMENT_REVERSE: (expenseId: number, paymentId: number) =>
+      `/accounting/expenses/${expenseId}/payments/${paymentId}/reverse`,
 
     // Reconciliation
     RECONCILIATIONS_LIST: "/accounting/reconciliations",
     RECONCILIATIONS_CREATE: "/accounting/reconciliations",
-    RECONCILIATIONS_DETAIL: (id: number) => `/accounting/reconciliations/${id}`,
+    RECONCILIATIONS_SHOW: (id: number) => `/accounting/reconciliations/${id}`,
     RECONCILIATIONS_MATCH: (id: number) => `/accounting/reconciliations/${id}/match`,
 
     // Periods
@@ -348,30 +473,404 @@ export const API_ENDPOINTS = {
     PERIODS_CLOSE: (id: number) => `/accounting/periods/${id}/close`,
     PERIODS_REOPEN: (id: number) => `/accounting/periods/${id}/reopen`,
 
-    // Settings and opening balances
-    SETTINGS: "/accounting/settings",
+    // Settings
     ACCOUNT_MAPPING: "/accounting/settings/account-mapping",
+
+    // Round C. Seeding keeps ACCOUNTS_SEED; its body gains `template`.
+    // Opening balances: one organisation-wide entry, a draft until finalised.
     OPENING_BALANCES: "/accounting/opening-balances",
+    OPENING_BALANCES_FINALISE: "/accounting/opening-balances/finalise",
+
+    // Year-end close: the list, the preview, and reopening the latest close.
+    YEAR_CLOSES: "/accounting/year-closes",
+    YEAR_CLOSES_PREVIEW: "/accounting/year-closes/preview",
+    YEAR_CLOSES_REOPEN: (id: number) => `/accounting/year-closes/${id}/reopen`,
+
+    // Allowance for credit losses: the preview, and the postings list and run.
+    ALLOWANCE_PREVIEW: "/accounting/allowance/preview",
+    ALLOWANCE_POSTINGS: "/accounting/allowance/postings",
+
+    // Reconciliation actions: book an unmatched statement line and match it.
+    RECONCILIATION_LINE_EXPENSE: (reconciliationId: number, lineId: number) =>
+      `/accounting/reconciliations/${reconciliationId}/lines/${lineId}/expense`,
+    RECONCILIATION_LINE_TRANSFER: (reconciliationId: number, lineId: number) =>
+      `/accounting/reconciliations/${reconciliationId}/lines/${lineId}/transfer`,
+    RECONCILIATION_LINE_SUSPENSE: (reconciliationId: number, lineId: number) =>
+      `/accounting/reconciliations/${reconciliationId}/lines/${lineId}/suspense`,
+
+    // Attachments on a journal or an expense.
+    JOURNAL_ATTACHMENTS: (journalId: number) => `/accounting/journals/${journalId}/attachments`,
+    JOURNAL_ATTACHMENT: (journalId: number, attachmentId: number) =>
+      `/accounting/journals/${journalId}/attachments/${attachmentId}`,
+    EXPENSE_ATTACHMENTS: (expenseId: number) => `/accounting/expenses/${expenseId}/attachments`,
+    EXPENSE_ATTACHMENT: (expenseId: number, attachmentId: number) =>
+      `/accounting/expenses/${expenseId}/attachments/${attachmentId}`,
   },
   /**
-   * None of these exist yet. Typed and wired now so the service layer has
-   * one place to be wrong rather than eleven, same rationale as ACCOUNTING
-   * above. Re-check against the backend handoff before trusting any path.
+   * Savings & Deposits: lendyph-backend's savings design §2 (Phase 3, Wave 1).
+   * Money posts carry an `Idempotency-Key` header. A withdrawal, close,
+   * settlement or pre-termination above the first approval tier answers 202
+   * with `{approval}` instead of 201.
+   */
+  SAVINGS: {
+    // The Savings dashboard (gap round S5): `from`, `to`, `branch_id`, `product_id`.
+    DASHBOARD: "/savings/dashboard",
+
+    SETTINGS: "/savings/settings",
+    PREPARE_BOOKS: "/savings/settings/prepare-books",
+    TAX_RULES: "/savings/tax-rules",
+
+    PRODUCTS: "/savings/products",
+    PRODUCT: (id: number) => `/savings/products/${id}`,
+    PRODUCT_RATES: (id: number) => `/savings/products/${id}/rates`,
+
+    /** The member check before opening (gap round S1). */
+    OPENING_CHECK: "/savings/opening-check",
+    ACCOUNTS: "/savings/accounts",
+    ACCOUNT: (id: number) => `/savings/accounts/${id}`,
+    ACCOUNT_TRANSACTIONS: (id: number) => `/savings/accounts/${id}/transactions`,
+    DEPOSITS: (id: number) => `/savings/accounts/${id}/deposits`,
+    WITHDRAWALS: (id: number) => `/savings/accounts/${id}/withdrawals`,
+    TRANSFERS: (id: number) => `/savings/accounts/${id}/transfers`,
+    CLOSING_QUOTE: (id: number) => `/savings/accounts/${id}/closing-quote`,
+    CLOSE: (id: number) => `/savings/accounts/${id}/close`,
+    STATUS: (id: number) => `/savings/accounts/${id}/status`,
+    HOLDS: (id: number) => `/savings/accounts/${id}/holds`,
+    HOLD_RELEASE: (holdId: number) => `/savings/holds/${holdId}/release`,
+
+    TRANSACTIONS: "/savings/transactions",
+    TRANSACTION: (id: number) => `/savings/transactions/${id}`,
+    TRANSACTION_REVERSE: (id: number) => `/savings/transactions/${id}/reverse`,
+    // A payout's reference recorded after the transfer, and the payouts still missing one (finish run round 6).
+    TRANSACTION_REFERENCE: (id: number) => `/savings/transactions/${id}/reference`,
+    PAYOUTS_MISSING_REFERENCE: "/savings/payouts/missing-reference",
+
+    APPROVALS: "/savings/approvals",
+    APPROVAL_APPROVE: (id: number) => `/savings/approvals/${id}/approve`,
+    APPROVAL_REJECT: (id: number) => `/savings/approvals/${id}/reject`,
+    APPROVAL_CANCEL: (id: number) => `/savings/approvals/${id}/cancel`,
+
+    TIME_DEPOSITS: "/savings/time-deposits",
+    TIME_DEPOSIT: (id: number) => `/savings/time-deposits/${id}`,
+    TIME_DEPOSIT_QUOTE: "/savings/time-deposits/quote",
+    // Preview of the next TD-[admin id]-[year]-[0001] cash placement reference.
+    TIME_DEPOSIT_NEXT_CASH_REFERENCE: "/savings/time-deposits/cash-reference/next",
+    TIME_DEPOSIT_SETTLE: (id: number) => `/savings/time-deposits/${id}/settle`,
+    TIME_DEPOSIT_PRETERMINATE: (id: number) => `/savings/time-deposits/${id}/preterminate`,
+    TIME_DEPOSIT_PAYOUT_REFERENCE: (id: number) => `/savings/time-deposits/${id}/payout-reference`,
+    TIME_DEPOSIT_PRETERMINATION_QUOTE: (id: number) =>
+      `/savings/time-deposits/${id}/pretermination-quote`,
+
+    INTEREST_RUNS: "/savings/interest-runs",
+    INTEREST_RUNS_PREVIEW: "/savings/interest-runs/preview",
+    INTEREST_RUN: (id: number) => `/savings/interest-runs/${id}`,
+    INTEREST_RUN_APPROVE: (id: number) => `/savings/interest-runs/${id}/approve`,
+    INTEREST_RUN_REJECT: (id: number) => `/savings/interest-runs/${id}/reject`,
+    INTEREST_RUN_POST: (id: number) => `/savings/interest-runs/${id}/post`,
+    INTEREST_RUN_REVERSE: (id: number) => `/savings/interest-runs/${id}/reverse`,
+
+    // Savings servicing (gap round S3 and S4): transfers to share capital,
+    // auto-credit instructions and runs, and account notes.
+    SHARE_CAPITAL_TRANSFERS: (id: number) => `/savings/accounts/${id}/share-capital-transfers`,
+    ACCOUNT_NOTES: (id: number) => `/savings/accounts/${id}/notes`,
+    AUTO_CREDIT_INSTRUCTIONS: "/savings/auto-credit/instructions",
+    AUTO_CREDIT_INSTRUCTION: (id: number) => `/savings/auto-credit/instructions/${id}`,
+    AUTO_CREDIT_PREVIEW: "/savings/auto-credit/preview",
+    AUTO_CREDIT_PROCESS: "/savings/auto-credit/process",
+    // Gap round B7: past auto-credit runs.
+    AUTO_CREDIT_RUNS: "/savings/auto-credit/runs",
+    AUTO_CREDIT_RUN: (id: number) => `/savings/auto-credit/runs/${id}`,
+  },
+  /**
+   * Credit Scoring (backend PR #240). Every route needs credit_scoring:view,
+   * settings or override as docs/CREDIT_SCORING_BACKEND_HANDOFF.md lists; the
+   * loan assessment also needs loans:view, and loans:update to save.
+   * The screens stay behind NEXT_PUBLIC_ENABLE_CREDIT_SCORING.
    */
   CREDIT_SCORING: {
     DASHBOARD: "/credit-scoring/dashboard",
     BORROWERS_LIST: "/credit-scoring/borrowers",
     BORROWER_PROFILE: (borrowerId: number) => `/credit-scoring/borrowers/${borrowerId}`,
     BORROWER_HISTORY: (borrowerId: number) => `/credit-scoring/borrowers/${borrowerId}/history`,
+    BORROWER_DECISIONS: (borrowerId: number) => `/credit-scoring/borrowers/${borrowerId}/decisions`,
     SCORE_HISTORY: "/credit-scoring/score-history",
     RISK_MONITORING: "/credit-scoring/risk-monitoring",
-    ALERTS_LIST: "/credit-scoring/alerts",
     SCORECARD_CONFIG: "/credit-scoring/scorecard-config",
     POLICY_FLAGS: (borrowerId: number) => `/credit-scoring/borrowers/${borrowerId}/policy-flags`,
     DECISIONS_CREATE: "/credit-scoring/decisions",
     SETTINGS: "/credit-scoring/settings",
+    LOAN_ASSESSMENT: (loanId: number) => `/credit-scoring/loans/${loanId}/assessment`,
+  },
+  /**
+   * Loan Origination, staff side: `routes/api/loan-origination/*` in the
+   * backend (LO-B1 to LO-B4). The screens stay behind
+   * NEXT_PUBLIC_ENABLE_LOAN_ORIGINATION. "Submit for approval" is the
+   * hand-off; there is no separate convert, and links have no logo upload.
+   */
+  LOAN_ORIGINATION: {
+    DASHBOARD: "/loan-origination/dashboard",
+    APPLICATIONS: "/loan-origination/applications",
+    APPLICATION: (id: number) => `/loan-origination/applications/${id}`,
+    TRANSITION: (id: number) => `/loan-origination/applications/${id}/transition`,
+    ASSIGN: (id: number) => `/loan-origination/applications/${id}/assign`,
+    NOTES: (id: number) => `/loan-origination/applications/${id}/notes`,
+    REQUEST_INFO: (id: number) => `/loan-origination/applications/${id}/request-information`,
+    REMIND: (id: number) => `/loan-origination/applications/${id}/remind`,
+    LINK_MEMBER: (id: number) => `/loan-origination/applications/${id}/link-member`,
+    SUBMIT_FOR_APPROVAL: (id: number) => `/loan-origination/applications/${id}/submit-for-approval`,
+    ASSESSMENTS: "/loan-origination/assessments",
+    ASSESSMENT: (id: number) => `/loan-origination/applications/${id}/assessment`,
+    ASSESSMENT_RERUN: (id: number) => `/loan-origination/applications/${id}/assessment/rerun`,
+    ASSESSMENT_HISTORY: (id: number) => `/loan-origination/applications/${id}/assessment/history`,
+    ASSESSMENT_PDF: (id: number) => `/loan-origination/applications/${id}/assessment/pdf`,
+    DOCUMENTS: "/loan-origination/documents",
+    DOCUMENT_VERIFY: (docId: number) => `/loan-origination/documents/${docId}/verify`,
+    DOCUMENT_REJECT: (docId: number) => `/loan-origination/documents/${docId}/reject`,
+    DOCUMENT_REQUEST_REPLACEMENT: (docId: number) =>
+      `/loan-origination/documents/${docId}/request-replacement`,
+    DOCUMENT_DOWNLOAD: (docId: number) => `/loan-origination/documents/${docId}/download`,
+    LINKS: "/loan-origination/links",
+    LINK: (id: number) => `/loan-origination/links/${id}`,
+    NOTICES: "/loan-origination/notices",
+    SETTINGS: "/loan-origination/settings",
+  },
+  /**
+   * A shared receipt (finish run round 2, decision 6): no Lendy account, a
+   * link token in the address. Answers 404 while the server switch
+   * (RECEIPT_SHARE_LINKS_ENABLED) is off. The token is encoded back, so it
+   * stays one path segment.
+   */
+  PUBLIC_RECEIPTS: {
+    SHOW: (token: string) => `/public/receipts/${encodeURIComponent(token)}`,
+  },
+  /**
+   * The applicant's side of Loan Origination (LO-B2,
+   * `routes/api/public-apply/intake.php`): no Lendy account, a link token and,
+   * after the code step, an `X-Application-Session` header. Every route
+   * answers 404 while the server switch (LOAN_ORIGINATION_ENABLED) is off.
+   * Document ids are the documents' random public ids. The token comes from
+   * the page address (decoded, so `%2F` arrives as `/`) and is encoded back,
+   * like the document id, so each stays one path segment.
+   */
+  PUBLIC_APPLY: {
+    PORTAL: (token: string) => `/public-apply/${encodeURIComponent(token)}`,
+    OTP_REQUEST: (token: string) => `/public-apply/${encodeURIComponent(token)}/otp`,
+    OTP_VERIFY: (token: string) => `/public-apply/${encodeURIComponent(token)}/otp/verify`,
+    DRAFT: (token: string) => `/public-apply/${encodeURIComponent(token)}/draft`,
+    ESTIMATE: (token: string) => `/public-apply/${encodeURIComponent(token)}/estimate`,
+    DOCUMENTS: (token: string) => `/public-apply/${encodeURIComponent(token)}/documents`,
+    DOCUMENT: (token: string, documentId: string) =>
+      `/public-apply/${encodeURIComponent(token)}/documents/${encodeURIComponent(documentId)}`,
+    SUBMIT: (token: string) => `/public-apply/${encodeURIComponent(token)}/submit`,
+    LOGOUT: (token: string) => `/public-apply/${encodeURIComponent(token)}/logout`,
+    TRACK: (token: string) => `/public-apply/${encodeURIComponent(token)}/track`,
+  },
+  /**
+   * Automated due-date reminders. None of these exist yet: the scheduler,
+   * providers and these routes are backend work still to do, and the contract
+   * is `@/types/reminder` plus the handoff in the commit that added this
+   * block. Until they land every screen shows "Not connected yet" (404).
+   */
+  REMINDERS: {
+    DASHBOARD: "/reminders/dashboard",
+    RULES: "/reminders/rules",
+    RULE: (id: number) => `/reminders/rules/${id}`,
+    RULE_DEACTIVATE: (id: number) => `/reminders/rules/${id}/deactivate`,
+    TEMPLATES: "/reminders/templates",
+    TEMPLATE: (id: number) => `/reminders/templates/${id}`,
+    TEMPLATE_PREVIEW: "/reminders/templates/preview",
+    QUEUE: "/reminders/queue",
+    HISTORY: "/reminders/history",
+    HISTORY_DETAIL: (id: number) => `/reminders/history/${id}`,
+    LOAN: (loanId: number) => `/loans/${loanId}/reminders`,
+    MANUAL_PREVIEW: "/reminders/manual-send/preview",
+    MANUAL_SEND: "/reminders/manual-send",
+    PAUSES: "/reminders/pauses",
+    PAUSE: "/reminders/pause",
+    RESUME: "/reminders/resume",
+    SETTINGS: "/reminders/settings",
+    BORROWER_PREFERENCES: (borrowerId: number) =>
+      `/borrowers/${borrowerId}/notification-preferences`,
+  },
+  /**
+   * Linda, the AI lending assistant. `CHAT` needs `linda:use`; the server
+   * derives tenant, branch and permissions from the token, so the request
+   * carries only the question and this session's earlier turns. `SETTINGS`
+   * (`GET` and `PUT`) needs `linda:settings` and `branches:view_all`.
+   */
+  LINDA: {
+    CHAT: "/linda/chat",
+    SETTINGS: "/linda/settings",
+  },
+  /**
+   * AMLA foundation (Phase 6, AMLA-B1). `STATUS`, `CALENDAR` and
+   * `DEADLINE_PREVIEW` need `amla:view`; `SETTINGS` needs `amla:view` or
+   * `amla:settings`, `SETTINGS_VERSIONS` `amla:settings` or `amla:audit`,
+   * change requests `amla:settings` and `LOG` `amla:audit`, each of those
+   * with `branches:view_all`. The maker of a change can't approve or reject it.
+   */
+  AMLA: {
+    STATUS: "/amla/status",
+    SETTINGS: "/amla/settings",
+    SETTINGS_VERSIONS: "/amla/settings/versions",
+    CALENDAR: "/amla/calendar",
+    DEADLINE_PREVIEW: "/amla/deadlines/preview",
+    CHANGE_REQUESTS: "/amla/change-requests",
+    CHANGE_REQUEST_APPROVE: (id: number) => `/amla/change-requests/${id}/approve`,
+    CHANGE_REQUEST_REJECT: (id: number) => `/amla/change-requests/${id}/reject`,
+    CHANGE_REQUEST_WITHDRAW: (id: number) => `/amla/change-requests/${id}/withdraw`,
+    LOG: "/amla/log",
+    /** AMLA-B4: every CDD route needs `amla:cdd`; a walk-in also needs `branches:view_all`. */
+    CDD_SUBJECTS: "/amla/cdd/subjects",
+    CDD_SUBJECT: (segment: string, id: number) => `/amla/cdd/${segment}/${id}`,
+    CDD_ID_VERIFICATIONS: (segment: string, id: number) => `/amla/cdd/${segment}/${id}/id-verifications`,
+    CDD_RISK_ASSESSMENTS: (segment: string, id: number) => `/amla/cdd/${segment}/${id}/risk-assessments`,
+    CDD_REVIEWS: (segment: string, id: number) => `/amla/cdd/${segment}/${id}/reviews`,
+    /** AMLA-B5: a subject's IDs on record, by type and last four only (`amla:cdd`). */
+    CDD_VALID_IDS: (segment: string, id: number) => `/amla/cdd/${segment}/${id}/valid-ids`,
+    /** AMLA-B5: screening needs `amla:screening`, orders `amla:sanctions`; both with every branch. */
+    SCREENING_LISTS: "/amla/screening/lists",
+    SCREENING_LIST_UPLOAD: (source: string) => `/amla/screening/lists/${source}/versions`,
+    SCREENING_RESCREEN: "/amla/screening/rescreen",
+    SCREENING_MATCHES: "/amla/screening/matches",
+    SCREENING_MATCH: (id: number) => `/amla/screening/matches/${id}`,
+    SCREENING_MATCH_CONFIRM: (id: number) => `/amla/screening/matches/${id}/confirm`,
+    SCREENING_MATCH_CLEAR: (id: number) => `/amla/screening/matches/${id}/clear`,
+    ORDERS: "/amla/orders",
+    ORDER: (id: number) => `/amla/orders/${id}`,
+    ORDER_RELEASE: (id: number) => `/amla/orders/${id}/release`,
+    ORDER_RELEASE_APPROVE: (id: number) => `/amla/orders/${id}/release/approve`,
+    ORDER_RELEASE_REJECT: (id: number) => `/amla/orders/${id}/release/reject`,
+    ORDER_RELEASE_WITHDRAW: (id: number) => `/amla/orders/${id}/release/withdraw`,
+    RISK_RULES: "/amla/risk-rules",
+    /** AMLA-B3: alerts need `amla:alerts`, candidates `amla:ctr`; both branch-scoped. Rules are head office. */
+    ALERTS: "/amla/alerts",
+    ALERT: (id: number) => `/amla/alerts/${id}`,
+    CTR_CANDIDATES: "/amla/ctr-candidates",
+    CTR_CANDIDATE: (id: number) => `/amla/ctr-candidates/${id}`,
+    DETECTION_RULES: "/amla/detection-rules",
+    DETECTION_RULE_VERSIONS: "/amla/detection-rules/versions",
+    /**
+     * AMLA-B6: cases need `amla:cases` with every branch (deciding also
+     * `amla:approve`, the STR `amla:str`); reports and deadlines any reporting
+     * key (an STR also every branch). Every view, download and export is logged.
+     */
+    ALERT_ASSIGN: (id: number) => `/amla/alerts/${id}/assign`,
+    ALERT_REVIEW: (id: number) => `/amla/alerts/${id}/review`,
+    ALERT_CLOSE: (id: number) => `/amla/alerts/${id}/close`,
+    ALERT_HISTORY: (id: number) => `/amla/alerts/${id}/history`,
+    ALERT_ESCALATE: (id: number) => `/amla/alerts/${id}/escalate`,
+    CASES: "/amla/cases",
+    CASE: (id: number) => `/amla/cases/${id}`,
+    CASE_ASSIGN: (id: number) => `/amla/cases/${id}/assign`,
+    CASE_NOTES: (id: number) => `/amla/cases/${id}/notes`,
+    CASE_EVIDENCE: (id: number) => `/amla/cases/${id}/evidence`,
+    CASE_EVIDENCE_FILE: (id: number, evidenceId: number) => `/amla/cases/${id}/evidence/${evidenceId}`,
+    CASE_DECISION: (id: number) => `/amla/cases/${id}/decision`,
+    CASE_STR: (id: number) => `/amla/cases/${id}/str`,
+    CTR_CANDIDATE_REPORT: (id: number) => `/amla/ctr-candidates/${id}/report`,
+    REPORTS: "/amla/reports",
+    REPORT: (id: number) => `/amla/reports/${id}`,
+    REPORT_APPROVE: (id: number) => `/amla/reports/${id}/approve`,
+    REPORT_RETURN: (id: number) => `/amla/reports/${id}/return`,
+    REPORT_SUBMISSIONS: (id: number) => `/amla/reports/${id}/submissions`,
+    REPORT_SUBMISSION_EVIDENCE: (id: number, submissionId: number) => `/amla/reports/${id}/submissions/${submissionId}/evidence`,
+    REPORT_EXPORT: (id: number) => `/amla/reports/${id}/export`,
+    FILING_DEADLINES: "/amla/filing-deadlines",
+    /** AMLA-B7: the ten reports (each needs its own key), their server exports and the dashboard counts. */
+    COMPLIANCE_REPORTS: "/amla/compliance-reports",
+    COMPLIANCE_REPORT: (key: string) => `/amla/compliance-reports/${encodeURIComponent(key)}`,
+    COMPLIANCE_REPORT_EXPORTS: (key: string) => `/amla/compliance-reports/${encodeURIComponent(key)}/exports`,
+    DASHBOARD_COUNTS: "/amla/dashboard/counts",
+  },
+  /**
+   * CDA Compliance (CDA design §3). Every route needs `branches:view_all` plus
+   * its own `cda:*` permission; mediation, audit and tax reports and documents
+   * need their restricted view as well. Reports and their workflow are
+   * addressed by id; `REPORT_BY_TYPE` is the year and type alias.
+   */
+  CDA: {
+    PERIODS: "/cda/periods",
+    PERIOD: (year: number) => `/cda/periods/${year}`,
+    DASHBOARD: (year: number) => `/cda/periods/${year}/dashboard`,
+    CALENDAR: (year: number) => `/cda/periods/${year}/calendar`,
+    REQUIREMENTS: (year: number) => `/cda/periods/${year}/requirements`,
+    REQUIREMENT: (id: number) => `/cda/requirements/${id}`,
+    REPORT_BY_TYPE: (year: number, type: string) => `/cda/periods/${year}/reports/${type}`,
+    REPORT: (id: number) => `/cda/reports/${id}`,
+    REPORT_WORKFLOW: (id: number) => `/cda/reports/${id}/workflow`,
+    REPORT_DEADLINE: (id: number) => `/cda/reports/${id}/deadline`,
+    REPORT_SNAPSHOTS: (id: number) => `/cda/reports/${id}/snapshots`,
+    REPORT_EXPORTS: (id: number) => `/cda/reports/${id}/exports`,
+    LOAN_CLASSIFICATION: (year: number) => `/cda/periods/${year}/loan-classification`,
+    PESOS: (year: number) => `/cda/periods/${year}/pesos`,
+    OFFICERS: "/cda/officers",
+    OFFICER: (id: number) => `/cda/officers/${id}`,
+    TRAININGS: "/cda/trainings",
+    TRAINING: (id: number) => `/cda/trainings/${id}`,
+    SOCIAL_PROGRAMS: (year: number) => `/cda/periods/${year}/social-programs`,
+    SOCIAL_PROGRAM: (id: number) => `/cda/social-programs/${id}`,
+    MEDIATION_CASES: (year: number) => `/cda/periods/${year}/mediation-cases`,
+    MEDIATION_CASE: (id: number) => `/cda/mediation-cases/${id}`,
+    DOCUMENTS: (year: number) => `/cda/periods/${year}/documents`,
+    DOCUMENT_VERSIONS: (id: number) => `/cda/documents/${id}/versions`,
+    DOCUMENT_WITHDRAW: (id: number) => `/cda/documents/${id}/withdraw`,
+    SUBMISSIONS: (year: number) => `/cda/periods/${year}/submissions`,
+    SUBMISSION: (id: number) => `/cda/submissions/${id}`,
+    SUBMISSION_PROOF: (id: number) => `/cda/submissions/${id}/proof`,
+    REGULATORY_PROFILE: "/cda/regulatory-profile",
+    SETTINGS: "/cda/settings",
+    TEMPLATES: "/cda/templates",
+    TEMPLATE: (id: number) => `/cda/templates/${id}`,
+    TEMPLATE_ACTIVATE: (id: number) => `/cda/templates/${id}/activate`,
+    TEMPLATE_RETIRE: (id: number) => `/cda/templates/${id}/retire`,
+    TEMPLATE_EXCEL_FILE: (id: number) => `/cda/templates/${id}/excel-file`,
+    TEMPLATE_VALIDATE: "/cda/templates/validate",
+  },
+  /**
+   * The Member Portal's staff side (`/portal-admin`, staff token, branch-scoped
+   * by the server). The member side has its own client and endpoints
+   * (`src/lib/portal/`), never these.
+   */
+  PORTAL_ADMIN: {
+    SETTINGS: "/portal-admin/settings",
+    TERMS: "/portal-admin/terms",
+    STATS: "/portal-admin/stats",
+    ACCOUNTS: "/portal-admin/accounts",
+    MEMBER_ACCESS: (borrowerId: number) => `/portal-admin/members/${borrowerId}/access`,
+    MEMBER_INVITE: (borrowerId: number) => `/portal-admin/members/${borrowerId}/invite`,
+    MEMBER_RESET_CODE: (borrowerId: number) => `/portal-admin/members/${borrowerId}/reset-code`,
+    MEMBER_UNLOCK: (borrowerId: number) => `/portal-admin/members/${borrowerId}/unlock`,
+    MEMBER_SIGN_OUT: (borrowerId: number) => `/portal-admin/members/${borrowerId}/sign-out`,
+    MEMBER_COMMUNICATIONS: (borrowerId: number) => `/portal-admin/members/${borrowerId}/communications`,
+    DOCUMENT_SHARE: (borrowerId: number) => `/portal-admin/members/${borrowerId}/documents/share`,
+    DOCUMENT_UNSHARE: (borrowerId: number) => `/portal-admin/members/${borrowerId}/documents/unshare`,
+    REQUESTS: "/portal-admin/requests",
+    REQUEST: (id: number) => `/portal-admin/requests/${id}`,
+    REQUEST_DECISION: (id: number) => `/portal-admin/requests/${id}/decision`,
+    ANNOUNCEMENTS: "/portal-admin/announcements",
+    ANNOUNCEMENT: (id: number) => `/portal-admin/announcements/${id}`,
+    ANNOUNCEMENT_PUBLISH: (id: number) => `/portal-admin/announcements/${id}/publish`,
+    ANNOUNCEMENT_WITHDRAW: (id: number) => `/portal-admin/announcements/${id}/withdraw`,
+  },
+  /** The signed-in staff user's own in-app notifications (the header bell). */
+  NOTIFICATIONS: {
+    LIST: "/notifications",
+    UNREAD_COUNT: "/notifications/unread-count",
+    READ: (id: string) => `/notifications/${encodeURIComponent(id)}/read`,
+    READ_ALL: "/notifications/read-all",
   },
   SYSTEM: {
     HEALTH: "/health",
+  },
+  /**
+   * Menu Visibility (finish run round 6). `HIDDEN` answers any signed-in staff
+   * user; the rest need `menu_visibility:manage`, and `SETTINGS` also an
+   * active administrator override (`OVERRIDE`, for this sign-in only).
+   */
+  MENU_VISIBILITY: {
+    HIDDEN: "/menu-visibility/hidden",
+    OVERRIDE: "/menu-visibility/override",
+    SETTINGS: "/menu-visibility",
   },
 } as const;

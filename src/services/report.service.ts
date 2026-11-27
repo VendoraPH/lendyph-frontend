@@ -53,6 +53,12 @@ export interface CollectedPages {
   pagesFetched: number;
   /** False when the walk stopped early — `rows` is then a partial set. */
   complete: boolean;
+  /**
+   * The first page's `totals` object, as the server sent it, or null when it
+   * sent none. The server computes it over the whole filtered set, so it is
+   * complete even when `rows` is not.
+   */
+  totals: Record<string, unknown> | null;
 }
 
 /**
@@ -73,6 +79,13 @@ const extractRows = (body: unknown): unknown[] => {
     }
   }
   return [];
+};
+
+const extractTotals = (body: unknown): Record<string, unknown> | null => {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return null;
+  const totals = (body as { totals?: unknown }).totals;
+  if (!totals || typeof totals !== "object" || Array.isArray(totals)) return null;
+  return totals as Record<string, unknown>;
 };
 
 const extractMeta = (body: unknown): PaginatorMeta | null => {
@@ -116,6 +129,7 @@ export async function collectReportPages(
   let page = 1;
   let pagesFetched = 0;
   let complete = true;
+  let totals: Record<string, unknown> | null = null;
 
   while (page <= lastPage) {
     if (page > maxPages) {
@@ -125,6 +139,7 @@ export async function collectReportPages(
 
     const body = await fetchPage(page);
     pagesFetched += 1;
+    if (page === 1) totals = extractTotals(body);
     const batch = extractRows(body);
     for (const row of batch) rows.push(row);
 
@@ -148,8 +163,29 @@ export async function collectReportPages(
     page += 1;
   }
 
-  return { rows, total, pagesFetched, complete };
+  return { rows, total, pagesFetched, complete, totals };
 }
+
+/**
+ * The savings reports the server writes a CSV for (`/reports/savings/{report}/export`).
+ * The per-account statement has none; the member statement's path carries the member.
+ */
+export type SavingsCsvReport =
+  | "balances"
+  | "transactions"
+  | "time-deposit-maturities"
+  | "interest-postings"
+  | "dormant"
+  | "gl-control"
+  | "summary"
+  | "accounts"
+  | "deposits"
+  | "withdrawals"
+  | "large-transactions"
+  | "time-deposits"
+  | "interest-accrual"
+  | "account-activity"
+  | `member-statement/${number}`;
 
 export const reportService = {
   // The three list endpoints return a Laravel paginator envelope
@@ -171,8 +207,9 @@ export const reportService = {
    * instead of asking for one big one.
    *
    * `params` takes the server-side filters `reportFilters()` accepts —
-   * `date_from`, `date_to`, `branch_id`. `per_page` and `page` are set here and
-   * anything passed for them is ignored.
+   * `date_from`, `date_to`, `branch_id` — plus `past_due_only=1`, which keeps
+   * only periods past their grace period (the totals follow the same filter).
+   * `per_page` and `page` are set here and anything passed for them is ignored.
    */
   duePastDueAll: (
     params?: Record<string, unknown>,
@@ -208,11 +245,22 @@ export const reportService = {
   income: (params?: Record<string, unknown>) =>
     api.get(API_ENDPOINTS.REPORTS.INCOME, { params }),
 
+  // A paginator envelope ({ data, meta, totals }) like the list reports, so
+  // getRaw: one row per loan, every figure (and the totals) summed by the server.
+  incomeByLoan: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.INCOME_BY_LOAN, { params }),
+
   aging: (params?: Record<string, unknown>) =>
     api.get(API_ENDPOINTS.REPORTS.AGING, { params }),
 
   borrowers: (params?: Record<string, unknown>) =>
     api.get(API_ENDPOINTS.REPORTS.BORROWERS, { params }),
+
+  // A paginator envelope ({ data, meta, totals }) like the list reports, so
+  // getRaw: one row per borrower, every figure (and the totals) summed by the
+  // server.
+  borrowersReleased: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.BORROWERS_RELEASED, { params }),
 
   disbursements: (params?: Record<string, unknown>) =>
     api.get(API_ENDPOINTS.REPORTS.DISBURSEMENTS, { params }),
@@ -240,11 +288,81 @@ export const reportService = {
   provisioning: (params?: Record<string, unknown>) =>
     api.get(API_ENDPOINTS.REPORTS.PROVISIONING, { params }),
 
+  // `cutoff_date` and `branch_id`: the profit to the cutoff date and each
+  // member's share of it, every figure and total the server's.
+  profitSharing: (params?: Record<string, unknown>) =>
+    api.get(API_ENDPOINTS.REPORTS.PROFIT_SHARING, { params }),
+
+  // Savings (NEXT_PUBLIC_ENABLE_SAVINGS; reports:view plus savings:view).
+  // The lists are paginator envelopes with `totals` over the whole filter, so
+  // getRaw keeps the meta and the server's figures.
+  savingsBalances: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.SAVINGS_BALANCES, { params }),
+
+  savingsTransactions: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.SAVINGS_TRANSACTIONS, { params }),
+
+  timeDepositMaturities: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.TIME_DEPOSIT_MATURITIES, { params }),
+
+  savingsInterestPostings: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.SAVINGS_INTEREST_POSTINGS, { params }),
+
+  savingsDormant: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.SAVINGS_DORMANT, { params }),
+
+  // One account's statement for the period: its opening balance, each line
+  // with the server's running balance, and the closing balance.
+  savingsStatement: (accountId: number, params?: Record<string, unknown>) =>
+    api.get(API_ENDPOINTS.REPORTS.SAVINGS_STATEMENT(accountId), { params }),
+
+  // The savings subledger against GL 2050 and 2060, per branch, as of a day.
+  savingsGlControl: (params?: Record<string, unknown>) =>
+    api.get(API_ENDPOINTS.REPORTS.SAVINGS_GL_CONTROL, { params }),
+
   // One member's share capital statement: opening balance, entries with a
   // running balance, period credits/debits, closing balance. Accepts
   // date_from/date_to to window the entries.
   shareCapitalStatement: (borrowerId: number, params?: Record<string, unknown>) =>
     api.get(API_ENDPOINTS.REPORTS.SHARE_CAPITAL_STATEMENT(borrowerId), { params }),
+
+  /**
+   * Savings report CSVs, written by the server over the whole filter
+   * (reports:export plus savings:view). The statement has none: it's a
+   * printable.
+   */
+  exportSavingsReport: (report: SavingsCsvReport, params?: Record<string, unknown>) =>
+    api.download(API_ENDPOINTS.REPORTS.SAVINGS_EXPORT(report), { params }),
+
+  // The rest of the deposit reports (gap round S5). The lists are paginator
+  // envelopes with `totals` over the whole filter (getRaw); the summary and
+  // the member statement are one object each.
+  savingsSummary: (params?: Record<string, unknown>) =>
+    api.get(API_ENDPOINTS.REPORTS.SAVINGS_SUMMARY, { params }),
+
+  savingsAccountList: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.SAVINGS_ACCOUNT_LIST, { params }),
+
+  savingsDeposits: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.SAVINGS_DEPOSITS, { params }),
+
+  savingsWithdrawals: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.SAVINGS_WITHDRAWALS, { params }),
+
+  savingsLargeTransactions: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.SAVINGS_LARGE_TRANSACTIONS, { params }),
+
+  savingsTimeDeposits: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.SAVINGS_TIME_DEPOSITS, { params }),
+
+  savingsInterestAccrual: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.SAVINGS_INTEREST_ACCRUAL, { params }),
+
+  savingsAccountActivity: (params?: Record<string, unknown>) =>
+    api.getRaw(API_ENDPOINTS.REPORTS.SAVINGS_ACCOUNT_ACTIVITY, { params }),
+
+  savingsMemberStatement: (borrowerId: number, params?: Record<string, unknown>) =>
+    api.get(API_ENDPOINTS.REPORTS.SAVINGS_MEMBER_STATEMENT(borrowerId), { params }),
 
   exportReleases: (params?: Record<string, unknown>) =>
     api.download(API_ENDPOINTS.REPORTS.EXPORT_RELEASES, { params }),

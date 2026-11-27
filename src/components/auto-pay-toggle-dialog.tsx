@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { autoPayReferenceError } from "@/lib/auto-pay-reference";
 
 interface AutoPayToggleDialogProps {
   loanId: number;
@@ -51,8 +52,9 @@ export function AutoPayToggleDialog({
   }, [open, currentEnabled, currentCbsReference]);
 
   async function handleSave() {
-    if (enabled && !cbsReference.trim()) {
-      toast.error("CBS Reference No. is required when enabling Auto-Pay.");
+    const referenceError = autoPayReferenceError(enabled, cbsReference);
+    if (referenceError) {
+      toast.error(referenceError);
       return;
     }
     setSaving(true);

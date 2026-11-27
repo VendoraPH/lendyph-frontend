@@ -1,13 +1,18 @@
 "use client";
 
+import { useMenuVisibility } from "@/hooks/use-menu-visibility";
+import { loanListParts } from "@/lib/hidden-module-parts";
 import { useState, useMemo, useEffect, useCallback, useRef, useLayoutEffect } from "react";
 import { RouteGuard, PermissionGate, TablePagination } from "@/components/common";
+import { NoBranchBanner } from "@/components/common/no-branch-banner";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { AutoPayToggleDialog } from "@/components/auto-pay-toggle-dialog";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { loanService } from "@/services/loan.service";
 import { loanProductService } from "@/services/loan-product.service";
+import { completeRows } from "@/lib/paginate";
 import { Spinner } from "@/components/ui/spinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,6 +25,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { formatDateISO } from "@/lib/format";
 import type { Loan, LoanProduct } from "@/types/loan";
 import { LoanTable } from "./_components/loan-table";
@@ -27,7 +33,9 @@ import { LoanFilters } from "./_components/loan-filters";
 import {
   FILTER_TABS,
   ACTIVE_STATUSES,
-  VIRTUAL_TAB_VALUES,
+  allCountFromStats,
+  currentCountFromStats,
+  loanListParams,
   numOrNull,
   dateOrNull,
   isoDateOrNull,
@@ -35,8 +43,11 @@ import {
   tabFromParam,
   type FilterTab,
   type LoanSortKey,
+  type LoanStats,
   type SortDir,
 } from "./_components/utils";
+import { emptyArt } from "@/lib/illustrations";
+import { loanNumberLabel } from "@/lib/loan-number";
 
 const PER_PAGE_OPTIONS = [10, 20, 50] as const;
 const SORT_KEYS: LoanSortKey[] = [
@@ -48,48 +59,6 @@ const SORT_KEYS: LoanSortKey[] = [
   "status",
   "created_at",
 ];
-
-/**
- * Global loan counts by status, read straight from the list response's
- * `meta.stats`. Deliberately an open record rather than a fixed shape: the API
- * reports every status it knows about — including legacy ones such as `ongoing`
- * and `restructured` that have no tab of their own — and each consumer here
- * only reads the keys it needs.
- *
- * These counts ignore the request's own `status`/`search`/product/date filters,
- * which is exactly why the KPI cards and tab badges can be driven from the same
- * request that fetches one page of rows.
- */
-type LoanStats = Record<string, number>;
-
-/**
- * Keys in `meta.stats` that are NOT statuses of their own, and so must never be
- * added into a total alongside the statuses they overlap.
- *
- * Derived from `VIRTUAL_TAB_VALUES` rather than typed out, so a virtual filter
- * cannot be added to the tab strip without also being excluded here. That
- * mattered immediately: `past_due` is a live `meta.stats` key now, it counts
- * `released`, `ongoing` AND `defaulted` loans that are already counted under
- * their own keys, and summing the record blind would have inflated "Total
- * Applications" by every overdue loan in the book.
- *
- *  - `active` = the sum of `Loan::ACTIVE_STATUSES` (released + ongoing).
- *  - `past_due` = `Loan::scopePastDue()`, which cuts ACROSS statuses instead of
- *    partitioning alongside them.
- *
- * `all` is here for the case where the API ever sends a total of its own; today
- * it does not, and `allCountFromStats` falls back to summing the real statuses.
- */
-const AGGREGATE_STAT_KEYS = new Set<string>(["all", ...VIRTUAL_TAB_VALUES]);
-
-function allCountFromStats(stats: LoanStats): number {
-  if (typeof stats.all === "number") return stats.all;
-  let sum = 0;
-  for (const [key, value] of Object.entries(stats)) {
-    if (!AGGREGATE_STAT_KEYS.has(key)) sum += value;
-  }
-  return sum;
-}
 
 function activeCountFromStats(stats: LoanStats): number {
   // Prefer the server's aggregate. The fallback re-adds the same four statuses
@@ -135,22 +104,22 @@ function StatCard({
           : "hover:border-brand-orange/40 hover:shadow-sm",
       )}
     >
-      <div className="py-4 px-6">
+      <div className="py-4 px-6 fit:px-4 fit:py-2.5">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs font-medium text-muted-foreground">{label}</p>
-            <p className={cn("text-2xl font-bold", valueClassName)}>
+            <p className={cn("text-2xl font-bold fit:text-xl", valueClassName)}>
               {value ?? "—"}
             </p>
           </div>
-          <div className={cn("rounded-full p-2.5", iconBg)}>{icon}</div>
+          <div className={cn("rounded-full p-2.5 fit:p-2", iconBg)}>{icon}</div>
         </div>
       </div>
     </button>
   );
 }
 
-export default function LoansPage() {
+function LoansContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -193,25 +162,24 @@ export default function LoansPage() {
   const dateFrom = useMemo(() => dateOrNull(dateFromParam), [dateFromParam]);
   const dateTo = useMemo(() => dateOrNull(dateToParam), [dateToParam]);
 
-  // Two tab values are virtual — `active` and `past_due` (VIRTUAL_TAB_VALUES).
-  // Both go to the API verbatim, because both are the API's OWN shorthand and
-  // both are resolved there from the same definition their `meta.stats` entry
-  // is counted through, so the rows and the badge above them cannot disagree:
+  // Three values are virtual: `active`, `current` and `past_due`
+  // (VIRTUAL_TAB_VALUES). All go to the API verbatim, because all are the API's
+  // OWN shorthand, each resolved there from the same definition its `meta.stats`
+  // entry is counted through, so the rows and the count above them cannot
+  // disagree:
   //
   //   - `status=active` expands to Loan::ACTIVE_STATUSES server-side. Spelling
   //     those statuses out here would work today and would be a second copy of
-  //     the definition — the copy that goes stale the day the set changes.
-  //   - `status=past_due` resolves to Loan::scopePastDue(). It CANNOT be
-  //     spelled out here at any price: it is derived from the amortization
+  //     the definition, the copy that goes stale the day the set changes.
+  //   - `status=current` is the same loans less the past-due ones, and
+  //     `status=past_due` resolves to Loan::scopePastDue(). Neither can be
+  //     spelled out here at any price: both are derived from the amortization
   //     schedule (an unpaid installment past its due date and past the loan's
-  //     `grace_period_days`), so there is no set of statuses that expresses it
-  //     and no way for this client to compute it from a loan row.
+  //     `grace_period_days`), so there is no set of statuses that expresses them
+  //     and no way for this client to compute them from a loan row.
   //
-  // Every other tab value IS its status, so it goes as-is: the Current tab
-  // sends `status=ongoing` and its badge reads `stats.ongoing`. Nothing reads
-  // `stats.current` — that one is not a status any row can hold and is absent
-  // from `meta.stats` on purpose.
-  const statusParam = tab === "all" ? null : tab;
+  // Every other tab value IS its status, so it goes as-is. loanListParams sends
+  // them.
   const search = q.trim();
 
   // ── Local-only state (not in URL) ──
@@ -223,6 +191,9 @@ export default function LoansPage() {
   const [products, setProducts] = useState<LoanProduct[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [searchDraft, setSearchDraft] = useState(q);
+  // Menu Visibility: the Auto-Pay column goes while Auto-Pay is hidden.
+  const { isHidden } = useMenuVisibility();
+  const listParts = loanListParts(isHidden);
   const [autoPayTarget, setAutoPayTarget] = useState<{
     loanId: number;
     loanAccountNumber?: string | null;
@@ -278,17 +249,19 @@ export default function LoansPage() {
     try {
       setLoading(true);
       setError(null);
-      const res = await loanService.list({
-        page,
-        per_page: perPage,
-        sort: sortKey,
-        dir: sortDir,
-        ...(statusParam && { status: statusParam }),
-        ...(search && { search }),
-        ...(productId != null && { loan_product_id: productId }),
-        ...(dateFromParam && { date_from: dateFromParam }),
-        ...(dateToParam && { date_to: dateToParam }),
-      });
+      const res = await loanService.list(
+        loanListParams({
+          tab,
+          page,
+          perPage,
+          sortKey,
+          sortDir,
+          search,
+          productId,
+          dateFrom: dateFromParam,
+          dateTo: dateToParam,
+        }),
+      );
       if (requestId !== requestIdRef.current) return;
       const rows = res.data ?? [];
 
@@ -332,7 +305,7 @@ export default function LoansPage() {
     perPage,
     sortKey,
     sortDir,
-    statusParam,
+    tab,
     search,
     productId,
     dateFromParam,
@@ -350,9 +323,9 @@ export default function LoansPage() {
     (async () => {
       try {
         setProductsLoading(true);
-        const res = await loanProductService.list();
+        const rows = completeRows(await loanProductService.listAll());
         if (cancelled) return;
-        setProducts(Array.isArray(res) ? res : []);
+        setProducts(rows);
       } catch {
         // Soft-fail: filter just shows empty product list, page still works.
       } finally {
@@ -394,6 +367,7 @@ export default function LoansPage() {
   const countsKnown = Object.keys(stats).length > 0;
   const allCount = allCountFromStats(stats);
   const activeCount = activeCountFromStats(stats);
+  const currentCount = currentCountFromStats(stats);
 
   // ── Handlers ──
   function handleTabChange(next: FilterTab) {
@@ -430,202 +404,220 @@ export default function LoansPage() {
   );
 
   return (
-    <RouteGuard permission="loans:view" pageName="Loans">
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Loan Management</h1>
-            <p className="text-sm text-muted-foreground">
-              Manage loan applications and track approval workflow
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link href="/loans/past-due">
-              <Button variant="outline">
-                <AlertTriangle className="mr-2 h-4 w-4 text-red-600" />
-                Past Due Loans
+    <PageFill className="gap-4 fit:gap-3">
+      <NoBranchBanner />
+      {/* Header */}
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Loan Management</h1>
+          <p className="text-sm text-muted-foreground">
+            Manage loan applications and track approval workflow
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Link href="/loans/past-due">
+            <Button variant="outline">
+              <AlertTriangle className="mr-2 h-4 w-4 text-red-600" />
+              Past Due Loans
+            </Button>
+          </Link>
+          <PermissionGate permission="loans:create">
+            <Link href="/loans/new">
+              <Button className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark">
+                <Plus className="mr-2 h-4 w-4" />
+                New Application
               </Button>
             </Link>
-            <PermissionGate permission="loans:create">
-              <Link href="/loans/new">
-                <Button className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark">
-                  <Plus className="mr-2 h-4 w-4" />
-                  New Application
-                </Button>
-              </Link>
-            </PermissionGate>
-          </div>
+          </PermissionGate>
         </div>
+      </div>
 
-        {/* Summary Cards */}
-        <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            label="Total Applications"
-            value={countsKnown ? allCount : null}
-            valueClassName=""
-            icon={<FileText className="h-5 w-5 text-brand-blue" />}
-            iconBg="bg-brand-blue/10"
-            active={tab === "all"}
-            onClick={() => handleTabChange("all")}
-          />
-          <StatCard
-            label="Pending Approval"
-            value={countsKnown ? (stats.for_review ?? 0) : null}
-            valueClassName="text-amber-600"
-            icon={<Clock className="h-5 w-5 text-amber-600" />}
-            iconBg="bg-amber-500/10"
-            active={tab === "for_review"}
-            onClick={() => handleTabChange("for_review")}
-          />
-          <StatCard
-            label="Active Loans"
-            value={countsKnown ? activeCount : null}
-            valueClassName="text-green-600"
-            icon={<Banknote className="h-5 w-5 text-green-600" />}
-            iconBg="bg-green-500/10"
-            active={tab === "active"}
-            onClick={() => handleTabChange("active")}
-          />
-          <StatCard
-            label="Rejected"
-            value={countsKnown ? (stats.rejected ?? 0) : null}
-            valueClassName="text-red-600"
-            icon={<XCircle className="h-5 w-5 text-red-600" />}
-            iconBg="bg-red-500/10"
-            active={tab === "rejected"}
-            onClick={() => handleTabChange("rejected")}
-          />
-        </div>
+      {/* Summary Cards */}
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          label="Total Applications"
+          value={countsKnown ? allCount : null}
+          valueClassName=""
+          icon={<FileText className="h-5 w-5 text-brand-blue" />}
+          iconBg="bg-brand-blue/10"
+          active={tab === "all"}
+          onClick={() => handleTabChange("all")}
+        />
+        <StatCard
+          label="For Approval"
+          value={countsKnown ? (stats.for_review ?? 0) : null}
+          valueClassName="text-amber-600"
+          icon={<Clock className="h-5 w-5 text-amber-600" />}
+          iconBg="bg-amber-500/10"
+          active={tab === "for_review"}
+          onClick={() => handleTabChange("for_review")}
+        />
+        <StatCard
+          label="Active Loans"
+          value={countsKnown ? activeCount : null}
+          valueClassName="text-green-600"
+          icon={<Banknote className="h-5 w-5 text-green-600" />}
+          iconBg="bg-green-500/10"
+          active={tab === "active"}
+          onClick={() => handleTabChange("active")}
+        />
+        <StatCard
+          label="Rejected"
+          value={countsKnown ? (stats.rejected ?? 0) : null}
+          valueClassName="text-red-600"
+          icon={<XCircle className="h-5 w-5 text-red-600" />}
+          iconBg="bg-red-500/10"
+          active={tab === "rejected"}
+          onClick={() => handleTabChange("rejected")}
+        />
+      </div>
 
-        {/* Status Filter Tabs */}
-        <div className="flex flex-wrap gap-2">
-          {FILTER_TABS.map((t) => (
-            <button
-              key={t.value}
-              type="button"
-              onClick={() => handleTabChange(t.value)}
+      {/* Status Filter Tabs: one row at fit, scrolling sideways if it must. */}
+      <div className="flex flex-wrap gap-2 fit:shrink-0 fit:flex-nowrap fit:overflow-x-auto fit:p-px">
+        {FILTER_TABS.map((t) => (
+          <button
+            key={t.value}
+            type="button"
+            onClick={() => handleTabChange(t.value)}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-all fit:py-1",
+              tab === t.value
+                ? "border-brand-orange bg-brand-orange/5 text-brand-orange ring-1 ring-brand-orange"
+                : "border-border text-muted-foreground hover:border-brand-orange/40 hover:bg-muted/50",
+            )}
+          >
+            {t.label}
+            <span
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-all",
+                "ml-1 rounded-full px-1.5 py-0.5 text-xs",
                 tab === t.value
-                  ? "border-brand-orange bg-brand-orange/5 text-brand-orange ring-1 ring-brand-orange"
-                  : "border-border text-muted-foreground hover:border-brand-orange/40 hover:bg-muted/50",
+                  ? "bg-brand-orange text-brand-orange-foreground"
+                  : "bg-muted text-muted-foreground",
               )}
             >
-              {t.label}
-              <span
-                className={cn(
-                  "ml-1 rounded-full px-1.5 py-0.5 text-xs",
-                  tab === t.value
-                    ? "bg-brand-orange text-brand-orange-foreground"
-                    : "bg-muted text-muted-foreground",
-                )}
-              >
-                {!countsKnown
-                  ? "—"
-                  : t.value === "all"
-                    ? allCount
+              {!countsKnown
+                ? "—"
+                : t.value === "all"
+                  ? allCount
+                  : t.value === "current"
+                    ? (currentCount ?? "—")
                     : (stats[t.value] ?? 0)}
-              </span>
-            </button>
-          ))}
-        </div>
+            </span>
+          </button>
+        ))}
+      </div>
 
-        {/* Data Table */}
-        <Card>
-          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="text-sm font-medium">
-              Loan Applications{countsKnown ? ` (${total})` : ""}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="mb-4">
-              <LoanFilters
-                search={searchDraft}
-                onSearchChange={setSearchDraft}
-                productId={productId}
-                onProductChange={handleProductChange}
-                dateFrom={dateFrom}
-                dateTo={dateTo}
-                onDateRangeChange={handleDateRangeChange}
-                productOptions={productOptions}
-                productsLoading={productsLoading}
-              />
+      {/* Data Table */}
+      <Card className={cn(FIT_CLASSES.section, "fit:gap-3 fit:py-3")}>
+        {/* The title and the filters share a row on wide screens, so the
+            table keeps the height. */}
+        <CardHeader className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-6">
+          <CardTitle className="text-sm font-medium">
+            Loan Applications{countsKnown ? ` (${total})` : ""}
+          </CardTitle>
+          <LoanFilters
+            search={searchDraft}
+            onSearchChange={setSearchDraft}
+            productId={productId}
+            onProductChange={handleProductChange}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onDateRangeChange={handleDateRangeChange}
+            productOptions={productOptions}
+            productsLoading={productsLoading}
+          />
+        </CardHeader>
+        <CardContent className={FIT_CLASSES.section}>
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Spinner className="size-6 text-brand-orange" />
             </div>
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <Spinner className="size-6 text-brand-orange" />
-              </div>
-            ) : error ? (
-              <div
-                role="alert"
-                className="flex flex-col items-center justify-center py-12 text-center"
+          ) : error ? (
+            <div
+              role="alert"
+              className="flex flex-col items-center justify-center py-12 text-center"
+            >
+              <AlertTriangle className="h-8 w-8 text-destructive/60 mb-3" />
+              <p className="text-sm text-muted-foreground">{error}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchLoans}
+                className="mt-3 border-brand-orange/50 text-brand-orange hover:bg-brand-orange/5"
               >
-                <AlertTriangle className="h-8 w-8 text-destructive/60 mb-3" />
-                <p className="text-sm text-muted-foreground">{error}</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={fetchLoans}
-                  className="mt-3 border-brand-orange/50 text-brand-orange hover:bg-brand-orange/5"
-                >
-                  Retry
-                </Button>
-              </div>
-            ) : (
-              <>
+                Retry
+              </Button>
+            </div>
+          ) : (
+            <>
+              <ScrollBox>
                 <LoanTable
                   loans={loans}
                   sort={{ key: sortKey, dir: sortDir }}
                   onSortChange={handleSortChange}
                   onRowClick={(id) => router.push(`/loans/${id}`)}
-                  onAutoPayClick={(loan) =>
-                    setAutoPayTarget({
-                      loanId: loan.id,
-                      loanAccountNumber: loan.loan_account_number,
-                      enabled: loan.auto_pay_enabled ?? false,
-                      cbsReference: loan.auto_pay_cbs_reference,
-                    })
+                  emptyIllustration={emptyArt(
+                    "emptyLoans",
+                    Boolean(search) || tab !== "all" || productId != null || dateFrom != null || dateTo != null,
+                  )}
+                  onAutoPayClick={
+                    listParts.autoPay
+                      ? (loan) =>
+                          setAutoPayTarget({
+                            loanId: loan.id,
+                            loanAccountNumber: loanNumberLabel(loan),
+                            enabled: loan.auto_pay_enabled ?? false,
+                            cbsReference: loan.auto_pay_cbs_reference,
+                          })
+                      : undefined
                   }
                 />
-                <TablePagination
-                  page={page}
-                  perPage={perPage}
-                  total={total}
-                  onPageChange={goToPage}
-                  onPerPageChange={handlePerPageChange}
-                />
-              </>
-            )}
-          </CardContent>
-        </Card>
-        {autoPayTarget && (
-          <AutoPayToggleDialog
-            loanId={autoPayTarget.loanId}
-            loanAccountNumber={autoPayTarget.loanAccountNumber}
-            currentEnabled={autoPayTarget.enabled}
-            currentCbsReference={autoPayTarget.cbsReference}
-            open={!!autoPayTarget}
-            onOpenChange={(open) => {
-              if (!open) setAutoPayTarget(null);
-            }}
-            onSuccess={(settings) => {
-              const targetId = autoPayTarget.loanId;
-              setLoans((prev) =>
-                prev.map((l) =>
-                  l.id === targetId
-                    ? {
-                        ...l,
-                        auto_pay_enabled: settings.auto_pay_enabled,
-                        auto_pay_cbs_reference: settings.cbs_reference,
-                      }
-                    : l,
-                ),
-              );
-            }}
-          />
-        )}
-      </div>
+              </ScrollBox>
+              <TablePagination
+                page={page}
+                perPage={perPage}
+                total={total}
+                onPageChange={goToPage}
+                onPerPageChange={handlePerPageChange}
+              />
+            </>
+          )}
+        </CardContent>
+      </Card>
+      {autoPayTarget && (
+        <AutoPayToggleDialog
+          loanId={autoPayTarget.loanId}
+          loanAccountNumber={autoPayTarget.loanAccountNumber}
+          currentEnabled={autoPayTarget.enabled}
+          currentCbsReference={autoPayTarget.cbsReference}
+          open={!!autoPayTarget}
+          onOpenChange={(open) => {
+            if (!open) setAutoPayTarget(null);
+          }}
+          onSuccess={(settings) => {
+            const targetId = autoPayTarget.loanId;
+            setLoans((prev) =>
+              prev.map((l) =>
+                l.id === targetId
+                  ? {
+                      ...l,
+                      auto_pay_enabled: settings.auto_pay_enabled,
+                      auto_pay_cbs_reference: settings.cbs_reference,
+                    }
+                  : l,
+              ),
+            );
+          }}
+        />
+      )}
+    </PageFill>
+  );
+}
+
+export default function LoansPage() {
+  return (
+    <RouteGuard permission="loans:view" pageName="Loans">
+      <LoansContent />
     </RouteGuard>
   );
 }

@@ -16,18 +16,61 @@ export interface AutoPayPartialRow {
   remaining_balance: number;
   principal_remaining: number;
   interest_remaining: number;
+  penalty_remaining?: number;
+}
+
+/** A loan the preview or the run left out, with the server's reason. */
+export interface AutoPayLoanIssue {
+  loan_id: number;
+  loan_account_number: string | null;
+  /** The number the loan is shown by (`loanNumberLabel`): an imported loan's Loan No. */
+  display_number?: string | null;
+  reason: string;
+}
+
+/** One loan with full dues in the preview: the server's figures for it. */
+export interface AutoPayLoanRow {
+  loan_id: number;
+  loan_account_number: string | null;
+  /** The number the loan is shown by (`loanNumberLabel`): an imported loan's Loan No. */
+  display_number?: string | null;
+  borrower_name: string;
+  total_principal: number;
+  total_interest: number;
+  total_penalty: number;
+  /** Insurance premium owed on the loan, charged on top of the periods. */
+  total_insurance?: number;
+  /** Includes the penalty and the insurance premium. */
+  total_amount: number;
 }
 
 export interface AutoPaySummary {
   total_principal: number;
   total_interest: number;
+  total_penalty?: number;
+  /** Insurance premium inside `total_amount`, charged on top of the periods. */
+  total_insurance?: number;
+  /** Includes the penalty and the insurance premium. */
   total_amount: number;
+  /** What the run posts for the selected part-paid rows (`include_schedule_ids[]`). */
+  partial_total?: number;
+  /** Insurance premium inside `partial_total`. */
+  partial_insurance?: number;
+  /** What the run posts for that selection: `total_amount` + `partial_total`. */
+  grand_total?: number;
   loans_count: number;
 }
 
 export interface AutoPayPreview {
   summary: AutoPaySummary;
+  loans?: AutoPayLoanRow[];
   partial_rows: AutoPayPartialRow[];
+  skips?: AutoPayLoanIssue[];
+}
+
+/** `GET /auto-pay/preview`, optionally with the part-paid rows selected. */
+export interface AutoPayPreviewQuery extends AutoPayFilter {
+  include_schedule_ids?: number[];
 }
 
 export interface AutoPayProcessData {
@@ -48,6 +91,8 @@ export interface AutoPayResult {
   skipped: number;
   failed: number;
   repayments: AutoPayRepaymentResult[];
+  skips?: AutoPayLoanIssue[];
+  failures?: AutoPayLoanIssue[];
 }
 
 export interface AutoPayToggleData {

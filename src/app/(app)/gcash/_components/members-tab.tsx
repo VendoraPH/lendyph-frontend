@@ -14,6 +14,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { TablePagination } from "@/components/common";
+import { usePermission } from "@/hooks";
 import { borrowerService } from "@/services/borrower.service";
 import { extractGCashErrorMessage } from "@/lib/gcash-errors";
 import { borrowerParty } from "@/lib/gcash-party";
@@ -21,6 +22,10 @@ import type { Borrower, GCashParty } from "@/types";
 import { CashInDialog } from "./cash-in-dialog";
 import { CashOutDialog } from "./cash-out-dialog";
 import { NewTransactionDialog } from "./new-transaction-dialog";
+import { gcashRowActions } from "../_lib/row-actions";
+import { ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 
 type DialogState =
   | { type: "cash_in" | "cash_out"; party: GCashParty }
@@ -34,7 +39,16 @@ export function MembersTab() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(20);
-  const [loading, setLoading] = useState(true);
+  const { can } = usePermission();
+  // The member list needs `borrowers:view`, which GCash does not. Without it
+  // the tab is left empty instead of asking and being refused.
+  const canListMembers = can("borrowers:view");
+  // Recording a transaction needs `gcash:transact`; `gcash:view` only reads.
+  const canTransact = can("gcash:transact");
+  const rowActions = gcashRowActions(can);
+  const showActions = rowActions.length > 0;
+  const columnCount = showActions ? 3 : 2;
+  const [loading, setLoading] = useState(canListMembers);
   const [dialog, setDialog] = useState<DialogState>(null);
 
   useEffect(() => {
@@ -46,6 +60,7 @@ export function MembersTab() {
   useEffect(() => setPage(1), [debounced, perPage]);
 
   useEffect(() => {
+    if (!canListMembers) return;
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -75,11 +90,11 @@ export function MembersTab() {
     return () => {
       cancelled = true;
     };
-  }, [debounced, page, perPage]);
+  }, [debounced, page, perPage, canListMembers]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
+    <div className={cn("gap-4", FIT_CLASSES.section)}>
+      <div className="flex shrink-0 items-center justify-between gap-2">
         <div className="relative max-w-sm w-full">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -89,31 +104,35 @@ export function MembersTab() {
             className="pl-8"
           />
         </div>
-        <Button onClick={() => setDialog({ type: "new_transaction" })}>
-          New Transaction
-        </Button>
+        {canTransact && (
+          <Button onClick={() => setDialog({ type: "new_transaction" })}>
+            New Transaction
+          </Button>
+        )}
       </div>
 
-      <div className="rounded-md border">
+      <ScrollBox className="rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Member Code</TableHead>
               <TableHead>Full Name</TableHead>
-              <TableHead className="text-right w-[260px]">Actions</TableHead>
+              {showActions && (
+                <TableHead className="text-right w-[260px]">Actions</TableHead>
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={3} className="text-center py-8">
+                <TableCell colSpan={columnCount} className="text-center py-8">
                   <Loader2 className="inline h-5 w-5 animate-spin" />
                 </TableCell>
               </TableRow>
             ) : members.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={3}
+                  colSpan={columnCount}
                   className="text-center text-muted-foreground py-8"
                 >
                   No members found.
@@ -126,31 +145,37 @@ export function MembersTab() {
                     {b.borrower_code ?? "—"}
                   </TableCell>
                   <TableCell>{b.full_name ?? "—"}</TableCell>
-                  <TableCell className="text-right space-x-2">
-                    <Button
-                      size="sm"
-                      onClick={() =>
-                        setDialog({ type: "cash_in", party: borrowerParty(b) })
-                      }
-                    >
-                      Cash In
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        setDialog({ type: "cash_out", party: borrowerParty(b) })
-                      }
-                    >
-                      Cash Out
-                    </Button>
-                  </TableCell>
+                  {showActions && (
+                    <TableCell className="text-right space-x-2">
+                      {rowActions.includes("cash_in") && (
+                        <Button
+                          size="sm"
+                          onClick={() =>
+                            setDialog({ type: "cash_in", party: borrowerParty(b) })
+                          }
+                        >
+                          Cash In
+                        </Button>
+                      )}
+                      {rowActions.includes("cash_out") && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            setDialog({ type: "cash_out", party: borrowerParty(b) })
+                          }
+                        >
+                          Cash Out
+                        </Button>
+                      )}
+                    </TableCell>
+                  )}
                 </TableRow>
               ))
             )}
           </TableBody>
         </Table>
-      </div>
+      </ScrollBox>
 
       <TablePagination
         page={page}

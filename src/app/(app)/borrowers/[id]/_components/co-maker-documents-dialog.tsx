@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { formatDate } from "@/lib/format";
 import {
   Dialog,
   DialogContent,
@@ -26,27 +27,20 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
+import { notifyError } from "@/lib/notify";
 import { documentService } from "@/services";
 import type { Document } from "@/services/document.service";
 import { fileUrl } from "@/lib/file-url";
+import { documentTypeFromName, documentTypeLabel } from "@/lib/document-type";
+import { DOCUMENT_ACCEPT } from "@/lib/file-validation";
+import { ConfirmDeleteDialog } from "@/components/common/confirm-delete-dialog";
+import { deleteDocumentLabel, documentName, openDocumentLabel } from "@/lib/document-delete";
 
 interface CoMakerDocumentsDialogProps {
   coMakerId: number | null;
   coMakerName: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function humanizeType(type: string): string {
-  return type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 /**
@@ -64,6 +58,8 @@ export function CoMakerDocumentsDialog({
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
+  // The document whose delete is waiting for the user to confirm it.
+  const [pendingDelete, setPendingDelete] = useState<Document | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchDocuments = useCallback(async () => {
@@ -71,7 +67,13 @@ export function CoMakerDocumentsDialog({
     setLoading(true);
     try {
       const data = await documentService.coMakerList(coMakerId);
-      setDocuments(Array.isArray(data) ? data : []);
+      // Valid IDs are managed in the Edit dialog, which pairs front and back.
+      // Listing them here too would show each side as a loose document, and
+      // deleting one would orphan the other — the borrower Documents tab hides
+      // them for the same reason.
+      setDocuments(
+        Array.isArray(data) ? data.filter((d) => d.type?.toLowerCase() !== "valid_id") : []
+      );
     } catch {
       // Treat any failure as empty so the dialog still renders cleanly.
       setDocuments([]);
@@ -96,14 +98,15 @@ export function CoMakerDocumentsDialog({
       formData.append("file", file);
       formData.append(
         "type",
-        file.name.split(".").pop()?.toLowerCase() || "file"
+        documentTypeFromName(file.name)
       );
       formData.append("label", file.name);
       await documentService.coMakerUpload(coMakerId, formData);
       toast.success("Document uploaded");
       fetchDocuments();
-    } catch {
-      toast.error("We couldn't upload the document. Please try again.");
+    } catch (err) {
+      // A 422 (the file's type or size) in the server's words.
+      notifyError(err, "We couldn't upload the document. Please try again.");
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -120,6 +123,7 @@ export function CoMakerDocumentsDialog({
       toast.error("We couldn't delete this document. Please try again.");
     } finally {
       setDeleting(null);
+      setPendingDelete(null);
     }
   }
 
@@ -137,8 +141,8 @@ export function CoMakerDocumentsDialog({
             )}
           </DialogTitle>
           <DialogDescription>
-            Attach valid IDs, signed forms, or any supporting files for this
-            co-maker.
+            Attach signed forms or other supporting files for this co-maker.
+            Valid IDs are added from Edit Co-Maker.
           </DialogDescription>
         </DialogHeader>
 
@@ -148,7 +152,7 @@ export function CoMakerDocumentsDialog({
               ref={fileInputRef}
               type="file"
               className="hidden"
-              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+              accept={DOCUMENT_ACCEPT}
               onChange={handleUpload}
             />
             <Button
@@ -175,7 +179,7 @@ export function CoMakerDocumentsDialog({
               <Paperclip className="h-7 w-7 opacity-40" />
               <p className="text-sm">No documents attached yet.</p>
               <p className="text-xs">
-                Upload IDs, signed forms, or other supporting files.
+                Upload signed forms or other supporting files.
               </p>
             </div>
           ) : (
@@ -196,13 +200,13 @@ export function CoMakerDocumentsDialog({
                         <div className="flex items-center gap-2 min-w-0">
                           <Paperclip className="h-4 w-4 text-muted-foreground shrink-0" />
                           <span className="text-sm font-medium truncate">
-                            {doc.label || `Document #${doc.id}`}
+                            {documentName(doc)}
                           </span>
                         </div>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-[10px] h-5">
-                          {humanizeType(doc.type)}
+                          {documentTypeLabel(doc.type)}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
@@ -214,7 +218,7 @@ export function CoMakerDocumentsDialog({
                             variant="ghost"
                             size="sm"
                             className="h-7 w-7 p-0"
-                            aria-label="Open document"
+                            aria-label={openDocumentLabel(doc)}
                             onClick={() =>
                               window.open(
                                 fileUrl(doc.url),
@@ -228,9 +232,9 @@ export function CoMakerDocumentsDialog({
                             variant="ghost"
                             size="sm"
                             className="h-7 w-7 p-0 text-destructive hover:text-destructive"
-                            aria-label="Delete document"
+                            aria-label={deleteDocumentLabel(doc)}
                             disabled={deleting === doc.id}
-                            onClick={() => handleDelete(doc.id)}
+                            onClick={() => setPendingDelete(doc)}
                           >
                             {deleting === doc.id ? (
                               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -253,6 +257,17 @@ export function CoMakerDocumentsDialog({
             Close
           </Button>
         </div>
+
+        <ConfirmDeleteDialog
+          open={pendingDelete !== null}
+          title="Delete this document?"
+          description={pendingDelete ? `${documentName(pendingDelete)} will be removed from this co-maker's documents.` : null}
+          busy={deleting !== null}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={() => {
+            if (pendingDelete) handleDelete(pendingDelete.id);
+          }}
+        />
       </DialogContent>
     </Dialog>
   );

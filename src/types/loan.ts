@@ -1,4 +1,7 @@
+import type { RateFrequency } from "@/lib/loan-terms";
 import type { ApiScheduleRow } from "@/lib/amortization";
+import type { StaffMember } from "./staff";
+import type { SecurityStatus } from "./collateral";
 
 export type LoanStatus =
   | "draft"
@@ -27,10 +30,6 @@ export type LoanStatus =
   // everywhere instead: the label and colour maps are keyed off this union.
   | "void";
 
-// Unit for Past Due Transfer config on LoanProduct: how the value is
-// interpreted when deciding when a missed payment becomes past_due.
-export type PastDueTransferUnit = "days" | "months" | "amortization_periods";
-
 export type InterestType = "fixed" | "diminishing" | "upon_maturity";
 
 /**
@@ -44,32 +43,426 @@ export type InterestType = "fixed" | "diminishing" | "upon_maturity";
  * Deductions".
  *
  * `amount` is the peso figure actually withheld; `original_value` is what was
- * configured, which for a percentage fee is the rate, not the peso amount.
+ * configured, which for a percentage or formula fee is the rate, not the peso
+ * amount. A `formula` item comes from a formula fee in Settings at release.
  */
 export interface LoanDeduction {
   name: string;
   amount: number;
-  type: "fixed" | "percentage";
+  type: "fixed" | "percentage" | "formula";
+  original_value: number;
+  /** Set on an item charged from a fee rule in Settings, at or for release. */
+  fee_id?: number;
+  /**
+   * Set only on a formula fee written as an expression: the snapshot the
+   * server took when it worked the fee out. Later edits to the fee never
+   * change it.
+   */
+  formula_expression?: string;
+  /** The loan figures the expression used, as the server sent them. */
+  formula_inputs?: FeeFormulaInputs;
+  /** The server's result before rounding to the centavo (6 decimals). */
+  raw_amount?: string;
+}
+
+/**
+ * The loan figures a formula fee's expression used, all strings from the
+ * server: pesos with 2 decimals, the rate as stored (3 means 3%) per
+ * `interest_rate_frequency`, `loan_term` in months (a days term counts as
+ * days ÷ 30) and `term_in_days` in calendar days from start to maturity.
+ */
+export interface FeeFormulaInputs {
+  principal_amount: string;
+  loan_amount: string;
+  interest_rate: string;
+  interest_rate_frequency: string;
+  loan_term: string;
+  term_in_days: string;
+}
+
+/**
+ * One penalty bracket: `rate` is the % of the period's unpaid principal
+ * charged on a penalty day `days_from` to `days_to` days past the due date
+ * (`days_to` null: no upper end).
+ */
+export interface PenaltyBracket {
+  days_from: number;
+  days_to: number | null;
+  rate: number;
+}
+
+/**
+ * `GET /loans/{id}/release-preview`: what releasing the loan would withhold,
+ * computed the way the release itself computes it
+ * (`LoanReleaseFeeService::preview()`).
+ *
+ * `deductions` are the loan's recorded deductions plus one item per
+ * configured fee that applies to it; `total_deductions` and `net_proceeds`
+ * include them. Insurance is not in any of it: it is typed at release. The two
+ * totals arrive as 2-decimal strings.
+ *
+ * `fee_fingerprint` goes back with the release, which is refused with a 409 if
+ * the fee configuration changed in between. `overlap_warnings` name configured
+ * fees that repeat one of the product's own; both are charged.
+ */
+export interface LoanReleasePreview {
+  deductions: LoanDeduction[];
+  total_deductions: string;
+  net_proceeds: string;
+  fee_fingerprint: string;
+  overlap_warnings?: { fee_id: number; fee_name: string; message: string }[];
+  /**
+   * The premium for the insurance asked about, as 2-decimal strings: the
+   * premium off the principal, what the release withholds (all of it, or the
+   * partial amount), and what is left to collect. Null with no insurance.
+   */
+  insurance: {
+    premium_amount: string;
+    collected: string;
+    partial_amount: string | null;
+    remaining_balance: string;
+  } | null;
+  /** `total_deductions` plus the premium withheld. */
+  total_deductions_after_insurance: string;
+  /** `net_proceeds` less the premium withheld: what the borrower is paid out. */
+  net_proceeds_after_insurance: string;
+  /** The premium withheld is more than the fees leave; the release refuses it. */
+  exceeds_net_proceeds: boolean;
+  /**
+   * A restructure only: how the release settles the old loan, worked out by the
+   * same code the release posts with. Absent on any other loan.
+   */
+  restructure?: LoanReleaseRestructure | null;
+}
+
+/**
+ * `release-preview`'s `restructure` block, in the preview's 2-decimal strings:
+ * the principal carried from the old loan, the interest and penalty
+ * capitalised into it, the principal written off, the deductions collected from
+ * the member at release, and what is paid out (₱0.00: a restructure pays
+ * nothing out).
+ */
+export interface LoanReleaseRestructure {
+  carried_principal: string;
+  capitalised_interest: string;
+  capitalised_penalty: string;
+  written_off_principal: string;
+  collected_now: string;
+  paid_out: string;
+}
+
+/**
+ * `GET /loans/{id}/deductions-preview`: what the release would withhold, built
+ * by the same code as `release-preview`, for a loan not yet released (`draft`,
+ * `for_review`, `approved`) and anyone with `loans:view`. There is no
+ * `fee_fingerprint`: nothing can be released from it. `provisional` is true
+ * until the loan is approved. The totals arrive as 2-decimal strings.
+ */
+export interface LoanDeductionsPreview {
+  deductions: LoanDeduction[];
+  total_deductions: string;
+  net_proceeds: string;
+  provisional?: boolean;
+}
+
+/**
+ * `POST /loans/preview`: what the loan form shows for the terms and
+ * collaterals entered so far. Every field is optional; the server works out
+ * whatever sections it can and writes nothing.
+ */
+export interface LoanFormPreviewRequest {
+  loan_product_id?: number;
+  principal_amount?: number;
+  interest_rate?: number;
+  term?: number;
+  frequency?: string;
+  start_date?: string;
+  scb_amount?: number;
+  /**
+   * The member the loan is for, sent whenever `collaterals` is: collateral
+   * rows are read within their collaterals, and the server values each one
+   * itself.
+   */
+  borrower_id?: number;
+  /**
+   * The loan being restructured. When sent, the answer carries a
+   * `restructure` block for it.
+   */
+  source_loan_id?: number;
+  /**
+   * The loan an edit changes (draft or for_review; needs `loans:update`). The
+   * server then carries the collaterals it already holds at their stored
+   * pledged value, so the total matches what the save keeps. A restructure
+   * being edited sends it with `source_loan_id`; each keeps its own checks.
+   */
+  loan_id?: number;
+  /** Each collateral by id only; the server sets the value it is held at. */
+  collaterals?: { collateral_id: number }[];
+  /**
+   * The deduction inputs exactly as the create, update or restructure payload
+   * states them: a percentage's rate, a fixed item's pesos. Absent, the server
+   * charges the product's own fees, as `POST /loans` does; `[]` is none.
+   */
+  deductions?: { name: string; amount: number; type: "percentage" | "fixed" }[];
+}
+
+/** One previewed deduction as the server books it: `amount` is pesos, to the centavo. */
+export interface LoanFormPreviewDeduction {
+  name: string;
+  amount: number;
+  type: "percentage" | "fixed";
+  /** The rate for a percentage item, the pesos for a fixed one. */
   original_value: number;
 }
+
+/**
+ * What the loan would withhold, from the server: the stated deductions, the
+ * configured fees (Settings → Fees) the release would add for this loan, with
+ * their conditions evaluated, and the totals.
+ */
+export interface LoanFormPreviewDeductions {
+  items: LoanFormPreviewDeduction[];
+  stated_total: number;
+  configured_fees: (LoanFormPreviewDeduction & { fee_id: number })[];
+  configured_total: number;
+  /** Null when a configured fee can't be worked out; the forms show a dash. */
+  total_deductions: number | null;
+  /** Null when `error` is set. */
+  net_proceeds: number | null;
+  /** The guard a save would fail on (deductions above the principal), else null. */
+  error: string | null;
+}
+
+/** One period of the previewed schedule, to the centavo. */
+export interface LoanFormPreviewRow {
+  period_number: number;
+  due_date: string;
+  principal_due: number;
+  interest_due: number;
+  total_due: number;
+  share_capital_build_up: number;
+  total_payment: number;
+  remaining_balance: number;
+}
+
+/**
+ * The `POST /loans/preview` answer. Every figure is the server's: the form
+ * displays them and works none of them out.
+ *
+ * `amortization` is null until the product, a principal, a rate, a term, a
+ * frequency and a start date are all known. It is built by the code that
+ * writes the real schedule at release, with the product's interest method
+ * (`interest_method` says which).
+ */
+export interface LoanFormPreview {
+  /**
+   * Known once the product, a term in its range, the frequency and the start
+   * date are; principal and rate are not needed. Null until then.
+   */
+  maturity_date: string | null;
+  /** Null until a product and a principal above zero are known. */
+  deductions: LoanFormPreviewDeductions | null;
+  /**
+   * The three figures are null, and `value_unknown` is true, when the server
+   * withholds them: an edit's preview with no collaterals list sent, for a
+   * caller without `share_capital:view` holding a share capital pledge.
+   */
+  collateral: {
+    total_value: number | null;
+    security_status: SecurityStatus | null;
+    short_by: number | null;
+    value_unknown?: boolean;
+  };
+  amortization: {
+    maturity_date: string;
+    interest_method: string;
+    rows: LoanFormPreviewRow[];
+    totals: {
+      principal_due: number;
+      interest_due: number;
+      share_capital_build_up: number;
+      total_payment: number;
+    };
+  } | null;
+  /**
+   * Present only when the request sent `source_loan_id`: what the restructure
+   * carries over from that loan and how far the new principal falls short.
+   * `collected_now` and `paid_out` are the release preview's figures, built by
+   * the same code, in 2-decimal strings: every deduction is collected from the
+   * member, and nothing is paid out.
+   */
+  restructure?: {
+    restructurable_balance: number;
+    principal: number;
+    shortfall: number;
+    remarks_required: boolean;
+    write_off_permission_required: boolean;
+    collected_now?: string;
+    paid_out?: string;
+  } | null;
+}
+
+/**
+ * `POST /loans/amortization-calculator` input: a what-if loan with no product.
+ */
+export interface AmortizationCalculatorRequest {
+  principal_amount: number;
+  interest_rate: number;
+  interest_rate_frequency: string;
+  interest_method: AmortizationMethod;
+  term: number;
+  term_unit: string;
+  frequency: string;
+  start_date: string;
+  scb_amount?: number;
+  compare?: boolean;
+}
+
+export type AmortizationMethod = "straight" | "diminishing" | "upon_maturity";
+
+/** One method's schedule, in the shape of `LoanFormPreview["amortization"]`. */
+export type AmortizationCalculatorSchedule = NonNullable<LoanFormPreview["amortization"]>;
+
+/**
+ * The calculator's answer: the schedule for the chosen method and, with
+ * `compare`, the schedule under every method. All server figures, built by
+ * the code that writes a real loan's schedule.
+ */
+export interface AmortizationCalculatorResult extends AmortizationCalculatorSchedule {
+  comparison?: Record<AmortizationMethod, AmortizationCalculatorSchedule>;
+}
+
+/**
+ * A loan in a restructure chain, as `LoanResource` flattens it. Flat rather
+ * than a nested `Loan` so a chain of restructures cannot recurse.
+ */
+interface RestructureLinkedLoan {
+  id: number;
+  application_number: string;
+  loan_account_number: string | null;
+  /** The number it is shown by (`loanNumberLabel`). */
+  display_number?: string | null;
+  status: LoanStatus;
+  principal_amount: number;
+}
+
+/** `Loan.source_loan`. */
+export interface RestructureSourceLoan extends RestructureLinkedLoan {
+  restructured_at: string | null;
+  restructured_balance: number | null;
+  write_off_amount: number | null;
+}
+
+/** One entry of `Loan.restructured_into`. */
+export interface RestructuredIntoLoan extends RestructureLinkedLoan {
+  /** Principal written off in the books when this restructure released; null before it was recorded. */
+  restructure_written_off_principal?: number | null;
+  start_date: string | null;
+}
+
+/**
+ * A co-maker linked to a loan, as a loan payload embeds it: the co-maker
+ * record (`CoMakerResource`) plus who linked it to the loan and when, `null`
+ * where the server has no record of that. Absent on payloads from before the
+ * API sent them.
+ */
+export interface LoanCoMaker {
+  id: number;
+  borrower_id?: number;
+  full_name?: string;
+  name?: string;
+  first_name?: string;
+  middle_name?: string;
+  last_name?: string;
+  suffix?: string;
+  address?: string;
+  contact_number?: string;
+  relationship_to_borrower?: string;
+  added_by?: number | null;
+  added_at?: string | null;
+}
+
+export interface LoanAmountDueNow {
+  amount: number;
+  insurance: number;
+  principal: number;
+  interest: number;
+  penalty: number;
+  share_capital_build_up: number;
+  /** The first period covered; null when no period is open. */
+  period_number: number | null;
+  /** The last period covered; equal to `period_number` for one. */
+  last_period_number: number | null;
+  schedule_id: number | null;
+}
+
+/**
+ * The latest print of a loan document (`printed_documents` on
+ * `GET /loans/{id}`), whatever terms it was printed with.
+ */
+export interface PrintedDocument {
+  document: "disclosure" | "promissory_note";
+  /** "Disclosure Statement" or "Promissory Note". */
+  label: string;
+  /** When that latest print was made (an ISO timestamp). */
+  printed_at: string;
+}
+
+/**
+ * A printed loan document whose terms changed since it was printed
+ * (`printed_documents_outdated` on `GET /loans/{id}`).
+ */
+export type PrintedDocumentOutdated = PrintedDocument;
 
 export interface Loan {
   id: number;
   application_number?: string;
   loan_account_number?: string;
+  /**
+   * The number the loan is shown by, from the server (`Loan::displayNumber()`):
+   * its LN- number, else an imported loan's Loan No. from the file, else its
+   * application number. Read it through `loanNumberLabel`.
+   */
+  display_number?: string | null;
+  /** An imported loan's own Loan No. in the cooperative's file; null on any other loan. */
+  external_loan_no?: string | null;
+  /** True when the loan came in by Data Import (it has no approval chain here). */
+  is_imported?: boolean;
+  /** An imported loan's as-of date (`Y-m-d`): its file counts payments up to this day, so a payment on or before it is refused. Null on any other loan. */
+  payments_counted_until?: string | null;
   // Nested relations from API
-  borrower?: { id: number; full_name?: string; name?: string; address?: string; borrower_code?: string };
+  borrower?: {
+    id: number;
+    full_name?: string;
+    name?: string;
+    address?: string;
+    borrower_code?: string;
+    /**
+     * The member's status ("withdrawn", "deceased", …). Sent only to a caller
+     * holding borrowers:view who can see the member's branch; others get the
+     * id, name and code alone.
+     */
+    status?: string;
+  };
   loan_product?: { id: number; name?: string; description?: string };
   branch?: { id: number; name?: string };
-  co_makers?: { id: number; full_name?: string; name?: string; first_name?: string; middle_name?: string; last_name?: string; suffix?: string; address?: string; relationship?: string }[];
+  /** Exactly the co-makers linked to this loan; `GET /loans/{id}` always loads them. */
+  co_makers?: LoanCoMaker[];
   approved_by_user?: { id: number; full_name?: string; name?: string };
   released_by_user?: { id: number; full_name?: string; name?: string };
   rejected_by_user?: { id: number; full_name?: string; name?: string };
   created_by_user?: { id: number; full_name?: string; name?: string };
+  account_officer_id?: number | null;
+  /** Null when no officer is assigned; absent when the endpoint did not load it. */
+  account_officer?: StaffMember | null;
   // Flat fields matching API
   interest_rate: number;
   interest_method?: string;
   term?: number;
+  /** Unit `term` is a length in; absent on older payloads, which mean months. */
+  term_unit?: "months" | "days";
+  /** Period `interest_rate` is quoted per; absent on older payloads, which mean monthly. */
+  interest_rate_frequency?: RateFrequency;
   /**
    * How many times this loan has been rolled forward via the Extend Loan
    * action. Distinct from `term`, which is the originally agreed term —
@@ -91,6 +484,14 @@ export interface Loan {
   net_proceeds?: number;
   penalty_rate?: number;
   grace_period_days?: number;
+  /**
+   * Penalty brackets copied from the product's penalty configuration when
+   * the loan was created (Settings → Penalties). When set they replace
+   * `penalty_rate`; null on loans charged a single monthly rate.
+   */
+  penalty_brackets?: PenaltyBracket[] | null;
+  penalty_config_id?: number | null;
+  penalty_config_name?: string | null;
   // Share Capital Build-Up amount chosen for this loan (within product's range)
   scb_amount?: number;
   // Policy Exception — when true, loan follows the full BOD approval chain
@@ -101,9 +502,56 @@ export interface Loan {
   is_editable?: boolean;
   is_releasable?: boolean;
   // Approval workflow fields
+  /**
+   * Display name of the pending approval step's officer, e.g. "Manager". Sent
+   * on list/detail rows while `status` is `for_review`; the list screens read
+   * it because they do not load `approval-steps`. Absent until the backend
+   * ships it, in which case the badge reads plain "For Approval".
+   */
+  current_approver?: string | null;
+  /**
+   * The Status set on the pending approval step, shown as "For Approval -
+   * <label>" while the loan waits there, or "Approved - <label>" while an
+   * approved loan waits at the Release step. Null when that step has no Status,
+   * and the "For Approval" badge falls back to `current_approver`.
+   */
+  current_status_label?: string | null;
+  /**
+   * What the badge shows: `past_due` for a released or ongoing loan past grace,
+   * otherwise `status`. `status` itself is unchanged. Read it through
+   * `loanDisplayStatus`, which handles a row that lacks it.
+   */
+  display_status?: string | null;
   approval_remarks?: string;
   approved_at?: string;
   released_at?: string;
+  /**
+   * How the release paid the proceeds out (`cash`, `gcash`, …) and its
+   * reference; null on loans released before they were recorded.
+   */
+  release_method?: string | null;
+  release_reference?: string | null;
+  /**
+   * The server's answer to whether the caller may send this loan back for
+   * approval: an approved, unreleased restructure and `loans:release`. The
+   * screen never works it out.
+   */
+  can_send_back_approved?: boolean;
+  /**
+   * `GET /loans/{id}` only: while the loan is approved, each printed
+   * disclosure statement or promissory note whose terms changed since it was
+   * printed. The release is refused until it is printed again. Empty when
+   * nothing is out of date; absent on other answers.
+   */
+  printed_documents_outdated?: PrintedDocumentOutdated[];
+  /**
+   * `GET /loans/{id}` only: while the loan is approved, the latest print of the
+   * disclosure statement and of the promissory note, any print. The Release
+   * dialog reminds the cashier to print one again after release when a change
+   * made there isn't on it. Empty when nothing was printed or the loan isn't
+   * approved; absent on other answers.
+   */
+  printed_documents?: PrintedDocument[];
   rejection_remarks?: string;
   rejected_at?: string;
   amortization_schedules?: ApiScheduleRow[];
@@ -112,6 +560,29 @@ export interface Loan {
   // Restructure — set on the new loan that was created from a restructure
   is_restructure?: boolean;
   source_loan_id?: number;
+  /** When a restructure's release closed this loan; null on any other loan. */
+  restructured_at?: string | null;
+  /** What was still owed on this loan when the restructure closed it. */
+  restructured_balance?: number | null;
+  /**
+   * On a closed (restructured) loan: the forgiveness approved, the part of the
+   * approved balance the new loan did not take on. Not what the books wrote
+   * off; that is the new loan's `restructure_written_off_principal`.
+   */
+  write_off_amount?: number | null;
+  /**
+   * On a restructure released since Phase 2: the old loan's unpaid principal
+   * it did not carry, written off in the books. Null on other loans and on
+   * restructures released before it was recorded.
+   */
+  restructure_written_off_principal?: number | null;
+  /** The loan this one was restructured out of. Only `GET /loans/{id}` loads it. */
+  source_loan?: RestructureSourceLoan | null;
+  /**
+   * Every restructure application raised on this loan, rejected and voided ones
+   * included. Only `GET /loans/{id}` loads it.
+   */
+  restructured_into?: RestructuredIntoLoan[];
 
   // Auto-Pay
   auto_pay_enabled?: boolean;
@@ -122,8 +593,6 @@ export interface Loan {
   // Legacy aliases — kept for backward compat with components that use old field names
   borrower_id?: number;
   borrower_name?: string;
-  co_maker_id?: number;
-  co_maker_name?: string;
   loan_product_id?: number;
   loan_product_name?: string;
   interest_type?: InterestType;
@@ -132,11 +601,76 @@ export interface Loan {
   processing_fee?: number;
   service_fee?: number;
   other_deductions?: number;
-  total_payable?: number;
+  /**
+   * The server's total payable: the amount still owed, `insurance_owed`
+   * included and Share Capital Build-Up never. Null before release, when
+   * `contract_total` is the figure to show.
+   */
+  total_payable?: number | null;
+  /** The contract's principal plus interest, shown on its own line. */
+  contract_total?: number | string | null;
+  /**
+   * The contract's interest, by the same rule as `contract_total` (a
+   * restructured source's original contract), on GET /loans/{id} only; null on
+   * lists.
+   */
+  contract_interest?: number | string | null;
+  /** Everything still owed on the loan, insurance premium included. */
+  total_outstanding?: number | string | null;
+  /** Principal still owed; the premium owed is `insurance_owed`. */
+  outstanding_principal?: number | string | null;
+  /**
+   * Deprecated alias: unpaid principal plus premium here, but everything owed
+   * on `GET /loans/{id}/summary`. Read `total_outstanding` or
+   * `outstanding_principal` instead.
+   */
   outstanding_balance?: number;
+  /**
+   * Insurance premium left unpaid at release and still owed on the loan:
+   * interest-free, collected first from each payment, on every loan that
+   * owes it. Part of `total_payable`.
+   */
+  insurance_owed?: number | string;
+  /**
+   * What a payment must be today to clear `insurance_owed` plus the first
+   * open period in full, penalty included, with its parts. Null unless the
+   * loan is released or ongoing; `period_number` and `schedule_id` are null
+   * when no period is open.
+   */
+  amount_due_now?: LoanAmountDueNow | null;
+  /**
+   * `total_deductions` less the itemised `deductions`, signed: the release
+   * voucher prints it as its own line when not 0.
+   */
+  unitemised_deductions?: number;
+  /**
+   * Each column of `amortization_schedules` added up by the server; present
+   * only when the schedule is loaded.
+   */
+  amortization_schedule_totals?: {
+    principal: number;
+    interest: number;
+    penalty: number;
+    total_due: number;
+    amount_paid: number;
+    share_capital_build_up?: number;
+    total_payment?: number;
+  };
+  /**
+   * The loan's pledged collateral against its principal, from the server
+   * (`GET /loans/{id}`). Null when the relation isn't loaded, as on lists.
+   * `total_value` and `short_by` are null, with `value_unknown` true, when
+   * the viewer may not see a share capital balance pledged to the loan.
+   */
+  collateral_summary?: {
+    total_value: number | null;
+    /** Null, with `value_unknown`, while the server withholds the figures. */
+    security_status: SecurityStatus | null;
+    short_by: number | null;
+    value_unknown?: boolean;
+  } | null;
   purpose?: string;
   collateral?: string;
-  co_maker?: string;
   approved_by?: string;
   rejected_by?: string;
   released_by?: string;
@@ -154,6 +688,203 @@ export interface LoanSchedule {
   amount_paid: number;
   balance: number;
   status: "pending" | "paid" | "partial" | "overdue";
+  /** The period's share capital build-up, from the server; null when it sent none. */
+  share_capital_build_up?: number | null;
+  /** `total_due` plus the build-up, from the server; null when it sent none. */
+  total_payment?: number | null;
+  /** The server's period number; it can skip, so it is not the row's position. */
+  period_number?: number | null;
+  /** The period's penalty, as the server last charged it; null when it sent none. */
+  penalty_amount?: number | null;
+  /** How many monthly late penalty charges that penalty counts (backend #284). */
+  penalty_months?: number | null;
+}
+
+/**
+ * `GET /loans/{id}/amortization-preview`, read whole: `data` is the rows the
+ * release would store (with `share_capital_build_up` and `total_payment`),
+ * `totals` their column totals, added up by the server beside `data`.
+ */
+export interface AmortizationPreviewResponse {
+  data: unknown[];
+  totals?: {
+    principal_due: number;
+    interest_due: number;
+    total_due: number;
+    share_capital_build_up: number;
+    total_payment: number;
+  };
+}
+
+/** What happens to the interest still owed when a loan extends. */
+export type ExtensionInterestOption = "pay" | "defer";
+
+/**
+ * `GET /loans/{id}/extension-preview?interest_option=pay|defer`: what
+ * `POST /loans/{id}/extend` would collect and store for that option, worked
+ * out by the server under the same guards (422 when it would refuse). Money
+ * is to the centavo; the dialog displays it and works none of it out.
+ */
+export interface LoanExtensionPreview {
+  interest_option: ExtensionInterestOption;
+  /** Collected as a payment before the loan extends; zeros for "defer". */
+  collect_now: {
+    /** Includes the insurance premium owed on "pay". */
+    amount: number;
+    /** Insurance premium owed on the loan, collected first on "pay". */
+    insurance_part?: number;
+    penalty_part: number;
+    interest_part: number;
+  };
+  carry_principal: number;
+  carry_interest: number;
+  fresh_interest: number;
+  new_interest_due: number;
+  new_total_due: number;
+  /** `Y-m-d`. */
+  new_due_date: string;
+}
+
+/** One component of a period: what was due, what the payments covered, what is left. */
+export interface AmortizationComponentBalance {
+  due: number;
+  paid: number;
+  balance: number;
+}
+
+/** Penalty is charged rather than scheduled, hence `charged` for `due`. */
+export interface AmortizationPenaltyBalance {
+  charged: number;
+  paid: number;
+  balance: number;
+}
+
+/** One period of `GET /loans/{id}/amortization-balances`. */
+export interface AmortizationBalancePeriod {
+  id: number;
+  period_number: number;
+  due_date: string;
+  status: "pending" | "paid" | "partial" | "overdue";
+  /** Unpaid past its grace period: the same test as the summary's `overdue_amount`. */
+  is_late: boolean;
+  principal: AmortizationComponentBalance;
+  interest: AmortizationComponentBalance;
+  penalty: AmortizationPenaltyBalance;
+  /** Principal + interest + penalty still owed on this period. */
+  balance: number;
+}
+
+/**
+ * `GET /loans/{id}/amortization-balances`: what is still owed on each period,
+ * per component. Every figure is the server's. `totals.balance`, `paid` and
+ * `overdue` are the summary's `outstanding_balance`, `total_paid` and
+ * `overdue_amount`.
+ */
+export interface LoanAmortizationBalances {
+  periods: AmortizationBalancePeriod[];
+  totals: {
+    principal: AmortizationComponentBalance;
+    interest: AmortizationComponentBalance;
+    penalty: AmortizationPenaltyBalance;
+    paid: number;
+    /** Includes `insurance_owed`, so it equals Current Outstanding. */
+    balance: number;
+    overdue: number;
+    /** Insurance premium still owed on the loan, inside `balance`. */
+    insurance_owed?: number | string | null;
+  };
+}
+
+/** One Record Payment preset: what paying `periods` periods ahead takes today. */
+export interface LoanAdvancePreset {
+  periods: number;
+  amount: number | string;
+}
+
+/**
+ * `GET /loans/{id}/summary`: the loan's balances as the server works them
+ * out. `total_outstanding` is everything owed, premium included;
+ * `outstanding_balance` is a deprecated alias of it.
+ */
+export interface LoanSummary {
+  total_outstanding?: number | string | null;
+  outstanding_principal?: number | string | null;
+  /** Deprecated alias of `total_outstanding`. */
+  outstanding_balance?: number;
+  /** One per open period, in allocation order (only the 1-period entry on Share Capital Build-Up loans). */
+  advance_presets?: LoanAdvancePreset[];
+  /** What clears the loan today. */
+  payoff_amount?: number | string | null;
+  /** Principal, interest and penalty paid only; narrower than Total Paid. */
+  total_paid?: number;
+  /**
+   * Total Paid on the loan page: every posted receipt, plus, on an imported
+   * loan, `paid_before_import`.
+   */
+  total_repaid?: number | string | null;
+  /** What an imported loan's file says was paid before the import; 0 otherwise. */
+  paid_before_import?: number | string | null;
+  principal_paid?: number;
+  interest_paid?: number;
+  overdue_amount?: number;
+  penalty_amount?: number;
+  /**
+   * The monthly late penalty charges counted in the penalty owed: the most on
+   * any overdue period (backend #284). 0 when none.
+   */
+  penalty_months?: number;
+  next_due_date?: string;
+  next_due_amount?: number;
+}
+
+/** What a Ledger row is; the server may add kinds later. */
+export type LoanLedgerKind =
+  | "release"
+  | "repayment"
+  | "extension_payment"
+  | "extension_charge"
+  | "penalty_charge"
+  | "adjustment"
+  | "void";
+
+/** Balances after a Ledger row, insurance premium owed left out. */
+export interface LoanLedgerBalances {
+  principal: number;
+  interest: number;
+  penalty: number;
+  /** Build-up the schedule still awaits, never below 0. */
+  scb: number;
+}
+
+/**
+ * One row of `GET /loans/{id}/ledger`. Payment, void and charge rows state
+ * positive figures and `kind` says which way they move the balances; an
+ * `adjustment` row's figures are the signed change it made.
+ */
+export interface LoanLedgerRow {
+  date: string;
+  kind: LoanLedgerKind | (string & {});
+  repayment_id: number | null;
+  loan_adjustment_id: number | null;
+  description: string;
+  principal: number;
+  interest: number;
+  penalty: number;
+  /** The insurance premium a payment collected. */
+  insurance: number;
+  /** The release row's total build-up; a payment or void row's share capital credited. */
+  scb: number;
+  balances: LoanLedgerBalances;
+}
+
+/**
+ * `GET /loans/{id}/ledger` (`loans:view`): every event that moved what the
+ * loan owes, in date then posting order, with the running balances the server
+ * worked out. `closing` equals the summary's outstanding figures.
+ */
+export interface LoanLedger {
+  rows: LoanLedgerRow[];
+  closing: LoanLedgerBalances;
 }
 
 /**
@@ -185,8 +916,17 @@ export interface LoanProduct {
   max_amount: number;
   interest_rate: number;
   interest_type: InterestType;
+  /** The method every loan on this product is built with; the server snapshots it. */
+  interest_method: "straight" | "diminishing" | "upon_maturity";
+  // Period the interest rate figure is quoted per (e.g. "3% per month").
+  // Absent on products created before this field existed — callers should
+  // default to "monthly", the rate's long-standing implicit basis.
+  interest_rate_frequency?: RateFrequency;
   min_term: number;
   max_term: number;
+  // Unit the term range is expressed in. Absent on products created before
+  // this field existed — callers should default to "months".
+  term_unit?: "months" | "days";
   payment_frequency: "daily" | "weekly" | "bi_weekly" | "monthly";
   processing_fee: number;
   service_fee: number;
@@ -199,13 +939,17 @@ export interface LoanProduct {
   max_service_fee?: number;
   penalty_rate: number;
   grace_period: number;
-  // Past Due Transfer — determines when a missed payment flips the loan's
-  // status to `past_due`. `past_due_transfer_value` is a positive integer;
-  // `past_due_transfer_unit` says how to interpret it (days, months, or
-  // number of amortization periods). Both are optional — a product with
-  // neither set falls back to the backend's default behavior.
-  past_due_transfer_value?: number;
-  past_due_transfer_unit?: PastDueTransferUnit;
+  /**
+   * Where new loans on this product take their penalty from: an active
+   * penalty configuration, the product's own fixed monthly rate (set before
+   * Settings → Penalties), or none. Sent by the server.
+   */
+  penalty_source?: {
+    type: "configuration" | "fixed_rate" | "none";
+    config_id: number | null;
+    config_name: string | null;
+    rate: number | null;
+  };
   // Share Capital Build-Up (SCB) — optional required contribution added to
   // every amortization period. When the borrower pays, the SCB portion is
   // credited to their share capital ledger.

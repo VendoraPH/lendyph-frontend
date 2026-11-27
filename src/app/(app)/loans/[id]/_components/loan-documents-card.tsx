@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { formatDate } from "@/lib/format";
+import { usePermission } from "@/hooks";
 import { CollapsibleCard } from "@/components/common/collapsible-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,10 +22,15 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
+import { notifyError } from "@/lib/notify";
 import { documentService } from "@/services";
 import type { Document } from "@/services/document.service";
 import { fileUrl } from "@/lib/file-url";
 import { cn } from "@/lib/utils";
+import { documentTypeFromName, documentTypeLabel } from "@/lib/document-type";
+import { DOCUMENT_ACCEPT } from "@/lib/file-validation";
+import { ConfirmDeleteDialog } from "@/components/common/confirm-delete-dialog";
+import { deleteDocumentLabel, documentName, openDocumentLabel } from "@/lib/document-delete";
 
 interface LoanDocumentsCardProps {
   loanId: number;
@@ -33,32 +40,24 @@ interface LoanDocumentsCardProps {
   canDelete?: boolean;
 }
 
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function humanizeType(type: string): string {
-  return type
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
 export function LoanDocumentsCard({
   loanId,
   canUpload = true,
   canDelete = true,
 }: LoanDocumentsCardProps) {
+  // Loan documents are read under `borrowers:view`, which viewing a loan does
+  // not imply. Without it they are not asked for and the card lists none.
+  const canListDocuments = usePermission().can("borrowers:view");
   const [documents, setDocuments] = useState<Document[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(canListDocuments);
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
+  // The document whose delete is waiting for the user to confirm it.
+  const [pendingDelete, setPendingDelete] = useState<Document | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchDocuments = useCallback(async () => {
+    if (!canListDocuments) return;
     setLoading(true);
     try {
       const data = await documentService.loanList(loanId);
@@ -70,7 +69,7 @@ export function LoanDocumentsCard({
     } finally {
       setLoading(false);
     }
-  }, [loanId]);
+  }, [loanId, canListDocuments]);
 
   useEffect(() => {
     fetchDocuments();
@@ -86,14 +85,15 @@ export function LoanDocumentsCard({
       formData.append("file", file);
       formData.append(
         "type",
-        file.name.split(".").pop()?.toLowerCase() || "file"
+        documentTypeFromName(file.name)
       );
       formData.append("label", file.name);
       await documentService.loanUpload(loanId, formData);
       toast.success("Document uploaded");
       fetchDocuments();
-    } catch {
-      toast.error("We couldn't upload the document. Please try again.");
+    } catch (err) {
+      // A 422 (the file's type or size) in the server's words.
+      notifyError(err, "We couldn't upload the document. Please try again.");
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -110,6 +110,7 @@ export function LoanDocumentsCard({
       toast.error("We couldn't delete the document. Please try again.");
     } finally {
       setDeleting(null);
+      setPendingDelete(null);
     }
   }
 
@@ -135,7 +136,7 @@ export function LoanDocumentsCard({
                 ref={fileInputRef}
                 type="file"
                 className="hidden"
-                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                accept={DOCUMENT_ACCEPT}
                 onChange={handleUpload}
               />
               <Button
@@ -189,13 +190,13 @@ export function LoanDocumentsCard({
                       <div className="flex items-center gap-2 min-w-0">
                         <Paperclip className="h-4 w-4 text-muted-foreground shrink-0" />
                         <span className="text-sm font-medium truncate">
-                          {doc.label || `Document #${doc.id}`}
+                          {documentName(doc)}
                         </span>
                       </div>
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="text-[10px] h-5">
-                        {humanizeType(doc.type)}
+                        {documentTypeLabel(doc.type)}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
@@ -207,7 +208,7 @@ export function LoanDocumentsCard({
                           variant="ghost"
                           size="sm"
                           className="h-7 w-7 p-0"
-                          aria-label="Open document"
+                          aria-label={openDocumentLabel(doc)}
                           onClick={() =>
                             window.open(
                               fileUrl(doc.url),
@@ -224,9 +225,9 @@ export function LoanDocumentsCard({
                             className={cn(
                               "h-7 w-7 p-0 text-destructive hover:text-destructive"
                             )}
-                            aria-label="Delete document"
+                            aria-label={deleteDocumentLabel(doc)}
                             disabled={deleting === doc.id}
-                            onClick={() => handleDelete(doc.id)}
+                            onClick={() => setPendingDelete(doc)}
                           >
                             {deleting === doc.id ? (
                               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -243,6 +244,17 @@ export function LoanDocumentsCard({
             </Table>
           </div>
         )}
+
+      <ConfirmDeleteDialog
+        open={pendingDelete !== null}
+        title="Delete this document?"
+        description={pendingDelete ? `${documentName(pendingDelete)} will be removed from this loan's documents.` : null}
+        busy={deleting !== null}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => {
+          if (pendingDelete) handleDelete(pendingDelete.id);
+        }}
+      />
     </CollapsibleCard>
   );
 }

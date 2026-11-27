@@ -2,11 +2,10 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { RouteGuard } from "@/components/common";
+import { PageFill, PageLoader, ScrollBox } from "@/components/common/page-fill";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -16,186 +15,66 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import {
   Building2,
   Plus,
   Pencil,
   MapPin,
   Phone,
-  Loader2,
   Search,
+  Info,
 } from "lucide-react";
 import { toast } from "sonner";
+import { env } from "@/config/env";
+import { usePermission } from "@/hooks/use-permission";
 import { branchService } from "@/services";
-import type { ApiBranch, CreateBranchData, UpdateBranchData } from "@/services/branch.service";
+import type { ApiBranch } from "@/services/branch.service";
+import { branchPageFeatures } from "@/lib/branch-page";
+import { branchStatusOf } from "@/lib/branch-status";
+import { BranchDetailsDialog } from "./_components/branch-details-dialog";
+import { BranchFormDialog } from "./_components/branch-form-dialog";
+import { MainOfficeBadge } from "./_components/main-office-action";
+import { BranchStatusBadge } from "./_components/branch-status-badge";
+import { BranchStatusActionButton } from "./_components/branch-status-action";
+import { completeRows } from "@/lib/paginate";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { cn } from "@/lib/utils";
-
-// ---------------------------------------------------------------------------
-// Branch Form Dialog
-// ---------------------------------------------------------------------------
-
-interface BranchFormDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  branch?: ApiBranch | null;
-  onSave: () => void;
-}
-
-function BranchFormDialog({ open, onOpenChange, branch, onSave }: BranchFormDialogProps) {
-  const isEdit = !!branch;
-  const [name, setName] = useState("");
-  const [code, setCode] = useState("");
-  const [address, setAddress] = useState("");
-  const [contactNumber, setContactNumber] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (branch) {
-      setName(branch.name);
-      setCode(branch.code);
-      setAddress(branch.address || "");
-      setContactNumber(branch.contact_number || "");
-    } else {
-      setName("");
-      setCode("");
-      setAddress("");
-      setContactNumber("");
-    }
-  }, [branch, open]);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim() || !code.trim()) return;
-
-    setSaving(true);
-    try {
-      if (isEdit && branch) {
-        const data: UpdateBranchData = { name, code, address: address || undefined, contact_number: contactNumber || undefined };
-        await branchService.update(branch.id, data);
-        toast.success("Branch updated");
-      } else {
-        const data: CreateBranchData = { name, code, address: address || undefined, contact_number: contactNumber || undefined };
-        await branchService.create(data);
-        toast.success("Branch created");
-      }
-      onOpenChange(false);
-      onSave();
-    } catch {
-      toast.error(isEdit ? "We couldn't update the branch. Please try again." : "We couldn't create the branch. Please try again.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit Branch" : "Add New Branch"}</DialogTitle>
-          <DialogDescription>
-            {isEdit ? "Update the branch details below." : "Fill in the details to create a new branch."}
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="branch-name">
-                Branch Name <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="branch-name"
-                placeholder="Main Branch"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="branch-code">
-                Branch Code <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="branch-code"
-                placeholder="MAIN"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                required
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="branch-address">Address</Label>
-            <Input
-              id="branch-address"
-              placeholder="123 Main St, Manila"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="branch-contact">Contact Number</Label>
-            <Input
-              id="branch-contact"
-              type="tel"
-              placeholder="09171234567"
-              value={contactNumber}
-              onChange={(e) => setContactNumber(e.target.value)}
-            />
-          </div>
-
-          <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={saving || !name.trim() || !code.trim()}
-              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-            >
-              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {isEdit ? "Update Branch" : "Create Branch"}
-            </Button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
-export default function BranchesPage() {
+function BranchesContent() {
   const [branches, setBranches] = useState<ApiBranch[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [editBranch, setEditBranch] = useState<ApiBranch | null>(null);
+  const [detailsBranch, setDetailsBranch] = useState<ApiBranch | null>(null);
+  const { can } = usePermission();
+  const features = branchPageFeatures(env.features.multiBranch, can);
 
-  const fetchBranches = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await branchService.list();
-      setBranches(Array.isArray(data) ? data : []);
-    } catch {
-      toast.error("We couldn't load the branches. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // A refresh after a change keeps the page (and any open dialog) on screen;
+  // only the first load shows the loader.
+  const [reloadCount, setReloadCount] = useState(0);
+  const fetchBranches = useCallback(() => setReloadCount((n) => n + 1), []);
 
   useEffect(() => {
-    fetchBranches();
-  }, [fetchBranches]);
+    let cancelled = false;
+    branchService
+      .listAll()
+      .then((result) => {
+        if (!cancelled) setBranches(completeRows(result));
+      })
+      .catch(() => {
+        if (!cancelled) toast.error("We couldn't load the branches. Please try again.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadCount]);
 
   const filtered = branches.filter((b) => {
     if (!search.trim()) return true;
@@ -207,17 +86,7 @@ export default function BranchesPage() {
     );
   });
 
-  const activeCount = branches.filter((b) => b.is_active).length;
-
-  async function handleToggleStatus(branch: ApiBranch) {
-    try {
-      await branchService.update(branch.id, { is_active: !branch.is_active });
-      toast.success(`Branch ${branch.is_active ? "deactivated" : "activated"}`);
-      fetchBranches();
-    } catch {
-      toast.error("We couldn't update the branch status. Please try again.");
-    }
-  }
+  const activeCount = branches.filter((b) => branchStatusOf(b) === "active").length;
 
   function handleEdit(branch: ApiBranch) {
     setEditBranch(branch);
@@ -230,18 +99,13 @@ export default function BranchesPage() {
   }
 
   if (loading) {
-    return (
-      <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <PageLoader />;
   }
 
   return (
-    <RouteGuard permission="settings:view" pageName="Branch Settings">
-    <div className="space-y-6">
+    <PageFill>
       {/* Header */}
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex shrink-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Branches</h1>
           <p className="text-sm text-muted-foreground">
@@ -258,7 +122,7 @@ export default function BranchesPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid shrink-0 gap-4 sm:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Total Branches</CardTitle>
@@ -279,7 +143,7 @@ export default function BranchesPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Inactive</CardTitle>
+            <CardTitle className="text-sm font-medium">Suspended or Closed</CardTitle>
             <Building2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -289,7 +153,7 @@ export default function BranchesPage() {
       </div>
 
       {/* Search */}
-      <div className="relative max-w-sm">
+      <div className="relative max-w-sm shrink-0">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           placeholder="Search branches..."
@@ -300,9 +164,9 @@ export default function BranchesPage() {
       </div>
 
       {/* Table */}
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
+      <Card className={FIT_CLASSES.section}>
+        <CardContent className={cn(FIT_CLASSES.section, "p-0")}>
+          <ScrollBox>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -321,6 +185,7 @@ export default function BranchesPage() {
                       <div className="flex items-center gap-2">
                         <Building2 className="h-4 w-4 text-brand-orange shrink-0" />
                         <span className="font-medium">{branch.name}</span>
+                        {features.mainOffice && branch.is_main_office && <MainOfficeBadge />}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -347,41 +212,33 @@ export default function BranchesPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          branch.is_active
-                            ? "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/30"
-                            : "bg-muted text-muted-foreground border-border"
-                        )}
-                      >
-                        {branch.is_active ? "Active" : "Inactive"}
-                      </Badge>
+                      <BranchStatusBadge branch={branch} />
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
+                        {features.details && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 gap-1 text-xs"
+                            aria-label={`Details of ${branch.name}`}
+                            onClick={() => setDetailsBranch(branch)}
+                          >
+                            <Info className="h-3 w-3" aria-hidden="true" />
+                            Details
+                          </Button>
+                        )}
                         <Button
                           variant="outline"
                           size="sm"
                           className="h-7 gap-1 text-xs"
+                          aria-label={`Edit ${branch.name}`}
                           onClick={() => handleEdit(branch)}
                         >
                           <Pencil className="h-3 w-3" />
                           Edit
                         </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className={cn(
-                            "h-7 text-xs",
-                            branch.is_active
-                              ? "text-destructive border-destructive/30 hover:bg-destructive/5"
-                              : "text-green-600 border-green-500/30 hover:bg-green-500/5"
-                          )}
-                          onClick={() => handleToggleStatus(branch)}
-                        >
-                          {branch.is_active ? "Deactivate" : "Activate"}
-                        </Button>
+                        <BranchStatusActionButton branch={branch} onChanged={fetchBranches} />
                       </div>
                     </TableCell>
                   </TableRow>
@@ -395,7 +252,7 @@ export default function BranchesPage() {
                 )}
               </TableBody>
             </Table>
-          </div>
+          </ScrollBox>
         </CardContent>
       </Card>
 
@@ -405,8 +262,24 @@ export default function BranchesPage() {
         onOpenChange={setFormOpen}
         branch={editBranch}
         onSave={fetchBranches}
+        profileFields={features.profileFields}
       />
-    </div>
+      {features.details && (
+        <BranchDetailsDialog
+          branch={detailsBranch}
+          onOpenChange={(open) => !open && setDetailsBranch(null)}
+          features={features}
+          onChanged={fetchBranches}
+        />
+      )}
+    </PageFill>
+  );
+}
+
+export default function BranchesPage() {
+  return (
+    <RouteGuard permission="settings:view" pageName="Branch Settings">
+      <BranchesContent />
     </RouteGuard>
   );
 }

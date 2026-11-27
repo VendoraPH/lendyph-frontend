@@ -1,10 +1,18 @@
 import {
   CIVIL_STATUS_OPTIONS,
   GENDER_OPTIONS,
-  INTEREST_TYPE_OPTIONS,
+  MEMBER_TYPE_OPTIONS,
   PAYMENT_FREQUENCY_OPTIONS,
   SUFFIX_OPTIONS,
 } from "@/constants";
+import {
+  CUSTOMER_COLUMNS,
+  LOAN_COLUMNS,
+  LOAN_INTEREST_TYPE_OPTIONS,
+  SHARE_CAPITAL_COLUMNS,
+  TRANSACTION_TYPE_OPTIONS,
+  type ImportColumn,
+} from "@/lib/import-schema";
 import type {
   DictionaryKey,
   TemplateColumn,
@@ -13,138 +21,15 @@ import type {
 } from "./types";
 
 /**
- * `public/Lendy CSV Format.xlsm`, transcribed.
+ * The client's Lendy CSV Format workbook, as data: its sheets read the
+ * import's own column tables (`@/lib/import-schema`), so neither this page nor
+ * the blank workbook it downloads (`./workbook`) can drift from what the
+ * import reads.
  *
  * `required` is the workbook's own colour coding — blue (#00B0F0) required,
- * yellow (#FFFF00) optional — read off the header row. If the workbook is ever
- * re-issued, this file is what has to move with it, and the download button
- * still serves the real thing either way.
+ * yellow (#FFFF00) optional — read off its header row, and kept even where the
+ * import takes a blank (a member's birthdate, a loan's Purpose).
  */
-
-const REQUIRED_WHEN_MARRIED = "Required when Civil Status is Married";
-
-const CUSTOMER_PROFILE_COLUMNS: TemplateColumn[] = [
-  { id: "account_no", header: "Account No.", required: true },
-  { id: "last_name", header: "Last Name", required: true },
-  { id: "first_name", header: "First Name", required: true },
-  { id: "middle_name", header: "Middle Name", required: false },
-  { id: "suffix", header: "Suffix", required: false, dictionary: "suffix" },
-  {
-    id: "birthdate",
-    header: "Birthdate",
-    required: true,
-    hint: "YYYY-MM-DD",
-  },
-  { id: "gender", header: "Gender", required: true, dictionary: "gender" },
-  {
-    id: "civil_status",
-    header: "Civil Status",
-    required: true,
-    dictionary: "civil_status",
-  },
-  { id: "contact_number", header: "Contact Number", required: true },
-  { id: "email", header: "Email", required: true },
-  { id: "street_address", header: "Street Address", required: false },
-  { id: "barangay", header: "Barangay", required: true },
-  { id: "city", header: "City/Municipality", required: true },
-  { id: "province", header: "Province", required: true },
-  { id: "employer", header: "Employer/Business Name", required: false },
-  { id: "monthly_income", header: "Monthly Income", required: false },
-  {
-    id: "pledge_amount",
-    header: "Pledge Amt (If Applicable)",
-    required: false,
-  },
-  {
-    id: "spouse_first_name",
-    header: "Spouse FName (If Married)",
-    required: true,
-    requiredWhen: REQUIRED_WHEN_MARRIED,
-  },
-  {
-    id: "spouse_middle_name",
-    header: "Spouse MName (If Married)",
-    required: false,
-  },
-  {
-    id: "spouse_last_name",
-    header: "Spouse LName (If Married)",
-    required: true,
-    requiredWhen: REQUIRED_WHEN_MARRIED,
-  },
-  {
-    id: "spouse_contact_no",
-    header: "Spouse Contact No (If Married)",
-    required: true,
-    requiredWhen: REQUIRED_WHEN_MARRIED,
-  },
-  {
-    id: "spouse_occupation",
-    header: "Spouse Occupation (If Married)",
-    required: false,
-  },
-];
-
-const LOAN_COLUMNS: TemplateColumn[] = [
-  { id: "account_no", header: "Account No.", required: true },
-  { id: "loan_no", header: "Loan No.", required: true },
-  { id: "loan_amount", header: "Loan Amount", required: true },
-  { id: "loan_balance", header: "Loan Balance", required: true },
-  { id: "interest_rate", header: "Interest Rate", required: true },
-  { id: "interest_amount", header: "Interest Amount", required: true },
-  { id: "interest_balance", header: "Interest Balance", required: true },
-  { id: "purpose", header: "Purpose", required: true },
-  { id: "loan_product", header: "Loan Product", required: true },
-  { id: "term_months", header: "Term in Months", required: true },
-  {
-    id: "payment_frequency",
-    header: "Payment Frequency",
-    required: true,
-    dictionary: "payment_frequency",
-  },
-  {
-    id: "interest_type",
-    header: "Interest Type",
-    required: true,
-    dictionary: "interest_type",
-  },
-  {
-    id: "date_released",
-    header: "Date Released",
-    required: true,
-    hint: "YYYY-MM-DD",
-  },
-  {
-    id: "maturity_date",
-    header: "Maturity Date",
-    required: true,
-    hint: "YYYY-MM-DD",
-  },
-  { id: "processing_fee", header: "Processing Fee", required: false },
-  { id: "service_fee", header: "Service Fee", required: false },
-  { id: "other_fee_detail", header: "Other Fee Detail", required: false },
-  { id: "other_fee_amount", header: "Other Fee Amount", required: false },
-];
-
-/** The sheets, with no rows. `createDraft` is what gives them one to type in. */
-export const TEMPLATE_SHEETS: TemplateSheet[] = [
-  {
-    id: "customer_profile",
-    name: "Customer Profile",
-    description:
-      "One row per member. Account numbers must be unique across this sheet.",
-    columns: CUSTOMER_PROFILE_COLUMNS,
-    rows: [],
-  },
-  {
-    id: "loans",
-    name: "Loans",
-    description:
-      "One row per loan account. Every Account No. here must also exist on Customer Profile.",
-    columns: LOAN_COLUMNS,
-    rows: [],
-  },
-];
 
 /**
  * The workbook's Data Dictionary sheet.
@@ -177,30 +62,142 @@ export const DATA_DICTIONARY: Record<
     values: dictionaryValues(CIVIL_STATUS_OPTIONS),
   },
   suffix: { label: "Suffix", values: dictionaryValues(SUFFIX_OPTIONS) },
+  // The loans import's own list: Upon Maturity too (finish run round 4).
   interest_type: {
     label: "Interest Type",
-    values: dictionaryValues(INTEREST_TYPE_OPTIONS),
+    values: dictionaryValues(LOAN_INTEREST_TYPE_OPTIONS),
   },
   payment_frequency: {
     label: "Payment Frequency",
     values: dictionaryValues(PAYMENT_FREQUENCY_OPTIONS),
   },
+  member_type: {
+    label: "Member Type",
+    values: dictionaryValues(MEMBER_TYPE_OPTIONS),
+  },
+  transaction_type: {
+    label: "Transaction Type",
+    values: dictionaryValues(TRANSACTION_TYPE_OPTIONS),
+  },
 };
 
-/** The workbook's Guidelines sheet, verbatim. */
+function isDictionaryKey(key: string): key is DictionaryKey {
+  return Object.hasOwn(DATA_DICTIONARY, key);
+}
+
+const REQUIRED_WHEN_MARRIED = "Required when Civil Status is Married";
+
+/** A column's hint by its type: a date's format, or what a blank reads as. */
+function typeHint(column: ImportColumn): string | undefined {
+  if (column.type === "date") return "YYYY-MM-DD";
+  return column.defaultWhenBlank ? `Blank means ${column.defaultWhenBlank}` : undefined;
+}
+
+/**
+ * One import column as a template column: its key and label, the workbook's
+ * colour, its dictionary and a hint. A conditional column (the spouse block)
+ * is painted required and says when, as the workbook does.
+ */
+function templateColumn(column: ImportColumn, hint = typeHint(column)): TemplateColumn {
+  const conditional = column.requiredWhen !== undefined;
+  const dictionary = isDictionaryKey(column.key) ? column.key : undefined;
+  return {
+    id: column.key,
+    header: column.label,
+    required: column.required || conditional,
+    ...(conditional && { requiredWhen: REQUIRED_WHEN_MARRIED }),
+    ...(dictionary && { dictionary }),
+    ...(hint && { hint }),
+  };
+}
+
+/**
+ * The Members sheet is the members import's own column table: the workbook's
+ * 22 columns, then the four it lacked (Date Hired and the membership columns),
+ * in the import's order and under the import's labels.
+ */
+const MEMBER_COLUMNS: TemplateColumn[] = CUSTOMER_COLUMNS.map((column) => templateColumn(column));
+
+/** The Loans sheet is the loans import's own column table, likewise. */
+const LOAN_TEMPLATE_COLUMNS: TemplateColumn[] = LOAN_COLUMNS.map((column) => templateColumn(column));
+
+/**
+ * What each share capital column takes, in a few words: the import's own
+ * rules (`ShareCapitalRowNormalizer`). Transaction Type's two words are its
+ * dictionary instead.
+ */
+const SHARE_CAPITAL_HINTS: Partial<Record<string, string>> = {
+  account_no: "Account No. on Members, or a member ID in Lendyph",
+  transaction_date: "YYYY-MM-DD",
+  reference_number: "One per transaction",
+  amount: "Above ₱0.00, 2 decimals at most",
+  remarks: "The entry's description",
+};
+
+/**
+ * The Share Capital sheet is the share capital import's own column table,
+ * read from `SHARE_CAPITAL_COLUMNS` as the Members sheet is from
+ * `CUSTOMER_COLUMNS`, so it can't drift from what the importer reads. The
+ * workbook has no such sheet (finish run round 2, decision 13).
+ */
+const SHARE_CAPITAL_TEMPLATE_COLUMNS: TemplateColumn[] = SHARE_CAPITAL_COLUMNS.map((column) =>
+  templateColumn(column, SHARE_CAPITAL_HINTS[column.key])
+);
+
+/** The sheets, with no rows. `createDraft` is what gives them one to type in. */
+export const TEMPLATE_SHEETS: TemplateSheet[] = [
+  {
+    id: "members",
+    name: "Members",
+    description:
+      "One row per member. Account numbers must be unique across this sheet.",
+    columns: MEMBER_COLUMNS,
+    rows: [],
+  },
+  {
+    id: "loans",
+    name: "Loans",
+    description:
+      "One row per loan account. Every Account No. here must also exist on Members.",
+    columns: LOAN_TEMPLATE_COLUMNS,
+    rows: [],
+  },
+  {
+    id: "share_capital",
+    name: "Share Capital",
+    description:
+      "One row per share capital contribution or withdrawal. Name each member by an Account No. on Members, or by their member ID in Lendyph.",
+    columns: SHARE_CAPITAL_TEMPLATE_COLUMNS,
+    rows: [],
+  },
+];
+
+/**
+ * The workbook's Guidelines sheet, with its "Customer Profile" file called
+ * Members, as the Data Import page names it, and the Share Capital file it
+ * lacks.
+ */
 export const TEMPLATE_GUIDELINES: TemplateGuideline[] = [
-  { text: "Prepare the Customer Profile and Loans data in separate CSV files." },
+  { text: "Prepare the Members, Loans and Share Capital data in separate CSV files." },
   {
     text: "Populate the data according to the prescribed column headers. Each record must occupy a separate row.",
   },
   { text: "Remove the header row before submitting the final CSV files." },
   {
-    text: "Relationship between the Customer Profile and Loans files:",
+    text: "Relationship between the Members and Loans files:",
     points: [
-      "A Customer Profile account number may exist even if there is no corresponding account number in the Loans file.",
-      "Every Loans account number must have a matching account number in the Customer Profile file.",
-      "Account numbers in the Customer Profile file must be unique.",
+      "A Members account number may exist even if there is no corresponding account number in the Loans file.",
+      "Every Loans account number must have a matching account number in the Members file.",
+      "Account numbers in the Members file must be unique.",
       "Duplicate account numbers are allowed in the Loans file.",
+    ],
+  },
+  {
+    text: "Share Capital rows:",
+    points: [
+      "Every Share Capital row names its member by an account number on Members, or by their member ID in Lendyph.",
+      "Transaction Type is Contribution or Withdrawal, Transaction Date is written YYYY-MM-DD, and Amount is above ₱0.00.",
+      "A row with the same reference as an entry already on the ledger, or with no reference the same member, date, type and amount, is skipped.",
     ],
   },
   { text: "If the customer has no middle name, leave the Middle Name field blank." },
@@ -210,14 +207,3 @@ export const TEMPLATE_GUIDELINES: TemplateGuideline[] = [
   { text: "Blue fields indicate required data." },
   { text: "Yellow fields indicate optional data." },
 ];
-
-/**
- * The untouched workbook, served straight from `public/`. Kept beside the
- * transcription so the two can never drift apart silently — if the filename
- * changes, this is the one place it changes.
- */
-export const TEMPLATE_FILE = {
-  /** URL-encoded: the filename has spaces. */
-  url: "/Lendy%20CSV%20Format.xlsm",
-  filename: "Lendy CSV Format.xlsm",
-} as const;

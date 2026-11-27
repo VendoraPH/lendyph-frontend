@@ -11,38 +11,38 @@ import {
   parseApiDate,
   periodsPerYear,
   rateLabel,
-  startOfLocalDay,
+  readFrequency,
   termLabel,
   termLabelFrom,
-  unitemisedRemainder,
 } from "./shared";
 
 /**
- * Every frequency `loans.frequency` can hold, against the arithmetic
- * `LoanService` actually performs on it.
- *
- * `interest_rate` is applied ONCE PER PERIOD and `term` is counted IN PERIODS —
- * `computeMaturityDate()` advances by days / weeks / 14 days / 15 days / months
- * per frequency, and every schedule builder multiplies by the rate per
- * iteration. The templates used to hardcode "per month" and "× 12".
+ * Every frequency `loans.frequency` can hold, and the rate phrase and
+ * annualisation it gets. The templates used to hardcode "per month" and "× 12".
  */
 const FREQUENCIES = [
-  { frequency: "daily", periods: 365, term: "30 day(s)", rate: "1% per day", annual: "365.00% per annum" },
-  { frequency: "weekly", periods: 52, term: "30 week(s)", rate: "1% per week", annual: "52.00% per annum" },
-  { frequency: "bi_weekly", periods: 26, term: "30 bi-weekly period(s)", rate: "1% per bi-weekly period", annual: "26.00% per annum" },
-  { frequency: "semi_monthly", periods: 24, term: "30 semi-monthly period(s)", rate: "1% per semi-monthly period", annual: "24.00% per annum" },
-  { frequency: "monthly", periods: 12, term: "30 month(s)", rate: "1% per month", annual: "12.00% per annum" },
-  { frequency: "upon_maturity", periods: 12, term: "30 month(s)", rate: "1% per month", annual: "12.00% per annum" },
+  { frequency: "daily", periods: 365, rate: "1% per day", annual: "365.00% per annum" },
+  { frequency: "weekly", periods: 52, rate: "1% per week", annual: "52.00% per annum" },
+  { frequency: "bi_weekly", periods: 26, rate: "1% per bi-weekly period", annual: "26.00% per annum" },
+  { frequency: "semi_monthly", periods: 24, rate: "1% per semi-monthly period", annual: "24.00% per annum" },
+  { frequency: "monthly", periods: 12, rate: "1% per month", annual: "12.00% per annum" },
+  { frequency: "upon_maturity", periods: 12, rate: "1% per month", annual: "12.00% per annum" },
 ] as const;
 
 for (const spec of FREQUENCIES) {
-  test(`frequency: ${spec.frequency} labels its own term and annual rate`, () => {
+  test(`frequency: ${spec.frequency} labels its own rate and annual rate`, () => {
     assert.equal(periodsPerYear(spec.frequency), spec.periods);
-    assert.equal(termLabel(30, spec.frequency), spec.term);
     assert.equal(rateLabel(1, spec.frequency), spec.rate);
     assert.equal(annualRateLabel(1, spec.frequency), spec.annual);
   });
 }
+
+test("term: labelled by its own unit, never by the payment frequency", () => {
+  // `term` is a length in `term_unit` — a 30-day loan paid weekly is still
+  // "30 day(s)", not "30 week(s)".
+  assert.equal(termLabel(30, "days"), "30 day(s)");
+  assert.equal(termLabel(6, "months"), "6 month(s)");
+});
 
 test("frequency: a 1%-per-day loan discloses 365%, not 12%", () => {
   // The headline case. `${(rate * 12).toFixed(2)}% per annum` disclosed a
@@ -53,6 +53,20 @@ test("frequency: a 1%-per-day loan discloses 365%, not 12%", () => {
 
   // And a 2.5% weekly loan is 130%, not 30%.
   assert.equal(annualRateLabel(2.5, "weekly"), "130.00% per annum");
+});
+
+test("rate: a fractional rate is stated and annualised without rounding", () => {
+  assert.equal(rateLabel(1.75, "monthly"), "1.75% per month");
+  assert.equal(annualRateLabel(1.5, "monthly"), "18.00% per annum");
+  assert.equal(annualRateLabel(1.75, "monthly"), "21.00% per annum");
+  assert.equal(annualRateLabel(1.125, "monthly"), "13.50% per annum");
+  // Not 13.48%: every stored place of the rate carries into the annual figure.
+  assert.equal(annualRateLabel(1.1234, "monthly"), "13.4808% per annum");
+  assert.equal(annualRateLabel(0.0125, "daily"), "4.5625% per annum");
+});
+
+test("rate: a four-digit annual rate prints without a thousands separator", () => {
+  assert.equal(annualRateLabel(3, "daily"), "1095.00% per annum");
 });
 
 test("frequency: an unknown frequency annualises to nothing at all", () => {
@@ -66,29 +80,32 @@ test("frequency: an unknown frequency annualises to nothing at all", () => {
     underline: true,
   });
 
-  // The periodic figures stay printable, in neutral units.
+  // The periodic figure stays printable, in neutral units.
   assert.equal(rateLabel(3, "quarterly"), "3% per period");
-  assert.equal(termLabel(4, "quarterly"), "4 period(s)");
+  // An unknown term unit is months, the backend's default.
+  assert.equal(termLabel(4, "quarterly"), "4 month(s)");
 });
 
 test("frequency: casing and absent values are tolerated", () => {
-  assert.equal(termLabel(6, "MONTHLY"), "6 month(s)");
+  assert.equal(termLabel(6, "MONTHS"), "6 month(s)");
+  assert.equal(termLabel(45, " Days "), "45 day(s)");
+  assert.equal(termLabel(6, undefined), "6 month(s)");
   assert.equal(rateLabel(2, " Daily "), "2% per day");
-  assert.equal(termLabel(null, "daily"), null);
+  assert.equal(termLabel(null, "days"), null);
   assert.equal(rateLabel(null, "daily"), null);
 });
 
-test("frequency: term_months names its own unit, term does not", () => {
-  // `term` is a count of the loan's periods, so it takes the frequency's unit.
-  assert.equal(termLabelFrom({ term: 12, frequency: "daily" }, "daily"), "12 day(s)");
+test("frequency: term takes its payload's term_unit; term_months names its own", () => {
+  assert.equal(termLabelFrom({ term: 12, term_unit: "days", frequency: "weekly" }), "12 day(s)");
+  // No unit on the payload: months, the backend's default.
+  assert.equal(termLabelFrom({ term: 12, frequency: "daily" }), "12 month(s)");
   // `term_months` only ever appears in the legacy flat payload shapes, where it
-  // says months in its name — reading both through one `pick` list relabelled
-  // one as the other.
-  assert.equal(termLabelFrom({ term_months: 12 }, "bi_weekly"), "12 month(s)");
+  // says months in its name.
+  assert.equal(termLabelFrom({ term_months: 12 }), "12 month(s)");
   // And `term` wins when a payload somehow carries both.
-  assert.equal(termLabelFrom({ term: 30, term_months: 12 }, "daily"), "30 day(s)");
-  assert.equal(termLabelFrom({}, "daily"), null);
-  assert.equal(termLabelFrom(null, "daily"), null);
+  assert.equal(termLabelFrom({ term: 30, term_unit: "days", term_months: 12 }), "30 day(s)");
+  assert.equal(termLabelFrom({}), null);
+  assert.equal(termLabelFrom(null), null);
 });
 
 // ---------------------------------------------------------------------------
@@ -122,9 +139,32 @@ test("dates: timestamps, Date objects and junk all round-trip sensibly", () => {
   assert.equal(parseApiDate(new Date("nope")), null);
 });
 
-test("dates: startOfLocalDay drops the time and nothing else", () => {
-  const floored = startOfLocalDay(new Date(2026, 7, 26, 23, 59, 59, 999));
-  assert.equal(floored.getTime(), new Date(2026, 7, 26).getTime());
+/** Run `check` on a computer set to New York, Auckland and Manila. */
+function onEveryComputer(check: (zone: string) => void) {
+  const original = process.env.TZ;
+  try {
+    for (const zone of ["America/New_York", "Pacific/Auckland", "Asia/Manila"]) {
+      process.env.TZ = zone;
+      check(zone);
+    }
+  } finally {
+    process.env.TZ = original;
+  }
+}
+
+test("dates: every API value reads as Manila's clock, on any computer", () => {
+  onEveryComputer((zone) => {
+    const day = parseApiDate("2026-11-10");
+    const zoned = parseApiDate("2026-11-09T20:00:00.000000Z"); // 04:00 on the 10th in Manila
+    const local = parseApiDate("2026-11-09 23:30:00");
+    assert.ok(day && zoned && local);
+    assert.deepEqual([day.getDate(), day.getHours()], [10, 0], zone);
+    assert.deepEqual([zoned.getDate(), zoned.getHours()], [10, 4], zone);
+    assert.deepEqual([local.getDate(), local.getHours(), local.getMinutes()], [9, 23, 30], zone);
+    // So a ledger mixing date-only entries and zoned timestamps keeps Manila's order.
+    assert.ok(local.getTime() < day.getTime(), zone);
+    assert.ok(day.getTime() < zoned.getTime(), zone);
+  });
 });
 
 test("dates: a fields row formats the date instead of printing the API string", () => {
@@ -149,7 +189,7 @@ test("dates: a fields row formats the date instead of printing the API string", 
 test("dates: dateTimeField keeps the minute a void happened at", () => {
   assert.equal(
     dateTimeField("Voided on", "2026-08-27 10:02:00").value,
-    formatValue(new Date(2026, 7, 27, 10, 2), "datetime")
+    formatValue("2026-08-27T10:02:00+08:00", "datetime")
   );
   assert.notEqual(
     dateTimeField("Voided on", "2026-08-27 10:02:00").value,
@@ -158,16 +198,12 @@ test("dates: dateTimeField keeps the minute a void happened at", () => {
   assert.equal(dateOrBlank(null), BLANK_LINE);
 });
 
-// ---------------------------------------------------------------------------
-// Reconciliation
-// ---------------------------------------------------------------------------
-
-test("reconciliation: the unitemised remainder is exact to the centavo", () => {
-  assert.equal(unitemisedRemainder(5000, 0), 5000);
-  assert.equal(unitemisedRemainder(5000, 5000), 0);
-  assert.equal(unitemisedRemainder(1500, 2000), -500);
-  // Float subtraction would leave 0.009999999999990905 here, which is not zero
-  // and would print a balancing line for a rounding artefact.
-  assert.equal(unitemisedRemainder(1000.01, 1000), 0.01);
-  assert.equal(unitemisedRemainder(16666.67, 6666.67 + 10000), 0);
+test("rate: an annual rate reads per year, from the rate period, never per period", () => {
+  assert.equal(rateLabel(18, "annual"), "18% per year");
+  assert.equal(rateLabel(18, " Annual "), "18% per year");
+  assert.notEqual(rateLabel(18, "annual"), "18% per period");
+  // `annual` is a rate period only: it is not a payment frequency, so it has
+  // no periods a year here and is never annualised by the browser.
+  assert.equal(readFrequency("annual"), null);
+  assert.equal(periodsPerYear("annual"), null);
 });

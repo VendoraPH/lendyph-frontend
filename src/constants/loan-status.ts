@@ -10,7 +10,7 @@
  * import path changes.
  */
 
-import type { LoanStatus } from "@/types/loan";
+import type { Loan, LoanStatus } from "@/types/loan";
 
 export const LOAN_STATUS = {
   DRAFT: "draft",
@@ -49,10 +49,13 @@ export const LOAN_STATUS = {
 
 export const LOAN_STATUS_LABELS: Record<LoanStatus, string> = {
   draft: "Draft",
-  for_review: "For Review",
+  // The value stays `for_review` on the wire; only the wording is "For Approval".
+  for_review: "For Approval",
   approved: "Approved",
   rejected: "Rejected",
-  released: "Released",
+  // A released loan reads "Current", the same as `ongoing` (decision 5a).
+  // `loans.status` keeps both values; only the wording is shared.
+  released: "Current",
   current: "Current",
   past_due: "Past Due",
   // Legacy — older backend versions may still emit "ongoing" for a loan
@@ -68,6 +71,61 @@ export const LOAN_STATUS_LABELS: Record<LoanStatus, string> = {
   // other label here and the payment detail screen's existing "Voided".
   void: "Voided",
 };
+
+/**
+ * The label for a loan status pill. A loan under approval reads "For Approval"
+ * followed by the Status set on the step it waits at ("For Approval - Credit
+ * Check", the API's `current_status_label`), or by that step's approver when
+ * the step has no Status ("For Approval - Manager"). An approved loan reads
+ * "Approved - <Status>" from the pending Release step, and plain "Approved" with
+ * none: the approver is not named there. Every other status, and a `for_review`
+ * loan with neither, reads as plain `LOAN_STATUS_LABELS`.
+ */
+export function loanStatusLabel(
+  status: LoanStatus,
+  approver?: string | null,
+  stepStatus?: string | null,
+): string {
+  const label = LOAN_STATUS_LABELS[status] ?? status;
+  const step = stepStatus?.trim();
+  if (status === LOAN_STATUS.APPROVED) return step ? `${label} - ${step}` : label;
+  const suffix = step || approver?.trim();
+  return status === LOAN_STATUS.FOR_REVIEW && suffix ? `${label} - ${suffix}` : label;
+}
+
+/**
+ * The status a loan's badge shows: the server's `display_status` (`past_due` for
+ * a released or ongoing loan past grace), else `status`. Read for the badge only;
+ * what a loan may do still goes by `status`. A value this screen has no label
+ * for falls back to `status`, so a badge is never unstyled.
+ */
+export function loanDisplayStatus(loan: Pick<Loan, "status" | "display_status">): LoanStatus {
+  const display = loan.display_status;
+  return display && Object.hasOwn(LOAN_STATUS_LABELS, display)
+    ? (display as LoanStatus)
+    : loan.status;
+}
+
+/**
+ * The status label of a loan in a list, the same on the Loans list and a
+ * member's Loans tab. A restructure application says so until it has itself
+ * been restructured.
+ */
+export function loanRowStatusLabel(
+  loan: Pick<
+    Loan,
+    "status" | "display_status" | "current_approver" | "current_status_label" | "is_restructure"
+  >,
+): string {
+  const label = loanStatusLabel(
+    loanDisplayStatus(loan),
+    loan.current_approver,
+    loan.current_status_label,
+  );
+  return loan.is_restructure && loan.status !== LOAN_STATUS.RESTRUCTURED
+    ? `Restructured — ${label}`
+    : label;
+}
 
 /**
  * Badge classes for a loan status pill.
@@ -88,7 +146,8 @@ export const LOAN_STATUS_COLORS: Record<LoanStatus, string> = {
   for_review: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800",
   approved: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-800",
   rejected: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
-  released: "bg-cyan-100 text-cyan-700 border-cyan-200 dark:bg-cyan-500/15 dark:text-cyan-400 dark:border-cyan-800",
+  // Styled as `ongoing`: both read "Current", so one word has one colour.
+  released: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
   current: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
   past_due: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
   ongoing: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
@@ -104,18 +163,19 @@ export const LOAN_STATUS_COLORS: Record<LoanStatus, string> = {
 };
 
 /**
- * The statuses that mean the money is out and still owed.
+ * The statuses of a current loan: released and being repaid on its schedule.
  *
  * "Active" vs "inactive" is a distinction the API does not make — it only
  * reports the twelve statuses above — but it is the one staff actually ask for
- * ("show me their live loans"). Defined here rather than inline in the one
- * screen that filters by it, next to the vocabulary it partitions, so the
- * answer cannot drift between screens the way the badge colours did.
+ * ("show me their live loans"). Defined here, next to the vocabulary it
+ * partitions, so the answer cannot drift between screens the way the badge
+ * colours did.
  *
  * `ongoing` is the legacy spelling of `current`; both are live. Everything
- * else — not yet released (`draft`, `for_review`, `approved`), never released
- * (`rejected`, `void`), or finished (`completed`, `defaulted`, `restructured`,
- * `closed`) — is inactive.
+ * else is not active: not yet released (`draft`, `for_review`, `approved`),
+ * never released (`rejected`, `void`), finished (`completed`, `restructured`,
+ * `closed`), or `defaulted`. A defaulted loan is still owed, so it is
+ * collectible (COLLECTIBLE_LOAN_STATUSES) but not active.
  */
 export const ACTIVE_LOAN_STATUSES: readonly LoanStatus[] = [
   LOAN_STATUS.RELEASED,
@@ -134,5 +194,48 @@ export const ACTIVE_LOAN_STATUSES: readonly LoanStatus[] = [
 export function isActiveLoanStatus(status: string | null | undefined): boolean {
   return (
     !!status && (ACTIVE_LOAN_STATUSES as readonly string[]).includes(status)
+  );
+}
+
+/**
+ * The statuses of a loan still owed: the backend's collectible loans (released,
+ * ongoing, defaulted). A defaulted loan is collectible but not active.
+ *
+ * Only values `loans.status` can hold, like EVER_RELEASED_LOAN_STATUSES below.
+ */
+export const COLLECTIBLE_LOAN_STATUSES: readonly LoanStatus[] = [
+  LOAN_STATUS.RELEASED,
+  LOAN_STATUS.ONGOING,
+  LOAN_STATUS.DEFAULTED,
+];
+
+/** Whether a loan status is one of COLLECTIBLE_LOAN_STATUSES. */
+export function isCollectibleLoanStatus(status: string | null | undefined): boolean {
+  return (
+    !!status && (COLLECTIBLE_LOAN_STATUSES as readonly string[]).includes(status)
+  );
+}
+
+/**
+ * The statuses of a loan whose money went out: released, whatever became of it
+ * since. The backend's `Loan::EVER_RELEASED_STATUSES`, and the set that has a
+ * persisted schedule, repayments and a ledger to read.
+ *
+ * Only values `loans.status` can hold. `current`, `past_due` and `closed` stay
+ * in `LoanStatus` for old payloads, but the enum has no such values (`closed`
+ * rows were migrated to `completed`), so they are not listed here.
+ */
+export const EVER_RELEASED_LOAN_STATUSES: readonly LoanStatus[] = [
+  LOAN_STATUS.RELEASED,
+  LOAN_STATUS.ONGOING,
+  LOAN_STATUS.COMPLETED,
+  LOAN_STATUS.DEFAULTED,
+  LOAN_STATUS.RESTRUCTURED,
+];
+
+/** Whether a loan status is one of EVER_RELEASED_LOAN_STATUSES. */
+export function isEverReleasedLoanStatus(status: string | null | undefined): boolean {
+  return (
+    !!status && (EVER_RELEASED_LOAN_STATUSES as readonly string[]).includes(status)
   );
 }

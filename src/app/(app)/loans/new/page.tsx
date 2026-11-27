@@ -1,8 +1,14 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
+import { useState, useMemo, useEffect, useRef, Suspense, type FormEvent } from "react";
 import { RouteGuard } from "@/components/common";
-import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
+import { PageFill, PageLoader, ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { FormStep, FormStepper, type FormStepperHandle } from "@/components/common/form-stepper";
+import { FORM_STEP_GRID, stepErrorsOf, type StepCheckTrigger, type StepErrors } from "@/lib/form-stepper";
+import { MissingAccessNotice } from "./_components/missing-access-notice";
+import { missingAccessPlacement, missingLoanFormAccess } from "./_lib/missing-access";
+import { StaffPicker } from "@/components/common/staff-picker";
 import {
   collateralLock,
   holdersSentence,
@@ -12,21 +18,20 @@ import {
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { notifyError, notifyValidation } from "@/lib/notify";
-import { ArrowLeft, CalendarIcon, Info, ChevronsUpDown, Check, Plus, X, FileText, ShieldCheck, Trash2 } from "lucide-react";
+import { notifyValidation } from "@/lib/notify";
+import { AlertCircle, ArrowLeft, CalendarIcon, Info, Plus, RefreshCw, X, FileText, ShieldCheck, Trash2 } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import {
-  borrowerService,
-  coMakerService,
   collateralService,
   collateralTypeService,
   documentService,
-  feeService,
   loanProductService,
   loanService,
-  userService,
 } from "@/services";
 import { api } from "@/lib/api-client";
+import { getErrorMessage, httpStatusOf } from "@/lib/api-error";
+import { completeRows } from "@/lib/paginate";
+import { usePermission } from "@/hooks";
 import {
   SHARE_CAPITAL_UNAVAILABLE_LABEL,
   getShareCapitalBalance,
@@ -35,21 +40,13 @@ import {
   collateralValue,
   type CollateralValueRow,
 } from "@/utils/collateral-value";
-import {
-  computeSecurityStatus,
-  securityStatusLabel,
-} from "@/types/collateral";
 import type {
-  Borrower,
-  CoMaker,
   CollateralType,
-  CollateralWithMeta,
-  Fee,
   Loan,
-  User,
+  LoanApprovalEditState,
+  StaffMember,
 } from "@/types";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -70,7 +67,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -87,191 +83,107 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
 import { cn } from "@/lib/utils";
-import { formatDateISO } from "@/lib/format";
-import { toUserList, type UserListShortfall } from "@/lib/user-list";
+import { calendarDate, formatCurrency, formatDateISO, formatDateObj, formatRate, todayDate } from "@/lib/format";
+import { currencyOrDash } from "@/lib/report-format";
+import {
+  decimalInputValue,
+  PESO_DECIMALS,
+  sanitizeDecimalInput,
+} from "@/lib/percent";
+import { ratePeriodWord, readTermUnit, termUnitNoun } from "@/lib/loan-terms";
+import { editedAccountOfficer } from "@/lib/loan-account-officer";
+import {
+  applicationDeductions,
+  feePercent,
+  productDeductionFields,
+  storedDeductionFields,
+  storedDeductionInputs,
+} from "@/lib/loan-application-deductions";
+import {
+  PROCESSING_FEE_LABEL,
+  SERVICE_FEE_LABEL,
+  readRestructurePreview,
+  restructurableBalanceHint,
+  restructureShortfallState,
+  type LoanDeduction,
+} from "@/lib/loan-restructure";
 
 import type { LoanProduct } from "@/types/loan";
 import {
-  INTEREST_TYPE_OPTIONS,
   PAYMENT_FREQUENCY_OPTIONS,
   PAYMENT_FREQUENCY_LABELS,
 } from "@/constants";
+import { parseEditLoanId } from "./_lib/edit-loan-id";
+import {
+  approvalEditHeaderNote,
+  approvalEditPayload,
+  approvalEditSavedMessage,
+  isApprovalEdit,
+  loanFormSave,
+  loanTermsBasis,
+  saveApprovalEdit,
+} from "./_lib/approval-edit-save";
+import { approvalCardHref, readApprovalEditState } from "@/app/(app)/loans/[id]/_lib/approval-edit";
+import { EDIT_LOAN_TITLE } from "@/lib/page-titles";
+import {
+  attachedCollateralRows,
+  canChangeCollaterals,
+  collateralSaveBlock,
+  editCollateralLoad,
+  statedAttachedCollaterals,
+  tracksEditCollaterals,
+  type EditCollateralResult,
+  type SelectedCollateral,
+} from "./_lib/edit-collaterals";
+import { loanMemberOptions, memberPicker } from "./_lib/member-picker";
+import { MemberSearchPicker } from "@/components/common/member-search-picker";
+import { rememberMembers, type MemberOption } from "@/hooks/use-member-search";
+import {
+  formInterestMethod,
+  interestMethodLabel,
+  loanPreviewRequest,
+  previewDeductionAmount,
+  previewFailureText,
+  shownCollateralTotal,
+  shownSecurityStatus,
+  showsShortBy,
+} from "./_lib/loan-preview";
+import { SHARE_CAPITAL_VALUE_HIDDEN } from "@/app/(app)/loans/[id]/_lib/collateral-display";
+import { useLoanPreview } from "./_hooks/use-loan-preview";
 
-// ── Currency Formatter ──
-
-const formatCurrency = (amount: number) =>
-  new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
+/**
+ * A fee's label with its rate in smaller type. Each part keeps the label's own
+ * line height (Tailwind's `text-xs` would set 16 px), so the label is as tall
+ * as the date labels and the fee boxes line up with the date boxes.
+ */
+const FEE_LABEL_CLASS = "flex items-center gap-0.5 *:leading-none";
+import { saveLoanEdit } from "./_lib/save-loan-edit";
+import {
+  amountInputValue,
+  principalRangeError,
+  REMARKS_SAVED_HINT,
+  remarksRefusal,
+  remarksRequired,
+  restructureEditFields,
+  restructureEditSourceId,
+  scbRuleError,
+} from "./_lib/restructure-edit";
+import { COLLECTED_BEFORE_INSURANCE, proceedsFigures } from "@/lib/restructure-proceeds";
+import { formatProductRangeMessage } from "./_lib/product-range-message";
+import { invalidStepMessages, loanFormMissing, loanFormSteps, serverFieldErrors } from "./_lib/loan-form-steps";
 
 // ── Helpers ──
 
-type PaymentFrequency = "daily" | "weekly" | "bi_weekly" | "semi_monthly" | "monthly" | "upon_maturity";
-type InterestType = "straight" | "fixed" | "diminishing";
-
-function getPeriodsFromMonths(
-  termMonths: number,
-  frequency: PaymentFrequency
-): number {
-  switch (frequency) {
-    case "daily":
-      return Math.round(termMonths * 30);
-    case "weekly":
-      return Math.round(termMonths * 4.33);
-    case "bi_weekly":
-    case "semi_monthly":
-      return Math.round(termMonths * 2);
-    case "monthly":
-    default:
-      return termMonths;
-  }
-}
-
-function getIntervalDays(frequency: PaymentFrequency): number {
-  switch (frequency) {
-    case "daily":
-      return 1;
-    case "weekly":
-      return 7;
-    case "bi_weekly":
-    case "semi_monthly":
-      return 15;
-    case "monthly":
-    default:
-      return 30;
-  }
-}
-
-function addMonths(date: Date, months: number): Date {
-  const result = new Date(date);
-  result.setMonth(result.getMonth() + months);
-  return result;
-}
-
-function addDays(date: Date, days: number): Date {
-  const result = new Date(date);
-  result.setDate(result.getDate() + days);
-  return result;
-}
-
-function formatDate(date: Date): string {
-  return date.toLocaleDateString("en-PH", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-interface AmortizationRow {
-  period: number;
-  dueDate: Date;
-  principal: number;
-  interest: number;
-  shareCapitalBuildUp: number;
-  totalPayment: number;
-}
-
-function computeAmortization(
-  principal: number,
-  interestRate: number,
-  interestType: InterestType,
-  termMonths: number,
-  frequency: PaymentFrequency,
-  releaseDate: Date,
-  scbAmount: number = 0,
-): AmortizationRow[] {
-  const r = interestRate / 100;
-  const scb = Math.round(scbAmount);
-
-  // Upon Maturity is a bullet / balloon repayment schedule: one single
-  // payment on the maturity date containing full principal + simple
-  // interest for the whole term + any SCB. It's a payment-frequency
-  // concept, not an interest-type concept — the interest type is still
-  // straight or diminishing, but with no intermediate paydowns the two
-  // converge to the same total here.
-  if (frequency === "upon_maturity") {
-    const totalInterest = Math.round(principal * r * termMonths);
-    return [{
-      period: 1,
-      dueDate: addMonths(releaseDate, termMonths),
-      principal,
-      interest: totalInterest,
-      shareCapitalBuildUp: scb,
-      totalPayment: principal + totalInterest + scb,
-    }];
-  }
-
-  const totalPeriods = getPeriodsFromMonths(termMonths, frequency);
-  const intervalDays = getIntervalDays(frequency);
-  const rows: AmortizationRow[] = [];
-  let remainingBalance = principal;
-
-  // Straight/Fixed: equal principal each period, constant interest on original principal
-  if (interestType === "straight" || interestType === "fixed") {
-    const principalPerPeriod = Math.round(principal / totalPeriods);
-    const interestPerPeriod = Math.round(principal * r);
-
-    for (let i = 1; i <= totalPeriods; i++) {
-      const dueDate = frequency === "monthly"
-        ? addMonths(releaseDate, i)
-        : addDays(releaseDate, i * intervalDays);
-      const isLast = i === totalPeriods;
-      const periodPrincipal = isLast ? remainingBalance : principalPerPeriod;
-
-      rows.push({
-        period: i,
-        dueDate,
-        principal: periodPrincipal,
-        interest: interestPerPeriod,
-        shareCapitalBuildUp: scb,
-        totalPayment: periodPrincipal + interestPerPeriod + scb,
-      });
-      remainingBalance -= periodPrincipal;
-    }
-  }
-
-  // Diminishing: equal total payment (PMT), decreasing interest, increasing principal
-  else if (interestType === "diminishing") {
-    const pmt = r > 0
-      ? principal * r / (1 - Math.pow(1 + r, -totalPeriods))
-      : principal / totalPeriods;
-
-    for (let i = 1; i <= totalPeriods; i++) {
-      const dueDate = frequency === "monthly"
-        ? addMonths(releaseDate, i)
-        : addDays(releaseDate, i * intervalDays);
-      const isLast = i === totalPeriods;
-      const interest = Math.round(remainingBalance * r);
-      const periodPrincipal = isLast
-        ? remainingBalance
-        : Math.round(pmt - interest);
-      const baseTotal = isLast ? periodPrincipal + interest : Math.round(pmt);
-
-      rows.push({
-        period: i,
-        dueDate,
-        principal: periodPrincipal,
-        interest,
-        shareCapitalBuildUp: scb,
-        totalPayment: baseTotal + scb,
-      });
-      remainingBalance -= periodPrincipal;
-    }
-  }
-
-  return rows;
+/**
+ * A 403 from a list this form only reads for reference. The edit mode below is
+ * open to `loans:update`, which `loan_processor` holds without
+ * `collaterals:view`. Those reads are skipped for a user without the
+ * permission, so a 403 here means it was withdrawn since sign-in. Expected,
+ * and nothing a retry fixes, so it is not announced; any other failure is.
+ */
+function isRoleWithoutAccess(err: unknown): boolean {
+  return httpStatusOf(err) === 403;
 }
 
 // ── Main Page Component ──
@@ -286,39 +198,76 @@ function computeAmortization(
 function NewLoanApplicationInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const editLoanId = (() => {
-    const raw = searchParams.get("edit");
-    if (!raw) return null;
-    const n = Number(raw);
-    return Number.isFinite(n) && n > 0 ? n : null;
-  })();
+  const editLoanId = parseEditLoanId(searchParams.get("edit"));
   const isEditMode = editLoanId !== null;
-
+  // The Chairman/Chairwoman's edit at their approval step (`?approval=1`):
+  // saved through PATCH /loans/{id}/approval-edit, which may also change the
+  // term and frequency. The member, product and policy exception stay fixed.
+  const inApproval = isApprovalEdit(editLoanId, searchParams.get("approval"));
+  // Lists this form reads under other modules' permissions, which neither
+  // `loans:create` nor `loans:update` implies. Without one, that list is not
+  // asked for and stays empty, as it would with nothing in it.
+  const { can } = usePermission();
+  const canListMembers = can("borrowers:view");
+  // The approval edit sends co-makers only for a role that can pick members,
+  // so without that their rows are shown as they are, with nothing to add or
+  // remove.
+  const coMakersLocked = inApproval && !canListMembers;
+  const canListProducts = can("loans:view");
+  const canListCollaterals = can("collaterals:view");
+  // Changing a loan's collaterals. Edit mode states them on the loan update,
+  // which the server refuses outright without this.
+  const canUpdateCollaterals = can("collaterals:update");
+  const canReadShareCapital = can("share_capital:view");
+  // The restructure preview, which states a restructure's restructurable
+  // balance, is open to loans:restructure only.
+  const canRestructure = can("loans:restructure");
+  const canWriteOff = can("loans:write_off");
+  const missingAccess = useMemo(
+    () =>
+      missingLoanFormAccess(
+        {
+          members: canListMembers,
+          products: canListProducts,
+          collaterals: canListCollaterals,
+          shareCapital: canReadShareCapital,
+        },
+        { editing: isEditMode },
+      ),
+    [canListMembers, canListProducts, canListCollaterals, canReadShareCapital, isEditMode],
+  );
+  // The approval edit keeps nothing above its form (it fits at 1024x640): the
+  // member gap reads beside the co-maker pickers instead.
+  const accessPlacement = missingAccessPlacement(missingAccess, inApproval);
   // ── API Data ──
-  const [borrowers, setBorrowers] = useState<Borrower[]>([]);
+  // The members this form has picked or the loan being edited names, so their
+  // names show whatever the pickers' searches have moved on to.
+  const [knownMembers, setKnownMembers] = useState<Record<number, MemberOption>>({});
   const [products, setProducts] = useState<LoanProduct[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [existingLoan, setExistingLoan] = useState<Loan | null>(null);
-
-  // ── Users (Account Officers) ──
-  const [users, setUsers] = useState<User[]>([]);
+  // The approval edit's state as the form opened: the step and the version
+  // the save sends back.
+  const [approvalEdit, setApprovalEdit] = useState<LoanApprovalEditState | null>(null);
+  // A restructure's remarks. The server asks for them (422 on `remarks`) when
+  // the edit moves its principal below the outstanding balance; its message is
+  // kept here and the field turns required.
+  const [restructureRemarks, setRestructureRemarks] = useState("");
+  const [remarksRequiredMessage, setRemarksRequiredMessage] = useState<string | null>(null);
 
   // ── Borrower & Co-Maker State ──
   const [borrowerId, setBorrowerId] = useState<number | null>(null);
   const [coMakerIds, setCoMakerIds] = useState<(number | null)[]>([null]);
-  const [openCoMakerIndex, setOpenCoMakerIndex] = useState<number | null>(null);
-  const [accountOfficerId, setAccountOfficerId] = useState<number | null>(null);
-  const [aoOpen, setAoOpen] = useState(false);
+  const [accountOfficer, setAccountOfficer] = useState<StaffMember | null>(null);
   const [purpose, setPurpose] = useState("");
 
   // ── Loan Product & Terms State ──
   const [productId, setProductId] = useState<string | null>(null);
   const [principalAmount, setPrincipalAmount] = useState<string>("");
-  const [termMonths, setTermMonths] = useState<string>("");
+  const [termValue, setTermValue] = useState<string>("");
   const [paymentFrequency, setPaymentFrequency] = useState<string | null>(null);
   const [interestRate, setInterestRate] = useState<string>("");
-  const [interestType, setInterestType] = useState<string | null>(null);
   // Share Capital Build-Up amount (only required when the selected
   // product has scb_required === true; must fall within product min/max)
   const [scbAmount, setScbAmount] = useState<string>("");
@@ -330,11 +279,11 @@ function NewLoanApplicationInner() {
     CollateralValueRow[]
   >([]);
   const [collateralTypes, setCollateralTypes] = useState<CollateralType[]>([]);
-  // Collaterals the user has chosen to attach to THIS loan, with the
-  // value snapshotted at attach time so post-attach ledger drift doesn't
-  // silently move security status.
+  // Collaterals the user has chosen to attach to THIS loan, each with the
+  // server figure the row shows. The server sets the value the loan holds
+  // each at when it attaches it; the form never sends one.
   const [selectedCollaterals, setSelectedCollaterals] = useState<
-    { collateral: CollateralValueRow; snapshot_value: number }[]
+    SelectedCollateral[]
   >([]);
   const [collateralPickerOpen, setCollateralPickerOpen] = useState(false);
 
@@ -344,91 +293,54 @@ function NewLoanApplicationInner() {
   const [policyExceptionLetter, setPolicyExceptionLetter] = useState<File | null>(null);
 
   // ── Combobox Open State ──
-  const [borrowerOpen, setBorrowerOpen] = useState(false);
 
   // ── Dates State ──
-  const [releaseDate, setReleaseDate] = useState<Date | undefined>(new Date());
+  const [releaseDate, setReleaseDate] = useState<Date | undefined>(todayDate);
   const [releaseDateOpen, setReleaseDateOpen] = useState(false);
 
   // ── Deductions State ──
   // Fee rates are editable percentages constrained to the selected product's
-  // min/max range. The peso amount is computed from rate × principal.
+  // min/max range. The peso amounts are the server's (`POST /loans/preview`).
   const [processingFeeRate, setProcessingFeeRate] = useState<string>("");
   const [serviceFeeRate, setServiceFeeRate] = useState<string>("");
   const [editingFeeRate, setEditingFeeRate] = useState<"processing" | "service" | null>(null);
   const [otherDeductions, setOtherDeductions] = useState<{ name: string; amount: string }[]>([]);
-  // Configured fees (Settings → Fees) that auto-apply to the selected product,
-  // e.g. a percentage "Insurance Premium" scoped to Cash Advance + Salary Loan.
-  const [fees, setFees] = useState<Fee[]>([]);
-  // Set only when the member drain gave up with pages outstanding, i.e. the
-  // member picker is knowingly missing people. Null means complete.
-  const [memberShortfall, setMemberShortfall] = useState<{
-    shown: number;
-    total: number | null;
-  } | null>(null);
-  // Same, for the officer drain: set only when the Account Officer picker is
-  // knowingly missing staff. Null means complete.
-  const [officerShortfall, setOfficerShortfall] = useState<UserListShortfall | null>(null);
+  // Deductions the form shows but does not edit — the product's notarial fee,
+  // or one stored on the loan being edited — sent back unchanged.
+  const [carriedDeductions, setCarriedDeductions] = useState<LoanDeduction[]>([]);
 
-  // ── Fetch borrowers, products, users — and the loan when editing ──
+  // ── Fetch products — and the loan when editing ──
   useEffect(() => {
+    // Set by the cleanup, so Strict Mode's discarded first mount (or a real
+    // unmount) neither writes state nor toasts.
+    let cancelled = false;
     async function fetchData() {
       setLoadingData(true);
 
-      const [borrowersResult, productsResult, usersResult, feesResult, loanResult] =
+      const [productsResult, loanResult, approvalResult] =
         await Promise.allSettled([
-          // members_only: pending and rejected applicants are not loan-eligible,
-          // and StoreLoanRequest only validates `exists:borrowers,id` — there is no
-          // server-side status gate behind this picker.
-          // Drained across pages. `per_page: 200` was clamped to 100 by
-          // BorrowerController without a word, so member 101 onwards could not
-          // be picked and could not be lent to from this screen at all.
-          borrowerService.listAll({ members_only: 1 }),
-          loanProductService.list(),
-          // Drained, and filtered to active on the server. This was
-          // `userService.list()` with no arguments — the endpoint's default
-          // page of 15, newest first — so from the 16th user on, the
-          // longest-serving officers were the ones missing from the picker.
-          userService.listAll({ status: "active" }),
-          feeService.list(),
+          canListProducts ? loanProductService.listAll().then(completeRows) : [],
           editLoanId ? loanService.detail(editLoanId) : Promise.resolve(null),
+          inApproval && editLoanId ? loanService.approvalEditState(editLoanId) : Promise.resolve(null),
         ]);
+      if (cancelled) return;
 
-      if (feesResult.status === "fulfilled") {
-        const feeData = Array.isArray(feesResult.value)
-          ? feesResult.value
-          : (feesResult.value as unknown as { data: Fee[] }).data ?? [];
-        setFees(feeData);
+      // The approval edit opens only on the server's yes, and returns to the
+      // approval card in words otherwise.
+      if (inApproval && editLoanId) {
+        const state = approvalResult.status === "fulfilled" ? readApprovalEditState(approvalResult.value) : null;
+        if (!state?.can_edit) {
+          toast.error(state?.reason ?? "You can't edit this loan at its approval step right now.");
+          router.push(approvalCardHref(editLoanId));
+          return;
+        }
+        setApprovalEdit(state);
       }
 
-      if (borrowersResult.status === "fulfilled") {
-        const memberDrain = borrowersResult.value;
-        setBorrowers(memberDrain.rows);
-        setMemberShortfall(
-          memberDrain.truncated
-            ? { shown: memberDrain.rows.length, total: memberDrain.total }
-            : null,
-        );
-      } else {
-        toast.error("We couldn't load members. Please try again.");
-      }
-
-      let productsList: LoanProduct[] = [];
       if (productsResult.status === "fulfilled") {
-        productsList = Array.isArray(productsResult.value)
-          ? productsResult.value
-          : (productsResult.value as unknown as { data: LoanProduct[] }).data ?? [];
-        setProducts(productsList);
+        setProducts(productsResult.value);
       } else {
         toast.error("We couldn't load loan products. Please try again.");
-      }
-
-      if (usersResult.status === "fulfilled") {
-        const officers = toUserList(usersResult.value);
-        // Still filtered here too, so the picker's rule does not hang on the
-        // server honouring `?status=`.
-        setUsers(officers.users.filter((u) => u.status === "active"));
-        setOfficerShortfall(officers.shortfall);
       }
 
       // Hydrate form state from the loan being edited. Runs after products
@@ -439,29 +351,40 @@ function NewLoanApplicationInner() {
         if (loanResult.status === "fulfilled" && loanResult.value) {
           const loan = loanResult.value;
           setExistingLoan(loan);
-          const l = loan as unknown as Record<string, unknown>;
           const borrowerIdVal = loan.borrower?.id ?? loan.borrower_id ?? null;
           if (borrowerIdVal) setBorrowerId(Number(borrowerIdVal));
+          setKnownMembers((known) => rememberMembers(known, loanMemberOptions(loan)));
           const coMakerIdList: number[] = Array.isArray(loan.co_makers)
-            ? loan.co_makers.map((c) => c.id).filter((id): id is number => typeof id === "number")
+            ? loan.co_makers.map((c) => c.borrower_id).filter((id): id is number => typeof id === "number")
             : [];
           setCoMakerIds(coMakerIdList.length > 0 ? coMakerIdList : [null]);
-          const aoId = (l.account_officer_id as number | undefined) ?? null;
-          if (aoId) setAccountOfficerId(aoId);
+          if (loan.account_officer) setAccountOfficer(loan.account_officer);
           setPurpose(loan.purpose ?? "");
           const productIdVal = loan.loan_product?.id ?? loan.loan_product_id ?? null;
           if (productIdVal) setProductId(String(productIdVal));
           setPrincipalAmount(String(loan.principal_amount ?? ""));
-          setTermMonths(String(loan.term ?? loan.term_months ?? ""));
+          setTermValue(String(loan.term ?? loan.term_months ?? ""));
           setPaymentFrequency(String(loan.frequency ?? loan.payment_frequency ?? "monthly"));
-          setInterestRate(loan.interest_rate != null ? String(Math.round(Number(loan.interest_rate))) : "");
-          const rawInterest = String(loan.interest_method ?? loan.interest_type ?? "straight");
-          setInterestType(rawInterest === "fixed" ? "straight" : rawInterest);
+          setInterestRate(decimalInputValue(loan.interest_rate));
           setScbAmount(loan.scb_amount != null ? String(loan.scb_amount) : "");
-          if (loan.start_date) setReleaseDate(new Date(loan.start_date));
+          if (loan.start_date) setReleaseDate(calendarDate(loan.start_date));
           if (loan.policy_exception) {
             setPolicyException(true);
             setPolicyExceptionDetails(loan.policy_exception_details ?? "");
+          }
+          // Fees as saved on this loan, not as its product has them today. The
+          // product is only the starting point for a loan with none stored.
+          const loanProduct = productsResult.status === "fulfilled"
+            ? productsResult.value.find((p) => p.id === Number(productIdVal))
+            : undefined;
+          const deductionFields =
+            storedDeductionFields(loan.deductions) ??
+            (loanProduct ? productDeductionFields(loanProduct) : null);
+          if (deductionFields) {
+            setProcessingFeeRate(deductionFields.processingFeeRate);
+            setServiceFeeRate(deductionFields.serviceFeeRate);
+            setOtherDeductions(deductionFields.otherDeductions);
+            setCarriedDeductions(deductionFields.carried);
           }
         } else {
           toast.error("We couldn't load this loan. Redirecting…");
@@ -472,49 +395,61 @@ function NewLoanApplicationInner() {
       setLoadingData(false);
     }
     fetchData();
+    return () => {
+      cancelled = true;
+    };
     // Re-fetch if user switches between create and edit in the same tab
-  }, [editLoanId, router]);
+  }, [editLoanId, inApproval, router, canListProducts]);
 
   // ── Collateral types: load once on mount ──
   useEffect(() => {
+    if (!canListCollaterals) return;
     let cancelled = false;
     collateralTypeService
-      .list()
+      .listAll()
+      .then(completeRows)
       .then((rows) => {
         if (!cancelled) setCollateralTypes(rows);
       })
-      .catch(() => {
-        // Non-blocking — picker will just lack type metadata.
+      .catch((err) => {
+        // Non-blocking, but not silent: without types a share-capital
+        // collateral is valued at its recorded amount instead of the member's
+        // balance.
+        if (!cancelled && !isRoleWithoutAccess(err)) {
+          toast.error("We couldn't load the collateral types, so collateral values may be wrong. Please reload before attaching collateral.");
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [canListCollaterals]);
 
   // ── Available collaterals: rebuild whenever the borrower changes ──
   // Filters out collaterals already locked to a different active loan
   // (in edit mode the loan being edited is excluded from the lock).
   useEffect(() => {
-    if (borrowerId == null) {
+    if (borrowerId == null || !canListCollaterals) {
       setAvailableCollaterals([]);
       return;
     }
     let cancelled = false;
     (async () => {
       try {
-        // One request. `active_loans` on each row is the server's answer to
-        // "is this already pledged", across the whole active loan book — no
+        // One request today. `active_loans` on each row is the server's answer
+        // to "is this already pledged", across the whole active loan book — no
         // loan list to page and no per-loan attachment fan-out to bound.
-        const collateralRows = await collateralService.list({
-          borrower_id: borrowerId,
-        });
+        // Drained so a paginated `/collaterals` cannot hand the picker page 1
+        // as the member's whole set.
+        const collateralRows = completeRows(
+          await collateralService.listAll({ borrower_id: borrowerId }),
+        );
         const typeById = new Map(collateralTypes.map((t) => [t.id, t]));
         const needsScBalance = collateralRows.some(
           (c) =>
             typeById.get(c.collateral_type_id)?.source === "share_capital",
         );
         const scBalance = needsScBalance
-          ? await getShareCapitalBalance(borrowerId)
+          ? await getShareCapitalBalance(borrowerId, canReadShareCapital)
           : null;
         const enriched: CollateralValueRow[] = collateralRows.map((c) => {
           const t = typeById.get(c.collateral_type_id);
@@ -525,82 +460,80 @@ function NewLoanApplicationInner() {
             // the user must be able to keep the security it already holds.
             lock: collateralLock(c, { exceptLoanId: editLoanId }),
             // `value_unknown` when this is a share-capital collateral whose
-            // ledger could not be read in full. Attaching such a row would
-            // write its value onto the loan as `snapshot_value` — a permanent
-            // appraisal derived from part of a ledger — so the picker refuses
-            // it below rather than booking one.
+            // balance could not be read. The server refuses to value such a
+            // row for this role (a 422 on the preview), so the picker refuses
+            // it below rather than offering a row the form can't price.
             ...collateralValue(c, t, scBalance),
           };
         });
         if (!cancelled) setAvailableCollaterals(enriched);
-      } catch {
-        if (!cancelled) setAvailableCollaterals([]);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [borrowerId, collateralTypes, editLoanId]);
-
-  // ── Edit mode: prefill selected collaterals from the loan ──
-  useEffect(() => {
-    if (!editLoanId) return;
-    if (collateralTypes.length === 0) return;
-    if (availableCollaterals.length === 0) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const links = await collateralService.listForLoan(editLoanId);
+      } catch (err) {
         if (cancelled) return;
-        const byId = new Map(availableCollaterals.map((c) => [c.id, c]));
-        // Rows are CollateralResource objects: the collateral id is `id`, and
-        // the booked amount is under `pivot`. They were read as `collateral_id`
-        // and `snapshot_value`, which the endpoint has never sent — so this
-        // prefill silently produced an empty list and edit mode looked as
-        // though the loan had no collateral attached.
-        const prefilled = links
-          .map((link) => {
-            const c = byId.get(link.id);
-            return c
-              ? {
-                  collateral: c,
-                  snapshot_value: link.pivot?.snapshot_value ?? c.effective_value,
-                }
-              : null;
-          })
-          .filter(
-            (
-              v,
-            ): v is {
-              collateral: CollateralValueRow;
-              snapshot_value: number;
-            } => v !== null,
-          );
-        setSelectedCollaterals(prefilled);
-      } catch {
-        // Non-blocking
+        setAvailableCollaterals([]);
+        if (!isRoleWithoutAccess(err)) {
+          toast.error("We couldn't load this member's collaterals. Please try again.");
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [editLoanId, collateralTypes, availableCollaterals]);
+  }, [borrowerId, collateralTypes, editLoanId, canListCollaterals, canReadShareCapital]);
 
-  // Co-makers: all borrowers except the selected borrower and already-picked co-makers
-  const availableCoMakersFor = useCallback(
-    (currentIndex: number) => {
-      const pickedElsewhere = new Set(
-        coMakerIds.filter((id, i) => id !== null && i !== currentIndex) as number[]
-      );
-      return borrowers.filter((b) => b.id !== borrowerId && !pickedElsewhere.has(b.id));
-    },
-    [borrowers, borrowerId, coMakerIds]
+  // ── Edit mode: the loan's attached collaterals ──
+  // Read on their own, not after the collateral types and the member's
+  // collaterals: waiting on those left a loan whose member has none
+  // registered, or whose list was slow or failed, with no collaterals on the
+  // form, and saving then detached them all. Save waits for this read
+  // (`collateralSaveBlock`), because the save states the loan's collaterals
+  // from it.
+  const tracksCollaterals = tracksEditCollaterals(isEditMode, canListCollaterals);
+  const [collateralReload, setCollateralReload] = useState(0);
+  const [collateralResult, setCollateralResult] = useState<EditCollateralResult | null>(null);
+  useEffect(() => {
+    if (!editLoanId || !canListCollaterals) return;
+    const request = `${editLoanId}:${collateralReload}`;
+    let cancelled = false;
+    collateralService
+      .listForLoan(editLoanId)
+      .then((links) => {
+        if (cancelled) return;
+        const attached = attachedCollateralRows(links, editLoanId);
+        setSelectedCollaterals(attached);
+        setCollateralResult({ request, attached, error: null });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setCollateralResult({
+          request,
+          attached: null,
+          error: getErrorMessage(err, "Please try again."),
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [editLoanId, canListCollaterals, collateralReload]);
+  const collateralLoad = tracksCollaterals
+    ? editCollateralLoad(collateralResult, `${editLoanId}:${collateralReload}`)
+    : null;
+  const collateralBlock = collateralSaveBlock(collateralLoad);
+  // In edit mode the collaterals can be changed once the loan's are known, and
+  // only by a role that may change them; otherwise the save never states them.
+  const canEditCollaterals = canChangeCollaterals(isEditMode, collateralLoad, canUpdateCollaterals);
+  const attachedCollaterals = statedAttachedCollaterals(
+    isEditMode,
+    collateralLoad,
+    canUpdateCollaterals,
+    collateralResult,
   );
 
   // ── Derived ──
-  const selectedBorrower = useMemo(
-    () => borrowers.find((b) => b.id === borrowerId) ?? null,
-    [borrowerId, borrowers]
+  const selectedBorrower = borrowerId !== null ? knownMembers[borrowerId] ?? null : null;
+  const member = memberPicker(
+    isEditMode,
+    selectedBorrower?.full_name ?? null,
+    existingLoan?.borrower?.full_name ?? existingLoan?.borrower?.name ?? null,
   );
   const selectedProduct = useMemo(
     () => (productId ? products.find((p) => p.id === Number(productId)) ?? null : null),
@@ -616,63 +549,79 @@ function NewLoanApplicationInner() {
     return raw ? [String(raw)] : [];
   }, [selectedProduct]);
 
+  // `term` is a length in the loan's unit — months unless it says days — and
+  // the rate is quoted per the loan's rate period: an edit's own, copied from
+  // its product when it was made, else the product's.
+  const termsBasis = useMemo(
+    () => loanTermsBasis(isEditMode ? existingLoan : null, selectedProduct),
+    [isEditMode, existingLoan, selectedProduct],
+  );
+  const termUnit = termsBasis.termUnit;
+  const rateFrequency = termsBasis.rateFrequency;
+  // On the approval edit, a term or rate whose product range is now in other
+  // terms stays as it is (the server refuses a change in the same words).
+  const termLocked = inApproval && termsBasis.termUnitMoved !== null;
+  const rateLocked = inApproval && termsBasis.ratePeriodMoved !== null;
   const principal = parseFloat(principalAmount) || 0;
-  const term = parseInt(termMonths) || 0;
+  const term = parseInt(termValue) || 0;
   const rate = parseFloat(interestRate) || 0;
   const scb = parseFloat(scbAmount) || 0;
 
+  // A restructure edited here (one sent back for approval is): the server
+  // exempts it from the product's minimum and build-up range, and it carries
+  // remarks of its own.
+  const isRestructureEdit = isEditMode && existingLoan?.is_restructure === true;
+  // A restructure's source loan, named by the form's one preview beside the
+  // edited loan (needs loans:restructure).
+  const restructureSourceId = restructureEditSourceId({
+    isRestructureEdit,
+    sourceLoanId: existingLoan?.source_loan_id,
+    canRestructure,
+  });
+  const storedPrincipal =
+    isRestructureEdit && existingLoan?.principal_amount != null ? Number(existingLoan.principal_amount) : null;
+  // Asked for by the server, and only while the principal differs from the
+  // stored one (the server keeps the stored remarks otherwise).
+  const remarksNeeded = remarksRequired(remarksRequiredMessage, principal, storedPrincipal);
+
   // Validation messages
   const principalError = useMemo(() => {
-    if (!selectedProduct || !principalAmount) return null;
-    if (principal < selectedProduct.min_amount)
-      return `Minimum amount is ${formatCurrency(selectedProduct.min_amount)}`;
-    if (principal > selectedProduct.max_amount)
-      return `Maximum amount is ${formatCurrency(selectedProduct.max_amount)}`;
-    return null;
-  }, [selectedProduct, principalAmount, principal]);
+    if (!principalAmount) return null;
+    return principalRangeError(principal, selectedProduct, { isRestructure: isRestructureEdit, storedPrincipal });
+  }, [selectedProduct, principalAmount, principal, isRestructureEdit, storedPrincipal]);
 
   const termError = useMemo(() => {
-    if (!selectedProduct || !termMonths) return null;
+    if (!selectedProduct || !termValue || termLocked) return null;
     if (term < selectedProduct.min_term)
-      return `Minimum term is ${selectedProduct.min_term} month(s)`;
+      return `Minimum term is ${selectedProduct.min_term} ${termUnitNoun(termUnit)}`;
     if (term > selectedProduct.max_term)
-      return `Maximum term is ${selectedProduct.max_term} months`;
+      return `Maximum term is ${selectedProduct.max_term} ${termUnitNoun(termUnit)}`;
     return null;
-  }, [selectedProduct, termMonths, term]);
+  }, [selectedProduct, termValue, term, termUnit, termLocked]);
 
   // SCB validation — required when the product says so; range-checked when
-  // the product defines min/max. Otherwise optional (any value >= 0 is fine).
-  const scbError = useMemo(() => {
-    if (!scbAmount || scb === 0) {
-      // Empty/zero SCB is only an error when the product requires it
-      return selectedProduct?.scb_required
-        ? "Share Capital Build-Up amount is required"
-        : null;
-    }
-    if (scb < 0) return "SCB cannot be negative";
-    const min = selectedProduct?.min_scb ?? 0;
-    const max = selectedProduct?.max_scb ?? 0;
-    if (min > 0 && scb < min) return `Minimum SCB is ${formatCurrency(min)}`;
-    if (max > 0 && scb > max) return `Maximum SCB is ${formatCurrency(max)}`;
-    return null;
-  }, [selectedProduct, scbAmount, scb]);
+  // the product defines min/max. A restructure is held to the server's rule
+  // only (any amount from ₱0.00).
+  const scbError = useMemo(
+    () => scbRuleError(scbAmount, selectedProduct, isRestructureEdit),
+    [selectedProduct, scbAmount, isRestructureEdit],
+  );
 
   // Fees — percent × principal. The percent is user-editable but bounded
   // by the product's min/max range (if defined on the product).
   const processingFeeRange = useMemo(() => ({
-    min: Math.round(Number(selectedProduct?.min_processing_fee ?? 0)),
-    max: Math.round(Number(selectedProduct?.max_processing_fee ?? selectedProduct?.processing_fee ?? 0)),
+    min: Number(selectedProduct?.min_processing_fee ?? 0),
+    max: Number(selectedProduct?.max_processing_fee ?? selectedProduct?.processing_fee ?? 0),
   }), [selectedProduct]);
   const serviceFeeRange = useMemo(() => ({
-    min: Math.round(Number(selectedProduct?.min_service_fee ?? 0)),
-    max: Math.round(Number(selectedProduct?.max_service_fee ?? selectedProduct?.service_fee ?? 0)),
+    min: Number(selectedProduct?.min_service_fee ?? 0),
+    max: Number(selectedProduct?.max_service_fee ?? selectedProduct?.service_fee ?? 0),
   }), [selectedProduct]);
 
 
-  const processingFeePercent = parseFloat(processingFeeRate) || (selectedProduct?.processing_fee ?? 0);
-  const serviceFeePercent = parseFloat(serviceFeeRate) || (selectedProduct?.service_fee ?? 0);
-  const processingFee = Math.round(principal * (processingFeePercent / 100));
-  const serviceFee = Math.round(principal * (serviceFeePercent / 100));
+  // A blank field stands for the product's rate; "0" waives the fee.
+  const processingFeePercent = feePercent(processingFeeRate, selectedProduct?.processing_fee);
+  const serviceFeePercent = feePercent(serviceFeeRate, selectedProduct?.service_fee);
 
   const processingFeePercentError = useMemo(() => {
     if (!selectedProduct || processingFeeRange.max <= 0) return null;
@@ -690,35 +639,34 @@ function NewLoanApplicationInner() {
     return null;
   }, [selectedProduct, serviceFeePercent, serviceFeeRange]);
 
-  const otherDed = otherDeductions.reduce((sum, d) => sum + Math.round(parseFloat(d.amount) || 0), 0);
+  // The deductions the application states, exactly as sent. What they come to
+  // in pesos is the server's preview, below.
+  const deductions = useMemo(
+    () =>
+      applicationDeductions({
+        processingFeePercent,
+        serviceFeePercent,
+        otherDeductions,
+        carried: carriedDeductions,
+      }),
+    [processingFeePercent, serviceFeePercent, otherDeductions, carriedDeductions],
+  );
+  // The two fee fields' own items in that list; carried items are matched on
+  // their own, so a carried fee sharing a name is never read as the field's.
+  const processingFeeInput = deductions.find(
+    (d) => d.type === "percentage" && d.name === PROCESSING_FEE_LABEL && !carriedDeductions.includes(d),
+  );
+  const serviceFeeInput = deductions.find(
+    (d) => d.type === "percentage" && d.name === SERVICE_FEE_LABEL && !carriedDeductions.includes(d),
+  );
 
-  // Configured fees scoped to the selected product. Percentage fees are
-  // computed off the principal; fixed fees use their flat value. These are a
-  // preview only — the backend re-applies them via computeDeductions on submit.
-  const applicableFees = useMemo(() => {
-    const pid = Number(productId);
-    if (!pid) return [];
-    return fees
-      .filter((f) => Array.isArray(f.applicable_product_ids) && f.applicable_product_ids.includes(pid))
-      .map((f) => ({
-        name: f.name,
-        amount:
-          f.type === "percentage"
-            ? Math.round(principal * (Number(f.value) / 100))
-            : Math.round(Number(f.value)),
-      }))
-      .filter((f) => f.amount > 0);
-  }, [fees, productId, principal]);
-  const configuredFeesTotal = applicableFees.reduce((sum, f) => sum + f.amount, 0);
-
-  const totalDeductions = processingFee + serviceFee + configuredFeesTotal + otherDed;
-  const netProceeds = principal - totalDeductions;
-
-  // Maturity date
-  const maturityDate = useMemo(() => {
-    if (!releaseDate || !term) return null;
-    return addMonths(releaseDate, term);
-  }, [releaseDate, term]);
+  // Shown read-only: the server builds the loan with its product's method.
+  const interestMethod = formInterestMethod({
+    product: selectedProduct,
+    storedMethod: existingLoan
+      ? (existingLoan.interest_method ?? existingLoan.interest_type ?? null)
+      : null,
+  });
 
   // Amortization preview — shown as soon as the core loan terms are valid.
   // SCB errors do NOT block the preview (we want the user to see the SCB
@@ -728,58 +676,73 @@ function NewLoanApplicationInner() {
     term > 0 &&
     rate > 0 &&
     paymentFrequency !== null &&
-    interestType !== null &&
+    interestMethod !== null &&
     releaseDate !== undefined &&
     !principalError &&
     !termError;
 
-  const amortizationSchedule = useMemo(() => {
-    if (!canShowAmortization || !releaseDate || !paymentFrequency || !interestType)
-      return [];
-    return computeAmortization(
-      principal,
-      rate,
-      interestType as InterestType,
-      term,
-      paymentFrequency as PaymentFrequency,
+  // The collateral total, security status, shortfall, maturity date,
+  // deductions, net proceeds and amortization schedule are the server's
+  // (`POST /loans/preview`), asked for whenever the terms, the deductions or
+  // the attached collaterals change. The form works none of them out: while a
+  // preview is on its way, or after one failed, it shows no figures.
+  const { view: preview, retry: retryPreview } = useLoanPreview(
+    loanPreviewRequest({
+      borrowerId,
+      sourceLoanId: restructureSourceId,
+      editLoanId,
+      productId,
+      principalAmount,
+      interestRate,
+      termValue,
+      paymentFrequency,
       releaseDate,
-      scb,
-    );
-  }, [
-    canShowAmortization,
-    principal,
-    rate,
-    interestType,
-    term,
-    paymentFrequency,
-    releaseDate,
-    scb,
-  ]);
-
-  const amortizationTotals = useMemo(() => {
-    return amortizationSchedule.reduce(
-      (acc, row) => ({
-        principal: acc.principal + row.principal,
-        interest: acc.interest + row.interest,
-        shareCapitalBuildUp: acc.shareCapitalBuildUp + row.shareCapitalBuildUp,
-        totalPayment: acc.totalPayment + row.totalPayment,
-      }),
-      { principal: 0, interest: 0, shareCapitalBuildUp: 0, totalPayment: 0 }
-    );
-  }, [amortizationSchedule]);
-
-  // ── Collaterals: total snapshot value + security status ──
-  const totalCollateralValue = useMemo(
-    () => selectedCollaterals.reduce((sum, c) => sum + c.snapshot_value, 0),
-    [selectedCollaterals],
+      scbAmount,
+      collaterals: selectedCollaterals,
+      heldCollaterals: isEditMode ? (collateralResult?.attached ?? null) : undefined,
+      // What the save would charge: the form's deductions once the product is
+      // known. Before then the save states none, and an edit keeps the loan's
+      // own, so the preview asks about those; a new loan asks about none yet.
+      deductions: selectedProduct
+        ? deductions
+        : existingLoan
+          ? storedDeductionInputs(existingLoan.deductions)
+          : null,
+      statesBuildUp: inApproval,
+    }),
+    inApproval ? editLoanId : null,
   );
-  const securityStatus = useMemo(
-    () =>
-      principal > 0
-        ? computeSecurityStatus(principal, totalCollateralValue)
-        : "unsecured",
-    [principal, totalCollateralValue],
+  const previewCollateral = preview.status === "ready" ? preview.preview.collateral : null;
+  const amortization = preview.status === "ready" ? preview.preview.amortization : null;
+  const previewMaturity = preview.status === "ready" ? preview.preview.maturity_date : null;
+  const previewDeductions = preview.status === "ready" ? preview.preview.deductions : null;
+  // A restructure's block from the same preview (it names the source loan):
+  // the source loan's restructurable balance, which may have moved since the
+  // restructure was approved (a payment, waiver or adjustment), so the most
+  // this restructure can take as principal; the shortfall; and what is
+  // collected from the member and paid out. All the server's; no hint while
+  // the preview loads, after it failed, or without loans:restructure.
+  const previewRestructure = preview.status === "ready" ? (preview.preview.restructure ?? null) : null;
+  const editRestructure = readRestructurePreview(previewRestructure);
+  const editShowsShortfall = restructureShortfallState(principal, editRestructure, canWriteOff).showsShortfall;
+  const restructureBalanceHint = restructurableBalanceHint(
+    editShowsShortfall,
+    editRestructure.shortfall,
+    editRestructure.restructurableBalance,
   );
+  // A collateral the preview refused is worded by whether this user can take
+  // it off the form: only when the collaterals can change, and in edit mode
+  // not one the loan already holds.
+  const heldIds = new Set(isEditMode ? (collateralResult?.attached ?? []).map((a) => a.collateral.id) : []);
+  const previewError =
+    preview.status === "error"
+      ? previewFailureText(
+          preview,
+          selectedCollaterals,
+          (row) => canEditCollaterals && !heldIds.has(row.collateral.id),
+        )
+      : null;
+
   // Picker rows: show all of the borrower's collaterals, but disable the
   // ones already selected here or locked to a different active loan.
   const pickerRows = useMemo(() => {
@@ -790,61 +753,51 @@ function NewLoanApplicationInner() {
       collateral: c,
       isSelected: selectedIds.has(c.id),
       isLocked: isCollateralLocked(c.lock),
-      // Not selectable: there is no value to attach it at. Refusing here is
-      // the point — the alternative is a loan secured at a figure nobody
-      // computed, which nothing downstream can tell from a real appraisal.
+      // Not selectable: the server won't value it for this role (the preview
+      // answers 422), so the form could show no total or security for it.
       isValueUnknown: c.value_unknown,
     }));
   }, [availableCollaterals, selectedCollaterals]);
 
   // ── Product Selection Handler ──
-  const handleProductChange = useCallback(
-    (value: string | null) => {
-      setProductId(value);
-      const product = products.find((p) => p.id === Number(value));
-      if (product) {
-        const apiProduct = product as unknown as Record<string, unknown>;
-        const rawRate = apiProduct.min_interest_rate ?? apiProduct.interest_rate ?? product.interest_rate;
-        setInterestRate(rawRate != null ? String(Math.round(Number(rawRate))) : "");
-        // Map API field names: interest_method/interest_type, "fixed" -> "straight"
-        const rawType = String(apiProduct.interest_method ?? product.interest_type ?? "straight");
-        setInterestType(rawType === "fixed" ? "straight" : rawType);
-        // Auto-select payment frequency from the product's frequencies array
-        const rawFreqs = apiProduct.frequencies ?? apiProduct.frequency ?? product.payment_frequency;
-        const freqArray = Array.isArray(rawFreqs) ? rawFreqs as string[] : rawFreqs ? [String(rawFreqs)] : ["monthly"];
-        setPaymentFrequency(String(freqArray[0] ?? "monthly"));
-        // Seed fee percent with the product's default (max of the range if available,
-        // else the legacy single fee field). Rounded to whole numbers.
-        const rawProcessingPct =
-          apiProduct.max_processing_fee ?? apiProduct.processing_fee ?? product.processing_fee;
-        const rawServicePct =
-          apiProduct.max_service_fee ?? apiProduct.service_fee ?? product.service_fee;
-        setProcessingFeeRate(
-          rawProcessingPct != null ? String(Math.round(Number(rawProcessingPct))) : ""
-        );
-        setServiceFeeRate(
-          rawServicePct != null ? String(Math.round(Number(rawServicePct))) : ""
-        );
-        // Seed SCB amount when the product requires it: default to the product's
-        // minimum. The loan officer can adjust up to the product's maximum.
-        if (product.scb_required) {
-          setScbAmount(String(product.min_scb ?? ""));
-        } else {
-          setScbAmount("");
-        }
+  function handleProductChange(value: string | null) {
+    setProductId(value);
+    const product = products.find((p) => p.id === Number(value));
+    if (product) {
+      const apiProduct = product as unknown as Record<string, unknown>;
+      const rawRate = apiProduct.min_interest_rate ?? apiProduct.interest_rate ?? product.interest_rate;
+      setInterestRate(decimalInputValue(rawRate));
+      // Auto-select payment frequency from the product's frequencies array
+      const rawFreqs = apiProduct.frequencies ?? apiProduct.frequency ?? product.payment_frequency;
+      const freqArray = Array.isArray(rawFreqs) ? rawFreqs as string[] : rawFreqs ? [String(rawFreqs)] : ["monthly"];
+      setPaymentFrequency(String(freqArray[0] ?? "monthly"));
+      // Seed the fees with exactly what the server charges from this product
+      // when it adds them itself. Other deductions are the operator's own and
+      // stay.
+      const productFees = productDeductionFields(product);
+      setProcessingFeeRate(productFees.processingFeeRate);
+      setServiceFeeRate(productFees.serviceFeeRate);
+      setCarriedDeductions(productFees.carried);
+      // Seed SCB amount when the product requires it: default to the product's
+      // minimum. The loan officer can adjust up to the product's maximum.
+      if (product.scb_required) {
+        setScbAmount(String(product.min_scb ?? ""));
+      } else {
+        setScbAmount("");
       }
-    },
-    [products]
-  );
+    }
+  }
 
   // ── Borrower Selection Handler ──
-  const handleBorrowerChange = useCallback((id: number | null) => {
-    setBorrowerId(id);
+  // A new application only: an edit's member is fixed (`memberPicker`).
+  function handleBorrowerChange(picked: MemberOption | null) {
+    if (picked) setKnownMembers((known) => rememberMembers(known, [picked]));
+    setBorrowerId(picked?.id ?? null);
     setCoMakerIds([null]);
     // Collaterals are per-borrower — drop any selections from the previous
     // member so they don't get accidentally attached to the new loan.
     setSelectedCollaterals([]);
-  }, []);
+  }
 
   // ── Co-Maker Slot Handlers ──
   function addCoMakerSlot() {
@@ -858,26 +811,49 @@ function NewLoanApplicationInner() {
     });
   }
 
-  function setCoMakerAt(index: number, id: number | null) {
-    setCoMakerIds((prev) => prev.map((v, i) => (i === index ? id : v)));
+  function setCoMakerAt(index: number, picked: MemberOption | null) {
+    if (picked) setKnownMembers((known) => rememberMembers(known, [picked]));
+    setCoMakerIds((prev) => prev.map((v, i) => (i === index ? (picked?.id ?? null) : v)));
+  }
+
+  // ── Steps ──
+  // The form's cards as steps; the Collaterals step only for a role that can
+  // view collaterals, as the card was.
+  const steps = useMemo(
+    () => loanFormSteps({ showCollaterals: canListCollaterals, isRestructureEdit }),
+    [canListCollaterals, isRestructureEdit],
+  );
+  const stepperRef = useRef<FormStepperHandle>(null);
+  // Every field the user still needs to fix, by field. Next checks the open
+  // step and lists its fields; Save lists them all in one pop-up, as before
+  // (`onInvalid` below), and the stepper opens the first step holding one.
+  const missingFields = loanFormMissing({
+    hasMember: borrowerId !== null,
+    hasProduct: productId !== null,
+    principalOk: principal > 0 && !principalError,
+    termOk: term > 0 && !termError,
+    hasFrequency: paymentFrequency !== null,
+    rateOk: rate > 0,
+    hasReleaseDate: releaseDate !== undefined,
+    scbInvalid: scbError !== null,
+    processingFeeInvalid: processingFeePercentError !== null,
+    serviceFeeInvalid: serviceFeePercentError !== null,
+    remarksMissing: isRestructureEdit && remarksNeeded && !restructureRemarks.trim(),
+  });
+  function validateStep(stepId: string): StepErrors | true {
+    const step = steps.find((s) => s.id === stepId);
+    return step ? stepErrorsOf(missingFields, step) : true;
+  }
+  // Next shows the open step's missing fields. Save (the stepper checks every
+  // step and opens the first that fails) shows every missing field at once.
+  function onInvalid(errors: StepErrors, _stepId: string, trigger: StepCheckTrigger) {
+    notifyValidation(invalidStepMessages(trigger, errors, missingFields));
   }
 
   // ── Submit ──
   const handleSubmit = async () => {
-    // Collect every field the user still needs to fix and surface them in a
-    // single consolidated pop-up instead of inline red messages.
-    const missing: string[] = [];
-    if (borrowerId === null) missing.push("Borrower");
-    if (productId === null) missing.push("Loan product");
-    if (!(principal > 0) || principalError) missing.push("Principal amount");
-    if (!(term > 0) || termError) missing.push("Term");
-    if (paymentFrequency === null) missing.push("Payment frequency");
-    if (interestType === null) missing.push("Interest type");
-    if (!(rate > 0)) missing.push("Interest rate");
-    if (releaseDate === undefined) missing.push("Release date");
-    if (scbError) missing.push("Share Capital Build-Up");
-    if (processingFeePercentError) missing.push("Processing fee");
-    if (serviceFeePercentError) missing.push("Service fee");
+    if (collateralBlock) return;
+    const missing = Object.values(missingFields);
     if (missing.length > 0) {
       notifyValidation(missing);
       return;
@@ -887,12 +863,13 @@ function NewLoanApplicationInner() {
       borrowerId === null ||
       productId === null ||
       paymentFrequency === null ||
-      interestType === null ||
       releaseDate === undefined
     )
       return;
     try {
       setSubmitting(true);
+      // Keep LOAN_FORM_SENT_FIELDS (./_lib/loan-form-steps) in step with the
+      // keys sent here and in saveLoanEdit (`collaterals`).
       const payload = {
         borrower_id: borrowerId,
         co_maker_ids: coMakerIds.filter((id): id is number => id !== null),
@@ -900,28 +877,78 @@ function NewLoanApplicationInner() {
         principal_amount: principal,
         // Loan terms chosen on the form. These were previously omitted from
         // the payload, so the backend fell back to product defaults (e.g. the
-        // product's max term) — making the saved term/frequency/method, and
-        // the backend-computed maturity date and total payable, differ from
-        // what the user entered. The backend stores interest_method verbatim
-        // ("straight"/"diminishing"), so send the form value as-is.
+        // product's max term) — making the saved term/frequency, and the
+        // backend-computed maturity date and total payable, differ from what
+        // the user entered. No `interest_method`: the server snapshots it from
+        // the product and ignores one sent.
         term,
         frequency: paymentFrequency,
         interest_rate: rate,
-        interest_method: interestType,
         start_date: formatDateISO(releaseDate),
         ...(scb > 0 && { scb_amount: scb }),
-        ...(accountOfficerId && { account_officer_id: accountOfficerId }),
+        // Stated whenever the product is known. Sent none, the server charged
+        // the product's own fee rates and dropped every edit and other
+        // deduction made here. Without the product (its list failed to load)
+        // they are left to the server, as before: an edit stating an empty list
+        // would clear the loan's fees.
+        ...(selectedProduct && { deductions }),
+        // A new loan states its officer, `null` for none. An edit sends one
+        // only when it changed, so an officer deactivated since does not
+        // block saving the rest of the loan.
+        ...(isEditMode
+          ? editedAccountOfficer(accountOfficer, existingLoan?.account_officer ?? null)
+          : { account_officer_id: accountOfficer?.id ?? null }),
         ...(purpose.trim() && { purpose: purpose.trim() }),
         ...(policyException && {
           policy_exception: true,
           policy_exception_details: policyExceptionDetails.trim() || undefined,
         }),
+        // A restructure: its build-up as typed (₱0.00 included) and, when the
+        // principal moved, its remarks.
+        ...(isRestructureEdit &&
+          restructureEditFields({ principal, storedPrincipal, scb, remarks: restructureRemarks })),
       };
+
+      // The Chairman/Chairwoman's edit at their approval step: the loan stays
+      // at their step, so it returns to the approval card to approve or forward.
+      // Without its version it is refused, never saved as a plain edit.
+      const save = loanFormSave({ inApproval, editLoanId, version: approvalEdit?.version ?? null });
+      if (save.kind === "refused") {
+        toast.error(save.message);
+        return;
+      }
+      if (save.kind === "approval") {
+        const saved = await saveApprovalEdit(
+          save.loanId,
+          approvalEditPayload({
+            payload,
+            version: save.version,
+            scbAmount: scb,
+            purpose,
+            coMakerIds: payload.co_maker_ids,
+            storedCoMakerIds: (existingLoan?.co_makers ?? [])
+              .map((c) => c.borrower_id)
+              .filter((id): id is number => typeof id === "number"),
+            canPickMembers: canListMembers,
+            selected: selectedCollaterals,
+            attached: attachedCollaterals,
+          }),
+        );
+        toast.success("Loan updated", { description: approvalEditSavedMessage(approvalEdit?.step?.name ?? null) });
+        router.push(approvalCardHref(saved.id ?? save.loanId));
+        return;
+      }
 
       // Edit mode — update existing loan, skip auto-submit (the loan is
       // already beyond draft and already in the approval chain).
       if (isEditMode && editLoanId) {
-        const updated = await loanService.update(editLoanId, payload);
+        // Collaterals go in the same update, and only when they changed.
+        const updated = await saveLoanEdit(
+          editLoanId,
+          payload,
+          selectedCollaterals,
+          attachedCollaterals,
+        );
 
         if (policyException && policyExceptionLetter) {
           try {
@@ -934,39 +961,6 @@ function NewLoanApplicationInner() {
           }
         }
 
-        // Reconcile collaterals: detach what's no longer selected, attach
-        // the new picks. Snapshot value is captured at attach time so
-        // post-edit ledger drift doesn't move security status silently.
-        try {
-          const existingLinks = await collateralService.listForLoan(
-            updated.id,
-          );
-          const selectedIds = new Set(
-            selectedCollaterals.map((s) => s.collateral.id),
-          );
-          await Promise.all(
-            existingLinks
-              .filter((l) => !selectedIds.has(l.id))
-              .map((l) => collateralService.detachFromLoan(updated.id, l.id)),
-          );
-          // Re-attaching one the loan already holds is a 422, so skip those:
-          // `attach()` rejects a duplicate rather than treating it as a no-op.
-          const alreadyAttached = new Set(existingLinks.map((l) => l.id));
-          await Promise.all(
-            selectedCollaterals
-              .filter((s) => !alreadyAttached.has(s.collateral.id))
-              .map((s) =>
-                collateralService.attachToLoan(
-                  updated.id,
-                  s.collateral.id,
-                  s.snapshot_value,
-                ),
-              ),
-          );
-        } catch {
-          toast.warning("Loan updated but some collaterals failed to sync");
-        }
-
         toast.success("Loan application updated");
         router.push(`/loans/${updated.id}`);
         return;
@@ -975,18 +969,15 @@ function NewLoanApplicationInner() {
       // Create mode
       const loan = await loanService.create(payload);
 
-      // Attach selected collaterals. Snapshot value is captured here so
-      // a future change to the underlying balance / amount does not retro-
-      // actively change this loan's security status.
+      // Attach selected collaterals, by id. The server sets the value the
+      // loan holds each at (its amount, or the member's share capital
+      // balance) as it attaches it, so a later change to the collateral does
+      // not change this loan's security status.
       if (selectedCollaterals.length > 0 && loan.id) {
         try {
           await Promise.all(
             selectedCollaterals.map((s) =>
-              collateralService.attachToLoan(
-                loan.id,
-                s.collateral.id,
-                s.snapshot_value,
-              ),
+              collateralService.attachToLoan(loan.id, s.collateral.id),
             ),
           );
         } catch {
@@ -1010,14 +1001,14 @@ function NewLoanApplicationInner() {
       }
 
       // Auto-forward to Manager: creating the loan IS the Loan Processor's action,
-      // so skip the redundant "Submit for Review" click on the detail page.
+      // so skip the redundant "Submit for Approval" click on the detail page.
       let forwarded = false;
       try {
         await loanService.submit(loan.id);
         forwarded = true;
       } catch {
         toast.warning(
-          "Loan created but could not be forwarded for review. Open the loan to submit it manually."
+          "Loan created but could not be forwarded for approval. Open the loan to submit it manually."
         );
       }
 
@@ -1028,1038 +1019,1168 @@ function NewLoanApplicationInner() {
       });
       router.push(`/loans/${loan.id}`);
     } catch (err: unknown) {
-      notifyError(
-        err,
-        isEditMode
-          ? "We couldn't update this loan. Please try again."
-          : "We couldn't create this loan. Please try again.",
+      // The server asks for a restructure's remarks: the field turns required.
+      const remarksAsked = remarksRefusal(err);
+      if (remarksAsked !== null) setRemarksRequiredMessage(remarksAsked);
+      // A 422 opens the first step holding one of its fields.
+      stepperRef.current?.showErrors(serverFieldErrors(err));
+      toast.error(
+        formatProductRangeMessage(
+          getErrorMessage(
+            err,
+            isEditMode
+              ? "We couldn't update this loan. Please try again."
+              : "We couldn't create this loan. Please try again.",
+          ),
+        ),
       );
     } finally {
       setSubmitting(false);
     }
   };
 
+  function onFormSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void handleSubmit();
+  }
+
   if (loadingData) {
-    return (
-      <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
-        <Spinner className="size-6 text-muted-foreground" />
-      </div>
-    );
+    return <PageLoader />;
   }
 
   return (
-    <RouteGuard
-      permission={isEditMode ? "loans:update" : "loans:create"}
-      pageName={isEditMode ? "Edit Loan Application" : "New Loan Application"}
-    >
-    <div className="mx-auto w-full max-w-4xl space-y-6 pb-10">
+    <PageFill className="pb-10 fit:pb-0">
       {/* ── Header ── */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
           <Link
-            href={isEditMode && editLoanId ? `/loans/${editLoanId}` : "/loans"}
+            href={
+              inApproval && editLoanId
+                ? approvalCardHref(editLoanId)
+                : isEditMode && editLoanId
+                  ? `/loans/${editLoanId}`
+                  : "/loans"
+            }
             className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             <ArrowLeft className="size-4" />
             {isEditMode ? "Back to Loan" : "Back to Loans"}
           </Link>
           <h1 className="text-2xl font-bold tracking-tight">
-            {isEditMode ? "Edit Loan Application" : "New Loan Application"}
+            {isEditMode ? EDIT_LOAN_TITLE : "New Loan Application"}
           </h1>
           {isEditMode && existingLoan?.application_number && (
             <p className="text-sm text-muted-foreground font-mono">
               {existingLoan.application_number}
             </p>
           )}
+          {/* The approval edit says where the loan stays in one line, not a
+              banner, so the form body keeps its fields at 1024x640. */}
+          {inApproval && approvalEdit && (
+            <p role="status" className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Info className="size-3 shrink-0 text-brand-orange" aria-hidden="true" />
+              {approvalEditHeaderNote(approvalEdit.step?.name ?? null)}
+            </p>
+          )}
         </div>
       </div>
 
-      {memberShortfall && (
-        <IncompleteListNotice
-          shown={memberShortfall.shown}
-          total={memberShortfall.total}
-          noun="members"
-          consequence="Some members are missing from the member and co-maker pickers below and cannot be selected."
-        />
-      )}
+      <MissingAccessNotice missing={accessPlacement.aboveForm} className="shrink-0" />
 
-      {officerShortfall && (
-        <IncompleteListNotice
-          shown={officerShortfall.shown}
-          total={officerShortfall.total}
-          noun="active users"
-          consequence="Some staff are missing from the Account Officer picker below and cannot be assigned."
-        />
-      )}
+      {/* One step per card. At fit the open step scrolls under the rail and
+          Back, Next and the submit stay at the foot. */}
+      <form noValidate onSubmit={onFormSubmit} className={FIT_CLASSES.section}>
+        <FormStepper
+          ref={stepperRef}
+          steps={steps}
+          mode={isEditMode ? "edit" : "create"}
+          validateStep={validateStep}
+          onInvalid={onInvalid}
+          submitLabel={isEditMode ? "Save Changes" : "Submit Loan Application"}
+          submittingLabel={isEditMode ? "Saving..." : "Submitting..."}
+          submitting={submitting}
+          submitDisabled={collateralBlock !== null}
+          submitDescribedBy={collateralBlock ? "save-blocked-reason" : undefined}
+          actions={
+            collateralBlock ? (
+              <p id="save-blocked-reason" className="text-sm text-muted-foreground">
+                {collateralBlock}
+              </p>
+            ) : undefined
+          }
+        >
+          {/* ── Step 1: Borrower & Co-Maker ── */}
+          <FormStep id="member">
+              <div className={FORM_STEP_GRID.grid}>
+                {/* Borrower */}
+                <div className="flex flex-col gap-2" data-field="borrower_id">
+                  <div className="flex h-6 items-center">
+                    <Label htmlFor={member.locked ? "loan-member" : undefined}>
+                      Member <span className="text-destructive">*</span>
+                    </Label>
+                  </div>
+                  {member.locked ? (
+                    <>
+                      <Input
+                        id="loan-member"
+                        value={member.label ?? ""}
+                        disabled
+                        readOnly
+                        aria-describedby="loan-member-note"
+                      />
+                      <p id="loan-member-note" className="text-xs text-muted-foreground">
+                        The member can&rsquo;t be changed after the application is
+                        created.
+                      </p>
+                    </>
+                  ) : (
+                  <MemberSearchPicker
+                    aria-label="Member"
+                    value={selectedBorrower}
+                    onChange={handleBorrowerChange}
+                    canSearch={canListMembers}
+                    placeholder={canListMembers ? "Search member..." : "Your role can't view members"}
+                  />
+                  )}
+                </div>
 
-      {/* ── Card 1: Borrower & Co-Maker ── */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Member & Co-Maker</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {/* Borrower */}
-            <div className="space-y-2">
-              <div className="flex h-6 items-center">
-                <Label>
-                  Member <span className="text-destructive">*</span>
-                </Label>
-              </div>
-              <Popover open={borrowerOpen} onOpenChange={setBorrowerOpen}>
-                <PopoverTrigger
-                  render={
-                    <button
+                {/* Co-Makers: the list grows and scrolls with the step */}
+                <div className="flex flex-col gap-2" data-field="co_maker_ids">
+                  <div className="flex h-6 items-center justify-between">
+                    <Label>Co-Maker{coMakerIds.length > 1 ? "s" : ""}</Label>
+                    {!coMakersLocked && (
+                    <Button
                       type="button"
-                      role="combobox"
-                      aria-expanded={borrowerOpen}
-                      className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-                    />
-                  }
-                >
-                  <span className={cn("truncate", !selectedBorrower && "text-muted-foreground")}>
-                    {selectedBorrower
-                      ? selectedBorrower.full_name
-                      : "Search member..."}
-                  </span>
-                  <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
-                </PopoverTrigger>
-                <PopoverContent className="w-(--anchor-width) p-0" align="start">
-                  <Command>
-                    <CommandInput placeholder="Type a name to search..." />
-                    <CommandList>
-                      <CommandEmpty>No member found.</CommandEmpty>
-                      <CommandGroup>
-                        {borrowers.map((b) => (
-                          <CommandItem
-                            key={b.id}
-                            value={`${b.full_name} ${b.borrower_code}`}
-                            onSelect={() => {
-                              handleBorrowerChange(
-                                b.id === borrowerId ? null : b.id
-                              );
-                              setBorrowerOpen(false);
-                            }}
-                          >
-                            <Check
-                              className={cn(
-                                "mr-2 size-4",
-                                borrowerId === b.id
-                                  ? "opacity-100"
-                                  : "opacity-0"
-                              )}
-                            />
-                            {b.full_name}{" "}
-                            <span className="text-muted-foreground">
-                              ({b.borrower_code})
-                            </span>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            {/* Co-Makers */}
-            <div className="space-y-2">
-              <div className="flex h-6 items-center justify-between">
-                <Label>Co-Maker{coMakerIds.length > 1 ? "s" : ""}</Label>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 gap-1 px-2 text-xs text-brand-orange hover:text-brand-orange hover:bg-brand-orange/10"
-                  onClick={addCoMakerSlot}
-                >
-                  <Plus className="h-3 w-3" />
-                  Add Co-Maker
-                </Button>
-              </div>
-              <div className="space-y-2">
-                {coMakerIds.map((selectedId, index) => {
-                  const options = availableCoMakersFor(index);
-                  const selected = selectedId ? borrowers.find((b) => b.id === selectedId) : null;
-                  const isOpen = openCoMakerIndex === index;
-                  return (
-                    <div key={index} className="flex items-center gap-2">
-                      <Popover
-                        open={isOpen}
-                        onOpenChange={(o) => setOpenCoMakerIndex(o ? index : null)}
-                      >
-                        <PopoverTrigger
-                          render={
-                            <button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 gap-1 px-2 text-xs text-brand-orange hover:text-brand-orange hover:bg-brand-orange/10"
+                      onClick={addCoMakerSlot}
+                    >
+                      <Plus className="h-3 w-3" />
+                      Add Co-Maker
+                    </Button>
+                    )}
+                  </div>
+                  {accessPlacement.coMakersNote && (
+                    <p className="text-xs text-muted-foreground">{accessPlacement.coMakersNote}</p>
+                  )}
+                  <div className="space-y-2">
+                    {coMakerIds.map((selectedId, index) => {
+                      const selected = selectedId ? knownMembers[selectedId] ?? null : null;
+                      return (
+                        <div key={index} className="flex items-center gap-2">
+                          <MemberSearchPicker
+                            aria-label={`Co-maker ${index + 1}`}
+                            value={selected}
+                            onChange={(picked) => setCoMakerAt(index, picked)}
+                            canSearch={canListMembers}
+                            exclude={[borrowerId, ...coMakerIds.filter((_, i) => i !== index)]}
+                            placeholder={
+                              canListMembers
+                                ? "Search co-maker (optional)..."
+                                : "Your role can't view members"
+                            }
+                          />
+                          {coMakerIds.length > 1 && !coMakersLocked && (
+                            <Button
                               type="button"
-                              role="combobox"
-                              aria-expanded={isOpen}
-                              disabled={options.length === 0}
-                              className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
-                            />
-                          }
-                        >
-                          <span className={cn("truncate", !selectedId && "text-muted-foreground")}>
-                            {selected
-                              ? (selected.full_name ?? `${selected.first_name} ${selected.last_name}`)
-                              : options.length === 0
-                                ? "No members available"
-                                : "Search co-maker (optional)..."}
-                          </span>
-                          <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
-                        </PopoverTrigger>
-                        <PopoverContent className="w-(--anchor-width) p-0" align="start">
-                          <Command>
-                            <CommandInput placeholder="Type a name to search..." />
-                            <CommandList>
-                              <CommandEmpty>No members found.</CommandEmpty>
-                              <CommandGroup>
-                                {options.map((b) => (
-                                  <CommandItem
-                                    key={b.id}
-                                    value={b.full_name ?? `${b.first_name} ${b.last_name}`}
-                                    onSelect={() => {
-                                      setCoMakerAt(index, b.id === selectedId ? null : b.id);
-                                      setOpenCoMakerIndex(null);
-                                    }}
-                                  >
-                                    <Check
-                                      className={cn(
-                                        "mr-2 size-4",
-                                        selectedId === b.id ? "opacity-100" : "opacity-0"
-                                      )}
-                                    />
-                                    {b.full_name ?? `${b.first_name} ${b.last_name}`}
-                                  </CommandItem>
-                                ))}
-                              </CommandGroup>
-                            </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
-                      {coMakerIds.length > 1 && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
-                          onClick={() => removeCoMakerSlot(index)}
-                          title="Remove co-maker"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                              onClick={() => removeCoMakerSlot(index)}
+                              title="Remove co-maker"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Account Officer */}
+                <div className="flex flex-col gap-2" data-field="account_officer_id">
+                  <div className="flex h-6 items-center">
+                    <Label htmlFor="account-officer">Account Officer (AO)</Label>
+                  </div>
+                  <StaffPicker
+                    id="account-officer"
+                    value={accountOfficer}
+                    onChange={setAccountOfficer}
+                    clearable
+                  />
+                </div>
+              </div>
+
+              {/* Purpose beside the policy exception from xl */}
+              <div className="grid items-start gap-6 xl:grid-cols-2">
+              {/* Purpose */}
+              <div className="space-y-2">
+                <Label>Purpose</Label>
+                <Textarea
+                  name="purpose"
+                  placeholder="Briefly describe the purpose of this loan"
+                  value={purpose}
+                  onChange={(e) => setPurpose(e.target.value)}
+                  className="min-h-20"
+                />
+              </div>
+
+              {/* Policy Exception */}
+              <div className="space-y-4">
+                <div className="flex items-start gap-3" data-field="policy_exception">
+                  <Checkbox
+                    id="policy-exception"
+                    checked={policyException}
+                    disabled={inApproval}
+                    onCheckedChange={(checked) => {
+                      setPolicyException(checked === true);
+                      if (!checked) {
+                        setPolicyExceptionDetails("");
+                        setPolicyExceptionLetter(null);
+                      }
+                    }}
+                  />
+                  <div>
+                    <Label htmlFor="policy-exception" className="cursor-pointer font-medium">
+                      Policy Exception
+                    </Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {inApproval
+                        ? "It decides the approval chain, so it can't change during approval."
+                        : "Check this if the loan requires policy exception approval (full BOD review)"}
+                    </p>
+                  </div>
+                </div>
+
+                {policyException && (
+                  <div className="grid gap-4 rounded-lg border border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-900/10 p-4 md:grid-cols-2">
+                    {/* Policy Exception Details */}
+                    <div className="space-y-2">
+                      <Label htmlFor="pe-details">Policy Exception Details</Label>
+                      <Textarea
+                        id="pe-details"
+                        name="policy_exception_details"
+                        placeholder="Describe why this loan requires a policy exception..."
+                        value={policyExceptionDetails}
+                        onChange={(e) => setPolicyExceptionDetails(e.target.value)}
+                        disabled={inApproval}
+                        className="min-h-20"
+                      />
+                    </div>
+
+                    {/* Policy Exception Letter Upload */}
+                    {!inApproval && (
+                    <div className="space-y-2">
+                      <Label>Policy Exception Letter</Label>
+                      {policyExceptionLetter ? (
+                        <div className="flex items-center gap-3 rounded-lg border p-3 bg-background">
+                          <FileText className="h-5 w-5 text-brand-orange shrink-0" />
+                          <span className="text-sm truncate flex-1">{policyExceptionLetter.name}</span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setPolicyExceptionLetter(null)}
+                            className="text-destructive hover:text-destructive shrink-0"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <label className="flex items-center gap-3 cursor-pointer rounded-lg border border-dashed border-muted-foreground/30 px-4 py-3 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors">
+                          <FileText className="h-5 w-5 text-muted-foreground" />
+                          <div>
+                            <p className="text-sm text-muted-foreground">Click to upload policy exception letter</p>
+                            <p className="text-xs text-muted-foreground/70">PDF, DOC, or image file</p>
+                          </div>
+                          <input
+                            type="file"
+                            accept=".pdf,.doc,.docx,image/*"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) setPolicyExceptionLetter(file);
+                            }}
+                            className="hidden"
+                          />
+                        </label>
                       )}
                     </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          {/* Account Officer */}
-          <div className="space-y-2">
-            <Label>Account Officer (AO)</Label>
-            <Popover open={aoOpen} onOpenChange={setAoOpen}>
-              <PopoverTrigger
-                render={
-                  <button
-                    type="button"
-                    role="combobox"
-                    aria-expanded={aoOpen}
-                    className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-                  />
-                }
-              >
-                <span className={cn("truncate", !accountOfficerId && "text-muted-foreground")}>
-                  {accountOfficerId
-                    ? users.find((u) => u.id === accountOfficerId)?.full_name ?? "Select AO"
-                    : "Select account officer"}
-                </span>
-                <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
-              </PopoverTrigger>
-              <PopoverContent className="w-(--anchor-width) p-0" align="start">
-                <Command>
-                  <CommandInput placeholder="Search officer..." />
-                  <CommandList>
-                    <CommandEmpty>No users found.</CommandEmpty>
-                    <CommandGroup>
-                      {users.map((user) => (
-                        <CommandItem
-                          key={user.id}
-                          value={user.full_name}
-                          onSelect={() => {
-                            setAccountOfficerId(user.id);
-                            setAoOpen(false);
-                          }}
-                        >
-                          <Check
-                            className={cn(
-                              "mr-2 size-4",
-                              accountOfficerId === user.id ? "opacity-100" : "opacity-0"
-                            )}
-                          />
-                          <div>
-                            <p className="text-sm">{user.full_name}</p>
-                            <p className="text-xs text-muted-foreground capitalize">{user.roles?.[0]?.replace("_", " ") ?? ""}</p>
-                          </div>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-          </div>
-
-          {/* Purpose */}
-          <div className="space-y-2">
-            <Label>Purpose</Label>
-            <Textarea
-              placeholder="Briefly describe the purpose of this loan"
-              value={purpose}
-              onChange={(e) => setPurpose(e.target.value)}
-              className="min-h-20"
-            />
-          </div>
-
-          <Separator />
-
-          {/* Policy Exception */}
-          <div className="space-y-4">
-            <div className="flex items-start gap-3">
-              <Checkbox
-                id="policy-exception"
-                checked={policyException}
-                onCheckedChange={(checked) => {
-                  setPolicyException(checked === true);
-                  if (!checked) {
-                    setPolicyExceptionDetails("");
-                    setPolicyExceptionLetter(null);
-                  }
-                }}
-              />
-              <div>
-                <Label htmlFor="policy-exception" className="cursor-pointer font-medium">
-                  Policy Exception
-                </Label>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Check this if the loan requires policy exception approval (full BOD review)
-                </p>
-              </div>
-            </div>
-
-            {policyException && (
-              <div className="space-y-4 rounded-lg border border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-900/10 p-4">
-                {/* Policy Exception Details */}
-                <div className="space-y-2">
-                  <Label htmlFor="pe-details">Policy Exception Details</Label>
-                  <Textarea
-                    id="pe-details"
-                    placeholder="Describe why this loan requires a policy exception..."
-                    value={policyExceptionDetails}
-                    onChange={(e) => setPolicyExceptionDetails(e.target.value)}
-                    className="min-h-20"
-                  />
-                </div>
-
-                {/* Policy Exception Letter Upload */}
-                <div className="space-y-2">
-                  <Label>Policy Exception Letter</Label>
-                  {policyExceptionLetter ? (
-                    <div className="flex items-center gap-3 rounded-lg border p-3 bg-background">
-                      <FileText className="h-5 w-5 text-brand-orange shrink-0" />
-                      <span className="text-sm truncate flex-1">{policyExceptionLetter.name}</span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setPolicyExceptionLetter(null)}
-                        className="text-destructive hover:text-destructive shrink-0"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <label className="flex items-center gap-3 cursor-pointer rounded-lg border border-dashed border-muted-foreground/30 px-4 py-3 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors">
-                      <FileText className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <p className="text-sm text-muted-foreground">Click to upload policy exception letter</p>
-                        <p className="text-xs text-muted-foreground/70">PDF, DOC, or image file</p>
-                      </div>
-                      <input
-                        type="file"
-                        accept=".pdf,.doc,.docx,image/*"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) setPolicyExceptionLetter(file);
-                        }}
-                        className="hidden"
-                      />
-                    </label>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* ── Card 2: Loan Product & Terms ── */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Loan Product & Terms</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Product */}
-          <div className="space-y-2">
-            <Label>
-              Loan Product <span className="text-destructive">*</span>
-            </Label>
-            <Select
-              value={productId ?? null}
-              onValueChange={(value) => handleProductChange(value)}
-              items={products.map((p) => ({ value: String(p.id), label: p.name }))}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select a loan product" />
-              </SelectTrigger>
-              <SelectContent>
-                {products.map((p) => (
-                  <SelectItem key={p.id} value={String(p.id)}>
-                    {p.name}
-                    {p.description && (
-                      <span className="text-muted-foreground">
-                        {" "}
-                        — {p.description}
-                      </span>
                     )}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {selectedProduct && (
-              <p className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Info className="size-3" />
-                Amount: {formatCurrency(selectedProduct.min_amount)} –{" "}
-                {formatCurrency(selectedProduct.max_amount)} | Term:{" "}
-                {selectedProduct.min_term} – {selectedProduct.max_term} months
-              </p>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {/* Principal Amount */}
-            <div className="space-y-2">
-              <Label>
-                Loan Amount <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                type="number"
-                placeholder="0"
-                step="1"
-                value={principalAmount}
-                onChange={(e) => setPrincipalAmount(e.target.value.replace(/\D/g, ""))}
-                min={selectedProduct?.min_amount}
-                max={selectedProduct?.max_amount}
-              />
-            </div>
-
-            {/* Term */}
-            <div className="space-y-2">
-              <Label>
-                Term (months) <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                type="number"
-                placeholder="0"
-                step="1"
-                value={termMonths}
-                onChange={(e) => setTermMonths(e.target.value.replace(/\D/g, ""))}
-                min={selectedProduct?.min_term}
-                max={selectedProduct?.max_term}
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {/* Payment Frequency */}
-            <div className="space-y-2">
-              <Label>Payment Frequency</Label>
-              <Select
-                value={paymentFrequency ?? null}
-                onValueChange={(value) => setPaymentFrequency(value ?? null)}
-                disabled={productFrequencies.length === 1}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select frequency">
-                    {(value: string | null) =>
-                      value ? (PAYMENT_FREQUENCY_LABELS[value] ?? value) : "Select frequency"
-                    }
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {(productFrequencies.length > 0
-                    ? PAYMENT_FREQUENCY_OPTIONS.filter((o) => productFrequencies.includes(o.value))
-                    : PAYMENT_FREQUENCY_OPTIONS
-                  ).map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {productFrequencies.length === 1 && (
-                <p className="text-xs text-muted-foreground">Set by loan product</p>
-              )}
-            </div>
-
-            {/* Interest Rate */}
-            <div className="space-y-2">
-              <Label>Interest Rate (%)</Label>
-              <Input
-                type="number"
-                placeholder="0"
-                step="1"
-                min={0}
-                value={interestRate}
-                onChange={(e) => {
-                  // Accept digits only — keep the value a whole number
-                  const v = e.target.value.replace(/\D/g, "");
-                  setInterestRate(v);
-                }}
-              />
-            </div>
-
-            {/* Interest Type */}
-            <div className="space-y-2">
-              <Label>Interest Type</Label>
-              <Select
-                value={interestType ?? null}
-                onValueChange={(value) => setInterestType(value ?? null)}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select type">
-                    {(value: string | null) =>
-                      value
-                        ? (INTEREST_TYPE_OPTIONS.find((o) => o.value === value)?.label ?? value)
-                        : "Select type"
-                    }
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {INTEREST_TYPE_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* Share Capital Build-Up — always visible when a product is
-              selected. Required when product has scb_required; optional
-              otherwise. This ensures the tester / user can always enter an
-              SCB amount regardless of backend product config. */}
-          {selectedProduct && (
-            <div className="mt-4 rounded-lg border border-brand-orange/30 bg-brand-orange/5 p-4 space-y-3">
-              <div className="space-y-0.5">
-                <Label htmlFor="scb-amount" className="text-sm font-medium">
-                  Share Capital Build-Up{" "}
-                  {selectedProduct.scb_required ? (
-                    <span className="text-destructive">*</span>
-                  ) : (
-                    <span className="text-muted-foreground font-normal">(optional)</span>
-                  )}
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  {selectedProduct.scb_required
-                    ? "This product requires a Share Capital Build-Up amount per period."
-                    : "Enter an amount to add Share Capital Build-Up to each amortization period."}{" "}
-                  The SCB portion will be credited to the member&rsquo;s share
-                  capital each time they pay.
-                </p>
-              </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Input
-                    id="scb-amount"
-                    type="number"
-                    min={selectedProduct.min_scb ?? 0}
-                    max={selectedProduct.max_scb ?? undefined}
-                    step="1"
-                    placeholder="0"
-                    value={scbAmount}
-                    onChange={(e) => setScbAmount(e.target.value)}
-                  />
-                </div>
-                {selectedProduct.scb_required && (selectedProduct.min_scb ?? 0) > 0 && (
-                  <div className="flex items-center text-xs text-muted-foreground">
-                    Allowed range:{" "}
-                    <span className="ml-1 font-medium text-foreground">
-                      {formatCurrency(selectedProduct.min_scb ?? 0)} –{" "}
-                      {formatCurrency(selectedProduct.max_scb ?? 0)}
-                    </span>
                   </div>
                 )}
               </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* ── Card 3: Collaterals ── */}
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <ShieldCheck className="size-5 text-brand-blue" />
-                Collaterals
-              </CardTitle>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Attach the member&rsquo;s registered collaterals to secure
-                this loan. Only collaterals not currently locked to another
-                active loan can be selected.
-              </p>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setCollateralPickerOpen(true)}
-              disabled={borrowerId === null}
-            >
-              <Plus className="mr-2 size-4" />
-              Add Collateral
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {borrowerId === null ? (
-            <p className="text-sm text-muted-foreground">
-              Pick a member first to load their registered collaterals.
-            </p>
-          ) : selectedCollaterals.length === 0 ? (
-            <div className="rounded-lg border border-dashed p-6 text-center">
-              <ShieldCheck className="mx-auto size-8 text-muted-foreground/50" />
-              <p className="mt-2 text-sm font-medium text-muted-foreground">
-                No collaterals attached
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground/80">
-                {availableCollaterals.length === 0
-                  ? "This member has no registered collaterals yet."
-                  : "Click “Add Collateral” to attach one."}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {selectedCollaterals.map(({ collateral: c, snapshot_value }) => (
-                <div
-                  key={c.id}
-                  className="flex items-center justify-between gap-3 rounded-lg border bg-muted/20 px-3 py-2"
-                >
-                  <div className="flex flex-1 flex-wrap items-center gap-2">
-                    <Badge variant="secondary">
-                      {c.type?.name ?? "Unknown"}
-                    </Badge>
-                    <span className="text-sm font-medium">
-                      {c.detail_value}
-                    </span>
-                    {c.type?.source === "share_capital" && (
-                      <span className="text-xs text-muted-foreground">
-                        (auto-derived)
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-sm font-semibold tabular-nums">
-                    {formatCurrency(snapshot_value)}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() =>
-                      setSelectedCollaterals((prev) =>
-                        prev.filter((s) => s.collateral.id !== c.id),
-                      )
-                    }
-                    aria-label="Remove collateral"
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {selectedCollaterals.length > 0 && (
-            <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground">
-                  Total Collateral Value
-                </p>
-                <p className="text-lg font-bold tabular-nums">
-                  {formatCurrency(totalCollateralValue)}
-                </p>
               </div>
-              <div className="flex flex-col items-start gap-1 sm:items-end">
-                <Badge
-                  className={cn(
-                    securityStatus === "secured" &&
-                      "bg-green-500/15 text-green-700 hover:bg-green-500/15",
-                    securityStatus === "partially_secured" &&
-                      "bg-amber-500/15 text-amber-700 hover:bg-amber-500/15",
-                    securityStatus === "unsecured" &&
-                      "bg-destructive/15 text-destructive hover:bg-destructive/15",
-                  )}
+          </FormStep>
+
+          {/* ── Step 2: Loan Product & Terms ── */}
+          <FormStep id="terms">
+              <div className={FORM_STEP_GRID.grid}>
+              {/* Product */}
+              <div className="space-y-2" data-field="loan_product_id">
+                <Label htmlFor="loan-product">
+                  Loan Product <span className="text-destructive">*</span>
+                </Label>
+                <Select
+                  value={productId ?? null}
+                  onValueChange={(value) => handleProductChange(value)}
+                  items={products.map((p) => ({ value: String(p.id), label: p.name }))}
+                  disabled={inApproval}
                 >
-                  {securityStatusLabel(securityStatus)}
-                </Badge>
-                {principal > 0 && securityStatus !== "secured" && (
+                  <SelectTrigger id="loan-product" className="w-full">
+                    <SelectValue placeholder="Select a loan product" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {products.map((p) => (
+                      <SelectItem key={p.id} value={String(p.id)} disabled={!p.is_active}>
+                        {p.name}
+                        {!p.is_active && (
+                          <span className="text-muted-foreground"> (Inactive)</span>
+                        )}
+                        {p.description && (
+                          <span className="text-muted-foreground">
+                            {" "}
+                            — {p.description}
+                          </span>
+                        )}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {inApproval && (
                   <p className="text-xs text-muted-foreground">
-                    Short by{" "}
-                    <span className="font-medium text-foreground">
-                      {formatCurrency(
-                        Math.max(0, principal - totalCollateralValue),
-                      )}
-                    </span>{" "}
-                    vs. principal
+                    The product can&rsquo;t change during approval.
+                  </p>
+                )}
+                {selectedProduct && (
+                  <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Info className="size-3" />
+                    Amount: {formatCurrency(selectedProduct.min_amount)} –{" "}
+                    {formatCurrency(selectedProduct.max_amount)} | Term:{" "}
+                    {selectedProduct.min_term} – {selectedProduct.max_term} {readTermUnit(selectedProduct.term_unit)}
                   </p>
                 )}
               </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
-      {/* ── Card 4: Dates ── */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Dates</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {/* Release Date */}
-            <div className="space-y-2">
-              <Label>
-                Release Date <span className="text-destructive">*</span>
-              </Label>
-              <Popover open={releaseDateOpen} onOpenChange={setReleaseDateOpen}>
-                <PopoverTrigger
-                  render={
-                    <button
-                      type="button"
-                      className="flex h-8 w-full items-center gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-                    />
-                  }
-                >
-                  <CalendarIcon className="size-4 text-muted-foreground" />
-                  {releaseDate ? (
-                    <span>{formatDate(releaseDate)}</span>
-                  ) : (
-                    <span className="text-muted-foreground">Pick a date</span>
+                {/* Principal Amount */}
+                <div className="space-y-2">
+                  <Label htmlFor="principal-amount">
+                    Loan Amount <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="principal-amount"
+                    name="principal_amount"
+                    type="number"
+                    placeholder="0.00"
+                    step="0.01"
+                    inputMode="decimal"
+                    value={principalAmount}
+                    onChange={(e) => setPrincipalAmount(amountInputValue(e.target.value))}
+                    min={selectedProduct?.min_amount}
+                    max={selectedProduct?.max_amount}
+                    aria-describedby={restructureBalanceHint !== null ? "restructure-balance-hint" : undefined}
+                  />
+                  {restructureBalanceHint !== null && (
+                    <p
+                      id="restructure-balance-hint"
+                      className={cn("text-xs", editShowsShortfall ? "text-amber-600 dark:text-amber-500" : "text-muted-foreground")}
+                    >
+                      {restructureBalanceHint}
+                    </p>
                   )}
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={releaseDate}
-                    onSelect={(date) => {
-                      setReleaseDate(date ?? undefined);
-                      setReleaseDateOpen(false);
-                    }}
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
+                </div>
 
-            {/* Maturity Date */}
-            <div className="space-y-2">
-              <Label>Maturity Date</Label>
-              <div className="flex h-8 items-center rounded-lg border border-input bg-muted/30 px-2.5 text-sm text-muted-foreground">
-                {maturityDate ? formatDate(maturityDate) : "Auto-computed"}
+                {/* Term */}
+                <div className="space-y-2">
+                  <Label htmlFor="loan-term">
+                    Term ({termUnit}) <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="loan-term"
+                    name="term"
+                    type="number"
+                    placeholder="0"
+                    step="1"
+                    value={termValue}
+                    onChange={(e) => setTermValue(e.target.value.replace(/\D/g, ""))}
+                    min={selectedProduct?.min_term}
+                    max={selectedProduct?.max_term}
+                    disabled={termLocked}
+                  />
+                  {termLocked && <p className="text-xs text-muted-foreground">{termsBasis.termUnitMoved}</p>}
+                </div>
+
+                {/* Payment Frequency */}
+                <div className="space-y-2" data-field="frequency">
+                  <Label htmlFor="payment-frequency">Payment Frequency</Label>
+                  <Select
+                    value={paymentFrequency ?? null}
+                    onValueChange={(value) => setPaymentFrequency(value ?? null)}
+                    disabled={productFrequencies.length === 1}
+                  >
+                    <SelectTrigger id="payment-frequency" className="w-full">
+                      <SelectValue placeholder="Select frequency">
+                        {(value: string | null) =>
+                          value ? (PAYMENT_FREQUENCY_LABELS[value] ?? value) : "Select frequency"
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(productFrequencies.length > 0
+                        ? PAYMENT_FREQUENCY_OPTIONS.filter((o) => productFrequencies.includes(o.value))
+                        : PAYMENT_FREQUENCY_OPTIONS
+                      ).map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {productFrequencies.length === 1 && (
+                    <p className="text-xs text-muted-foreground">Set by loan product</p>
+                  )}
+                </div>
+
+                {/* Interest Rate */}
+                <div className="space-y-2">
+                  <Label htmlFor="interest-rate">Interest Rate (% per {ratePeriodWord(rateFrequency)})</Label>
+                  <Input
+                    id="interest-rate"
+                    name="interest_rate"
+                    inputMode="decimal"
+                    placeholder="0"
+                    value={interestRate}
+                    onChange={(e) => setInterestRate(sanitizeDecimalInput(e.target.value))}
+                    disabled={rateLocked}
+                  />
+                  {rateLocked && <p className="text-xs text-muted-foreground">{termsBasis.ratePeriodMoved}</p>}
+                </div>
+
+                {/* Interest Type — read-only: the server snapshots it from the product */}
+                <div className="space-y-2">
+                  <Label htmlFor="interest-type">Interest Type</Label>
+                  {/* <output> is labelable, so the read-only value keeps its label */}
+                  <output
+                    id="interest-type"
+                    className="flex h-8 items-center rounded-lg border border-input bg-muted/30 px-2.5 text-sm"
+                  >
+                    {interestMethod ? (
+                      interestMethodLabel(interestMethod)
+                    ) : (
+                      <span className="text-muted-foreground">Select a product first</span>
+                    )}
+                  </output>
+                  <p className="text-xs text-muted-foreground">Set by loan product</p>
+                </div>
               </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
-      {/* ── Card 4: Deductions & Net Proceeds ── */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Deductions & Net Proceeds</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {/* Processing Fee */}
-            <div className="space-y-2">
-              <Label className="flex items-center gap-0.5">
-                Processing Fee
-                <span className="text-muted-foreground font-normal text-xs ml-0.5">(</span>
-                {editingFeeRate === "processing" ? (
-                  <input
-                    type="number"
-                    min={processingFeeRange.min || 0}
-                    max={processingFeeRange.max || 100}
-                    step="1"
-                    autoFocus
-                    className="w-10 border-b border-brand-orange bg-transparent text-center text-xs text-muted-foreground font-normal outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                    value={processingFeeRate}
-                    onChange={(e) => setProcessingFeeRate(e.target.value.replace(/\D/g, "").slice(0, 3))}
-                    onBlur={() => setEditingFeeRate(null)}
-                    onKeyDown={(e) => { if (e.key === "Enter") setEditingFeeRate(null); }}
-                  />
-                ) : (
-                  <span
-                    className="text-xs text-muted-foreground font-normal cursor-pointer hover:text-brand-orange"
-                    onClick={() => setEditingFeeRate("processing")}
-                    title="Click to edit"
-                  >
-                    {processingFeeRate ? Math.round(Number(processingFeeRate)) : "0"}
-                  </span>
-                )}
-                <span className="text-muted-foreground font-normal text-xs">%)</span>
-              </Label>
-              <Input
-                type="text"
-                readOnly
-                value={formatCurrency(processingFee)}
-                className="bg-muted/40 cursor-default font-medium tabular-nums"
-              />
-              {processingFeeRange.max > 0 && (
-                <p className="text-[10px] text-muted-foreground">
-                  Allowed range: {processingFeeRange.min}% – {processingFeeRange.max}%
-                </p>
+              {/* Share Capital Build-Up — always visible when a product is
+                  selected. Required when product has scb_required; optional
+                  otherwise. This ensures the tester / user can always enter an
+                  SCB amount regardless of backend product config. */}
+              {/* The build-up beside a restructure's remarks from xl */}
+              <div className="grid items-start gap-4 xl:grid-cols-2">
+              {selectedProduct && (
+                <div className="rounded-lg border border-brand-orange/30 bg-brand-orange/5 p-4 space-y-3">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="scb-amount" className="text-sm font-medium">
+                      Share Capital Build-Up{" "}
+                      {selectedProduct.scb_required && !isRestructureEdit ? (
+                        <span className="text-destructive">*</span>
+                      ) : (
+                        <span className="text-muted-foreground font-normal">(optional)</span>
+                      )}
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      {isRestructureEdit
+                        ? "A restructure takes any build-up from ₱0.00 per period."
+                        : selectedProduct.scb_required
+                        ? "This product requires a Share Capital Build-Up amount per period."
+                        : "Enter an amount to add Share Capital Build-Up to each amortization period."}{" "}
+                      The SCB portion will be credited to the member&rsquo;s share
+                      capital each time they pay.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Input
+                        id="scb-amount"
+                        name="scb_amount"
+                        type="number"
+                        min={isRestructureEdit ? 0 : (selectedProduct.min_scb ?? 0)}
+                        max={isRestructureEdit ? undefined : (selectedProduct.max_scb ?? undefined)}
+                        step="0.01"
+                        placeholder="0.00"
+                        value={scbAmount}
+                        onChange={(e) => setScbAmount(e.target.value)}
+                      />
+                    </div>
+                    {selectedProduct.scb_required && !isRestructureEdit && (selectedProduct.min_scb ?? 0) > 0 && (
+                      <div className="flex items-center text-xs text-muted-foreground">
+                        Allowed range:{" "}
+                        <span className="ml-1 font-medium text-foreground">
+                          {formatCurrency(selectedProduct.min_scb ?? 0)} –{" "}
+                          {formatCurrency(selectedProduct.max_scb ?? 0)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
               )}
-            </div>
 
-            {/* Service Fee */}
-            <div className="space-y-2">
-              <Label className="flex items-center gap-0.5">
-                Service Fee
-                <span className="text-muted-foreground font-normal text-xs ml-0.5">(</span>
-                {editingFeeRate === "service" ? (
-                  <input
-                    type="number"
-                    min={serviceFeeRange.min || 0}
-                    max={serviceFeeRange.max || 100}
-                    step="1"
-                    autoFocus
-                    className="w-10 border-b border-brand-orange bg-transparent text-center text-xs text-muted-foreground font-normal outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                    value={serviceFeeRate}
-                    onChange={(e) => setServiceFeeRate(e.target.value.replace(/\D/g, "").slice(0, 3))}
-                    onBlur={() => setEditingFeeRate(null)}
-                    onKeyDown={(e) => { if (e.key === "Enter") setEditingFeeRate(null); }}
+              {/* A restructure's remarks: required once the server says the
+                  principal is below the outstanding balance (it writes the
+                  difference off), and sent only with a changed principal. */}
+              {isRestructureEdit && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="restructure-remarks">
+                    Remarks{" "}
+                    {remarksNeeded ? (
+                      <span className="text-destructive">*</span>
+                    ) : (
+                      <span className="text-muted-foreground font-normal">(needed when the principal is below the outstanding balance)</span>
+                    )}
+                  </Label>
+                  <Textarea
+                    id="restructure-remarks"
+                    name="remarks"
+                    value={restructureRemarks}
+                    onChange={(e) => setRestructureRemarks(e.target.value)}
+                    maxLength={1000}
+                    rows={2}
+                    required={remarksNeeded}
+                    aria-invalid={remarksNeeded && !restructureRemarks.trim()}
+                    aria-describedby={remarksNeeded ? "restructure-remarks-saved restructure-remarks-hint" : "restructure-remarks-saved"}
+                    placeholder="Why the restructured principal is below the outstanding balance"
                   />
-                ) : (
-                  <span
-                    className="text-xs text-muted-foreground font-normal cursor-pointer hover:text-brand-orange"
-                    onClick={() => setEditingFeeRate("service")}
-                    title="Click to edit"
-                  >
-                    {serviceFeeRate ? Math.round(Number(serviceFeeRate)) : "0"}
-                  </span>
-                )}
-                <span className="text-muted-foreground font-normal text-xs">%)</span>
-              </Label>
-              <Input
-                type="text"
-                readOnly
-                value={formatCurrency(serviceFee)}
-                className="bg-muted/40 cursor-default font-medium tabular-nums"
-              />
-              {serviceFeeRange.max > 0 && (
-                <p className="text-[10px] text-muted-foreground">
-                  Allowed range: {serviceFeeRange.min}% – {serviceFeeRange.max}%
-                </p>
+                  <p id="restructure-remarks-saved" className="text-xs text-muted-foreground">
+                    {REMARKS_SAVED_HINT}
+                  </p>
+                  {remarksNeeded && (
+                    <p id="restructure-remarks-hint" className="text-xs text-destructive">
+                      {remarksRequiredMessage}
+                    </p>
+                  )}
+                </div>
               )}
-            </div>
+              </div>
+          </FormStep>
 
-          </div>
+          {/* ── Step 3: Collaterals ──
+              Only for a role that can view collaterals. Without `collaterals:view`
+              the member's collaterals are never read, so the card could only say
+              "no registered collaterals" and offer a register link the role can't
+              use; the missing-access notice above says what is skipped instead. */}
+          {canListCollaterals && (
+            <FormStep id="collaterals">
+              {/* The attached list grows and scrolls with the step. */}
+              <div className="space-y-4" data-field="collaterals">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="flex items-start gap-2 text-sm text-muted-foreground">
+                      <ShieldCheck className="size-5 shrink-0 text-brand-blue" aria-hidden="true" />
+                      <span>
+                        Attach the member&rsquo;s registered collaterals to secure
+                        this loan. Only collaterals not currently locked to another
+                        active loan can be selected.
+                      </span>
+                    </p>
+                    {isEditMode && !canUpdateCollaterals && (
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Your role can view this loan&rsquo;s collaterals but not
+                        change them.
+                      </p>
+                    )}
+                  </div>
+                  {(!isEditMode || canUpdateCollaterals) && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setCollateralPickerOpen(true)}
+                      disabled={borrowerId === null || !canEditCollaterals}
+                    >
+                      <Plus className="mr-2 size-4" />
+                      Add Collateral
+                    </Button>
+                  )}
+                </div>
+                {collateralLoad === "loading" ? (
+                  <div
+                    role="status"
+                    className="flex items-center gap-2 text-sm text-muted-foreground"
+                  >
+                    <Spinner className="size-4" />
+                    Loading this loan&rsquo;s collaterals…
+                  </div>
+                ) : collateralLoad === "error" ? (
+                  <div
+                    role="alert"
+                    className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm"
+                  >
+                    <AlertCircle
+                      className="mt-0.5 size-4 shrink-0 text-destructive"
+                      aria-hidden="true"
+                    />
+                    <div className="flex-1 space-y-2">
+                      <p className="font-medium">
+                        We couldn&rsquo;t load this loan&rsquo;s collaterals.
+                      </p>
+                      <p className="text-muted-foreground">
+                        {collateralResult?.error} Saving is off until they load, so
+                        the loan&rsquo;s collaterals stay as they are.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCollateralReload((n) => n + 1)}
+                      >
+                        <RefreshCw className="mr-2 size-4" />
+                        Retry
+                      </Button>
+                    </div>
+                  </div>
+                ) : borrowerId === null ? (
+                  <p className="text-sm text-muted-foreground">
+                    Pick a member first to load their registered collaterals.
+                  </p>
+                ) : selectedCollaterals.length === 0 ? (
+                  <div className="rounded-lg border border-dashed p-6 text-center">
+                    <ShieldCheck className="mx-auto size-8 text-muted-foreground/50" />
+                    <p className="mt-2 text-sm font-medium text-muted-foreground">
+                      No collaterals attached
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground/80">
+                      {availableCollaterals.length === 0
+                        ? "This member has no registered collaterals yet."
+                        : canEditCollaterals
+                          ? "Click “Add Collateral” to attach one."
+                          : null}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {selectedCollaterals.map(({ collateral: c, shown_value }) => (
+                      <div
+                        key={c.id}
+                        className="flex items-center justify-between gap-3 rounded-lg border bg-muted/20 px-3 py-2"
+                      >
+                        <div className="flex flex-1 flex-wrap items-center gap-2">
+                          <Badge variant="secondary">
+                            {c.type?.name ?? "Unknown"}
+                          </Badge>
+                          <span className="text-sm font-medium">
+                            {c.detail_value}
+                          </span>
+                          {c.type?.source === "share_capital" && (
+                            <span className="text-xs text-muted-foreground">
+                              (auto-derived)
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-sm font-semibold tabular-nums">
+                          {shown_value === null ? "—" : formatCurrency(shown_value)}
+                        </span>
+                        {canEditCollaterals && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() =>
+                              setSelectedCollaterals((prev) =>
+                                prev.filter((s) => s.collateral.id !== c.id),
+                              )
+                            }
+                            aria-label="Remove collateral"
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
 
-            {/* Configured fees that auto-apply to the selected product */}
-            {applicableFees.length > 0 && (
-              <div className="space-y-2">
-                {applicableFees.map((f) => (
-                  <div key={f.name} className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">{f.name}</span>
-                    <span className="text-sm font-medium">{formatCurrency(f.amount)}</span>
+                {selectedCollaterals.length > 0 && (
+                  <div
+                    className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between"
+                    aria-live="polite"
+                    aria-busy={preview.status === "loading"}
+                  >
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Total Collateral Value
+                      </p>
+                      <p className="text-lg font-bold tabular-nums">
+                        {previewCollateral
+                          ? currencyOrDash(shownCollateralTotal(previewCollateral))
+                          : "—"}
+                      </p>
+                      {previewCollateral?.value_unknown === true && (
+                        <p className="text-xs text-muted-foreground">
+                          {SHARE_CAPITAL_VALUE_HIDDEN}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex flex-col items-start gap-1 sm:items-end">
+                      {preview.status === "error" ? (
+                        <div role="alert" className="flex flex-col items-start gap-2 text-sm sm:items-end">
+                          <p className="flex items-center gap-1.5 text-destructive">
+                            <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
+                            We couldn&rsquo;t load the collateral preview.
+                          </p>
+                          <p className="text-xs text-muted-foreground">{previewError}</p>
+                          <Button type="button" variant="outline" size="sm" onClick={retryPreview}>
+                            <RefreshCw className="mr-2 size-4" />
+                            Retry
+                          </Button>
+                        </div>
+                      ) : previewCollateral ? (
+                        <>
+                          {shownSecurityStatus(previewCollateral) !== null && (
+                            <Badge
+                              className={cn(
+                                previewCollateral.security_status === "secured" &&
+                                  "bg-green-500/15 text-green-700 hover:bg-green-500/15",
+                                previewCollateral.security_status === "partially_secured" &&
+                                  "bg-amber-500/15 text-amber-700 hover:bg-amber-500/15",
+                                previewCollateral.security_status === "unsecured" &&
+                                  "bg-destructive/15 text-destructive hover:bg-destructive/15",
+                              )}
+                            >
+                              {shownSecurityStatus(previewCollateral)}
+                            </Badge>
+                          )}
+                          {showsShortBy(previewCollateral, principal) && (
+                            <p className="text-xs text-muted-foreground">
+                              Short by{" "}
+                              <span className="font-medium text-foreground">
+                                {currencyOrDash(previewCollateral.short_by)}
+                              </span>{" "}
+                              vs. principal
+                            </p>
+                          )}
+                        </>
+                      ) : (
+                        <span role="status" className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Spinner className="size-4" />
+                          Checking security…
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </FormStep>
+          )}
+
+          {/* ── Step 4: Deductions & Net Proceeds, with the dates ── */}
+          <FormStep id="deductions">
+            <div className="space-y-4">
+              {/* The dates, under their heading, beside the fees from xl; the
+                  fee grid widens with its own width. */}
+              <div className="grid items-start gap-x-6 gap-y-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+              <section className="space-y-3" aria-labelledby="loan-dates-title">
+                <h3 id="loan-dates-title" className="text-sm font-semibold">Dates</h3>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {/* Release Date */}
+                <div className="space-y-2" data-field="start_date">
+                  <Label>
+                    Release Date <span className="text-destructive">*</span>
+                  </Label>
+                  <Popover open={releaseDateOpen} onOpenChange={setReleaseDateOpen}>
+                    <PopoverTrigger
+                      render={
+                        <button
+                          type="button"
+                          className="flex h-8 w-full items-center gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+                        />
+                      }
+                    >
+                      <CalendarIcon className="size-4 text-muted-foreground" />
+                      {releaseDate ? (
+                        <span>{formatDateObj(releaseDate)}</span>
+                      ) : (
+                        <span className="text-muted-foreground">Pick a date</span>
+                      )}
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={releaseDate}
+                        onSelect={(date) => {
+                          setReleaseDate(date ?? undefined);
+                          setReleaseDateOpen(false);
+                        }}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                {/* Maturity Date */}
+                <div className="space-y-2">
+                  <Label>Maturity Date</Label>
+                  <div className="flex h-8 items-center rounded-lg border border-input bg-muted/30 px-2.5 text-sm text-muted-foreground">
+                    {previewMaturity
+                      ? formatDateObj(calendarDate(previewMaturity))
+                      : "—"}
+                  </div>
+                </div>
+                </div>
+              </section>
+
+              {/* Level with the dates' fields: the heading's line and gap.
+                  FEE_LABEL_CLASS keeps each fee label as tall as the date labels. */}
+              <div className="@container xl:pt-8">
+              <div className="grid grid-cols-1 gap-4 @md:grid-cols-2 @xl:grid-cols-3 @4xl:grid-cols-4">
+                {/* Processing Fee */}
+                <div className="space-y-2" data-field="deductions.processing_fee">
+                  <Label className={FEE_LABEL_CLASS}>
+                    Processing Fee
+                    <span className="text-muted-foreground font-normal text-xs ml-0.5">(</span>
+                    {editingFeeRate === "processing" ? (
+                      <input
+                        inputMode="decimal"
+                        autoFocus
+                        className="w-14 border-b border-brand-orange bg-transparent text-center text-xs text-muted-foreground font-normal outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                        value={processingFeeRate}
+                        onChange={(e) => setProcessingFeeRate(sanitizeDecimalInput(e.target.value))}
+                        onBlur={() => setEditingFeeRate(null)}
+                        // Enter only closes the rate, as before, never Next.
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setEditingFeeRate(null); } }}
+                      />
+                    ) : (
+                      <span
+                        className="text-xs text-muted-foreground font-normal cursor-pointer hover:text-brand-orange"
+                        onClick={() => setEditingFeeRate("processing")}
+                        title="Click to edit"
+                      >
+                        {formatRate(processingFeePercent)}
+                      </span>
+                    )}
+                    <span className="text-muted-foreground font-normal text-xs">%)</span>
+                  </Label>
+                  <Input
+                    type="text"
+                    readOnly
+                    value={currencyOrDash(
+                      previewDeductionAmount(previewDeductions?.items, deductions, processingFeeInput),
+                    )}
+                    className="bg-muted/40 cursor-default font-medium tabular-nums"
+                  />
+                  {processingFeeRange.max > 0 && (
+                    <p className="text-[10px] text-muted-foreground">
+                      Allowed range: {processingFeeRange.min}% – {processingFeeRange.max}%
+                    </p>
+                  )}
+                </div>
+
+                {/* Service Fee */}
+                <div className="space-y-2" data-field="deductions.service_fee">
+                  <Label className={FEE_LABEL_CLASS}>
+                    Service Fee
+                    <span className="text-muted-foreground font-normal text-xs ml-0.5">(</span>
+                    {editingFeeRate === "service" ? (
+                      <input
+                        inputMode="decimal"
+                        autoFocus
+                        className="w-14 border-b border-brand-orange bg-transparent text-center text-xs text-muted-foreground font-normal outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                        value={serviceFeeRate}
+                        onChange={(e) => setServiceFeeRate(sanitizeDecimalInput(e.target.value))}
+                        onBlur={() => setEditingFeeRate(null)}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setEditingFeeRate(null); } }}
+                      />
+                    ) : (
+                      <span
+                        className="text-xs text-muted-foreground font-normal cursor-pointer hover:text-brand-orange"
+                        onClick={() => setEditingFeeRate("service")}
+                        title="Click to edit"
+                      >
+                        {formatRate(serviceFeePercent)}
+                      </span>
+                    )}
+                    <span className="text-muted-foreground font-normal text-xs">%)</span>
+                  </Label>
+                  <Input
+                    type="text"
+                    readOnly
+                    value={currencyOrDash(
+                      previewDeductionAmount(previewDeductions?.items, deductions, serviceFeeInput),
+                    )}
+                    className="bg-muted/40 cursor-default font-medium tabular-nums"
+                  />
+                  {serviceFeeRange.max > 0 && (
+                    <p className="text-[10px] text-muted-foreground">
+                      Allowed range: {serviceFeeRange.min}% – {serviceFeeRange.max}%
+                    </p>
+                  )}
+                </div>
+
+                {/* Carried fees — the notarial fee: charged, but not editable here */}
+                {carriedDeductions.map((d, idx) => (
+                  <div key={`${d.name}-${idx}`} className="space-y-2">
+                    <Label className={FEE_LABEL_CLASS}>
+                      {d.name}
+                      <span className="text-muted-foreground font-normal text-xs ml-0.5">
+                        ({formatRate(d.amount)}%)
+                      </span>
+                    </Label>
+                    <Input
+                      type="text"
+                      readOnly
+                      value={currencyOrDash(previewDeductionAmount(previewDeductions?.items, deductions, d))}
+                      className="bg-muted/40 cursor-default font-medium tabular-nums"
+                    />
+                    <p className="text-[10px] text-muted-foreground">Set by loan product</p>
                   </div>
                 ))}
               </div>
-            )}
-
-            {/* Other Deductions */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label>Other Deductions</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setOtherDeductions((prev) => [...prev, { name: "", amount: "" }])}
-                >
-                  <Plus className="h-3.5 w-3.5 mr-1" />
-                  Add Deduction
-                </Button>
               </div>
-              {otherDeductions.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No other deductions added.</p>
-              ) : (
-                <div className="space-y-2">
-                  {otherDeductions.map((ded, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
-                      <Input
-                        placeholder="Deduction name"
-                        value={ded.name}
-                        onChange={(e) =>
-                          setOtherDeductions((prev) =>
-                            prev.map((d, i) => (i === idx ? { ...d, name: e.target.value } : d))
-                          )
-                        }
-                        className="flex-1"
-                      />
-                      <Input
-                        type="number"
-                        placeholder="Amount"
-                        min={0}
-                        step="1"
-                        value={ded.amount}
-                        onChange={(e) =>
-                          setOtherDeductions((prev) =>
-                            prev.map((d, i) => (i === idx ? { ...d, amount: e.target.value.replace(/\D/g, "") } : d))
-                          )
-                        }
-                        className="w-32"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => setOtherDeductions((prev) => prev.filter((_, i) => i !== idx))}
-                        className="text-destructive hover:text-destructive shrink-0"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
+              </div>
+
+              {/* The deductions list beside the server's totals from xl; the
+                  list grows and scrolls with the step. */}
+              <div className="grid items-start gap-6 xl:grid-cols-2" data-field="deductions">
+              <div className="space-y-4">
+                {/* Configured fees the release would add for this loan, from the server */}
+                {previewDeductions && previewDeductions.configured_fees.length > 0 && (
+                  <div className="space-y-2">
+                    {previewDeductions.configured_fees.map((f) => (
+                      <div key={f.fee_id} className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">{f.name}</span>
+                        <span className="text-sm font-medium">{formatCurrency(f.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Other Deductions */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label>Other Deductions</Label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setOtherDeductions((prev) => [...prev, { name: "", amount: "" }])}
+                    >
+                      <Plus className="h-3.5 w-3.5 mr-1" />
+                      Add Deduction
+                    </Button>
+                  </div>
+                  {otherDeductions.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No other deductions added.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {otherDeductions.map((ded, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <Input
+                            placeholder="Deduction name"
+                            value={ded.name}
+                            onChange={(e) =>
+                              setOtherDeductions((prev) =>
+                                prev.map((d, i) => (i === idx ? { ...d, name: e.target.value } : d))
+                              )
+                            }
+                            className="flex-1"
+                          />
+                          <Input
+                            inputMode="decimal"
+                            placeholder="Amount"
+                            value={ded.amount}
+                            onChange={(e) =>
+                              setOtherDeductions((prev) =>
+                                prev.map((d, i) => (i === idx ? { ...d, amount: sanitizeDecimalInput(e.target.value, PESO_DECIMALS) } : d))
+                              )
+                            }
+                            className="w-32"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => setOtherDeductions((prev) => prev.filter((_, i) => i !== idx))}
+                            className="text-destructive hover:text-destructive shrink-0"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-4">
+              {/* Summary — the server's totals; a dash until it has sent them */}
+              <div
+                className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-1"
+                aria-live="polite"
+                aria-busy={preview.status === "loading"}
+              >
+                <div className="flex items-center justify-between rounded-lg bg-muted/50 px-4 py-3">
+                  <span className="text-sm text-muted-foreground">
+                    Total Deductions
+                  </span>
+                  <span className="text-sm font-semibold">
+                    {currencyOrDash(previewDeductions?.total_deductions)}
+                  </span>
+                </div>
+                {/* A restructure pays nothing out: what is collected from the
+                    member, and Paid out, in place of Net Proceeds. */}
+                {proceedsFigures(isRestructureEdit, {
+                  totalDeductions: previewDeductions?.total_deductions,
+                  netProceeds: previewDeductions?.net_proceeds,
+                  restructure: previewRestructure,
+                }, { collectedLabel: COLLECTED_BEFORE_INSURANCE }).map((figure) => (
+                  <div
+                    key={figure.label}
+                    className="flex items-center justify-between rounded-lg bg-brand-orange/10 px-4 py-3"
+                  >
+                    <span className="text-sm font-medium">{figure.label}</span>
+                    <span className="text-lg font-bold text-brand-orange">{currencyOrDash(figure.amount)}</span>
+                  </div>
+                ))}
+              </div>
+              {previewDeductions?.error && (
+                <p role="alert" className="flex items-center gap-1.5 text-sm text-destructive">
+                  <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
+                  {previewDeductions.error}
+                </p>
+              )}
+              {preview.status === "error" && (
+                <div role="alert" className="flex flex-wrap items-center gap-2 text-sm">
+                  <p className="flex items-center gap-1.5 text-destructive">
+                    <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
+                    We couldn&rsquo;t load the deductions preview.
+                  </p>
+                  <span className="text-xs text-muted-foreground">{previewError}</span>
+                  <Button type="button" variant="outline" size="sm" onClick={retryPreview}>
+                    <RefreshCw className="mr-2 size-4" />
+                    Retry
+                  </Button>
                 </div>
               )}
+              </div>
+              </div>
             </div>
+          </FormStep>
 
-          <Separator />
-
-          {/* Summary */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="flex items-center justify-between rounded-lg bg-muted/50 px-4 py-3">
-              <span className="text-sm text-muted-foreground">
-                Total Deductions
-              </span>
-              <span className="text-sm font-semibold">
-                {formatCurrency(totalDeductions)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between rounded-lg bg-brand-orange/10 px-4 py-3">
-              <span className="text-sm font-medium">Net Proceeds</span>
-              <span className="text-lg font-bold text-brand-orange">
-                {formatCurrency(netProceeds)}
-              </span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* ── Card 5: Amortization Schedule Preview ── */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Amortization Schedule Preview</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {canShowAmortization && amortizationSchedule.length > 0 ? (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12 text-center">#</TableHead>
-                    <TableHead>Due Date</TableHead>
-                    <TableHead className="text-right">Principal</TableHead>
-                    <TableHead className="text-right">Interest</TableHead>
-                                        <TableHead className="text-right">Share Capital Build-Up</TableHead>
-                    <TableHead className="text-right">Total Payment</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {amortizationSchedule.map((row) => (
-                    <TableRow key={row.period}>
-                      <TableCell className="text-center">
-                        {row.period}
-                      </TableCell>
-                      <TableCell>{formatDate(row.dueDate)}</TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(row.principal)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(row.interest)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(row.shareCapitalBuildUp)}
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatCurrency(row.totalPayment)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-                <TableFooter>
-                  <TableRow>
-                    <TableCell colSpan={2} className="font-semibold">
-                      Total
-                    </TableCell>
-                    <TableCell className="text-right font-semibold">
-                      {formatCurrency(amortizationTotals.principal)}
-                    </TableCell>
-                    <TableCell className="text-right font-semibold">
-                      {formatCurrency(amortizationTotals.interest)}
-                    </TableCell>
-                    <TableCell className="text-right font-semibold">
-                      {formatCurrency(amortizationTotals.shareCapitalBuildUp)}
-                    </TableCell>
-                    <TableCell className="text-right font-bold">
-                      {formatCurrency(amortizationTotals.totalPayment)}
-                    </TableCell>
-                  </TableRow>
-                </TableFooter>
-              </Table>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-10 text-center text-muted-foreground">
-              <Info className="mb-2 size-8 opacity-50" />
-              <p className="text-sm">
-                Fill in all required fields above to preview the amortization
-                schedule.
-              </p>
-              <p className="mt-1 text-xs">
-                Product, amount, term, interest, frequency, and release date are
-                required.
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* ── Submit ── */}
-      <div className="flex justify-end">
-        <Button
-          size="lg"
-          className="w-full bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark sm:w-auto"
-          disabled={submitting}
-          onClick={handleSubmit}
-        >
-          {submitting
-            ? isEditMode ? "Saving..." : "Submitting..."
-            : isEditMode ? "Save Changes" : "Submit Loan Application"}
-        </Button>
-      </div>
+          {/* ── Step 5: Amortization Schedule Preview, the server's ──
+              At fit the schedule fills the step and scrolls in its own box,
+              its headings and Total row pinned; below fit the box is capped. */}
+          <FormStep id="review" className="fit:flex fit:h-full fit:flex-col">
+              {canShowAmortization && preview.status === "loading" ? (
+                <div
+                  role="status"
+                  className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground"
+                >
+                  <Spinner className="size-4" />
+                  Loading the schedule preview…
+                </div>
+              ) : canShowAmortization && preview.status === "error" ? (
+                <div
+                  role="alert"
+                  className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm"
+                >
+                  <AlertCircle
+                    className="mt-0.5 size-4 shrink-0 text-destructive"
+                    aria-hidden="true"
+                  />
+                  <div className="flex-1 space-y-2">
+                    <p className="font-medium">
+                      We couldn&rsquo;t load the schedule preview.
+                    </p>
+                    <p className="text-muted-foreground">{previewError}</p>
+                    <Button type="button" variant="outline" size="sm" onClick={retryPreview}>
+                      <RefreshCw className="mr-2 size-4" />
+                      Retry
+                    </Button>
+                  </div>
+                </div>
+              ) : canShowAmortization && amortization ? (
+                <div className="flex flex-col gap-3 fit:min-h-0 fit:flex-1">
+                  <p className="text-xs text-muted-foreground">
+                    Built with the product&rsquo;s{" "}
+                    {interestMethodLabel(amortization.interest_method)} interest
+                    method, as the loan&rsquo;s schedule will be at release.
+                  </p>
+                  <ScrollBox always className="max-h-[60vh] rounded-md border fit:max-h-none">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-12 text-center">#</TableHead>
+                          <TableHead>Due Date</TableHead>
+                          <TableHead className="text-right">Principal</TableHead>
+                          <TableHead className="text-right">Interest</TableHead>
+                          <TableHead className="text-right">Share Capital Build-Up</TableHead>
+                          <TableHead className="text-right">Total Payment</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {amortization.rows.map((row) => (
+                          <TableRow key={row.period_number}>
+                            <TableCell className="text-center">
+                              {row.period_number}
+                            </TableCell>
+                            <TableCell>{formatDateObj(calendarDate(row.due_date))}</TableCell>
+                            <TableCell className="text-right">
+                              {formatCurrency(row.principal_due)}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {formatCurrency(row.interest_due)}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {formatCurrency(row.share_capital_build_up)}
+                            </TableCell>
+                            <TableCell className="text-right font-medium">
+                              {formatCurrency(row.total_payment)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                      <TableFooter>
+                        <TableRow>
+                          {/* Two cells, not one spanning both: a pinned cell
+                              spanning columns can sit off its columns. */}
+                          <TableCell className="font-semibold">
+                            Total
+                          </TableCell>
+                          <TableCell />
+                          <TableCell className="text-right font-semibold">
+                            {formatCurrency(amortization.totals.principal_due)}
+                          </TableCell>
+                          <TableCell className="text-right font-semibold">
+                            {formatCurrency(amortization.totals.interest_due)}
+                          </TableCell>
+                          <TableCell className="text-right font-semibold">
+                            {formatCurrency(amortization.totals.share_capital_build_up)}
+                          </TableCell>
+                          <TableCell className="text-right font-bold">
+                            {formatCurrency(amortization.totals.total_payment)}
+                          </TableCell>
+                        </TableRow>
+                      </TableFooter>
+                    </Table>
+                  </ScrollBox>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-10 text-center text-muted-foreground">
+                  <Info className="mb-2 size-8 opacity-50" />
+                  <p className="text-sm">
+                    Fill in all required fields above to preview the amortization
+                    schedule.
+                  </p>
+                  <p className="mt-1 text-xs">
+                    Product, amount, term, interest, frequency, and release date are
+                    required.
+                  </p>
+                </div>
+              )}
+          </FormStep>
+        </FormStepper>
+      </form>
 
       {/* ── Collateral Picker Dialog ── */}
       <Dialog
@@ -2105,7 +2226,7 @@ function NewLoanApplicationInner() {
                       ...prev,
                       {
                         collateral: c,
-                        snapshot_value: c.effective_value,
+                        shown_value: c.effective_value,
                       },
                     ]);
                   }}
@@ -2148,7 +2269,9 @@ function NewLoanApplicationInner() {
                       )}
                       {isValueUnknown && (
                         <span className="text-amber-700 dark:text-amber-500">
-                          Share capital ledger unreadable — cannot be attached
+                          {isSelected
+                            ? SHARE_CAPITAL_VALUE_HIDDEN
+                            : `${SHARE_CAPITAL_VALUE_HIDDEN}, so it can't be added`}
                         </span>
                       )}
                     </div>
@@ -2179,21 +2302,37 @@ function NewLoanApplicationInner() {
         </DialogContent>
       </Dialog>
 
-    </div>
+    </PageFill>
+  );
+}
+
+// Inside the Suspense boundary because edit mode comes from the search params.
+// Edit mode opens by reading the loan, so it needs `loans:view` as well. For a
+// new application the inner guard just repeats the outer one.
+function NewLoanApplicationGuard() {
+  const searchParams = useSearchParams();
+  const editLoanId = parseEditLoanId(searchParams.get("edit"));
+  const isEditMode = editLoanId !== null;
+  // The Chairman/Chairwoman's edit at their approval step needs their own
+  // permission instead of `loans:update`.
+  const inApproval = isApprovalEdit(editLoanId, searchParams.get("approval"));
+  const pageName = isEditMode ? EDIT_LOAN_TITLE : "New Loan Application";
+  return (
+    <RouteGuard
+      permission={inApproval ? "loans:edit_in_approval" : isEditMode ? "loans:update" : "loans:create"}
+      pageName={pageName}
+    >
+      <RouteGuard permission={isEditMode ? "loans:view" : "loans:create"} pageName={pageName}>
+        <NewLoanApplicationInner />
+      </RouteGuard>
     </RouteGuard>
   );
 }
 
 export default function NewLoanApplicationPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
-          <Spinner className="size-6 text-muted-foreground" />
-        </div>
-      }
-    >
-      <NewLoanApplicationInner />
+    <Suspense fallback={<PageLoader />}>
+      <NewLoanApplicationGuard />
     </Suspense>
   );
 }

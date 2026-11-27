@@ -16,7 +16,9 @@
  */
 
 import { asRecord, pick, pickNumber } from "@/lib/api-payload";
+import { clockDate } from "@/lib/format";
 import { escapeHtml } from "@/lib/html-escape";
+import { PERIOD_DAYS, ratePeriodWord, readTermUnit, termUnitNoun, type RateFrequency } from "@/lib/loan-terms";
 import {
   DASH,
   currencyOrDash,
@@ -33,7 +35,7 @@ import type { PrintableOrg, PrintField } from "../types";
  * eight template files.
  */
 export { DASH, currencyOrDash, formatCurrency, toNumber };
-export { asArray, asRecord, pick, pickNumber, sum } from "@/lib/api-payload";
+export { asArray, asRecord, pick, pickNumber } from "@/lib/api-payload";
 export { escapeHtml } from "@/lib/html-escape";
 
 /**
@@ -132,16 +134,14 @@ export function textOrBlank(value: unknown): string {
 // timezone west of UTC. Parsing the parts into a local Date removes both.
 // ---------------------------------------------------------------------------
 
-/** `YYYY-MM-DD`, with nothing after it. */
-const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
-
 /**
- * An API date value as a `Date` in the reader's own timezone, or null.
+ * An API date value as Manila's clock reads it, held at the reader's own
+ * clock (`clockDate`), or null.
  *
- * Date-only strings are built from their parts so they land on local midnight
- * of the day they name. Everything else (a `YYYY-MM-DD HH:mm:ss` timestamp, an
- * ISO instant, a `Date`) is left to the platform, which already reads those as
- * the instant they denote.
+ * A date-only string lands on local midnight of the day it names, and a
+ * `YYYY-MM-DD HH:mm:ss` server time keeps its reading. A timestamp with a zone
+ * takes Manila's reading too, so a ledger mixing dated entries and timestamps
+ * orders the same on any computer. A `Date` is kept as it is.
  */
 export function parseApiDate(value: unknown): Date | null {
   if (value === null || value === undefined || value === "") return null;
@@ -149,29 +149,18 @@ export function parseApiDate(value: unknown): Date | null {
     return Number.isNaN(value.getTime()) ? null : value;
   }
 
-  const text = String(value).trim();
-  const parts = DATE_ONLY.exec(text);
-  if (parts) {
-    return new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]));
-  }
-
-  const parsed = new Date(text);
+  const parsed = clockDate(String(value));
   return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
-
-/** Midnight of the day `date` falls on, locally. The day-counting baseline. */
-export function startOfLocalDay(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
 export function dateOrBlank(value: unknown): string {
   if (value === null || value === undefined || value === "") return BLANK_LINE;
-  return formatValue(parseApiDate(value) ?? value, "date");
+  return formatValue(value, "date");
 }
 
 export function dateOrDash(value: unknown): string {
   if (value === null || value === undefined || value === "") return DASH;
-  return formatValue(parseApiDate(value) ?? value, "date");
+  return formatValue(value, "date");
 }
 
 export function moneyOrBlank(value: unknown): string {
@@ -220,7 +209,7 @@ export function dateField(label: string, value: unknown): PrintField {
   if (value === null || value === undefined || value === "") {
     return { label, underline: true };
   }
-  return { label, value: formatValue(parseApiDate(value) ?? value, "date") };
+  return { label, value: formatValue(value, "date") };
 }
 
 /**
@@ -233,7 +222,7 @@ export function dateTimeField(label: string, value: unknown): PrintField {
   if (value === null || value === undefined || value === "") {
     return { label, underline: true };
   }
-  return { label, value: formatValue(parseApiDate(value) ?? value, "datetime") };
+  return { label, value: formatValue(value, "datetime") };
 }
 
 /** Drop the rows the API did not send, keeping a document honest about gaps. */
@@ -247,16 +236,14 @@ export function presentFields(items: (PrintField | null)[]): PrintField[] {
 // The single most dangerous assumption a document in this folder can make is
 // that a loan is monthly.
 //
-// `LoanService` applies `interest_rate` ONCE PER PERIOD and counts `term` IN
-// PERIODS — `buildStraight`, `buildDiminishing` and `buildUponMaturity` all
-// multiply by the rate per iteration, and `computeMaturityDate` advances by
-// days / weeks / 14 days / 15 days / months depending on `frequency`. The
-// "monthly rate (PH convention)" comments in that service describe the common
-// case, not the arithmetic.
+// `term` is a LENGTH in the loan's `term_unit` (months or days), so it is
+// labelled by that unit and never by the payment frequency.
 //
-// So `${rate}% per month` and `${(rate * 12)}% per annum` are true only for a
-// monthly loan. On a 1%-per-day loan they disclose 12.00% per annum against a
-// real nominal of 365%. Stating the annual rate correctly is the entire
+// The rate phrase and its annualisation follow the period the rate is quoted
+// per — the loan's `interest_rate_frequency` (see rateFrequencyFrom), not its
+// payment frequency. So `${rate}% per month` and `${(rate * 12)}% per annum`
+// are true only for a rate quoted per month. On a 1%-per-day rate they
+// disclose 12.00% per annum against a real nominal of 365%. Stating the annual rate correctly is the entire
 // statutory purpose of an R.A. 3765 disclosure, so no template may write either
 // phrase by hand; they call these instead.
 // ---------------------------------------------------------------------------
@@ -282,34 +269,19 @@ interface FrequencyMeta {
    * unlike the 30× error these replace.
    */
   periodsPerYear: number;
-  /** Singular noun for one period, as a term is counted in them. */
-  termNoun: string;
   /** How a rate reads after the figure: "1% per day". */
   ratePhrase: string;
 }
 
 const FREQUENCY_META: Record<LoanFrequency, FrequencyMeta> = {
-  daily: { periodsPerYear: 365, termNoun: "day", ratePhrase: "per day" },
-  weekly: { periodsPerYear: 52, termNoun: "week", ratePhrase: "per week" },
-  bi_weekly: {
-    periodsPerYear: 26,
-    termNoun: "bi-weekly period",
-    ratePhrase: "per bi-weekly period",
-  },
-  semi_monthly: {
-    periodsPerYear: 24,
-    termNoun: "semi-monthly period",
-    ratePhrase: "per semi-monthly period",
-  },
-  monthly: { periodsPerYear: 12, termNoun: "month", ratePhrase: "per month" },
-  // A bullet loan's `term` is months-until-maturity — `computeMaturityDate`
-  // handles 'monthly' and 'upon_maturity' in the same arm — and its interest is
-  // principal × rate × term, i.e. still a monthly periodic rate.
-  upon_maturity: {
-    periodsPerYear: 12,
-    termNoun: "month",
-    ratePhrase: "per month",
-  },
+  daily: { periodsPerYear: 365, ratePhrase: "per day" },
+  weekly: { periodsPerYear: 52, ratePhrase: "per week" },
+  bi_weekly: { periodsPerYear: 26, ratePhrase: "per bi-weekly period" },
+  semi_monthly: { periodsPerYear: 24, ratePhrase: "per semi-monthly period" },
+  monthly: { periodsPerYear: 12, ratePhrase: "per month" },
+  // A bullet loan's interest is principal × rate per month of its term, i.e.
+  // still a monthly periodic rate.
+  upon_maturity: { periodsPerYear: 12, ratePhrase: "per month" },
 };
 
 /** The frequency a payload names, or null when it names none we know. */
@@ -326,44 +298,74 @@ export function periodsPerYear(frequency: unknown): number | null {
 }
 
 /**
- * `"6 month(s)"`, `"30 day(s)"`, `"12 week(s)"`.
+ * `"6 month(s)"`, `"45 day(s)"`.
  *
- * Falls back to the neutral "period(s)" when the frequency is unknown, which is
- * honest — `term` really is a count of periods — rather than guessing months.
+ * `term` is a length in `termUnit`; an absent or unknown unit is months, the
+ * backend's default and what every term before `term_unit` meant.
  */
-export function termLabel(term: number | null, frequency: unknown): string | null {
+export function termLabel(term: number | null, termUnit: unknown): string | null {
   if (term === null) return null;
-  const key = readFrequency(frequency);
-  const noun = key === null ? "period" : FREQUENCY_META[key].termNoun;
-  return `${term} ${noun}(s)`;
+  return `${term} ${termUnitNoun(readTermUnit(termUnit))}`;
 }
 
 /**
- * `termLabel` reading the term straight off a payload.
+ * `termLabel` reading the term and its unit straight off a payload.
  *
- * `term` is a count of the loan's OWN periods and takes the unit from
- * `frequency`. `term_months` — a key only the legacy flat shapes in
+ * `term_months` — a key only the legacy flat shapes in
  * `src/types/loan-document.ts` ever used — names its unit in its name, so a
- * value that arrives under it is labelled in months whatever `frequency` says.
- * Reading them through one `pick` list, as every template used to, silently
- * relabels one as the other.
+ * value that arrives under it is labelled in months.
  */
-export function termLabelFrom(
-  source: Record<string, unknown> | null,
-  frequency: unknown
-): string | null {
-  const periods = pickNumber(source, ["term"]);
-  if (periods !== null) return termLabel(periods, frequency);
-  return termLabel(pickNumber(source, ["term_months"]), "monthly");
+export function termLabelFrom(source: Record<string, unknown> | null): string | null {
+  const term = pickNumber(source, ["term"]);
+  if (term !== null) return termLabel(term, source?.term_unit);
+  return termLabel(pickNumber(source, ["term_months"]), "months");
 }
 
-/** `"1% per day"`, `"2.5% per month"`. The rate exactly as it is applied. */
+/**
+ * The period a payload's `interest_rate` is quoted per: its own
+ * `interest_rate_frequency`, or monthly when it carries none — the backend's
+ * default, and what every rate before that field meant. An unrecognised value
+ * passes through, so rateLabel and annualRateLabel treat it as unknown.
+ */
+export function rateFrequencyFrom(source: Record<string, unknown> | null): unknown {
+  const raw = pick(source, ["interest_rate_frequency"]);
+  return raw === null || raw === undefined || raw === "" ? "monthly" : raw;
+}
+
+/**
+ * The rate period a payload names ("annual" included), or null when it names
+ * none we know. Kept apart from `readFrequency`, the payment frequency
+ * lookup: a rate can be quoted per year, but no loan is paid yearly, so
+ * `annual` has no periods a year there and is never annualised here.
+ */
+function readRatePeriod(value: unknown): RateFrequency | null {
+  if (value === null || value === undefined || value === "") return null;
+  const key = String(value).trim().toLowerCase();
+  return key in PERIOD_DAYS ? (key as RateFrequency) : null;
+}
+
+/**
+ * `"1% per day"`, `"2.5% per month"`, `"18% per year"`. The rate exactly as it
+ * is quoted, labelled by its rate period. `upon_maturity` (a payment shape an
+ * old payload may name) still reads per month.
+ */
 export function rateLabel(rate: number | null, frequency: unknown): string | null {
   if (rate === null) return null;
+  const period = readRatePeriod(frequency);
+  if (period !== null) return `${rate}% per ${ratePeriodWord(period)}`;
   const key = readFrequency(frequency);
   const phrase = key === null ? "per period" : FREQUENCY_META[key].ratePhrase;
   return `${rate}% ${phrase}`;
 }
+
+// At least two places, as the disclosure has always printed; up to four, the
+// places a rate is stored to, so the product of a whole number of periods is
+// never rounded — 1.1234% a month is 13.4808% a year, not 13.48%.
+const annualRateFmt = new Intl.NumberFormat("en-PH", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 4,
+  useGrouping: false,
+});
 
 /**
  * `"365.00% per annum"` for 1% per day. Null when the loan's frequency is
@@ -377,26 +379,17 @@ export function annualRateLabel(
   if (rate === null) return null;
   const periods = periodsPerYear(frequency);
   if (periods === null) return null;
-  return `${(rate * periods).toFixed(2)}% per annum`;
+  return percentLabel(rate * periods, "per annum");
 }
 
-// ---------------------------------------------------------------------------
-// Reconciliation
-// ---------------------------------------------------------------------------
-
 /**
- * What an itemised stack is missing before it adds up to the total.
- *
- * Both the release voucher and the disclosure prefer the server's
- * `total_deductions` over the sum of the `deductions[]` it also sent — the
- * server is the authority on what was withheld, and a voucher that disagrees
- * with the cash is worthless. But when the array is empty or short, the printed
- * lines then visibly fail to add up to the printed total, and the reader is
- * left to do the subtraction. This is the difference, to the centavo, so each
- * document can print it as a line of its own.
+ * A rate the server stated, e.g. `"41.4804% per annum"` or `"3.50% per
+ * month"`: two to four places, as stored, never rounded further. Null when
+ * there is no rate.
  */
-export function unitemisedRemainder(total: number, itemised: number): number {
-  return Math.round((total - itemised) * 100) / 100;
+export function percentLabel(percent: number | null, phrase: string): string | null {
+  if (percent === null) return null;
+  return `${annualRateFmt.format(percent)}% ${phrase}`;
 }
 
 /** Timestamp for a freshly built document. `print-chrome` may restamp it. */

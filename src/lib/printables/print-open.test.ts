@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { api } from "@/lib/api-client";
 import { openPrintable } from "./print-open";
 import type { PrintableDocument } from "./types";
 
@@ -227,5 +228,125 @@ test("the fallback frees its blob on the backstop timer", () => {
     assert.deepEqual(harness.revoked, harness.created);
   } finally {
     harness.restore();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// The print log (disclosure statement and promissory note)
+//
+// The browser's `beforeprint` is the one signal that covers the tab's Print
+// button, Ctrl+P and Save as PDF (which is the same dialog). Opening the tab is
+// only a preview, and "Printed" in the audit trail should not claim otherwise.
+// ---------------------------------------------------------------------------
+
+function stubPrintTab({ listenerRefused = false, documentUnreachable = false } = {}) {
+  const globals = globalThis as unknown as Record<string, unknown>;
+  const previousWindow = globals.window;
+  const objectUrl = URL as unknown as Record<string, unknown>;
+  const previousCreate = objectUrl.createObjectURL;
+  const listeners: Array<{ event: string; handler: () => void }> = [];
+  const order: string[] = [];
+
+  objectUrl.createObjectURL = () => "blob:https://app.test/0";
+  const newTab = {
+    get document() {
+      if (documentUnreachable) throw new Error("cross-origin");
+      return {
+        open: () => order.push("open"),
+        write: () => order.push("write"),
+        close: () => order.push("close"),
+      };
+    },
+    location: { set href(_url: string) {} },
+    focus: () => {},
+    addEventListener: (event: string, handler: () => void) => {
+      if (listenerRefused) throw new Error("refused");
+      order.push("listen");
+      listeners.push({ event, handler });
+    },
+  };
+  globals.window = { open: () => newTab, setTimeout: () => 1 };
+
+  const posts: Array<{ url: string; body: unknown }> = [];
+  const originalPost = api.rawPost;
+  api.rawPost = (async (url: string, body?: unknown) => {
+    posts.push({ url, body });
+    return { logged: true };
+  }) as typeof api.rawPost;
+
+  return {
+    listeners,
+    order,
+    posts,
+    print: () =>
+      listeners.filter((l) => l.event === "beforeprint").forEach((l) => l.handler()),
+    restore: () => {
+      if (previousWindow === undefined) delete globals.window;
+      else globals.window = previousWindow;
+      objectUrl.createObjectURL = previousCreate;
+      api.rawPost = originalPost;
+    },
+  };
+}
+
+function disclosure(subjectId?: number): PrintableDocument {
+  return { ...doc(), id: "disclosure_statement", subjectId };
+}
+
+test("opening a disclosure logs nothing; printing it logs once per print", () => {
+  const tab = stubPrintTab();
+  try {
+    assert.equal(openPrintable(disclosure(42)), "opened");
+    assert.deepEqual(tab.posts, []);
+
+    tab.print();
+    assert.deepEqual(tab.posts, [{ url: "/loans/42/print-log", body: { document: "disclosure" } }]);
+
+    tab.print();
+    assert.equal(tab.posts.length, 2);
+  } finally {
+    tab.restore();
+  }
+});
+
+test("the print listener goes on after the document is written", () => {
+  // `document.open()` erases a window's listeners, so one attached earlier
+  // would never fire.
+  const tab = stubPrintTab();
+  try {
+    openPrintable(disclosure(42));
+    assert.deepEqual(tab.order, ["open", "write", "close", "listen"]);
+  } finally {
+    tab.restore();
+  }
+});
+
+test("a receipt or a blank form gets no print listener", () => {
+  const tab = stubPrintTab();
+  try {
+    openPrintable(doc());
+    openPrintable(disclosure());
+    assert.deepEqual(tab.listeners, []);
+  } finally {
+    tab.restore();
+  }
+});
+
+test("a tab that refuses the listener still opens", () => {
+  const tab = stubPrintTab({ listenerRefused: true });
+  try {
+    assert.equal(openPrintable(disclosure(42)), "opened");
+  } finally {
+    tab.restore();
+  }
+});
+
+test("the fallback tab can't be listened to, so opening it is what gets logged", () => {
+  const tab = stubPrintTab({ documentUnreachable: true });
+  try {
+    assert.equal(openPrintable(disclosure(42)), "opened");
+    assert.deepEqual(tab.posts, [{ url: "/loans/42/print-log", body: { document: "disclosure" } }]);
+  } finally {
+    tab.restore();
   }
 });

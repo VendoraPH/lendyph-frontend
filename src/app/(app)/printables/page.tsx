@@ -1,17 +1,24 @@
 "use client";
 
+import { useMenuVisibility } from "@/hooks/use-menu-visibility";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { RouteGuard } from "@/components/common";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { FileStack, Printer, Search, Table2 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { Printer, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { PRINTABLE_CATALOG } from "@/lib/printables/catalog";
-import { SUBJECT_ACCENT, SUBJECT_META } from "@/lib/printables/types";
+import { documentsAvailableLabel, visiblePrintables } from "@/lib/printables/catalog";
+import { printableIcon3D } from "@/lib/printables/icons-3d";
+import type { Icon3DName } from "@/lib/icons-3d";
+import { Icon3D } from "@/components/common/icon-3d";
+import { usePermission } from "@/hooks";
+import { SUBJECT_ACCENT, SUBJECT_ILLUSTRATION, SUBJECT_META } from "@/lib/printables/types";
 import type { PrintableDefinition, PrintableSubject } from "@/lib/printables/types";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { hasIllustration, Illustration } from "@/components/common/illustration";
+import { DATA_IMPORT_TEMPLATE_TITLE } from "@/lib/page-titles";
 
 /**
  * Documents catalog. Grouped by what you have to pick before the document can
@@ -23,12 +30,22 @@ import type { PrintableDefinition, PrintableSubject } from "@/lib/printables/typ
  * they behave differently.
  */
 
-const ORDERED_SUBJECTS: PrintableSubject[] = ["loan", "borrower", "repayment"];
+const ORDERED_SUBJECTS: PrintableSubject[] = [
+  "loan",
+  "borrower",
+  "repayment",
+  "savings_account",
+  "savings_withdrawal",
+  "time_deposit",
+];
 
 const SUBJECT_DESCRIPTION: Record<PrintableSubject, string> = {
   loan: "Documents issued against a single loan account",
   borrower: "Statements and certificates issued to a member",
   repayment: "Receipts issued for a payment",
+  savings_account: "Forms, agreements and notices for a savings account",
+  savings_withdrawal: "Slips for a posted savings withdrawal",
+  time_deposit: "Notices and forms for a time deposit",
 };
 
 /**
@@ -38,19 +55,24 @@ const SUBJECT_DESCRIPTION: Record<PrintableSubject, string> = {
  */
 const IMPORT_TEMPLATE = {
   href: "/printables/data-template",
-  title: "Data Import Template",
+  title: DATA_IMPORT_TEMPLATE_TITLE,
   description:
-    "The member and loan workbook for migrating an existing book onto Lendyph.",
+    "The member, loan and share capital workbook for migrating an existing book onto Lendyph.",
   /** Extra words the search should match, since none of them are on the card. */
   keywords: "csv excel xlsm bulk import migration upload template onboarding",
 };
 
 export default function PrintablesPage() {
   const [query, setQuery] = useState("");
+  const { can } = usePermission();
+  // Savings documents only where savings is switched on, for savings:view, and
+  // no document of a menu Menu Visibility hides.
+  const { isHidden } = useMenuVisibility();
+  const catalog = visiblePrintables(can, isHidden);
 
   const grouped = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    const filtered = PRINTABLE_CATALOG.filter((p) => {
+    const filtered = catalog.filter((p) => {
       if (!needle) return true;
       return (
         p.title.toLowerCase().includes(needle) ||
@@ -64,7 +86,7 @@ export default function PrintablesPage() {
       bySubject.set(p.subject, list);
     });
     return bySubject;
-  }, [query]);
+  }, [query, catalog]);
 
   const templateMatches = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -79,13 +101,13 @@ export default function PrintablesPage() {
 
   return (
     <RouteGuard permission="reports:view" pageName="Documents">
-      <div className="space-y-6">
+      <PageFill>
         {/* Hero / header */}
-        <div className="rounded-xl border bg-gradient-to-br from-brand-orange/10 via-background to-background p-6 sm:p-8">
+        <div className="shrink-0 rounded-xl border bg-gradient-to-br from-brand-orange/10 via-background to-background p-6 sm:p-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex items-start gap-4">
               <div className="hidden sm:flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-brand-orange/15 text-brand-orange">
-                <FileStack className="h-6 w-6" />
+                <Icon3D name="empty-documents" size={36} />
               </div>
               <div className="min-w-0">
                 <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
@@ -105,7 +127,7 @@ export default function PrintablesPage() {
                     Print-ready
                   </Badge>
                   <span className="text-muted-foreground">
-                    {PRINTABLE_CATALOG.length} documents available
+                    {documentsAvailableLabel(catalog.length)}
                   </span>
                 </div>
               </div>
@@ -125,25 +147,34 @@ export default function PrintablesPage() {
 
         {/* Catalog */}
         {!hasResults ? (
-          <div className="rounded-lg border border-dashed py-16 text-center text-sm text-muted-foreground">
-            No documents match{" "}
-            <span className="font-medium">&ldquo;{query}&rdquo;</span>.
+          <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-16 text-center text-sm text-muted-foreground">
+            {hasIllustration("noResults") && <Illustration name="noResults" />}
+            <p>
+              No documents match{" "}
+              <span className="font-medium">&ldquo;{query}&rdquo;</span>.
+            </p>
           </div>
         ) : (
-          <div className="space-y-8">
+          <ScrollBox className="space-y-8 p-px">
             {ORDERED_SUBJECTS.map((subject) => {
               const items = grouped.get(subject) ?? [];
               if (items.length === 0) return null;
               return (
                 <section key={subject}>
-                  <div className="mb-3 flex items-baseline justify-between">
-                    <div>
-                      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                        By {SUBJECT_META[subject].label}
-                      </h2>
-                      <p className="text-xs text-muted-foreground/80">
-                        {SUBJECT_DESCRIPTION[subject]}
-                      </p>
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <Illustration
+                        name={SUBJECT_ILLUSTRATION[subject]}
+                        className="h-14 max-h-14 w-14 shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                          By {SUBJECT_META[subject].label}
+                        </h2>
+                        <p className="text-xs text-muted-foreground/80">
+                          {SUBJECT_DESCRIPTION[subject]}
+                        </p>
+                      </div>
                     </div>
                     <span className="text-xs text-muted-foreground">
                       {items.length}{" "}
@@ -161,18 +192,21 @@ export default function PrintablesPage() {
 
             {templateMatches && (
               <section>
-                <div className="mb-3">
-                  <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                    Bulk import
-                  </h2>
-                  <p className="text-xs text-muted-foreground/80">
-                    Bringing records in from another system
-                  </p>
+                <div className="mb-3 flex min-w-0 items-center gap-3">
+                  <Illustration name="emptyDocuments" className="h-14 max-h-14 w-14 shrink-0" />
+                  <div className="min-w-0">
+                    <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                      Bulk import
+                    </h2>
+                    <p className="text-xs text-muted-foreground/80">
+                      Bringing records in from another system
+                    </p>
+                  </div>
                 </div>
                 <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   <CatalogCard
                     href={IMPORT_TEMPLATE.href}
-                    icon={Table2}
+                    icon="icon-layers"
                     // Not one of `SUBJECT_ACCENT`'s three on purpose: emerald
                     // means "repayment" everywhere else in this catalog.
                     accent={{
@@ -187,9 +221,9 @@ export default function PrintablesPage() {
                 </div>
               </section>
             )}
-          </div>
+          </ScrollBox>
         )}
-      </div>
+      </PageFill>
     </RouteGuard>
   );
 }
@@ -198,7 +232,7 @@ function PrintableCard({ printable }: { printable: PrintableDefinition }) {
   return (
     <CatalogCard
       href={`/printables/${printable.id}`}
-      icon={printable.icon}
+      icon={printableIcon3D(printable.icon)}
       accent={SUBJECT_ACCENT[printable.subject]}
       title={printable.title}
       description={printable.description}
@@ -215,14 +249,14 @@ function PrintableCard({ printable }: { printable: PrintableDefinition }) {
  */
 function CatalogCard({
   href,
-  icon: Icon,
+  icon,
   accent,
   title,
   description,
   footer,
 }: {
   href: string;
-  icon: LucideIcon;
+  icon: Icon3DName;
   accent: { text: string; bg: string; ring: string };
   title: string;
   description: string;
@@ -246,7 +280,7 @@ function CatalogCard({
                 accent.ring
               )}
             >
-              <Icon className={cn("h-5 w-5", accent.text)} />
+              <Icon3D name={icon} size={30} />
             </div>
             <div className="min-w-0">
               <h3 className="text-sm font-semibold leading-tight">{title}</h3>

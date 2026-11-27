@@ -1,12 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { formatCurrency } from "@/lib/report-format";
+import { DASH, formatCurrency } from "@/lib/report-format";
 import { buildMemberLedgerCardDoc } from "./member-ledger-card";
 import {
   allFields,
   assertPrintableShape,
   chargeAmount,
   fieldValue,
+  hasChargeLine,
   hasTable,
   isBlankField,
   notes,
@@ -30,10 +31,11 @@ const PAYLOAD = {
     contact_number: "0917-555-0101",
   },
   loans: [
-    { loan_account_number: "LN-2025-0011", product_name: "Regular Loan", principal_amount: 40000, released_at: "2025-06-01", maturity_date: "2025-12-01", status: "completed", total_paid: 44000, outstanding_balance: 0, payments_count: 6 },
-    { loan_account_number: "LN-2026-0042", product_name: "Regular Loan", principal_amount: 100000, released_at: "2026-08-01", maturity_date: "2027-02-01", status: "current", total_paid: 18666.67, outstanding_balance: 83333.33, payments_count: 1 },
+    { loan_account_number: "LN-2025-0011", product_name: "Regular Loan", principal_amount: 40000, released_at: "2025-06-01", maturity_date: "2025-12-01", status: "completed", total_paid: 44000, outstanding_balance: 0, outstanding_principal: 0, total_outstanding: 0, payments_count: 6 },
+    { loan_account_number: "LN-2026-0042", product_name: "Regular Loan", principal_amount: 100000, released_at: "2026-08-01", maturity_date: "2027-02-01", status: "ongoing", display_status: "past_due", total_paid: 18666.67, outstanding_balance: 83333.33, outstanding_principal: 83333.33, total_outstanding: 90000, overdue_amount: 6359, payments_count: 1 },
   ],
-  totals: { total_loans: 2, total_portfolio: 140000, total_outstanding: 83333.33 },
+  totals: { total_loans: 2, total_portfolio: 140000, total_paid: 62666.67, total_outstanding: 90000 },
+  loans_totals: { principal_amount: 140000, total_paid: 62666.67, payments_count: 7, outstanding_balance: 83333.33, outstanding_principal: 83333.33, total_outstanding: 90000, overdue_amount: 6359 },
   generated_at: "2026-08-26 09:15:00",
 };
 
@@ -65,38 +67,47 @@ test("member ledger card: every loan account is listed", () => {
     ["LN-2025-0011", "LN-2026-0042"]
   );
   assert.equal(table.rows[0]?.status, "Completed");
-  assert.equal(table.rows[1]?.balance, 83333.33);
+  assert.equal(table.rows[1]?.principal_balance, 83333.33);
+  assert.equal(table.rows[1]?.outstanding, 90000);
   assert.equal(table.rows[1]?.payments_count, 1);
 });
 
-test("member ledger card: the summary agrees with the table it sits above", () => {
+test("member ledger card: the summary and the table totals are the server's", () => {
   const doc = buildMemberLedgerCardDoc(PAYLOAD);
   const table = tableBlock(doc, "Loan Accounts");
 
   assert.equal(chargeAmount(doc, "Loan accounts on record"), "2");
   assert.equal(chargeAmount(doc, "Total released"), formatCurrency(140000));
-  assert.equal(chargeAmount(doc, "Total paid"), formatCurrency(44000 + 18666.67));
-  assert.equal(
-    chargeAmount(doc, "TOTAL OUTSTANDING BALANCE"),
-    formatCurrency(83333.33)
-  );
+  assert.equal(chargeAmount(doc, "Total paid"), formatCurrency(62666.67));
+  assert.equal(chargeAmount(doc, "TOTAL OUTSTANDING"), formatCurrency(90000));
 
-  // Server totals and row totals must be the same figure.
-  assert.equal(table.totals?.principal, formatCurrency(40000 + 100000));
-  assert.equal(table.totals?.principal, chargeAmount(doc, "Total released"));
-  assert.equal(table.totals?.balance, chargeAmount(doc, "TOTAL OUTSTANDING BALANCE"));
+  // `loans_totals`, the server's column totals of the table.
+  assert.equal(table.totals?.principal, formatCurrency(140000));
+  assert.equal(table.totals?.total_paid, formatCurrency(62666.67));
+  assert.equal(table.totals?.principal_balance, formatCurrency(83333.33));
+  assert.equal(table.totals?.outstanding, formatCurrency(90000));
   assert.equal(table.totals?.payments_count, "7");
+
+  // A server figure unlike the rows added up is printed as sent.
+  const sent = tableBlock(
+    buildMemberLedgerCardDoc({ ...PAYLOAD, loans_totals: { ...PAYLOAD.loans_totals, total_paid: 62666.68 } }),
+    "Loan Accounts"
+  );
+  assert.equal(sent.totals?.total_paid, formatCurrency(62666.68));
 });
 
-test("member ledger card: totals are summed when the API sends none", () => {
-  const doc = buildMemberLedgerCardDoc({ ...PAYLOAD, totals: undefined });
+test("member ledger card: totals the server did not send are dashes, never sums", () => {
+  const doc = buildMemberLedgerCardDoc({ ...PAYLOAD, totals: undefined, loans_totals: undefined });
+  const table = tableBlock(doc, "Loan Accounts");
 
+  // A count of the rows listed is not a money figure, and stays.
   assert.equal(chargeAmount(doc, "Loan accounts on record"), "2");
-  assert.equal(chargeAmount(doc, "Total released"), formatCurrency(140000));
-  assert.equal(
-    chargeAmount(doc, "TOTAL OUTSTANDING BALANCE"),
-    formatCurrency(83333.33)
-  );
+  assert.equal(chargeAmount(doc, "Total released"), DASH);
+  assert.equal(chargeAmount(doc, "Total paid"), DASH);
+  assert.equal(chargeAmount(doc, "TOTAL OUTSTANDING"), DASH);
+  for (const key of ["principal", "total_paid", "payments_count", "principal_balance", "outstanding"]) {
+    assert.equal(table.totals?.[key], DASH, key);
+  }
 });
 
 test("member ledger card: without per-payment data it says where to find it", () => {
@@ -121,10 +132,8 @@ test("member ledger card: a payment history is rendered if the API grows one", (
   const table = tableBlock(doc, "Payment History");
   assert.equal(table.rows.length, 2);
   assert.equal(table.rows[0]?.reference, "OR-0142");
-  assert.equal(
-    table.totals?.amount,
-    formatCurrency(18666.67 + 18166.67)
-  );
+  // The server sends no totals for this table, so it has no TOTAL row.
+  assert.equal(table.totals, undefined);
   // The note is replaced by the thing it was apologising for.
   assert.ok(!notes(doc).includes("Statement of Account"));
 });
@@ -146,10 +155,60 @@ test("member ledger card: a null payload still prints a blank card", () => {
   assert.ok(isBlankField(doc, "Member"));
   assert.ok(isBlankField(doc, "Member No."));
   assert.equal(chargeAmount(doc, "Loan accounts on record"), "0");
-  assert.equal(
-    chargeAmount(doc, "TOTAL OUTSTANDING BALANCE"),
-    formatCurrency(0)
-  );
+  // No figure was sent: a dash, never a ₱0.00 the server did not state.
+  assert.equal(chargeAmount(doc, "TOTAL OUTSTANDING"), DASH);
   assert.equal(tableBlock(doc, "Loan Accounts").rows.length, 0);
   assert.deepEqual(signatureLabels(doc), ["Posted by", "Verified by"]);
+});
+
+test("member ledger card: a loan past grace reads Past Due, from the server's display_status", () => {
+  const table = tableBlock(buildMemberLedgerCardDoc(PAYLOAD), "Loan Accounts");
+  // The status is printed, in its own column, and ten columns print in the
+  // compact type so the table fits an A4 page.
+  assert.ok(table.columns.some((c) => c.key === "status" && c.header === "Status"));
+  assert.equal(table.compact, true);
+  assert.equal(table.rows[0]?.status, "Completed");
+  assert.equal(table.rows[1]?.status, "Past Due");
+});
+
+test("member ledger card: each loan's Past Due is the server's, with the server's total", () => {
+  const table = tableBlock(buildMemberLedgerCardDoc(PAYLOAD), "Loan Accounts");
+  const keys = table.columns.map((c) => c.key);
+  assert.equal(table.columns.find((c) => c.key === "overdue")?.header, "Past Due");
+  assert.equal(keys.indexOf("overdue"), keys.indexOf("outstanding") + 1);
+  assert.equal(table.rows[1]?.overdue, 6359);
+  assert.equal(table.rows[0]?.overdue, null);
+  assert.equal(table.totals?.overdue, formatCurrency(6359));
+
+  const noTotal = tableBlock(
+    buildMemberLedgerCardDoc({ ...PAYLOAD, loans_totals: { ...PAYLOAD.loans_totals, overdue_amount: undefined } }),
+    "Loan Accounts"
+  );
+  assert.equal(noTotal.totals?.overdue, DASH);
+});
+
+test("member ledger card: eleven columns still share the page and print compact", () => {
+  const table = tableBlock(buildMemberLedgerCardDoc(PAYLOAD), "Loan Accounts");
+  const widths = table.columns.map((c) => Number.parseFloat(String(c.width)));
+  assert.equal(table.columns.length, 11);
+  assert.equal(widths.reduce((sum, w) => sum + w, 0), 100);
+  assert.equal(table.compact, true);
+});
+
+test("member ledger card: Total paid says what it holds from before an import", () => {
+  const imported = buildMemberLedgerCardDoc({
+    ...PAYLOAD,
+    totals: { ...PAYLOAD.totals, paid_before_import: 23600 },
+  });
+  assert.equal(chargeAmount(imported, "Of which paid before the import"), formatCurrency(23600));
+
+  // A member with no imported loan prints as before.
+  assert.equal(hasChargeLine(buildMemberLedgerCardDoc(PAYLOAD), "Of which paid before the import"), false);
+  assert.equal(
+    hasChargeLine(
+      buildMemberLedgerCardDoc({ ...PAYLOAD, totals: { ...PAYLOAD.totals, paid_before_import: 0 } }),
+      "Of which paid before the import"
+    ),
+    false
+  );
 });

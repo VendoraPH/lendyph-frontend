@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -15,11 +15,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { gcashService } from "@/services/gcash.service";
-import { useGCashTiers } from "@/hooks/use-gcash-tiers";
-import { extractGCashErrorMessage } from "@/lib/gcash-errors";
-import { formatCurrency } from "@/lib/format";
 import { gcashPartyNoun, gcashPartyPayload } from "@/lib/gcash-party";
 import type { GCashParty } from "@/types";
+import { useGCashChargePreview } from "../_hooks/use-gcash-charge-preview";
+import { useWalkInBranch } from "../_hooks/use-walk-in-branch";
+import { ChargePreviewPanel } from "./charge-preview-panel";
+import { WalkInBranchField } from "./walk-in-branch-field";
 
 interface Props {
   open: boolean;
@@ -34,10 +35,10 @@ export function CashOutDialog({
   party,
   onCreated,
 }: Props) {
-  const { resolveCharge, loading: tiersLoading } = useGCashTiers();
   const [amount, setAmount] = useState("");
   const [remarks, setRemarks] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const branch = useWalkInBranch(party);
 
   useEffect(() => {
     if (open) {
@@ -47,28 +48,21 @@ export function CashOutDialog({
   }, [open]);
 
   const amountNum = Number(amount);
-  const charge = useMemo(
-    () =>
-      Number.isFinite(amountNum) && amountNum > 0
-        ? resolveCharge(amountNum, "cash_out")
-        : null,
-    [amountNum, resolveCharge],
-  );
-  const total = charge === null ? null : amountNum - charge;
-  const canSubmit =
-    !submitting &&
-    amountNum > 0 &&
-    charge !== null &&
-    total !== null &&
-    total >= 0 &&
-    !tiersLoading;
+  // The charge and total are the server's preview for this exact amount; the
+  // browser never works them out. A Cash Out the charge would take all of is
+  // the server's 422, shown as it words it. Recording waits for the preview.
+  const { view: preview, retry: retryPreview } = useGCashChargePreview("cash_out", amountNum);
+  const canSubmit = !submitting && !branch.blocked && preview.status === "ready";
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
+    const branchBody = branch.take();
+    if (branchBody === null) return;
     setSubmitting(true);
     try {
       const tx = await gcashService.createTransaction({
         ...gcashPartyPayload(party),
+        ...branchBody,
         type: "cash_out",
         amount: amountNum,
         remarks: remarks.trim() || undefined,
@@ -77,7 +71,7 @@ export function CashOutDialog({
       onCreated?.();
       onOpenChange(false);
     } catch (err) {
-      toast.error(extractGCashErrorMessage(err));
+      branch.showFailure(err);
     } finally {
       setSubmitting(false);
     }
@@ -109,20 +103,14 @@ export function CashOutDialog({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label className="text-muted-foreground">Charge</Label>
-              <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
-                {charge !== null ? formatCurrency(charge) : "—"}
-              </div>
-            </div>
-            <div>
-              <Label className="text-muted-foreground">Total</Label>
-              <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm font-medium">
-                {total !== null ? formatCurrency(total) : "—"}
-              </div>
-            </div>
-          </div>
+          <WalkInBranchField branch={branch} disabled={submitting} />
+
+          <ChargePreviewPanel
+            view={preview}
+            action="Cash Out"
+            amount={amountNum}
+            onRetry={retryPreview}
+          />
 
           <div className="space-y-1.5">
             <Label htmlFor="cashout-remarks">Remarks (optional)</Label>
@@ -144,7 +132,11 @@ export function CashOutDialog({
           >
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={!canSubmit}>
+          <Button
+            onClick={handleSubmit}
+            disabled={!canSubmit}
+            aria-describedby={branch.blocked ? branch.reasonId : undefined}
+          >
             {submitting ? "Saving…" : "Record Cash Out"}
           </Button>
         </DialogFooter>

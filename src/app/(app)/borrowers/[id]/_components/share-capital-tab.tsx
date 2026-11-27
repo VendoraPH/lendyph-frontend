@@ -9,14 +9,17 @@ import { Loader2, Landmark, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { shareCapitalService } from "@/services";
-import type { ShareCapitalLedgerEntry } from "@/types";
+import { usePermission } from "@/hooks";
+import { formatCurrency, formatDate } from "@/lib/format";
+import type { ShareCapitalLedgerEntry, ShareCapitalMemberPeriod } from "@/types";
+import { shareCapitalTabView } from "../_lib/share-capital-tab-view";
+import { ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(isNaN(amount) ? 0 : amount);
-}
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+/** "—" when the server sent no figure, never a browser stand-in. */
+function money(amount: number | null): string {
+  return amount === null ? "—" : formatCurrency(amount);
 }
 
 interface ShareCapitalTabProps {
@@ -24,13 +27,15 @@ interface ShareCapitalTabProps {
 }
 
 export function ShareCapitalTab({ borrowerId }: ShareCapitalTabProps) {
+  // The ledger needs `share_capital:view`, which a member's page does not
+  // imply. Without it the ledger is not asked for, and the tab says it could
+  // not be read rather than showing an empty ledger (see `failed` below).
+  const canReadLedger = usePermission().can("share_capital:view");
   const [entries, setEntries] = useState<ShareCapitalLedgerEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  // Set only when the drain gave up with pages outstanding. This tab prints a
-  // running balance per row, so a short ledger is not merely a short table:
-  // every balance in the Balance column is accumulated from the first entry
-  // shown, and if that is not the first entry that EXISTS then every figure in
-  // the column is wrong, including the closing one.
+  const [summary, setSummary] = useState<ShareCapitalMemberPeriod | null>(null);
+  const [loading, setLoading] = useState(canReadLedger);
+  // Set only when the drain gave up with pages outstanding. The balances and
+  // totals are the server's, so they stay right; only the list is short.
   const [shortfall, setShortfall] = useState<{
     shown: number;
     total: number | null;
@@ -39,56 +44,40 @@ export function ShareCapitalTab({ borrowerId }: ShareCapitalTabProps) {
   // point: a failed request used to land in the same state as a member who has
   // never contributed, so the screen said "No share capital entries found" and
   // showed a ₱0.00 balance for somebody holding six figures.
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState(!canReadLedger);
 
   const fetchEntries = useCallback(async () => {
+    if (!canReadLedger) return;
     setLoading(true);
     try {
-      // Drained across pages. `per_page: 9999` was clamped to 100, so a member
-      // with a longer ledger saw their hundred most recent entries under a
-      // "Share Capital Balance" card that summed only those.
-      const { rows, truncated, total } = await shareCapitalService.ledgerListAll({
-        borrower_id: borrowerId,
-      });
+      // Drained across pages, with each entry's server `running_balance` and
+      // the member's `meta.summary` (credits, debits, ending balance).
+      const { rows, truncated, total, summary: period } =
+        await shareCapitalService.memberLedger(borrowerId);
       setEntries(rows);
+      setSummary(period);
       setShortfall(truncated ? { shown: rows.length, total } : null);
       setFailed(false);
     } catch {
       setEntries([]);
+      setSummary(null);
       setShortfall(null);
       setFailed(true);
     } finally {
       setLoading(false);
     }
-  }, [borrowerId]);
+  }, [borrowerId, canReadLedger]);
 
   useEffect(() => {
     fetchEntries();
   }, [fetchEntries]);
 
-  const { totalCredits, totalDebits, balance } = useMemo(() => {
-    let credits = 0;
-    let debits = 0;
-    for (const e of entries) {
-      const amt = parseFloat(String(e.amount ?? 0)) || 0;
-      if (e.type === "credit") credits += amt;
-      else debits += amt;
-    }
-    return { totalCredits: credits, totalDebits: debits, balance: credits - debits };
-  }, [entries]);
-
-  // Compute running balance
-  const entriesWithBalance = useMemo(() => {
-    const sorted = [...entries].sort(
-      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-    );
-    let running = 0;
-    return sorted.map((e) => {
-      const amt = parseFloat(String(e.amount ?? 0)) || 0;
-      running += e.type === "credit" ? amt : -amt;
-      return { ...e, runningBalance: running };
-    });
-  }, [entries]);
+  // Every figure is the server's; nothing is added up here.
+  const { rows: entriesWithBalance, totals } = useMemo(
+    () => shareCapitalTabView(entries, summary),
+    [entries, summary],
+  );
+  const { totalCredits, totalDebits, balance } = totals;
 
   if (loading) {
     return (
@@ -128,99 +117,102 @@ export function ShareCapitalTab({ borrowerId }: ShareCapitalTabProps) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className={cn("gap-4", FIT_CLASSES.section)}>
       {shortfall && (
         <IncompleteListNotice
           shown={shortfall.shown}
           total={shortfall.total}
           noun="share capital entries"
-          consequence="The totals and the running Balance column below are computed from only the entries that loaded, so every figure in them is understated or overstated by the entries that did not."
+          className="shrink-0"
+          consequence="The totals and the Balance column are the server's figures over every entry; only the list of entries below is incomplete."
         />
       )}
 
       {/* Summary Cards */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+      <div className="grid shrink-0 gap-4 grid-cols-1 sm:grid-cols-3">
         <Card>
           <CardContent className="py-4">
             <p className="text-xs text-muted-foreground mb-1">Total Credits</p>
-            <p className="text-xl font-bold text-green-600 tabular-nums">{formatCurrency(totalCredits)}</p>
+            <p className="text-xl font-bold text-green-600 tabular-nums">{money(totalCredits)}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="py-4">
             <p className="text-xs text-muted-foreground mb-1">Total Debits</p>
             <p className="text-xl font-bold text-red-600 tabular-nums">
-              {totalDebits > 0 ? formatCurrency(totalDebits) : "—"}
+              {totalDebits !== null && totalDebits > 0 ? formatCurrency(totalDebits) : "—"}
             </p>
           </CardContent>
         </Card>
         <Card className="border-brand-orange/30">
           <CardContent className="py-4">
             <p className="text-xs text-muted-foreground mb-1">Share Capital Balance</p>
-            <p className="text-xl font-bold text-brand-orange tabular-nums">{formatCurrency(balance)}</p>
+            <p className="text-xl font-bold text-brand-orange tabular-nums">{money(balance)}</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Entries Table */}
-      <Card>
+      <Card className={FIT_CLASSES.section}>
         <CardHeader>
           <CardTitle className="text-sm font-medium flex items-center gap-2">
             <Landmark className="h-4 w-4 text-muted-foreground" />
             Share Capital Ledger
           </CardTitle>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className={cn("p-0", FIT_CLASSES.section)}>
           {entriesWithBalance.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-2 py-12 text-muted-foreground">
               <Landmark className="h-8 w-8 opacity-40" />
               <p className="text-sm">No share capital entries found</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead className="text-right">Debit</TableHead>
-                  <TableHead className="text-right">Credit</TableHead>
-                  <TableHead className="text-right">Balance</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {entriesWithBalance.map((entry) => (
-                  <TableRow key={entry.id}>
-                    <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                      {formatDate(entry.date)}
+            <ScrollBox>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead className="text-right">Debit</TableHead>
+                    <TableHead className="text-right">Credit</TableHead>
+                    <TableHead className="text-right">Balance</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {entriesWithBalance.map((entry) => (
+                    <TableRow key={entry.id}>
+                      <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                        {formatDate(entry.date)}
+                      </TableCell>
+                      <TableCell className="text-sm">{entry.description}</TableCell>
+                      <TableCell className="text-right text-sm tabular-nums text-red-600">
+                        {entry.debit > 0 ? formatCurrency(entry.debit) : ""}
+                      </TableCell>
+                      <TableCell className="text-right text-sm tabular-nums text-green-600">
+                        {entry.credit > 0 ? formatCurrency(entry.credit) : ""}
+                      </TableCell>
+                      <TableCell className="text-right text-sm tabular-nums font-semibold">
+                        {money(entry.runningBalance)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+                <TableFooter>
+                  <TableRow className="bg-muted/50 font-semibold">
+                    <TableCell colSpan={2} className="text-sm">Total</TableCell>
+                    <TableCell className="text-right text-sm text-red-600 tabular-nums">
+                      {totalDebits !== null && totalDebits > 0 ? formatCurrency(totalDebits) : ""}
                     </TableCell>
-                    <TableCell className="text-sm">{entry.description}</TableCell>
-                    <TableCell className="text-right text-sm tabular-nums text-red-600">
-                      {entry.type === "debit" ? formatCurrency(parseFloat(String(entry.amount ?? 0)) || 0) : ""}
+                    <TableCell className="text-right text-sm text-green-600 tabular-nums">
+                      {money(totalCredits)}
                     </TableCell>
-                    <TableCell className="text-right text-sm tabular-nums text-green-600">
-                      {entry.type === "credit" ? formatCurrency(parseFloat(String(entry.amount ?? 0)) || 0) : ""}
-                    </TableCell>
-                    <TableCell className="text-right text-sm tabular-nums font-semibold">
-                      {formatCurrency(entry.runningBalance)}
+                    <TableCell className="text-right text-sm tabular-nums">
+                      {money(balance)}
                     </TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-              <TableFooter>
-                <TableRow className="bg-muted/50 font-semibold">
-                  <TableCell colSpan={2} className="text-sm">Total</TableCell>
-                  <TableCell className="text-right text-sm text-red-600 tabular-nums">
-                    {totalDebits > 0 ? formatCurrency(totalDebits) : ""}
-                  </TableCell>
-                  <TableCell className="text-right text-sm text-green-600 tabular-nums">
-                    {formatCurrency(totalCredits)}
-                  </TableCell>
-                  <TableCell className="text-right text-sm tabular-nums">
-                    {formatCurrency(balance)}
-                  </TableCell>
-                </TableRow>
-              </TableFooter>
-            </Table>
+                </TableFooter>
+              </Table>
+            </ScrollBox>
           )}
         </CardContent>
       </Card>

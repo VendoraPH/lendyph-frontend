@@ -1,7 +1,10 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
+import { fetchAllPages, type DrainResult } from "@/lib/paginate";
 import type {
   Collateral,
+  CollateralRegisterParams,
+  CollateralRegisterResponse,
   LoanCollateral,
   PaginatedResponse,
 } from "@/types";
@@ -30,13 +33,41 @@ function unwrapList<T>(res: unknown): T[] {
 }
 
 export const collateralService = {
-  list: async (params?: CollateralListParams): Promise<Collateral[]> => {
-    const res = await api.get<PaginatedResponse<Collateral> | Collateral[]>(
-      API_ENDPOINTS.COLLATERALS.LIST,
-      { params },
-    );
-    return unwrapList<Collateral>(res);
-  },
+  /**
+   * Every collateral matching `params` — one member's with `borrower_id`, the
+   * whole register with none.
+   *
+   * `CollateralController::index()` answers with `->get()`, not a paginator, so
+   * today this is one request whatever the filter. It is a drain so that stays
+   * true of the result if the endpoint ever paginates: a single read would
+   * silently become page 1, while this keeps reading and reports `truncated` if
+   * it has to stop. Every caller needs the whole set — the loan forms' pickers
+   * and the duplicate guard need all of one member's. The register does not
+   * read this; it pages `registerPage` instead. `DrainResult` for the reason on
+   * `borrowerService.listAll`; `page` and `per_page` are set by the drain.
+   */
+  listAll: (params?: CollateralListParams): Promise<DrainResult<Collateral>> =>
+    fetchAllPages<Collateral>(({ page, per_page }) =>
+      api.getRaw<{ data: Collateral[] }>(API_ENDPOINTS.COLLATERALS.LIST, {
+        params: { ...params, page, per_page },
+      }),
+    ),
+
+  /**
+   * One page of the collateral register: collaterals grouped by member, with
+   * the filtering, grouping, valuation, sorting and paging all done on the
+   * server. Pages are of MEMBERS, so `meta.total` counts groups.
+   *
+   * `getRaw` because the body is a paginator and `meta` carries more than the
+   * paging — the KPI `totals` and `names_hidden` — all of which `api.get`
+   * would discard. `per_page` is clamped to 100 like every list.
+   */
+  registerPage: (
+    params: CollateralRegisterParams,
+  ): Promise<CollateralRegisterResponse> =>
+    api.getRaw<CollateralRegisterResponse>(API_ENDPOINTS.COLLATERALS.REGISTER, {
+      params,
+    }),
 
   detail: (id: number): Promise<Collateral> =>
     api.get<Collateral>(API_ENDPOINTS.COLLATERALS.DETAIL(id)),
@@ -60,7 +91,7 @@ export const collateralService = {
    * are NOT pivot rows, whatever the name suggests: there is no `collateral_id`
    * key at any level, and reading one yields `undefined` rather than an error.
    * Use `row.id` for the collateral and `row.pivot?.snapshot_value` for the
-   * amount it was booked at.
+   * value the server holds it at on this loan.
    *
    * `active_loans` here INCLUDES `loanId` itself when that loan is active, so
    * anything asking "is this held elsewhere" must pass
@@ -74,7 +105,10 @@ export const collateralService = {
   },
 
   /**
-   * Attach a collateral to a loan.
+   * Attach a collateral to a loan, by id only. The server sets the value the
+   * loan holds it at (decision 11a: the collateral's amount, or the member's
+   * share capital balance) and returns the link row with that value under
+   * `pivot`. No value is sent: one the browser sent used to be stored as is.
    *
    * `CollateralController::attach()` now refuses a collateral that another loan
    * in `Loan::ACTIVE_STATUSES` already holds, with a 422 on `collateral_id`
@@ -83,14 +117,9 @@ export const collateralService = {
    * and a stale page can still hit it. Surface the message rather than a
    * generic failure: it tells the operator exactly which loan to detach from.
    */
-  attachToLoan: (
-    loanId: number,
-    collateralId: number,
-    snapshotValue: number,
-  ): Promise<LoanCollateral> =>
+  attachToLoan: (loanId: number, collateralId: number): Promise<LoanCollateral> =>
     api.post<LoanCollateral>(API_ENDPOINTS.COLLATERALS.ATTACH(loanId), {
       collateral_id: collateralId,
-      snapshot_value: snapshotValue,
     }),
 
   detachFromLoan: (loanId: number, collateralId: number): Promise<void> =>

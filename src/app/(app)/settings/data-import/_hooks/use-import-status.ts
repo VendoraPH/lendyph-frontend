@@ -19,7 +19,7 @@
  *    the exact condition where piling on more of them is worst.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { getErrorMessage } from "@/lib/api-error";
 import { dataImportService } from "@/services/data-import.service";
 import type { ImportRunStatus } from "@/types/data-import";
@@ -89,7 +89,11 @@ export function useImportStatus(options: UseImportStatusOptions): UseImportStatu
   const failuresRef = useRef(0);
   const mountedRef = useRef(true);
   const onStatusRef = useRef(onStatus);
-  onStatusRef.current = onStatus;
+  // Updated after each commit, before any poll can answer: polls resolve
+  // asynchronously, so they always read the latest callback.
+  useLayoutEffect(() => {
+    onStatusRef.current = onStatus;
+  });
 
   const clearTimer = useCallback(() => {
     if (timerRef.current !== null) {
@@ -139,17 +143,20 @@ export function useImportStatus(options: UseImportStatusOptions): UseImportStatu
 
   /** Poll, then queue the next one at the cadence the tab currently deserves. */
   const scheduleNext = useCallback(() => {
-    clearTimer();
-    if (stoppedRef.current || !runId || !enabled) return;
+    function queue() {
+      clearTimer();
+      if (stoppedRef.current || !runId || !enabled) return;
 
-    const visibility = typeof document === "undefined" ? undefined : document.visibilityState;
-    const wait = pollIntervalFor(visibility, visibleIntervalMs, hiddenIntervalMs);
+      const visibility = typeof document === "undefined" ? undefined : document.visibilityState;
+      const wait = pollIntervalFor(visibility, visibleIntervalMs, hiddenIntervalMs);
 
-    timerRef.current = setTimeout(() => {
-      void poll().finally(() => {
-        if (mountedRef.current) scheduleNext();
-      });
-    }, wait);
+      timerRef.current = setTimeout(() => {
+        void poll().finally(() => {
+          if (mountedRef.current) queue();
+        });
+      }, wait);
+    }
+    queue();
   }, [clearTimer, runId, enabled, visibleIntervalMs, hiddenIntervalMs, poll]);
 
   useEffect(() => {

@@ -6,7 +6,8 @@ import { RouteGuard } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronRight, RotateCcw, Table2 } from "lucide-react";
+import { ChevronRight, RotateCcw } from "lucide-react";
+import { Icon3D } from "@/components/common/icon-3d";
 import { issuesForSheet } from "@/lib/data-template/validate";
 import { useTemplateDraft } from "./_hooks/use-template-draft";
 import { ExportActions } from "./_components/export-actions";
@@ -16,6 +17,8 @@ import {
   DataDictionaryPanel,
   GuidelinesPanel,
 } from "./_components/reference-panels";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
 
 /**
  * The bulk data-import template: preview it, edit it, take it away.
@@ -37,8 +40,8 @@ export default function DataTemplatePage() {
 
   return (
     <RouteGuard permission="reports:view" pageName="Documents">
-      <div className="space-y-6">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <PageFill>
+        <div className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
           <Link
             href="/printables"
             className="transition-colors hover:text-foreground"
@@ -49,10 +52,10 @@ export default function DataTemplatePage() {
           <span className="text-foreground">Data Import Template</span>
         </div>
 
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex shrink-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex min-w-0 items-start gap-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-teal-50 ring-1 ring-teal-200">
-              <Table2 className="h-6 w-6 text-teal-600" />
+              <Icon3D name="icon-layers" size={36} />
             </div>
             <div className="min-w-0">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -62,9 +65,10 @@ export default function DataTemplatePage() {
                 Data Import Template
               </h1>
               <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                The workbook for migrating existing members and loans onto
-                Lendyph. Download it blank, or fill it in here — adding, renaming
-                and reordering columns as your records need — and export the CSVs.
+                The workbook for migrating existing members, loans and share
+                capital onto Lendyph. Download it blank, or fill it in here —
+                adding, renaming and reordering columns as your records need — and
+                export the CSVs.
               </p>
             </div>
           </div>
@@ -74,8 +78,8 @@ export default function DataTemplatePage() {
           </div>
         </div>
 
-        <Tabs value={tab} onValueChange={setTab}>
-          <div className="flex flex-wrap items-center justify-between gap-3">
+        <Tabs value={tab} onValueChange={setTab} className={FIT_CLASSES.section}>
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
             <TabsList>
               {draft.sheets.map((sheet) => {
                 const count = issuesForSheet(issues, sheet.id).length;
@@ -111,27 +115,33 @@ export default function DataTemplatePage() {
           </div>
 
           {draft.sheets.map((sheet) => (
-            <TabsContent key={sheet.id} value={sheet.id} className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                {sheet.description}
-              </p>
-              <SheetEditor
-                sheet={sheet}
-                issues={issuesForSheet(issues, sheet.id)}
-                onChange={(fn) => update(sheet.id, fn)}
-              />
-              <IssueList issues={issuesForSheet(issues, sheet.id)} />
+            <TabsContent key={sheet.id} value={sheet.id} className={FIT_CLASSES.section}>
+              <ScrollBox className="space-y-4 p-px">
+                <p className="text-sm text-muted-foreground">
+                  {sheet.description}
+                </p>
+                <SheetEditor
+                  sheet={sheet}
+                  issues={issuesForSheet(issues, sheet.id)}
+                  onChange={(fn) => update(sheet.id, fn)}
+                />
+                <IssueList issues={issuesForSheet(issues, sheet.id)} />
+              </ScrollBox>
             </TabsContent>
           ))}
 
-          <TabsContent value="dictionary">
-            <DataDictionaryPanel />
+          <TabsContent value="dictionary" className={FIT_CLASSES.section}>
+            <ScrollBox className="p-px">
+              <DataDictionaryPanel />
+            </ScrollBox>
           </TabsContent>
-          <TabsContent value="guidelines">
-            <GuidelinesPanel />
+          <TabsContent value="guidelines" className={FIT_CLASSES.section}>
+            <ScrollBox className="p-px">
+              <GuidelinesPanel />
+            </ScrollBox>
           </TabsContent>
         </Tabs>
-      </div>
+      </PageFill>
     </RouteGuard>
   );
 }

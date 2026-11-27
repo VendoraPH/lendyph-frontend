@@ -1,6 +1,8 @@
 import type { LucideIcon } from "lucide-react";
 import type { SubjectKind } from "@/components/common/subject-picker";
-import type { FormattableColumn } from "@/lib/report-format";
+import { DASH, type FormattableColumn } from "@/lib/report-format";
+import type { Permission } from "@/types";
+import type { ModuleIllustrationName } from "@/lib/illustrations";
 
 export type ReportId =
   | "daily_collection"
@@ -19,7 +21,32 @@ export type ReportId =
   | "portfolio_by_product"
   | "share_capital"
   | "performance"
-  | "provisioning";
+  | "provisioning"
+  | "profit_sharing"
+  | "savings_balances"
+  | "savings_transactions"
+  | "time_deposit_maturities"
+  | "savings_interest_postings"
+  | "savings_dormant"
+  | "savings_statement"
+  | "savings_gl_control"
+  // The rest of the deposit reports (gap round S5).
+  | "savings_summary"
+  | "savings_accounts"
+  | "savings_deposits"
+  | "savings_withdrawals"
+  | "savings_large_transactions"
+  | "savings_time_deposits"
+  | "savings_interest_accrual"
+  | "savings_account_activity"
+  | "savings_member_statement";
+
+/**
+ * Every document the exporters print: a catalog report, or a page exported as
+ * a report without being one (the executive dashboard). Kept apart from
+ * `ReportId` so the dashboard is not offered as a `/reports/[reportId]` route.
+ */
+export type DocumentId = ReportId | "executive_dashboard" | "share_capital_ledger" | "gcash_transactions";
 
 export type ReportCategory =
   | "operations"
@@ -27,7 +54,8 @@ export type ReportCategory =
   | "member"
   | "disbursement"
   | "financial"
-  | "performance";
+  | "performance"
+  | "savings";
 
 /**
  * Re-exported, not redeclared: `formatValue` in `@/lib/report-format` is what
@@ -75,6 +103,20 @@ export type ReportSection =
       rows: Record<string, unknown>[];
       totals?: { column: string; label?: string; value: string }[];
       emptyText?: string;
+      /**
+       * Print in smaller type in the PDF and Word files. A landscape A4 page
+       * holds about ten columns of "PHP 1,080,000.00" at the regular size; past
+       * that the table squeezes its narrow columns until words break mid-letter
+       * ("overdu/e").
+       */
+      compact?: boolean;
+      /**
+       * In the PDF, print the title on the page of the column headings and the
+       * first row: when they don't fit under it, the title starts the next page
+       * with them, as a fields box's title does. Opt-in, so no other report's
+       * pages move.
+       */
+      keepTitleWithRows?: boolean;
     }
   | {
       kind: "note";
@@ -97,6 +139,8 @@ export type ReportSection =
   | {
       kind: "signatures";
       roles: string[];
+      /** Blank lines under each role, such as "Name" and "Date". */
+      lines?: string[];
     };
 
 /**
@@ -120,11 +164,17 @@ export interface ReportChrome {
 }
 
 export interface ReportDocument {
-  reportId: ReportId;
+  reportId: DocumentId;
   meta: {
     title: string;
     subtitle?: string;
     period?: string;
+    /**
+     * Set instead of `period` on a report that covers everything up to a day,
+     * as the Statement of Account does: every output then prints "As of <date>"
+     * and no Period line. Read both through `reportScope`.
+     */
+    asOf?: string;
     generatedAt: string;
     /**
      * The organization the report is issued by. Builders emit an empty string
@@ -132,6 +182,9 @@ export interface ReportDocument {
      * it from branding settings, falling back to `siteConfig.name`.
      */
     org: string;
+    /** The organization's address and contact, printed under its name. */
+    orgAddress?: string | null;
+    orgContact?: string | null;
     /** Organization logo, resolved from branding settings at generate time. */
     logoUrl?: string | null;
     /**
@@ -147,8 +200,30 @@ export interface ReportDocument {
     branchLabel?: string | null;
     /** Human-quotable document reference, e.g. `AGE-20260806-1432`. */
     reference?: string | null;
+    /**
+     * What makes this document's reference its own, when it covers one record:
+     * a statement's loan number.
+     */
+    referenceKey?: string;
   };
   sections: ReportSection[];
+}
+
+/** What a report covers, for the one line every output prints it on. */
+export function reportScope(meta: ReportDocument["meta"]): { label: string; value: string } {
+  return meta.asOf !== undefined
+    ? { label: "As of", value: meta.asOf }
+    : { label: "Period:", value: meta.period ?? DASH };
+}
+
+/** The organization's address and contact on one line, or null without either. */
+export function orgDetailsLine(meta: ReportDocument["meta"]): string | null {
+  return [meta.orgAddress, meta.orgContact].filter(Boolean).join("  •  ") || null;
+}
+
+export function reportScopeLine(meta: ReportDocument["meta"]): string {
+  const { label, value } = reportScope(meta);
+  return `${label} ${value}`;
 }
 
 export interface DateRange {
@@ -223,8 +298,18 @@ export interface ReportContext {
   range: DateRange;
   /** null = all branches. Only sent for endpoints that accept branch_id. */
   branchId?: number | null;
-  /** The chosen loan or borrower id, for subject-scoped reports. */
+  /** The chosen loan, borrower or savings account id, for subject-scoped reports. */
   subjectId?: number | null;
+  /** null = every product. Only sent for reports with `supportsProduct`. */
+  productId?: number | null;
+  /** The summary's grouping, one of the report's `groupBy` options. */
+  groupBy?: string | null;
+}
+
+/** A report's "Group by" choices; the first is the default. */
+export interface ReportGroupBy {
+  label: string;
+  options: readonly { value: string; label: string }[];
 }
 
 export interface ReportDefinition {
@@ -240,8 +325,56 @@ export interface ReportDefinition {
   };
   /** Set when the API accepts `branch_id`, which enables the branch picker. */
   supportsBranch?: boolean;
+  /** Set when the API accepts a savings `product_id`, which enables the product picker. */
+  supportsProduct?: boolean;
+  /** The kind of savings product the picker lists; every kind when unset. */
+  productKind?: "regular" | "time_deposit";
+  /** Set when the API accepts `group_by`, which shows a "Group by" select. */
+  groupBy?: ReportGroupBy;
   /** Set when the report is scoped to one loan or borrower. */
   subject?: ReportSubject;
+  /**
+   * Set when the report reads one savings account, chosen by opening it from
+   * that account's page (`?account=<id>`) rather than with a picker.
+   */
+  accountParam?: boolean;
+  /** Set when the API takes no dates, which hides the date range controls. */
+  noDateRange?: boolean;
+  /**
+   * Set when the report runs to one cutoff date (the Profit Sharing report): a
+   * single Cutoff Date field, today by default and never after it, stands in
+   * for the date range. The build reads the cutoff as `range.to`; `range.from`
+   * is January 1 of its year.
+   */
+  cutoffDate?: boolean;
+  /**
+   * The period the report opens on. "this_month" (the default) runs from the
+   * 1st to today; "whole_month" to the month's last day, for a report that
+   * looks ahead, such as time deposits maturing.
+   */
+  defaultPeriod?: "this_month" | "whole_month";
+  /** Set when the server writes no CSV for the report (a printable), which hides the CSV export. */
+  noCsv?: boolean;
+  /**
+   * A permission beyond `reports:view` that the report's data needs, such as
+   * `savings:view` for the savings reports. Without it the report is not
+   * listed and its page says the user has no access (`reportAccess`).
+   */
+  permission?: Permission;
+  /**
+   * Further permissions beyond `reports:view`, every one of them needed, for a
+   * report that shows figures from several sources (Profit Sharing). Without
+   * any one it is not listed and its page says the user has no access.
+   */
+  permissions?: readonly Permission[];
+  /** False when the report's module is switched off for this deployment. */
+  available?: boolean;
+  /**
+   * The menus whose figures it reads besides Reports (Savings, Share Capital,
+   * Accounting). While Menu Visibility hides any one, the report is not listed
+   * and its page reads not found.
+   */
+  modules?: readonly import("@/constants/menu-modules").MenuModuleKey[];
   build: (ctx: ReportContext) => Promise<ReportDocument>;
 }
 
@@ -259,7 +392,7 @@ export const CATEGORY_META: Record<
   },
   member: {
     label: "Member Activity",
-    description: "Borrower and repayment activity",
+    description: "Member and repayment activity",
   },
   disbursement: {
     label: "Disbursement",
@@ -273,4 +406,43 @@ export const CATEGORY_META: Record<
     label: "Performance",
     description: "Collection efficiency and account officer productivity",
   },
+  savings: {
+    label: "Savings & Deposits",
+    description: "Members' savings, time deposits, interest and the GL control",
+  },
 };
+
+/**
+ * The small picture beside each category's heading on `/reports`, one of the
+ * module pictures, chosen so no two neighbouring sections repeat.
+ */
+export const CATEGORY_ILLUSTRATION: Record<ReportCategory, ModuleIllustrationName> = {
+  operations: "emptyPayments",
+  portfolio: "emptyCollaterals",
+  member: "emptyMembers",
+  disbursement: "emptyLoans",
+  financial: "emptyLedger",
+  performance: "emptyShareCapital",
+  savings: "emptySavings",
+};
+
+/**
+ * One of the ten AMLA reports on the Reports page (Phase 6, AMLA-B7). The
+ * server builds, totals and exports it, on its own page under /amla/reports,
+ * so it carries no builder.
+ */
+export interface AmlaReportDefinition {
+  key: import("@/lib/amla/report-titles").AmlaReportKey;
+  title: string;
+  description: string;
+  icon: LucideIcon;
+  accent: ReportDefinition["accent"];
+  /** Its page: `/amla/reports/<key>`. */
+  href: string;
+  /** Any one of these opens it, as the server's `canAny`. */
+  permissions: readonly Permission[];
+  /** The confidential reports also need every branch (`branches:view_all`). */
+  headOffice: boolean;
+  /** False while NEXT_PUBLIC_ENABLE_AMLA is off. */
+  available: boolean;
+}

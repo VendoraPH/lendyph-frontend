@@ -9,6 +9,14 @@ export interface ApiResource<T> {
   refetch: () => void;
 }
 
+/** How the request made for one fetcher and refetch count ended. */
+interface Outcome<T> {
+  fetcher: () => Promise<T>;
+  nonce: number;
+  unavailable: boolean;
+  error: string | null;
+}
+
 /**
  * Fetches one resource, distinguishing "this endpoint is not built yet" from
  * "this request failed".
@@ -29,43 +37,45 @@ export function useApiResource<T>(
   fetcher: () => Promise<T>,
   enabled = true,
 ): ApiResource<T> {
+  // `data` is the last successful response and outlives later requests, so a
+  // refetch or a failure never blanks what was already loaded.
   const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(enabled);
-  const [unavailable, setUnavailable] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState<Outcome<T> | null>(null);
   const [nonce, setNonce] = useState(0);
+
+  // Switching the hook off and on again requests afresh even for the same
+  // fetcher, so forget the last outcome whenever `enabled` flips.
+  const [wasEnabled, setWasEnabled] = useState(enabled);
+  if (wasEnabled !== enabled) {
+    setWasEnabled(enabled);
+    setOutcome(null);
+  }
 
   const refetch = useCallback(() => setNonce((n) => n + 1), []);
 
   useEffect(() => {
-    if (!enabled) {
-      setLoading(false);
-      return;
-    }
+    if (!enabled) return;
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setUnavailable(false);
 
     fetcher()
       .then((res) => {
         if (cancelled) return;
         setData(res);
+        setOutcome({ fetcher, nonce, unavailable: false, error: null });
       })
       .catch((err: unknown) => {
         if (cancelled) return;
         const status = (err as { response?: { status?: number } })?.response?.status;
-        if (status === 404 || status === 501) {
-          setUnavailable(true);
-        } else {
-          setError(
-            (err as { response?: { data?: { message?: string } } })?.response?.data
-              ?.message ?? "Unable to load this data.",
-          );
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        const notBuilt = status === 404 || status === 501;
+        setOutcome({
+          fetcher,
+          nonce,
+          unavailable: notBuilt,
+          error: notBuilt
+            ? null
+            : ((err as { response?: { data?: { message?: string } } })?.response?.data
+                ?.message ?? "Unable to load this data."),
+        });
       });
 
     return () => {
@@ -73,5 +83,17 @@ export function useApiResource<T>(
     };
   }, [fetcher, enabled, nonce]);
 
-  return { data, loading, unavailable, error, refetch };
+  // Loading until the request for the current fetcher and refetch count has
+  // settled — derived, so the render that asks for new data already says so.
+  const settled =
+    outcome !== null && outcome.fetcher === fetcher && outcome.nonce === nonce;
+  const loading = enabled && !settled;
+
+  return {
+    data,
+    loading,
+    unavailable: !loading && (outcome?.unavailable ?? false),
+    error: loading ? null : (outcome?.error ?? null),
+    refetch,
+  };
 }

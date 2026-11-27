@@ -19,19 +19,23 @@ export const authService = {
   login: (credentials: {
     login: string;
     password: string;
-    remember?: boolean;
   }) =>
-    api.rawPost<{ token: string; user: User }>(
+    api.rawPost<{ token: string; expires_in?: number; user: User }>(
       API_ENDPOINTS.AUTH.LOGIN,
       credentials
     ),
 
-  logout: () => api.post(API_ENDPOINTS.AUTH.LOGOUT),
+  /**
+   * Revokes `token` (see lib/sign-out.ts, which clears the stored tokens
+   * first). Sent explicitly because storage is already empty by then, and the
+   * request interceptor only adds a token while one is stored.
+   */
+  logout: (token: string) =>
+    api.post(API_ENDPOINTS.AUTH.LOGOUT, undefined, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
 
   me: () => api.get<User>(API_ENDPOINTS.AUTH.ME),
-
-  refresh: () =>
-    api.post<{ token: string }>(API_ENDPOINTS.AUTH.REFRESH),
 
   /**
    * Self-service profile update. Backend whitelists full_name, email, and

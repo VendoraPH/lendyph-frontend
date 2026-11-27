@@ -1,7 +1,13 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { RouteGuard } from "@/components/common";
+import { FillSection, PageFill, ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { FormStep, FormStepper, type FormStepperHandle } from "@/components/common/form-stepper";
+import { FORM_STEP_GRID } from "@/lib/form-stepper";
+import { validationErrors } from "@/lib/credit-scoring/field-errors";
+import { useDialogOpening } from "@/hooks";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,10 +29,18 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { ROLES } from "@/constants/rbac";
-import type { Module, Action, Permission } from "@/types";
+import type { Action, Permission } from "@/types";
+import { MODULE_ACTIONS, moduleActionLabel, type UIModule } from "./_lib/permission-matrix";
+import { OFFERED_MODULE_TOTAL, roleModuleCount } from "./_lib/module-count";
+import {
+  roleItemFromApi,
+  rolePayload,
+  setModulePermissions,
+  slugify,
+  togglePermission as togglePermissionIn,
+  type RoleItem,
+} from "./_lib/role-item";
 import { roleService } from "@/services/role.service";
-import type { ApiRole } from "@/services/role.service";
 import { PermissionGate } from "@/components/common";
 import { useAuthStore } from "@/store";
 import { Spinner } from "@/components/ui/spinner";
@@ -54,21 +68,52 @@ import {
   BookOpenCheck,
   BookOpen,
   ListTree,
-  Receipt,
+  ReceiptText,
   Wallet,
   Gauge,
+  AlarmClock,
+  BellRing,
+  PiggyBank,
+  ClipboardCheck,
+  MonitorSmartphone,
+  Sparkles,
+  Package,
+  Building2,
+  ArrowLeftRight,
+  FileInput,
+  ShieldAlert,
+  EyeOff,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { notifyValidation } from "@/lib/notify";
+import { getErrorMessage } from "@/lib/api-error";
+import { describePermission, otherRoleSaveErrors, readablePermissionKeys, roleSaveErrorMessage } from "./_lib/role-save-error";
+import { roleConflictMessage } from "./_lib/role-conflict";
+import { canToggleActive, roleActivationError, roleStatusMark } from "./_lib/role-activation";
+import {
+  GRANT_LOCK_REASON,
+  canGrant,
+  editLockReason,
+  grantLockReason,
+  moduleToggleTargets,
+  type GrantingCaller,
+} from "./_lib/role-grant";
+import { completeRows } from "@/lib/paginate";
+import {
+  ROLE_STEPS,
+  roleFormErrors,
+  roleStepErrors,
+  roleStepProblem,
+  type RoleStepInput,
+  type RoleStepProblem,
+} from "./_lib/role-steps";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
-// Module metadata — describes each feature area protected by permissions
-// (Collections is excluded — no longer used in the system)
+// Module metadata — describes each feature area protected by permissions.
+// Which modules are offered at all is decided in _lib/permission-matrix.ts.
 // ---------------------------------------------------------------------------
-
-type UIModule = Exclude<Module, "collections">;
 
 interface ModuleMeta {
   label: string;
@@ -84,6 +129,16 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
     icon: CreditCard,
     features: ["View fee rules", "Create and edit fees for selected products", "Delete fee rules"],
   },
+  penalties: {
+    label: "Penalties",
+    description: "Late penalty rates by days late, for loan products. New loans copy their product's configuration.",
+    icon: AlarmClock,
+    features: [
+      "View penalty configurations",
+      "Create and edit configurations, and activate or deactivate them",
+      "Delete configurations no loan carries",
+    ],
+  },
   dashboard: {
     label: "Dashboard",
     description: "Main KPI dashboard with portfolio metrics and trends.",
@@ -91,18 +146,19 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
     features: [
       "View portfolio KPIs and collection trends",
       "Monitor recent transactions",
-      "View charts and summary widgets",
+      "Open, export and set alert thresholds on the executive dashboard",
     ],
   },
   borrowers: {
     label: "Members",
-    description: "Manage borrower profiles and member records.",
+    description: "Manage member profiles and records.",
     icon: Users,
     features: [
       "View and search member profiles",
       "Create new members",
       "Update member details and status",
       "Deactivate / archive member records",
+      "Move a member to another branch when nothing of theirs is open",
     ],
   },
   loans: {
@@ -115,6 +171,29 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
       "Update loan details and amortization",
       "Approve, reject, or release loans",
       "Void draft loans",
+    ],
+  },
+  loan_products: {
+    label: "Loan Products",
+    description: "The products, rates, terms and fees loan applications are built from.",
+    icon: Package,
+    features: [
+      "Create new loan products",
+      "Edit, activate and deactivate products",
+      "Delete loan products",
+    ],
+  },
+  loan_origination: {
+    label: "Loan Origination",
+    description:
+      "Online loan applications from public links, their review and assessment. Changing the module's settings also needs See all branches.",
+    icon: FileInput,
+    features: [
+      "View applications, links, assessments and documents",
+      "Verify documents, assign officers, request information and send for approval",
+      "Run and annotate the preliminary assessment",
+      "Turn an approved application into a loan",
+      "Configure public links and the module's settings",
     ],
   },
   payments: {
@@ -155,7 +234,7 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
     description: "Business reports, analytics, and exports.",
     icon: BarChart3,
     features: [
-      "View daily collection, portfolio, income, aging, and borrower reports",
+      "View daily collection, portfolio, income, aging, and member reports",
       "Export reports to PDF or Excel",
     ],
   },
@@ -170,6 +249,27 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
       "Deactivate users",
     ],
   },
+  branches: {
+    label: "Branch Access",
+    description: "Which branches' records a user can see.",
+    icon: Building2,
+    features: [
+      "Without this, a user sees only the branches they are assigned to",
+      "See every branch's members, loans, payments and reports",
+      "Add, edit, open and close branches (with See all branches)",
+    ],
+  },
+  interbranch_transfers: {
+    label: "Interbranch Transfers",
+    description: "Money moved between branches through Interbranch Clearing.",
+    icon: ArrowLeftRight,
+    features: [
+      "View transfers between branches",
+      "Start a transfer",
+      "Approve a transfer someone else started",
+      "Confirm a transfer at the receiving branch",
+    ],
+  },
   settings: {
     label: "Settings",
     description: "System configuration: branches, profile, roles.",
@@ -178,6 +278,13 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
       "View settings pages (profile, branches, roles)",
       "Update settings and system configuration",
     ],
+  },
+  menu_visibility: {
+    label: "Menu Visibility",
+    description:
+      "Which menus this deployment shows. Opening it also needs the administrator password, which the server checks.",
+    icon: EyeOff,
+    features: ["Show or hide menus, with their pages and settings, after entering the administrator password"],
   },
   audit_logs: {
     label: "Audit Trail",
@@ -226,7 +333,7 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
   accounting: {
     label: "Accounting",
     description:
-      "The reporting side of the books, plus the three privileged verbs that lock or correct them.",
+      "The reporting side of the books, plus the privileged verbs that lock or correct them.",
     icon: BookOpenCheck,
     features: [
       "View the accounting dashboard, general ledger and trial balance",
@@ -234,6 +341,7 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
       "Reconcile a cash or bank account against an external statement",
       "Close and reopen an accounting period",
       "Configure accounting settings and the automatic posting map",
+      "Post the allowance for credit losses",
     ],
   },
   chart_of_accounts: {
@@ -261,7 +369,7 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
   expenses: {
     label: "Expenses & Payables",
     description: "Operating costs, whether paid immediately or owed.",
-    icon: Receipt,
+    icon: ReceiptText,
     features: [
       "View expenses and outstanding payables",
       "Record an expense against a cash account or as a payable",
@@ -279,48 +387,93 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
   },
   credit_scoring: {
     label: "Credit Scoring",
-    description: "Automated credit scoring, risk assessment and manual override for loan decisions.",
+    description: "Member credit scores, risk monitoring, and human credit decisions.",
     icon: Gauge,
     features: [
-      "View borrower credit scores, risk levels and score history",
-      "Override an automated score with a manual credit decision",
-      "Configure scorecard weights, policy rules and module settings",
+      "View the dashboard, member scores, assessments, risk monitoring and score history",
+      "Record a credit decision (approve, decline, refer, hold) against a score",
+      "Configure the scorecard and credit scoring settings",
+    ],
+  },
+  reminders: {
+    label: "Reminders",
+    description: "Automated SMS and email payment reminders to members. In test mode they are logged, not sent.",
+    icon: BellRing,
+    features: [
+      "View the reminders dashboard, queue, message history and a loan's reminders",
+      "Send one reminder to a member by hand",
+      "Pause and resume reminders for everyone, one member or one loan",
+      "Configure rules, templates and the SMS and email set-up",
+    ],
+  },
+  savings: {
+    label: "Savings & Deposits",
+    description: "Members' savings accounts, time deposits, approvals and interest runs.",
+    icon: PiggyBank,
+    features: [
+      "View accounts, time deposits, ledgers and savings reports",
+      "Open savings accounts and place time deposits",
+      "Post deposits, withdrawals, transfers and holds, and request reversals",
+      "Close, freeze and reactivate accounts, and pre-terminate time deposits",
+      "Approve or reject requests and interest runs made by someone else",
+      "Run and post interest",
+      "Manage savings products, rates, tax rules and approval amounts",
+    ],
+  },
+  cda: {
+    label: "CDA Compliance",
+    description:
+      "The cooperative's annual CDA reports, registers and filings. Every CDA permission also needs See all branches.",
+    icon: ClipboardCheck,
+    features: [
+      "View the CDA dashboard, calendar, reports and registers",
+      "Prepare reports and send them for review",
+      "Upload compliance documents",
+      "Return a report for changes",
+      "Approve a report someone else sent for review",
+      "Finalize, reopen, record the filing and export reports",
+      "Keep the officers, trainings, social programs and mediation registers",
+      "See the restricted mediation, audit and tax reports",
+      "Configure the regulatory profile, deadlines and extensions",
+    ],
+  },
+  member_portal: {
+    label: "Member Portal",
+    description:
+      "Members' online access, their requests and announcements. Changing the portal settings also needs See all branches.",
+    icon: MonitorSmartphone,
+    features: [
+      "See portal counts, the accounts list and a member's access card",
+      "Issue activation and password reset codes after checking a valid ID",
+      "Turn a member's access off or on, unlock, sign out everywhere and share files",
+      "Decide members' profile change, withdrawal and new account requests",
+      "Write, publish and withdraw announcements to members",
+      "Configure the portal and publish its terms",
+    ],
+  },
+  linda: {
+    label: "Linda (AI assistant)",
+    description:
+      "Ask Linda about collections, overdue members, loans and disbursements. Choosing its AI model also needs See all branches.",
+    icon: Sparkles,
+    features: ["Ask Linda questions", "Choose the AI model Linda uses"],
+  },
+  amla: {
+    label: "AMLA Compliance",
+    description:
+      "Anti-money laundering monitoring, cases and filings with the AMLC. Cases, reports, screening, sanctions and settings also need See all branches.",
+    icon: ShieldAlert,
+    features: [
+      "See the AMLA dashboard and reports, and work monitoring alerts",
+      "Run cases, due diligence and AML risk, and screen against watchlists",
+      "Place and lift holds for an AMLA order",
+      "Prepare covered and suspicious transaction reports, and approve someone else's",
+      "Export filing files and record filings with the AMLC",
+      "Change AMLA settings and read the AMLA log",
     ],
   },
 };
 
-// Applicable actions per module — only the actions that make sense for each area
-const MODULE_ACTIONS: Record<UIModule, Action[]> = {
-  fees: ["view", "create", "update", "delete"],
-  dashboard: ["view"],
-  borrowers: ["view", "create", "update", "delete", "approve"],
-  loans: ["view", "create", "update", "delete", "approve", "reject", "release", "restructure"],
-  payments: ["view", "create", "update", "void"],
-  share_capital: ["view", "create", "update"],
-  collaterals: ["view", "create", "update", "delete"],
-  reports: ["view", "export"],
-  users: ["view", "create", "update", "delete"],
-  settings: ["view", "update"],
-  audit_logs: ["view", "export"],
-  auto_pay: ["view", "process", "toggle"],
-  gcash: ["view", "transact", "settings"],
-  // `process` only. There is no `imports:view`: the page has nothing to look at
-  // without running one, so a view-only grant would be a link to an empty
-  // wizard, and the template literal `Module:Action` type would happily mint it.
-  imports: ["process"],
-  // `close` and `settings` sit on `accounting` rather than on a module of their
-  // own because neither has a screen to view — they are verbs applied to the
-  // whole book.
-  accounting: ["view", "reconcile", "close", "settings"],
-  chart_of_accounts: ["view", "create", "update", "delete"],
-  // No `update` or `delete`: a posted entry is immutable, and the only lawful
-  // correction is `reverse`, which writes a second entry rather than editing
-  // the first. Granting "edit a journal" would be granting "rewrite history".
-  journals: ["view", "create", "post", "reverse"],
-  expenses: ["view", "create", "update"],
-  cash_accounts: ["view", "transfer"],
-  credit_scoring: ["view", "override", "settings"],
-};
 
 const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   view: { label: "View", colorClass: "bg-slate-500/10 text-slate-700 border-slate-500/30" },
@@ -331,6 +484,10 @@ const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   reject: { label: "Reject", colorClass: "bg-red-500/10 text-red-700 border-red-500/30" },
   release: { label: "Release", colorClass: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30" },
   restructure: { label: "Restructure", colorClass: "bg-purple-500/10 text-purple-700 border-purple-500/30" },
+  write_off: { label: "Write off restructure shortfall", colorClass: "bg-red-500/10 text-red-700 border-red-500/30" },
+  edit_in_approval: { label: "Edit loans at their approval step", colorClass: "bg-amber-500/10 text-amber-700 border-amber-500/30" },
+  extend: { label: "Extend", colorClass: "bg-purple-500/10 text-purple-700 border-purple-500/30" },
+  reset_password: { label: "Reset password", colorClass: "bg-amber-500/10 text-amber-700 border-amber-500/30" },
   void: { label: "Void", colorClass: "bg-rose-500/10 text-rose-700 border-rose-500/30" },
   mark_collected: { label: "Mark Collected", colorClass: "bg-teal-500/10 text-teal-700 border-teal-500/30" },
   export: { label: "Export", colorClass: "bg-indigo-500/10 text-indigo-700 border-indigo-500/30" },
@@ -342,22 +499,54 @@ const ACTION_META: Record<Action, { label: string; colorClass: string }> = {
   reverse: { label: "Reverse", colorClass: "bg-orange-500/10 text-orange-700 border-orange-500/30" },
   reconcile: { label: "Reconcile", colorClass: "bg-sky-500/10 text-sky-700 border-sky-500/30" },
   close: { label: "Close Period", colorClass: "bg-stone-500/10 text-stone-700 border-stone-500/30" },
+  allowance: { label: "Post the allowance", colorClass: "bg-red-500/10 text-red-700 border-red-500/30" },
   transfer: { label: "Transfer", colorClass: "bg-lime-500/10 text-lime-700 border-lime-500/30" },
   override: { label: "Override", colorClass: "bg-pink-500/10 text-pink-700 border-pink-500/30" },
+  send: { label: "Send", colorClass: "bg-blue-500/10 text-blue-700 border-blue-500/30" },
+  pause: { label: "Pause", colorClass: "bg-amber-500/10 text-amber-700 border-amber-500/30" },
+  pay: { label: "Pay", colorClass: "bg-green-500/10 text-green-700 border-green-500/30" },
+  manage: { label: "Manage", colorClass: "bg-orange-500/10 text-orange-700 border-orange-500/30" },
+  view_all: { label: "See all branches", colorClass: "bg-sky-500/10 text-sky-700 border-sky-500/30" },
+  prepare: { label: "Prepare", colorClass: "bg-blue-500/10 text-blue-700 border-blue-500/30" },
+  upload: { label: "Upload", colorClass: "bg-cyan-500/10 text-cyan-700 border-cyan-500/30" },
+  review: { label: "Review", colorClass: "bg-amber-500/10 text-amber-700 border-amber-500/30" },
+  finalize: { label: "Finalize", colorClass: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30" },
+  reopen: { label: "Reopen", colorClass: "bg-orange-500/10 text-orange-700 border-orange-500/30" },
+  submit: { label: "Record filing", colorClass: "bg-teal-500/10 text-teal-700 border-teal-500/30" },
+  manage_officers: { label: "Manage officers", colorClass: "bg-violet-500/10 text-violet-700 border-violet-500/30" },
+  manage_social: { label: "Manage social programs", colorClass: "bg-lime-500/10 text-lime-700 border-lime-500/30" },
+  manage_mediation: { label: "Manage mediation", colorClass: "bg-rose-500/10 text-rose-700 border-rose-500/30" },
+  view_mediation: { label: "See mediation", colorClass: "bg-rose-500/10 text-rose-700 border-rose-500/30" },
+  view_audit: { label: "See audit reports", colorClass: "bg-indigo-500/10 text-indigo-700 border-indigo-500/30" },
+  view_tax: { label: "See tax reports", colorClass: "bg-indigo-500/10 text-indigo-700 border-indigo-500/30" },
+  invite: { label: "Issue codes", colorClass: "bg-blue-500/10 text-blue-700 border-blue-500/30" },
+  requests: { label: "Decide requests", colorClass: "bg-teal-500/10 text-teal-700 border-teal-500/30" },
+  announcements: { label: "Announcements", colorClass: "bg-violet-500/10 text-violet-700 border-violet-500/30" },
+  use: { label: "Use", colorClass: "bg-orange-500/10 text-orange-700 border-orange-500/30" },
+  // Loan Origination verbs.
+  assess: { label: "Assess", colorClass: "bg-sky-500/10 text-sky-700 border-sky-500/30" },
+  convert: { label: "Convert", colorClass: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30" },
+  // AMLA verbs; each module reads its own words (MODULE_ACTION_LABELS).
+  alerts: { label: "Alerts", colorClass: "bg-amber-500/10 text-amber-700 border-amber-500/30" },
+  cases: { label: "Cases", colorClass: "bg-violet-500/10 text-violet-700 border-violet-500/30" },
+  cdd: { label: "Due diligence", colorClass: "bg-sky-500/10 text-sky-700 border-sky-500/30" },
+  screening: { label: "Screening", colorClass: "bg-cyan-500/10 text-cyan-700 border-cyan-500/30" },
+  sanctions: { label: "Sanctions", colorClass: "bg-red-500/10 text-red-700 border-red-500/30" },
+  ctr: { label: "Covered transactions", colorClass: "bg-indigo-500/10 text-indigo-700 border-indigo-500/30" },
+  str: { label: "Suspicious transactions", colorClass: "bg-rose-500/10 text-rose-700 border-rose-500/30" },
+  audit: { label: "AMLA log", colorClass: "bg-stone-500/10 text-stone-700 border-stone-500/30" },
+  analytics: { label: "Analytics", colorClass: "bg-blue-500/10 text-blue-700 border-blue-500/30" },
+  receive: { label: "Receive", colorClass: "bg-teal-500/10 text-teal-700 border-teal-500/30" },
 };
 
-// ---------------------------------------------------------------------------
-// Role model — local state (no mutation endpoints yet)
-// ---------------------------------------------------------------------------
-
-interface RoleItem {
-  id?: number;
-  key: string;
-  label: string;
-  description: string;
-  permissions: Permission[];
-  isSystem: boolean;
-  isActive: boolean;
+/** "credit_scoring:settings" → "Credit Scoring: Configure", as the matrix labels it. */
+function describeMatrixPermission(permission: string): string {
+  const [module, action] = permission.split(":");
+  const moduleLabel = MODULE_META[module as UIModule]?.label;
+  const actionLabel =
+    (MODULE_META[module as UIModule] && moduleActionLabel(module as UIModule, action as Action)) ||
+    ACTION_META[action as Action]?.label;
+  return moduleLabel && actionLabel ? `${moduleLabel}: ${actionLabel}` : describePermission(permission);
 }
 
 const ROLE_BADGE: Record<string, string> = {
@@ -377,49 +566,6 @@ const ROLE_BADGE: Record<string, string> = {
   bod7: "bg-sky-500/10 text-sky-700 border-sky-500/30",
 };
 
-function stripCollections(perms: Permission[]): Permission[] {
-  return perms.filter((p) => !p.startsWith("collections:"));
-}
-
-function titleCase(s: string): string {
-  return s
-    .split("_")
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
-
-// Map an API role to the UI RoleItem shape, enriching snake_case keys
-// with local label/description when the frontend recognises the role.
-function apiRoleToItem(api: ApiRole): RoleItem {
-  const key = api.name;
-  const known = (ROLES as Record<string, { label: string; description: string }>)[key];
-  return {
-    id: api.id,
-    key,
-    label: known?.label ?? titleCase(key),
-    description: api.description ?? known?.description ?? "",
-    permissions: stripCollections(api.permissions as Permission[]),
-    isSystem: api.is_system === true,
-    isActive: api.is_active ?? true,
-  };
-}
-
-function groupByModule(permissions: Permission[]): Record<string, Action[]> {
-  const map: Record<string, Action[]> = {};
-  for (const p of permissions) {
-    const [mod, act] = p.split(":") as [string, Action];
-    if (mod === "collections") continue;
-    if (!map[mod]) map[mod] = [];
-    map[mod].push(act);
-  }
-  return map;
-}
-
-function slugify(s: string): string {
-  return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
-}
-
 // ---------------------------------------------------------------------------
 // Role Form Dialog (Create / Edit)
 // ---------------------------------------------------------------------------
@@ -429,8 +575,11 @@ interface RoleFormDialogProps {
   onOpenChange: (open: boolean) => void;
   role: RoleItem | null; // null = create
   existingKeys: string[];
-  onSave: (role: RoleItem) => void;
+  /** Saves the role: the server's 422 field errors when it refused them, else null. */
+  onSave: (role: RoleItem) => Promise<Record<string, string[]> | null>;
   readOnly?: boolean;
+  /** Switch a read-only view into the editor. */
+  onEdit?: () => void;
   saving?: boolean;
 }
 
@@ -441,66 +590,61 @@ function RoleFormDialog({
   existingKeys,
   onSave,
   readOnly = false,
+  onEdit,
   saving = false,
 }: RoleFormDialogProps) {
   const isEdit = !!role;
+  const callerUser = useAuthStore((s) => s.user);
+  const caller: GrantingCaller = { roles: callerUser?.roles ?? [], permissions: callerUser?.permissions ?? [] };
+  const editLock = role ? editLockReason(role.key, caller) : null;
   const [label, setLabel] = useState("");
   const [description, setDescription] = useState("");
   const [permissions, setPermissions] = useState<Set<Permission>>(new Set());
+  const stepperRef = useRef<FormStepperHandle>(null);
 
-  useEffect(() => {
-    if (open) {
-      setLabel(role?.label ?? "");
-      setDescription(role?.description ?? "");
-      setPermissions(new Set(role?.permissions ?? []));
-    }
-  }, [open, role]);
+  if (useDialogOpening(open, role)) {
+    setLabel(role?.label ?? "");
+    setDescription(role?.description ?? "");
+    setPermissions(new Set(role?.permissions ?? []));
+  }
 
   function togglePermission(mod: UIModule, act: Action) {
-    const perm = `${mod}:${act}` as Permission;
-    setPermissions((prev) => {
-      const next = new Set(prev);
-      if (next.has(perm)) next.delete(perm);
-      else next.add(perm);
-      return next;
-    });
+    setPermissions((prev) => togglePermissionIn(prev, `${mod}:${act}` as Permission));
   }
 
   function toggleModule(mod: UIModule, enable: boolean) {
-    setPermissions((prev) => {
-      const next = new Set(prev);
-      for (const act of MODULE_ACTIONS[mod]) {
-        const perm = `${mod}:${act}` as Permission;
-        if (enable) next.add(perm);
-        else next.delete(perm);
-      }
-      return next;
-    });
+    setPermissions((prev) => setModulePermissions(prev, mod, enable, (p) => canGrant(caller, p)));
   }
 
-  function handleSave() {
-    const missing: string[] = [];
-    if (!label.trim()) missing.push("Role name");
-    if (!description.trim()) missing.push("Description");
-    if (missing.length > 0) {
-      notifyValidation(missing);
-      return;
+  const stepInput: RoleStepInput = {
+    label,
+    description,
+    permissionCount: permissions.size,
+    isEdit,
+    roleKey: role?.key ?? null,
+    existingKeys,
+  };
+
+  // A step fails as the save did: one "Please complete" toast for the missing
+  // fields, or the problem's own toast.
+  function showProblem(problem: RoleStepProblem) {
+    if (!problem) return;
+    if (problem.kind === "missing") notifyValidation(problem.fields.map((f) => f.label));
+    else toast.error(problem.message);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    for (const step of ROLE_STEPS) {
+      const problem = roleStepProblem(step.id, stepInput);
+      if (problem) {
+        showProblem(problem);
+        return;
+      }
     }
     const key = isEdit && role ? role.key : slugify(label);
-    if (!key) {
-      toast.error("Role name must contain at least one letter or number");
-      return;
-    }
-    if (!isEdit && existingKeys.includes(key)) {
-      toast.error(`A role named "${label}" already exists`);
-      return;
-    }
-    if (permissions.size === 0) {
-      toast.error("Select at least one permission");
-      return;
-    }
 
-    onSave({
+    const errors = await onSave({
       id: role?.id,
       key,
       label: label.trim(),
@@ -509,14 +653,170 @@ function RoleFormDialog({
       isSystem: role?.isSystem ?? false,
       isActive: role?.isActive ?? true,
     });
+    if (errors) stepperRef.current?.showErrors(roleFormErrors(errors));
   }
 
   const modules = Object.keys(MODULE_META) as UIModule[];
   const totalSelected = permissions.size;
+  // A caller who isn't a super_admin can't add a permission they don't hold.
+  const someLocked =
+    !readOnly &&
+    modules.some((mod) =>
+      MODULE_ACTIONS[mod].some((act) => {
+        const perm = `${mod}:${act}` as Permission;
+        return grantLockReason(caller, perm, permissions.has(perm)) !== null;
+      })
+    );
+
+  const detailsFields = (
+    <div className={FORM_STEP_GRID.roomy}>
+      <div className="space-y-2">
+        <Label htmlFor="role-label">
+          Role Name <span className="text-destructive">*</span>
+        </Label>
+        <Input
+          id="role-label"
+          name="label"
+          placeholder="e.g. Branch Manager"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          disabled={readOnly}
+        />
+      </div>
+      <div className={cn("space-y-2", FORM_STEP_GRID.wide)}>
+        <Label htmlFor="role-desc">
+          Description <span className="text-destructive">*</span>
+        </Label>
+        <Input
+          id="role-desc"
+          name="description"
+          placeholder="Short description of this role"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          disabled={readOnly}
+        />
+      </div>
+    </div>
+  );
+
+  // The permissions matrix. In the editor it is the Permissions step, whose
+  // title names it, and it scrolls inside the step.
+  const permissionsMatrix = (
+    <div data-field="permissions">
+      <div className={cn("flex items-center mb-2", readOnly ? "justify-between" : "justify-end")}>
+        {readOnly && <Label className="text-sm font-semibold">Permissions</Label>}
+        <Badge variant="outline" className="text-xs">
+          {totalSelected} selected
+        </Badge>
+      </div>
+      {someLocked && (
+        <p className="mb-2 text-xs text-muted-foreground">
+          {GRANT_LOCK_REASON}, so the boxes for the others are locked.
+        </p>
+      )}
+
+      <div className="space-y-3">
+        {modules.map((mod) => {
+          const meta = MODULE_META[mod];
+          const Icon = meta.icon;
+          const actions = MODULE_ACTIONS[mod];
+          const grantedCount = actions.filter((a) =>
+            permissions.has(`${mod}:${a}` as Permission)
+          ).length;
+          // The header toggle covers every action but the own-checkbox
+          // ones (write_off) that the role has or the caller can grant,
+          // so it reads checked when those are all on.
+          const toggleTargets = moduleToggleTargets(mod, permissions, caller);
+          const allSelected =
+            toggleTargets.length > 0 &&
+            toggleTargets.every((a) => permissions.has(`${mod}:${a}` as Permission));
+          const someSelected = grantedCount > 0 && !allSelected;
+
+          return (
+            <div
+              key={mod}
+              className={cn(
+                "rounded-lg border p-3 transition-colors",
+                grantedCount > 0 ? "bg-card" : "bg-muted/30"
+              )}
+            >
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <div className="flex items-start gap-3 min-w-0">
+                  <div
+                    className={cn(
+                      "h-8 w-8 rounded-md flex items-center justify-center shrink-0",
+                      grantedCount > 0
+                        ? "bg-brand-orange/10 text-brand-orange"
+                        : "bg-muted text-muted-foreground"
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold">{meta.label}</p>
+                    <p className="text-xs text-muted-foreground">{meta.description}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs text-muted-foreground">
+                    {grantedCount}/{actions.length}
+                  </span>
+                  <Checkbox
+                    checked={allSelected}
+                    indeterminate={someSelected}
+                    onCheckedChange={() => toggleModule(mod, !allSelected)}
+                    disabled={readOnly || toggleTargets.length === 0}
+                    title={!readOnly && toggleTargets.length === 0 ? GRANT_LOCK_REASON : undefined}
+                    aria-label={`Toggle all ${meta.label} permissions`}
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2 pl-11">
+                {actions.map((act) => {
+                  const perm = `${mod}:${act}` as Permission;
+                  const granted = permissions.has(perm);
+                  const lockReason = readOnly ? null : grantLockReason(caller, perm, granted);
+                  const actLabel = moduleActionLabel(mod, act) ?? ACTION_META[act].label;
+                  return (
+                    <label
+                      key={act}
+                      title={lockReason ?? undefined}
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs select-none transition-colors",
+                        readOnly ? "cursor-default" : lockReason ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+                        granted
+                          ? ACTION_META[act].colorClass
+                          : "bg-background text-muted-foreground border-border",
+                        !readOnly && !granted && !lockReason && "hover:bg-muted"
+                      )}
+                    >
+                      <Checkbox
+                        checked={granted}
+                        onCheckedChange={() => togglePermission(mod, act)}
+                        disabled={readOnly || lockReason !== null}
+                        className="h-3.5 w-3.5"
+                        aria-label={
+                          lockReason
+                            ? `${meta.label} ${actLabel} (${lockReason})`
+                            : `${meta.label} ${actLabel}`
+                        }
+                      />
+                      {actLabel}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-brand-orange" />
@@ -530,154 +830,65 @@ function RoleFormDialog({
           </DialogTitle>
           <DialogDescription>
             {readOnly
-              ? "System role — permissions are built-in and cannot be changed."
+              ? "What this role can do. Choose Edit to change it."
               : isEdit
                 ? "Update role details and configure permissions per module."
                 : "Define a new role and select which permissions it should grant."}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 pt-2">
-          {/* Basic info */}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="role-label">
-                Role Name <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="role-label"
-                placeholder="e.g. Branch Manager"
-                value={label}
-                onChange={(e) => setLabel(e.target.value)}
-                disabled={readOnly}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="role-desc">
-                Description <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="role-desc"
-                placeholder="Short description of this role"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                disabled={readOnly}
-              />
-            </div>
-          </div>
-
-          {/* Permissions matrix */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <Label className="text-sm font-semibold">Permissions</Label>
-              <Badge variant="outline" className="text-xs">
-                {totalSelected} selected
-              </Badge>
+        {readOnly ? (
+          <>
+            {/* Viewing isn't a form: the details and the matrix read as one scrolling page. */}
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pt-2">
+              {detailsFields}
+              {permissionsMatrix}
             </div>
 
-            <div className="space-y-3">
-              {modules.map((mod) => {
-                const meta = MODULE_META[mod];
-                const Icon = meta.icon;
-                const actions = MODULE_ACTIONS[mod];
-                const grantedCount = actions.filter((a) =>
-                  permissions.has(`${mod}:${a}` as Permission)
-                ).length;
-                const allSelected = grantedCount === actions.length;
-                const someSelected = grantedCount > 0 && !allSelected;
-
-                return (
-                  <div
-                    key={mod}
-                    className={cn(
-                      "rounded-lg border p-3 transition-colors",
-                      grantedCount > 0 ? "bg-card" : "bg-muted/30"
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-3 mb-2">
-                      <div className="flex items-start gap-3 min-w-0">
-                        <div
-                          className={cn(
-                            "h-8 w-8 rounded-md flex items-center justify-center shrink-0",
-                            grantedCount > 0
-                              ? "bg-brand-orange/10 text-brand-orange"
-                              : "bg-muted text-muted-foreground"
-                          )}
-                        >
-                          <Icon className="h-4 w-4" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold">{meta.label}</p>
-                          <p className="text-xs text-muted-foreground">{meta.description}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-xs text-muted-foreground">
-                          {grantedCount}/{actions.length}
-                        </span>
-                        <Checkbox
-                          checked={allSelected}
-                          indeterminate={someSelected}
-                          onCheckedChange={() => toggleModule(mod, !allSelected)}
-                          disabled={readOnly}
-                          aria-label={`Toggle all ${meta.label} permissions`}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2 pl-11">
-                      {actions.map((act) => {
-                        const perm = `${mod}:${act}` as Permission;
-                        const granted = permissions.has(perm);
-                        return (
-                          <label
-                            key={act}
-                            className={cn(
-                              "flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs select-none transition-colors",
-                              readOnly ? "cursor-default" : "cursor-pointer",
-                              granted
-                                ? ACTION_META[act].colorClass
-                                : "bg-background text-muted-foreground border-border",
-                              !readOnly && !granted && "hover:bg-muted"
-                            )}
-                          >
-                            <Checkbox
-                              checked={granted}
-                              onCheckedChange={() => togglePermission(mod, act)}
-                              disabled={readOnly}
-                              className="h-3.5 w-3.5"
-                              aria-label={`${meta.label} ${ACTION_META[act].label}`}
-                            />
-                            {ACTION_META[act].label}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="flex shrink-0 justify-end gap-3 pt-4 border-t">
+              <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+                Close
+              </Button>
+              {onEdit && (
+                <PermissionGate permission="settings:update">
+                  <span title={editLock ?? undefined} className="inline-flex">
+                    <Button
+                      onClick={onEdit}
+                      disabled={editLock !== null}
+                      aria-label={editLock ? `Edit (${editLock})` : undefined}
+                      className="gap-1 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                    >
+                      <Pencil className="h-4 w-4" />
+                      Edit
+                    </Button>
+                  </span>
+                </PermissionGate>
+              )}
             </div>
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-3 pt-4 border-t">
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={saving}
-          >
-            {readOnly ? "Close" : "Cancel"}
-          </Button>
-          {!readOnly && (
-            <Button
-              onClick={handleSave}
-              disabled={saving}
-              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+          </>
+        ) : (
+          <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+            <FormStepper
+              ref={stepperRef}
+              layout="dialog"
+              mode={isEdit ? "edit" : "create"}
+              steps={ROLE_STEPS}
+              validateStep={(stepId) => roleStepErrors(roleStepProblem(stepId, stepInput))}
+              onInvalid={(_errors, stepId) => showProblem(roleStepProblem(stepId, stepInput))}
+              submitLabel={isEdit ? "Save Changes" : "Create Role"}
+              submittingLabel="Saving..."
+              submitting={saving}
+              actions={
+                <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+                  Cancel
+                </Button>
+              }
             >
-              {saving ? "Saving..." : isEdit ? "Save Changes" : "Create Role"}
-            </Button>
-          )}
-        </div>
+              <FormStep id="details">{detailsFields}</FormStep>
+              <FormStep id="permissions">{permissionsMatrix}</FormStep>
+            </FormStepper>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -687,7 +898,7 @@ function RoleFormDialog({
 // Page
 // ---------------------------------------------------------------------------
 
-export default function UserRolesPage() {
+function UserRolesContent() {
   const [roles, setRoles] = useState<RoleItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -698,6 +909,8 @@ export default function UserRolesPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const refreshUser = useAuthStore((s) => s.refreshUser);
   const currentUserRoles = useAuthStore((s) => s.user?.roles ?? []);
+  const callerUser = useAuthStore((s) => s.user);
+  const caller: GrantingCaller = { roles: callerUser?.roles ?? [], permissions: callerUser?.permissions ?? [] };
 
   const maybeRefreshCurrentUser = async (affectedRoleKey?: string) => {
     if (!affectedRoleKey) return;
@@ -709,11 +922,8 @@ export default function UserRolesPage() {
   async function loadRoles() {
     setLoading(true);
     try {
-      const res = await roleService.list();
-      const list = Array.isArray(res)
-        ? res
-        : (res as unknown as { data: ApiRole[] })?.data ?? [];
-      setRoles(list.map(apiRoleToItem));
+      const list = completeRows(await roleService.listAll());
+      setRoles(list.map(roleItemFromApi));
     } catch {
       toast.error("We couldn't load the roles. Please try again.");
     } finally {
@@ -725,14 +935,11 @@ export default function UserRolesPage() {
     loadRoles();
   }, []);
 
-  async function handleSaveRole(item: RoleItem) {
+  // Answers the 422's field errors, so the dialog opens the step holding them.
+  async function handleSaveRole(item: RoleItem): Promise<Record<string, string[]> | null> {
     setActionLoading(true);
     try {
-      const payload = {
-        name: item.key,
-        description: item.description,
-        permissions: item.permissions,
-      };
+      const payload = rolePayload(item, { isEdit: formMode === "edit" });
       if (formMode === "create") {
         await roleService.create(payload);
         toast.success("Role created");
@@ -745,8 +952,31 @@ export default function UserRolesPage() {
       if (formMode === "edit") {
         await maybeRefreshCurrentUser(item.key);
       }
-    } catch {
-      toast.error(formMode === "create" ? "We couldn't create the role. Please try again." : "We couldn't update the role. Please try again.");
+      return null;
+    } catch (err) {
+      // The role was deleted by another request while this save waited:
+      // nothing was written, so close the form and show the current list.
+      const conflict = roleConflictMessage(err);
+      if (conflict) {
+        toast.error(conflict);
+        setFormOpen(false);
+        await loadRoles();
+        return null;
+      }
+      // A permission the server doesn't seed comes back as a raw
+      // "permissions.N is invalid"; name the permission instead.
+      const refused = roleSaveErrorMessage(err, item.permissions, describeMatrixPermission);
+      if (refused) {
+        toast.error(refused);
+        for (const message of otherRoleSaveErrors(err)) toast.error(message);
+        return validationErrors(err);
+      }
+      // The API's own reason (a taken name, a permission it does not have)
+      // is what tells the admin what to change; a bare "try again" hid it.
+      // Permission keys it lists read as the matrix labels them.
+      const fallback = formMode === "create" ? "We couldn't create the role. Please try again." : "We couldn't update the role. Please try again.";
+      toast.error(readablePermissionKeys(getErrorMessage(err, fallback), describeMatrixPermission));
+      return validationErrors(err);
     } finally {
       setActionLoading(false);
     }
@@ -765,8 +995,13 @@ export default function UserRolesPage() {
       }
       await loadRoles();
       await maybeRefreshCurrentUser(role.key);
-    } catch {
-      toast.error("We couldn't update the role status. Please try again.");
+    } catch (err) {
+      // A 422 (deactivating a role you hold, reactivating one carrying a
+      // permission you don't hold) says what to do; a 409 means the role was
+      // deleted meanwhile, so the list is reloaded.
+      const { message, reload } = roleActivationError(err, "We couldn't update the role status. Please try again.");
+      toast.error(readablePermissionKeys(message, describeMatrixPermission));
+      if (reload) await loadRoles();
     } finally {
       setActionLoading(false);
     }
@@ -782,7 +1017,16 @@ export default function UserRolesPage() {
       setDeleteTarget(null);
       await loadRoles();
       await maybeRefreshCurrentUser(affected);
-    } catch {
+    } catch (err) {
+      // Already deleted by another request: nothing was written, so close the
+      // dialog and show the current list.
+      const conflict = roleConflictMessage(err);
+      if (conflict) {
+        toast.error(conflict);
+        setDeleteTarget(null);
+        await loadRoles();
+        return;
+      }
       toast.error("We couldn't delete the role. Please try again.");
     } finally {
       setActionLoading(false);
@@ -800,10 +1044,16 @@ export default function UserRolesPage() {
     );
   }, [roles, search]);
 
-  const totalModules = Object.keys(MODULE_META).length;
+  const totalModules = OFFERED_MODULE_TOTAL;
   const customCount = roles.filter((r) => !r.isSystem).length;
 
   function openView(role: RoleItem) {
+    setFormRole(role);
+    setFormMode("view");
+    setFormOpen(true);
+  }
+
+  function openEdit(role: RoleItem) {
     setFormRole(role);
     setFormMode("edit");
     setFormOpen(true);
@@ -816,80 +1066,85 @@ export default function UserRolesPage() {
   }
 
   return (
-    <RouteGuard permission="settings:view" pageName="Role and Permissions">
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Role and Permissions</h1>
-            <p className="text-sm text-muted-foreground">
-              Manage roles and their access rights across every system module
-            </p>
-          </div>
-          <PermissionGate permission="settings:update">
-            <Button
-              onClick={openCreate}
-              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              New Role
-            </Button>
-          </PermissionGate>
+    <PageFill>
+      {/* Header */}
+      <div className="flex shrink-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Role and Permissions</h1>
+          <p className="text-sm text-muted-foreground">
+            Manage roles and their access rights across every system module
+          </p>
         </div>
+        <PermissionGate permission="settings:update">
+          <Button
+            onClick={openCreate}
+            className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            New Role
+          </Button>
+        </PermissionGate>
+      </div>
 
-        {/* Summary Cards */}
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Total Roles</CardTitle>
-              <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">{roles.length}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Defined in the backend
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Modules Protected</CardTitle>
-              <SettingsIcon className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">{totalModules}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Feature areas with access control</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Custom Roles</CardTitle>
-              <UserCog className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">{customCount}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Created on top of the built-in roles
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Search */}
-        <div className="relative max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search roles..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-
-        {/* Roles Table */}
+      {/* Summary Cards */}
+      <div className="grid shrink-0 gap-4 sm:grid-cols-3">
         <Card>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Total Roles</CardTitle>
+            <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">{roles.length}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Defined in the backend
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Modules Protected</CardTitle>
+            <SettingsIcon className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">{totalModules}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Feature areas with access control</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Custom Roles</CardTitle>
+            <UserCog className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">{customCount}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Created on top of the built-in roles
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Search */}
+      <div className="relative max-w-sm shrink-0">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Search roles..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
+      {/*
+        Roles table, with the module reference beside it from 2xl, where both
+        fit. Below 2xl the reference is a collapsed section under the table, so
+        the table keeps the width for its columns and actions.
+      */}
+      <FillSection className="gap-6 2xl:grid 2xl:grid-cols-[minmax(0,1fr)_20rem] fit:2xl:grid-rows-[minmax(0,1fr)]">
+        {/* Roles Table */}
+        <Card className={FIT_CLASSES.section}>
+          <CardContent className={cn(FIT_CLASSES.section, "p-0")}>
+            <ScrollBox>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -912,8 +1167,8 @@ export default function UserRolesPage() {
                   )}
                   {!loading &&
                     filtered.map((r) => {
-                      const grouped = groupByModule(r.permissions);
-                      const moduleCount = Object.keys(grouped).length;
+                      const moduleCount = roleModuleCount(r.permissions);
+                      const editLock = editLockReason(r.key, caller);
                       return (
                         <TableRow
                           key={r.key}
@@ -936,9 +1191,14 @@ export default function UserRolesPage() {
                               >
                                 {r.label}
                               </Badge>
+                              {roleStatusMark(r.isActive) && (
+                                <Badge variant="outline" className="text-xs text-muted-foreground">
+                                  {roleStatusMark(r.isActive)}
+                                </Badge>
+                              )}
                             </div>
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="min-w-56 whitespace-normal">
                             <span className="text-sm text-muted-foreground">
                               {r.description || "—"}
                             </span>
@@ -957,40 +1217,46 @@ export default function UserRolesPage() {
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-1">
                               <PermissionGate permission="settings:update">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 gap-1 text-xs"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    openView(r);
-                                  }}
-                                >
-                                  <Pencil className="h-3 w-3" />
-                                  Edit
-                                </Button>
-                              </PermissionGate>
-                              <PermissionGate permission="settings:update">
-                                <>
+                                <span title={editLock ?? undefined} className="inline-flex">
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    className="h-7 w-7 p-0"
-                                    title={r.isActive ? "Deactivate role" : "Reactivate role"}
-                                    disabled={actionLoading}
+                                    className="h-7 gap-1 text-xs"
+                                    disabled={editLock !== null}
+                                    aria-label={editLock ? `Edit (${editLock})` : undefined}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      handleToggleActive(r);
+                                      openEdit(r);
                                     }}
                                   >
-                                    {r.isActive ? (
-                                      <PowerOff className="h-3 w-3" />
-                                    ) : (
-                                      <Power className="h-3 w-3" />
-                                    )}
+                                    <Pencil className="h-3 w-3" />
+                                    Edit
                                   </Button>
-                                </>
+                                </span>
                               </PermissionGate>
+                              {canToggleActive(r.key) && (
+                                <PermissionGate permission="settings:update">
+                                  <>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 w-7 p-0"
+                                      title={r.isActive ? "Deactivate role" : "Reactivate role"}
+                                      disabled={actionLoading}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleToggleActive(r);
+                                      }}
+                                    >
+                                      {r.isActive ? (
+                                        <PowerOff className="h-3 w-3" />
+                                      ) : (
+                                        <Power className="h-3 w-3" />
+                                      )}
+                                    </Button>
+                                  </>
+                                </PermissionGate>
+                              )}
                               <PermissionGate permission="settings:delete">
                                 <Button
                                   variant="outline"
@@ -1020,81 +1286,115 @@ export default function UserRolesPage() {
                   )}
                 </TableBody>
               </Table>
-            </div>
+            </ScrollBox>
           </CardContent>
         </Card>
 
-        {/* Module reference */}
-        <Card>
+        {/* Module reference: beside the table from 2xl */}
+        <Card className={cn(FIT_CLASSES.section, "hidden 2xl:flex")}>
           <CardHeader>
             <CardTitle className="text-sm font-medium">Module Reference</CardTitle>
             <p className="text-xs text-muted-foreground">
               Every feature area protected by access control
             </p>
           </CardHeader>
-          <CardContent>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {(Object.keys(MODULE_META) as UIModule[]).map((mod) => {
-                const meta = MODULE_META[mod];
-                const Icon = meta.icon;
-                return (
-                  <div key={mod} className="flex items-start gap-3 rounded-lg border p-3">
-                    <div className="h-8 w-8 rounded-md bg-brand-orange/10 text-brand-orange flex items-center justify-center shrink-0">
-                      <Icon className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold">{meta.label}</p>
-                      <p className="text-xs text-muted-foreground">{meta.description}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+          <CardContent className={FIT_CLASSES.section}>
+            <ScrollBox className="p-px">
+              <ModuleReferenceList className="grid gap-3" />
+            </ScrollBox>
           </CardContent>
         </Card>
 
-        <RoleFormDialog
-          open={formOpen}
-          onOpenChange={setFormOpen}
-          role={formRole}
-          existingKeys={roles.map((r) => r.key)}
-          onSave={handleSaveRole}
-          readOnly={formMode === "view"}
-          saving={actionLoading}
-        />
+        {/* Module reference: a collapsed section under the table below 2xl */}
+        <details className="shrink-0 rounded-xl bg-card text-sm ring-1 ring-foreground/10 2xl:hidden">
+          <summary className="cursor-pointer px-4 py-3">
+            <span className="font-medium">Module Reference</span>
+            <span className="ml-2 text-xs text-muted-foreground">
+              Every feature area protected by access control
+            </span>
+          </summary>
+          <div className="border-t p-4 fit:max-h-[40dvh] fit:overflow-y-auto">
+            <ModuleReferenceList className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" />
+          </div>
+        </details>
+      </FillSection>
 
-        <Dialog
-          open={!!deleteTarget}
-          onOpenChange={(open) => !open && setDeleteTarget(null)}
-        >
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Delete role?</DialogTitle>
-              <DialogDescription>
-                This permanently deletes {deleteTarget?.label}. Users currently
-                assigned to this role will lose its permissions. This action
-                cannot be undone.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="flex justify-end gap-3 pt-4">
-              <Button
-                variant="outline"
-                onClick={() => setDeleteTarget(null)}
-                disabled={actionLoading}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={handleDeleteRole}
-                disabled={actionLoading}
-              >
-                {actionLoading ? "Deleting..." : "Delete Role"}
-              </Button>
+      <RoleFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        role={formRole}
+        existingKeys={roles.map((r) => r.key)}
+        onSave={handleSaveRole}
+        readOnly={formMode === "view"}
+        onEdit={() => setFormMode("edit")}
+        saving={actionLoading}
+      />
+
+      <Dialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete role?</DialogTitle>
+            <DialogDescription>
+              This permanently deletes {deleteTarget?.label}. Users currently
+              assigned to this role will lose its permissions. This action
+              cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteTarget(null)}
+              disabled={actionLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteRole}
+              disabled={actionLoading}
+            >
+              {actionLoading ? "Deleting..." : "Delete Role"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </PageFill>
+  );
+}
+
+/** Every feature area protected by access control, for the Module Reference. */
+function ModuleReferenceList({ className }: { className: string }) {
+  return (
+    <div className={className}>
+      {(Object.keys(MODULE_META) as UIModule[]).map((mod) => {
+        const meta = MODULE_META[mod];
+        const Icon = meta.icon;
+        return (
+          <div key={mod} className="flex items-start gap-3 rounded-lg border p-3">
+            <div className="h-8 w-8 rounded-md bg-brand-orange/10 text-brand-orange flex items-center justify-center shrink-0">
+              <Icon className="h-4 w-4" />
             </div>
-          </DialogContent>
-        </Dialog>
-      </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">{meta.label}</p>
+              <p className="text-xs text-muted-foreground">{meta.description}</p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// The roles themselves come from `GET /roles`, which needs `users:view`.
+export default function UserRolesPage() {
+  return (
+    <RouteGuard permission="settings:view" pageName="Role and Permissions">
+      <RouteGuard permission="users:view" pageName="Role and Permissions">
+        <UserRolesContent />
+      </RouteGuard>
     </RouteGuard>
   );
 }

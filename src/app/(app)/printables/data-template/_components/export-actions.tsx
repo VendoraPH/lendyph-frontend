@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -115,10 +116,12 @@ export function ExportActions({ draft }: { draft: TemplateDraft }) {
             Both files (.zip)
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">
-            Exports keep the header row. Guideline 3 asks for it to be removed
-            before the files are submitted.
-          </DropdownMenuLabel>
+          <DropdownMenuGroup>
+            <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">
+              Exports keep the header row. Guideline 3 asks for it to be removed
+              before the files are submitted.
+            </DropdownMenuLabel>
+          </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
     </div>

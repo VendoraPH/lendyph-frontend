@@ -1,7 +1,8 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { fetchAllPages, type DrainResult } from "@/lib/paginate";
-import type { Borrower, BorrowerLedgerEntry, PaginatedResponse } from "@/types";
+import type { Borrower, BorrowerLoanSummary, PaginatedResponse } from "@/types";
+import type { BorrowerLedgerResponse, BorrowerMembershipUpdate } from "@/types/borrower";
 
 /** A valid-ID entry as returned grouped (front/back pair) by the API. */
 export interface BorrowerValidId {
@@ -75,6 +76,27 @@ export const borrowerService = {
   reactivate: (id: number) =>
     api.patch<Borrower>(API_ENDPOINTS.BORROWERS.REACTIVATE(id)),
 
+  /**
+   * Move the member to another branch with a reason (`borrowers:view` and
+   * `borrowers:transfer`, Phase 6 MB-BE4). Refused in words with 422 while
+   * anything is still open or the destination can't receive members; 409 when
+   * the member is busy or changed at the same moment; 404 for a member outside
+   * the caller's branches. The answer is the member in the new branch.
+   */
+  transfer: (id: number, body: { branch_id: number; reason: string }) =>
+    api.post<Borrower>(API_ENDPOINTS.BORROWERS.TRANSFER(id), body),
+
+  /**
+   * Change the membership date, member type or membership number
+   * (`borrowers:update`, finish run round 2). Send only what changes; a null
+   * number goes back to the member code. Refused in words with 422 (a field,
+   * a number another member holds, a registration not yet a member, a date
+   * after the membership ended); 404 for a member outside the caller's
+   * branches. The answer is the member's record.
+   */
+  updateMembership: (id: number, body: BorrowerMembershipUpdate) =>
+    api.patch<Borrower>(API_ENDPOINTS.BORROWERS.MEMBERSHIP(id), body),
+
   uploadPhoto: (id: number, formData: FormData) =>
     api.upload<Borrower>(API_ENDPOINTS.BORROWERS.UPLOAD_PHOTO(id), formData),
 
@@ -90,6 +112,10 @@ export const borrowerService = {
   deleteValidId: (id: number, validIdId: number) =>
     api.delete(API_ENDPOINTS.BORROWERS.DELETE_VALID_ID(id, validIdId)),
 
-  ledger: (id: number, params?: Record<string, unknown>) =>
-    api.get<PaginatedResponse<BorrowerLedgerEntry>>(API_ENDPOINTS.BORROWERS.LEDGER(id), { params }),
+  /** `getRaw`, because `meta.closing` sits beside `data` and `api.get` would drop it. */
+  ledger: (id: number) =>
+    api.getRaw<BorrowerLedgerResponse>(API_ENDPOINTS.BORROWERS.LEDGER(id)),
+
+  loanSummary: (id: number) =>
+    api.get<BorrowerLoanSummary>(API_ENDPOINTS.BORROWERS.LOAN_SUMMARY(id)),
 };

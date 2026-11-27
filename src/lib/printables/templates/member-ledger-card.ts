@@ -12,30 +12,43 @@
  * below already accepts `entries` / `transactions` / `payments` / `repayments`).
  * Until then a note points staff at the Statement of Account, which does carry
  * the per-payment ledger for a single loan.
+ *
+ * Every total is the server's: the summary from `totals`, the loan table's
+ * column totals from `loans_totals`. One it did not send prints as a dash.
  */
 
+import { LOAN_STATUS_LABELS } from "@/constants/loan-status";
+import type { LoanStatus } from "@/types/loan";
 import type { PrintableDocument, PrintBlock } from "../types";
 import {
   BLANK_ORG,
+  DASH,
   asArray,
   asRecord,
+  currencyOrDash,
   field,
-  formatCurrency,
   generatedAt,
   humanize,
   pick,
   pickNumber,
   presentFields,
-  sum,
-  toNumber,
   type PrintableBuildOptions,
 } from "./shared";
 
+/**
+ * A loan's status as the loans screens name it: the server's display_status
+ * (Past Due for a loan past grace) first, then the stored status.
+ */
+function loanStatusText(value: unknown): unknown {
+  return typeof value === "string" && Object.hasOwn(LOAN_STATUS_LABELS, value)
+    ? LOAN_STATUS_LABELS[value as LoanStatus]
+    : humanize(value);
+}
+
 function normalizeLoanRow(raw: Record<string, unknown>): Record<string, unknown> {
-  const principal = toNumber(pick(raw, ["principal_amount", "principal"])) ?? 0;
-  const paid = toNumber(pick(raw, ["total_paid", "amount_paid"])) ?? 0;
   return {
     loan_account_number: pick(raw, [
+      "display_number",
       "loan_account_number",
       "account_number",
       "application_number",
@@ -43,15 +56,16 @@ function normalizeLoanRow(raw: Record<string, unknown>): Record<string, unknown>
     product: pick(raw, ["product_name", "loan_product_name"]),
     released_at: pick(raw, ["released_at", "release_date", "start_date"]),
     maturity_date: pick(raw, ["maturity_date", "end_date"]),
-    principal,
-    total_paid: paid,
+    principal: pick(raw, ["principal_amount", "principal"]),
+    total_paid: pick(raw, ["total_paid", "amount_paid"]),
     payments_count: pick(raw, ["payments_count", "repayments_count"]),
-    balance: pick(raw, [
-      "outstanding_balance",
-      "balance",
-      "remaining_balance",
-    ]),
-    status: humanize(pick(raw, ["status"])),
+    // Unpaid principal, and everything still owed, as the loan pages name
+    // them. Never the deprecated `outstanding_balance` (principal plus premium).
+    principal_balance: pick(raw, ["outstanding_principal"]),
+    outstanding: pick(raw, ["total_outstanding"]),
+    // What is late past grace, the Past Due Loans page's per-loan figure.
+    overdue: pick(raw, ["overdue_amount"]),
+    status: loanStatusText(pick(raw, ["display_status", "status"])),
   };
 }
 
@@ -59,7 +73,7 @@ function normalizePaymentRow(raw: Record<string, unknown>): Record<string, unkno
   return {
     date: pick(raw, ["date", "payment_date", "paid_at"]),
     reference: pick(raw, ["receipt_number", "reference", "reference_number"]),
-    loan_account_number: pick(raw, ["loan_account_number", "account_number"]),
+    loan_account_number: pick(raw, ["display_number", "loan_account_number", "account_number"]),
     principal: pick(raw, ["principal_applied", "principal_paid", "principal"]),
     interest: pick(raw, ["interest_applied", "interest_paid", "interest"]),
     penalty: pick(raw, ["penalty_applied", "penalty_paid", "penalty"]),
@@ -75,6 +89,7 @@ export function buildMemberLedgerCardDoc(
   const root = asRecord(raw);
   const borrower = asRecord(pick(root, ["borrower", "member"])) ?? root;
   const totals = asRecord(pick(root, ["totals", "summary"]));
+  const loansTotals = asRecord(pick(root, ["loans_totals"]));
 
   const loanRows = asArray(pick(root, ["loans", "accounts"])).map(normalizeLoanRow);
   const paymentRows = asArray(
@@ -84,17 +99,14 @@ export function buildMemberLedgerCardDoc(
   const memberName = pick(borrower, ["full_name", "name", "borrower_name"]);
   const memberCode = pick(borrower, ["borrower_code", "member_no", "code"]);
 
-  const totalReleased =
-    pickNumber(totals, ["total_portfolio", "total_released", "total_principal"]) ??
-    sum(loanRows, "principal");
-  const totalPaid =
-    pickNumber(totals, ["total_paid", "total_amount_paid"]) ??
-    sum(loanRows, "total_paid");
-  const totalOutstanding =
-    pickNumber(totals, ["total_outstanding", "outstanding_balance"]) ??
-    sum(loanRows, "balance");
+  const totalReleased = pickNumber(totals, ["total_portfolio", "total_released", "total_principal"]);
+  const totalPaid = pickNumber(totals, ["total_paid", "total_amount_paid"]);
+  // Inside Total paid: what imported loans' files say was paid before the import.
+  const paidBeforeImport = pickNumber(totals, ["paid_before_import"]);
+  const totalOutstanding = pickNumber(totals, ["total_outstanding"]);
   const loanCount =
     pickNumber(totals, ["total_loans", "loan_count"]) ?? loanRows.length;
+  const paymentsCount = pickNumber(loansTotals, ["payments_count"]);
 
   const blocks: PrintBlock[] = [
     {
@@ -126,11 +138,14 @@ export function buildMemberLedgerCardDoc(
       title: "Summary",
       lines: [
         { label: "Loan accounts on record", amount: String(loanCount) },
-        { label: "Total released", amount: formatCurrency(totalReleased) },
-        { label: "Total paid", amount: formatCurrency(totalPaid), indent: true },
+        { label: "Total released", amount: currencyOrDash(totalReleased) },
+        { label: "Total paid", amount: currencyOrDash(totalPaid), indent: true },
+        ...(paidBeforeImport !== null && paidBeforeImport > 0
+          ? [{ label: "Of which paid before the import", amount: currencyOrDash(paidBeforeImport), indent: true }]
+          : []),
         {
-          label: "TOTAL OUTSTANDING BALANCE",
-          amount: formatCurrency(totalOutstanding),
+          label: "TOTAL OUTSTANDING",
+          amount: currencyOrDash(totalOutstanding),
           rule: "grand",
         },
       ],
@@ -139,24 +154,31 @@ export function buildMemberLedgerCardDoc(
       kind: "table",
       title: "Loan Accounts",
       columns: [
-        { key: "loan_account_number", header: "Loan #", width: "14%" },
-        { key: "product", header: "Product", width: "16%" },
-        { key: "released_at", header: "Released", format: "date", width: "11%" },
-        { key: "maturity_date", header: "Maturity", format: "date", width: "11%" },
-        { key: "principal", header: "Principal", format: "currency", align: "right", width: "13%" },
-        { key: "total_paid", header: "Total Paid", format: "currency", align: "right", width: "13%" },
-        { key: "payments_count", header: "Payments", format: "number", align: "right", width: "9%" },
-        { key: "balance", header: "Balance", format: "currency", align: "right", width: "13%" },
+        { key: "loan_account_number", header: "Loan #", width: "10%" },
+        { key: "product", header: "Product", width: "11%" },
+        { key: "released_at", header: "Released", format: "date", width: "8%" },
+        { key: "maturity_date", header: "Maturity", format: "date", width: "8%" },
+        { key: "principal", header: "Principal", format: "currency", align: "right", width: "9%" },
+        { key: "total_paid", header: "Total Paid", format: "currency", align: "right", width: "9%" },
+        { key: "payments_count", header: "Payments", format: "number", align: "right", width: "6%" },
+        { key: "principal_balance", header: "Principal Balance", format: "currency", align: "right", width: "10%" },
+        { key: "outstanding", header: "Outstanding", format: "currency", align: "right", width: "10%" },
+        { key: "overdue", header: "Past Due", format: "currency", align: "right", width: "9%" },
+        { key: "status", header: "Status", width: "10%" },
       ],
+      // Eleven columns only fit an A4 page in the smaller type.
+      compact: true,
       rows: loanRows,
       totals:
         loanRows.length > 0
           ? {
               maturity_date: "TOTAL",
-              principal: formatCurrency(sum(loanRows, "principal")),
-              total_paid: formatCurrency(sum(loanRows, "total_paid")),
-              payments_count: String(sum(loanRows, "payments_count")),
-              balance: formatCurrency(sum(loanRows, "balance")),
+              principal: currencyOrDash(pick(loansTotals, ["principal_amount"])),
+              total_paid: currencyOrDash(pick(loansTotals, ["total_paid"])),
+              payments_count: paymentsCount === null ? DASH : String(paymentsCount),
+              principal_balance: currencyOrDash(pick(loansTotals, ["outstanding_principal"])),
+              outstanding: currencyOrDash(pick(loansTotals, ["total_outstanding"])),
+              overdue: currencyOrDash(pick(loansTotals, ["overdue_amount"])),
             }
           : undefined,
       emptyText: "This member has no released loan accounts on record.",
@@ -177,13 +199,8 @@ export function buildMemberLedgerCardDoc(
         { key: "amount", header: "Amount Paid", format: "currency", align: "right", width: "18%" },
       ],
       rows: paymentRows,
-      totals: {
-        loan_account_number: "TOTAL",
-        principal: formatCurrency(sum(paymentRows, "principal")),
-        interest: formatCurrency(sum(paymentRows, "interest")),
-        penalty: formatCurrency(sum(paymentRows, "penalty")),
-        amount: formatCurrency(sum(paymentRows, "amount")),
-      },
+      // No TOTAL row: the server sends no totals for this table, and none is
+      // added up here.
     });
   } else {
     blocks.push({

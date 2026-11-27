@@ -128,13 +128,15 @@ export function stepForRunStatus(status: {
     case "uploading":
       return "upload";
     // The server has staged the rows and is waiting on the admin to map CSV
-    // product names onto loan products. That is step 2's job.
+    // product names onto loan products. The Processing step shows the mapping
+    // inline while it polls; the Check step returns early for a re-opened run
+    // and never shows it.
     case "awaiting_mapping":
-      return "check";
     case "assembled":
     case "staging":
     case "importing_customers":
     case "importing_loans":
+    case "importing_share_capital":
       return "processing";
     default:
       return "processing";
@@ -158,6 +160,39 @@ export function stepForHit(
   const step = stepForRunStatus(status);
   if (step === "result" && source !== "url") return "prepare";
   return step;
+}
+
+/**
+ * Whether a remembered run may take the next upload: only one still open. A
+ * run that has finished (completed, failed or cancelled, which the server's
+ * `is_closed` says, never a phase list) never takes another file, so the
+ * wizard forgets it and the next upload opens a new run. A run nothing has
+ * read yet is kept, since nothing has said it finished.
+ */
+export function keepsRunForUpload(status: { is_closed: boolean } | null | undefined): boolean {
+  return status?.is_closed !== true;
+}
+
+/**
+ * The run the wizard takes from a reattach hit. A finished run's id is kept
+ * only to show its result (asked for by name, `?session=`); found any other
+ * way it is a receipt on step 1, and the next Continue opens a new run.
+ */
+export function seededRunId(hit: {
+  runId: number;
+  status: { is_closed: boolean };
+  step: ImportStep;
+}): number | null {
+  return hit.step === "result" || keepsRunForUpload(hit.status) ? hit.runId : null;
+}
+
+/**
+ * Whether the run this device remembers is forgotten on load: a finished one
+ * is. A link someone followed is theirs to look at, and the server probe only
+ * ever answers with an open run.
+ */
+export function forgetsRememberedRun(source: ReattachSource, status: { is_closed: boolean }): boolean {
+  return source === "storage" && !keepsRunForUpload(status);
 }
 
 /** Copy for a run that has vanished. Said out loud, never a silent reset. */
@@ -267,6 +302,10 @@ export function useImportReattach(): UseImportReattachResult {
           } else if (candidate) {
             const status = await dataImportService.status(candidate.id);
             if (cancelled) return;
+            // A finished run this device remembers is a receipt, not work to
+            // resume: forget it, so the next upload opens a new run instead of
+            // landing in this one.
+            if (forgetsRememberedRun(source, status)) clearImportSession();
             finish({
               runId: status.id,
               status,

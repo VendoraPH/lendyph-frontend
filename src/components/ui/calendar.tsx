@@ -198,7 +198,9 @@ function CalendarDayButton({
     <Button
       variant="ghost"
       size="icon"
-      data-day={day.date.toLocaleDateString(locale?.code)}
+      data-day={new Date(
+        Date.UTC(day.date.getFullYear(), day.date.getMonth(), day.date.getDate())
+      ).toLocaleDateString(locale?.code, { timeZone: "UTC" })}
       data-selected-single={
         modifiers.selected &&
         !modifiers.range_start &&

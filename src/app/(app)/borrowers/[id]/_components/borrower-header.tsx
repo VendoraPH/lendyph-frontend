@@ -5,17 +5,20 @@ import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Pencil, Camera, X, Maximize2 } from "lucide-react";
+import { ArrowLeft, ArrowRightLeft, Pencil, Camera, X, Maximize2 } from "lucide-react";
 import { toast } from "sonner";
 import { borrowerService } from "@/services";
 import type { Borrower } from "@/types";
 import { PhotoCropDialog } from "@/components/borrower/photo-crop-dialog";
+import { PermissionGate } from "@/components/common/permission-gate";
+import { usePermission } from "@/hooks";
 import { getInitials } from "@/lib/initials";
+import { memberPhotoActions } from "../_lib/member-photo-actions";
 // The module-wide map, keyed off `Borrower["status"]`. The copy that used to
 // live here was `Record<string, string>` and had only the three member
 // statuses, so a `pending` or `rejected` borrower opened by URL drew an
 // unstyled pill — the same drift that hid `rejected` from the status tabs.
-import { statusBadgeColor } from "@/app/(app)/borrowers/_components/utils";
+import { memberStatusLabel, statusBadgeColor } from "@/app/(app)/borrowers/_components/utils";
 import {
   Dialog,
   DialogContent,
@@ -30,9 +33,14 @@ interface BorrowerHeaderProps {
   borrower: Borrower;
   onEdit: () => void;
   onPhotoUpdate?: () => void;
+  /** Opens Transfer member; absent when the user can't transfer this member. */
+  onTransfer?: () => void;
 }
 
-export function BorrowerHeader({ borrower, onEdit, onPhotoUpdate }: BorrowerHeaderProps) {
+export function BorrowerHeader({ borrower, onEdit, onPhotoUpdate, onTransfer }: BorrowerHeaderProps) {
+  const { can } = usePermission();
+  // Editing the member, photo included, needs borrowers:update, as the server does.
+  const photoActions = memberPhotoActions(Boolean(borrower.photo), can("borrowers:update"));
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [cropDialogOpen, setCropDialogOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -85,57 +93,69 @@ export function BorrowerHeader({ borrower, onEdit, onPhotoUpdate }: BorrowerHead
     .filter(Boolean)
     .join(" · ");
 
+  const avatar = (
+    <Avatar className="size-24 sm:size-28 fit:size-16">
+      {borrower.photo ? (
+        <AvatarImage src={borrower.photo} alt={borrower.full_name} />
+      ) : null}
+      <AvatarFallback className="bg-brand-orange/10 text-brand-orange text-3xl font-semibold">
+        {getInitials(borrower.full_name)}
+      </AvatarFallback>
+    </Avatar>
+  );
+
   return (
-    <div className="space-y-4">
+    <div className="shrink-0 space-y-4 fit:space-y-2">
       <Link
         href="/borrowers"
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back to Borrowers
+        Back to Members
       </Link>
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-5">
           <div className="relative shrink-0">
-            <button
-              type="button"
-              aria-label={borrower.photo ? "View profile photo" : "Upload profile photo"}
-              onClick={() => (borrower.photo ? setViewerOpen(true) : photoInputRef.current?.click())}
-              className="group relative block rounded-full"
-            >
-              <Avatar className="size-24 sm:size-28">
-                {borrower.photo ? (
-                  <AvatarImage src={borrower.photo} alt={borrower.full_name} />
-                ) : null}
-                <AvatarFallback className="bg-brand-orange/10 text-brand-orange text-3xl font-semibold">
-                  {getInitials(borrower.full_name)}
-                </AvatarFallback>
-              </Avatar>
-              <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
-                {borrower.photo ? (
-                  <Maximize2 className="h-6 w-6 text-white" />
-                ) : (
-                  <Camera className="h-6 w-6 text-white" />
-                )}
-              </div>
-            </button>
-            <input
-              ref={photoInputRef}
-              type="file"
-              className="hidden"
-              accept="image/*"
-              onChange={handleFileSelect}
-            />
-            <button
-              type="button"
-              aria-label="Change photo"
-              onClick={() => photoInputRef.current?.click()}
-              className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full bg-brand-orange text-brand-orange-foreground shadow-sm ring-2 ring-background hover:bg-brand-orange-dark transition-colors"
-            >
-              <Camera className="h-4 w-4" />
-            </button>
-            {borrower.photo ? (
+            {photoActions.avatar ? (
+              <button
+                type="button"
+                aria-label={photoActions.avatar === "view" ? "View profile photo" : "Upload profile photo"}
+                onClick={() => (photoActions.avatar === "view" ? setViewerOpen(true) : photoInputRef.current?.click())}
+                className="group relative block rounded-full"
+              >
+                {avatar}
+                <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {photoActions.avatar === "view" ? (
+                    <Maximize2 className="h-6 w-6 text-white" />
+                  ) : (
+                    <Camera className="h-6 w-6 text-white" />
+                  )}
+                </div>
+              </button>
+            ) : (
+              avatar
+            )}
+            {photoActions.change ? (
+              <>
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  className="hidden"
+                  accept="image/*"
+                  onChange={handleFileSelect}
+                />
+                <button
+                  type="button"
+                  aria-label="Change photo"
+                  onClick={() => photoInputRef.current?.click()}
+                  className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full bg-brand-orange text-brand-orange-foreground shadow-sm ring-2 ring-background hover:bg-brand-orange-dark transition-colors"
+                >
+                  <Camera className="h-4 w-4" />
+                </button>
+              </>
+            ) : null}
+            {photoActions.remove ? (
               <button
                 type="button"
                 aria-label="Remove photo"
@@ -155,7 +175,7 @@ export function BorrowerHeader({ borrower, onEdit, onPhotoUpdate }: BorrowerHead
                 variant="outline"
                 className={statusBadgeColor[borrower.status]}
               >
-                {borrower.status}
+                {memberStatusLabel(borrower.status)}
               </Badge>
             </div>
             <p className="text-sm text-muted-foreground font-mono">
@@ -168,13 +188,23 @@ export function BorrowerHeader({ borrower, onEdit, onPhotoUpdate }: BorrowerHead
             </p>
           </div>
         </div>
-        <Button
-          onClick={onEdit}
-          className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark self-start sm:self-auto"
-        >
-          <Pencil className="mr-2 h-4 w-4" />
-          Edit Profile
-        </Button>
+        <div className="flex flex-wrap gap-2 self-start empty:hidden sm:self-auto">
+          {onTransfer ? (
+            <Button variant="outline" onClick={onTransfer}>
+              <ArrowRightLeft className="mr-2 h-4 w-4" />
+              Transfer member
+            </Button>
+          ) : null}
+          <PermissionGate permission="borrowers:update">
+            <Button
+              onClick={onEdit}
+              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+            >
+              <Pencil className="mr-2 h-4 w-4" />
+              Edit Profile
+            </Button>
+          </PermissionGate>
+        </div>
       </div>
 
       <PhotoCropDialog

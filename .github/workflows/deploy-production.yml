@@ -237,7 +237,7 @@ jobs:
           # Bumped from the 30s default: a slow handshake should wait, not fail.
           timeout: 120s
           # Next builds on this box are slow under swap pressure.
-          command_timeout: 20m
+          command_timeout: 45m
           script: ${{ env.DEPLOY_SCRIPT }}
 
       # The retry below used to fire ~2 min after the first attempt — inside the
@@ -272,7 +272,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           timeout: 120s
-          command_timeout: 20m
+          command_timeout: 45m
           script: ${{ env.DEPLOY_SCRIPT }}
 
       # --- Does the public site answer at all? ------------------------------

@@ -1,16 +1,19 @@
 "use client";
 
+import { useMenuVisibility } from "@/hooks/use-menu-visibility";
+import { accountingDashboardParts } from "@/lib/hidden-module-parts";
 import { useCallback, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
+  ArrowRight,
   Banknote,
   BookOpen,
   CheckCircle2,
   FileText,
   Landmark,
   ListTree,
-  Receipt,
+  ReceiptText,
   Scale,
   Smartphone,
   TrendingDown,
@@ -18,120 +21,155 @@ import {
   Wallet,
 } from "lucide-react";
 import { RouteGuard } from "@/components/common";
+import { FillSection, PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useAccountingResource } from "@/hooks";
 import { accountingService } from "@/services";
-import { formatCentavos } from "@/lib/accounting/money";
-import { formatDate, todayISO } from "@/lib/format";
+import { todayISO } from "@/lib/format";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { formatValue } from "@/lib/report-format";
 import { cn } from "@/lib/utils";
-import type { AccountingDashboard } from "@/types";
+import type { AccountingDashboard, RecentJournal } from "@/types";
 import { AccountingPageHeader } from "./_components/page-header";
 import { DataState } from "./_components/data-state";
 import {
-  ALL_BRANCHES,
   BranchFilter,
   DateFilter,
   FilterBar,
   branchParam,
 } from "./_components/accounting-filters";
+import { FigureCard, FigureSection } from "./_components/dashboard/figure-card";
+import { CashAccountsTable } from "./_components/dashboard/cash-accounts-table";
+import { ReceivablesSection } from "./_components/dashboard/receivables-section";
+import { TrendCharts } from "./_components/dashboard/trend-charts";
+import { SavingsGlBannerCard } from "./_components/dashboard/savings-gl-banner";
+import { journalSourceLabel } from "./_lib/display-labels";
+import { journalHref } from "./journals/_lib/journal-register";
+import { centavosOrDash } from "./_lib/dashboard-figures";
+import {
+  currentPeriodText,
+  dashboardFromError,
+  defaultDashboardFrom,
+  periodRangeLabel,
+} from "./_lib/dashboard-period";
+import { useBranchFilter } from "@/hooks/use-working-branch";
 
 /** Where a loan officer actually goes from here. */
 const SHORTCUTS = [
   { href: "/accounting/journals", label: "Journal Entries", icon: ListTree },
-  { href: "/accounting/expenses", label: "Record an expense", icon: Receipt },
+  { href: "/accounting/expenses", label: "Record an expense", icon: ReceiptText },
   { href: "/accounting/cash-bank", label: "Cash & Bank", icon: Wallet },
   { href: "/accounting/statements", label: "Financial Statements", icon: FileText },
   { href: "/accounting/chart-of-accounts", label: "Chart of Accounts", icon: BookOpen },
   { href: "/accounting/trial-balance", label: "Trial Balance", icon: Scale },
 ];
 
-export default function AccountingDashboardPage() {
+function AccountingDashboardContent() {
   const [asOf, setAsOf] = useState(todayISO());
-  const [branch, setBranch] = useState(ALL_BRANCHES);
+  // Follows As of's month until someone picks a From of their own.
+  const [fromPicked, setFromPicked] = useState<string | null>(null);
+  const [branch, setBranch] = useBranchFilter();
+  // Held here, outside the data state, so changing a filter keeps the open tab.
+  const [tab, setTab] = useState<DashboardTab>("figures");
+  const from = fromPicked ?? defaultDashboardFrom(asOf);
+  const datesError = dashboardFromError(from, asOf);
 
   const fetcher = useCallback(
-    () => accountingService.dashboard(asOf, branchParam(branch)),
-    [asOf, branch],
+    () => accountingService.dashboard(asOf, branchParam(branch), from),
+    [asOf, branch, from],
   );
-  const resource = useAccountingResource<AccountingDashboard>(fetcher);
+  const resource = useAccountingResource<AccountingDashboard>(fetcher, datesError === null);
 
   return (
-    <RouteGuard permission="accounting:view" pageName="Accounting">
-      <div className="space-y-6">
-        <AccountingPageHeader
-          title="Accounting"
-          description="Where the lending operation stands, in accounting terms."
+    <PageFill className="gap-4">
+      <AccountingPageHeader
+        title="Accounting"
+        description="Where the lending operation stands, in accounting terms."
+      />
+
+      <FilterBar>
+        <DateFilter label="As of" value={asOf} onChange={setAsOf} />
+        <DateFilter
+          label="From"
+          value={from}
+          onChange={(value) => setFromPicked(value === "" ? null : value)}
         />
+        <BranchFilter value={branch} onChange={setBranch} />
+      </FilterBar>
 
-        <FilterBar>
-          <DateFilter label="As of" value={asOf} onChange={setAsOf} />
-          <BranchFilter value={branch} onChange={setBranch} />
-        </FilterBar>
-
+      {datesError ? (
+        <Card className="shrink-0">
+          <CardContent className="py-8 text-center text-sm text-muted-foreground" role="alert">
+            {datesError}
+          </CardContent>
+        </Card>
+      ) : (
         <DataState
           resource={resource}
-          summary="A one-screen position: money on hand, what is owed to and by the business, and the month's result."
+          summary="A one-screen position: money on hand, what is owed to and by the business, and the period's result."
           endpoints={["GET /accounting/dashboard"]}
         >
-          {(data) => <DashboardBody data={data} />}
+          {(data) => <DashboardBody data={data} tab={tab} onTabChange={setTab} />}
         </DataState>
+      )}
 
-        <div>
-          <p className="mb-3 text-sm font-medium text-muted-foreground">Go to</p>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {SHORTCUTS.map(({ href, label, icon: Icon }) => (
-              <Link
-                key={href}
-                href={href}
-                className="flex items-center gap-3 rounded-lg border bg-card p-4 text-sm transition-colors hover:bg-accent"
-              >
-                <Icon className="h-4 w-4 text-muted-foreground" />
-                {label}
-              </Link>
-            ))}
-          </div>
-        </div>
+      {/* One compact row at the page's foot, so the figures above keep the height. */}
+      <div data-fab-clear className="flex shrink-0 flex-wrap items-center gap-2">
+        <p className="mr-1 text-sm font-medium text-muted-foreground">Go to</p>
+        {SHORTCUTS.map(({ href, label, icon: Icon }) => (
+          <Link
+            key={href}
+            href={href}
+            className="flex items-center gap-2 rounded-lg border bg-card px-3 py-1.5 text-sm transition-colors hover:bg-accent"
+          >
+            <Icon className="h-4 w-4 text-muted-foreground" />
+            {label}
+          </Link>
+        ))}
       </div>
+    </PageFill>
+  );
+}
+
+export default function AccountingDashboardPage() {
+  return (
+    <RouteGuard permission="accounting:view" pageName="Accounting">
+      <AccountingDashboardContent />
     </RouteGuard>
   );
 }
 
-function Figure({
-  label,
-  value,
-  icon: Icon,
-  tone,
-}: {
-  label: string;
-  value: number;
-  icon: typeof Wallet;
-  tone?: "positive" | "negative";
-}) {
-  return (
-    <Card>
-      <CardContent className="space-y-2 pt-6">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Icon className="h-4 w-4" />
-          <span className="text-sm">{label}</span>
-        </div>
-        <p
-          className={cn(
-            "font-mono text-2xl font-semibold",
-            tone === "positive" && "text-emerald-600",
-            tone === "negative" && "text-red-600",
-          )}
-        >
-          {formatCentavos(value)}
-        </p>
-      </CardContent>
-    </Card>
-  );
+type DashboardTab = "figures" | "trends" | "journals";
+
+function isDashboardTab(value: unknown): value is DashboardTab {
+  return value === "figures" || value === "trends" || value === "journals";
 }
 
-function DashboardBody({ data }: { data: AccountingDashboard }) {
+function DashboardBody({
+  data,
+  tab,
+  onTabChange,
+}: {
+  data: AccountingDashboard;
+  tab: DashboardTab;
+  onTabChange: (tab: DashboardTab) => void;
+}) {
+  const periodLabel = periodRangeLabel(data.period);
+  // Menu Visibility: the savings books banner goes while Savings is hidden.
+  const { isHidden } = useMenuVisibility();
+  const parts = accountingDashboardParts(isHidden);
   return (
-    <div className="space-y-6">
+    <FillSection className="gap-4">
       {/*
         The balance check comes first and cannot be scrolled past. Every other
         figure on this page is read off the same ledger, so if debits and
@@ -140,11 +178,11 @@ function DashboardBody({ data }: { data: AccountingDashboard }) {
       */}
       <Card
         className={cn(
-          "border-2",
+          "shrink-0 border-2",
           data.is_balanced ? "border-emerald-500/40" : "border-red-500/60",
         )}
       >
-        <CardContent className="flex items-center gap-3 py-4">
+        <CardContent className="flex flex-wrap items-center gap-3 py-4 fit:py-0">
           {data.is_balanced ? (
             <CheckCircle2 className="h-5 w-5 text-emerald-600" />
           ) : (
@@ -157,8 +195,7 @@ function DashboardBody({ data }: { data: AccountingDashboard }) {
                 : "The books do not balance"}
             </p>
             <p className="text-sm text-muted-foreground">
-              As of {formatDate(data.as_of)}
-              {data.open_period ? ` · open period ${data.open_period}` : ""}
+              As of {formatValue(data.as_of, "date")} · {currentPeriodText(data.current_period)}
             </p>
           </div>
           {data.unposted_journals > 0 && (
@@ -171,50 +208,131 @@ function DashboardBody({ data }: { data: AccountingDashboard }) {
         </CardContent>
       </Card>
 
-      <div>
-        <p className="mb-3 text-sm font-medium text-muted-foreground">
-          Money and receivables
-        </p>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Figure label="Cash on hand" value={data.cash_on_hand} icon={Banknote} />
-          <Figure label="Cash in bank" value={data.cash_in_bank} icon={Landmark} />
-          <Figure label="E-wallets" value={data.e_wallets} icon={Smartphone} />
-          <Figure
-            label="Loans receivable, net"
-            value={data.loans_receivable_net}
-            icon={Wallet}
-          />
-        </div>
-      </div>
+      {parts.savingsBanner && <SavingsGlBannerCard data={data} />}
 
-      <div>
-        <p className="mb-3 text-sm font-medium text-muted-foreground">Position</p>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Figure label="Total assets" value={data.total_assets} icon={Scale} />
-          <Figure
-            label="Total liabilities"
-            value={data.total_liabilities}
-            icon={Receipt}
-          />
-          <Figure label="Total equity" value={data.total_equity} icon={Landmark} />
-        </div>
-      </div>
+      {/*
+        Like the main dashboard: the balance check above stays put, and the
+        rest sits in tabs that each scroll inside, so the page fits the screen.
+      */}
+      <Tabs
+        value={tab}
+        onValueChange={(value) => {
+          if (isDashboardTab(value)) onTabChange(value);
+        }}
+        className={FIT_CLASSES.section}
+      >
+        <TabsList className="shrink-0">
+          <TabsTrigger value="figures">Figures</TabsTrigger>
+          <TabsTrigger value="trends">Trends</TabsTrigger>
+          <TabsTrigger value="journals">Recent journals</TabsTrigger>
+        </TabsList>
 
-      <div>
-        <p className="mb-3 text-sm font-medium text-muted-foreground">
-          This month
-        </p>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Figure label="Income" value={data.income_mtd} icon={TrendingUp} />
-          <Figure label="Expenses" value={data.expenses_mtd} icon={TrendingDown} />
-          <Figure
-            label="Net income"
-            value={data.net_income_mtd}
-            icon={Scale}
-            tone={data.net_income_mtd < 0 ? "negative" : "positive"}
-          />
-        </div>
-      </div>
-    </div>
+        <TabsContent value="figures" className={FIT_CLASSES.section}>
+          <ScrollBox className="space-y-6 p-px">
+            <div className="space-y-4">
+              <FigureSection title="Money" className="sm:grid-cols-3">
+                <FigureCard label="Cash on hand" value={data.cash_on_hand} icon={Banknote} />
+                <FigureCard label="Cash in bank" value={data.cash_in_bank} icon={Landmark} />
+                <FigureCard label="E-wallets" value={data.e_wallets} icon={Smartphone} />
+              </FigureSection>
+              <CashAccountsTable accounts={data.cash_accounts} />
+            </div>
+
+            <ReceivablesSection data={data} />
+
+            <FigureSection title="Position" className="sm:grid-cols-3">
+              <FigureCard label="Total assets" value={data.total_assets} icon={Scale} />
+              <FigureCard label="Total liabilities" value={data.total_liabilities} icon={ReceiptText} />
+              <FigureCard label="Total equity" value={data.total_equity} icon={Landmark} />
+            </FigureSection>
+
+            <FigureSection title="Period" description={periodLabel || undefined} className="sm:grid-cols-3">
+              <FigureCard label="Income" value={data.period?.income} icon={TrendingUp} />
+              <FigureCard label="Expenses" value={data.period?.expenses} icon={TrendingDown} />
+              <FigureCard label="Net income" value={data.period?.net_income} icon={Scale} signed />
+            </FigureSection>
+
+            <FigureSection title="This month" className="sm:grid-cols-3">
+              <FigureCard label="Income" value={data.income_mtd} icon={TrendingUp} />
+              <FigureCard label="Expenses" value={data.expenses_mtd} icon={TrendingDown} />
+              <FigureCard label="Net income" value={data.net_income_mtd} icon={Scale} signed />
+            </FigureSection>
+          </ScrollBox>
+        </TabsContent>
+
+        <TabsContent value="trends" className={FIT_CLASSES.section}>
+          <TrendCharts months={data.months} />
+        </TabsContent>
+
+        <TabsContent value="journals" className={FIT_CLASSES.section}>
+          <RecentJournals journals={data.recent_journals} />
+        </TabsContent>
+      </Tabs>
+    </FillSection>
+  );
+}
+
+/** The latest posted or reversed journals on or before As of, newest first, as sent. */
+function RecentJournals({ journals }: { journals: readonly RecentJournal[] | undefined }) {
+  return (
+    <Card className={FIT_CLASSES.section}>
+      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+        <CardTitle className="text-base">Recent journals</CardTitle>
+        <Link
+          href="/accounting/journals"
+          className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+        >
+          View all
+          <ArrowRight className="h-4 w-4" aria-hidden="true" />
+        </Link>
+      </CardHeader>
+      <CardContent className={FIT_CLASSES.section}>
+        {!journals || journals.length === 0 ? (
+          <p className="py-4 text-center text-sm text-muted-foreground">
+            No posted journals on or before this date.
+          </p>
+        ) : (
+          <ScrollBox>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-28">Date</TableHead>
+                  <TableHead className="w-32">Journal</TableHead>
+                  <TableHead className="w-32">Source</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead className="w-32">Branch</TableHead>
+                  <TableHead className="w-36 text-right">Amount</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {journals.map((journal) => (
+                  <TableRow key={journal.id}>
+                    <TableCell className="text-sm">{formatValue(journal.date, "date")}</TableCell>
+                    <TableCell className="font-mono text-xs">
+                      <Link
+                        href={journalHref(journal.id)}
+                        className="underline-offset-4 hover:underline"
+                      >
+                        {journal.journal_no}
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-[10px]">
+                        {journalSourceLabel(journal.source)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm">{journal.description}</TableCell>
+                    <TableCell className="text-sm">{journal.branch_name ?? "No branch"}</TableCell>
+                    <TableCell className="text-right font-mono text-sm tabular-nums">
+                      {centavosOrDash(journal.amount)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ScrollBox>
+        )}
+      </CardContent>
+    </Card>
   );
 }

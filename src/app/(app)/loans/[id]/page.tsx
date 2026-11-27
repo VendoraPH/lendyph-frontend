@@ -1,57 +1,252 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback, use } from "react";
+import { useMenuVisibility } from "@/hooks/use-menu-visibility";
+import { loanPageParts } from "@/lib/hidden-module-parts";
+import { Fragment, useState, useMemo, useEffect, useCallback, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { notifyError, notifyWarning } from "@/lib/notify";
+import { getErrorMessage, validationErrors } from "@/lib/api-error";
 import { AxiosError } from "axios";
 import { Spinner } from "@/components/ui/spinner";
 import {
   loanService,
   loanApprovalService,
-  loanProductService,
   loanAdjustmentService,
   repaymentService,
-  coMakerService,
-  userService,
   reportService,
 } from "@/services";
 import type { RepaymentPreview } from "@/services/repayment.service";
 import { useAuthStore } from "@/store/auth-store";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import { PrintableMenu } from "@/components/common";
+import { PermissionButton, PrintableMenu, RouteGuard } from "@/components/common";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
+import { StaffPicker } from "@/components/common/staff-picker";
 import type { PrintableId } from "@/lib/printables/types";
-import { toUserList, type UserListShortfall } from "@/lib/user-list";
+import { toLoanRepayments, type RepaymentListShortfall } from "@/lib/repayment-list";
+import { coMakerName } from "@/lib/co-maker-name";
+import {
+  INSURANCE_OWED_LABEL,
+  INSURANCE_PREMIUM_LABEL,
+  loanInsuranceOwed,
+  previewInsuranceApplied,
+} from "@/lib/insurance-premium";
+import { applyAutoPaySettings } from "./_lib/auto-pay-settings";
+import { loadLoan, loanLoadFailure } from "./_lib/load-loan";
+import { workflowEvents, type WorkflowEventKey } from "./_lib/workflow-history";
+import {
+  approvalRemarksHistory,
+  approvalStepState,
+  chainEvents,
+  readyForRelease,
+  revisionRoundView,
+  withChainEvents,
+} from "./_lib/approval-rounds";
+import { proceedsFigures } from "@/lib/restructure-proceeds";
+import { useRoleLabels } from "@/hooks/use-role-labels";
+import { interestMethodLabel } from "@/app/(app)/loans/new/_lib/loan-preview";
+import {
+  SEND_BACK_REASON_MAX,
+  canSendBackApproved,
+  sendBackApprovedPayload,
+  sendBackFailureAction,
+  sendBackReasonError,
+} from "./_lib/send-back-approved";
+import type {
+  ForwardCandidates,
+  LoanApprovalRound,
+  LoanApprovalStep as ChainStep,
+} from "@/types/loan-approval";
+import {
+  NO_SCHEDULE_TOTALS,
+  allocationBuildUp,
+  allocationMatches,
+  allocationPenaltyNoteFor,
+  rowForAllocation,
+  openPeriods,
+  readPreviewResponse,
+  readScheduleRows,
+  readScheduleTotals,
+  toDisplaySchedule,
+  type ScheduleTotals,
+} from "./_lib/server-schedule";
+import { ledgerShowsScb, readLoanLedger, type LedgerView } from "./_lib/loan-ledger";
+import {
+  IMPORTED_APPROVAL_TITLE,
+  IMPORTED_LOAN_NO_LABEL,
+  importedApprovalNote,
+  importedLoanNo,
+  isImportedLoan,
+} from "./_lib/imported-loan";
+import { approvalChipLabel } from "./_lib/approval-chip";
+import { loanNumberLabel } from "@/lib/loan-number";
+import {
+  countedUntilHint,
+  paymentDateRefusal,
+  paymentDayBlocked,
+  paymentsCountedUntil,
+} from "./_lib/payments-counted-until";
+import { paidBeforeImportNote } from "@/lib/paid-before-import";
+import {
+  interestAmountFigure,
+  outstandingPrincipal,
+  presetButtons,
+  previewOutstandingAfter,
+  previewOutstandingBefore,
+  totalOutstanding,
+  totalPayableFigures,
+} from "./_lib/loan-figures";
+import {
+  dispatchPartialExtend,
+  offersExtendOnPartialPayment,
+  partialExtendPayload,
+  type PartialExtendChoice,
+} from "@/lib/partial-extend";
+import { PartialExtendPrompt } from "@/components/loans/partial-extend-prompt";
+import { ReasonDialog } from "@/components/common/reason-dialog";
+import { LOAN_DECISION_NOTE_MAX, adjustmentDecisionDialog, voidPaymentDialog } from "./_lib/decision-dialogs";
+import {
+  ADJUSTMENT_CANCEL_REASON_MAX,
+  cancelAdjustmentDialog,
+  cancelAllowed,
+  cancellationLine,
+  offersCancel,
+} from "./_lib/adjustment-cancel";
+import {
+  RestructuredBalanceFigures,
+  ScheduleNotice,
+  type ScheduleLoad,
+} from "./_components/schedule-notice";
+import { AmortizationBalanceTable } from "./_components/amortization-balance-table";
+import { LedgerTable } from "./_components/ledger-table";
 import { LoanDocumentsCard } from "./_components/loan-documents-card";
+import { CreditAssessmentCard } from "./_components/credit-assessment-card";
+import { LoanRemindersCard } from "./_components/loan-reminders-card";
 import { ShareCapitalCard } from "./_components/share-capital-card";
 import { LoanCollateralsCard } from "./_components/loan-collaterals-card";
 import { ReleaseDeductions } from "./_components/release-deductions";
+import { FormulaSnapshot, type FormulaSnapshotItem } from "./_components/formula-snapshot";
+import { PenaltyTerms } from "@/components/loans/penalty-terms";
+import { env } from "@/config/env";
+import { ReleaseCoMakers } from "./_components/release-co-makers";
+import { ForwardToPicker } from "./_components/forward-to-picker";
 import {
-  InsurancePremiumSection,
-  computeInsurancePremium,
-} from "./_components/insurance-premium-section";
+  ANYONE_WITH_THE_ROLE,
+  assignedToText,
+  canUserActOnStep,
+  forwardFieldError,
+  forwardPickFor,
+  forwardPickName,
+  notYourStepMessage,
+  withForwardTo,
+  type ForwardPick,
+} from "./_lib/approval-forward";
+import { InsurancePremiumSection } from "./_components/insurance-premium-section";
+import {
+  releaseDialogView,
+  releaseInsuranceQuery,
+  releaseMethodDetails,
+  releaseRequest,
+} from "./_lib/release-figures";
+import { MethodReferenceFields } from "@/components/common/method-reference-fields";
+import { releaseConflictOf } from "./_lib/release-conflict";
+import {
+  outdatedPrints,
+  releaseBlockedReason,
+  releaseDocumentsRefusal,
+  releaseReadyState,
+  releaseStepInstruction,
+  reprintNotice,
+  waitingForReleasePhrase,
+  waitingForReprintLine,
+} from "./_lib/reprint-notice";
+import { coMakerReprintReminder, insuranceReprintReminder } from "./_lib/release-reminders";
+import { ReleaseReminder } from "./_components/release-reminder";
+import { useRereadOnReturn } from "./_hooks/use-reread-on-return";
+import { DisabledReason } from "@/components/common/disabled-reason";
+import { stepConflictMessage } from "./_lib/step-conflict";
+import { signOffRefusal, signOffRefusalFor, type KeptRefusal } from "./_lib/sign-off-refusal";
+import { approvalChainItems } from "./_lib/left-out-steps";
+import { LeftOutStepChip } from "./_components/left-out-step-chip";
+import { oncePerKey } from "./_lib/once-per-key";
+import { useReleasePreview } from "./_hooks/use-release-preview";
+import { useApprovalEditState } from "./_hooks/use-approval-edit-state";
+import {
+  APPROVAL_ACTIONS_ROW,
+  APPROVAL_CARD_ID,
+  approvalEditHref,
+  asksApprovalEdit,
+  offersApprovalEdit,
+} from "./_lib/approval-edit";
+import { useDeductionsPreview } from "./_hooks/use-deductions-preview";
+import type { PreviewReadState } from "./_hooks/use-preview-read";
+import { cardDeductionsSource, cardFiguresAreEstimated } from "./_lib/deductions-preview";
+import {
+  DEFAULT_PAYMENT_METHOD,
+  PAYMENT_METHOD_OPTIONS,
+  extensionMethodFields,
+  extensionReferenceError,
+  paymentMethodFields,
+  paymentMethodLabel,
+  paymentReferenceError,
+  readPaymentMethod,
+  referenceAfterMethodChange,
+  type RecordPaymentMethod,
+  type RecordPaymentPayload,
+} from "./_lib/payment-method";
+import { useBalanceAdjustmentPreview } from "./_hooks/use-balance-adjustment-preview";
+import { useExtensionPreview } from "./_hooks/use-extension-preview";
+import { ReportPreview } from "@/app/(app)/reports/_components/report-preview";
+import type { ReportDocument } from "@/app/(app)/reports/_lib/types";
+import {
+  canConfirmExtension,
+  collectNowRows,
+  extensionCycleUnit,
+  extensionCyclesLabel,
+  extensionCyclesSentence,
+  extensionMoveDescription,
+  freshInterestLabel,
+} from "./_lib/extension-preview";
+import { checkPaymentAmount } from "@/app/(app)/payments/_lib/payment-amount";
+import { previewExcessCells, previewExcessTiles } from "@/app/(app)/payments/_lib/payment-preview";
+import { loanHasBuildUp } from "@/app/(app)/payments/_lib/active-loans";
+import { previewRefusalMessage, recordPaymentErrorMessage } from "./_lib/payment-errors";
+import {
+  dueNowHasOpenPeriod,
+  dueNowIsRange,
+  dueNowOnDate,
+  dueNowPeriodLabel,
+  dueNowTiles,
+  previewIsCurrent,
+  previewRequestKey,
+  readAmountDueNow,
+  shouldPromptExtend,
+} from "@/lib/payment-figures";
+import { BalanceAdjustmentPreviewBox } from "./_components/balance-adjustment-preview";
+import { balanceAdjustmentNewValues, targetPrincipalInput } from "./_lib/balance-adjustment";
+import { useReleaseInsurancePreview } from "./_hooks/use-release-insurance-preview";
+import { useReleaseConfirm } from "./_hooks/use-release-confirm";
 import {
   INSURANCE_PREMIUM_INITIAL,
   type InsurancePremiumValue,
 } from "./_components/insurance-premium.types";
 import { AutoPayToggleDialog } from "@/components/auto-pay-toggle-dialog";
-import type { LoanSchedule, LoanLedgerEntry } from "@/types/loan";
-import type { CoMaker, LoanAdjustment, LoanAdjustmentType, Repayment, User } from "@/types";
+import type { LoanDeductionsPreview, LoanSchedule, LoanSummary } from "@/types/loan";
+import type { ExtensionInterestOption, LoanAdjustment, LoanAdjustmentType, Repayment } from "@/types";
 import { isApprovalChainHidden, loanShouldHaveAChain, type LoanApprovalStep } from "@/types";
 import { useLoanApproval } from "@/hooks/use-loan-approval";
 import { usePermission } from "@/hooks/use-permission";
+import {
+  LOAN_ADJUSTMENT_APPLY_GATE,
+  LOAN_ADJUSTMENT_CREATE_GATE,
+  LOAN_ADJUSTMENT_DECIDE_GATE,
+  LOAN_EXTEND_GATE,
+  recordPaymentGate,
+} from "@/lib/lending-write-gates";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { CollapsibleCard } from "@/components/common/collapsible-card";
+import { PageFill, PageLoader, ScrollBox } from "@/components/common/page-fill";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -100,12 +295,11 @@ import {
 import { Separator } from "@/components/ui/separator";
 import {
   ArrowLeft,
-  Check,
-  X,
   Clock,
   FileText,
   UserCheck,
   Ban,
+  CircleSlash,
   Send,
   Unlock,
   Lock,
@@ -115,206 +309,49 @@ import {
   CalendarIcon,
   CalendarPlus,
   Plus,
-  DollarSign,
-  Settings2,
-  ChevronsUpDown,
+  PhilippinePeso,
   ChevronDown,
   ChevronUp,
   Pencil,
   AlertTriangle,
-  Receipt,
+  ReceiptText,
   CreditCard,
   Loader2,
   BookOpen,
   Zap,
+  RefreshCw,
+  Info,
+  Undo2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { currencyOrDash } from "@/lib/report-format";
+import { penaltyMonthsNote } from "@/lib/penalty-months";
+import { PenaltyMonthsNote } from "@/components/common/penalty-months-note";
+import { RecoveryPaymentNote } from "@/components/common/recovery-payment-note";
+import { canRecordPaymentOn } from "@/lib/recovery-payment";
 import {
+  formatCurrency,
+  formatCurrencyExact,
   formatDate,
   formatDateISO,
   formatDateObj,
   formatDateTime,
-  formatRate,
+  todayDate,
+  todayISO,
 } from "@/lib/format";
 import {
   LOAN_STATUS_COLORS,
   LOAN_STATUS_LABELS,
+  loanStatusLabel,
   PAYMENT_FREQUENCY_LABELS,
   ADJUSTMENT_TYPE_LABELS,
   ADJUSTMENT_STATUS_LABELS,
+  isEverReleasedLoanStatus,
 } from "@/constants";
-import type { Loan, LoanStatus } from "@/types/loan";
-import type { ApiScheduleRow } from "@/lib/amortization";
-
-// ── Currency & Date Formatters ──
-
-const formatCurrency = (amount: number | string | undefined | null) =>
-  new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(Math.round(parseFloat(String(amount ?? 0)) || 0));
-
-// Like formatCurrency but keeps centavos — use where the number shown must
-// exactly equal a number being posted (e.g. the interest collected on extend),
-// so the display never rounds away centavos that are actually charged.
-const formatCurrencyPrecise = (amount: number | string | undefined | null) =>
-  new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(parseFloat(String(amount ?? 0)) || 0);
-
-
-// ── Amortization Schedule Helpers ──
-
-type PaymentFrequency = "daily" | "weekly" | "bi_weekly" | "monthly" | "upon_maturity";
-type InterestType = "fixed" | "diminishing" | "upon_maturity";
-
-interface AmortizationRow {
-  period: number;
-  dueDate: Date;
-  principal: number;
-  interest: number;
-  shareCapitalBuildUp: number;
-  totalPayment: number;
-  balance: number;
-  status?: "pending" | "paid" | "partial" | "overdue";
-  amountPaid?: number;
-}
-
-// One row of the Ledger table — either a Repayment or a LoanLedgerEntry
-// (interest a loan extension accrues or collects), flattened to a common
-// shape so both render in one chronological list with running balances.
-interface LedgerDisplayRow {
-  key: string;
-  date: string;
-  createdAt: string;
-  refNo: string;
-  remarks: string;
-  principalPaid?: number;
-  interestDebit?: number;
-  interestCredit?: number;
-  penaltyPaid?: number;
-  scbPaid?: number;
-  excessAmount?: number;
-  totalPaid?: number;
-  status?: Repayment["status"];
-  repaymentId?: number;
-  principalBal: number;
-  interestBal: number;
-  scbBal: number;
-}
-
-function getPeriodsFromMonths(termMonths: number, frequency: PaymentFrequency): number {
-  switch (frequency) {
-    case "upon_maturity":
-      return termMonths; // SCB accumulates monthly, paid as lump sum at maturity
-    case "daily":
-      return Math.round(termMonths * 30);
-    case "weekly":
-      return Math.round(termMonths * 4.33);
-    case "bi_weekly":
-      return Math.round(termMonths * 2.17);
-    case "monthly":
-      return termMonths;
-  }
-}
-
-function getIntervalDays(frequency: PaymentFrequency): number {
-  switch (frequency) {
-    case "upon_maturity":
-      return 30; // fallback, not used in upon_maturity path
-    case "daily":
-      return 1;
-    case "weekly":
-      return 7;
-    case "bi_weekly":
-      return 14;
-    case "monthly":
-      return 30;
-  }
-}
-
-function addMonths(date: Date, months: number): Date {
-  const result = new Date(date);
-  result.setMonth(result.getMonth() + months);
-  return result;
-}
-
-function addDays(date: Date, days: number): Date {
-  const result = new Date(date);
-  result.setDate(result.getDate() + days);
-  return result;
-}
-
-function generateSchedule(
-  principal: number,
-  rate: number,
-  termMonths: number,
-  frequency: PaymentFrequency,
-  interestType: InterestType,
-  startDate: Date,
-  scbAmount: number = 0,
-): AmortizationRow[] {
-  // Upon Maturity = a single consolidated payment at the maturity date.
-  // Triggered when payment_frequency OR interest_type is "upon_maturity".
-  if (frequency === "upon_maturity" || interestType === "upon_maturity") {
-    const totalInterest = principal * (rate / 100) * termMonths;
-    const totalScb = scbAmount * termMonths; // SCB accumulates monthly, paid at maturity
-    return [{
-      period: 1,
-      dueDate: addMonths(startDate, termMonths),
-      principal,
-      interest: totalInterest,
-      shareCapitalBuildUp: totalScb,
-      totalPayment: principal + totalInterest + totalScb,
-      balance: 0,
-    }];
-  }
-
-  const totalPeriods = getPeriodsFromMonths(termMonths, frequency);
-  const intervalDays = getIntervalDays(frequency);
-  const principalPerPeriod = principal / totalPeriods;
-  const rows: AmortizationRow[] = [];
-
-  let remainingBalance = principal;
-
-  for (let i = 1; i <= totalPeriods; i++) {
-    const dueDate =
-      frequency === "monthly"
-        ? addMonths(startDate, i)
-        : addDays(startDate, i * intervalDays);
-
-    let interest: number;
-    // Constant interest on the original principal for straight/fixed loans.
-    // The API stores this method as "straight" (label "Straight (Fixed)"), so
-    // only "diminishing" should reduce interest on the falling balance —
-    // anything else (straight/fixed) keeps it flat. Matching only "fixed" here
-    // mis-treated straight loans as diminishing, understating total payable.
-    if ((interestType as string) !== "diminishing") {
-      interest = principal * (rate / 100);
-    } else {
-      interest = remainingBalance * (rate / 100);
-    }
-
-    remainingBalance -= principalPerPeriod;
-
-    rows.push({
-      period: i,
-      dueDate,
-      principal: principalPerPeriod,
-      interest,
-      shareCapitalBuildUp: scbAmount,
-      totalPayment: principalPerPeriod + interest + scbAmount,
-      balance: Math.max(0, remainingBalance),
-    });
-  }
-
-  return rows;
-}
+import { loanDisplayStatus } from "@/constants/loan-status";
+import { useDialogOpening } from "@/hooks/use-dialog-opening";
+import type { Loan } from "@/types/loan";
+import { rateWithPeriod, readTermUnit, stepsByCalendarMonth } from "@/lib/loan-terms";
 
 // ── Status Colors ──
 //
@@ -329,6 +366,7 @@ const adjustmentStatusColors: Record<string, string> = {
   approved: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-800",
   rejected: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
   applied: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
+  cancelled: "bg-muted text-muted-foreground border-border",
 };
 
 // ── Multi-Step Approval Chain ──
@@ -352,35 +390,29 @@ const adjustmentStatusColors: Record<string, string> = {
 // On any "Approved? = No" the loan is sent back for revision (the chain does
 // NOT support terminal rejection — "Void Loan" is the escape hatch for drafts).
 
-/**
- * ADVISORY ONLY. The gate is `step.can_act`, which the server computes for the
- * requesting user, and behind that the endpoints themselves. This exists so a
- * button can be disabled before the round trip when the signed-in user plainly
- * lacks the role; it must never be the reason an action is considered allowed.
- */
-function canUserActOnStep(
-  step: LoanApprovalStep,
-  userRoles: string[] | undefined
-): boolean {
-  if (!userRoles || userRoles.length === 0) return false;
-  // Admins (client) and super_admin (developer) can act on any step.
-  if (userRoles.includes("admin") || userRoles.includes("super_admin")) return true;
-  return userRoles.includes(step.role);
-}
+// The advisory "can act" check, `canUserActOnStep`, lives in
+// `_lib/approval-forward.ts`: a step forwarded to a named user is theirs.
 
 // ── Borrower's Active Loans Component ──
 
 const VISIBLE_LOAN_COUNT = 3;
 
-function BorrowerActiveLoans({ loans, loading, truncated = false, approvalSteps, loanStatus, loan }: { loans: Loan[]; loading: boolean; truncated?: boolean; approvalSteps: LoanApprovalStep[]; loanStatus: string; loan?: Loan }) {
+/** The Record Payment allocation grid's columns on wider screens, by its cell count. */
+const PAYMENT_PREVIEW_GRID_COLUMNS: Record<number, string> = {
+  4: "sm:grid-cols-4",
+  5: "sm:grid-cols-5",
+  6: "sm:grid-cols-6",
+};
+
+function BorrowerActiveLoans({ loans, loading, truncated = false, approvalSteps, approvalRounds, loanStatus, loan }: { loans: Loan[]; loading: boolean; truncated?: boolean; approvalSteps: LoanApprovalStep[]; approvalRounds: LoanApprovalRound[]; loanStatus: string; loan?: Loan }) {
   const [expanded, setExpanded] = useState(false);
   const [activeLoansOpen, setActiveLoansOpen] = useState(true);
   const visibleLoans = expanded ? loans : loans.slice(0, VISIBLE_LOAN_COUNT);
   const hasMore = loans.length > VISIBLE_LOAN_COUNT;
 
-  const completedSteps = approvalSteps.filter(
-    (s) => (s.status === "approved" || s.status === "sent_back") && s.acted_at
-  );
+  // Every round's sign-offs and send-backs, newest first.
+  const completedSteps = approvalRemarksHistory(approvalRounds, approvalSteps);
+  const showsRounds = approvalRounds.length > 0;
 
   // Show the remarks section when the server's chain has signoffs to show, OR
   // when the loan carries top-level approval/rejection remarks. `rejected` and
@@ -396,7 +428,7 @@ function BorrowerActiveLoans({ loans, loading, truncated = false, approvalSteps,
           <CollapsibleTrigger className="w-full text-left group/trigger">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <FileText className="h-4 w-4 text-muted-foreground" />
-              Borrower&rsquo;s Active Loans
+              Member&rsquo;s Active Loans
               <Badge variant="outline" className="text-xs font-normal">
                 {loading
                   ? "Loading..."
@@ -417,7 +449,7 @@ function BorrowerActiveLoans({ loans, loading, truncated = false, approvalSteps,
             className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200"
           >
             <span className="font-medium">This list may be incomplete.</span>{" "}
-            We couldn&rsquo;t confirm all of this borrower&rsquo;s existing loans.
+            We couldn&rsquo;t confirm all of this member&rsquo;s existing loans.
             Check their profile before approving.
           </div>
         )}
@@ -427,7 +459,7 @@ function BorrowerActiveLoans({ loans, loading, truncated = false, approvalSteps,
           <p className="text-sm text-muted-foreground py-4 text-center">
             {truncated
               ? "No other active loans were returned — see the notice above."
-              : "No other active loans for this borrower."}
+              : "No other active loans for this member."}
           </p>
         ) : (
           <>
@@ -446,14 +478,16 @@ function BorrowerActiveLoans({ loans, loading, truncated = false, approvalSteps,
                       variant="outline"
                       className={cn(
                         "text-[10px] px-1.5 py-0 h-4",
-                        bl.status === "released" || bl.status === "ongoing"
-                          ? "bg-green-500/10 text-green-700 border-green-500/30"
-                          : bl.status === "approved"
-                            ? "bg-blue-500/10 text-blue-700 border-blue-500/30"
-                            : "bg-amber-500/10 text-amber-700 border-amber-500/30"
+                        loanDisplayStatus(bl) === "past_due"
+                          ? "bg-red-500/10 text-red-700 border-red-500/30"
+                          : bl.status === "released" || bl.status === "ongoing"
+                            ? "bg-green-500/10 text-green-700 border-green-500/30"
+                            : bl.status === "approved"
+                              ? "bg-blue-500/10 text-blue-700 border-blue-500/30"
+                              : "bg-amber-500/10 text-amber-700 border-amber-500/30"
                       )}
                     >
-                      {LOAN_STATUS_LABELS[bl.status as keyof typeof LOAN_STATUS_LABELS] ?? bl.status}
+                      {loanStatusLabel(loanDisplayStatus(bl), bl.current_approver, bl.current_status_label)}
                     </Badge>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
@@ -466,9 +500,7 @@ function BorrowerActiveLoans({ loans, loading, truncated = false, approvalSteps,
                     <div>
                       <p className="text-[10px] text-muted-foreground">Outstanding Balance</p>
                       <p className="text-xs font-medium tabular-nums">
-                        {bl.outstanding_balance != null
-                          ? formatCurrency(bl.outstanding_balance)
-                          : "—"}
+                        {currencyOrDash(totalOutstanding(null, bl))}
                       </p>
                     </div>
                   </div>
@@ -513,10 +545,10 @@ function BorrowerActiveLoans({ loans, loading, truncated = false, approvalSteps,
               <div className="space-y-3">
                 {completedSteps.map((step) => (
                   <div
-                    key={step.index}
+                    key={step.key}
                     className={cn(
                       "rounded-lg border p-3",
-                      step.status === "approved"
+                      step.outcome === "approved"
                         ? "border-green-200 bg-green-50/50 dark:border-green-800/40 dark:bg-green-900/10"
                         : "border-red-200 bg-red-50/50 dark:border-red-800/40 dark:bg-red-900/10"
                     )}
@@ -525,10 +557,10 @@ function BorrowerActiveLoans({ loans, loading, truncated = false, approvalSteps,
                       <div
                         className={cn(
                           "h-6 w-6 rounded-full flex items-center justify-center text-white text-[10px]",
-                          step.status === "approved" ? "bg-green-600" : "bg-red-500"
+                          step.outcome === "approved" ? "bg-green-600" : "bg-red-500"
                         )}
                       >
-                        {step.status === "approved" ? (
+                        {step.outcome === "approved" ? (
                           <CheckCircle2 className="h-3.5 w-3.5" />
                         ) : (
                           <XCircle className="h-3.5 w-3.5" />
@@ -539,16 +571,17 @@ function BorrowerActiveLoans({ loans, loading, truncated = false, approvalSteps,
                         variant="outline"
                         className={cn(
                           "text-[10px] px-1.5 py-0 h-4",
-                          step.status === "approved"
+                          step.outcome === "approved"
                             ? "bg-green-500/10 text-green-700 border-green-500/30"
                             : "bg-red-500/10 text-red-700 border-red-500/30"
                         )}
                       >
-                        {step.status === "approved" ? "Approved" : "Sent back"}
+                        {step.outcome === "approved" ? "Approved" : "Sent back"}
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {step.acted_by ?? "—"} · {step.acted_at ? formatDateTime(step.acted_at) : "—"}
+                      {showsRounds && <>Round {step.round} · </>}
+                      {step.actedBy ?? "—"} · {step.actedAt ? formatDateTime(step.actedAt) : "—"}
                     </p>
                     {step.remarks ? (
                       <p className="text-xs italic mt-1 pl-2 border-l-2 border-muted-foreground/30">
@@ -624,61 +657,38 @@ function BorrowerActiveLoans({ loans, loading, truncated = false, approvalSteps,
 
 // ── Workflow History Component ──
 
-function WorkflowHistory({ loan }: { loan: Loan }) {
-  const events: { icon: React.ReactNode; label: string; date: string; detail?: string }[] = [];
+const WORKFLOW_ICONS: Record<WorkflowEventKey, React.ReactNode> = {
+  created: <FileText className="h-4 w-4 text-gray-500" />,
+  submitted: <Send className="h-4 w-4 text-amber-600" />,
+  approved: <UserCheck className="h-4 w-4 text-blue-600" />,
+  rejected: <Ban className="h-4 w-4 text-red-600" />,
+  released: <Unlock className="h-4 w-4 text-cyan-600" />,
+  sent_back: <Undo2 className="h-4 w-4 text-red-600" />,
+  cancelled: <CircleSlash className="h-4 w-4 text-muted-foreground" />,
+};
 
-  events.push({
-    icon: <FileText className="h-4 w-4 text-gray-500" />,
-    label: "Application created",
-    date: loan.created_at,
-  });
-
-  if (
-    loan.status !== "draft" &&
-    loan.updated_at !== loan.created_at
-  ) {
-    events.push({
-      icon: <Send className="h-4 w-4 text-amber-600" />,
-      label: "Submitted for review",
-      date: loan.updated_at,
-    });
-  }
-
-  if (loan.approved_at) {
-    events.push({
-      icon: <UserCheck className="h-4 w-4 text-blue-600" />,
-      label: `Approved by ${loan.approved_by_user?.full_name ?? loan.approved_by_user?.name ?? loan.approved_by ?? "—"}`,
-      date: loan.approved_at,
-      detail: loan.approval_remarks ?? undefined,
-    });
-  }
-
-  if (loan.rejected_at) {
-    events.push({
-      icon: <Ban className="h-4 w-4 text-red-600" />,
-      label: `Rejected by ${loan.rejected_by ?? "—"}`,
-      date: loan.rejected_at,
-      detail: loan.rejection_remarks ?? undefined,
-    });
-  }
-
-  if (loan.released_at) {
-    events.push({
-      icon: <Unlock className="h-4 w-4 text-cyan-600" />,
-      label: `Released by ${loan.released_by_user?.full_name ?? loan.released_by_user?.name ?? loan.released_by ?? "—"}`,
-      date: loan.released_at,
-    });
-  }
+function WorkflowHistory({
+  loan,
+  rounds,
+  steps,
+}: {
+  loan: Loan;
+  rounds: LoanApprovalRound[];
+  steps: ChainStep[];
+}) {
+  // The loan's own milestones, with every round's sign-offs, send-back and
+  // re-submission from the chain (the loan keeps only its latest approval).
+  const events = withChainEvents(workflowEvents(loan), chainEvents(rounds, steps), loan.created_at);
 
   return (
     <div className="space-y-4">
-      {events.map((event, idx) => (
-        <div key={idx} className="flex items-start gap-3">
-          <div className="mt-0.5">{event.icon}</div>
+      {events.map((event, i) => (
+        <div key={`${event.key}-${i}`} className="flex items-start gap-3">
+          <div className="mt-0.5">{WORKFLOW_ICONS[event.key]}</div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium">{event.label}</p>
             <p className="text-xs text-muted-foreground">
-              {formatDateTime(event.date)}
+              {event.date ? formatDateTime(event.date) : "—"}
             </p>
             {event.detail && (
               <p className="mt-1 text-sm text-muted-foreground italic">
@@ -692,47 +702,49 @@ function WorkflowHistory({ loan }: { loan: Loan }) {
   );
 }
 
-// ── Loan product resolution ──
-// Action endpoints (submit/approve/reject/release/void/extend/etc.) commonly
-// return a leaner loan payload than GET /api/loans/{id} and don't eager-load
-// the `loan_product` relation. Left unhandled, the next setLoan(...) call
-// wipes out a product name the page already had, and "Loan Product" (incl.
-// the Release modal) shows "N/A" even though nothing about the product
-// actually changed.
-
-async function enrichLoanProduct(data: Loan): Promise<Loan> {
-  const productId = data.loan_product?.id ?? data.loan_product_id;
-  if (productId && !data.loan_product?.name && !data.loan_product_name) {
-    try {
-      const product = await loanProductService.detail(productId);
-      if (product?.name) {
-        return {
-          ...data,
-          loan_product: { ...(data.loan_product ?? {}), id: productId, name: product.name },
-        };
-      }
-    } catch { /* product fetch is non-critical */ }
-  }
-  return data;
-}
-
-// Resolves the freshest loan_product info for `updated`, falling back to a
-// product-id lookup and finally to whatever `prev` already had on hand.
-async function resolveLoan(prev: Loan | null, updated: Loan): Promise<Loan> {
-  if (updated.loan_product?.name || updated.loan_product_name) return updated;
-  const enriched = await enrichLoanProduct(updated);
-  if (enriched.loan_product?.name || enriched.loan_product_name) return enriched;
-  if (prev?.loan_product?.name || prev?.loan_product_name) {
-    return {
-      ...updated,
-      loan_product: prev.loan_product,
-      loan_product_name: prev.loan_product_name,
-    };
-  }
-  return updated;
-}
-
 // ── Main Page ──
+
+function LoanNotFound() {
+  return (
+    <div className="flex flex-col items-center justify-center py-20 gap-4">
+      <AlertCircle className="h-12 w-12 text-muted-foreground" />
+      <h2 className="text-xl font-semibold">Loan Not Found</h2>
+      <p className="text-muted-foreground">
+        The loan application you&apos;re looking for does not exist.
+      </p>
+      <Link href="/loans">
+        <Button variant="outline">
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to Loans
+        </Button>
+      </Link>
+    </div>
+  );
+}
+
+/**
+ * The loan read failed for a reason that says nothing about the loan — a rate
+ * limit, a server error, a dropped connection. Only a 404 is "not found".
+ */
+function LoanLoadFailed({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div role="alert" className="flex flex-col items-center justify-center py-20 gap-4 text-center">
+      <AlertCircle className="h-12 w-12 text-muted-foreground" />
+      <h2 className="text-xl font-semibold">We couldn&apos;t load this loan</h2>
+      <p className="text-muted-foreground max-w-md">{message}</p>
+      <div className="flex flex-col-reverse gap-2 sm:flex-row">
+        <Button variant="ghost" nativeButton={false} render={<Link href="/loans" />}>
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to Loans
+        </Button>
+        <Button variant="outline" onClick={onRetry}>
+          <RefreshCw className="mr-2 h-4 w-4" />
+          Retry
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export default function LoanDetailPage({
   params,
@@ -740,43 +752,61 @@ export default function LoanDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const loanId = Number(id);
+  // Anything can follow `/loans/` in a hand-edited URL. Only plain digits name
+  // a loan — `Number()` alone reads `1e3` as 1000, `0x10` as 16 and ` 12 ` as
+  // 12 — so anything else is "not found" without asking the API. Decided here,
+  // before the page's own hooks, so such a URL makes no request at all.
+  if (!(typeof id === "string" && /^\d+$/.test(id) && Number(id) > 0)) {
+    return <LoanNotFound />;
+  }
+  return (
+    <RouteGuard permission="loans:view" pageName="Loan Details">
+      <LoanDetail loanId={Number(id)} />
+    </RouteGuard>
+  );
+}
+
+function LoanDetail({ loanId }: { loanId: number }) {
   const router = useRouter();
 
   const [loan, setLoan] = useState<Loan | undefined>();
   const [loading, setLoading] = useState(true);
+  // Why the loan could not be read, when it could not: `not_found` (a 404) is
+  // the only answer that means the loan does not exist.
+  const [loadFailure, setLoadFailure] = useState<{
+    kind: ReturnType<typeof loanLoadFailure>;
+    message: string;
+  } | null>(null);
+  // Bumped by the failed-load Retry, which re-runs the load effect below.
+  const [loanReloadCount, setLoanReloadCount] = useState(0);
   const [actionLoading, setActionLoading] = useState(false);
+  // The persisted schedule, for released loans. Null until the server has
+  // answered; `scheduleFailed` says whether it could not be asked. An empty list
+  // is an answer: the loan has no instalments.
   const [apiSchedule, setApiSchedule] = useState<LoanSchedule[] | null>(null);
-  // Raw amortization rows exactly as the backend returns them. The mapped
-  // `apiSchedule` above folds each row's interest_paid into amount_paid, which
-  // loses the per-row interest breakdown; we keep the raw rows so the extend
-  // flow can read the true outstanding interest (interest_due - interest_paid).
-  const [rawSchedule, setRawSchedule] = useState<ApiScheduleRow[] | null>(null);
+  const [scheduleFailed, setScheduleFailed] = useState(false);
 
   // Server-side balance summary (for released loans). Populated via
   // loanService.summary — gives authoritative outstanding/overdue figures
   // that supersede client-side calculations when present.
-  const [loanSummary, setLoanSummary] = useState<{
-    outstanding_balance?: number;
-    total_paid?: number;
-    principal_paid?: number;
-    interest_paid?: number;
-    overdue_amount?: number;
-    penalty_amount?: number;
-    next_due_date?: string;
-    next_due_amount?: number;
-  } | null>(null);
+  const [loanSummary, setLoanSummary] = useState<LoanSummary | null>(null);
 
   // Server-computed amortization preview (for pre-release loans). Populated
   // via loanService.amortizationPreview — lets approvers see the same schedule
-  // the server will persist on release.
+  // the server will persist on release. Null and `previewFailed` as above.
   const [previewSchedule, setPreviewSchedule] = useState<LoanSchedule[] | null>(null);
+  const [previewTotals, setPreviewTotals] = useState<ScheduleTotals>(NO_SCHEDULE_TOTALS);
+  const [previewFailed, setPreviewFailed] = useState(false);
+  // Bumped by the schedule card's Retry, which re-runs the effects that read it.
+  const [scheduleReloadCount, setScheduleReloadCount] = useState(0);
 
   // Statement of Account dialog state
   const [soaOpen, setSoaOpen] = useState(false);
   const [soaLoading, setSoaLoading] = useState(false);
-  const [soaData, setSoaData] = useState<Record<string, unknown> | null>(null);
+  const [soaDoc, setSoaDoc] = useState<ReportDocument | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(true);
+  // Kept here, so collapsing the card and opening it again keeps the open tab.
+  const [scheduleTab, setScheduleTab] = useState("schedule");
   const [approvalStepsOpen, setApprovalStepsOpen] = useState(true);
   const [memberCoMakerOpen, setMemberCoMakerOpen] = useState(true);
   const [workflowHistoryOpen, setWorkflowHistoryOpen] = useState(true);
@@ -784,16 +814,49 @@ export default function LoanDetailPage({
   // Repayments state
   const [repayments, setRepayments] = useState<Repayment[]>([]);
   const [repaymentsLoading, setRepaymentsLoading] = useState(false);
-  // Ledger debit/credit entries (interest an extension accrues/collects) —
-  // merged with repayments into `ledgerRows` below.
-  const [ledgerEntries, setLedgerEntries] = useState<LoanLedgerEntry[]>([]);
-  const [ledgerEntriesLoading, setLedgerEntriesLoading] = useState(false);
+  // Set only when the repayment drain gave up with pages outstanding: the
+  // Ledger rows of the payments it missed show no receipt number or Void.
+  // Null means complete.
+  const [repaymentsShortfall, setRepaymentsShortfall] = useState<RepaymentListShortfall | null>(null);
+  // The Ledger as the server sends it (GET /loans/{id}/ledger): every row and
+  // running balance. Null until it has answered; `ledgerFailed` says whether
+  // it could not be read.
+  const [ledger, setLedger] = useState<LedgerView | null>(null);
+  const [ledgerLoading, setLedgerLoading] = useState(false);
+  const [ledgerFailed, setLedgerFailed] = useState(false);
+  // Bumped after an action that posts to the share-capital ledger (a payment
+  // credits any SCB build-up, a void reverses it) so the Share Capital card
+  // re-reads its balance. No other action writes to that ledger.
+  const [shareCapitalVersion, setShareCapitalVersion] = useState(0);
   const [recordPaymentOpen, setRecordPaymentOpen] = useState(false);
-  const [paymentDate, setPaymentDate] = useState<Date>(new Date());
+  const [paymentDate, setPaymentDate] = useState<Date>(todayDate);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentRemarks, setPaymentRemarks] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<RecordPaymentMethod>(DEFAULT_PAYMENT_METHOD);
+  const [paymentReference, setPaymentReference] = useState("");
+  // Every opening starts at Cash with no reference: what was left after Cancel
+  // must not post on a later payment under the wrong method.
+  if (useDialogOpening(recordPaymentOpen, loanId)) {
+    setPaymentMethod(DEFAULT_PAYMENT_METHOD);
+    setPaymentReference("");
+  }
   const [paymentDatePickerOpen, setPaymentDatePickerOpen] = useState(false);
+  // The server's words on the payment date (an imported loan's counted days),
+  // for the day it refused, shown under the field.
+  const [paymentDateServerError, setPaymentDateServerError] = useState<{ day: string; message: string } | null>(null);
   const [paymentPreview, setPaymentPreview] = useState<RepaymentPreview | null>(null);
+  // The amount and date `paymentPreview` answers (previewRequestKey).
+  const [paymentPreviewKey, setPaymentPreviewKey] = useState<string | null>(null);
+  // The amount and date whose preview request failed, and a round that asks
+  // again after the cashier is told so.
+  const [paymentPreviewFailedKey, setPaymentPreviewFailedKey] = useState<string | null>(null);
+  const [paymentPreviewRound, setPaymentPreviewRound] = useState(0);
+  // The server's reason for refusing the preview of an amount and date (a
+  // 422, e.g. a date before release), for those inputs only.
+  const [paymentPreviewRefusal, setPaymentPreviewRefusal] = useState<{
+    key: string;
+    message: string;
+  } | null>(null);
   const [paymentPreviewLoading, setPaymentPreviewLoading] = useState(false);
   const [paymentMode, setPaymentMode] = useState<"regular" | "advance">("regular");
   const [advancePeriods, setAdvancePeriods] = useState<number>(1);
@@ -804,171 +867,135 @@ export default function LoanDetailPage({
   const [extendOpen, setExtendOpen] = useState(false);
   const [extendRemarks, setExtendRemarks] = useState("");
   const [partialExtendOpen, setPartialExtendOpen] = useState(false);
-  const [pendingPayment, setPendingPayment] = useState<{
-    payment_date: string;
-    amount_paid: number;
-    remarks?: string;
-  } | null>(null);
+  const [pendingPayment, setPendingPayment] = useState<RecordPaymentPayload | null>(null);
   // What to do with interest already outstanding when the loan extends.
   // Defaults to "pay", which is how extension behaved before the choice
   // existed. The API performs the collection itself, so there is no longer a
   // client-side payment step to guard against repeating.
-  const [extendInterestOption, setExtendInterestOption] = useState<"pay" | "defer">("pay");
+  const [extendInterestOption, setExtendInterestOption] = useState<ExtensionInterestOption>("pay");
+  // Bumped on every open, so a reopened dialog asks the server again rather
+  // than showing the figures from before the last extension.
+  const [extendPreviewRound, setExtendPreviewRound] = useState(0);
+  // How "pay" collects what the extension takes, and its reference. Every
+  // opening starts at Cash with no reference, as Record Payment does.
+  const [extendMethod, setExtendMethod] = useState<RecordPaymentMethod>(DEFAULT_PAYMENT_METHOD);
+  const [extendReference, setExtendReference] = useState("");
+  if (useDialogOpening(extendOpen, loanId)) {
+    setExtendMethod(DEFAULT_PAYMENT_METHOD);
+    setExtendReference("");
+  }
 
   // Loan Adjustments state
   const [adjustments, setAdjustments] = useState<LoanAdjustment[]>([]);
   const [adjustmentsLoading, setAdjustmentsLoading] = useState(false);
+  // The pending adjustment and the decision its dialog asks for, and the
+  // payment the Void dialog asks about. Each stays set once its dialog
+  // closes, so the dialog keeps its words while it animates out.
+  const [adjustmentDecision, setAdjustmentDecision] = useState<{
+    adjustment: LoanAdjustment;
+    action: "approve" | "reject";
+  } | null>(null);
+  const [adjustmentDecisionOpen, setAdjustmentDecisionOpen] = useState(false);
+  // The approved adjustment the Cancel dialog asks about.
+  const [adjustmentToCancel, setAdjustmentToCancel] = useState<LoanAdjustment | null>(null);
+  const [cancelAdjustmentOpen, setCancelAdjustmentOpen] = useState(false);
+  const [voidTarget, setVoidTarget] = useState<number | null>(null);
+  const [voidOpen, setVoidOpen] = useState(false);
   const [createAdjustmentOpen, setCreateAdjustmentOpen] = useState(false);
   const [adjType, setAdjType] = useState<LoanAdjustmentType>("balance_adjustment");
   const [adjDescription, setAdjDescription] = useState("");
   const [adjRemarks, setAdjRemarks] = useState("");
-  const [adjNewValues, setAdjNewValues] = useState("");
   // User-friendly adjustment fields
-  const [adjNewBalance, setAdjNewBalance] = useState("");
+  const [adjTargetPrincipal, setAdjTargetPrincipal] = useState("");
   const [adjAdditionalMonths, setAdjAdditionalMonths] = useState("");
+  // The server's figures for the target principal typed now, while the
+  // balance adjustment form is open.
+  const adjTarget =
+    createAdjustmentOpen && adjType === "balance_adjustment"
+      ? targetPrincipalInput(adjTargetPrincipal)
+      : null;
+  const adjPreview = useBalanceAdjustmentPreview(loanId, adjTarget);
+  // The server's figures for the extension the open Extend dialog describes.
+  const extendPreview = useExtensionPreview(
+    extendOpen ? { loanId, option: extendInterestOption, round: extendPreviewRound } : null,
+  );
 
 
   // Account Officer state
-  const [users, setUsers] = useState<User[]>([]);
-  // Set only when the officer drain gave up with pages outstanding, i.e. the
-  // AO picker is knowingly missing staff. Null means complete.
-  const [officerShortfall, setOfficerShortfall] = useState<UserListShortfall | null>(null);
   const [aoEditing, setAoEditing] = useState(false);
-  const [aoOpen, setAoOpen] = useState(false);
   const [aoSaving, setAoSaving] = useState(false);
 
-  // Fetch loan on mount
+  // Fetch loan on mount, and again on Retry. `loading` is already true when
+  // this runs (initially, or set by `reloadLoan`), so state is only set once
+  // the request settles.
   useEffect(() => {
     let cancelled = false;
-    async function fetchLoan() {
-      try {
-        setLoading(true);
-        const data = await loanService.detail(loanId);
-        // Resolve the loan's co-makers when the detail response doesn't embed
-        // them. Co-makers are loan-scoped (chosen at application time), so we
-        // hydrate from the loan's own id(s) / flat name first, and only fall
-        // back to the borrower's registered co-makers as a last resort.
-        if (!data.co_makers || data.co_makers.length === 0) {
-          const mapCoMaker = (cm: CoMaker) => ({
-            id: cm.id,
-            full_name: cm.full_name ?? cm.name ?? ([cm.first_name, cm.middle_name, cm.last_name, cm.suffix].filter(Boolean).join(" ") || undefined),
-            address: cm.address,
-            relationship: cm.relationship_to_borrower ?? cm.relationship,
-          });
-          const rawLoan = data as Loan & { co_maker_ids?: number[] };
-          const coMakerIds = Array.isArray(rawLoan.co_maker_ids)
-            ? rawLoan.co_maker_ids
-            : data.co_maker_id != null
-              ? [data.co_maker_id]
-              : [];
-          // 1) Explicit co-maker id(s) on the loan → fetch each by id.
-          if (coMakerIds.length > 0) {
-            try {
-              const fetched = await Promise.all(
-                coMakerIds.map((cid) => coMakerService.detail(cid).catch(() => null))
-              );
-              const mapped = fetched.filter((cm): cm is CoMaker => !!cm).map(mapCoMaker);
-              if (mapped.length > 0) data.co_makers = mapped;
-            } catch { /* non-critical */ }
-          }
-          // 2) Legacy flat name with no id.
-          if ((!data.co_makers || data.co_makers.length === 0) && data.co_maker_name) {
-            data.co_makers = [{ id: data.co_maker_id ?? 0, full_name: data.co_maker_name }];
-          }
-          // 3) Last resort: the borrower's registered co-makers.
-          const borrowerId = data.borrower?.id ?? data.borrower_id;
-          if ((!data.co_makers || data.co_makers.length === 0) && borrowerId) {
-            try {
-              const cms = await coMakerService.list(borrowerId);
-              const cmList = Array.isArray(cms) ? cms : (cms as unknown as { data: CoMaker[] }).data ?? [];
-              if (cmList.length > 0) data.co_makers = cmList.map(mapCoMaker);
-            } catch { /* non-critical */ }
-          }
-        }
-        // Resolve the loan product name when the loan detail doesn't embed it,
-        // so the Loan Product field (incl. the Release modal) isn't "N/A".
-        const enriched = await enrichLoanProduct(data);
-        if (!cancelled) setLoan(enriched);
-      } catch {
-        if (!cancelled) toast.error("We couldn't load the loan details. Please try again.");
-      } finally {
+    loadLoan(loanId, null)
+      .then((loaded) => {
+        if (!cancelled) setLoan(loaded);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setLoadFailure({
+          kind: loanLoadFailure(err),
+          message: getErrorMessage(err, "Please try again in a moment."),
+        });
+      })
+      .finally(() => {
         if (!cancelled) setLoading(false);
-      }
-    }
-    fetchLoan();
+      });
     return () => { cancelled = true; };
-  }, [loanId]);
+  }, [loanId, loanReloadCount]);
 
-  // Fetch users for AO tagging
-  useEffect(() => {
-    async function fetchUsers() {
-      try {
-        // Drained, and filtered to active on the server. This was
-        // `userService.list()` with no arguments — the endpoint's default page
-        // of 15, newest first — so from the 16th user on, the longest-serving
-        // officers could not be assigned from here.
-        const officers = toUserList(await userService.listAll({ status: "active" }));
-        // Still filtered here too, so the picker's rule does not hang on the
-        // server honouring `?status=`.
-        setUsers(officers.users.filter((u) => u.status === "active"));
-        setOfficerShortfall(officers.shortfall);
-      } catch { /* non-critical */ }
-    }
-    fetchUsers();
-  }, []);
+  const reloadLoan = () => {
+    setLoading(true);
+    setLoadFailure(null);
+    setLoanReloadCount((n) => n + 1);
+  };
 
-  // Save AO assignment
+  // `loans:update` edits a loan application and assigns its account officer.
+  // The officer is saved through `PATCH /loans/{id}/account-officer`, which
+  // needs it, and the picker's `GET /staff` accepts that same permission. It
+  // used to require `users:view` as well, which only admins hold, so loan
+  // officers never saw the control.
+  const canUpdateLoan = usePermission().can("loans:update");
+  // Roles read by their display name on the approval panel, never their key.
+  const roleLabel = useRoleLabels();
+  // Menu Visibility: the credit scoring card, the reminders card and Auto-Pay
+  // go while their menus are hidden (their API answers 404 then).
+  const { isHidden } = useMenuVisibility();
+  const parts = loanPageParts(isHidden);
+  const canToggleAutoPay = usePermission().can("auto_pay:toggle") && parts.autoPay;
+  const { can } = usePermission();
+
+  // Save AO assignment. This goes through its own endpoint, not `update`: PUT
+  // /loans/{id} refuses every loan past for_review. The page shows what the
+  // server saved, not what was picked.
   const handleSaveAO = useCallback(async (userId: number) => {
     if (!loan) return;
     setAoSaving(true);
     try {
-      await loanService.update(loan.id, { account_officer_id: userId } as Partial<Loan>);
-      setLoan((prev) => prev ? { ...prev, account_officer_id: userId, account_officer: users.find((u) => u.id === userId) } as Loan : prev);
+      const saved = await loanService.assignAccountOfficer(loan.id, userId);
+      setLoan((prev) => prev ? { ...prev, account_officer_id: saved.account_officer_id, account_officer: saved.account_officer } : prev);
       toast.success("Account officer updated");
       setAoEditing(false);
-    } catch {
-      toast.error("We couldn't update the account officer. Please try again.");
+    } catch (err) {
+      notifyError(err, "We couldn't update the account officer. Please try again.");
     } finally {
       setAoSaving(false);
     }
-  }, [loan, users]);
+  }, [loan]);
 
-  // Fetch schedule for released+ loans
+  // Fetch schedule for released+ loans. A failed or unreadable answer is
+  // recorded as such: nothing stands in for the server's rows.
   const fetchSchedule = useCallback(async (id: number) => {
     try {
-      const res = await loanService.schedule(id);
-      // API may return { schedule: [...], summary: {...} } or a plain array
-      const rows = Array.isArray(res) ? res : (res as unknown as { schedule: unknown[] })?.schedule;
-      if (Array.isArray(rows) && rows.length > 0) {
-        // Map ApiScheduleRow field names to LoanSchedule field names
-        const first = rows[0] as Record<string, unknown>;
-        const isApiFormat = "principal_due" in first;
-        // Keep the raw rows only when they carry the API breakdown fields
-        // (interest_due / interest_paid); otherwise fall back to null so the
-        // outstanding-interest memo uses the client-side schedule instead.
-        setRawSchedule(isApiFormat ? (rows as unknown as ApiScheduleRow[]) : null);
-        setApiSchedule(
-          isApiFormat
-            ? (rows as Record<string, unknown>[]).map((r) => ({
-                id: Number(r.id) || 0,
-                loan_id: Number(r.loan_id) || id,
-                due_date: String(r.due_date ?? ""),
-                principal: parseFloat(String(r.principal_due ?? 0)),
-                interest: parseFloat(String(r.interest_due ?? 0)),
-                amount_due: parseFloat(String(r.total_due ?? 0)),
-                amount_paid: parseFloat(String(r.principal_paid ?? 0)) + parseFloat(String(r.interest_paid ?? 0)),
-                balance: parseFloat(String(r.remaining_balance ?? 0)),
-                status: (r.status as LoanSchedule["status"]) ?? "pending",
-              }) as LoanSchedule)
-            : rows as unknown as LoanSchedule[]
-        );
-      } else {
-        setApiSchedule([]);
-        setRawSchedule(null);
-      }
+      const read = readScheduleRows(await loanService.schedule(id), id);
+      setApiSchedule(read?.schedule ?? null);
+      setScheduleFailed(read === null);
     } catch {
-      setApiSchedule(null); // fallback to client-side generation
-      setRawSchedule(null);
+      setApiSchedule(null);
+      setScheduleFailed(true);
     }
   }, []);
 
@@ -978,92 +1005,134 @@ export default function LoanDetailPage({
       const res = await loanService.summary(id);
       const payload = (res && typeof res === "object" && "data" in (res as Record<string, unknown>)
         ? (res as { data: unknown }).data
-        : res) as Record<string, unknown> | null;
+        : res) as LoanSummary | null;
       setLoanSummary(payload ?? null);
     } catch {
       setLoanSummary(null);
     }
   }, []);
 
-  // Fetch server-computed amortization preview for draft/for_review loans
+  // Fetch server-computed amortization preview for draft/for_review loans.
+  // Its rows carry the same `*_due` fields as the persisted schedule.
   const fetchAmortizationPreview = useCallback(async (id: number) => {
     try {
-      const res = await loanService.amortizationPreview(id);
-      const rows = Array.isArray(res)
-        ? res
-        : ((res as unknown as { data?: LoanSchedule[] })?.data ?? []);
-      setPreviewSchedule(rows);
+      const read = readPreviewResponse(await loanService.amortizationPreview(id), id);
+      setPreviewSchedule(read?.schedule ?? null);
+      setPreviewTotals(read?.totals ?? NO_SCHEDULE_TOTALS);
+      setPreviewFailed(read === null);
     } catch {
       setPreviewSchedule(null);
+      setPreviewTotals(NO_SCHEDULE_TOTALS);
+      setPreviewFailed(true);
     }
   }, []);
 
+  // The loaded loan's id and status as plain values. The fetch effects below
+  // read only these, so they re-run when one of them changes, not every time a
+  // refetch or an action hands back a new `loan` object. `loadedLoanId` stays
+  // undefined until the loan arrives, unlike the route's `loanId`.
+  const loadedLoanId = loan?.id;
+  const loanStatus = loan?.status;
+  // Statuses for which the backend has schedule / repayment / adjustment data:
+  // every loan that was released, whatever became of it since.
+  const hasServerLoanData = isEverReleasedLoanStatus(loanStatus);
+
+  // Released-loan data is read when the loan is first known to have it: on
+  // first load, and when a release moves it into that set. These effects key
+  // on the flag, not the status, because every status change INSIDE the set
+  // (a payment settling a past_due loan, a void, an extension, an applied
+  // adjustment) comes from an action that re-reads what it changed itself;
+  // keyed on the status, each of those re-read everything a second time.
   useEffect(() => {
-    if (loan && ["released", "ongoing", "current", "past_due", "completed", "defaulted", "restructured", "closed"].includes(loan.status)) {
-      fetchSchedule(loan.id);
-      fetchLoanSummary(loan.id);
+    if (loadedLoanId !== undefined && hasServerLoanData) {
+      fetchSchedule(loadedLoanId);
+      fetchLoanSummary(loadedLoanId);
     }
-  }, [loan?.id, loan?.status, fetchSchedule, fetchLoanSummary]);
+  }, [loadedLoanId, hasServerLoanData, fetchSchedule, fetchLoanSummary, scheduleReloadCount]);
 
   // Pre-release preview (draft / for_review / approved)
   useEffect(() => {
-    if (loan && ["draft", "for_review", "approved"].includes(loan.status)) {
-      fetchAmortizationPreview(loan.id);
+    if (loadedLoanId !== undefined && loanStatus && ["draft", "for_review", "approved"].includes(loanStatus)) {
+      fetchAmortizationPreview(loadedLoanId);
     }
-  }, [loan?.id, loan?.status, fetchAmortizationPreview]);
+  }, [loadedLoanId, loanStatus, fetchAmortizationPreview, scheduleReloadCount]);
 
-  // Fetch repayments for released+ loans, then enrich each with its detail
-  // so that breakdown fields (principal_paid, interest_paid, scb_paid, penalty_paid)
-  // are populated — the list endpoint omits them; the detail endpoint includes them.
+  // Where this loan's schedule comes from: the persisted schedule once it is
+  // released, the server's preview before that, nowhere for a rejected or void
+  // loan. `scheduleRows` is that source's answer, null until there is one.
+  const scheduleSource: "persisted" | "preview" | null = hasServerLoanData
+    ? "persisted"
+    : loanStatus && ["draft", "for_review", "approved"].includes(loanStatus)
+      ? "preview"
+      : null;
+  const scheduleRows =
+    scheduleSource === "persisted" ? apiSchedule : scheduleSource === "preview" ? previewSchedule : null;
+  const scheduleLoad: ScheduleLoad =
+    scheduleRows !== null
+      ? "loaded"
+      : (scheduleSource === "persisted" ? scheduleFailed : previewFailed)
+        ? "failed"
+        : "loading";
+
+  // Retry from the schedule card: back to loading, then the effects above read
+  // the schedule (and the summary beside it) again.
+  const retrySchedule = () => {
+    setScheduleFailed(false);
+    setPreviewFailed(false);
+    setScheduleReloadCount((n) => n + 1);
+  };
+
+  // Payments need `payments:view` and adjustments `loan_adjustments:view`,
+  // neither of which viewing a loan implies (the approval-chain roles hold only
+  // `loans:view`). Without one, that history is not asked for and stays empty.
+  const canViewPayments = usePermission().can("payments:view");
+  const canViewAdjustments = usePermission().can("loan_adjustments:view");
+
+  // Fetch repayments for released+ loans. Each list row is the full
+  // RepaymentResource — the same payload `GET /repayments/{id}` returns — and
+  // the ledger's breakdown fields (principal_paid, interest_paid, penalty_paid)
+  // are read off its `*_amount` aliases by withBreakdown(). This used to ask for
+  // every row's detail on the belief that the list omitted the breakdown; it
+  // never did, and each of those requests returned the row it started from.
   const fetchRepayments = useCallback(async (id: number) => {
+    if (!canViewPayments) return;
     try {
       setRepaymentsLoading(true);
-      const res = await repaymentService.list(id);
-      const list: Repayment[] = Array.isArray(res) ? res : res.data ?? [];
-      const enriched = await Promise.all(
-        list.map(async (r) => {
-          try {
-            const detail = await repaymentService.detail(r.id);
-            // Merge: prefer detail fields (breakdown), keep list fields as fallback
-            const d = detail as Repayment & Record<string, unknown>;
-            return {
-              ...r,
-              ...detail,
-              principal_paid: (detail.principal_paid ?? (d.principal_amount as number)) || undefined,
-              interest_paid: (detail.interest_paid ?? (d.interest_amount as number)) || undefined,
-              scb_paid: (detail.scb_paid ?? (d.scb_amount as number)) || undefined,
-              penalty_paid: (detail.penalty_paid ?? (d.penalty_amount as number)) || undefined,
-            } as Repayment;
-          } catch {
-            return r;
-          }
-        })
+      // Drained across pages. This was `repaymentService.list(id)` — the
+      // endpoint's default page of 15, and the OLDEST 15, since the list is
+      // oldest-first — so from a loan's sixteenth payment on the ledger lost
+      // its newest payments and every running balance after them. A loan with
+      // N payments now costs ceil(N / 100) requests, and nothing per row.
+      const { rows, shortfall } = toLoanRepayments(
+        await repaymentService.listAllForLoan(id),
       );
-      setRepayments(enriched);
+      setRepayments(rows);
+      setRepaymentsShortfall(shortfall);
     } catch {
       // silently fail
     } finally {
       setRepaymentsLoading(false);
     }
-  }, []);
+  }, [canViewPayments]);
 
-  // Fetch debit/credit ledger entries for released+ loans — merged into
-  // `ledgerRows` alongside repayments.
-  const fetchLedgerEntries = useCallback(async (id: number) => {
+  // Fetch the Ledger for released+ loans. A failed or unreadable answer is
+  // shown as such, with a Retry: nothing stands in for the server's rows.
+  const fetchLedger = useCallback(async (id: number) => {
     try {
-      setLedgerEntriesLoading(true);
-      const res = await loanService.ledgerEntries(id);
-      const list: LoanLedgerEntry[] = Array.isArray(res) ? res : res.data ?? [];
-      setLedgerEntries(list);
+      setLedgerLoading(true);
+      const read = readLoanLedger(await loanService.ledger(id));
+      setLedger(read);
+      setLedgerFailed(read === null);
     } catch {
-      // silently fail — the ledger still renders correctly from repayments alone
+      setLedgerFailed(true);
     } finally {
-      setLedgerEntriesLoading(false);
+      setLedgerLoading(false);
     }
   }, []);
 
   // Fetch adjustments for released+ loans
   const fetchAdjustments = useCallback(async (id: number) => {
+    if (!canViewAdjustments) return;
     try {
       setAdjustmentsLoading(true);
       const res = await loanAdjustmentService.list(id);
@@ -1077,40 +1146,98 @@ export default function LoanDetailPage({
     } finally {
       setAdjustmentsLoading(false);
     }
-  }, []);
+  }, [canViewAdjustments]);
 
   useEffect(() => {
-    if (loan && ["released", "ongoing", "current", "past_due", "completed", "defaulted", "restructured", "closed"].includes(loan.status)) {
-      fetchRepayments(loan.id);
-      fetchAdjustments(loan.id);
-      fetchLedgerEntries(loan.id);
+    if (loadedLoanId !== undefined && hasServerLoanData) {
+      fetchRepayments(loadedLoanId);
+      fetchAdjustments(loadedLoanId);
+      fetchLedger(loadedLoanId);
     }
-  }, [loan?.id, loan?.status, fetchRepayments, fetchAdjustments, fetchLedgerEntries]);
+  }, [loadedLoanId, hasServerLoanData, fetchRepayments, fetchAdjustments, fetchLedger]);
 
   // Dialog state
-  const [approveOpen, setApproveOpen] = useState(false);
-  const [rejectOpen, setRejectOpen] = useState(false);
   const [releaseOpen, setReleaseOpen] = useState(false);
-  const [submitOpen, setSubmitOpen] = useState(false);
-  const [releaseDatePickerOpen, setReleaseDatePickerOpen] = useState(false);
+  // "Send back for approval" on an approved restructure: its reason, cleared
+  // each time the dialog opens.
+  const [sendBackApprovedOpen, setSendBackApprovedOpen] = useState(false);
+  const [sendBackReason, setSendBackReason] = useState("");
+  const [sendBackApprovedLoading, setSendBackApprovedLoading] = useState(false);
+  if (useDialogOpening(sendBackApprovedOpen, loanId)) setSendBackReason("");
+  // How the proceeds are paid out, and its reference. Every opening starts at
+  // Cash with no reference, so a later release can't go out under an old one.
+  const [releaseMethod, setReleaseMethod] = useState<RecordPaymentMethod>(DEFAULT_PAYMENT_METHOD);
+  const [releaseReference, setReleaseReference] = useState("");
+  if (useDialogOpening(releaseOpen, loanId)) {
+    setReleaseMethod(DEFAULT_PAYMENT_METHOD);
+    setReleaseReference("");
+  }
   const [autoPayDialogOpen, setAutoPayDialogOpen] = useState(false);
   const [autoPayIsPostRelease, setAutoPayIsPostRelease] = useState(false);
 
-  const [approvalRemarks, setApprovalRemarks] = useState("");
-  const [rejectionRemarks, setRejectionRemarks] = useState("");
-  const [releaseDate, setReleaseDate] = useState<Date>(new Date());
   const [insurancePremium, setInsurancePremium] = useState<InsurancePremiumValue>(
     INSURANCE_PREMIUM_INITIAL,
   );
-
-  // Add-second-co-maker state (used inside Release Dialog)
-  const [addCoMakerOpen, setAddCoMakerOpen] = useState(false);
-  const [addingCoMaker, setAddingCoMaker] = useState(false);
-  const [newCoMaker, setNewCoMaker] = useState({
-    first_name: "",
-    last_name: "",
-    contact_number: "",
-    relationship_to_borrower: "",
+  // What the release will withhold and pay out before insurance, read from the
+  // server once while the loan awaits release. The Release dialog and, for
+  // whoever can release it, the Loan Information card show no deduction, total
+  // or net for an approved loan that does not come from here. The endpoint
+  // needs `loans:release`, so nothing is asked for without it unless the dialog
+  // is opened.
+  const canReleaseLoan = usePermission().can("loans:release");
+  const { state: releasePreview, reload: reloadReleasePreview } = useReleasePreview(
+    loanId,
+    loan?.status === "approved" && (canReleaseLoan || releaseOpen),
+  );
+  // The card before release: the same figures for anyone who can see the loan,
+  // labelled as an estimate until it is approved. What the loan records until
+  // then leaves out the fees configured in Settings, so it is never shown.
+  const cardSource = loan ? cardDeductionsSource(loan.status, canReleaseLoan) : "recorded";
+  const { state: deductionsPreview, reload: reloadDeductionsPreview } = useDeductionsPreview(
+    loanId,
+    loan?.status,
+    cardSource === "deductions-preview",
+  );
+  const cardPreview: PreviewReadState<LoanDeductionsPreview> | null =
+    cardSource === "release-preview"
+      ? releasePreview
+      : cardSource === "deductions-preview"
+        ? deductionsPreview
+        : null;
+  const reloadCardPreview =
+    cardSource === "release-preview" ? reloadReleasePreview : reloadDeductionsPreview;
+  const cardEstimated = cardFiguresAreEstimated(
+    cardSource,
+    cardPreview?.status === "loaded" ? cardPreview.preview : null,
+  );
+  // The same preview with the insurance typed in the Release dialog: the
+  // premium, what is left to collect, and the deductions and net after it, all
+  // the server's. Asked only while the dialog is open and a percentage is set.
+  const releaseInsurance = releaseInsuranceQuery(insurancePremium);
+  const {
+    view: insurancePreview,
+    premiumAmount: insurancePremiumAmount,
+    retry: retryInsurancePreview,
+  } = useReleaseInsurancePreview(
+    loanId,
+    releaseInsurance,
+    releaseOpen && loan?.status === "approved",
+  );
+  // The answer Confirm Release stands on: the release preview with no
+  // insurance, else the insurance preview read against the same fees as the
+  // fee list on screen. When the two were read against different fees, both
+  // are read again, once per mismatch.
+  const {
+    view: releaseConfirm,
+    stuck: releaseFeesStuck,
+    reread: rereadRelease,
+  } = useReleaseConfirm({
+    open: releaseOpen,
+    base: releasePreview,
+    query: releaseInsurance,
+    insurance: insurancePreview,
+    reloadBase: reloadReleasePreview,
+    retryInsurance: retryInsurancePreview,
   });
 
   // Multi-step approval workflow — SERVER-OWNED, read-only here. Acting on a
@@ -1121,12 +1248,44 @@ export default function LoanDetailPage({
   const {
     steps: approvalSteps,
     rounds: approvalRounds,
+    leftOut: approvalLeftOut,
     loading: approvalLoading,
     unavailable: approvalUnavailable,
     refresh: refreshApproval,
   } = useLoanApproval(loan?.id, loan?.status);
+  // The Chairman/Chairwoman's "Edit Loan" at their approval step
+  // (`loans:edit_in_approval`): the server is asked only for that holder while
+  // the loan waits at an approve step, and again when the step changes. It
+  // shows only on the server's yes for the step on screen.
+  const canEditInApproval = can("loans:edit_in_approval");
+  const pendingApprovalStep = approvalSteps.find((s) => s.status === "pending") ?? null;
+  const approvalEditState = useApprovalEditState(
+    loan?.id,
+    asksApprovalEdit({ canEditInApproval, loanStatus: loan?.status, currentStep: pendingApprovalStep }),
+    String(pendingApprovalStep?.id ?? ""),
+  );
+  // Back from that edit (`/loans/{id}#approval`), the page opens at the card
+  // once the chain is on screen.
+  const approvalCardReady = !approvalLoading && approvalSteps.length > 0;
+  useEffect(() => {
+    if (!approvalCardReady || window.location.hash !== `#${APPROVAL_CARD_ID}`) return;
+    document.getElementById(APPROVAL_CARD_ID)?.scrollIntoView({ block: "start" });
+  }, [approvalCardReady]);
   const [stepRemarks, setStepRemarks] = useState("");
   const [stepActionLoading, setStepActionLoading] = useState(false);
+  // "Forward to" on Submit for Approval and Approve & Forward, tied to the
+  // step it was picked on (a draft is "draft"), so a new step starts at the
+  // role default. The server's 422 on the pick is kept the same way.
+  const [forwardPick, setForwardPick] = useState<ForwardPick>({
+    key: "",
+    userId: ANYONE_WITH_THE_ROLE,
+  });
+  const [forwardError, setForwardError] = useState<{ key: string; message: string } | null>(null);
+  // A sign-off the server refused because a step the chain left out by its
+  // minimum now applies (422 on `approval`), kept beside that step's actions.
+  const [signOffError, setSignOffError] = useState<KeptRefusal | null>(null);
+  // The "Forward to" candidates, read once per pending step for this page.
+  const [readForwardCandidates] = useState(() => oncePerKey<ForwardCandidates>());
   // Index of the step an approver is sending the loan back to. Defaults to
   // the most recent prior approver, falling back to the Loan Processor. See
   // `sendBackTargets` below for the list of valid choices.
@@ -1145,11 +1304,17 @@ export default function LoanDetailPage({
   // precisely who sits on a draft, so an ungated Void button offers that role
   // an action it can never complete — QA measured it: 403, loan unchanged, and
   // a toast saying "please try again" for a permission wall that retrying will
-  // never clear. Gated the same way Edit is.
+  // never clear. Edit and Submit are gated for the same reason.
   //
   // Called up here with the other hooks, not beside the flag it feeds: this
   // component has early returns below, and a hook after one breaks the order.
   const canVoidLoan = usePermission().can("loans:void");
+  // Submitting a restructure application needs only `loans:restructure`.
+  const canRestructureLoan = usePermission().can("loans:restructure");
+  // The documents card's own defaults offered upload and delete to anyone who
+  // can open a loan. Uploading to a loan needs `loans:update` and deleting a
+  // document `borrowers:delete` (DocumentController).
+  const canDeleteDocuments = usePermission().can("borrowers:delete");
 
   const currentUser = useAuthStore((s) => s.user);
   const currentUserDisplayName =
@@ -1158,365 +1323,48 @@ export default function LoanDetailPage({
     currentUser?.username ||
     "Unknown User";
 
-  // Amortization schedule preview for release dialog
-  const releaseSchedule = useMemo(() => {
-    if (!loan) return [];
-    const termVal = loan.term ?? loan.term_months ?? 0;
-    const freqVal = (loan.frequency ?? loan.payment_frequency ?? "monthly") as Parameters<typeof generateSchedule>[3];
-    const methodVal = (loan.interest_method ?? loan.interest_type ?? "fixed") as Parameters<typeof generateSchedule>[4];
-    return generateSchedule(
-      loan.principal_amount,
-      loan.interest_rate,
-      termVal,
-      freqVal,
-      methodVal,
-      releaseDate,
-      loan.scb_amount ?? 0,
-    );
-  }, [loan?.principal_amount, loan?.interest_rate, loan?.term, loan?.term_months, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, loan?.scb_amount, releaseDate]);
-
-  const scheduleTotals = useMemo(() => {
-    return releaseSchedule.reduce(
-      (acc, row) => ({
-        principal: acc.principal + row.principal,
-        interest: acc.interest + row.interest,
-        shareCapitalBuildUp: acc.shareCapitalBuildUp + row.shareCapitalBuildUp,
-        totalPayment: acc.totalPayment + row.totalPayment,
-      }),
-      { principal: 0, interest: 0, shareCapitalBuildUp: 0, totalPayment: 0 },
-    );
-  }, [releaseSchedule]);
-
-  // Maturity date computed from release date + term
-  const computedMaturityDate = useMemo(() => {
-    if (!loan) return null;
-    return addMonths(releaseDate, loan.term ?? loan.term_months ?? 0);
-  }, [releaseDate, loan?.term, loan?.term_months]);
-
-  // Post-release: prefer API schedule, fallback to client-side generation
+  // The schedule on screen: the server's rows, persisted or previewed, and
+  // nothing else. The browser never builds a schedule of its own for a loan it
+  // shows — no rows from the server (a restructured loan whose open periods the
+  // release deleted, a request that failed) means no rows here, and the card
+  // says which. For an approved loan these are the preview rows, which is what
+  // the Release dialog shows: the schedule the release will store.
+  //
+  // The memo lists the loan FIELDS it reads rather than `loan`, so a refetch
+  // that returns the same terms does not recompute it. That only holds while
+  // every read goes through a listed field, which is why the has-a-loan guard
+  // reads `loan?.id`, not `loan`, and every read is written `loan?.` exactly as
+  // the deps list it (the React Compiler matches them as written).
+  //
+  // The column totals are the server's `amortization_schedule_totals`, read
+  // with the loan (every action that re-reads the schedule re-reads the loan
+  // too); a preview's are the `totals` its endpoint sends beside the rows. A
+  // total the server did not send is a dash, never the rows added up here.
+  const storedScheduleTotals = useMemo(
+    () =>
+      scheduleSource === "persisted"
+        ? readScheduleTotals(loan?.amortization_schedule_totals)
+        : scheduleSource === "preview"
+          ? previewTotals
+          : NO_SCHEDULE_TOTALS,
+    [scheduleSource, loan?.amortization_schedule_totals, previewTotals],
+  );
   const storedSchedule = useMemo(() => {
-    if (!loan) return [];
-    const scb = loan.scb_amount ?? 0;
-    const isReleased = ["released", "ongoing", "current", "past_due", "completed", "defaulted", "restructured", "closed"].includes(loan.status);
-    const isPreRelease = ["draft", "for_review", "approved"].includes(loan.status);
-
-    if (isReleased) {
-      const relDate = loan.released_at ?? loan.start_date ?? loan.release_date;
-      if (!relDate) return [];
-      const freq = loan.frequency ?? loan.payment_frequency ?? "monthly";
-      const isUponMaturity = freq === "upon_maturity" || loan.interest_method === "upon_maturity" || loan.interest_type === "upon_maturity";
-      // Use API schedule if available, map to display format
-      if (apiSchedule && apiSchedule.length > 0) {
-        if (isUponMaturity) {
-          // Backend may return one row per period; collapse everything into a single maturity payment
-          const lastRow = apiSchedule[apiSchedule.length - 1];
-          const totalPrincipal = apiSchedule.reduce((s, r) => s + (parseFloat(String(r.principal)) || 0), 0);
-          const totalInterest = apiSchedule.reduce((s, r) => s + (parseFloat(String(r.interest)) || 0), 0);
-          const totalAmountDue = apiSchedule.reduce((s, r) => s + (parseFloat(String(r.amount_due)) || 0), 0);
-          const totalAmountPaid = apiSchedule.reduce((s, r) => s + (parseFloat(String(r.amount_paid)) || 0), 0);
-          const totalScb = scb * apiSchedule.length;
-          return [{
-            period: 1,
-            dueDate: new Date(lastRow.due_date),
-            principal: totalPrincipal,
-            interest: totalInterest,
-            shareCapitalBuildUp: totalScb,
-            totalPayment: totalAmountDue + totalScb,
-            balance: parseFloat(String(lastRow.balance)) || 0,
-            status: lastRow.status,
-            amountPaid: totalAmountPaid,
-          }];
-        }
-        // Compute running principal balance ourselves; backend often returns 0
-        // for `remaining_balance`, which leaves the Balance column blank.
-        // Starts at the full loan principal and decreases by each row's principal portion.
-        let runningBalance = Number(loan.principal_amount ?? 0);
-        return apiSchedule.map((row, idx) => {
-          const rowPrincipal = parseFloat(String(row.principal)) || 0;
-          const apiBalance = parseFloat(String(row.balance)) || 0;
-          runningBalance = Math.max(0, runningBalance - rowPrincipal);
-          return {
-            period: idx + 1,
-            dueDate: new Date(row.due_date),
-            principal: rowPrincipal,
-            interest: parseFloat(String(row.interest)) || 0,
-            shareCapitalBuildUp: scb,
-            totalPayment: (parseFloat(String(row.amount_due)) || 0) + scb,
-            balance: apiBalance > 0 ? apiBalance : runningBalance,
-            status: row.status,
-            amountPaid: parseFloat(String(row.amount_paid)) || 0,
-          };
-        });
-      }
-      // Fallback to client-side generation
-      const termVal = loan.term ?? loan.term_months ?? 0;
-      const freqVal = freq as Parameters<typeof generateSchedule>[3];
-      const methodVal = (loan.interest_method ?? loan.interest_type ?? "fixed") as Parameters<typeof generateSchedule>[4];
-      return generateSchedule(
-        loan.principal_amount,
-        loan.interest_rate,
-        termVal,
-        freqVal,
-        methodVal,
-        new Date(relDate),
-        scb,
-      );
-    }
-
-    if (isPreRelease) {
-      const termVal = loan.term ?? loan.term_months ?? 0;
-      const freqVal = (loan.frequency ?? loan.payment_frequency ?? "monthly") as Parameters<typeof generateSchedule>[3];
-      const methodVal = (loan.interest_method ?? loan.interest_type ?? "fixed") as Parameters<typeof generateSchedule>[4];
-      const startDate = loan.start_date ? new Date(loan.start_date) : new Date();
-
-      // Use server preview only when it includes a principal/interest breakdown.
-      // The preview endpoint sometimes returns amount_due only (principal=0, interest=0)
-      // for newly created draft loans — in that case fall back to client-side generation.
-      const hasBreakdown = previewSchedule && previewSchedule.length > 0 &&
-        previewSchedule.some(r => (parseFloat(String(r.principal)) || 0) > 0 || (parseFloat(String(r.interest)) || 0) > 0);
-
-      if (hasBreakdown && previewSchedule) {
-        let runningBalance = Number(loan.principal_amount ?? 0);
-        return previewSchedule.map((row, idx) => {
-          const rowPrincipal = parseFloat(String(row.principal)) || 0;
-          const apiBalance = parseFloat(String(row.balance)) || 0;
-          runningBalance = Math.max(0, runningBalance - rowPrincipal);
-          return {
-            period: idx + 1,
-            dueDate: new Date(row.due_date),
-            principal: rowPrincipal,
-            interest: parseFloat(String(row.interest)) || 0,
-            shareCapitalBuildUp: scb,
-            totalPayment: (parseFloat(String(row.amount_due)) || 0) + scb,
-            balance: apiBalance > 0 ? apiBalance : runningBalance,
-            status: row.status,
-            amountPaid: parseFloat(String(row.amount_paid)) || 0,
-          };
-        });
-      }
-      // Client-side generation as primary fallback
-      if (!termVal || !loan.principal_amount || !loan.interest_rate) return [];
-      return generateSchedule(
-        loan.principal_amount,
-        loan.interest_rate,
-        termVal,
-        freqVal,
-        methodVal,
-        startDate,
-        scb,
-      );
-    }
-
-    return [];
-  }, [loan?.principal_amount, loan?.interest_rate, loan?.term, loan?.term_months, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, loan?.scb_amount, loan?.released_at, loan?.start_date, loan?.release_date, loan?.status, apiSchedule, previewSchedule]);
-
-  // Single source of truth for the interest still OWED on the loan — used both
-  // to decide whether to collect it before extending, and to render the
-  // "Interest Due" amount in the Extend dialog.
-  //
-  // This must be the OUTSTANDING interest, not the gross interest_due. It is
-  // computed from the raw amortization rows as Σ max(0, interest_due −
-  // interest_paid) over every not-fully-paid period. The gross sum (what the
-  // collapsed upon-maturity row exposes) re-charges interest already collected
-  // in earlier periods: after the backend's /extend carries a settled period
-  // forward alongside a new one, a 2nd extension would bill period-1's interest
-  // again. Netting out interest_paid per row means a settled period contributes
-  // 0, so extension N collects exactly period-N's still-unpaid interest.
-  //
-  // Rounded to centavos so the displayed figure and the posted amount match to
-  // the last decimal (formatCurrencyPrecise shows the same value we charge).
-  const currentInterestDue = useMemo(() => {
-    if (rawSchedule && rawSchedule.length > 0) {
-      const outstanding = rawSchedule.reduce((sum, row) => {
-        const due = parseFloat(String(row.interest_due ?? 0)) || 0;
-        const paid = parseFloat(String(row.interest_paid ?? 0)) || 0;
-        return sum + Math.max(0, due - paid);
-      }, 0);
-      return Math.round(outstanding * 100) / 100;
-    }
-    // No raw API rows (client-generated schedule): nothing has been paid yet,
-    // so the first open period's interest is the full amount owed.
-    const fallback = storedSchedule.find((row) => row.status !== "paid")?.interest ?? 0;
-    return Math.round(fallback * 100) / 100;
-  }, [rawSchedule, storedSchedule]);
-
-  /**
-   * What the new period will owe in interest if the outstanding amount is
-   * deferred: today's unpaid interest plus one fresh cycle on the unpaid
-   * principal. Mirrors LoanAdjustmentService::extendLoan, which charges a flat
-   * `principal × rate` per cycle regardless of how many days the cycle spans.
-   *
-   * Display only — the API recomputes it. Null when the figures needed aren't
-   * available, so the dialog omits the line rather than showing a wrong total.
-   */
-  const extendDeferredInterestTotal = useMemo(() => {
-    const rate = parseFloat(String(loan?.interest_rate ?? 0)) || 0;
-    if (!rate || !rawSchedule || rawSchedule.length === 0) return null;
-
-    const outstandingPrincipal = rawSchedule.reduce((sum, row) => {
-      const due = parseFloat(String(row.principal_due ?? 0)) || 0;
-      const paid = parseFloat(String(row.principal_paid ?? 0)) || 0;
-      return sum + Math.max(0, due - paid);
-    }, 0);
-
-    const fresh = Math.round(outstandingPrincipal * (rate / 100) * 100) / 100;
-    return Math.round((currentInterestDue + fresh) * 100) / 100;
-  }, [rawSchedule, loan?.interest_rate, currentInterestDue]);
-
-  const storedScheduleTotals = useMemo(() => {
-    return storedSchedule.reduce(
-      (acc, row) => ({
-        principal: acc.principal + row.principal,
-        interest: acc.interest + row.interest,
-        shareCapitalBuildUp: acc.shareCapitalBuildUp + row.shareCapitalBuildUp,
-        totalPayment: acc.totalPayment + row.totalPayment,
-      }),
-      { principal: 0, interest: 0, shareCapitalBuildUp: 0, totalPayment: 0 },
-    );
-  }, [storedSchedule]);
-
-  // Remaining-due totals for the Schedule tab footer — excludes fully-paid periods.
-  const scheduleRemainingTotals = useMemo(() => {
-    return storedSchedule.reduce(
-      (acc, row) => {
-        if (row.status === "paid") return acc;
-        return {
-          principal: acc.principal + row.principal,
-          interest: acc.interest + row.interest,
-          shareCapitalBuildUp: acc.shareCapitalBuildUp + row.shareCapitalBuildUp,
-          totalPayment: acc.totalPayment + row.totalPayment,
-        };
-      },
-      { principal: 0, interest: 0, shareCapitalBuildUp: 0, totalPayment: 0 },
-    );
-  }, [storedSchedule]);
-
-  // Opening running-balance per period: how much Principal / Interest / SCB
-  // is still owed at the START of period N (before that period's payment).
-  // First row shows the full original obligation; last row shows what the
-  // final payment will settle; after the term everything reaches zero.
-  const balancesRows = useMemo(() => {
-    if (storedSchedule.length === 0) return [];
-    let remainingPrincipal = storedScheduleTotals.principal;
-    let remainingInterest = storedScheduleTotals.interest;
-    let remainingScb = storedScheduleTotals.shareCapitalBuildUp;
-    return storedSchedule.map((row) => {
-      const opening = {
-        principal: remainingPrincipal,
-        interest: remainingInterest,
-        scb: remainingScb,
-        total: remainingPrincipal + remainingInterest + remainingScb,
-      };
-      remainingPrincipal = Math.max(0, remainingPrincipal - row.principal);
-      remainingInterest = Math.max(0, remainingInterest - row.interest);
-      remainingScb = Math.max(0, remainingScb - row.shareCapitalBuildUp);
-      return { ...row, opening };
+    if (!loan?.id || !scheduleRows) return [];
+    const freq = loan?.frequency ?? loan?.payment_frequency ?? "monthly";
+    return toDisplaySchedule(scheduleRows, {
+      isUponMaturity:
+        freq === "upon_maturity" || loan?.interest_method === "upon_maturity" || loan?.interest_type === "upon_maturity",
+      totals: storedScheduleTotals,
     });
-  }, [storedSchedule, storedScheduleTotals.principal, storedScheduleTotals.interest, storedScheduleTotals.shareCapitalBuildUp]);
+  }, [loan?.id, loan?.frequency, loan?.payment_frequency, loan?.interest_method, loan?.interest_type, storedScheduleTotals, scheduleRows]);
+  // The build-up columns show when the loan carries a build-up or the server
+  // totals one; a figure the server did not send in them is a dash.
+  const scheduleHasScb = (loan?.scb_amount ?? 0) > 0 || (storedScheduleTotals.shareCapitalBuildUp ?? 0) > 0;
 
-  // Ledger rows: repayments merged with debit/credit ledger entries (interest
-  // a loan extension accrues or collects), sorted by date so the table reads
-  // as one chronological history with running Principal/Interest/SCB balances.
-  const ledgerRows = useMemo(() => {
-    const principalStart = loan?.principal_amount ?? 0;
-    const scbStart = storedScheduleTotals.shareCapitalBuildUp;
-
-    // The API's category can widen to "principal" / "penalty" later even
-    // though only "interest" entries exist today (see LoanLedgerEntry) — this
-    // table only has an Interest debit/credit pair to put them in, so entries
-    // in some other category are left out rather than mislabeled as interest.
-    const interestEntries = ledgerEntries.filter((e) => e.category === "interest");
-
-    // A "pay" extension collects interest through a real Repayment AND logs
-    // the same money again as a credit ledger entry (linked via
-    // repayment_id) so it carries a description. Keep the ledger entry — it's
-    // the one with the description — and drop the repayment it stands in
-    // for, or that collection would render, and count, twice.
-    const creditedRepaymentIds = new Set(
-      interestEntries.map((e) => e.repayment_id).filter((id): id is number => id != null),
-    );
-    const keptRepayments = repayments.filter((r) => !creditedRepaymentIds.has(r.id));
-
-    const repaymentRows: LedgerDisplayRow[] = keptRepayments.map((r) => ({
-      key: `repayment-${r.id}`,
-      date: r.payment_date,
-      createdAt: r.created_at,
-      refNo: (r as Repayment & { receipt_number?: string }).receipt_number ?? `OR-${String(r.id).padStart(6, "0")}`,
-      remarks: r.remarks || "payment",
-      principalPaid: r.principal_paid,
-      interestCredit: r.interest_paid,
-      penaltyPaid: r.penalty_paid,
-      scbPaid: r.scb_paid,
-      excessAmount: r.excess_amount,
-      totalPaid: r.amount_paid,
-      status: r.status,
-      repaymentId: r.id,
-      principalBal: 0,
-      interestBal: 0,
-      scbBal: 0,
-    }));
-
-    const ledgerEntryRows: LedgerDisplayRow[] = interestEntries.map((e) => ({
-      key: `ledger-${e.id}`,
-      date: e.entry_date,
-      createdAt: e.created_at,
-      refNo: "—",
-      remarks: e.description,
-      interestDebit: e.type === "debit" ? e.amount : undefined,
-      interestCredit: e.type === "credit" ? e.amount : undefined,
-      // A credit here IS the cash collection (its Repayment twin was dropped
-      // above), so it belongs in Total Paid too; a debit moves no cash.
-      totalPaid: e.type === "credit" ? e.amount : undefined,
-      principalBal: 0,
-      interestBal: 0,
-      scbBal: 0,
-    }));
-
-    const sorted = [...repaymentRows, ...ledgerEntryRows].sort((a, b) => {
-      const byDate = new Date(a.date).getTime() - new Date(b.date).getTime();
-      if (byDate !== 0) return byDate;
-      // Same-day tiebreaker: a debit and its paired credit share an entry_date,
-      // so fall back to creation order to keep them in a stable, sensible sequence.
-      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-    });
-
-    // Interest must walk FORWARD — a debit (extension interest accruing)
-    // raises what's owed; a credit or repayment lowers it — unlike
-    // Principal/SCB, which only ever go down. The API only ever debits
-    // extension interest; the loan's origination interest was never posted
-    // as a ledger entry, so this can't start at 0 either. Instead, solve for
-    // the opening balance that makes the LAST row land exactly on
-    // currentInterestDue — this file's own "single source of truth" for what's
-    // actually still owed (see its definition above). storedScheduleTotals.interest
-    // is deliberately NOT the anchor here even though it seeds the Interest
-    // column of the static "Loan released" row above: it's a gross, never-paid-down
-    // total (Σ interest_due across every period the schedule has ever had), so
-    // once anything has been paid it no longer equals what's outstanding today —
-    // anchoring to it would land the last row on a number too high by whatever's
-    // already been paid off. currentInterestDue nets paid amounts out already, so:
-    //
-    //   opening = currentInterestDue − debits + credits + interest paid
-    //
-    // and re-applying every debit/credit/payment below recreates that same
-    // closing figure at the end of the walk — verified against worked examples
-    // covering a bare "pay" extension and a "defer" extension stacked after one,
-    // both landing exactly on currentInterestDue.
-    const round2 = (n: number) => Math.round(n * 100) / 100;
-    const debitTotal = interestEntries.reduce((s, e) => s + (e.type === "debit" ? e.amount : 0), 0);
-    const creditTotal = interestEntries.reduce((s, e) => s + (e.type === "credit" ? e.amount : 0), 0);
-    const paidTotal = keptRepayments.reduce((s, r) => s + (r.interest_paid ?? 0), 0);
-
-    let principalBal = principalStart;
-    let interestBal = round2(currentInterestDue - debitTotal + creditTotal + paidTotal);
-    let scbBal = scbStart;
-
-    return sorted.map((row) => {
-      principalBal = Math.max(0, principalBal - (row.principalPaid ?? 0));
-      scbBal = Math.max(0, scbBal - (row.scbPaid ?? 0));
-      interestBal = round2(interestBal + (row.interestDebit ?? 0) - (row.interestCredit ?? 0));
-      return { ...row, principalBal, interestBal, scbBal };
-    });
-  }, [repayments, ledgerEntries, loan?.principal_amount, currentInterestDue, storedScheduleTotals.shareCapitalBuildUp]);
+  // The payments the Ledger rows name, for each row's receipt number, amount
+  // paid and Void button.
+  const repaymentsById = useMemo(() => new Map(repayments.map((r) => [r.id, r])), [repayments]);
 
   // Fetch borrower's other active loans when viewing a loan under approval.
   // This lets approvers see the borrower's existing obligations.
@@ -1526,20 +1374,23 @@ export default function LoanDetailPage({
   // ever examined the borrower's 50 newest loans: a member whose recent history
   // is a run of `completed` loans pushed every live one off that page and the
   // card rendered "No other active loans" over real, outstanding debt.
+  //
+  // Keyed on the RESOLVED borrower id, the value the request actually uses, so
+  // a loan payload that names the member only by `borrower_id` is not taken
+  // for a change of member.
+  const loanBorrowerId = loan?.borrower?.id ?? loan?.borrower_id;
   useEffect(() => {
-    if (!loan) return;
-    const borrowerId = loan.borrower?.id ?? loan.borrower_id;
-    if (!borrowerId) return;
+    if (!loanBorrowerId) return;
     let cancelled = false;
     setBorrowerLoansLoading(true);
     setBorrowerLoansTruncated(false);
     loanService
-      .obligationsForBorrower(borrowerId)
+      .obligationsForBorrower(loanBorrowerId)
       .then(({ rows, truncated }) => {
         if (cancelled) return;
         // Every row here is already an obligation; the only thing left to drop
         // is the loan being viewed, which is display logic rather than a filter.
-        setBorrowerLoans(rows.filter((l) => l.id !== loan.id));
+        setBorrowerLoans(rows.filter((l) => l.id !== loadedLoanId));
         setBorrowerLoansTruncated(truncated);
       })
       .catch(() => {
@@ -1555,7 +1406,7 @@ export default function LoanDetailPage({
     return () => {
       cancelled = true;
     };
-  }, [loan?.id, loan?.borrower?.id, loan?.borrower_id]);
+  }, [loanBorrowerId, loadedLoanId]);
 
   // Valid send-back targets for the current approver: every earlier step
   // whose kind is "submit" (Loan Processor) or "approve" (a prior approver).
@@ -1592,23 +1443,11 @@ export default function LoanDetailPage({
     }
   }, [sendBackTargets]);
 
-  const isLocked = loan ? ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status) : false;
-  // Statuses for which the backend has schedule / repayment / adjustment data —
-  // the SAME set fetchSchedule/fetchRepayments/fetchAdjustments use. Unlike
-  // isLocked, this includes `current` and `past_due` (the primary active
-  // states), so the Adjustments & History card shows for loans that can be
-  // extended/adjusted, not just terminal ones.
-  const hasServerLoanData = loan
-    ? ["released", "ongoing", "current", "past_due", "completed", "defaulted", "restructured", "closed"].includes(loan.status)
-    : false;
+  const isLocked = hasServerLoanData;
 
   // Resolve actual API field names with fallbacks to legacy flat fields
   const loanBorrowerName = loan?.borrower?.full_name ?? loan?.borrower?.name ?? loan?.borrower_name ?? "";
-  const loanCoMakerName = (() => {
-    const cm = loan?.co_makers?.[0];
-    if (!cm) return loan?.co_maker_name ?? "";
-    return cm.full_name ?? cm.name ?? ([cm.first_name, cm.middle_name, cm.last_name, cm.suffix].filter(Boolean).join(" ") || "");
-  })();
+  const loanCoMakers = loan?.co_makers ?? [];
   const loanProductName = loan?.loan_product?.name ?? loan?.loan_product_name ?? "";
   const loanInterestType = loan?.interest_method ?? loan?.interest_type ?? "";
   const loanTerm = loan?.term ?? loan?.term_months ?? 0;
@@ -1617,24 +1456,22 @@ export default function LoanDetailPage({
   // keeps a rolled-forward loan from reading as if it had a longer original
   // term than the borrower agreed to.
   const loanExtensionCount = loan?.extension_count ?? 0;
+  const loanTermUnit = readTermUnit(loan?.term_unit);
+  const loanTermUnitWord =
+    loanTermUnit === "days" ? (loanTerm === 1 ? "day" : "days") : (loanTerm === 1 ? "month" : "months");
   const loanTermLabel =
-    `${loanTerm} ${loanTerm === 1 ? "month" : "months"}` +
+    `${loanTerm} ${loanTermUnitWord}` +
     (loanExtensionCount > 0 ? ` · extended ×${loanExtensionCount}` : "");
   const loanFrequency = loan?.frequency ?? loan?.payment_frequency ?? "";
-  // Extend-dialog preview: the extend endpoint always moves the due date
-  // forward by exactly one cycle (1 month for upon-maturity loans, matching
-  // the SCB build-up and computedMaturityDate math elsewhere on this page).
-  // This is display-only — it does not drive the actual extend() call.
-  const extendCurrentMaturity = loan?.maturity_date ?? loanSummary?.next_due_date ?? loan?.next_due_date;
-  const extendPreviewMaturityDate = extendCurrentMaturity
-    ? addMonths(new Date(extendCurrentMaturity), 1)
-    : null;
+  // A term extension adds instalments. Those are months only when the loan
+  // steps by calendar month; otherwise they are the loan's own payment periods.
+  const extendsByMonth = stepsByCalendarMonth(loanTermUnit, loanFrequency || "monthly");
   // Backend stores `deductions` as an array of {name, amount, type} objects
   // (LoanService::computeDeductions). Earlier code assumed it was an object
   // keyed by fee name and silently fell through to 0 for every fee, which
   // collapsed all fees into the "Other Deductions" bucket on the UI.
-  const deductionsArray: Array<{ name?: string; amount?: number | string }> = Array.isArray(loan?.deductions)
-    ? (loan.deductions as Array<{ name?: string; amount?: number | string }>)
+  const deductionsArray: Array<{ name?: string; amount?: number | string } & FormulaSnapshotItem> = Array.isArray(loan?.deductions)
+    ? (loan.deductions as Array<{ name?: string; amount?: number | string } & FormulaSnapshotItem>)
     : [];
   const findDeductionAmount = (name: string): number => {
     const match = deductionsArray.find((d) => (d?.name ?? "").toLowerCase() === name.toLowerCase());
@@ -1642,28 +1479,69 @@ export default function LoanDetailPage({
   };
   const loanProcessingFee = findDeductionAmount("Processing Fee");
   const loanServiceFee = findDeductionAmount("Service Fee");
-  const loanNotarialFee = findDeductionAmount("Notarial Fee");
-  const knownDeductionTotal = loanProcessingFee + loanServiceFee + loanNotarialFee;
-  const loanOtherDeductions = Math.max(0, (loan?.total_deductions ?? 0) - knownDeductionTotal);
-  const loanReleaseDate = loan?.released_at ?? loan?.start_date ?? loan?.release_date;
-  const loanApprovedBy = loan?.approved_by_user?.full_name ?? loan?.approved_by_user?.name ?? loan?.approved_by;
-  const loanReleasedBy = loan?.released_by_user?.full_name ?? loan?.released_by_user?.name ?? loan?.released_by;
-  const loanRejectedBy = loan?.rejected_by_user?.full_name ?? loan?.rejected_by_user?.name ?? loan?.rejected_by;
-  // total_payable from API is computed by summing amortization_schedules. For
-  // unreleased loans (draft/for_review/approved) those rows don't exist yet,
-  // so the API returns 0. Fall back to a straight-line projection — same math
-  // the loan-creation form uses for its preview — so the value matches what
-  // the user expected when they filled out the form.
-  const expectedInterest =
-    Number(loan?.principal_amount ?? 0) * (Number(loan?.interest_rate ?? 0) / 100) * Number(loan?.term ?? 0);
-  const loanTotalPayable =
-    Number(loan?.total_payable ?? 0) > 0
-      ? Number(loan!.total_payable)
-      : storedSchedule.length > 0
-        ? storedSchedule.reduce((sum, r) => sum + r.totalPayment, 0)
-        : Number(loan?.principal_amount ?? 0) + expectedInterest;
-  const loanInterestAmount =
-    storedScheduleTotals.interest > 0 ? storedScheduleTotals.interest : expectedInterest;
+  // Total Payable is the server's amount still owed (never Share Capital
+  // Build-Up), a dash before release; the contract total is its own line.
+  // Neither falls back to the schedule's total payment.
+  const { totalPayable: loanTotalPayable, contractTotal: loanContractTotal } = totalPayableFigures(loan);
+  // Everything still owed, premium included, from the summary or the loan
+  // (the same figure on both); a dash when neither sent it.
+  const loanTotalOutstanding = totalOutstanding(loanSummary, loan);
+  // "Penalty: N month(s) late": the summary's own penalty and count, worded only.
+  const summaryPenaltyNote = penaltyMonthsNote(loanSummary?.penalty_amount, loanSummary?.penalty_months);
+  // Under Total Paid on an imported loan: what its file says was paid before
+  // the import, which Total Paid holds; null on any other loan.
+  const totalPaidNote = paidBeforeImportNote(loanSummary?.paid_before_import);
+  // The cooperative's own Loan No. in the file an imported loan came in.
+  const fileLoanNo = importedLoanNo(loan);
+  // Principal still owed, from the summary or the loan.
+  const loanPrincipalBalance = outstandingPrincipal(loanSummary, loan);
+  // Insurance premium left unpaid at release, still owed on the loan (part of
+  // the server's total_payable); null when none is.
+  const insuranceOwed = loanInsuranceOwed(loan);
+  // What the previewed payment will collect of it first; null when none.
+  const paymentPreviewInsurance = previewInsuranceApplied(paymentPreview);
+  // Where the preview's excess goes, by the same rule as Payment Entry: the
+  // server's split when sent, else the loan's own build-up, else "Excess".
+  const paymentExcessTiles = paymentPreview ? previewExcessTiles(paymentPreview, loanHasBuildUp(loan?.scb_amount)) : [];
+  const paymentExcessCells = paymentPreview ? previewExcessCells(paymentPreview, loanHasBuildUp(loan?.scb_amount)) : [];
+  // What a payment must be today to clear the premium owed and the first
+  // open period, with its parts: the server's, null when it sent none.
+  const amountDueNow = readAmountDueNow(loan?.amount_due_now);
+  // The figure is as of today: another payment date shows a dash.
+  const amountDueOnPaymentDate = dueNowOnDate(amountDueNow, formatDateISO(paymentDate), todayISO());
+  // The amount typed, checked for centavos: more than two decimals shows a
+  // message and sends neither the preview nor the payment (the server
+  // refuses it too).
+  const paymentAmountCheck = checkPaymentAmount(paymentAmount);
+  const paymentReferenceProblem = paymentReferenceError(paymentMethod, paymentReference);
+  // An imported loan's file already counts payments up to this day: the
+  // picker blocks it and every day before, and says why.
+  const countedUntil = paymentsCountedUntil(loan);
+  const paymentDayIsCounted = paymentDayBlocked(formatDateISO(paymentDate), countedUntil);
+  const paymentDateError =
+    paymentDateServerError !== null && paymentDateServerError.day === formatDateISO(paymentDate)
+      ? paymentDateServerError.message
+      : null;
+  // The server refused the amount and date typed now: posting them would be
+  // refused too, so its reason shows and Record Payment waits for a change.
+  const paymentRefusal =
+    paymentPreviewRefusal !== null &&
+    paymentPreviewRefusal.key === previewRequestKey(Number(paymentAmount), formatDateISO(paymentDate))
+      ? paymentPreviewRefusal.message
+      : null;
+  // The preview on screen answers exactly the amount and date typed now.
+  const paymentPreviewCurrent = previewIsCurrent(
+    { answeredKey: paymentPreviewKey, loading: paymentPreviewLoading },
+    Number(paymentAmount),
+    formatDateISO(paymentDate),
+  );
+  // The server's contract interest (a restructured source's original
+  // contract's, so Principal + Interest = Contract Total), else the stored
+  // schedule's interest total: ₱0.00 when it is 0, a dash when not sent.
+  const loanInterestAmount: number | null = interestAmountFigure(
+    loan,
+    storedSchedule.length === 0 ? null : storedScheduleTotals.interest,
+  );
 
   // Live-preview the repayment allocation as the user types the amount.
   // Mirrors the rich breakdown shown on /payments so cashiers see exactly
@@ -1671,26 +1549,41 @@ export default function LoanDetailPage({
   // settle before posting. Must sit ABOVE the early returns below to keep
   // hook order stable across renders.
   useEffect(() => {
-    if (!recordPaymentOpen || !loan) {
+    if (!recordPaymentOpen || !loan || !canViewPayments) {
       setPaymentPreview(null);
       return;
     }
-    const amt = Number(paymentAmount);
-    if (!paymentAmount || !Number.isFinite(amt) || amt <= 0) {
+    const amt = checkPaymentAmount(paymentAmount).amount;
+    if (amt === null || amt <= 0) {
       setPaymentPreview(null);
       return;
     }
     let cancelled = false;
     setPaymentPreviewLoading(true);
     const handle = setTimeout(async () => {
+      const paymentDateISO = formatDateISO(paymentDate);
       try {
         const res = await repaymentService.preview(loan.id, {
           amount_paid: amt,
-          payment_date: formatDateISO(paymentDate),
+          payment_date: paymentDateISO,
         });
-        if (!cancelled) setPaymentPreview(res ?? null);
-      } catch {
-        if (!cancelled) setPaymentPreview(null);
+        if (!cancelled) {
+          setPaymentPreview(res ?? null);
+          setPaymentPreviewKey(previewRequestKey(amt, paymentDateISO));
+          setPaymentPreviewFailedKey(null);
+          setPaymentPreviewRefusal(null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          const key = previewRequestKey(amt, paymentDateISO);
+          const refusal = previewRefusalMessage(err);
+          const dateRefusal = paymentDateRefusal(validationErrors(err));
+          if (dateRefusal !== null) setPaymentDateServerError({ day: paymentDateISO, message: dateRefusal });
+          setPaymentPreview(null);
+          setPaymentPreviewKey(null);
+          setPaymentPreviewFailedKey(key);
+          setPaymentPreviewRefusal(refusal === null ? null : { key, message: refusal });
+        }
       } finally {
         if (!cancelled) setPaymentPreviewLoading(false);
       }
@@ -1699,123 +1592,170 @@ export default function LoanDetailPage({
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [recordPaymentOpen, loan, paymentAmount, paymentDate]);
+  }, [recordPaymentOpen, loan, paymentAmount, paymentDate, canViewPayments, paymentPreviewRound]);
+
+  // A document is printed in its own tab. While a printed one is out of date,
+  // read the loan again each time staff come back to this tab, so the notice
+  // and the held Release clear once the reprint is recorded. Never on a timer.
+  const rereadLoan = () => loadLoan(loanId, loan ?? null).then(setLoan);
+  useRereadOnReturn(outdatedPrints(loan).length > 0, rereadLoan);
 
   if (loading) {
-    return (
-      <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
-        <Spinner className="size-6 text-muted-foreground" />
-      </div>
-    );
+    return <PageLoader />;
   }
 
   if (!loan) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 gap-4">
-        <AlertCircle className="h-12 w-12 text-muted-foreground" />
-        <h2 className="text-xl font-semibold">Loan Not Found</h2>
-        <p className="text-muted-foreground">
-          The loan application you&apos;re looking for does not exist.
-        </p>
-        <Link href="/loans">
-          <Button variant="outline">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Loans
-          </Button>
-        </Link>
-      </div>
+    return loadFailure?.kind === "failed" ? (
+      <LoanLoadFailed message={loadFailure.message} onRetry={reloadLoan} />
+    ) : (
+      <LoanNotFound />
     );
   }
 
-  const handleSubmitForReview = async () => {
-    try {
-      setActionLoading(true);
-      const updated = await loanService.submit(loan.id);
-      setLoan(await resolveLoan(loan, updated));
-      toast.success("Loan submitted for review");
-      setSubmitOpen(false);
-    } catch {
-      toast.error("We couldn't submit the loan for review. Please try again.");
-    } finally {
-      setActionLoading(false);
-    }
-  };
+  // Printed documents whose terms changed since they were printed, from the
+  // server: the notice names them, and Release waits until they are printed
+  // again (the server refuses it until then).
+  const outdatedDocuments = outdatedPrints(loan);
+  const reprintNoticeText = reprintNotice(outdatedDocuments);
+  const releaseHeldReason = releaseBlockedReason(outdatedDocuments);
 
-  const handleApprove = async () => {
-    try {
-      setActionLoading(true);
-      const updated = await loanService.approve(loan.id, {
-        approval_remarks: approvalRemarks || undefined,
-      });
-      setLoan(await resolveLoan(loan, updated));
-      toast.success("Loan approved");
-      setApprovalRemarks("");
-      setApproveOpen(false);
-    } catch (err) {
-      notifyError(err, "We couldn't approve this loan. Please try again.");
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleReject = async () => {
-    if (!rejectionRemarks.trim()) return;
-    try {
-      setActionLoading(true);
-      const updated = await loanService.reject(loan.id, {
-        approval_remarks: rejectionRemarks,
-      });
-      setLoan(await resolveLoan(loan, updated));
-      toast.success("Loan rejected");
-      setRejectionRemarks("");
-      setRejectOpen(false);
-    } catch (err) {
-      notifyError(err, "We couldn't reject this loan. Please try again.");
-    } finally {
-      setActionLoading(false);
-    }
-  };
+  // What the release will store, from the server (see `releaseConfirmView`).
+  // Null until the right answer is in for what is typed now, and Confirm
+  // Release stays off until then.
+  const releaseAnswer = releaseConfirm.status === "ready" ? releaseConfirm.answer : null;
+  const releaseExceedsNet = releaseAnswer?.exceeds_net_proceeds === true;
+  // A restructure pays nothing out: the dialog shows how the release settles
+  // the old loan, from the server's `restructure` block, instead of a net, and
+  // its method is how the deductions were collected from the member.
+  const releaseView = releaseDialogView(loan.is_restructure, releaseAnswer);
+  const releaseRestructureRows = releaseView.restructureRows;
+  const releaseReferenceProblem = paymentReferenceError(
+    releaseMethod,
+    releaseReference,
+    releaseView.referenceSubject,
+  );
+  const canConfirmRelease =
+    releaseAnswer !== null && !releaseExceedsNet && releaseReferenceProblem === null && !actionLoading;
+  const loanReleaseMethod = releaseMethodDetails(loan);
+  // Changes made in the dialog after a print: an insurance premium the printed
+  // disclosure statement doesn't show, a co-maker the printed promissory note
+  // doesn't name. Reminders to print it again after release; Confirm Release
+  // never waits on them.
+  const releaseInsuranceReminder = insuranceReprintReminder(releaseInsurance, loan);
+  const releaseCoMakerReminder = coMakerReprintReminder(loan, currentUser?.id ?? null);
 
   const handleRelease = async () => {
+    if (releaseAnswer === null || !canConfirmRelease) return;
+    setActionLoading(true);
     try {
-      setActionLoading(true);
-      const { totalPremium, upfrontDeduction, remainingBalance } =
-        computeInsurancePremium(
-          Number(loan.principal_amount) || 0,
-          insurancePremium,
-        );
-      const releasePayload = {
-        insurance_premium_percentage: Number(insurancePremium.percentage) || 0,
-        insurance_premium_amount: totalPremium,
-        insurance_payment_type: insurancePremium.paymentType,
-        insurance_partial_amount:
-          insurancePremium.paymentType === "partial" ? upfrontDeduction : 0,
-        insurance_remaining_balance: remainingBalance,
-      };
-      await loanService.release(loan.id, releasePayload);
-      // Refetch the full loan detail rather than trusting the PATCH body —
-      // the GET endpoint returns the complete server state (deductions
-      // including the insurance premium added on release, total_deductions,
-      // net_proceeds, and embedded relations).
-      const updated = await loanService.detail(loan.id);
-      setLoan(await resolveLoan(loan, updated));
-      toast.success("Loan released");
-      setReleaseOpen(false);
-      setInsurancePremium(INSURANCE_PREMIUM_INITIAL);
-      setAutoPayIsPostRelease(true);
-      setAutoPayDialogOpen(true);
-      // Fetch the server-generated schedule
-      fetchSchedule(loan.id);
-      // Re-read the chain rather than marking the release step approved here.
-      // Releasing is a server-side event; whether it closes the release step is
-      // the server's call to record and ours to display.
-      void refreshApproval();
+      // The fingerprint of the fees quoted on screen: if they have changed
+      // since, the server refuses the release (409) rather than pay out a
+      // different amount from the one the cashier just read. The premium sent
+      // is the server's own from the same answer; it refuses any other (422).
+      // How the proceeds are paid out goes with it, for the release journal.
+      await loanService.release(
+        loan.id,
+        releaseRequest(releaseInsurance, releaseAnswer, releaseMethod, releaseReference),
+      );
     } catch (err) {
       console.error("[release] failed", err instanceof AxiosError ? { status: err.response?.status, data: err.response?.data } : err);
-      notifyError(err, "We couldn't release this loan. Please try again.");
-    } finally {
+      const conflict = releaseConflictOf(err);
+      if (conflict === "fees_changed") {
+        // Nothing was released: the fees changed after they were quoted. Quote
+        // them again, the insurance with them (its fingerprint is the one sent),
+        // and the dialog stays open on the new figures.
+        notifyError(
+          err,
+          "We couldn't release this loan. Please try again.",
+          "The release figures have been read again. Check them before confirming.",
+        );
+        rereadRelease();
+      } else if (conflict === "loan_changed") {
+        // Nothing was released: another request changed this loan first, or
+        // the two collided and this one was rolled back. Read the loan again so
+        // the page shows where it now stands.
+        notifyError(
+          err,
+          "We couldn't release this loan. Please try again.",
+          "The loan has been read again.",
+        );
+        setReleaseOpen(false);
+        reloadLoan();
+      } else {
+        const documentsRefusal = releaseDocumentsRefusal(err);
+        if (documentsRefusal !== null) {
+          // Nothing was released: a printed document's terms changed since it
+          // was printed. Say so in the server's words, and read the loan again
+          // so the notice names the document and Release says why it's off.
+          toast.error(documentsRefusal);
+          setReleaseOpen(false);
+          void rereadLoan().catch(() => {});
+        } else {
+          notifyError(err, "We couldn't release this loan. Please try again.");
+        }
+      }
       setActionLoading(false);
+      return;
     }
+    // The loan is released. A failure from here on is only the re-read, and
+    // must not read as a failed release: trying again would be refused, the
+    // loan no longer being approved.
+    //
+    // Refetch the full loan detail rather than trusting the PATCH body — the
+    // GET endpoint returns the complete server state (deductions including the
+    // insurance premium added on release, total_deductions, net_proceeds, and
+    // embedded relations). The server-generated schedule, summary, payments,
+    // adjustments and ledger are then read once by the effects above, which run
+    // when the status enters the released set.
+    const reloaded = await loadLoan(loan.id, loan).catch(() => null);
+    setActionLoading(false);
+    setReleaseOpen(false);
+    setInsurancePremium(INSURANCE_PREMIUM_INITIAL);
+    toast.success("Loan released");
+    // Re-read the chain rather than marking the release step approved here.
+    // Releasing is a server-side event; whether it closes the release step is
+    // the server's call to record and ours to display.
+    void refreshApproval();
+    if (reloaded) {
+      setLoan(reloaded);
+      if (canToggleAutoPay) {
+        setAutoPayIsPostRelease(true);
+        setAutoPayDialogOpen(true);
+      }
+    } else {
+      notifyWarning("The page couldn't refresh", "Reload to see the released loan.");
+    }
+  };
+
+  const sendBackReasonProblem = sendBackReasonError(sendBackReason);
+
+  // An approved, unreleased restructure back into review, offered only on the
+  // server's `can_send_back_approved`. The loan and its chain are read again
+  // after, since the server reopened the chain.
+  const handleSendBackApproved = async () => {
+    if (sendBackReasonProblem !== null || sendBackApprovedLoading) return;
+    setSendBackApprovedLoading(true);
+    try {
+      await loanService.sendBackApproved(loan.id, sendBackApprovedPayload(sendBackReason));
+    } catch (err) {
+      notifyError(err, "We couldn't send this restructure back for approval. Please try again.");
+      if (sendBackFailureAction(err) === "reload") {
+        // The loan moved on meanwhile (released, voided, already sent back):
+        // show where it now stands.
+        setSendBackApprovedOpen(false);
+        reloadLoan();
+        void refreshApproval();
+      }
+      setSendBackApprovedLoading(false);
+      return;
+    }
+    const reloaded = await loadLoan(loan.id, loan).catch(() => null);
+    setSendBackApprovedLoading(false);
+    setSendBackApprovedOpen(false);
+    toast.success("Restructure sent back for approval");
+    void refreshApproval();
+    if (reloaded) setLoan(reloaded);
+    else notifyWarning("The page couldn't refresh", "Reload to see the loan back in approval.");
   };
 
   // ── Multi-step approval handlers ──
@@ -1832,6 +1772,11 @@ export default function LoanDetailPage({
   // used for exactly one thing: the `target_step_order` a send-back carries.
   const currentStepIndex = approvalSteps.findIndex((s) => s.status === "pending");
   const currentStep = currentStepIndex >= 0 ? approvalSteps[currentStepIndex] : null;
+  // The tracker's chain: the round's steps, with any step the server says it
+  // left out by its minimum principal in its place, muted (none before the
+  // server sends `left_out_steps`). Positions still count only the kept steps.
+  const approvalChain = approvalChainItems(approvalSteps, approvalLeftOut);
+  const leftOutSteps = approvalChain.flatMap((item) => (item.type === "left_out" ? [item] : []));
   const nextStep =
     currentStepIndex >= 0 ? approvalSteps[currentStepIndex + 1] ?? null : null;
   // Confirmation step = the last approve step (next step is release). Its button
@@ -1841,17 +1786,51 @@ export default function LoanDetailPage({
     currentStep?.kind === "approve" && nextStep?.kind === "release";
   const allStepsApproved =
     approvalSteps.length > 0 && approvalSteps.every((s) => s.status === "approved");
+  // Ready for release once every approver has signed off, unless a printed
+  // document is out of date: then it waits on the reprint, as Release does.
+  const releaseReady = releaseReadyState(readyForRelease(loan.status, allStepsApproved), outdatedDocuments);
   // THE SERVER DECIDES. `can_act` is the same rule the endpoints enforce,
   // evaluated for the requesting user; the client role check is only a fallback
   // for a payload that omits the flag.
   const canActOnCurrentStep = currentStep
-    ? currentStep.can_act ?? canUserActOnStep(currentStep, currentUser?.roles)
+    ? currentStep.can_act ?? canUserActOnStep(currentStep, currentUser)
     : false;
   // Advisory second opinion, used to disable the action buttons before the
   // round trip. It can only ever narrow what `can_act` offers, never widen it.
   const clientCanActOnCurrentStep = currentStep
-    ? canUserActOnStep(currentStep, currentUser?.roles)
+    ? canUserActOnStep(currentStep, currentUser)
     : false;
+  // The current step, forwarded to the signed-in user.
+  const currentStepIsMine =
+    !!currentStep?.assigned_to && currentStep.assigned_to.id === currentUser?.id;
+  // A step forwarded to someone else.
+  const currentStepForwardedElsewhere = !!currentStep?.assigned_to && !currentStepIsMine;
+  // The Chairman/Chairwoman may edit the loan at this step (the server's yes).
+  const showsApprovalEdit = offersApprovalEdit({
+    canEditInApproval,
+    loanStatus: loan.status,
+    currentStep,
+    state: approvalEditState,
+  });
+
+  // The pick and its error for the step on screen (a draft has none yet).
+  const forwardKey = currentStep ? String(currentStep.id) : "draft";
+  const forwardTo = forwardPickFor(forwardPick, forwardKey);
+  const forwardErrorMessage = forwardError?.key === forwardKey ? forwardError.message : null;
+  const signOffErrorMessage = signOffRefusalFor(signOffError, forwardKey);
+  const handleForwardChange = (userId: string, name: string) => {
+    setForwardPick({ key: forwardKey, userId, name });
+    setForwardError(null);
+  };
+  /** Keeps the server's 422 on the pick beside the picker; the toast says it too. */
+  const rememberForwardError = (err: unknown, key: string) => {
+    const message = forwardFieldError(err);
+    if (message) setForwardError({ key, message });
+  };
+  const clearForwardPick = () => {
+    setForwardPick({ key: "", userId: ANYONE_WITH_THE_ROLE });
+    setForwardError(null);
+  };
 
   /**
    * Re-read the loan AND its chain after acting on a step.
@@ -1863,10 +1842,10 @@ export default function LoanDetailPage({
   const refreshAfterStepAction = async () => {
     try {
       const [updated] = await Promise.all([
-        loanService.detail(loan.id),
+        loadLoan(loan.id, loan),
         refreshApproval(),
       ]);
-      setLoan(await resolveLoan(loan, updated));
+      setLoan(updated);
     } catch {
       // Swallowed on purpose. Reaching here means the ACTION succeeded and only
       // the re-read failed; letting this reject would have the caller report a
@@ -1879,6 +1858,20 @@ export default function LoanDetailPage({
     }
   };
 
+  // A step action answered 409: the step the button named isn't waiting any
+  // more. Nothing was recorded, so read the loan and its chain again to show
+  // where it now stands, then show the server's sentence. A failed re-read
+  // stays quiet: the sentence already says to reload.
+  const showStepConflict = async (message: string) => {
+    try {
+      const [updated] = await Promise.all([loadLoan(loan.id, loan), refreshApproval()]);
+      setLoan(updated);
+    } catch {
+      // The conflict toast below already tells the user to reload.
+    }
+    toast.error(message);
+  };
+
   /** Shared guard for the three step actions. Returns false once it has toasted. */
   // A draft whose chain has not been seeded yet: no steps, so no `currentStep`,
   // so every guard keyed on one silently refuses. Submit, Edit and Void all
@@ -1888,7 +1881,7 @@ export default function LoanDetailPage({
   const assertCanActOnStep = (verb: string): boolean => {
     if (!currentStep) return false;
     if (!canActOnCurrentStep || !clientCanActOnCurrentStep) {
-      toast.error(`Only a user with the ${currentStep.role} role can ${verb}`);
+      toast.error(notYourStepMessage(currentStep, roleLabel(currentStep.role), verb));
       return false;
     }
     return true;
@@ -1896,17 +1889,23 @@ export default function LoanDetailPage({
 
   // Edit Loan Application — available to the Loan Processor while the loan
   // is still a draft OR has been sent back by an approver. The button links
-  // to /loans/new?edit={id} so the full New Loan form is used for editing.
+  // to /loans/new?edit={id} so the full New Loan form is used for editing,
+  // and saving there is `PUT /loans/{id}`, which needs `loans:update`.
   const canEditLoanApplication =
+    canUpdateLoan &&
     !isLocked &&
     !isApprovalChainHidden(loan.status) &&
     (isUnseededDraft ||
       (!!currentStep && currentStep.kind === "submit" && canActOnCurrentStep));
 
+  // Who may send a draft for approval: `PATCH /loans/{id}/submit` takes
+  // `loans:update`, or `loans:restructure` for a restructure application.
+  const canSubmitDraft = canUpdateLoan || (!!loan.is_restructure && canRestructureLoan);
+
   // Loan Processor's submit step.
   //
   // Two different calls behind one button, chosen on the loan's server status:
-  //   * `draft`  → `loanService.submit()`. This is the draft → for_review hop,
+  //   * `draft`  → `loanApprovalService.submit()`. This is the draft → for_review hop,
   //     and it is what SEEDS the chain server-side. There is no chain to act on
   //     before it runs.
   //   * anything else → the loan is already `for_review` and has been sent back
@@ -1918,28 +1917,40 @@ export default function LoanDetailPage({
     // Guarding on one made the draft Submit button a silent no-op: it
     // rendered, it was enabled, and it returned on the first line.
     //
-    // Authorisation is the server's here rather than the client's: with no
-    // step there is no role to compare against, and `submit` is gated on
-    // `loans:update`, which the page cannot evaluate. A 403 surfaces through
-    // notifyError like any other failure.
+    // With no step there is no role to compare against. The button is shown
+    // only to `canSubmitDraft`, the rule `submit` enforces, and a 403 still
+    // surfaces through notifyError like any other failure.
     if (!isUnseededDraft) {
       if (!currentStep || currentStep.kind !== "submit") return;
       if (!assertCanActOnStep("submit the draft")) return;
     }
+    const key = forwardKey;
+    const forwardedName = forwardPickName(forwardPick, key);
     try {
       setStepActionLoading(true);
       if (loan.status === "draft") {
-        await loanService.submit(loan.id);
+        await loanApprovalService.submit(loan.id, withForwardTo({}, forwardTo));
       } else {
-        await loanApprovalService.approve(loan.id, currentStep!.id, {
-          remarks: stepRemarks.trim() || undefined,
-        });
+        await loanApprovalService.approve(
+          loan.id,
+          currentStep!.id,
+          withForwardTo({ remarks: stepRemarks.trim() || undefined }, forwardTo),
+        );
       }
       await refreshAfterStepAction();
       setStepRemarks("");
-      toast.success("Submitted for review");
+      clearForwardPick();
+      toast.success(
+        forwardedName ? `Submitted for approval. Forwarded to ${forwardedName}.` : "Submitted for approval"
+      );
     } catch (err) {
-      notifyError(err, "We couldn't submit for review. Please try again.");
+      const conflict = stepConflictMessage(err);
+      if (conflict) {
+        await showStepConflict(conflict);
+        return;
+      }
+      rememberForwardError(err, key);
+      notifyError(err, "We couldn't submit for approval. Please try again.");
     } finally {
       setStepActionLoading(false);
     }
@@ -1949,26 +1960,44 @@ export default function LoanDetailPage({
   //
   // One call. The server marks the step approved, moves the chain to the next
   // step, and on the LAST approve step takes `loans.status` to `approved` by
-  // itself — so this must NOT also call `loanService.approve()`, which is what
-  // the localStorage version did and what would now double-post the approval.
+  // itself — so this must NOT also call `PATCH /loans/{id}/approve`, which is
+  // what the localStorage version did and what would now double-post the approval.
   const handleStepApprove = async () => {
     if (!currentStep || currentStep.kind !== "approve") return;
     if (!assertCanActOnStep("approve this step")) return;
     const actedStepName = currentStep.name;
-    const forwardedTo = nextStep?.name;
+    const key = forwardKey;
+    const forwardedName = forwardPickName(forwardPick, key);
+    const forwardedTo = nextStep
+      ? forwardedName
+        ? `${forwardedName} (${nextStep.name})`
+        : nextStep.name
+      : undefined;
     try {
       setStepActionLoading(true);
-      await loanApprovalService.approve(loan.id, currentStep.id, {
-        remarks: stepRemarks.trim() || undefined,
-      });
+      setSignOffError(null);
+      await loanApprovalService.approve(
+        loan.id,
+        currentStep.id,
+        withForwardTo({ remarks: stepRemarks.trim() || undefined }, forwardTo),
+      );
       await refreshAfterStepAction();
       setStepRemarks("");
+      clearForwardPick();
       toast.success(
         forwardedTo
           ? `Approved by ${actedStepName}. Forwarded to ${forwardedTo}.`
           : `Approved by ${actedStepName}`
       );
     } catch (err) {
+      const conflict = stepConflictMessage(err);
+      if (conflict) {
+        await showStepConflict(conflict);
+        return;
+      }
+      rememberForwardError(err, key);
+      const refusal = signOffRefusal(err);
+      if (refusal) setSignOffError({ key, message: refusal });
       notifyError(err, "We couldn't record this approval. Please try again.");
     } finally {
       setStepActionLoading(false);
@@ -2006,6 +2035,11 @@ export default function LoanDetailPage({
         `${currentStep.name} sent the loan back to ${targetStep.name} for revision.`
       );
     } catch (err) {
+      const conflict = stepConflictMessage(err);
+      if (conflict) {
+        await showStepConflict(conflict);
+        return;
+      }
       notifyError(err, "We couldn't send this back for revision. Please try again.");
     } finally {
       setStepActionLoading(false);
@@ -2016,75 +2050,17 @@ export default function LoanDetailPage({
   // dialog. `handleRelease()` makes the real call and then refreshes the chain.
   const handleStepRelease = () => {
     if (!currentStep || currentStep.kind !== "release") return;
+    if (releaseHeldReason !== null) return;
     if (!assertCanActOnStep("release this loan")) return;
     setReleaseOpen(true);
   };
 
-  const handleAddSecondCoMaker = async () => {
-    if (!loan) return;
-    const borrowerId = loan.borrower?.id ?? loan.borrower_id;
-    if (!borrowerId) {
-      toast.error("Borrower not found");
-      return;
-    }
-    if (!newCoMaker.first_name.trim() || !newCoMaker.last_name.trim()) {
-      toast.error("First name and last name are required");
-      return;
-    }
-    try {
-      setAddingCoMaker(true);
-      const created = await coMakerService.create(borrowerId, {
-        first_name: newCoMaker.first_name.trim(),
-        last_name: newCoMaker.last_name.trim(),
-        contact_number: newCoMaker.contact_number.trim() || undefined,
-        relationship_to_borrower:
-          newCoMaker.relationship_to_borrower.trim() || undefined,
-      });
-      // Append to loan.co_makers so the Release Dialog reflects the new co-maker
-      setLoan((prev) => {
-        if (!prev) return prev;
-        const fullName =
-          created.full_name ??
-          [created.first_name, created.middle_name, created.last_name, created.suffix]
-            .filter(Boolean)
-            .join(" ");
-        const appended = {
-          id: created.id,
-          full_name: fullName,
-          address: created.address,
-          relationship:
-            created.relationship_to_borrower ?? created.relationship,
-        };
-        return { ...prev, co_makers: [...(prev.co_makers ?? []), appended] };
-      });
-      toast.success("Co-maker added");
-      setAddCoMakerOpen(false);
-      setNewCoMaker({
-        first_name: "",
-        last_name: "",
-        contact_number: "",
-        relationship_to_borrower: "",
-      });
-    } catch {
-      toast.error("We couldn't add the co-maker. Please try again.");
-    } finally {
-      setAddingCoMaker(false);
-    }
-  };
-
   // ── Repayment Handlers ──
 
-  // Whether the current loan qualifies for "Upon Maturity" extension flows.
-  // Mirrors the predicate used by storedSchedule (line ~1136).
-  const isUponMaturityLoan = (() => {
-    if (!loan) return false;
-    const freq = loan.frequency ?? loan.payment_frequency ?? "";
-    return (
-      freq === "upon_maturity" ||
-      loan.interest_method === "upon_maturity" ||
-      loan.interest_type === "upon_maturity"
-    );
-  })();
+  // A partial payment asks "Extend loan?" only on a loan that can be extended
+  // (offersExtendOnPartialPayment), and only then does it wait for the
+  // server's preview, which needs payments:view.
+  const recordPayment = recordPaymentGate(offersExtendOnPartialPayment(loan), can);
 
   // Loan Extension is offered only on one-month-term loans, whatever the
   // product. The API decides: eligibility depends on the loan's ORIGINAL term,
@@ -2093,15 +2069,21 @@ export default function LoanDetailPage({
   // payload. Reimplementing it here would hide the button after one use even
   // though the API still allows more.
   const isOneMonthTermLoan = loan?.is_one_month_term ?? false;
+  // What the Extend dialog calls one cycle: a month on monthly and
+  // upon-maturity loans (anchored months), a cycle on any other frequency.
+  const extendCycleUnit = extensionCycleUnit(loan?.frequency ?? loan?.payment_frequency);
 
-  const submitRepayment = async (data: {
-    payment_date: string;
-    amount_paid: number;
-    remarks?: string;
-  }): Promise<boolean> => {
+  // Posts a payment and, unless `refresh` is false, re-reads what it changed.
+  // "Yes, extend" passes false: it extends straight afterwards and re-reads
+  // once for both.
+  const submitRepayment = async (
+    data: RecordPaymentPayload,
+    { refresh = true }: { refresh?: boolean } = {},
+  ): Promise<boolean> => {
     setActionLoading(true);
     try {
       const repayment = await repaymentService.create(loan.id, data);
+      setShareCapitalVersion((v) => v + 1);
       toast.success(
         paymentMode === "advance" ? "Advance payment recorded" : "Payment recorded",
         { action: { label: "View Receipt", onClick: () => router.push(`/payments/${repayment.id}`) } }
@@ -2109,25 +2091,29 @@ export default function LoanDetailPage({
       setRecordPaymentOpen(false);
       setPaymentAmount("");
       setPaymentRemarks("");
-      setPaymentDate(new Date());
+      setPaymentMethod(DEFAULT_PAYMENT_METHOD);
+      setPaymentReference("");
+      setPaymentDate(todayDate());
       setPaymentPreview(null);
       setPaymentMode("regular");
       setAdvancePeriods(1);
       // Refresh independently — don't let any single failure block the others
       // or pollute the catch block (payment already succeeded at this point).
-      // Awaited (not fire-and-forget) so callers that chain another mutation
-      // afterward (e.g. handlePartialExtendConfirm calling extend()) don't
-      // race this refresh with their own later one.
-      const loanId = loan.id;
-      await Promise.allSettled([
-        fetchSchedule(loanId),
-        fetchLoanSummary(loanId),
-        fetchRepayments(loanId),
-        loanService.detail(loanId).then(setLoan).catch(() => {}),
-      ]);
+      if (refresh) {
+        const loanId = loan.id;
+        await Promise.allSettled([
+          fetchSchedule(loanId),
+          fetchLoanSummary(loanId),
+          fetchRepayments(loanId),
+          fetchLedger(loanId),
+          loadLoan(loanId, loan).then(setLoan),
+        ]);
+      }
       return true;
-    } catch {
-      toast.error("We couldn't record the payment. Please try again.");
+    } catch (err) {
+      toast.error(recordPaymentErrorMessage(err));
+      const dateRefusal = paymentDateRefusal(validationErrors(err));
+      if (dateRefusal !== null) setPaymentDateServerError({ day: data.payment_date, message: dateRefusal });
       return false;
     } finally {
       setActionLoading(false);
@@ -2135,11 +2121,12 @@ export default function LoanDetailPage({
   };
 
   const handleRecordPayment = async () => {
-    if (!paymentAmount || Number(paymentAmount) <= 0) return;
+    const amountPaid = checkPaymentAmount(paymentAmount).amount;
+    if (amountPaid === null || amountPaid <= 0) return;
+    if (paymentReferenceProblem !== null) return;
     // Annotate the remarks so the receipt/audit log preserves the
-    // cashier's intent. Backend only persists payment_date, amount_paid,
-    // and remarks — no dedicated "is_advance" column — so the tag in
-    // remarks is the audit trail for advance payments.
+    // cashier's intent. There is no dedicated "is_advance" column, so the
+    // tag in remarks is the audit trail for advance payments.
     const tag =
       paymentMode === "advance"
         ? `[ADVANCE: ${advancePeriods} period${advancePeriods === 1 ? "" : "s"}]`
@@ -2151,16 +2138,40 @@ export default function LoanDetailPage({
       : paymentRemarks || undefined;
     const payload = {
       payment_date: formatDateISO(paymentDate),
-      amount_paid: Number(paymentAmount),
+      amount_paid: amountPaid,
       remarks: composedRemarks,
+      ...paymentMethodFields(paymentMethod, paymentReference),
     };
 
-    // Upon Maturity loans: if the cashier is recording less than the
-    // full amount due for the current period, prompt to extend instead
-    // of silently posting a partial payment.
-    if (isUponMaturityLoan && paymentMode === "regular") {
-      const currentDue = storedSchedule.find((row) => row.status !== "paid");
-      if (currentDue && payload.amount_paid < currentDue.totalPayment) {
+    // A loan that can be extended (a one-month loan, as the server says): if
+    // the server's preview for this amount and date calls it partial
+    // (premium owed counted), prompt to extend instead of silently posting a
+    // partial payment. Until that preview has answered for exactly this
+    // amount and date, the payment is not posted at all. Any other loan's
+    // payment, a defaulted loan's included, is simply recorded.
+    if (paymentMode === "regular" && offersExtendOnPartialPayment(loan)) {
+      const decision = shouldPromptExtend({
+        hasOpenPeriod: amountDueNow === null || dueNowHasOpenPeriod(amountDueNow),
+        preview: paymentPreview,
+        previewIsCurrent: previewIsCurrent(
+          { answeredKey: paymentPreviewKey, loading: paymentPreviewLoading },
+          payload.amount_paid,
+          payload.payment_date,
+        ),
+        previewFailed:
+          !paymentPreviewLoading &&
+          paymentPreviewFailedKey === previewRequestKey(payload.amount_paid, payload.payment_date),
+      });
+      if (decision === "failed") {
+        toast.error("We couldn't check this payment with the server. Try again.");
+        setPaymentPreviewRound((round) => round + 1);
+        return;
+      }
+      if (decision === "unknown") {
+        toast.error("We're still checking this payment with the server. Wait for the allocation preview, then try again.");
+        return;
+      }
+      if (decision === "prompt") {
         setPendingPayment(payload);
         setPartialExtendOpen(true);
         return;
@@ -2172,7 +2183,10 @@ export default function LoanDetailPage({
 
   // ── Loan Extension Handlers (Upon Maturity) ──
 
+  const extendReferenceProblem = extensionReferenceError(extendInterestOption, extendMethod, extendReference);
+
   const handleExtendLoan = async () => {
+    if (extendReferenceProblem !== null) return;
     setActionLoading(true);
     try {
       // The API collects the interest itself when "pay" is chosen, in the same
@@ -2180,34 +2194,37 @@ export default function LoanDetailPage({
       // call followed by extend(): if the extend failed, the payment was
       // already committed, and the only thing stopping a second charge was a
       // ref that reset whenever this dialog was reopened.
+      // "pay" says how the collection was received; "defer" sends neither.
       await loanService.extend(loan.id, {
         remarks: extendRemarks.trim() || undefined,
         interest_option: extendInterestOption,
+        ...extensionMethodFields(extendInterestOption, extendMethod, extendReference),
       });
       toast.success(
         extendInterestOption === "pay"
-          ? "Interest collected and loan extended by one cycle"
-          : "Loan extended by one cycle — interest carried forward",
+          ? "Payment collected and loan extended"
+          : "Loan extended — interest carried forward",
       );
       setExtendOpen(false);
       setExtendRemarks("");
     } catch (err) {
       // Nothing was charged: a failed extension rolls the interest payment
-      // back with it, so retrying is safe.
+      // back with it, so retrying is safe. The dialog stays open, so ask for
+      // a fresh preview: Confirm waits for it rather than offering figures the
+      // refusal may have made stale.
       notifyError(err, "We couldn't extend this loan. Please try again.");
+      setExtendPreviewRound((round) => round + 1);
     } finally {
       try {
-        const updated = await loanService.detail(loan.id);
-        setLoan(await resolveLoan(loan, updated));
+        setLoan(await loadLoan(loan.id, loan));
         await fetchSchedule(loan.id);
         await fetchLoanSummary(loan.id);
         await fetchRepayments(loan.id);
-        // Extend always posts a debit (and a credit when "pay" collects the
-        // interest) — refresh so the Ledger shows both immediately rather
-        // than only after the next full page load.
-        await fetchLedgerEntries(loan.id);
+        // An extension adds Ledger rows (its interest charge, and its payment
+        // when "pay" collects the interest): re-read the server's Ledger.
+        await fetchLedger(loan.id);
         // Refresh the extension/adjustment history too — the effect that loads
-        // adjustments only re-runs on loan.id/status change, and a same-status
+        // adjustments only runs when the loan first has server data, so an
         // extension wouldn't trigger it, leaving the history card stale.
         await fetchAdjustments(loan.id);
       } catch {
@@ -2217,57 +2234,60 @@ export default function LoanDetailPage({
     }
   };
 
-  const handlePartialExtendConfirm = async () => {
-    if (!pendingPayment) return;
-    const payload = pendingPayment;
-    setPartialExtendOpen(false);
-    setPendingPayment(null);
+  // "Yes, extend" on the partial-payment prompt: record the payment, then extend.
+  const recordPaymentAndExtend = async (payload: NonNullable<typeof pendingPayment>) => {
     // Pay first — this posts the cashier's originally-entered amount against
     // the CURRENT period (before it rolls over), then extend. Reversing this
     // order (as the old code did) posted the payment against the already-
     // extended period instead of paying down the period it was meant to settle.
-    const paid = await submitRepayment(payload);
+    const paid = await submitRepayment(payload, { refresh: false });
     if (!paid) return;
     setActionLoading(true);
     try {
-      await loanService.extend(loan.id, {
-        remarks: `Auto-extend on partial payment of ${payload.amount_paid}`,
-        // The cashier's payment was just posted on the line above, so the API
-        // must not collect interest again — whatever remains unpaid carries
-        // into the new period, which is how this flow has always behaved.
-        interest_option: "defer",
-      });
+      // On "defer": the cashier's payment was just posted on the line above,
+      // so the API must not collect interest again (partialExtendPayload).
+      await loanService.extend(loan.id, partialExtendPayload(payload.amount_paid));
       toast.success("Loan extended");
-      const updated = await loanService.detail(loan.id);
-      setLoan(await resolveLoan(loan, updated));
-      fetchSchedule(loan.id);
-      fetchLoanSummary(loan.id);
-      // Keep the extension/adjustment history in sync without a reload.
-      fetchAdjustments(loan.id);
     } catch (err) {
       notifyError(err, "We couldn't extend this loan. Please try again.");
     } finally {
+      // One re-read for the payment AND the extension: what Extend Loan reads,
+      // which covers what the payment changed. Also when the extension fails,
+      // because the payment above stands either way.
+      await Promise.allSettled([
+        loadLoan(loan.id, loan).then(setLoan),
+        fetchSchedule(loan.id),
+        fetchLoanSummary(loan.id),
+        fetchRepayments(loan.id),
+        fetchLedger(loan.id),
+        fetchAdjustments(loan.id),
+      ]);
       setActionLoading(false);
     }
   };
 
-  const handlePartialExtendDecline = async () => {
-    if (!pendingPayment) return;
+  // The "Extend loan?" prompt's three buttons. Every choice closes it and
+  // clears the pending payment; what runs is dispatchPartialExtend's: Cancel
+  // nothing, "Record partial payment" the payment only, "Yes, extend" both.
+  const handlePartialExtendChoice = async (choice: PartialExtendChoice) => {
     const payload = pendingPayment;
     setPartialExtendOpen(false);
     setPendingPayment(null);
-    await submitRepayment(payload);
+    await dispatchPartialExtend(choice, payload, {
+      record: (payment) => submitRepayment(payment),
+      recordAndExtend: recordPaymentAndExtend,
+    });
   };
 
   // ── Auto Pay (Upon Maturity) ──
 
   const handleAutoPayConfirm = async () => {
-    const amount = loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0;
-    if (!amount || amount <= 0) return;
+    const amount = loanTotalOutstanding;
+    if (amount === null || amount <= 0) return;
     setAutoPayProcessing(true);
     try {
       const repayment = await repaymentService.create(loan.id, {
-        payment_date: formatDateISO(new Date()),
+        payment_date: todayISO(),
         amount_paid: amount,
         remarks: "[AUTO PAY]",
       });
@@ -2282,21 +2302,29 @@ export default function LoanDetailPage({
   };
 
 
-  const handleVoidRepayment = async (repaymentId: number) => {
-    const reason = prompt("Reason for voiding this payment:");
-    if (!reason?.trim()) return;
-    try {
-      setActionLoading(true);
-      await repaymentService.void(repaymentId, { void_reason: reason });
-      toast.success("Payment voided");
-      fetchRepayments(loan.id);
-      const updated = await loanService.detail(loan.id);
-      setLoan(await resolveLoan(loan, updated));
-    } catch {
-      toast.error("We couldn't void the payment. Please try again.");
-    } finally {
-      setActionLoading(false);
-    }
+  // A Ledger row's Void asks for the reason in its dialog.
+  const handleVoidRepayment = (repaymentId: number) => {
+    setVoidTarget(repaymentId);
+    setVoidOpen(true);
+  };
+
+  // The Void dialog's confirm, with the reason the server requires. A refusal
+  // (e.g. a payment made before an extension) rejects, so the dialog keeps it
+  // on screen in the server's words, beside the reason typed.
+  const voidPayment = async (repaymentId: number, reason: string) => {
+    await repaymentService.void(repaymentId, { void_reason: reason });
+    setShareCapitalVersion((v) => v + 1);
+    toast.success("Payment voided");
+    // A void undoes a payment, so re-read what recording one re-reads.
+    // Settled rather than thrown, since the void already stands and a failed
+    // re-read must not be reported as a failed void.
+    await Promise.allSettled([
+      loadLoan(loan.id, loan).then(setLoan),
+      fetchSchedule(loan.id),
+      fetchLoanSummary(loan.id),
+      fetchRepayments(loan.id),
+      fetchLedger(loan.id),
+    ]);
   };
 
   const handleVoidLoan = async () => {
@@ -2304,8 +2332,9 @@ export default function LoanDetailPage({
       setActionLoading(true);
       await loanService.void(loan.id);
       toast.success("Loan voided");
-      const updated = await loanService.detail(loan.id);
-      setLoan(await resolveLoan(loan, updated));
+      // Settled rather than thrown: the void already stands, and a failed
+      // re-read must not be reported as a failed void.
+      await Promise.allSettled([loadLoan(loan.id, loan).then(setLoan)]);
     } catch {
       toast.error("We couldn't void the loan. Please try again.");
     } finally {
@@ -2320,13 +2349,12 @@ export default function LoanDetailPage({
     setAdjType("balance_adjustment");
     setAdjDescription("");
     setAdjRemarks("");
-    setAdjNewValues("");
     resetAdjustmentValueFields();
   };
 
   /** Clear only the type-specific value fields — used when the type changes mid-form. */
   const resetAdjustmentValueFields = () => {
-    setAdjNewBalance("");
+    setAdjTargetPrincipal("");
     setAdjAdditionalMonths("");
   };
 
@@ -2334,16 +2362,12 @@ export default function LoanDetailPage({
     // Build new_values from user-friendly fields based on type
     const newValues: Record<string, unknown> = {};
     if (adjType === "balance_adjustment") {
-      if (!adjNewBalance) { toast.error("Please enter the new balance amount"); return; }
-      const target = parseFloat(adjNewBalance);
-      if (!Number.isFinite(target) || target < 0) { toast.error("Enter a valid new balance"); return; }
-      // The API takes a signed delta applied to the principal
-      // (`adjustment_amount`), not the resulting balance. The dialog asks for
-      // the balance the user wants, so convert it here.
-      const current = loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0;
-      const delta = Number((target - current).toFixed(2));
-      if (delta === 0) { toast.error("That is already the outstanding balance"); return; }
-      newValues.adjustment_amount = delta;
+      // The server works out and stores the adjustment from the target
+      // principal; the dialog only repeats its preview.
+      if (adjTarget === null) { toast.error("Enter the target principal balance (up to 2 decimals)"); return; }
+      if (adjPreview.preview === null) { toast.error("Wait for the preview of this adjustment"); return; }
+      if (adjPreview.preview.adjustment === 0) { toast.error("That is already the outstanding principal"); return; }
+      Object.assign(newValues, balanceAdjustmentNewValues(adjTarget));
     } else if (adjType === "penalty_waiver") {
       // The API waives a schedule's penalty in full — there is no partial
       // amount waiver — so it takes `waive_all` or a list of `schedule_ids`,
@@ -2351,9 +2375,10 @@ export default function LoanDetailPage({
       // no selection at all, which waived the penalty on *every* open schedule.
       newValues.waive_all = true;
     } else if (adjType === "term_extension") {
-      if (!adjAdditionalMonths) { toast.error("Please enter the additional months"); return; }
+      const extraWhat = extendsByMonth ? "months" : "instalments";
+      if (!adjAdditionalMonths) { toast.error(`Please enter the additional ${extraWhat}`); return; }
       const extraMonths = parseInt(adjAdditionalMonths);
-      if (!Number.isFinite(extraMonths) || extraMonths < 1) { toast.error("Additional months must be at least 1"); return; }
+      if (!Number.isFinite(extraMonths) || extraMonths < 1) { toast.error(`Additional ${extraWhat} must be at least 1`); return; }
       // `additional_terms` is the number of extra periods, not the resulting
       // term — `term` is the restructure field and is ignored here.
       newValues.additional_terms = extraMonths;
@@ -2377,27 +2402,56 @@ export default function LoanDetailPage({
     }
   };
 
-  const handleAdjustmentAction = async (adjId: number, action: "approve" | "reject" | "apply") => {
+  // Approve and Reject ask for remarks in their dialog.
+  const askAdjustmentDecision = (decision: { adjustment: LoanAdjustment; action: "approve" | "reject" }) => {
+    setAdjustmentDecision(decision);
+    setAdjustmentDecisionOpen(true);
+  };
+
+  // The dialog's confirm: remarks are optional on an approval and asked for
+  // on a rejection (adjustmentDecisionDialog). A refusal (e.g. a request
+  // decided by someone else meanwhile) rejects, so the dialog keeps it on
+  // screen in the server's words.
+  const decideAdjustment = async (adjId: number, action: "approve" | "reject", remarks: string) => {
+    if (action === "approve") {
+      await loanAdjustmentService.approve(adjId, { remarks: remarks || undefined });
+      toast.success("Adjustment approved");
+    } else {
+      await loanAdjustmentService.reject(adjId, { remarks: remarks || undefined });
+      toast.success("Adjustment rejected");
+    }
+    await fetchAdjustments(loan.id);
+  };
+
+  // Cancel an approved adjustment before it is applied, with a reason. A
+  // refusal (applied or cancelled meanwhile, a 409 on a race) rejects, so the
+  // dialog keeps it on screen in the server's words. Nothing on the loan
+  // changes, so only the list is read again.
+  const cancelAdjustment = async (adjId: number, reason: string) => {
+    await loanAdjustmentService.cancel(adjId, { reason });
+    toast.success("Adjustment cancelled");
+    await fetchAdjustments(loan.id);
+  };
+
+  const handleApplyAdjustment = async (adjId: number) => {
     try {
       setActionLoading(true);
-      if (action === "approve") {
-        const remarks = prompt("Approval remarks (optional):");
-        await loanAdjustmentService.approve(adjId, { remarks: remarks || undefined });
-        toast.success("Adjustment approved");
-      } else if (action === "reject") {
-        const remarks = prompt("Rejection remarks:");
-        if (!remarks?.trim()) return;
-        await loanAdjustmentService.reject(adjId, { remarks });
-        toast.success("Adjustment rejected");
-      } else {
-        await loanAdjustmentService.apply(adjId);
-        toast.success("Adjustment applied");
-        const updated = await loanService.detail(loan.id);
-        setLoan(await resolveLoan(loan, updated));
-      }
+      await loanAdjustmentService.apply(adjId);
+      toast.success("Adjustment applied");
+      // Applying rewrites the loan's open schedule rows, and with them its
+      // balances, and adds its row to the Ledger. Settled rather than
+      // thrown: a failed re-read is not a failed apply.
+      await Promise.allSettled([
+        loadLoan(loan.id, loan).then(setLoan),
+        fetchSchedule(loan.id),
+        fetchLoanSummary(loan.id),
+        fetchLedger(loan.id),
+      ]);
       fetchAdjustments(loan.id);
-    } catch {
-      toast.error(`We couldn't ${action} the adjustment. Please try again.`);
+    } catch (err) {
+      // The server explains a refusal (e.g. a reduction larger than the unpaid
+      // principal); show it rather than a bare "try again" that can't succeed.
+      toast.error(getErrorMessage(err, "We couldn't apply the adjustment. Please try again."));
     } finally {
       setActionLoading(false);
     }
@@ -2408,16 +2462,22 @@ export default function LoanDetailPage({
     if (!loan) return;
     setSoaOpen(true);
     setSoaLoading(true);
-    setSoaData(null);
+    setSoaDoc(null);
     try {
-      const res = await reportService.statementOfAccount(loan.id);
-      const payload = (res && typeof res === "object" && "data" in (res as Record<string, unknown>)
+      // The Reports screen's own Statement of Account, loaded on open so the
+      // report builders stay out of this page's bundle. Every figure in it is
+      // the server's; a total the server did not send shows a dash.
+      const [res, { buildStatementOfAccountDoc }] = await Promise.all([
+        reportService.statementOfAccount(loan.id),
+        import("@/app/(app)/reports/_lib/report-builders"),
+      ]);
+      const payload = res && typeof res === "object" && "data" in (res as Record<string, unknown>)
         ? (res as { data: unknown }).data
-        : res) as Record<string, unknown> | null;
-      setSoaData(payload ?? {});
+        : res;
+      setSoaDoc(buildStatementOfAccountDoc(payload ?? {}, { from: "", to: todayISO() }));
     } catch {
       toast.error("We couldn't load the statement of account. Please try again.");
-      setSoaData(null);
+      setSoaDoc(null);
     } finally {
       setSoaLoading(false);
     }
@@ -2453,10 +2513,29 @@ export default function LoanDetailPage({
       : { demand_letter: "Available once the loan falls past due" }),
   };
 
-  const totalDeductions = loan.total_deductions ?? (loanProcessingFee + loanServiceFee + (loanOtherDeductions > 0 ? loanOtherDeductions : 0));
+
+  const displayStatus = loanDisplayStatus(loan);
+  // The number the loan is shown by (an imported loan's Loan No. from the
+  // file, which has no LN- number), and whether it came in by Data Import.
+  const loanNumber = loanNumberLabel(loan);
+  const loanIsImported = isImportedLoan(loan);
+  // The approver only names a step while the loan is under approval; at approved
+  // the label comes from the pending Release step. Past Due is the server's.
+  const headerStatusBadge = (
+    <Badge
+      variant="outline"
+      className={cn("text-sm px-3 py-1", LOAN_STATUS_COLORS[displayStatus])}
+    >
+      {loanStatusLabel(
+        displayStatus,
+        currentStep?.name ?? loan.current_approver,
+        currentStep ? currentStep.status_label : loan.current_status_label,
+      )}
+    </Badge>
+  );
 
   return (
-    <div className="space-y-6">
+    <PageFill>
       {/* Header */}
       <div className="space-y-4">
         <Link
@@ -2469,1639 +2548,1766 @@ export default function LoanDetailPage({
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
-            {loan.loan_account_number && (
+            {loanNumber !== loan.application_number && (
               <div className="flex items-center gap-2 mb-1">
                 <span className="font-mono text-xl font-bold text-brand-orange">
-                  {loan.loan_account_number}
+                  {loanNumber}
                 </span>
-                <Badge
-                  variant="outline"
-                  className={cn("text-sm px-3 py-1", LOAN_STATUS_COLORS[loan.status])}
-                >
-                  {LOAN_STATUS_LABELS[loan.status] ?? loan.status}
-                </Badge>
+                {headerStatusBadge}
               </div>
             )}
             <div className="flex items-center gap-3 flex-wrap">
               <span className={cn(
                 "font-mono font-semibold",
-                loan.loan_account_number ? "text-sm text-muted-foreground" : "text-lg text-brand-orange"
+                loanNumber !== loan.application_number ? "text-sm text-muted-foreground" : "text-lg text-brand-orange"
               )}>
                 {loan.application_number}
               </span>
-              {!loan.loan_account_number && (
-                <Badge
-                  variant="outline"
-                  className={cn("text-sm px-3 py-1", LOAN_STATUS_COLORS[loan.status])}
-                >
-                  {LOAN_STATUS_LABELS[loan.status] ?? loan.status}
-                </Badge>
-              )}
+              {loanNumber === loan.application_number && headerStatusBadge}
             </div>
             <p className="text-lg text-foreground">{loanBorrowerName}</p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:self-start">
+            {canSendBackApproved(loan) && (
+              <Button
+                variant="outline"
+                onClick={() => setSendBackApprovedOpen(true)}
+                className="w-full sm:w-auto"
+              >
+                <Undo2 className="mr-2 h-4 w-4" />
+                Send back for approval
+              </Button>
+            )}
+            {/* Shown to everyone on a loan that can be extended; disabled, with
+                the reason, for a role without loans:extend, as Void is. */}
             {isOneMonthTermLoan &&
               ["released", "ongoing", "current", "past_due"].includes(loan.status) &&
-              (loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0) > 0 && (
-                <Button
-                  onClick={() => setExtendOpen(true)}
+              (loanTotalOutstanding ?? 0) > 0 && (
+                <PermissionButton
+                  permission={LOAN_EXTEND_GATE.permission}
+                  tooltip={LOAN_EXTEND_GATE.tooltip}
+                  wrapperClassName="w-full sm:w-auto"
+                  onClick={() => {
+                    setExtendInterestOption("pay");
+                    setExtendPreviewRound((round) => round + 1);
+                    setExtendOpen(true);
+                  }}
                   className="w-full sm:w-auto bg-brand-blue text-brand-blue-foreground shadow-sm hover:bg-brand-blue-dark hover:shadow-md transition-all"
                 >
                   <CalendarPlus className="mr-2 h-4 w-4" />
                   Extend Loan
-                </Button>
+                </PermissionButton>
               )}
           </div>
         </div>
       </div>
 
-
-      <LoanCollateralsCard
-        loanId={loan.id}
-        loanPrincipal={Number(loan.principal_amount ?? 0)}
-      />
-
-      {/* The chain is over for `rejected` and `void` loans — a voided draft used
-          to keep rendering its orphaned chain, complete with a "pending" step on
-          a loan struck from the record. While the chain is loading or
-          unreadable the card still renders, saying which: an empty card would
-          read as "nobody has approved anything". */}
-      {!isApprovalChainHidden(loan.status) &&
-        (approvalLoading ||
-          approvalUnavailable ||
-          approvalSteps.length > 0 ||
-          // A DRAFT has no chain yet — it is seeded on submit — but the only
-          // "Submit for Review" control lives inside this card, so suppressing
-          // it here left a draft with no way into the chain at all: the chain
-          // seeds on submit, and submit needed the chain. Any draft not
-          // auto-submitted by /loans/new was unrecoverable.
-          loan.status === "draft" ||
-          // Past draft the rows should exist. Empty here means they are
-          // missing, not unwritten — say so rather than rendering nothing,
-          // which reads as "this loan has no approval process".
-          loanShouldHaveAChain(loan.status)) && (
-        <Collapsible open={approvalStepsOpen} onOpenChange={setApprovalStepsOpen}>
-          <Card>
-            <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
-              <CollapsibleTrigger className="w-full text-left group/trigger">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
-                  Loan Approval Process
-                  <Badge variant="outline" className="text-xs font-normal">
-                    {approvalLoading
-                      ? "Loading..."
-                      : approvalUnavailable
-                        ? "Unavailable"
-                        : allStepsApproved
-                          ? "Complete"
-                          : currentStep
-                            ? `Step ${currentStepIndex + 1} of ${approvalSteps.length}`
-                            : approvalSteps.length === 0
-                              ? loan.status === "draft"
-                                ? "Not submitted"
-                                : "No steps found"
-                              : `${approvalSteps.length} steps`}
-                  </Badge>
-                  <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-aria-expanded/trigger:rotate-180 shrink-0" />
-                </CardTitle>
-              </CollapsibleTrigger>
-              {approvalRounds.length > 0 && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Revision {approvalRounds.length + 1} — previously sent back{" "}
-                  {approvalRounds.length} time{approvalRounds.length !== 1 ? "s" : ""}
-                </p>
-              )}
-            </CardHeader>
-            <CollapsibleContent>
-              <CardContent className="space-y-5">
-            {approvalLoading && (
-              <div
-                className="flex items-center gap-2 text-xs text-muted-foreground"
-                role="status"
-                aria-live="polite"
-              >
-                <Spinner className="h-4 w-4" />
-                Loading the approval chain&hellip;
-              </div>
-            )}
-
-            {/* The read failed — 404 while the endpoint is still shipping, or a
-                loan whose chain was never seeded. Says so rather than drawing a
-                chain from `loans.status`: a chain assembled in the browser is a
-                claim about who signed off that nobody can check, which is the
-                whole reason this moved off localStorage. */}
-            {!approvalLoading && approvalUnavailable && (
-              <div className="rounded-lg border border-dashed bg-muted/30 p-3 flex items-start gap-2">
-                <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                <div className="text-xs">
-                  <p className="font-medium">Approval chain unavailable</p>
-                  <p className="text-muted-foreground mt-0.5">
-                    We couldn&rsquo;t load the approval steps for this loan. Reload the
-                    page to try again — approvals are recorded on the server, so
-                    nothing has been lost.
+      {/* The header stays put; the loan's cards scroll under it. Dialogs sit
+          outside the box. */}
+      <ScrollBox className="space-y-6 p-px">
+        {/* Reprint after a change: a printed document's terms no longer match
+            the loan, so the signed copy is out of date until it is printed
+            again. The server says which; Release waits until then. */}
+        {reprintNoticeText !== null && (
+          <Card
+            role="alert"
+            className="border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-900/10"
+          >
+            <CardContent className="py-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="flex-1 space-y-1">
+                  <p className="font-semibold text-amber-700 dark:text-amber-400">
+                    Print again before release
                   </p>
+                  <p className="text-sm text-amber-700/80 dark:text-amber-300/80">{reprintNoticeText}</p>
                 </div>
               </div>
-            )}
+            </CardContent>
+          </Card>
+        )}
 
-            {/* A draft has no chain yet — it is seeded on submit — so this is
-                the one place Submit for Review can live. It used to sit inside
-                the active-step panel, which needs a `currentStep` that a draft
-                by definition does not have, so the card was suppressed and the
-                loan had no way in. */}
-            {!approvalLoading && !approvalUnavailable && approvalSteps.length === 0
-              && loan.status === "draft" && (
-              <div className="rounded-lg border border-dashed bg-muted/30 p-3 space-y-3">
-                <div className="flex items-start gap-2">
+        <LoanCollateralsCard
+          loanId={loan.id}
+          summary={loan.collateral_summary ?? null}
+        />
+
+        {/* The chain is over for `rejected` and `void` loans — a voided draft used
+            to keep rendering its orphaned chain, complete with a "pending" step on
+            a loan struck from the record. While the chain is loading or
+            unreadable the card still renders, saying which: an empty card would
+            read as "nobody has approved anything". */}
+        {!isApprovalChainHidden(loan.status) &&
+          (approvalLoading ||
+            approvalUnavailable ||
+            approvalSteps.length > 0 ||
+            // A DRAFT has no chain yet — it is seeded on submit — but the only
+            // "Submit for Approval" control lives inside this card, so suppressing
+            // it here left a draft with no way into the chain at all: the chain
+            // seeds on submit, and submit needed the chain. Any draft not
+            // auto-submitted by /loans/new was unrecoverable.
+            loan.status === "draft" ||
+            // Past draft the rows should exist. Empty here means they are
+            // missing, not unwritten — say so rather than rendering nothing,
+            // which reads as "this loan has no approval process".
+            loanShouldHaveAChain(loan.status)) && (
+          <Collapsible open={approvalStepsOpen} onOpenChange={setApprovalStepsOpen}>
+            <Card id={APPROVAL_CARD_ID} className="scroll-mt-4">
+              <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
+                <CollapsibleTrigger className="w-full text-left group/trigger">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+                    Loan Approval Process
+                    <Badge variant="outline" className="text-xs font-normal">
+                      {approvalChipLabel({
+                        loading: approvalLoading,
+                        unavailable: approvalUnavailable,
+                        allApproved: allStepsApproved,
+                        currentStepIndex,
+                        stepCount: approvalSteps.length,
+                        status: loan.status,
+                        imported: loanIsImported,
+                      })}
+                    </Badge>
+                    <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-aria-expanded/trigger:rotate-180 shrink-0" />
+                  </CardTitle>
+                </CollapsibleTrigger>
+                {approvalRounds.length > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Revision {approvalRounds.length + 1} — previously sent back{" "}
+                    {approvalRounds.length} time{approvalRounds.length !== 1 ? "s" : ""}
+                  </p>
+                )}
+              </CardHeader>
+              <CollapsibleContent>
+                <CardContent className="space-y-5">
+              {approvalLoading && (
+                <div
+                  className="flex items-center gap-2 text-xs text-muted-foreground"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <Spinner className="h-4 w-4" />
+                  Loading the approval chain&hellip;
+                </div>
+              )}
+
+              {/* An imported loan was approved in the cooperative's own records
+                  before it came in, so it has no chain here: say so, instead of
+                  "Approval chain unavailable" (finish run round 7). */}
+              {!approvalLoading && loanIsImported && approvalSteps.length === 0 && (
+                <div className="rounded-lg border border-dashed bg-muted/30 p-3 flex items-start gap-2">
                   <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
                   <div className="text-xs">
-                    <p className="font-medium">Not yet submitted</p>
+                    <p className="font-medium">{IMPORTED_APPROVAL_TITLE}</p>
+                    <p className="text-muted-foreground mt-0.5">{importedApprovalNote(loan)}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* The read failed — 404 while the endpoint is still shipping, or a
+                  loan whose chain was never seeded. Says so rather than drawing a
+                  chain from `loans.status`: a chain assembled in the browser is a
+                  claim about who signed off that nobody can check, which is the
+                  whole reason this moved off localStorage. */}
+              {!approvalLoading && !loanIsImported && approvalUnavailable && (
+                <div className="rounded-lg border border-dashed bg-muted/30 p-3 flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                  <div className="text-xs">
+                    <p className="font-medium">Approval chain unavailable</p>
                     <p className="text-muted-foreground mt-0.5">
-                      The approval chain is created when this loan is submitted for
-                      review. Nobody can sign off on it until then.
+                      We couldn&rsquo;t load the approval steps for this loan. Reload the
+                      page to try again — approvals are recorded on the server, so
+                      nothing has been lost.
                     </p>
                   </div>
                 </div>
-                {/* Void and Edit live in the submit-step panel below, which a
-                    never-submitted draft never reaches — so without these the
-                    draft could not be submitted, edited OR voided from its own
-                    page. */}
-                <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-                  {canVoidLoan && (
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      className="w-full sm:w-auto"
-                      disabled={actionLoading}
-                      onClick={handleVoidLoan}
-                    >
-                      <Ban className="mr-2 h-4 w-4" />
-                      Void Loan
-                    </Button>
-                  )}
-                  {canEditLoanApplication && loan && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full sm:w-auto"
+              )}
+
+              {/* A draft has no chain yet — it is seeded on submit — so this is
+                  the one place Submit for Approval can live. It used to sit inside
+                  the active-step panel, which needs a `currentStep` that a draft
+                  by definition does not have, so the card was suppressed and the
+                  loan had no way in. */}
+              {!approvalLoading && !approvalUnavailable && approvalSteps.length === 0
+                && loan.status === "draft" && (
+                <div className="rounded-lg border border-dashed bg-muted/30 p-3 space-y-3">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                    <div className="text-xs">
+                      <p className="font-medium">Not yet submitted</p>
+                      <p className="text-muted-foreground mt-0.5">
+                        The approval chain is created when this loan is submitted for
+                        approval. Nobody can sign off on it until then.
+                      </p>
+                    </div>
+                  </div>
+                  {canSubmitDraft && (
+                    <ForwardToPicker
+                      key={`forward-${loan.id}-draft`}
+                      loanId={loan.id}
+                      stepKey={forwardKey}
+                      readCandidates={readForwardCandidates}
+                      value={forwardTo}
+                      onChange={handleForwardChange}
                       disabled={stepActionLoading}
-                      nativeButton={false}
-                      render={<Link href={`/loans/new?edit=${loan.id}`} />}
-                    >
-                      <Pencil className="mr-2 h-4 w-4" />
-                      Edit Loan Application
-                    </Button>
+                      error={forwardErrorMessage}
+                    />
                   )}
-                  <Button
-                    size="sm"
-                    className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                    disabled={stepActionLoading}
-                    onClick={handleStepSubmit}
-                  >
-                    {stepActionLoading ? "Submitting…" : "Submit for Review"}
-                  </Button>
+                  {/* Void and Edit live in the submit-step panel below, which a
+                      never-submitted draft never reaches — so without these the
+                      draft could not be submitted, edited OR voided from its own
+                      page. */}
+                  <div className={APPROVAL_ACTIONS_ROW}>
+                    {canVoidLoan && (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="w-full sm:w-auto"
+                        disabled={actionLoading}
+                        onClick={handleVoidLoan}
+                      >
+                        <Ban className="mr-2 h-4 w-4" />
+                        Void Loan
+                      </Button>
+                    )}
+                    {canEditLoanApplication && loan && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full sm:w-auto"
+                        disabled={stepActionLoading}
+                        nativeButton={false}
+                        render={<Link href={`/loans/new?edit=${loan.id}`} />}
+                      >
+                        <Pencil className="mr-2 h-4 w-4" />
+                        Edit Loan Application
+                      </Button>
+                    )}
+                    {canSubmitDraft && (
+                      <Button
+                        size="sm"
+                        className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                        disabled={stepActionLoading}
+                        onClick={handleStepSubmit}
+                      >
+                        {stepActionLoading ? "Submitting…" : "Submit for Approval"}
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Past draft, the rows should already exist. Empty means missing,
-                not unwritten. The server answers 200 with empty arrays either
-                way, so the hook cannot tell them apart — the loan's own status
-                is what distinguishes them. */}
-            {!approvalLoading && !approvalUnavailable && approvalSteps.length === 0
-              && loanShouldHaveAChain(loan.status) && (
-              <div className="rounded-lg border border-dashed bg-muted/30 p-3 flex items-start gap-2">
-                <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                <div className="text-xs">
-                  <p className="font-medium">Approval chain unavailable</p>
-                  <p className="text-muted-foreground mt-0.5">
-                    This loan is {LOAN_STATUS_LABELS[loan.status] ?? loan.status}, but its approval
-                    steps could not be found. Approvals are recorded on the server —
-                    ask an administrator to check this loan rather than re-approving
-                    it.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Horizontal progress tracker — every step at a glance.
-                The step awaiting action is marked with an orange ring. */}
-            {approvalSteps.length > 0 && (
-            <div className="rounded-lg border bg-muted/20 p-3">
-              <div className="flex items-center gap-1 overflow-x-auto pb-1">
-                {approvalSteps.map((step, i) => {
-                  const isCurrent = step.status === "pending";
-                  const isDone = step.status === "approved";
-                  const isSentBack = step.status === "sent_back";
-                  const isLast = i === approvalSteps.length - 1;
-                  return (
-                    <div
-                      key={`mini-${step.index}`}
-                      className="flex items-center shrink-0"
-                    >
-                      <div className="flex flex-col items-center gap-1 min-w-[68px]">
-                        <div
-                          className={cn(
-                            "h-7 w-7 rounded-full flex items-center justify-center shrink-0 text-white text-[10px] font-semibold transition-all",
-                            isCurrent && "bg-brand-orange ring-4 ring-brand-orange/20 scale-110",
-                            isDone && "bg-green-600",
-                            isSentBack && "bg-red-500",
-                            !isCurrent && !isDone && !isSentBack && "bg-muted text-muted-foreground"
-                          )}
-                        >
-                          {isDone ? (
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                          ) : isSentBack ? (
-                            <XCircle className="h-3.5 w-3.5" />
-                          ) : isCurrent ? (
-                            step.kind === "submit" ? (
-                              <Send className="h-3.5 w-3.5" />
-                            ) : step.kind === "release" ? (
-                              <Unlock className="h-3.5 w-3.5" />
-                            ) : (
-                              <Clock className="h-3.5 w-3.5" />
-                            )
-                          ) : (
-                            <span>{i + 1}</span>
-                          )}
-                        </div>
-                        <span
-                          className={cn(
-                            "text-[10px] text-center leading-tight font-medium",
-                            isCurrent && "text-brand-orange",
-                            isDone && "text-green-700",
-                            isSentBack && "text-red-700",
-                            !isCurrent && !isDone && !isSentBack && "text-muted-foreground"
-                          )}
-                        >
-                          {step.name}
-                        </span>
-                      </div>
-                      {!isLast && (
-                        <div
-                          className={cn(
-                            "h-0.5 w-4 mx-0.5 shrink-0 transition-colors",
-                            isDone ? "bg-green-600" : "bg-muted"
-                          )}
-                        />
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            )}
-
-            {/* Previous revision rounds (collapsed summary) */}
-            {approvalRounds.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  Previous Revisions
-                </p>
-                {approvalRounds.map((round) => (
-                  <div
-                    key={round.round}
-                    className="rounded-lg border border-dashed bg-muted/30 p-3"
-                  >
-                    <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <Badge variant="outline" className="text-[10px] h-4 px-1.5">
-                        Round {round.round}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">
-                        Sent back by {round.sent_back_by} ·{" "}
-                        {formatDateTime(round.sent_back_at)}
-                      </span>
-                    </div>
-                    <p className="text-xs italic text-muted-foreground pl-2 border-l-2 border-red-400/40 mb-2">
-                      &ldquo;{round.sent_back_remarks}&rdquo;
+              {/* Past draft, the rows should already exist. Empty means missing,
+                  not unwritten. The server answers 200 with empty arrays either
+                  way, so the hook cannot tell them apart — the loan's own status
+                  is what distinguishes them. */}
+              {!approvalLoading && !loanIsImported && !approvalUnavailable && approvalSteps.length === 0
+                && loanShouldHaveAChain(loan.status) && (
+                <div className="rounded-lg border border-dashed bg-muted/30 p-3 flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                  <div className="text-xs">
+                    <p className="font-medium">Approval chain unavailable</p>
+                    <p className="text-muted-foreground mt-0.5">
+                      This loan is {LOAN_STATUS_LABELS[displayStatus] ?? displayStatus}, but its approval
+                      steps could not be found. Approvals are recorded on the server —
+                      ask an administrator to check this loan rather than re-approving
+                      it.
                     </p>
-                    <div className="flex flex-wrap gap-1">
-                      {round.steps
-                        .filter((s) => s.status === "approved" || s.status === "sent_back")
-                        .map((s) => (
-                          <Badge
-                            key={s.index}
-                            variant="outline"
+                  </div>
+                </div>
+              )}
+
+              {/* Horizontal progress tracker — every step at a glance.
+                  The step awaiting action is marked with an orange ring. */}
+              {approvalSteps.length > 0 && (
+              <div className="rounded-lg border bg-muted/20 p-3">
+                <div className="flex items-center gap-1 overflow-x-auto pb-1">
+                  {approvalChain.map((item, itemIndex) => {
+                    const isLast = itemIndex === approvalChain.length - 1;
+                    if (item.type === "left_out") {
+                      return (
+                        <div key={item.key} className="flex items-center shrink-0">
+                          <LeftOutStepChip name={item.name} description={item.description} />
+                          {!isLast && <div className="h-0.5 w-4 mx-0.5 shrink-0 bg-muted" />}
+                        </div>
+                      );
+                    }
+                    const { step, position: i } = item;
+                    const state = approvalStepState(step.status);
+                    const isCurrent = state === "current";
+                    const isDone = state === "done";
+                    const isSentBack = state === "sent_back";
+                    // Closed when the loan was voided: neutral, never the waiting circle.
+                    const isCancelled = state === "cancelled";
+                    return (
+                      <div
+                        key={`mini-${step.index}`}
+                        className="flex items-center shrink-0"
+                      >
+                        <div className="flex flex-col items-center gap-1 min-w-[68px]">
+                          <div
                             className={cn(
-                              "text-[10px] h-4 px-1.5",
-                              s.status === "approved"
-                                ? "bg-green-500/10 text-green-700 border-green-500/30"
-                                : "bg-red-500/10 text-red-700 border-red-500/30"
+                              "h-7 w-7 rounded-full flex items-center justify-center shrink-0 text-white text-[10px] font-semibold transition-all",
+                              isCurrent && "bg-brand-orange ring-4 ring-brand-orange/20 scale-110",
+                              isDone && "bg-green-600",
+                              isSentBack && "bg-red-500",
+                              isCancelled && "border border-dashed border-muted-foreground/40 bg-background text-muted-foreground",
+                              state === "waiting" && "bg-muted text-muted-foreground"
                             )}
                           >
-                            {s.status === "approved" ? "✓" : "✗"} {s.name}
-                          </Badge>
-                        ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {/* Current step action panel — matches the original screenshot
-                design. Phase header (DRAFT / APPROVAL CHAIN / RELEASE) above,
-                then the orange-bordered step card with inline "You are acting
-                as X" section, remarks textarea, and action buttons. */}
-            {currentStep && canActOnCurrentStep && (
-              <div>
-                {/* Phase header */}
-                <div className="flex items-center gap-2 mb-2">
-                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    {currentStep.kind === "submit"
-                      ? "Draft Preparation"
-                      : currentStep.kind === "release"
-                        ? "Release"
-                        : "Approval Chain"}
-                  </p>
-                  <div className="flex-1 h-px bg-border" />
-                </div>
-
-                {/* Step card with orange border */}
-                <div className="rounded-lg border border-brand-orange/40 bg-brand-orange/5 overflow-hidden">
-                  {/* Header row */}
-                  <div className="flex items-center gap-3 p-3">
-                    <div className="h-9 w-9 rounded-full bg-brand-orange text-white flex items-center justify-center shrink-0">
-                      {currentStep.kind === "submit" ? (
-                        <Send className="h-4 w-4" />
-                      ) : currentStep.kind === "release" ? (
-                        <Unlock className="h-4 w-4" />
-                      ) : (
-                        <Clock className="h-4 w-4" />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-bold">{currentStep.name}</p>
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] px-1.5 py-0 h-4 bg-brand-orange/10 text-brand-orange border-brand-orange/30"
-                        >
-                          Pending your action
-                        </Badge>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Divider */}
-                  <div className="h-px bg-brand-orange/20" />
-
-                  {/* Action body */}
-                  <div className="p-4 space-y-3">
-                    <div>
-                      <p className="text-xs font-semibold">
-                        You are acting as{" "}
-                        <span className="text-brand-orange">{currentStep.name}</span>
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Signed in as {currentUserDisplayName}
-                        {currentStep.kind === "submit" &&
-                          " — submit the draft to forward it to the Manager for approval."}
-                        {currentStep.kind === "approve" &&
-                          (!isConfirmationStep && nextStep
-                            ? ` — on approve, the loan will be forwarded to ${
-                                nextStep.name
-                              }.${
-                                sendBackTargets.length > 1
-                                  ? " You may send it back to any earlier step for revision."
-                                  : " Send back for revision to return it to the Loan Processor."
-                              }`
-                            : ` — this is the final approver. Approve to forward for release${
-                                sendBackTargets.length > 1
-                                  ? ", or send the loan back to any earlier step for revision."
-                                  : "."
-                              }`)}
-                        {currentStep.kind === "release" &&
-                          " — open the release dialog to complete the loan release."}
-                      </p>
-                      {!clientCanActOnCurrentStep && (
-                        <p
-                          className="text-xs text-amber-700 dark:text-amber-400 mt-1"
-                          role="status"
-                        >
-                          Your signed-in roles don&rsquo;t include{" "}
-                          <span className="font-mono bg-muted px-1 py-0.5 rounded">
-                            {currentStep.role}
-                          </span>
-                          , so the actions below are disabled. Sign in again if your
-                          access changed recently.
-                        </p>
-                      )}
-                    </div>
-
-                    {currentStep.kind !== "release" && (
-                      <div className="space-y-1.5">
-                        <Label htmlFor="current-step-remarks" className="text-xs">
-                          {currentStep.kind === "submit"
-                            ? "Processing notes (optional)"
-                            : "Remarks"}{" "}
-                          <span className="text-muted-foreground font-normal">
-                            {currentStep.kind === "approve"
-                              ? "(required for send-back)"
-                              : ""}
-                          </span>
-                        </Label>
-                        <Textarea
-                          id="current-step-remarks"
-                          placeholder={
-                            currentStep.kind === "submit"
-                              ? "Any notes for the approvers..."
-                              : `${currentStep.name}: enter your remarks...`
-                          }
-                          value={stepRemarks}
-                          onChange={(e) => setStepRemarks(e.target.value)}
-                          className="min-h-[80px] text-sm bg-background"
-                        />
-                      </div>
-                    )}
-
-                    <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-                      {currentStep.kind === "submit" && (
-                        <>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            className="w-full sm:w-auto"
-                            disabled={actionLoading}
-                            onClick={handleVoidLoan}
+                            {isDone ? (
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                            ) : isCancelled ? (
+                              <CircleSlash className="h-3.5 w-3.5" aria-hidden="true" />
+                            ) : isSentBack ? (
+                              <XCircle className="h-3.5 w-3.5" />
+                            ) : isCurrent ? (
+                              step.kind === "submit" ? (
+                                <Send className="h-3.5 w-3.5" />
+                              ) : step.kind === "release" ? (
+                                <Unlock className="h-3.5 w-3.5" />
+                              ) : (
+                                <Clock className="h-3.5 w-3.5" />
+                              )
+                            ) : (
+                              <span>{i + 1}</span>
+                            )}
+                          </div>
+                          <span
+                            className={cn(
+                              "text-[10px] text-center leading-tight font-medium",
+                              isCurrent && "text-brand-orange",
+                              isDone && "text-green-700",
+                              isSentBack && "text-red-700",
+                              (isCancelled || state === "waiting") && "text-muted-foreground"
+                            )}
                           >
-                            <Ban className="mr-2 h-4 w-4" />
-                            Void Loan
-                          </Button>
-                          {canEditLoanApplication && loan && (
+                            {step.name}
+                            {isCancelled && (
+                              <span className="block font-normal">
+                                Cancelled
+                              </span>
+                            )}
+                            {!isCancelled && assignedToText(step) && (
+                              <span className="block font-normal text-muted-foreground">
+                                {assignedToText(step)}
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        {!isLast && (
+                          <div
+                            className={cn(
+                              "h-0.5 w-4 mx-0.5 shrink-0 transition-colors",
+                              isDone ? "bg-green-600" : "bg-muted"
+                            )}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                {leftOutSteps.length > 0 && (
+                  <ul className="mt-2 space-y-0.5 border-t pt-2 text-[11px] text-muted-foreground">
+                    {leftOutSteps.map((item) => (
+                      <li key={item.key}>{item.description}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              )}
+
+              {/* Previous revision rounds (collapsed summary) */}
+              {approvalRounds.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Previous Revisions
+                  </p>
+                  {approvalRounds.map((round) => {
+                    // Any step kind can close a round, a release step included
+                    // (an approved restructure sent back before release).
+                    const view = revisionRoundView(round);
+                    return (
+                      <div
+                        key={round.round}
+                        className="rounded-lg border border-dashed bg-muted/30 p-3"
+                      >
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <Badge variant="outline" className="text-[10px] h-4 px-1.5">
+                            Round {round.round}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {view.heading} ·{" "}
+                            {round.sent_back_at ? formatDateTime(round.sent_back_at) : "—"}
+                          </span>
+                        </div>
+                        {view.remarks !== null && (
+                          <p className="text-xs italic text-muted-foreground pl-2 border-l-2 border-red-400/40 mb-2">
+                            &ldquo;{view.remarks}&rdquo;
+                          </p>
+                        )}
+                        <div className="flex flex-wrap gap-1">
+                          {view.badges.map((badge) => (
+                            <Badge
+                              key={badge.key}
+                              variant="outline"
+                              className={cn(
+                                "text-[10px] h-4 px-1.5",
+                                badge.outcome === "approved"
+                                  ? "bg-green-500/10 text-green-700 border-green-500/30"
+                                  : "bg-red-500/10 text-red-700 border-red-500/30"
+                              )}
+                            >
+                              {badge.text}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {/* Current step action panel — matches the original screenshot
+                  design. Phase header (DRAFT / APPROVAL CHAIN / RELEASE) above,
+                  then the orange-bordered step card with inline "You are acting
+                  as X" section, remarks textarea, and action buttons. */}
+              {currentStep && canActOnCurrentStep && (
+                <div>
+                  {/* Phase header */}
+                  <div className="flex items-center gap-2 mb-2">
+                    <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      {currentStep.kind === "submit"
+                        ? "Draft Preparation"
+                        : currentStep.kind === "release"
+                          ? "Release"
+                          : "Approval Chain"}
+                    </p>
+                    <div className="flex-1 h-px bg-border" />
+                  </div>
+
+                  {/* Step card with orange border */}
+                  <div className="rounded-lg border border-brand-orange/40 bg-brand-orange/5 overflow-hidden">
+                    {/* Header row */}
+                    <div className="flex items-center gap-3 p-3">
+                      <div className="h-9 w-9 rounded-full bg-brand-orange text-white flex items-center justify-center shrink-0">
+                        {currentStep.kind === "submit" ? (
+                          <Send className="h-4 w-4" />
+                        ) : currentStep.kind === "release" ? (
+                          <Unlock className="h-4 w-4" />
+                        ) : (
+                          <Clock className="h-4 w-4" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-bold">{currentStep.name}</p>
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] px-1.5 py-0 h-4 bg-brand-orange/10 text-brand-orange border-brand-orange/30"
+                          >
+                            Pending your action
+                          </Badge>
+                          {currentStepIsMine && (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] px-1.5 py-0 h-4"
+                            >
+                              Forwarded to you
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Divider */}
+                    <div className="h-px bg-brand-orange/20" />
+
+                    {/* Action body */}
+                    <div className="p-4 space-y-3">
+                      <div>
+                        <p className="text-xs font-semibold">
+                          You are acting as{" "}
+                          <span className="text-brand-orange">{currentStep.name}</span>
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Signed in as {currentUserDisplayName}
+                          {currentStep.kind === "submit" &&
+                            " — submit the draft to forward it to the Manager for approval."}
+                          {currentStep.kind === "approve" &&
+                            (!isConfirmationStep && nextStep
+                              ? ` — on approve, the loan will be forwarded to ${
+                                  nextStep.name
+                                }.${
+                                  sendBackTargets.length > 1
+                                    ? " You may send it back to any earlier step for revision."
+                                    : " Send back for revision to return it to the Loan Processor."
+                                }`
+                              : ` — this is the final approver. Approve to forward for release${
+                                  sendBackTargets.length > 1
+                                    ? ", or send the loan back to any earlier step for revision."
+                                    : "."
+                                }`)}
+                          {/* While Release is held for a reprint, it says the release waits. */}
+                          {currentStep.kind === "release" && ` — ${releaseStepInstruction(outdatedDocuments)}`}
+                        </p>
+                        {showsApprovalEdit && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            You can edit the loan&rsquo;s amount, rate, term and payment schedule here
+                            before you approve or forward it. Every change is recorded in the audit trail.
+                          </p>
+                        )}
+                        {!clientCanActOnCurrentStep && (
+                          <p
+                            className="text-xs text-amber-700 dark:text-amber-400 mt-1"
+                            role="status"
+                          >
+                            {currentStepForwardedElsewhere ? (
+                              <>
+                                This step was forwarded to{" "}
+                                <span className="font-medium">{currentStep.assigned_to?.name}</span>
+                                , so the actions below are disabled.
+                              </>
+                            ) : (
+                              <>
+                                Your signed-in roles don&rsquo;t include{" "}
+                                <span className="font-medium">{roleLabel(currentStep.role)}</span>
+                                , so the actions below are disabled. Sign in again if your
+                                access changed recently.
+                              </>
+                            )}
+                          </p>
+                        )}
+                      </div>
+
+                      {currentStep.kind !== "release" && (
+                        <div className="space-y-1.5">
+                          <Label htmlFor="current-step-remarks" className="text-xs">
+                            {currentStep.kind === "submit"
+                              ? "Processing notes (optional)"
+                              : "Remarks"}{" "}
+                            <span className="text-muted-foreground font-normal">
+                              {currentStep.kind === "approve"
+                                ? "(required for send-back)"
+                                : ""}
+                            </span>
+                          </Label>
+                          <Textarea
+                            id="current-step-remarks"
+                            placeholder={
+                              currentStep.kind === "submit"
+                                ? "Any notes for the approvers..."
+                                : `${currentStep.name}: enter your remarks...`
+                            }
+                            value={stepRemarks}
+                            onChange={(e) => setStepRemarks(e.target.value)}
+                            className="min-h-[80px] text-sm bg-background"
+                          />
+                        </div>
+                      )}
+
+                      {currentStep.kind === "approve" && signOffErrorMessage && (
+                        <div
+                          className="rounded-md border border-red-200 bg-red-50 p-2.5 flex items-start gap-2 text-xs text-red-700 dark:border-red-800/40 dark:bg-red-900/10 dark:text-red-400"
+                          role="alert"
+                        >
+                          <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                          <p>{signOffErrorMessage}</p>
+                        </div>
+                      )}
+
+                      {currentStep.kind !== "release" && clientCanActOnCurrentStep && (
+                        <ForwardToPicker
+                          key={`forward-${loan.id}-${currentStep.id}`}
+                          loanId={loan.id}
+                          stepKey={forwardKey}
+                          readCandidates={readForwardCandidates}
+                          value={forwardTo}
+                          onChange={handleForwardChange}
+                          disabled={stepActionLoading}
+                          error={forwardErrorMessage}
+                        />
+                      )}
+
+                      <div className={APPROVAL_ACTIONS_ROW}>
+                        {currentStep.kind === "submit" && (
+                          <>
+                            {canVoidLoan && (
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                className="w-full sm:w-auto"
+                                disabled={actionLoading}
+                                onClick={handleVoidLoan}
+                              >
+                                <Ban className="mr-2 h-4 w-4" />
+                                Void Loan
+                              </Button>
+                            )}
+                            {canEditLoanApplication && loan && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full sm:w-auto"
+                                disabled={stepActionLoading}
+                                nativeButton={false}
+                                render={<Link href={`/loans/new?edit=${loan.id}`} />}
+                              >
+                                <Pencil className="mr-2 h-4 w-4" />
+                                Edit Loan Application
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                              onClick={handleStepSubmit}
+                              disabled={stepActionLoading || !clientCanActOnCurrentStep}
+                            >
+                              <Send className="mr-2 h-4 w-4" />
+                              Submit for Approval
+                            </Button>
+                          </>
+                        )}
+                        {currentStep.kind === "approve" && (
+                          <>
+                            {/* 32 px, like the send-back select in the same row. */}
+                            {showsApprovalEdit && (
+                              <Button
+                                variant="outline"
+                                className="w-full sm:w-auto"
+                                disabled={stepActionLoading}
+                                nativeButton={false}
+                                render={<Link href={approvalEditHref(loan.id)} />}
+                              >
+                                <Pencil className="mr-2 h-4 w-4" />
+                                Edit Loan
+                              </Button>
+                            )}
+                            {sendBackTargets.length > 1 && (
+                              <div className="flex items-center gap-2 w-full sm:w-auto">
+                                <Label
+                                  htmlFor="send-back-target"
+                                  className="text-xs text-muted-foreground whitespace-nowrap"
+                                >
+                                  Send back to
+                                </Label>
+                                <Select
+                                  items={sendBackTargetItems}
+                                  value={String(sendBackTargetIndex)}
+                                  onValueChange={(v) =>
+                                    setSendBackTargetIndex(Number(v))
+                                  }
+                                  disabled={stepActionLoading}
+                                >
+                                  <SelectTrigger
+                                    id="send-back-target"
+                                    className="w-full sm:w-[180px] text-xs"
+                                  >
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {sendBackTargets.map((t) => (
+                                      <SelectItem
+                                        key={t.index}
+                                        value={String(t.index)}
+                                      >
+                                        {t.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            )}
                             <Button
                               variant="outline"
-                              size="sm"
-                              className="w-full sm:w-auto"
-                              disabled={stepActionLoading}
-                              nativeButton={false}
-                              render={<Link href={`/loans/new?edit=${loan.id}`} />}
+                              className="w-full sm:w-auto border-red-500/30 text-red-700 hover:bg-red-50 dark:text-red-400"
+                              onClick={() =>
+                                handleStepSendBack(
+                                  sendBackTargets.length > 1
+                                    ? sendBackTargetIndex
+                                    : sendBackTargets[0]?.index ?? 0
+                                )
+                              }
+                              disabled={
+                                stepActionLoading ||
+                                !stepRemarks.trim() ||
+                                !clientCanActOnCurrentStep ||
+                                sendBackTargets.length === 0
+                              }
                             >
-                              <Pencil className="mr-2 h-4 w-4" />
-                              Edit Loan Application
+                              <XCircle className="mr-2 h-4 w-4" />
+                              Send Back for Revision
                             </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                            onClick={handleStepSubmit}
-                            disabled={stepActionLoading || !clientCanActOnCurrentStep}
-                          >
-                            <Send className="mr-2 h-4 w-4" />
-                            Submit for Review
-                          </Button>
-                        </>
-                      )}
-                      {currentStep.kind === "approve" && (
-                        <>
-                          {sendBackTargets.length > 1 && (
-                            <div className="flex items-center gap-2 w-full sm:w-auto">
-                              <Label
-                                htmlFor="send-back-target"
-                                className="text-xs text-muted-foreground whitespace-nowrap"
-                              >
-                                Send back to
-                              </Label>
-                              <Select
-                                items={sendBackTargetItems}
-                                value={String(sendBackTargetIndex)}
-                                onValueChange={(v) =>
-                                  setSendBackTargetIndex(Number(v))
-                                }
-                                disabled={stepActionLoading}
-                              >
-                                <SelectTrigger
-                                  id="send-back-target"
-                                  className="h-9 w-full sm:w-[180px] text-xs"
-                                >
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {sendBackTargets.map((t) => (
-                                    <SelectItem
-                                      key={t.index}
-                                      value={String(t.index)}
-                                    >
-                                      {t.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          )}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full sm:w-auto border-red-500/30 text-red-700 hover:bg-red-50 dark:text-red-400"
-                            onClick={() =>
-                              handleStepSendBack(
-                                sendBackTargets.length > 1
-                                  ? sendBackTargetIndex
-                                  : sendBackTargets[0]?.index ?? 0
-                              )
-                            }
-                            disabled={
-                              stepActionLoading ||
-                              !stepRemarks.trim() ||
-                              !clientCanActOnCurrentStep ||
-                              sendBackTargets.length === 0
-                            }
-                          >
-                            <XCircle className="mr-2 h-4 w-4" />
-                            Send Back for Revision
-                          </Button>
-                          <Button
-                            size="sm"
-                            className="w-full sm:w-auto bg-green-600 text-white hover:bg-green-700"
-                            onClick={handleStepApprove}
-                            disabled={stepActionLoading || !clientCanActOnCurrentStep}
-                          >
-                            <CheckCircle2 className="mr-2 h-4 w-4" />
-                            {isConfirmationStep ? "Confirm & Forward" : "Approve & Forward"}
-                          </Button>
-                        </>
-                      )}
-                      {currentStep.kind === "release" && (
-                        <Button
-                          size="sm"
-                          className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                          onClick={handleStepRelease}
-                          disabled={stepActionLoading || !clientCanActOnCurrentStep}
-                        >
-                          <Unlock className="mr-2 h-4 w-4" />
-                          Release Loan
-                        </Button>
-                      )}
+                            <Button
+                              className="w-full sm:w-auto bg-green-600 text-white hover:bg-green-700"
+                              onClick={handleStepApprove}
+                              disabled={stepActionLoading || !clientCanActOnCurrentStep}
+                            >
+                              <CheckCircle2 className="mr-2 h-4 w-4" />
+                              {isConfirmationStep ? "Confirm & Forward" : "Approve & Forward"}
+                            </Button>
+                          </>
+                        )}
+                        {currentStep.kind === "release" && (
+                          <DisabledReason reason={releaseHeldReason} wrapperClassName="w-full sm:w-auto">
+                            <Button
+                              size="sm"
+                              className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                              onClick={handleStepRelease}
+                              disabled={stepActionLoading || !clientCanActOnCurrentStep || releaseHeldReason !== null}
+                            >
+                              <Unlock className="mr-2 h-4 w-4" />
+                              Release Loan
+                            </Button>
+                          </DisabledReason>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* "Not your turn" message — current step exists but current user lacks the required role */}
-            {currentStep && !canActOnCurrentStep && (
-              <div className="rounded-lg border bg-muted/40 p-3">
-                <div className="flex items-start gap-2">
-                  <Clock className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                  <div className="text-xs">
-                    <p className="font-medium">
-                      Waiting for {currentStep.name}{" "}
-                      {currentStep.kind === "submit"
-                        ? "to submit the draft"
-                        : currentStep.kind === "release"
-                          ? "to release the loan"
-                          : "to approve"}
-                    </p>
-                    <p className="text-muted-foreground mt-0.5">
-                      Only users with the{" "}
-                      <span className="font-mono bg-muted px-1 py-0.5 rounded">
-                        {currentStep.role}
-                      </span>{" "}
-                      role can act on this step. You are signed in as{" "}
-                      {currentUserDisplayName}
-                      {currentUser?.roles && currentUser.roles.length > 0
-                        ? ` (${currentUser.roles.join(", ")})`
-                        : " (no role assigned)"}
-                      .
-                    </p>
+              {/* "Not your turn" message — current step exists but current user lacks the required role */}
+              {currentStep && !canActOnCurrentStep && (
+                <div className="rounded-lg border bg-muted/40 p-3">
+                  <div className="flex items-start gap-2">
+                    <Clock className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                    <div className="text-xs">
+                      <p className="font-medium">
+                        Waiting for{" "}
+                        {currentStep.assigned_to
+                          ? `${currentStep.assigned_to.name} (${currentStep.name})`
+                          : currentStep.name}{" "}
+                        {currentStep.kind === "submit"
+                          ? "to submit the draft"
+                          : currentStep.kind === "release"
+                            ? waitingForReleasePhrase(outdatedDocuments)
+                            : "to approve"}
+                      </p>
+                      <p className="text-muted-foreground mt-0.5">
+                        {currentStep.assigned_to ? (
+                          <>
+                            This step was forwarded to{" "}
+                            <span className="font-medium">{currentStep.assigned_to.name}</span>
+                            , who acts on it with the{" "}
+                            <span className="font-medium">{roleLabel(currentStep.role)}</span>{" "}
+                            role. You are signed in as{" "}
+                          </>
+                        ) : (
+                          <>
+                            Only users with the{" "}
+                            <span className="font-medium">{roleLabel(currentStep.role)}</span>{" "}
+                            role can act on this step. You are signed in as{" "}
+                          </>
+                        )}
+                        {currentUserDisplayName}
+                        {currentUser?.roles && currentUser.roles.length > 0
+                          ? ` (${currentUser.roles.map((role) => roleLabel(role)).join(", ")})`
+                          : " (no role assigned)"}
+                        .
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
-
-            {allStepsApproved && (
-              <div className="rounded-lg border border-green-200 bg-green-50 p-3 flex items-start gap-2 dark:border-green-800/40 dark:bg-green-900/10">
-                <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
-                <p className="text-sm text-green-700 dark:text-green-400">
-                  All approvers have signed off. The loan is ready for release.
-                </p>
-              </div>
-            )}
-              </CardContent>
-            </CollapsibleContent>
-          </Card>
-        </Collapsible>
-      )}
-
-      {loan.status === "rejected" && (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4 space-y-2">
-              <div className="flex items-center gap-2">
-                <Ban className="h-5 w-5 text-red-600" />
-                <span className="font-semibold text-red-700">
-                  Loan Rejected
-                </span>
-              </div>
-              <p className="text-sm text-red-600">
-                Rejected by{" "}
-                <span className="font-medium">{loan.rejected_by ?? "—"}</span> on{" "}
-                {loan.rejected_at ? formatDateTime(loan.rejected_at) : "N/A"}
-              </p>
-              {loan.rejection_remarks && (
-                <p className="text-sm text-red-600 italic">
-                  &ldquo;{loan.rejection_remarks}&rdquo;
-                </p>
               )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
-      {/* Policy Exception Banner */}
-      {loan.policy_exception && (
-        <Card className="border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-900/10">
-          <CardContent className="py-4">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-              <div className="flex-1 space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-amber-700 dark:text-amber-400">Policy Exception</span>
-                  <Badge variant="outline" className="bg-amber-500/10 text-amber-700 border-amber-500/30 text-xs">
-                    Full BOD Approval Required
-                  </Badge>
+              {/* Ready for release, or, while Release is held for a reprint, waiting
+                  on it: one line, from the same list as the button. */}
+              {releaseReady === "ready" && (
+                <div className="rounded-lg border border-green-200 bg-green-50 p-3 flex items-start gap-2 dark:border-green-800/40 dark:bg-green-900/10">
+                  <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
+                  <p className="text-sm text-green-700 dark:text-green-400">
+                    All approvers have signed off. The loan is ready for release.
+                  </p>
                 </div>
-                {loan.policy_exception_details && (
-                  <p className="text-sm text-amber-700/80 dark:text-amber-300/80">
-                    {loan.policy_exception_details}
+              )}
+              {releaseReady === "waiting_for_reprint" && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 flex items-start gap-2 dark:border-amber-700 dark:bg-amber-900/10">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                  <p className="text-sm text-amber-700 dark:text-amber-400">
+                    {waitingForReprintLine(outdatedDocuments)}
+                  </p>
+                </div>
+              )}
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+        )}
+
+        {loan.status === "rejected" && (
+          <Card>
+            <CardContent className="pt-6">
+              <div className="rounded-lg border border-red-200 bg-red-50 p-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Ban className="h-5 w-5 text-red-600" />
+                  <span className="font-semibold text-red-700">
+                    Loan Rejected
+                  </span>
+                </div>
+                <p className="text-sm text-red-600">
+                  Rejected by{" "}
+                  <span className="font-medium">{loan.rejected_by ?? "—"}</span> on{" "}
+                  {loan.rejected_at ? formatDateTime(loan.rejected_at) : "N/A"}
+                </p>
+                {loan.rejection_remarks && (
+                  <p className="text-sm text-red-600 italic">
+                    &ldquo;{loan.rejection_remarks}&rdquo;
                   </p>
                 )}
-                {loan.policy_exception_letter && (
-                  <a
-                    href={loan.policy_exception_letter}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-xs text-brand-orange hover:underline"
-                  >
-                    <FileText className="h-3.5 w-3.5" />
-                    View Policy Exception Letter
-                  </a>
-                )}
               </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+            </CardContent>
+          </Card>
+        )}
 
-      {/* Loan Details Cards */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Card 1: Loan Information */}
-        <CollapsibleCard
-          title="Loan Information"
-          icon={<FileText className="h-4 w-4 text-muted-foreground" />}
-          contentClassName="space-y-4"
-        >
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground">
-                  Application Number
-                </p>
-                <p className="text-sm font-medium font-mono">
-                  {loan.application_number}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Loan Product</p>
-                <p className="text-sm font-medium">
-                  {loanProductName || "N/A"}
-                </p>
-              </div>
-              {loan.purpose && (
-                <div className="col-span-2">
-                  <p className="text-xs text-muted-foreground">Purpose</p>
-                  <p className="text-sm font-medium">{loan.purpose}</p>
+        {/* Policy Exception Banner */}
+        {loan.policy_exception && (
+          <Card className="border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-900/10">
+            <CardContent className="py-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="flex-1 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-amber-700 dark:text-amber-400">Policy Exception</span>
+                    <Badge variant="outline" className="bg-amber-500/10 text-amber-700 border-amber-500/30 text-xs">
+                      Full BOD Approval Required
+                    </Badge>
+                  </div>
+                  {loan.policy_exception_details && (
+                    <p className="text-sm text-amber-700/80 dark:text-amber-300/80">
+                      {loan.policy_exception_details}
+                    </p>
+                  )}
+                  {loan.policy_exception_letter && (
+                    <a
+                      href={loan.policy_exception_letter}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs text-brand-orange hover:underline"
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      View Policy Exception Letter
+                    </a>
+                  )}
                 </div>
-              )}
-            </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-            <Separator />
-
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  Principal Amount
-                  {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
-                </p>
-                <p className="text-sm font-semibold">
-                  {formatCurrency(loan.principal_amount)}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  Interest Amount
-                  {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
-                </p>
-                <p className="text-sm font-semibold">{formatCurrency(loanInterestAmount)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  Interest Rate
-                  {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
-                </p>
-                <p className="text-sm font-medium">{formatRate(loan.interest_rate)}%</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  Interest Type
-                  {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
-                </p>
-                <p className="text-sm font-medium capitalize">
-                  {loanInterestType || "N/A"}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  Term
-                  {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
-                </p>
-                <p className="text-sm font-medium">
-                  {loanTermLabel}
-                </p>
-              </div>
-              {(loan.scb_amount ?? 0) > 0 && (
+        {/* Loan Details Cards */}
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Card 1: Loan Information */}
+          <CollapsibleCard
+            title="Loan Information"
+            icon={<FileText className="h-4 w-4 text-muted-foreground" />}
+            contentClassName="space-y-4"
+          >
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs text-muted-foreground">
-                    Share Capital Build-Up
+                    Application Number
                   </p>
-                  <p className="text-sm font-semibold">
-                    {formatCurrency(storedScheduleTotals.shareCapitalBuildUp)}
+                  <p className="text-sm font-medium font-mono">
+                    {loan.application_number}
                   </p>
                 </div>
-              )}
+                <div>
+                  <p className="text-xs text-muted-foreground">Loan Product</p>
+                  <p className="text-sm font-medium">
+                    {loanProductName || "N/A"}
+                  </p>
+                </div>
+                {fileLoanNo && (
+                  <div className="col-span-2">
+                    <p className="text-xs text-muted-foreground">{IMPORTED_LOAN_NO_LABEL}</p>
+                    <p className="text-sm font-medium font-mono break-all">{fileLoanNo}</p>
+                  </div>
+                )}
+                {loan.purpose && (
+                  <div className="col-span-2">
+                    <p className="text-xs text-muted-foreground">Purpose</p>
+                    <p className="text-sm font-medium">{loan.purpose}</p>
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    Principal Amount
+                    {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
+                  </p>
+                  <p className="text-sm font-semibold">
+                    {formatCurrency(loan.principal_amount)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    Interest Amount
+                    {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
+                  </p>
+                  <p className="text-sm font-semibold">
+                    {loanInterestAmount === null ? "—" : formatCurrency(loanInterestAmount)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    Interest Rate
+                    {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
+                  </p>
+                  <p className="text-sm font-medium">
+                    {rateWithPeriod(loan.interest_rate, loan.interest_rate_frequency)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    Interest Type
+                    {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
+                  </p>
+                  <p className="text-sm font-medium">
+                    {loanInterestType ? interestMethodLabel(loanInterestType) : "N/A"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    Term
+                    {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
+                  </p>
+                  <p className="text-sm font-medium">
+                    {loanTermLabel}
+                  </p>
+                </div>
+                {(loan.scb_amount ?? 0) > 0 && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">
+                      Share Capital Build-Up
+                    </p>
+                    <p className="text-sm font-semibold">
+                      {storedSchedule.length > 0
+                        ? currencyOrDash(storedScheduleTotals.shareCapitalBuildUp)
+                        : "—"}
+                    </p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    Payment Frequency
+                  </p>
+                  <p className="text-sm font-medium">
+                    {(PAYMENT_FREQUENCY_LABELS[loanFrequency as keyof typeof PAYMENT_FREQUENCY_LABELS] ?? loanFrequency) || "N/A"}
+                  </p>
+                </div>
+                {/* The penalty terms the loan was created with, from the server. */}
+                {env.features.penaltyConfigs && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Penalty</p>
+                    <PenaltyTerms loan={loan} className="font-medium" />
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-muted-foreground">Total Payable</p>
+                  <p className="text-sm font-semibold">
+                    {currencyOrDash(loanTotalPayable)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Contract Total</p>
+                  <p className="text-sm font-semibold">{currencyOrDash(loanContractTotal)}</p>
+                </div>
+                {/* A restructure pays nothing out: what is collected from the
+                    member and Paid out, in place of Net Proceeds. Each figure
+                    is the server's (the preview before release, the loan's
+                    own after), a dash when it sent none. */}
+                {proceedsFigures(!!loan.is_restructure, {
+                  totalDeductions: cardPreview
+                    ? cardPreview.status === "loaded"
+                      ? cardPreview.preview.total_deductions
+                      : null
+                    : loan.total_deductions,
+                  netProceeds: cardPreview
+                    ? cardPreview.status === "loaded"
+                      ? cardPreview.preview.net_proceeds
+                      : null
+                    : loan.net_proceeds,
+                  restructure:
+                    cardSource === "release-preview" && releasePreview.status === "loaded"
+                      ? releasePreview.preview.restructure
+                      : null,
+                }).map((figure) => (
+                  <div key={figure.label}>
+                    <p className="text-xs text-muted-foreground">{figure.label}</p>
+                    <p className="text-sm font-semibold">{currencyOrDash(figure.amount)}</p>
+                    {cardEstimated && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Estimated until release
+                      </p>
+                    )}
+                  </div>
+                ))}
+                {/* Insurance premium left unpaid at release: part of the
+                    server's Total Payable, collected before anything else. */}
+                {insuranceOwed !== null && (
+                  <div className="col-span-2">
+                    <p className="text-xs text-muted-foreground">{INSURANCE_OWED_LABEL}</p>
+                    <p className="text-sm font-semibold">{formatCurrency(insuranceOwed)}</p>
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+
+              {/* Deductions */}
+              <div className="space-y-3">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Deductions</p>
+                  {cardEstimated && (
+                    <p className="text-xs text-muted-foreground">Estimated until release</p>
+                  )}
+                </div>
+                {/* Before release: what the release will withhold, as the server
+                    works it out with the Release dialog's own code. */}
+                {cardPreview ? (
+                  cardPreview.status === "loaded" ? (
+                    cardPreview.preview.deductions.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No fees will be withheld.</p>
+                    ) : cardPreview.preview.deductions.map((item, index) => (
+                      <div key={`${item.name}-${index}`} className="flex items-center justify-between gap-4">
+                        <span className="text-sm text-muted-foreground">
+                          {item.name}
+                          {item.fee_id != null && <span className="ml-1.5 text-xs">from Fees settings</span>}
+                          <FormulaSnapshot item={item} />
+                        </span>
+                        <span className="text-sm font-medium">{formatCurrencyExact(item.amount)}</span>
+                      </div>
+                    ))
+                  ) : cardPreview.status === "loading" ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Spinner className="size-4" />
+                      Getting the release figures…
+                    </div>
+                  ) : (
+                    <div role="alert" className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm text-destructive">{cardPreview.message}</p>
+                      <Button type="button" variant="outline" size="sm" onClick={reloadCardPreview}>
+                        Try again
+                      </Button>
+                    </div>
+                  )
+                ) : (() => {
+                  // Render every backend-computed deduction as its own line —
+                  // including configured fees like "Insurance Premium" — so
+                  // product-specific fees aren't silently folded into "Other".
+                  const named = deductionsArray
+                    .filter((d) => (d?.name ?? "").trim() && Number(d.amount ?? 0) !== 0)
+                    .map((d) => ({ label: d.name as string, amount: Number(d.amount ?? 0), snapshot: d }));
+                  // The server's unitemised remainder, signed; its own line when not 0.
+                  const other = Number(loan.unitemised_deductions ?? 0);
+                  const rows = named.length > 0
+                    ? named
+                    : [
+                        { label: "Processing Fee", amount: loanProcessingFee },
+                        { label: "Service Fee", amount: loanServiceFee },
+                      ];
+                  return (
+                    <>
+                      {rows.map((r) => (
+                        <div key={r.label} className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">
+                            {r.label}
+                            {"snapshot" in r && <FormulaSnapshot item={r.snapshot} />}
+                          </span>
+                          <span className="text-sm font-medium">{formatCurrency(r.amount)}</span>
+                        </div>
+                      ))}
+                      {other !== 0 && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">Other Deductions</span>
+                          <span className="text-sm font-medium">{formatCurrency(other)}</span>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+                <Separator />
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold">Total Deductions</span>
+                  <span className="text-sm font-semibold">
+                    {cardPreview
+                      ? cardPreview.status === "loaded"
+                        ? formatCurrencyExact(cardPreview.preview.total_deductions)
+                        : "—"
+                      : currencyOrDash(loan.total_deductions)}
+                  </span>
+                </div>
+              </div>
+          </CollapsibleCard>
+
+          {/* Card 2: Borrower's Active Loans */}
+          <BorrowerActiveLoans
+            loans={borrowerLoans}
+            loading={borrowerLoansLoading}
+            truncated={borrowerLoansTruncated}
+            approvalSteps={approvalSteps}
+            approvalRounds={approvalRounds}
+            loanStatus={loan.status}
+            loan={loan}
+          />
+
+          {/* Card 3: Member & Co-Maker */}
+          <Collapsible open={memberCoMakerOpen} onOpenChange={setMemberCoMakerOpen}>
+            <Card>
+              <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
+                <CollapsibleTrigger className="w-full text-left group/trigger">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <UserCheck className="h-4 w-4 text-muted-foreground" />
+                    Member & Co-Maker
+                    <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-aria-expanded/trigger:rotate-180 shrink-0" />
+                  </CardTitle>
+                </CollapsibleTrigger>
+              </CardHeader>
+              <CollapsibleContent>
+                <CardContent className="space-y-4">
+              <div>
+                <p className="text-xs text-muted-foreground">Member</p>
+                <p className="text-sm font-medium">
+                  {loanBorrowerName || "N/A"}
+                </p>
+              </div>
               <div>
                 <p className="text-xs text-muted-foreground">
-                  Payment Frequency
+                  Co-Maker{loanCoMakers.length > 1 ? "s" : ""}
                 </p>
-                <p className="text-sm font-medium">
-                  {(PAYMENT_FREQUENCY_LABELS[loanFrequency as keyof typeof PAYMENT_FREQUENCY_LABELS] ?? loanFrequency) || "N/A"}
-                </p>
-              </div>
-            </div>
-
-            <Separator />
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground">Total Payable</p>
-                <p className="text-sm font-semibold">
-                  {formatCurrency(loanTotalPayable)}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Net Proceeds</p>
-                <p className="text-sm font-semibold">
-                  {loan.net_proceeds != null
-                    ? formatCurrency(loan.net_proceeds)
-                    : "N/A"}
-                </p>
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Deductions */}
-            <div className="space-y-3">
-              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Deductions</p>
-              {(() => {
-                // Render every backend-computed deduction as its own line —
-                // including configured fees like "Insurance Premium" — so
-                // product-specific fees aren't silently folded into "Other".
-                const named = deductionsArray
-                  .filter((d) => (d?.name ?? "").trim() && Number(d.amount ?? 0) !== 0)
-                  .map((d) => ({ label: d.name as string, amount: Number(d.amount ?? 0) }));
-                const namedTotal = named.reduce((s, r) => s + r.amount, 0);
-                const other = Math.max(0, (loan.total_deductions ?? 0) - namedTotal);
-                const rows = named.length > 0
-                  ? named
-                  : [
-                      { label: "Processing Fee", amount: loanProcessingFee },
-                      { label: "Service Fee", amount: loanServiceFee },
-                    ];
-                return (
-                  <>
-                    {rows.map((r) => (
-                      <div key={r.label} className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">{r.label}</span>
-                        <span className="text-sm font-medium">{formatCurrency(r.amount)}</span>
-                      </div>
+                {loanCoMakers.length === 0 ? (
+                  <p className="text-sm font-medium">None</p>
+                ) : (
+                  <ul className="space-y-0.5">
+                    {loanCoMakers.map((cm) => (
+                      <li key={cm.id} className="text-sm font-medium">
+                        {coMakerName(cm) || "—"}
+                      </li>
                     ))}
-                    {other > 0 && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Other Deductions</span>
-                        <span className="text-sm font-medium">{formatCurrency(other)}</span>
+                  </ul>
+                )}
+              </div>
+              <Separator />
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs text-muted-foreground">Account Officer (AO)</p>
+                  {!aoEditing && canUpdateLoan && (
+                    <button
+                      type="button"
+                      onClick={() => setAoEditing(true)}
+                      className="text-xs text-brand-orange hover:underline flex items-center gap-1"
+                    >
+                      <Pencil className="h-3 w-3" />
+                      {loan.account_officer_id ? "Change" : "Assign"}
+                    </button>
+                  )}
+                </div>
+                {aoEditing ? (
+                  <div className="space-y-2">
+                    <StaffPicker
+                      aria-label="Account officer"
+                      value={loan.account_officer ?? null}
+                      onChange={(officer) => {
+                        if (officer) handleSaveAO(officer.id);
+                      }}
+                      disabled={aoSaving}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setAoEditing(false)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-sm font-medium">
+                    {loan.account_officer?.full_name ?? "Not assigned"}
+                  </p>
+                )}
+              </div>
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+
+          {/* Share Capital — current balance for the loan's member */}
+          <ShareCapitalCard
+            borrowerId={loan.borrower?.id ?? loan.borrower_id ?? null}
+            version={shareCapitalVersion}
+          />
+
+          {/* Auto-Pay Status Card: the loans the backend's toggle accepts
+              (Loan::ACTIVE_STATUSES, released and ongoing), which both read
+              "Current". */}
+          {parts.autoPay && ["released", "ongoing", "current"].includes(loan.status) && (
+            <CollapsibleCard
+              title="Auto-Pay"
+              headerExtra={
+                loan.auto_pay_enabled ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-300">
+                    ● Enabled
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/50 px-2.5 py-0.5 text-xs text-muted-foreground">
+                    ○ Disabled
+                  </span>
+                )
+              }
+              contentClassName="space-y-3 text-sm"
+            >
+                {loan.auto_pay_enabled && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">CBS Reference</span>
+                      <span className="font-mono font-medium">
+                        {loan.auto_pay_cbs_reference ?? "—"}
+                      </span>
+                    </div>
+                    {loan.auto_pay_enabled_at && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Enabled on</span>
+                        <span>{formatDate(loan.auto_pay_enabled_at)}</span>
                       </div>
                     )}
                   </>
-                );
-              })()}
-              <Separator />
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold">Total Deductions</span>
-                <span className="text-sm font-semibold">
-                  {formatCurrency(totalDeductions)}
-                </span>
-              </div>
-            </div>
-        </CollapsibleCard>
-
-        {/* Card 2: Borrower's Active Loans */}
-        <BorrowerActiveLoans
-          loans={borrowerLoans}
-          loading={borrowerLoansLoading}
-          truncated={borrowerLoansTruncated}
-          approvalSteps={approvalSteps}
-          loanStatus={loan.status}
-          loan={loan}
-        />
-
-        {/* Card 3: Member & Co-Maker */}
-        <Collapsible open={memberCoMakerOpen} onOpenChange={setMemberCoMakerOpen}>
-          <Card>
-            <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
-              <CollapsibleTrigger className="w-full text-left group/trigger">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <UserCheck className="h-4 w-4 text-muted-foreground" />
-                  Member & Co-Maker
-                  <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-aria-expanded/trigger:rotate-180 shrink-0" />
-                </CardTitle>
-              </CollapsibleTrigger>
-            </CardHeader>
-            <CollapsibleContent>
-              <CardContent className="space-y-4">
-            <div>
-              <p className="text-xs text-muted-foreground">Member</p>
-              <p className="text-sm font-medium">
-                {loanBorrowerName || "N/A"}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Co-Maker</p>
-              <p className="text-sm font-medium">
-                {loanCoMakerName || "None"}
-              </p>
-            </div>
-            <Separator />
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-xs text-muted-foreground">Account Officer (AO)</p>
-                {!aoEditing && (
-                  <button
-                    type="button"
-                    onClick={() => setAoEditing(true)}
-                    className="text-xs text-brand-orange hover:underline flex items-center gap-1"
-                  >
-                    <Pencil className="h-3 w-3" />
-                    {(loan as unknown as Record<string, unknown>).account_officer_id ? "Change" : "Assign"}
-                  </button>
                 )}
-              </div>
-              {aoEditing ? (
-                <div className="space-y-2">
-                  {officerShortfall && (
-                    <IncompleteListNotice
-                      shown={officerShortfall.shown}
-                      total={officerShortfall.total}
-                      noun="active users"
-                      consequence="Some staff are missing from this picker and cannot be assigned as account officer."
-                    />
-                  )}
-                  <Popover open={aoOpen} onOpenChange={setAoOpen}>
-                    <PopoverTrigger
-                      render={
-                        <button
-                          type="button"
-                          role="combobox"
-                          disabled={aoSaving}
-                          className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-                        />
-                      }
-                    >
-                      <span className="text-muted-foreground text-sm">Select account officer...</span>
-                      <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
-                    </PopoverTrigger>
-                    <PopoverContent className="w-(--anchor-width) p-0" align="start">
-                      <Command>
-                        <CommandInput placeholder="Search officer..." />
-                        <CommandList>
-                          <CommandEmpty>No users found.</CommandEmpty>
-                          <CommandGroup>
-                            {users.map((user) => (
-                              <CommandItem
-                                key={user.id}
-                                value={user.full_name}
-                                onSelect={() => {
-                                  handleSaveAO(user.id);
-                                  setAoOpen(false);
-                                }}
-                              >
-                                <Check
-                                  className={cn(
-                                    "mr-2 size-4",
-                                    (loan as unknown as Record<string, unknown>).account_officer_id === user.id ? "opacity-100" : "opacity-0"
-                                  )}
-                                />
-                                <div>
-                                  <p className="text-sm">{user.full_name}</p>
-                                  <p className="text-xs text-muted-foreground capitalize">{user.roles?.[0]?.replace("_", " ") ?? ""}</p>
-                                </div>
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setAoEditing(false)}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              ) : (
-                <p className="text-sm font-medium">
-                  {(() => {
-                    const ao = (loan as unknown as Record<string, unknown>).account_officer as { id?: number; full_name?: string; name?: string } | undefined;
-                    return ao?.full_name ?? ao?.name ?? "Not assigned";
-                  })()}
-                </p>
-              )}
-            </div>
-              </CardContent>
-            </CollapsibleContent>
-          </Card>
-        </Collapsible>
+                <PermissionButton
+                  permission="auto_pay:toggle"
+                  tooltip="Turning Auto-Pay on or off needs permission to manage Auto-Pay"
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  wrapperClassName="w-full"
+                  onClick={() => {
+                    setAutoPayIsPostRelease(false);
+                    setAutoPayDialogOpen(true);
+                  }}
+                >
+                  {loan.auto_pay_enabled ? "Disable Auto-Pay" : "Enable Auto-Pay"}
+                </PermissionButton>
+            </CollapsibleCard>
+          )}
 
-        {/* Share Capital — current balance for the loan's member */}
-        <ShareCapitalCard borrowerId={loan.borrower?.id ?? loan.borrower_id ?? null} />
+          {/* Card 4: Workflow History */}
+          <Collapsible open={workflowHistoryOpen} onOpenChange={setWorkflowHistoryOpen}>
+            <Card>
+              <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
+                <CollapsibleTrigger className="w-full text-left group/trigger">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    Workflow History
+                    <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-aria-expanded/trigger:rotate-180 shrink-0" />
+                  </CardTitle>
+                </CollapsibleTrigger>
+              </CardHeader>
+              <CollapsibleContent>
+                <CardContent>
+                  <WorkflowHistory loan={loan} rounds={approvalRounds} steps={approvalSteps} />
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+        </div>
 
-        {/* Auto-Pay Status Card */}
-        {["released", "current"].includes(loan.status) && (
+        {/* Release Details — only for released+ loans */}
+        {isLocked && loan.release_date && (
           <CollapsibleCard
-            title="Auto-Pay"
-            headerExtra={
-              loan.auto_pay_enabled ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-300">
-                  ● Enabled
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/50 px-2.5 py-0.5 text-xs text-muted-foreground">
-                  ○ Disabled
-                </span>
-              )
+            icon={<Unlock className="h-4 w-4 text-cyan-600" />}
+            title={
+              <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                Release Details
+                {loanSummary && (
+                  <Badge variant="outline" className="text-[10px] bg-green-500/10 text-green-700 border-green-500/30">
+                    Server-verified
+                  </Badge>
+                )}
+              </span>
             }
-            contentClassName="space-y-3 text-sm"
-          >
-              {loan.auto_pay_enabled && (
-                <>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">CBS Reference</span>
-                    <span className="font-mono font-medium">
-                      {loan.auto_pay_cbs_reference ?? "—"}
-                    </span>
-                  </div>
-                  {loan.auto_pay_enabled_at && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Enabled on</span>
-                      <span>{formatDate(loan.auto_pay_enabled_at)}</span>
-                    </div>
-                  )}
-                </>
-              )}
+            headerExtra={
+              // A phone gets the short label, so the button is never cut off;
+              // its name stays "Statement of Account" for screen readers.
               <Button
                 variant="outline"
                 size="sm"
-                className="w-full"
-                onClick={() => {
-                  setAutoPayIsPostRelease(false);
-                  setAutoPayDialogOpen(true);
-                }}
+                aria-label="Statement of Account"
+                onClick={handleOpenStatementOfAccount}
               >
-                {loan.auto_pay_enabled ? "Disable Auto-Pay" : "Enable Auto-Pay"}
+                <FileText className="mr-2 h-4 w-4" />
+                <span className="sm:hidden">Statement</span>
+                <span className="hidden sm:inline">Statement of Account</span>
               </Button>
+            }
+          >
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <p className="text-xs text-muted-foreground">Release Date</p>
+                  <p className="text-sm font-medium">{formatDate(loan.release_date)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Release Method</p>
+                  <p className="text-sm font-medium">{loanReleaseMethod.method}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Release Reference</p>
+                  <p className="text-sm font-medium break-all">{loanReleaseMethod.reference}</p>
+                </div>
+                {loan.maturity_date && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Maturity Date</p>
+                    <p className="text-sm font-medium">{formatDate(loan.maturity_date)}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-xs text-muted-foreground">Next Due Date</p>
+                  <p className="text-sm font-medium">
+                    {(() => {
+                      // Upon-maturity loans have a single payment due at maturity,
+                      // so the next due date IS the maturity date — never a
+                      // monthly increment off the release date.
+                      const isUponMaturity =
+                        loanFrequency === "upon_maturity" ||
+                        loan.interest_method === "upon_maturity" ||
+                        loan.interest_type === "upon_maturity";
+                      const nextDue = isUponMaturity
+                        ? loan.maturity_date ?? loanSummary?.next_due_date ?? loan.next_due_date
+                        : loanSummary?.next_due_date ?? loan.next_due_date;
+                      return nextDue ? formatDate(nextDue) : "—";
+                    })()}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Outstanding Balance</p>
+                  <p className="text-sm font-semibold">{currencyOrDash(loanTotalOutstanding)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Principal Balance</p>
+                  <p className="text-sm font-medium">{currencyOrDash(loanPrincipalBalance)}</p>
+                </div>
+              </div>
+              {loanSummary && (
+                <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Total Paid</p>
+                    <p className="text-sm font-medium">{currencyOrDash(loanSummary.total_repaid)}</p>
+                    {totalPaidNote && <p className="text-xs text-muted-foreground">{totalPaidNote}</p>}
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Principal Paid</p>
+                    <p className="text-sm font-medium">{currencyOrDash(loanSummary.principal_paid)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Interest Paid</p>
+                    <p className="text-sm font-medium">{currencyOrDash(loanSummary.interest_paid)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Overdue (incl. penalty)</p>
+                    <p className="text-sm font-semibold text-red-600">
+                      {currencyOrDash(loanSummary.overdue_amount)}
+                    </p>
+                    <PenaltyMonthsNote note={summaryPenaltyNote} className="text-xs" />
+                  </div>
+                </div>
+              )}
           </CollapsibleCard>
         )}
 
-        {/* Card 4: Workflow History */}
-        <Collapsible open={workflowHistoryOpen} onOpenChange={setWorkflowHistoryOpen}>
-          <Card>
-            <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors">
-              <CollapsibleTrigger className="w-full text-left group/trigger">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  Workflow History
-                  <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-aria-expanded/trigger:rotate-180 shrink-0" />
-                </CardTitle>
-              </CollapsibleTrigger>
-            </CardHeader>
-            <CollapsibleContent>
-              <CardContent>
-                <WorkflowHistory loan={loan} />
-              </CardContent>
-            </CollapsibleContent>
-          </Card>
-        </Collapsible>
-      </div>
 
-      {/* Release Details — only for released+ loans */}
-      {isLocked && loan.release_date && (
-        <CollapsibleCard
-          icon={<Unlock className="h-4 w-4 text-cyan-600" />}
-          title={
-            <>
-              Release Details
-              {loanSummary && (
-                <Badge variant="outline" className="text-[10px] bg-green-500/10 text-green-700 border-green-500/30">
-                  Server-verified
-                </Badge>
-              )}
-            </>
-          }
-          headerExtra={
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleOpenStatementOfAccount}
+        {/* Amortization Schedule — collapsible, open by default. Shown for
+            every loan that has a server schedule to read, rows or not: loading,
+            failed and empty each say so in place of the rows. */}
+        {scheduleSource !== null && (
+          <Card>
+            <CardHeader
+              className="cursor-pointer select-none"
+              onClick={() => setScheduleOpen((o) => !o)}
             >
-              <FileText className="mr-2 h-4 w-4" />
-              Statement of Account
-            </Button>
-          }
-        >
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground">Release Date</p>
-                <p className="text-sm font-medium">{formatDate(loan.release_date)}</p>
-              </div>
-              {loan.maturity_date && (
-                <div>
-                  <p className="text-xs text-muted-foreground">Maturity Date</p>
-                  <p className="text-sm font-medium">{formatDate(loan.maturity_date)}</p>
-                </div>
-              )}
-              <div>
-                <p className="text-xs text-muted-foreground">Next Due Date</p>
-                <p className="text-sm font-medium">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                  Amortization Schedule
+                  {["draft", "for_review", "approved"].includes(loan.status) && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-yellow-700 dark:text-yellow-400 border-yellow-500/40 bg-yellow-500/10">
+                      Preview
+                    </Badge>
+                  )}
+                </CardTitle>
+                <div className="flex items-center gap-2">
                   {(() => {
-                    // Upon-maturity loans have a single payment due at maturity,
-                    // so the next due date IS the maturity date — never a
-                    // monthly increment off the release date.
                     const isUponMaturity =
-                      loanFrequency === "upon_maturity" ||
+                      loan.frequency === "upon_maturity" ||
                       loan.interest_method === "upon_maturity" ||
                       loan.interest_type === "upon_maturity";
-                    const nextDue = isUponMaturity
-                      ? loan.maturity_date ?? loanSummary?.next_due_date ?? loan.next_due_date
-                      : loanSummary?.next_due_date ?? loan.next_due_date;
-                    return nextDue ? formatDate(nextDue) : "—";
+                    const canAutoPay =
+                      isUponMaturity &&
+                      ["released", "ongoing", "current", "past_due"].includes(loan.status) &&
+                      (loanTotalOutstanding ?? 0) > 0;
+                    if (!canAutoPay) return null;
+                    return (
+                      <Button
+                        size="sm"
+                        className="h-7 px-2.5 text-xs bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAutoPayConfirmOpen(true);
+                        }}
+                      >
+                        <Zap className="h-3.5 w-3.5 mr-1" />
+                        Auto Pay
+                      </Button>
+                    );
                   })()}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Outstanding Balance</p>
-                <p className="text-sm font-semibold">
-                  {formatCurrency(
-                    loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0
+                  {scheduleOpen ? (
+                    <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
                   )}
-                </p>
-              </div>
-            </div>
-            {loanSummary && (
-              <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t">
-                <div>
-                  <p className="text-xs text-muted-foreground">Total Paid</p>
-                  <p className="text-sm font-medium">{formatCurrency(loanSummary.total_paid ?? 0)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Principal Paid</p>
-                  <p className="text-sm font-medium">{formatCurrency(loanSummary.principal_paid ?? 0)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Interest Paid</p>
-                  <p className="text-sm font-medium">{formatCurrency(loanSummary.interest_paid ?? 0)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Overdue + Penalty</p>
-                  <p className="text-sm font-semibold text-red-600">
-                    {formatCurrency(
-                      (loanSummary.overdue_amount ?? 0) + (loanSummary.penalty_amount ?? 0)
-                    )}
-                  </p>
                 </div>
               </div>
-            )}
-        </CollapsibleCard>
-      )}
-
-
-      {/* Amortization Schedule — collapsible, collapsed by default */}
-      {storedSchedule.length > 0 && (
-        <Card>
-          <CardHeader
-            className="cursor-pointer select-none"
-            onClick={() => setScheduleOpen((o) => !o)}
-          >
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <FileText className="h-4 w-4 text-muted-foreground" />
-                Amortization Schedule
-                {["draft", "for_review", "approved"].includes(loan.status) && (
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-yellow-700 dark:text-yellow-400 border-yellow-500/40 bg-yellow-500/10">
-                    Preview
-                  </Badge>
-                )}
-              </CardTitle>
-              <div className="flex items-center gap-2">
+            </CardHeader>
+            {scheduleOpen && (
+              <CardContent className="pt-0">
                 {(() => {
-                  const isUponMaturity =
-                    loan.frequency === "upon_maturity" ||
-                    loan.interest_method === "upon_maturity" ||
-                    loan.interest_type === "upon_maturity";
-                  const canAutoPay =
-                    isUponMaturity &&
-                    ["released", "ongoing", "current", "past_due"].includes(loan.status) &&
-                    (loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0) > 0;
-                  if (!canAutoPay) return null;
-                  return (
-                    <Button
-                      size="sm"
-                      className="h-7 px-2.5 text-xs bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setAutoPayConfirmOpen(true);
-                      }}
-                    >
-                      <Zap className="h-3.5 w-3.5 mr-1" />
-                      Auto Pay
-                    </Button>
-                  );
-                })()}
-                {scheduleOpen ? (
-                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                ) : (
-                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                )}
-              </div>
-            </div>
-          </CardHeader>
-          {scheduleOpen && (
-            <CardContent className="pt-0">
-              {(() => {
-                const isReleased = ["released", "ongoing", "completed", "defaulted", "restructured", "closed"].includes(loan.status);
-                const hasScb = storedScheduleTotals.shareCapitalBuildUp > 0;
+                  const isReleased = hasServerLoanData;
+                  const hasScb = scheduleHasScb;
+                  // In place of the rows on both tabs when there are none to draw.
+                  const scheduleNotice =
+                    storedSchedule.length > 0 ? null : (
+                      <ScheduleNotice load={scheduleLoad} loan={loan} onRetry={retrySchedule} />
+                    );
 
-                const scheduleTable = (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-12 text-center">#</TableHead>
-                          <TableHead>Due Date</TableHead>
-                          <TableHead className="text-right">Principal Due</TableHead>
-                          <TableHead className="text-right">Interest</TableHead>
-                          {hasScb && <TableHead className="text-right">Share Capital Build-Up</TableHead>}
-                          <TableHead className="text-right">Total Payment</TableHead>
-                          <TableHead className="text-right">Balance</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {storedSchedule.map((row) => (
-                          <TableRow key={row.period}>
-                            <TableCell className="text-center">{row.period}</TableCell>
-                            <TableCell>{formatDateObj(row.dueDate)}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(row.principal)}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(row.interest)}</TableCell>
-                            {hasScb && (
-                              <TableCell className="text-right text-brand-orange">
-                                {formatCurrency(row.shareCapitalBuildUp)}
-                              </TableCell>
-                            )}
-                            <TableCell className="text-right font-medium">{formatCurrency(row.totalPayment)}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(row.balance)}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                      <TableFooter>
-                        <TableRow>
-                          <TableCell colSpan={2} className="font-semibold">Total</TableCell>
-                          <TableCell className="text-right font-semibold">{formatCurrency(storedScheduleTotals.principal)}</TableCell>
-                          <TableCell className="text-right font-semibold">{formatCurrency(storedScheduleTotals.interest)}</TableCell>
-                          {hasScb && (
-                            <TableCell className="text-right font-semibold text-brand-orange">
-                              {formatCurrency(storedScheduleTotals.shareCapitalBuildUp)}
-                            </TableCell>
-                          )}
-                          <TableCell className="text-right font-bold">{formatCurrency(storedScheduleTotals.totalPayment)}</TableCell>
-                          <TableCell />
-                        </TableRow>
-                      </TableFooter>
-                    </Table>
-                  </div>
-                );
-
-                const balancesTable = (
-                  <div className="space-y-3">
-                    {loanSummary && (
-                      <div className="flex flex-wrap gap-4 px-1">
-                        <div>
-                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Current Outstanding</p>
-                          <p className="text-base font-bold text-brand-orange tabular-nums">
-                            {formatCurrency(loanSummary.outstanding_balance ?? 0)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Total Paid</p>
-                          <p className="text-base font-bold tabular-nums">{formatCurrency(loanSummary.total_paid ?? 0)}</p>
-                        </div>
-                        {(loanSummary.overdue_amount ?? 0) > 0 && (
-                          <div>
-                            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Overdue</p>
-                            <p className="text-base font-bold text-destructive tabular-nums">
-                              {formatCurrency(loanSummary.overdue_amount ?? 0)}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-12 text-center">#</TableHead>
-                          <TableHead>Due Date</TableHead>
-                          <TableHead className="text-right">Principal Due</TableHead>
-                          <TableHead className="text-right">Interest</TableHead>
-                          {hasScb && <TableHead className="text-right">Share Capital Build-Up</TableHead>}
-                          <TableHead className="text-right">Total Payment</TableHead>
-                          <TableHead className="text-right">Balance</TableHead>
-                          <TableHead className="text-center">Status</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {storedSchedule.map((row) => {
-                          const today = new Date();
-                          today.setHours(0, 0, 0, 0);
-                          const isPaid = row.status === "paid";
-                          const isPartial = row.status === "partial";
-                          const isOverdue = row.status === "overdue" || (
-                            !isPaid && !isPartial && row.dueDate < today
-                          );
-                          const isUpcoming = !isPaid && !isPartial && !isOverdue;
-
-                          type DisplayStatus = "paid" | "partial" | "overdue" | "upcoming";
-                          const displayStatus: DisplayStatus =
-                            isPaid ? "paid"
-                            : isPartial ? "partial"
-                            : isOverdue ? "overdue"
-                            : "upcoming";
-
-                          const statusStyles: Record<DisplayStatus, string> = {
-                            paid: "border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-400",
-                            partial: "border-yellow-500/40 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400",
-                            overdue: "border-destructive/40 bg-destructive/10 text-destructive",
-                            upcoming: "border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-400",
-                          };
-
-                          return (
-                            <TableRow
-                              key={row.period}
-                              className={cn(isPaid && "text-muted-foreground/50")}
-                            >
-                              <TableCell className="text-center">{row.period}</TableCell>
-                              <TableCell>{formatDateObj(row.dueDate)}</TableCell>
-                              <TableCell className="text-right tabular-nums">{isPaid ? formatCurrency(0) : formatCurrency(row.principal)}</TableCell>
-                              <TableCell className="text-right tabular-nums">{isPaid ? formatCurrency(0) : formatCurrency(row.interest)}</TableCell>
+                  // A restructured loan with rows left (paid ones) still shows
+                  // the two write-off figures above them.
+                  const scheduleTable = scheduleNotice ?? (
+                    <div className="space-y-3">
+                      <RestructuredBalanceFigures loan={loan} />
+                      {/* Its own box at fit, so the headings and totals stay in view. */}
+                      <ScrollBox className="fit:max-h-[min(32rem,calc(100dvh-23rem))]">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-12 text-center">#</TableHead>
+                              <TableHead>Due Date</TableHead>
+                              <TableHead className="text-right">Principal Due</TableHead>
+                              <TableHead className="text-right">Interest</TableHead>
+                              {hasScb && <TableHead className="text-right">Share Capital Build-Up</TableHead>}
+                              <TableHead className="text-right">Total Payment</TableHead>
+                              <TableHead className="text-right">Balance</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {storedSchedule.map((row) => (
+                              <TableRow key={row.period}>
+                                <TableCell className="text-center">{row.periodNumber ?? row.period}</TableCell>
+                                <TableCell>
+                                  {formatDateObj(row.dueDate)}
+                                  <PenaltyMonthsNote note={row.penaltyNote} />
+                                </TableCell>
+                                <TableCell className="text-right">{currencyOrDash(row.principal)}</TableCell>
+                                <TableCell className="text-right">{currencyOrDash(row.interest)}</TableCell>
+                                {hasScb && (
+                                  <TableCell className="text-right text-brand-orange">
+                                    {currencyOrDash(row.shareCapitalBuildUp)}
+                                  </TableCell>
+                                )}
+                                <TableCell className="text-right font-medium">{currencyOrDash(row.totalPayment)}</TableCell>
+                                <TableCell className="text-right">{formatCurrency(row.balance)}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                          <TableFooter>
+                            <TableRow>
+                              <TableCell colSpan={2} className="font-semibold">Total</TableCell>
+                              <TableCell className="text-right font-semibold">{currencyOrDash(storedScheduleTotals.principal)}</TableCell>
+                              <TableCell className="text-right font-semibold">{currencyOrDash(storedScheduleTotals.interest)}</TableCell>
                               {hasScb && (
-                                <TableCell className="text-right tabular-nums">
-                                  {isPaid ? formatCurrency(0) : formatCurrency(row.shareCapitalBuildUp)}
+                                <TableCell className="text-right font-semibold text-brand-orange">
+                                  {currencyOrDash(storedScheduleTotals.shareCapitalBuildUp)}
                                 </TableCell>
                               )}
-                              <TableCell className="text-right font-medium tabular-nums">
-                                {isPaid ? formatCurrency(0) : formatCurrency(row.totalPayment)}
-                              </TableCell>
-                              <TableCell className="text-right tabular-nums">{formatCurrency(row.balance)}</TableCell>
-                              <TableCell className="text-center">
-                                <Badge
-                                  variant="outline"
-                                  className={cn("text-[10px] px-1.5 py-0 capitalize", statusStyles[displayStatus])}
-                                >
-                                  {displayStatus}
-                                </Badge>
-                              </TableCell>
+                              <TableCell className="text-right font-bold">{currencyOrDash(storedScheduleTotals.totalPayment)}</TableCell>
+                              <TableCell />
                             </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                  </div>
-                );
+                          </TableFooter>
+                        </Table>
+                      </ScrollBox>
+                    </div>
+                  );
 
-                if (!isReleased) return scheduleTable;
+                  const balancesTable = (
+                    <div className="space-y-3">
+                      {loanSummary && (
+                        <div className="flex flex-wrap gap-4 px-1">
+                          <div>
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Current Outstanding</p>
+                            <p className="text-base font-bold text-brand-orange tabular-nums">
+                              {currencyOrDash(loanTotalOutstanding)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Total Paid</p>
+                            <p className="text-base font-bold tabular-nums">{currencyOrDash(loanSummary.total_repaid)}</p>
+                            {totalPaidNote && <p className="text-xs text-muted-foreground">{totalPaidNote}</p>}
+                          </div>
+                          {(loanSummary.overdue_amount ?? 0) > 0 && (
+                            <div>
+                              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Overdue</p>
+                              <p className="text-base font-bold text-destructive tabular-nums">
+                                {currencyOrDash(loanSummary.overdue_amount)}
+                              </p>
+                              <PenaltyMonthsNote note={summaryPenaltyNote} />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      <RestructuredBalanceFigures loan={loan} />
+                      <AmortizationBalanceTable loan={loan} refreshKey={loanSummary} />
+                    </div>
+                  );
 
-                return (
-                  <Tabs defaultValue="schedule" className="gap-3">
-                    <TabsList>
-                      <TabsTrigger value="schedule">Schedule</TabsTrigger>
-                      <TabsTrigger value="balances">Balances</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="schedule">{scheduleTable}</TabsContent>
-                    <TabsContent value="balances">{balancesTable}</TabsContent>
-                  </Tabs>
-                );
-              })()}
-            </CardContent>
-          )}
-        </Card>
-      )}
+                  if (!isReleased) return scheduleTable;
 
-      {/* Loan Documents — only for approved+ loans */}
-      {loan.status !== "draft" && loan.status !== "for_review" && (
-        <CollapsibleCard
-          title="Generated Documents"
-          icon={<FileText className="h-4 w-4 text-muted-foreground" />}
-        >
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-muted-foreground">
-                Open a document on your cooperative&apos;s letterhead, ready to
-                print.
-              </p>
-              <PrintableMenu
-                subjectId={loan.id}
-                unavailable={printUnavailable}
-                ids={[
-                  "disclosure_statement",
-                  "promissory_note",
-                  "release_voucher",
-                  "amortization_schedule",
-                  "demand_letter",
-                ]}
-              />
-            </div>
-        </CollapsibleCard>
-      )}
-
-      {/* Attached documents — available for every loan, including drafts so
-          the policy exception letter is reachable from the very first save. */}
-      <LoanDocumentsCard loanId={loan.id} />
-
-      {/* Ledger — shown for every status that has server-side repayment data
-          (incl. current / past_due), matching the Adjustments & History card. */}
-      {hasServerLoanData && (
-        <CollapsibleCard
-          title="Ledger"
-          icon={<BookOpen className="h-4 w-4 text-muted-foreground" />}
-          contentClassName="p-0"
-          headerExtra={
-            <>
-                {["released", "ongoing"].includes(loan.status) && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      // Start every adjustment from a clean form, however many
-                      // have already been raised on this loan.
-                      resetAdjustmentForm();
-                      setCreateAdjustmentOpen(true);
-                    }}
-                  >
-                    <Plus className="mr-1 h-3 w-3" />
-                    New Adjustment
-                  </Button>
-                )}
-                {["released", "ongoing", "current", "past_due"].includes(loan.status) && (
-                  <Button
-                    size="sm"
-                    className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                    onClick={() => setRecordPaymentOpen(true)}
-                  >
-                    <Plus className="mr-1 h-3 w-3" />
-                    Record Payment
-                  </Button>
-                )}
-            </>
-          }
-        >
-            {repaymentsLoading || ledgerEntriesLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Spinner className="size-5 text-muted-foreground" />
-              </div>
-            ) : (
-              (() => {
-                const hasScb = (loan.scb_amount ?? 0) > 0;
-                const dash = <span className="text-muted-foreground/40">—</span>;
-                const fmtN = (n: number | undefined) =>
-                  n != null && n > 0 ? formatCurrency(n) : dash;
-                const totalCols = hasScb ? 14 : 13;
-                return (
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse text-xs">
-                      <thead>
-                        <tr className="border-b bg-muted/50 text-center font-semibold uppercase tracking-wide text-muted-foreground">
-                          <th rowSpan={2} className="border-r px-3 py-2 text-left align-middle">Date</th>
-                          <th rowSpan={2} className="border-r px-3 py-2 align-middle">Ref No</th>
-                          <th colSpan={3} className="border-r border-b px-3 py-1">Principal</th>
-                          <th colSpan={3} className="border-r border-b px-3 py-1">Interest</th>
-                          <th colSpan={2} className="border-r border-b px-3 py-1">Past Due</th>
-                          {hasScb && <th rowSpan={2} className="border-r px-3 py-2 align-middle">SCB</th>}
-                          <th rowSpan={2} className="border-r px-3 py-2 align-middle">Others</th>
-                          <th colSpan={2} className="border-b px-3 py-1">Total Paid</th>
-                        </tr>
-                        <tr className="border-b bg-muted/30 text-center text-muted-foreground">
-                          <th className="border-r px-3 py-1">Debit</th>
-                          <th className="border-r px-3 py-1">Credit</th>
-                          <th className="border-r px-3 py-1">Balance</th>
-                          <th className="border-r px-3 py-1">Debit</th>
-                          <th className="border-r px-3 py-1">Credit</th>
-                          <th className="border-r px-3 py-1">Balance</th>
-                          <th className="border-r px-3 py-1">Penalty</th>
-                          <th className="border-r px-3 py-1">Interest</th>
-                          <th className="border-r px-3 py-1">Amount</th>
-                          <th className="px-3 py-1 text-left">Remarks</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {/* Opening entry */}
-                        {loanReleaseDate && (
-                          <tr className="border-b bg-blue-50/40 dark:bg-blue-950/20">
-                            <td className="border-r px-3 py-2 text-left">{formatDate(loanReleaseDate)}</td>
-                            <td className="border-r px-3 py-2 text-center text-muted-foreground">—</td>
-                            <td className="border-r px-3 py-2 text-right tabular-nums font-medium">{formatCurrency(loan.principal_amount)}</td>
-                            <td className="border-r px-3 py-2 text-center">{dash}</td>
-                            <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{formatCurrency(loan.principal_amount)}</td>
-                            <td className="border-r px-3 py-2 text-right tabular-nums font-medium">{storedScheduleTotals.interest > 0 ? formatCurrency(storedScheduleTotals.interest) : dash}</td>
-                            <td className="border-r px-3 py-2 text-center">{dash}</td>
-                            <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{storedScheduleTotals.interest > 0 ? formatCurrency(storedScheduleTotals.interest) : dash}</td>
-                            <td className="border-r px-3 py-2 text-center">{dash}</td>
-                            <td className="border-r px-3 py-2 text-center">{dash}</td>
-                            {hasScb && <td className="border-r px-3 py-2 text-center">{dash}</td>}
-                            <td className="border-r px-3 py-2 text-center">{dash}</td>
-                            <td className="border-r px-3 py-2 text-center text-muted-foreground">-</td>
-                            <td className="px-3 py-2 italic text-muted-foreground">Loan released</td>
-                          </tr>
-                        )}
-                        {/* Repayment + ledger entry rows, interleaved chronologically */}
-                        {ledgerRows.length === 0 ? (
-                          <tr>
-                            <td colSpan={totalCols} className="px-3 py-6 text-center text-muted-foreground">
-                              No repayments recorded yet.
-                            </td>
-                          </tr>
-                        ) : (
-                          ledgerRows.map((r) => {
-                            const repaymentId = r.repaymentId;
-                            return (
-                              <tr
-                                key={r.key}
-                                className={cn(
-                                  "border-b transition-colors hover:bg-muted/30",
-                                  r.status === "voided" && "opacity-50 line-through",
-                                )}
-                              >
-                                <td className="border-r px-3 py-2 text-left">{formatDate(r.date)}</td>
-                                <td className="border-r px-3 py-2 text-center text-muted-foreground">{r.refNo}</td>
-                                {/* Principal */}
-                                <td className="border-r px-3 py-2 text-center">{dash}</td>
-                                <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.principalPaid)}</td>
-                                <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{formatCurrency(r.principalBal)}</td>
-                                {/* Interest */}
-                                <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.interestDebit)}</td>
-                                <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.interestCredit)}</td>
-                                <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{formatCurrency(r.interestBal)}</td>
-                                {/* Past Due */}
-                                <td className="border-r px-3 py-2 text-right tabular-nums">
-                                  {r.penaltyPaid != null && r.penaltyPaid > 0 ? (
-                                    <span className="text-destructive">{formatCurrency(r.penaltyPaid)}</span>
-                                  ) : dash}
-                                </td>
-                                <td className="border-r px-3 py-2 text-center">{dash}</td>
-                                {/* SCB */}
-                                {hasScb && <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.scbPaid)}</td>}
-                                {/* Others */}
-                                <td className="border-r px-3 py-2 text-right tabular-nums">{fmtN(r.excessAmount)}</td>
-                                {/* Total Paid */}
-                                <td className="border-r px-3 py-2 text-right tabular-nums font-semibold">{fmtN(r.totalPaid)}</td>
-                                <td className="px-3 py-2">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <span className="text-muted-foreground">{r.remarks}</span>
-                                    {repaymentId != null && (
-                                      <div className="flex shrink-0 items-center gap-1">
-                                        {r.status === "voided" && (
-                                          <Badge variant="destructive" className="text-[10px] px-1 py-0">voided</Badge>
-                                        )}
-                                        {r.status !== "voided" && (
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-5 px-1 text-[10px] text-destructive hover:text-destructive"
-                                            onClick={() => handleVoidRepayment(repaymentId)}
-                                            disabled={actionLoading}
-                                          >
-                                            Void
-                                          </Button>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                );
-              })()
+                  return (
+                    <Tabs value={scheduleTab} onValueChange={(v) => setScheduleTab(String(v))} className="gap-3">
+                      <TabsList>
+                        <TabsTrigger value="schedule">Schedule</TabsTrigger>
+                        <TabsTrigger value="balances">Amortization Balance</TabsTrigger>
+                      </TabsList>
+                      <TabsContent value="schedule">{scheduleTable}</TabsContent>
+                      <TabsContent value="balances">{balancesTable}</TabsContent>
+                    </Tabs>
+                  );
+                })()}
+              </CardContent>
             )}
-        </CollapsibleCard>
-      )}
+          </Card>
+        )}
 
-      {/* Adjustments & Extension History — shown for every status that has
-          server-side loan data (incl. current / past_due), matching the set
-          fetchAdjustments loads for. */}
-      {hasServerLoanData && (
-        <CollapsibleCard
-          title={<>Adjustments &amp; History</>}
-          icon={<FileText className="h-4 w-4 text-muted-foreground" />}
-          contentClassName="p-0"
-        >
-            {adjustmentsLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Spinner className="size-5 text-muted-foreground" />
+        {/* Loan Documents — only for approved+ loans */}
+        {loan.status !== "draft" && loan.status !== "for_review" && (
+          <CollapsibleCard
+            title="Generated Documents"
+            icon={<FileText className="h-4 w-4 text-muted-foreground" />}
+          >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-muted-foreground">
+                  Open a document on your cooperative&apos;s letterhead, ready to
+                  print.
+                </p>
+                <PrintableMenu
+                  subjectId={loan.id}
+                  unavailable={printUnavailable}
+                  ids={[
+                    "disclosure_statement",
+                    "promissory_note",
+                    "release_voucher",
+                    "amortization_schedule",
+                    "demand_letter",
+                  ]}
+                />
               </div>
-            ) : adjustments.length === 0 ? (
-              <p className="px-4 py-6 text-center text-sm text-muted-foreground">
-                No adjustments recorded for this loan yet.
-              </p>
-            ) : (
-              <div className="divide-y">
-                {adjustments.map((adj) => (
-                  <div key={adj.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="outline" className="text-xs">
-                          {ADJUSTMENT_TYPE_LABELS[adj.adjustment_type] ?? adj.adjustment_type}
-                        </Badge>
-                        <Badge
-                          variant="outline"
-                          className={cn("text-xs", adjustmentStatusColors[adj.status])}
-                        >
-                          {ADJUSTMENT_STATUS_LABELS[adj.status] ?? adj.status}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          {formatDate(adj.created_at)}
-                        </span>
+          </CollapsibleCard>
+        )}
+
+        {/* Attached documents — available for every loan, including drafts so
+            the policy exception letter is reachable from the very first save. */}
+        <LoanDocumentsCard loanId={loan.id} canUpload={canUpdateLoan} canDelete={canDeleteDocuments} />
+        {parts.creditAssessment && <CreditAssessmentCard loanId={loan.id} status={loan.status} />}
+
+        {/* Reminders need a schedule, so only released loans have any. */}
+        {hasServerLoanData && parts.reminders && <LoanRemindersCard loanId={loan.id} />}
+
+        {/* Ledger — shown for every status that has server-side repayment data
+            (incl. current / past_due), matching the Adjustments & History card. */}
+        {hasServerLoanData && (
+          <CollapsibleCard
+            title="Ledger"
+            icon={<BookOpen className="h-4 w-4 text-muted-foreground" />}
+            contentClassName="p-0"
+            headerExtra={
+              <>
+                  {["released", "ongoing"].includes(loan.status) && (
+                    <PermissionButton
+                      permission={LOAN_ADJUSTMENT_CREATE_GATE.permission}
+                      tooltip={LOAN_ADJUSTMENT_CREATE_GATE.tooltip}
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        // Start every adjustment from a clean form, however many
+                        // have already been raised on this loan.
+                        resetAdjustmentForm();
+                        setCreateAdjustmentOpen(true);
+                      }}
+                    >
+                      <Plus className="mr-1 h-3 w-3" />
+                      New Adjustment
+                    </PermissionButton>
+                  )}
+                  {canRecordPaymentOn(loan.status) && (
+                    // Recording needs payments:create; an upon-maturity payment
+                    // is also checked against the server's payment preview,
+                    // which needs payments:view. A defaulted loan takes recovery
+                    // payments too.
+                    <PermissionButton
+                      permission={recordPayment.permission}
+                      tooltip={recordPayment.tooltip}
+                      size="sm"
+                      className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                      onClick={() => setRecordPaymentOpen(true)}
+                    >
+                      <Plus className="mr-1 h-3 w-3" />
+                      Record Payment
+                    </PermissionButton>
+                  )}
+              </>
+            }
+          >
+              {repaymentsShortfall && !repaymentsLoading && (
+                <IncompleteListNotice
+                  className="m-4"
+                  shown={repaymentsShortfall.shown}
+                  total={repaymentsShortfall.total}
+                  noun="payments"
+                  consequence="Ledger rows for the payments not loaded show no receipt number or amount paid and can't be voided here. The figures and balances are the server's and are complete."
+                />
+              )}
+              <LedgerTable
+                ledger={ledger}
+                loading={ledgerLoading}
+                failed={ledgerFailed}
+                onRetry={() => void fetchLedger(loan.id)}
+                hasScb={ledgerShowsScb(scheduleHasScb, ledger)}
+                loanStatus={loan.status}
+                repaymentsById={repaymentsById}
+                onVoid={handleVoidRepayment}
+                actionLoading={actionLoading}
+              />
+          </CollapsibleCard>
+        )}
+
+        {/* Adjustments & Extension History — shown for every status that has
+            server-side loan data (incl. current / past_due), matching the set
+            fetchAdjustments loads for. */}
+        {hasServerLoanData && (
+          <CollapsibleCard
+            title={<>Adjustments &amp; History</>}
+            icon={<FileText className="h-4 w-4 text-muted-foreground" />}
+            contentClassName="p-0"
+          >
+              {adjustmentsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Spinner className="size-5 text-muted-foreground" />
+                </div>
+              ) : adjustments.length === 0 ? (
+                <p className="px-4 py-6 text-center text-sm text-muted-foreground">
+                  No adjustments recorded for this loan yet.
+                </p>
+              ) : (
+                <div className="divide-y">
+                  {adjustments.map((adj) => (
+                    <div key={adj.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="outline" className="text-xs">
+                            {ADJUSTMENT_TYPE_LABELS[adj.adjustment_type] ?? adj.adjustment_type}
+                          </Badge>
+                          <Badge
+                            variant="outline"
+                            className={cn("text-xs", adjustmentStatusColors[adj.status])}
+                          >
+                            {ADJUSTMENT_STATUS_LABELS[adj.status] ?? adj.status}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {formatDate(adj.created_at)}
+                          </span>
+                        </div>
+                        {(adj.description || adj.remarks) && (
+                          <p
+                            className="mt-1 text-sm text-muted-foreground truncate"
+                            title={adj.description || adj.remarks}
+                          >
+                            {adj.description || adj.remarks}
+                          </p>
+                        )}
+                        {cancellationLine(adj) !== null && (
+                          <p className="mt-1 text-sm text-muted-foreground break-words">{cancellationLine(adj)}</p>
+                        )}
                       </div>
-                      {(adj.description || adj.remarks) && (
-                        <p
-                          className="mt-1 text-sm text-muted-foreground truncate"
-                          title={adj.description || adj.remarks}
-                        >
-                          {adj.description || adj.remarks}
-                        </p>
+                      {/* Disabled, with the reason, for a role without the
+                          permission each request checks, as Void is. */}
+                      {adj.adjustment_type !== "extension" && adj.status === "pending" && (
+                        <div className="flex shrink-0 items-center gap-2">
+                          <PermissionButton
+                            permission={LOAN_ADJUSTMENT_DECIDE_GATE.permission}
+                            tooltip={LOAN_ADJUSTMENT_DECIDE_GATE.tooltip}
+                            size="sm"
+                            variant="outline"
+                            disabled={actionLoading}
+                            onClick={() => askAdjustmentDecision({ adjustment: adj, action: "approve" })}
+                          >
+                            Approve
+                          </PermissionButton>
+                          <PermissionButton
+                            permission={LOAN_ADJUSTMENT_DECIDE_GATE.permission}
+                            tooltip={LOAN_ADJUSTMENT_DECIDE_GATE.tooltip}
+                            size="sm"
+                            variant="outline"
+                            className="text-destructive hover:text-destructive"
+                            disabled={actionLoading}
+                            onClick={() => askAdjustmentDecision({ adjustment: adj, action: "reject" })}
+                          >
+                            Reject
+                          </PermissionButton>
+                        </div>
+                      )}
+                      {adj.adjustment_type !== "extension" && adj.status === "approved" && (
+                        <div className="flex shrink-0 items-center gap-2">
+                          <PermissionButton
+                            permission={LOAN_ADJUSTMENT_APPLY_GATE.permission}
+                            tooltip={LOAN_ADJUSTMENT_APPLY_GATE.tooltip}
+                            size="sm"
+                            className="bg-brand-blue text-brand-blue-foreground hover:bg-brand-blue-dark"
+                            disabled={actionLoading}
+                            onClick={() => handleApplyAdjustment(adj.id)}
+                          >
+                            Apply
+                          </PermissionButton>
+                          {offersCancel(adj) && (
+                            <PermissionButton
+                              permission={LOAN_ADJUSTMENT_DECIDE_GATE.permission}
+                              tooltip="Your role doesn't have permission to cancel loan adjustments"
+                              size="sm"
+                              variant="outline"
+                              className="text-destructive hover:text-destructive"
+                              disabled={actionLoading || !cancelAllowed(adj)}
+                              onClick={() => {
+                                setAdjustmentToCancel(adj);
+                                setCancelAdjustmentOpen(true);
+                              }}
+                            >
+                              Cancel
+                            </PermissionButton>
+                          )}
+                        </div>
                       )}
                     </div>
-                    {adj.adjustment_type !== "extension" && adj.status === "pending" && (
-                      <div className="flex shrink-0 items-center gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={actionLoading}
-                          onClick={() => handleAdjustmentAction(adj.id, "approve")}
-                        >
-                          Approve
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-destructive hover:text-destructive"
-                          disabled={actionLoading}
-                          onClick={() => handleAdjustmentAction(adj.id, "reject")}
-                        >
-                          Reject
-                        </Button>
-                      </div>
-                    )}
-                    {adj.adjustment_type !== "extension" && adj.status === "approved" && (
-                      <div className="flex shrink-0 items-center gap-2">
-                        <Button
-                          size="sm"
-                          className="bg-brand-blue text-brand-blue-foreground hover:bg-brand-blue-dark"
-                          disabled={actionLoading}
-                          onClick={() => handleAdjustmentAction(adj.id, "apply")}
-                        >
-                          Apply
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-        </CollapsibleCard>
-      )}
+                  ))}
+                </div>
+              )}
+          </CollapsibleCard>
+        )}
+      </ScrollBox>
 
       {/* ── Dialogs ── */}
 
@@ -4120,9 +4326,7 @@ export default function LoanDetailPage({
           <div className="flex flex-col items-center py-6">
             <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Outstanding Balance</p>
             <p className="text-5xl font-bold text-brand-orange">
-              {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(
-                Math.round(loanSummary?.outstanding_balance ?? loan?.outstanding_balance ?? 0)
-              )}
+              {currencyOrDash(loanTotalOutstanding)}
             </p>
             <p className="text-sm text-muted-foreground mt-2">
               {loan?.borrower?.full_name ?? loan?.borrower?.name ?? "Member"}
@@ -4167,11 +4371,9 @@ export default function LoanDetailPage({
             <div className="flex items-center justify-center py-12">
               <Spinner className="size-6 text-muted-foreground" />
             </div>
-          ) : soaData ? (
-            <div className="space-y-3 pt-2">
-              <pre className="max-h-[60vh] overflow-auto rounded-md bg-muted/50 p-3 text-[11px] leading-relaxed font-mono">
-                {JSON.stringify(soaData, null, 2)}
-              </pre>
+          ) : soaDoc ? (
+            <div className="pt-2">
+              <ReportPreview doc={soaDoc} />
             </div>
           ) : (
             <p className="py-6 text-center text-sm text-muted-foreground">
@@ -4186,108 +4388,58 @@ export default function LoanDetailPage({
         </DialogContent>
       </Dialog>
 
-      {/* Submit for Review Dialog */}
-      <Dialog open={submitOpen} onOpenChange={setSubmitOpen}>
+      {/* Send an approved restructure back for approval */}
+      <Dialog
+        open={sendBackApprovedOpen}
+        onOpenChange={(open) => {
+          if (!sendBackApprovedLoading) setSendBackApprovedOpen(open);
+        }}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Submit for Review</DialogTitle>
+            <DialogTitle>Send back for approval</DialogTitle>
             <DialogDescription>
-              Are you sure you want to submit this loan application for review?
-              Once submitted, it will be queued for approval.
+              This restructure goes back to its approval chain and must be submitted and approved
+              again before release. Its figures are taken again then.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => setSubmitOpen(false)}>
+          <div className="space-y-1.5">
+            <Label htmlFor="send-back-approved-reason">
+              Reason <span className="text-red-500">*</span>
+            </Label>
+            <Textarea
+              id="send-back-approved-reason"
+              value={sendBackReason}
+              onChange={(e) => setSendBackReason(e.target.value)}
+              maxLength={SEND_BACK_REASON_MAX}
+              rows={3}
+              required
+              disabled={sendBackApprovedLoading}
+              aria-describedby="send-back-approved-hint"
+              placeholder="e.g. the source loan was paid down after approval"
+            />
+            <p id="send-back-approved-hint" className="text-xs text-muted-foreground">
+              {sendBackReasonProblem ?? `${sendBackReason.trim().length} of ${SEND_BACK_REASON_MAX} characters`}
+            </p>
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setSendBackApprovedOpen(false)}
+              disabled={sendBackApprovedLoading}
+            >
               Cancel
             </Button>
             <Button
-              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-              onClick={handleSubmitForReview}
+              onClick={handleSendBackApproved}
+              disabled={sendBackApprovedLoading || sendBackReasonProblem !== null}
             >
-              <Send className="mr-2 h-4 w-4" />
-              Submit
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Approve Dialog */}
-      <Dialog open={approveOpen} onOpenChange={setApproveOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Approve Loan Application</DialogTitle>
-            <DialogDescription>
-              You are about to approve{" "}
-              <span className="font-medium">{loan.application_number}</span> for{" "}
-              <span className="font-medium">{loanBorrowerName}</span>.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 pt-2">
-            <div>
-              <Label htmlFor="approval-remarks">Remarks (optional)</Label>
-              <Textarea
-                id="approval-remarks"
-                placeholder="Add any notes about this approval..."
-                value={approvalRemarks}
-                onChange={(e) => setApprovalRemarks(e.target.value)}
-                className="mt-1.5"
-              />
-            </div>
-          </div>
-          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => setApproveOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              className="bg-green-600 text-white hover:bg-green-700"
-              onClick={handleApprove}
-            >
-              <CheckCircle2 className="mr-2 h-4 w-4" />
-              Approve
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Reject Dialog */}
-      <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Reject Loan Application</DialogTitle>
-            <DialogDescription>
-              You are about to reject{" "}
-              <span className="font-medium">{loan.application_number}</span> for{" "}
-              <span className="font-medium">{loanBorrowerName}</span>. Please
-              provide a reason.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 pt-2">
-            <div>
-              <Label htmlFor="rejection-remarks">
-                Reason for Rejection{" "}
-                <span className="text-red-500">*</span>
-              </Label>
-              <Textarea
-                id="rejection-remarks"
-                placeholder="Explain why this application is being rejected..."
-                value={rejectionRemarks}
-                onChange={(e) => setRejectionRemarks(e.target.value)}
-                className="mt-1.5"
-                required
-              />
-            </div>
-          </div>
-          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => setRejectOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleReject}
-              disabled={!rejectionRemarks.trim()}
-            >
-              <XCircle className="mr-2 h-4 w-4" />
-              Reject
+              {sendBackApprovedLoading ? (
+                <Spinner className="mr-2 size-4" />
+              ) : (
+                <Undo2 className="mr-2 h-4 w-4" />
+              )}
+              {sendBackApprovedLoading ? "Sending back..." : "Send back for approval"}
             </Button>
           </div>
         </DialogContent>
@@ -4329,16 +4481,20 @@ export default function LoanDetailPage({
                   <p className="text-xs text-muted-foreground">Principal Amount</p>
                   <p className="text-sm font-semibold">{formatCurrency(loan.principal_amount)}</p>
                 </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Net Proceeds</p>
-                  <p className="text-sm font-semibold text-green-600">
-                    {loan.net_proceeds != null ? formatCurrency(loan.net_proceeds) : "N/A"}
-                  </p>
-                </div>
+                {releaseRestructureRows === null && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Net Proceeds</p>
+                    <p className="text-sm font-semibold text-green-600">
+                      {releaseAnswer && !releaseExceedsNet
+                        ? currencyOrDash(releaseAnswer.net_proceeds_after_insurance)
+                        : "—"}
+                    </p>
+                  </div>
+                )}
                 <div>
                   <p className="text-xs text-muted-foreground">Interest Rate / Type</p>
                   <p className="text-sm font-medium">
-                    {formatRate(loan.interest_rate)}% / <span className="capitalize">{loanInterestType || "N/A"}</span>
+                    {rateWithPeriod(loan.interest_rate, loan.interest_rate_frequency)} / {loanInterestType ? interestMethodLabel(loanInterestType) : "N/A"}
                   </p>
                 </div>
                 <div>
@@ -4350,234 +4506,83 @@ export default function LoanDetailPage({
               </div>
             </div>
 
-            <ReleaseDeductions deductions={loan.deductions} totalDeductions={loan.total_deductions} />
+            {/* A restructure: how the release settles the old loan, each
+                figure the server's (a dash when it sent none). */}
+            {releaseRestructureRows !== null && (
+              <section aria-labelledby="release-restructure-title" className="rounded-lg border p-4 space-y-2">
+                <h3 id="release-restructure-title" className="text-sm font-semibold">
+                  Restructure settlement
+                </h3>
+                <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1.5 text-sm">
+                  {releaseRestructureRows.map((row) => (
+                    <Fragment key={row.label}>
+                      <dt className="text-muted-foreground">{row.label}</dt>
+                      <dd className="text-right font-medium tabular-nums">{currencyOrDash(row.amount)}</dd>
+                    </Fragment>
+                  ))}
+                </dl>
+              </section>
+            )}
 
-            {/* Co-Makers Section */}
+            <ReleaseDeductions preview={releasePreview} onRetry={reloadReleasePreview} />
+
+            <MethodReferenceFields
+              idPrefix="release"
+              methodLabel={releaseView.methodLabel}
+              options={PAYMENT_METHOD_OPTIONS}
+              method={releaseMethod}
+              reference={releaseReference}
+              onChange={(next) => {
+                setReleaseMethod(next.method);
+                setReleaseReference(next.reference);
+              }}
+              referenceRequired={releaseMethod !== "cash"}
+              problem={releaseReferenceProblem}
+              disabled={actionLoading}
+            />
+
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>
-                  Co-Maker
-                  {(loan.co_makers?.length ?? 0) !== 1 ? "s" : ""}
-                  {(loan.co_makers?.length ?? 0) > 0 && (
-                    <span className="ml-1 text-xs text-muted-foreground font-normal">
-                      ({loan.co_makers!.length})
-                    </span>
-                  )}
-                </Label>
-                {!addCoMakerOpen && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 gap-1 text-xs"
-                    onClick={() => setAddCoMakerOpen(true)}
-                  >
-                    <Plus className="h-3 w-3" />
-                    Add Co-Maker
-                  </Button>
-                )}
-              </div>
-              <div className="rounded-lg border bg-muted/50 p-3 space-y-2">
-                {(loan.co_makers?.length ?? 0) === 0 ? (
-                  <p className="text-sm text-muted-foreground italic">
-                    No co-maker on file
-                  </p>
-                ) : (
-                  loan.co_makers!.map((cm, idx) => {
-                    const name =
-                      cm.full_name ??
-                      cm.name ??
-                      [cm.first_name, cm.middle_name, cm.last_name, cm.suffix]
-                        .filter(Boolean)
-                        .join(" ");
-                    return (
-                      <div
-                        key={cm.id ?? idx}
-                        className="flex items-start justify-between gap-3 text-sm"
-                      >
-                        <div className="min-w-0">
-                          <p className="font-medium truncate">{name || "—"}</p>
-                          {cm.relationship && (
-                            <p className="text-xs text-muted-foreground">
-                              {cm.relationship}
-                            </p>
-                          )}
-                        </div>
-                        <Badge variant="outline" className="text-xs shrink-0">
-                          Co-Maker {idx + 1}
-                        </Badge>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-              {addCoMakerOpen && (
-                <div className="rounded-lg border border-brand-orange/30 bg-brand-orange/5 p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold">Add Co-Maker</p>
-                    <button
-                      type="button"
-                      onClick={() => setAddCoMakerOpen(false)}
-                      className="text-muted-foreground hover:text-foreground"
-                      aria-label="Close"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="new-cm-first" className="text-xs">
-                        First Name <span className="text-destructive">*</span>
-                      </Label>
-                      <Input
-                        id="new-cm-first"
-                        className="h-9"
-                        value={newCoMaker.first_name}
-                        onChange={(e) =>
-                          setNewCoMaker((prev) => ({
-                            ...prev,
-                            first_name: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="new-cm-last" className="text-xs">
-                        Last Name <span className="text-destructive">*</span>
-                      </Label>
-                      <Input
-                        id="new-cm-last"
-                        className="h-9"
-                        value={newCoMaker.last_name}
-                        onChange={(e) =>
-                          setNewCoMaker((prev) => ({
-                            ...prev,
-                            last_name: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="new-cm-contact" className="text-xs">
-                        Contact Number
-                      </Label>
-                      <Input
-                        id="new-cm-contact"
-                        type="tel"
-                        className="h-9"
-                        placeholder="09171234567"
-                        value={newCoMaker.contact_number}
-                        onChange={(e) =>
-                          setNewCoMaker((prev) => ({
-                            ...prev,
-                            contact_number: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="new-cm-rel" className="text-xs">
-                        Relationship to Member
-                      </Label>
-                      <Input
-                        id="new-cm-rel"
-                        className="h-9"
-                        placeholder="e.g. Sibling, Spouse"
-                        value={newCoMaker.relationship_to_borrower}
-                        onChange={(e) =>
-                          setNewCoMaker((prev) => ({
-                            ...prev,
-                            relationship_to_borrower: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-8 text-xs"
-                      onClick={() => setAddCoMakerOpen(false)}
-                      disabled={addingCoMaker}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-8 text-xs bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                      onClick={handleAddSecondCoMaker}
-                      disabled={
-                        addingCoMaker ||
-                        !newCoMaker.first_name.trim() ||
-                        !newCoMaker.last_name.trim()
-                      }
-                    >
-                      {addingCoMaker ? "Adding..." : "Add Co-Maker"}
-                    </Button>
-                  </div>
-                </div>
-              )}
+              <ReleaseCoMakers loan={loan} onLoanChange={setLoan} />
+              <ReleaseReminder text={releaseCoMakerReminder} />
             </div>
 
-            {/* Release Date Picker */}
-            <div className="space-y-1.5">
-              <Label>Release Date</Label>
-              <Popover open={releaseDatePickerOpen} onOpenChange={setReleaseDatePickerOpen}>
-                <PopoverTrigger
-                  render={
-                    <button
-                      type="button"
-                      className="flex h-9 w-full items-center gap-2 rounded-lg border border-input bg-transparent px-3 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                    />
-                  }
-                >
-                  <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-                  <span>{formatDateObj(releaseDate)}</span>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={releaseDate}
-                    onSelect={(date) => {
-                      if (date) setReleaseDate(date);
-                      setReleaseDatePickerOpen(false);
-                    }}
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            {/* Computed dates */}
+            {/* Dates the release will store: the loan's maturity and the
+                server schedule's first instalment. */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-xs text-muted-foreground">Maturity Date</p>
                 <p className="text-sm font-medium">
-                  {computedMaturityDate ? formatDateObj(computedMaturityDate) : "N/A"}
+                  {loan.maturity_date ? formatDate(loan.maturity_date) : "N/A"}
                 </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">First Due Date</p>
                 <p className="text-sm font-medium">
-                  {releaseSchedule.length > 0 ? formatDateObj(releaseSchedule[0].dueDate) : "N/A"}
+                  {storedSchedule.length > 0 ? formatDateObj(storedSchedule[0].dueDate) : "N/A"}
                 </p>
               </div>
             </div>
 
-            <InsurancePremiumSection
-              principalAmount={Number(loan.principal_amount) || 0}
-              value={insurancePremium}
-              onChange={setInsurancePremium}
-              disabled={actionLoading}
-            />
+            <div className="space-y-2">
+              <InsurancePremiumSection
+                value={insurancePremium}
+                onChange={setInsurancePremium}
+                view={insurancePreview}
+                premiumAmount={insurancePremiumAmount}
+                onRetry={retryInsurancePreview}
+                disabled={actionLoading}
+              />
+              <ReleaseReminder text={releaseInsuranceReminder} />
+            </div>
 
-            {/* Amortization Preview */}
-            {releaseSchedule.length > 0 && (
-              <div className="space-y-2">
-                <Label>Amortization Schedule Preview</Label>
-                <div className="overflow-x-auto max-h-60 overflow-y-auto rounded-md border">
+            {/* Amortization Preview: the server's preview rows */}
+            <div className="space-y-2">
+              <Label>Amortization Schedule Preview</Label>
+              {storedSchedule.length === 0 ? (
+                <ScheduleNotice load={scheduleLoad} loan={loan} onRetry={retrySchedule} />
+              ) : (
+                // The table's own wrapper would hold the pinned headings; this box scrolls them instead.
+                <div className="overflow-x-auto max-h-60 overflow-y-auto rounded-md border [&_[data-slot=table-container]]:overflow-visible">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -4585,7 +4590,7 @@ export default function LoanDetailPage({
                         <TableHead className="sticky top-0 bg-background">Due Date</TableHead>
                         <TableHead className="text-right sticky top-0 bg-background">Principal</TableHead>
                         <TableHead className="text-right sticky top-0 bg-background">Interest</TableHead>
-                        {scheduleTotals.shareCapitalBuildUp > 0 && (
+                        {scheduleHasScb && (
                           <TableHead className="text-right sticky top-0 bg-background">SCB</TableHead>
                         )}
                         <TableHead className="text-right sticky top-0 bg-background">Total</TableHead>
@@ -4593,18 +4598,18 @@ export default function LoanDetailPage({
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {releaseSchedule.map((row) => (
+                      {storedSchedule.map((row) => (
                         <TableRow key={row.period}>
-                          <TableCell className="text-center text-xs">{row.period}</TableCell>
+                          <TableCell className="text-center text-xs">{row.periodNumber ?? row.period}</TableCell>
                           <TableCell className="text-xs">{formatDateObj(row.dueDate)}</TableCell>
-                          <TableCell className="text-right text-xs">{formatCurrency(row.principal)}</TableCell>
-                          <TableCell className="text-right text-xs">{formatCurrency(row.interest)}</TableCell>
-                          {scheduleTotals.shareCapitalBuildUp > 0 && (
+                          <TableCell className="text-right text-xs">{currencyOrDash(row.principal)}</TableCell>
+                          <TableCell className="text-right text-xs">{currencyOrDash(row.interest)}</TableCell>
+                          {scheduleHasScb && (
                             <TableCell className="text-right text-xs text-brand-orange">
-                              {formatCurrency(row.shareCapitalBuildUp)}
+                              {currencyOrDash(row.shareCapitalBuildUp)}
                             </TableCell>
                           )}
-                          <TableCell className="text-right text-xs font-medium">{formatCurrency(row.totalPayment)}</TableCell>
+                          <TableCell className="text-right text-xs font-medium">{currencyOrDash(row.totalPayment)}</TableCell>
                           <TableCell className="text-right text-xs">{formatCurrency(row.balance)}</TableCell>
                         </TableRow>
                       ))}
@@ -4612,56 +4617,81 @@ export default function LoanDetailPage({
                     <TableFooter>
                       <TableRow>
                         <TableCell colSpan={2} className="font-semibold text-xs">Total</TableCell>
-                        <TableCell className="text-right font-semibold text-xs">{formatCurrency(scheduleTotals.principal)}</TableCell>
-                        <TableCell className="text-right font-semibold text-xs">{formatCurrency(scheduleTotals.interest)}</TableCell>
-                        {scheduleTotals.shareCapitalBuildUp > 0 && (
+                        <TableCell className="text-right font-semibold text-xs">{currencyOrDash(storedScheduleTotals.principal)}</TableCell>
+                        <TableCell className="text-right font-semibold text-xs">{currencyOrDash(storedScheduleTotals.interest)}</TableCell>
+                        {scheduleHasScb && (
                           <TableCell className="text-right font-semibold text-xs text-brand-orange">
-                            {formatCurrency(scheduleTotals.shareCapitalBuildUp)}
+                            {currencyOrDash(storedScheduleTotals.shareCapitalBuildUp)}
                           </TableCell>
                         )}
-                        <TableCell className="text-right font-bold text-xs">{formatCurrency(scheduleTotals.totalPayment)}</TableCell>
+                        <TableCell className="text-right font-bold text-xs">{currencyOrDash(storedScheduleTotals.totalPayment)}</TableCell>
                         <TableCell />
                       </TableRow>
                     </TableFooter>
                   </Table>
                 </div>
+              )}
+            </div>
+
+            {(releaseFeesStuck || releaseConfirm.status === "no_premium") && (
+              <div
+                role="alert"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3"
+              >
+                <p className="text-sm text-destructive">
+                  {releaseFeesStuck
+                    ? "The fees changed while these figures were being read, and they still disagree. Use Try again to read them again before confirming."
+                    : "The server sent no premium for this insurance, so the release can't be confirmed."}
+                </p>
+                <Button type="button" variant="outline" size="sm" onClick={rereadRelease}>
+                  Try again
+                </Button>
               </div>
             )}
 
             {/* Warning */}
-            {(() => {
-              const baseNetProceeds =
-                loan.net_proceeds != null
-                  ? Number(loan.net_proceeds)
-                  : Number(loan.principal_amount) || 0;
-              const { upfrontDeduction } = computeInsurancePremium(
-                Number(loan.principal_amount) || 0,
-                insurancePremium,
-              );
-              const adjustedNetProceeds = Math.max(
-                0,
-                baseNetProceeds - upfrontDeduction,
-              );
-              return (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 flex items-start gap-2">
-                  <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
-                  <p className="text-sm text-amber-700">
-                    Releasing this loan will lock the principal, interest rate, and term.
-                    The borrower will receive{" "}
-                    <span className="font-semibold">
-                      {formatCurrency(adjustedNetProceeds)}
-                    </span>{" "}
-                    as net proceeds
-                    {upfrontDeduction > 0 && (
-                      <>
-                        {" "}(after {formatCurrency(upfrontDeduction)} insurance premium)
-                      </>
-                    )}
-                    .
-                  </p>
-                </div>
-              );
-            })()}
+            {releaseExceedsNet ? (
+              <div
+                role="alert"
+                className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 flex items-start gap-2"
+              >
+                <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+                <p className="text-sm text-destructive">
+                  Insurance collected exceeds the loan net proceeds. Lower the
+                  premium, or collect part of it now and the rest later.
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                <p className="text-sm text-amber-700">
+                  Releasing this loan will lock the principal, interest rate, and term.
+                  {releaseAnswer && releaseRestructureRows !== null && (
+                    <>
+                      {" "}The member is paid out{" "}
+                      <span className="font-semibold">{currencyOrDash(releaseAnswer.restructure?.paid_out)}</span>, and{" "}
+                      <span className="font-semibold">{currencyOrDash(releaseAnswer.restructure?.collected_now)}</span>{" "}
+                      is collected from the member now.
+                    </>
+                  )}
+                  {releaseAnswer && releaseRestructureRows === null && (
+                    <>
+                      {" "}The member will receive{" "}
+                      <span className="font-semibold">
+                        {currencyOrDash(releaseAnswer.net_proceeds_after_insurance)}
+                      </span>{" "}
+                      as net proceeds
+                      {releaseAnswer.insurance && Number(releaseAnswer.insurance.collected) > 0 && (
+                        <>
+                          {" "}(after {formatCurrencyExact(releaseAnswer.insurance.collected)} insurance premium)
+                        </>
+                      )}
+                      .
+                    </>
+                  )}
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-4">
@@ -4677,9 +4707,14 @@ export default function LoanDetailPage({
             <Button
               className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
               onClick={handleRelease}
+              disabled={!canConfirmRelease}
             >
-              <Unlock className="mr-2 h-4 w-4" />
-              Confirm Release
+              {actionLoading ? (
+                <Spinner className="mr-2 size-4" />
+              ) : (
+                <Unlock className="mr-2 h-4 w-4" />
+              )}
+              {actionLoading ? "Releasing..." : "Confirm Release"}
             </Button>
           </div>
         </DialogContent>
@@ -4690,7 +4725,7 @@ export default function LoanDetailPage({
         <DialogContent className="w-[95vw] sm:w-full sm:max-w-3xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="flex flex-wrap items-center gap-2">
-              <DollarSign className="h-5 w-5 shrink-0" />
+              <PhilippinePeso className="h-5 w-5 shrink-0" />
               <span>Record Payment</span>
               {paymentMode === "advance" && (
                 <Badge className="bg-blue-600 hover:bg-blue-600 text-white">
@@ -4700,10 +4735,12 @@ export default function LoanDetailPage({
             </DialogTitle>
             <DialogDescription className="break-words">
               {paymentMode === "advance"
-                ? `Recording an advance payment for loan ${loan.loan_account_number || loan.application_number}. Excess will be applied to upcoming scheduled installments.`
-                : `Record a repayment for loan ${loan.loan_account_number || loan.application_number}.`}
+                ? `Recording an advance payment for loan ${loanNumber}. Excess will be applied to upcoming scheduled installments.`
+                : `Record a repayment for loan ${loanNumber}.`}
             </DialogDescription>
           </DialogHeader>
+
+          <RecoveryPaymentNote status={loan.status} />
 
           {/* Loan / dues summary */}
           <div className="rounded-lg border bg-muted/30 p-3 sm:p-4 space-y-3">
@@ -4713,7 +4750,7 @@ export default function LoanDetailPage({
                   {loan.borrower?.full_name ?? loan.borrower?.name ?? loan.borrower_name ?? "—"}
                 </p>
                 <p className="text-xs text-muted-foreground truncate">
-                  {loan.loan_account_number || loan.application_number} &middot;{" "}
+                  {loanNumber} &middot;{" "}
                   {loan.loan_product?.name ?? loan.loan_product_name ?? "—"}
                 </p>
               </div>
@@ -4722,15 +4759,13 @@ export default function LoanDetailPage({
               <div className="min-w-0">
                 <p className="text-[10px] text-muted-foreground uppercase">Outstanding</p>
                 <p className="text-sm font-bold tabular-nums truncate">
-                  {formatCurrency(
-                    loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0
-                  )}
+                  {currencyOrDash(loanTotalOutstanding)}
                 </p>
               </div>
               <div className="min-w-0">
                 <p className="text-[10px] text-muted-foreground uppercase">Next Due</p>
                 <p className="text-sm font-bold tabular-nums truncate">
-                  {formatCurrency(loanSummary?.next_due_amount ?? 0)}
+                  {currencyOrDash(loanSummary?.next_due_amount)}
                 </p>
               </div>
               <div className="min-w-0">
@@ -4741,7 +4776,7 @@ export default function LoanDetailPage({
                     (loanSummary?.overdue_amount ?? 0) > 0 && "text-destructive"
                   )}
                 >
-                  {formatCurrency(loanSummary?.overdue_amount ?? 0)}
+                  {currencyOrDash(loanSummary?.overdue_amount)}
                 </p>
               </div>
               <div className="min-w-0">
@@ -4752,43 +4787,84 @@ export default function LoanDetailPage({
                     (loanSummary?.penalty_amount ?? 0) > 0 && "text-destructive"
                   )}
                 >
-                  {formatCurrency(loanSummary?.penalty_amount ?? 0)}
+                  {currencyOrDash(loanSummary?.penalty_amount)}
                 </p>
+                <PenaltyMonthsNote note={summaryPenaltyNote} />
               </div>
             </div>
           </div>
+
+          {/* Insurance premium owed on the loan: the server takes it out of
+              this payment before any period, so the amounts below are
+              reached only after it. */}
+          {insuranceOwed !== null && (
+            <div
+              role="note"
+              className="flex gap-2 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 text-xs text-purple-900 dark:border-purple-800 dark:bg-purple-950/20 dark:text-purple-200"
+            >
+              <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+              <p>
+                <span className="font-semibold tabular-nums">{formatCurrency(insuranceOwed)}</span>{" "}
+                insurance premium is still owed on this loan (interest-free). This payment
+                collects it first, before penalty, interest and principal.
+              </p>
+            </div>
+          )}
 
           {/* Current Scheduled Payment — shows the single amortization
               installment the borrower currently needs to pay (the earliest
               unpaid period). Gives the cashier a clear "this is what's due
               right now" anchor before they enter an amount. */}
-          {storedSchedule.length > 0 && (() => {
-            const current = storedSchedule.find((row) => row.status !== "paid");
-            if (!current) return null;
-            const hasScb = storedScheduleTotals.shareCapitalBuildUp > 0;
-            const isOverdue = current.status === "overdue";
-            const isPartial = current.status === "partial";
+          {(() => {
+            // Built on the server's amount due now, which also covers a loan
+            // whose periods are all paid but still owes premium. The period
+            // shown is the server's, matched to its row by schedule id or
+            // period number for the due date and status.
+            if (amountDueNow === null) return null;
+            const currentTotal = amountDueOnPaymentDate?.amount ?? null;
+            const dueParts = dueNowTiles(amountDueOnPaymentDate);
+            const periodLabel = dueNowPeriodLabel(amountDueNow);
+            // Several periods due: no single due date, status or per-period
+            // verdict, only the server's range and its amounts.
+            const isRange = dueNowIsRange(amountDueNow);
+            const current =
+              scheduleRows && periodLabel !== null
+                ? rowForAllocation(scheduleRows, {
+                    schedule_id: amountDueNow.scheduleId ?? undefined,
+                    period: amountDueNow.periodNumber ?? undefined,
+                  })
+                : null;
+            const isOverdue = current?.status === "overdue";
+            const isPartial = current?.status === "partial";
             // If the cashier has already typed an amount, surface what
             // portion of THIS payment lands on the current period.
-            const currentAlloc = (paymentPreview?.allocations ?? []).find(
-              (a) => a.period === current.period
-            );
-            const currentApplied =
-              currentAlloc?.amount_applied ??
-              (currentAlloc?.principal ?? 0) +
-                (currentAlloc?.interest ?? 0) +
-                (currentAlloc?.penalty ?? 0);
-            const currentRemaining = currentAlloc?.remaining_balance ?? 0;
+            // Matched by schedule id or the server's period number, never by
+            // position: period numbers can skip after an extension.
+            const currentAlloc =
+              current === null || isRange || !paymentPreviewCurrent
+                ? undefined
+                : (paymentPreview?.allocations ?? []).find((a) => allocationMatches(a, current));
+            // The row's due date and status only for one period on today's
+            // date, the date the server's figure is for.
+            const showPeriodDetail = current !== null && !isRange && amountDueOnPaymentDate !== null;
+            // The server's amount applied and remaining balance; no verdict
+            // without them.
+            const currentApplied = currentAlloc?.amount_applied ?? null;
+            const currentRemaining = currentAlloc?.remaining_balance ?? null;
             const willFullySettle =
-              !!currentAlloc && currentApplied > 0 && currentRemaining <= 0;
+              currentApplied !== null && currentApplied > 0 && currentRemaining !== null && currentRemaining <= 0;
             return (
-              <div className="rounded-lg border overflow-hidden">
+              <div className="shrink-0 rounded-lg border overflow-hidden">
                 <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-muted/40 border-b">
                   <p className="text-xs font-medium flex items-center gap-1.5">
                     <CalendarIcon className="size-3.5 shrink-0" />
-                    Current Scheduled Payment
+                    {periodLabel === null
+                      ? "Insurance Premium Owed"
+                      : isRange
+                        ? "Amount Due Now"
+                        : "Current Scheduled Payment"}
                   </p>
-                  {isOverdue ? (
+                  {!showPeriodDetail ? null : isOverdue ? (
                     <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
                       Overdue
                     </span>
@@ -4804,63 +4880,73 @@ export default function LoanDetailPage({
                 </div>
                 <div className="px-3 sm:px-4 py-3 space-y-3">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch sm:justify-between">
-                    <div className="min-w-0">
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                        Period {current.period} &middot; Due
-                      </p>
-                      <p className="text-base font-semibold truncate">
-                        {formatDateObj(current.dueDate)}
-                      </p>
-                    </div>
-                    {/* Prominent "Amount to Pay" callout — gives the cashier
-                        an unmissable reference for what the borrower owes
-                        for the current period, with a one-click fill into
-                        the Amount input. */}
+                    {periodLabel !== null && (
+                      <div className="min-w-0">
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                          {periodLabel}
+                          {showPeriodDetail && <> &middot; Due</>}
+                        </p>
+                        {showPeriodDetail && current !== null && (
+                          <p className="text-base font-semibold truncate">
+                            {formatDateObj(current.dueDate)}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {/* Prominent "Amount to Pay" callout — the server's
+                        amount due now (premium owed plus every period due,
+                        or the next period), with a one-click fill into the
+                        Amount input. */}
                     <div className="rounded-md border-2 border-emerald-300 bg-emerald-50 px-3 py-2 dark:border-emerald-700 dark:bg-emerald-950/30 sm:text-right">
                       <p className="text-[10px] text-emerald-800 dark:text-emerald-300 uppercase tracking-wide font-semibold">
                         Amount to Pay
                       </p>
                       <p className="text-2xl font-bold tabular-nums text-emerald-900 dark:text-emerald-200">
-                        {formatCurrency(current.totalPayment)}
+                        {currencyOrDash(currentTotal)}
                       </p>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setPaymentAmount(current.totalPayment.toFixed(2))
-                        }
-                        className="mt-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 underline-offset-2 hover:underline"
-                      >
-                        Use this amount →
-                      </button>
+                      {amountDueOnPaymentDate === null && (
+                        <p className="mt-1 text-[11px] text-emerald-800 dark:text-emerald-300">
+                          Shown for today&apos;s date only
+                        </p>
+                      )}
+                      {currentTotal !== null && (
+                        <button
+                          type="button"
+                          onClick={() => setPaymentAmount(currentTotal.toFixed(2))}
+                          className="mt-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 underline-offset-2 hover:underline"
+                        >
+                          Use this amount →
+                        </button>
+                      )}
                     </div>
                   </div>
 
-                  <div className={cn("grid gap-2", hasScb ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2")}>
-                    <div className="rounded-md border bg-background p-2 text-center min-w-0">
-                      <p className="text-[10px] text-muted-foreground">Principal</p>
-                      <p className="text-sm font-semibold tabular-nums truncate">
-                        {formatCurrency(current.principal)}
-                      </p>
-                    </div>
-                    <div className="rounded-md border bg-background p-2 text-center min-w-0">
-                      <p className="text-[10px] text-muted-foreground">Interest</p>
-                      <p className="text-sm font-semibold tabular-nums truncate">
-                        {formatCurrency(current.interest)}
-                      </p>
-                    </div>
-                    {hasScb && (
-                      <div className="rounded-md border bg-background p-2 text-center min-w-0 col-span-2 sm:col-span-1">
-                        <p className="text-[10px] text-muted-foreground">SCB</p>
-                        <p className="text-sm font-semibold tabular-nums text-brand-orange truncate">
-                          {formatCurrency(current.shareCapitalBuildUp)}
+                  <div
+                    className={cn(
+                      "grid grid-cols-2 gap-2",
+                      dueParts.length >= 5 ? "sm:grid-cols-5" : dueParts.length === 4 ? "sm:grid-cols-4" : "sm:grid-cols-3"
+                    )}
+                  >
+                    {dueParts.map((part) => (
+                      <div key={part.key} className="rounded-md border bg-background p-2 text-center min-w-0">
+                        <p className="text-[10px] text-muted-foreground">{part.label}</p>
+                        <p
+                          className={cn(
+                            "text-sm font-semibold tabular-nums truncate",
+                            part.key === "insurance" && "text-purple-700 dark:text-purple-300",
+                            part.key === "penalty" && (part.amount ?? 0) > 0 && "text-destructive",
+                            part.key === "share_capital_build_up" && "text-brand-orange"
+                          )}
+                        >
+                          {currencyOrDash(part.amount)}
                         </p>
                       </div>
-                    )}
+                    ))}
                   </div>
 
                   {/* When an amount is entered, show the live verdict for
                       the current period: settled / partial / no impact. */}
-                  {currentAlloc && currentApplied > 0 && (
+                  {currentApplied !== null && currentApplied > 0 && (
                     <div
                       className={cn(
                         "rounded-md border px-3 py-2 text-xs flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between",
@@ -4874,7 +4960,7 @@ export default function LoanDetailPage({
                         <span className="break-words">
                           {willFullySettle
                             ? "This payment fully settles this scheduled period"
-                            : `Partial: ${formatCurrency(currentRemaining)} will still be owed for this period`}
+                            : `Partial: ${currencyOrDash(currentRemaining)} will still be owed for this period`}
                         </span>
                       </span>
                       <span className="font-semibold tabular-nums whitespace-nowrap shrink-0">
@@ -4927,18 +5013,22 @@ export default function LoanDetailPage({
           </div>
 
           {/* Advance-mode helpers: quick presets that auto-fill the amount
-              with the sum of the next N unpaid scheduled installments. The
-              cashier can still edit the amount manually. */}
-          {paymentMode === "advance" && storedSchedule.length > 0 && (() => {
-            const unpaid = storedSchedule.filter((r) => r.status !== "paid");
+              with the server's figure for paying N periods ahead (premium and
+              penalty owed included), or for paying the loan off. The cashier
+              can still edit the amount manually. */}
+          {paymentMode === "advance" && scheduleRows && (() => {
+            // The open periods count the "remaining" label and the remark's
+            // period count only; every amount is the server's.
+            const unpaid = openPeriods(scheduleRows);
             if (unpaid.length === 0) return null;
-            const sumOfNext = (n: number) =>
-              unpaid.slice(0, n).reduce((s, r) => s + r.totalPayment, 0);
-            const fillForPeriods = (n: number) => {
-              const capped = Math.max(1, Math.min(n, unpaid.length));
-              setAdvancePeriods(capped);
-              const total = sumOfNext(capped);
-              setPaymentAmount(total > 0 ? String(total.toFixed(2)) : "");
+            // Only the presets the server sent (one on a Share Capital
+            // Build-Up loan), then "Pay all remaining" when the server sent a
+            // payoff amount (it sends none on a Build-Up loan).
+            const buttons = presetButtons(loanSummary, unpaid.length);
+            if (buttons.length === 0) return null;
+            const fillAmount = (periods: number, amount: number) => {
+              setAdvancePeriods(periods);
+              setPaymentAmount(amount > 0 ? amount.toFixed(2) : "");
             };
             return (
               <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-3 dark:border-blue-900 dark:bg-blue-950/20 space-y-2">
@@ -4951,41 +5041,25 @@ export default function LoanDetailPage({
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {[1, 2, 3, 6].filter((n) => n <= unpaid.length).map((n) => (
+                  {buttons.map((b) => (
                     <Button
-                      key={n}
+                      key={b.label}
                       type="button"
-                      variant={advancePeriods === n ? "default" : "outline"}
+                      variant={advancePeriods === b.periods ? "default" : "outline"}
                       size="sm"
                       className={cn(
                         "h-8 text-xs whitespace-nowrap",
-                        advancePeriods === n &&
+                        advancePeriods === b.periods &&
                           "bg-blue-600 hover:bg-blue-700 text-white"
                       )}
-                      onClick={() => fillForPeriods(n)}
+                      onClick={() => fillAmount(b.periods, b.amount)}
                     >
-                      {n} period{n === 1 ? "" : "s"}
+                      {b.label}
                       <span className="ml-1.5 opacity-80 text-[10px] tabular-nums">
-                        ({formatCurrency(sumOfNext(n))})
+                        ({currencyOrDash(b.amount)})
                       </span>
                     </Button>
                   ))}
-                  <Button
-                    type="button"
-                    variant={advancePeriods === unpaid.length ? "default" : "outline"}
-                    size="sm"
-                    className={cn(
-                      "h-8 text-xs whitespace-nowrap",
-                      advancePeriods === unpaid.length &&
-                        "bg-blue-600 hover:bg-blue-700 text-white"
-                    )}
-                    onClick={() => fillForPeriods(unpaid.length)}
-                  >
-                    Pay all remaining
-                    <span className="ml-1.5 opacity-80 text-[10px] tabular-nums">
-                      ({formatCurrency(sumOfNext(unpaid.length))})
-                    </span>
-                  </Button>
                 </div>
                 <p className="text-[11px] text-blue-800/80 dark:text-blue-300/80 break-words">
                   Tap a preset to auto-fill the amount. You can still edit it
@@ -5004,7 +5078,7 @@ export default function LoanDetailPage({
                   render={
                     <button
                       type="button"
-                      className="flex h-9 w-full items-center gap-2 rounded-lg border border-input bg-transparent px-3 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                      className="flex h-8 w-full items-center gap-2 rounded-lg border border-input bg-transparent px-3 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                     />
                   }
                 >
@@ -5015,6 +5089,7 @@ export default function LoanDetailPage({
                   <Calendar
                     mode="single"
                     selected={paymentDate}
+                    disabled={(day) => paymentDayBlocked(formatDateISO(day), countedUntil)}
                     onSelect={(date) => {
                       if (date) setPaymentDate(date);
                       setPaymentDatePickerOpen(false);
@@ -5022,6 +5097,14 @@ export default function LoanDetailPage({
                   />
                 </PopoverContent>
               </Popover>
+              {countedUntil !== null && (
+                <p className="text-xs text-muted-foreground break-words">{countedUntilHint(countedUntil)}</p>
+              )}
+              {paymentDateError !== null && (
+                <p id="payment-date-error" role="alert" className="text-xs text-destructive break-words">
+                  {paymentDateError}
+                </p>
+              )}
             </div>
             <div className="space-y-1.5 min-w-0">
               <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -5029,10 +5112,8 @@ export default function LoanDetailPage({
                   Amount <span className="text-red-500">*</span>
                 </Label>
                 {(() => {
-                  const currentDue = storedSchedule.find((r) => r.status !== "paid");
-                  if (!currentDue) return null;
-                  const suggested = currentDue.totalPayment;
-                  if (suggested <= 0) return null;
+                  const suggested = amountDueOnPaymentDate?.amount ?? null;
+                  if (suggested === null || suggested <= 0) return null;
                   return (
                     <button
                       type="button"
@@ -5052,14 +5133,68 @@ export default function LoanDetailPage({
                 placeholder="0.00"
                 value={paymentAmount}
                 onChange={(e) => setPaymentAmount(e.target.value)}
+                aria-invalid={paymentAmountCheck.error !== null}
+                aria-describedby={paymentAmountCheck.error !== null ? "payment-amount-error" : undefined}
                 className="w-full"
               />
-              {paymentAmount && Number(paymentAmount) > 0 && (
+              {paymentAmountCheck.error !== null && (
+                <p id="payment-amount-error" role="alert" className="text-xs text-destructive">
+                  {paymentAmountCheck.error}
+                </p>
+              )}
+              {paymentAmountCheck.amount !== null && paymentAmountCheck.amount > 0 && (
                 <p className="text-[11px] text-muted-foreground tabular-nums">
-                  Borrower will pay{" "}
+                  Member will pay{" "}
                   <span className="font-semibold text-foreground">
-                    {formatCurrency(Number(paymentAmount))}
+                    {formatCurrency(paymentAmountCheck.amount)}
                   </span>
+                </p>
+              )}
+            </div>
+            <div className="space-y-1.5 min-w-0">
+              <Label id="payment-method-label">
+                Payment Method <span className="text-red-500">*</span>
+              </Label>
+              <Select
+                value={paymentMethod}
+                onValueChange={(value) => {
+                  const next = readPaymentMethod(value, paymentMethod);
+                  setPaymentReference(referenceAfterMethodChange(paymentMethod, next, paymentReference));
+                  setPaymentMethod(next);
+                }}
+              >
+                <SelectTrigger className="w-full" aria-labelledby="payment-method-label">
+                  <SelectValue>
+                    {(value: RecordPaymentMethod) => paymentMethodLabel(value)}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {PAYMENT_METHOD_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5 min-w-0">
+              <Label htmlFor="payment-reference">
+                Reference Number
+                {paymentMethod !== "cash" && <span className="text-red-500"> *</span>}
+              </Label>
+              <Input
+                id="payment-reference"
+                placeholder={paymentMethod === "cash" ? "Optional" : "Required for this method"}
+                maxLength={100}
+                value={paymentReference}
+                onChange={(e) => setPaymentReference(e.target.value)}
+                required={paymentMethod !== "cash"}
+                aria-describedby={paymentReferenceProblem !== null ? "payment-reference-hint" : undefined}
+                className="w-full"
+              />
+              {paymentReferenceProblem !== null && (
+                <p id="payment-reference-hint" className="text-xs text-muted-foreground">
+                  {paymentReferenceProblem}
                 </p>
               )}
             </div>
@@ -5089,43 +5224,49 @@ export default function LoanDetailPage({
             }> = [
               {
                 n: 1,
-                label: "Penalty",
-                hint: "Late-payment fees first",
-                cls: "border-destructive/40 bg-destructive/5 text-destructive",
+                label: "Insurance Premium",
+                hint: "Premium still owed on the loan, interest-free",
+                cls: "border-purple-300 bg-purple-50 text-purple-800 dark:border-purple-700 dark:bg-purple-950/30 dark:text-purple-300",
               },
               {
                 n: 2,
+                label: "Penalty",
+                hint: "Late-payment fees",
+                cls: "border-destructive/40 bg-destructive/5 text-destructive",
+              },
+              {
+                n: 3,
                 label: "Overdue Interest",
                 hint: "Interest on missed periods",
                 cls: "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-300",
               },
               {
-                n: 3,
+                n: 4,
                 label: "Current Interest",
                 hint: "Interest for the current period",
                 cls: "border-blue-300 bg-blue-50 text-blue-800 dark:border-blue-700 dark:bg-blue-950/30 dark:text-blue-300",
               },
               {
-                n: 4,
+                n: 5,
                 label: "Current Principal",
                 hint: "Principal for the current period",
                 cls: "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300",
               },
               loanHasScb
                 ? {
-                    n: 5,
+                    n: 6,
                     label: "SCB (Excess)",
                     hint: "Share Capital Build-Up credit",
                     cls: "border-orange-300 bg-orange-50 text-orange-800 dark:border-orange-700 dark:bg-orange-950/30 dark:text-orange-300",
                   }
                 : {
-                    n: 5,
+                    n: 6,
                     label: "Next Interest",
                     hint: "Advance toward next period",
                     cls: "border-blue-300 bg-blue-50 text-blue-800 dark:border-blue-700 dark:bg-blue-950/30 dark:text-blue-300",
                   },
               {
-                n: 6,
+                n: 7,
                 label: loanHasScb ? "Next Interest" : "Next Principal",
                 hint: loanHasScb
                   ? "If SCB is settled, future periods next"
@@ -5165,16 +5306,26 @@ export default function LoanDetailPage({
                 <p className="text-[11px] text-muted-foreground leading-snug">
                   The system applies the entered amount in this order. Each
                   bucket must be fully covered before excess flows to the
-                  next. {loanHasScb
-                    ? "Because this loan has SCB, leftover after current dues credits the borrower's Share Capital before advancing future periods."
+                  next; insurance premium still owed on the loan is taken
+                  before anything else. {loanHasScb
+                    ? "Because this loan has SCB, leftover after current dues credits the member's Share Capital before advancing future periods."
                     : "This loan has no SCB, so leftover after current dues advances directly to upcoming periods."}
                 </p>
               </div>
             );
           })()}
 
+          {paymentRefusal !== null && paymentRefusal !== paymentDateError && paymentAmountCheck.amount !== null && paymentAmountCheck.amount > 0 && (
+            <p
+              role="alert"
+              className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive break-words"
+            >
+              {paymentRefusal}
+            </p>
+          )}
+
           {/* Allocation Preview */}
-          {paymentPreview && Number(paymentAmount) > 0 && (
+          {paymentPreview && paymentAmountCheck.amount !== null && paymentAmountCheck.amount > 0 && (
             <>
               <Separator />
               <div className="space-y-4">
@@ -5193,8 +5344,24 @@ export default function LoanDetailPage({
                   </p>
                 </div>
 
-                {/* Component allocation totals */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {/* Component allocation totals. Insurance premium owed on the
+                    loan is collected first, so it leads when there is any. */}
+                <div
+                  className={cn(
+                    "grid grid-cols-2 gap-2",
+                    PAYMENT_PREVIEW_GRID_COLUMNS[3 + paymentExcessCells.length + (paymentPreviewInsurance !== null ? 1 : 0)]
+                  )}
+                >
+                  {paymentPreviewInsurance !== null && (
+                    <div className="rounded-lg border p-2 sm:p-3 text-center min-w-0">
+                      <p className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wide">
+                        {INSURANCE_PREMIUM_LABEL}
+                      </p>
+                      <p className="text-sm font-semibold tabular-nums truncate">
+                        {formatCurrency(paymentPreviewInsurance)}
+                      </p>
+                    </div>
+                  )}
                   <div className="rounded-lg border p-2 sm:p-3 text-center min-w-0">
                     <p className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wide">Penalty</p>
                     <p
@@ -5203,53 +5370,62 @@ export default function LoanDetailPage({
                         (paymentPreview.total_penalty ?? 0) > 0 && "text-destructive"
                       )}
                     >
-                      {formatCurrency(paymentPreview.total_penalty ?? 0)}
+                      {currencyOrDash(paymentPreview.total_penalty)}
                     </p>
                   </div>
                   <div className="rounded-lg border p-2 sm:p-3 text-center min-w-0">
                     <p className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wide">Interest</p>
                     <p className="text-sm font-semibold tabular-nums truncate">
-                      {formatCurrency(paymentPreview.total_interest ?? 0)}
+                      {currencyOrDash(paymentPreview.total_interest)}
                     </p>
                   </div>
                   <div className="rounded-lg border p-2 sm:p-3 text-center min-w-0">
                     <p className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wide">Principal</p>
                     <p className="text-sm font-semibold tabular-nums truncate">
-                      {formatCurrency(paymentPreview.total_principal ?? 0)}
+                      {currencyOrDash(paymentPreview.total_principal)}
                     </p>
                   </div>
-                  <div
-                    className={cn(
-                      "rounded-lg border p-2 sm:p-3 text-center min-w-0",
-                      (paymentPreview.excess ?? 0) > 0 &&
-                        "border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/20"
-                    )}
-                  >
-                    <p className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wide">Excess / SCB</p>
-                    <p
+                  {paymentExcessCells.map((cell) => (
+                    <div
+                      key={cell.key}
                       className={cn(
-                        "text-sm font-semibold tabular-nums truncate",
-                        (paymentPreview.excess ?? 0) > 0 && "text-amber-700 dark:text-amber-400"
+                        "rounded-lg border p-2 sm:p-3 text-center min-w-0",
+                        cell.key === "build_up" &&
+                          paymentExcessTiles.some((tile) => tile.key === "build_up") &&
+                          "border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/20"
                       )}
                     >
-                      {formatCurrency(paymentPreview.excess ?? 0)}
-                    </p>
-                  </div>
+                      <p className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wide">{cell.label}</p>
+                      <p
+                        className={cn(
+                          "text-sm font-semibold tabular-nums truncate",
+                          cell.key === "build_up" &&
+                            paymentExcessTiles.some((tile) => tile.key === "build_up") &&
+                            "text-amber-700 dark:text-amber-400"
+                        )}
+                      >
+                        {cell.amount}
+                      </p>
+                    </div>
+                  ))}
                 </div>
 
                 {/* Per-schedule allocation table */}
                 {Array.isArray(paymentPreview.allocations) && paymentPreview.allocations.length > 0 && (() => {
                   const loanHasScb = (loan?.scb_amount ?? 0) > 0;
-                  const periodScb = (period: number | undefined) => {
-                    if (typeof period !== "number") return 0;
-                    const row = storedSchedule.find((r) => r.period === period);
-                    return row?.shareCapitalBuildUp ?? 0;
+                  // A dash with no schedule on screen to read the build-up from.
+                  const periodScb = (allocation: { schedule_id?: number; period?: number }) => {
+                    if (storedSchedule.length === 0 || !scheduleRows) return "—";
+                    // The period's own server row (by schedule id, else the
+                    // server's period number), never the merged upon-maturity
+                    // row and never by position; a dash when there is none.
+                    return currencyOrDash(allocationBuildUp(scheduleRows, allocation));
                   };
                   return (
                   <div className="rounded-lg border overflow-hidden">
                     <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-muted/40 border-b">
                       <p className="text-xs font-medium flex items-center gap-1.5">
-                        <Receipt className="size-3.5 shrink-0" />
+                        <ReceiptText className="size-3.5 shrink-0" />
                         Schedule Periods Covered
                       </p>
                       <span className="text-[10px] text-muted-foreground">
@@ -5275,28 +5451,27 @@ export default function LoanDetailPage({
                         </TableHeader>
                         <TableBody>
                           {paymentPreview.allocations.map((a, idx) => {
-                            const applied =
-                              a.amount_applied ??
-                              (a.principal ?? 0) + (a.interest ?? 0) + (a.penalty ?? 0);
-                            const remaining = a.remaining_balance ?? 0;
-                            const isFullySettled = remaining <= 0 && applied > 0;
+                            const applied = a.amount_applied ?? null;
+                            const remaining = a.remaining_balance ?? null;
+                            const isFullySettled =
+                              remaining !== null && remaining <= 0 && applied !== null && applied > 0;
                             return (
                               <TableRow key={`${a.schedule_id ?? idx}-${a.period ?? idx}`}>
                                 <TableCell className="text-center text-xs font-medium">
-                                  {a.period ?? idx + 1}
+                                  {a.period ?? "—"}
                                 </TableCell>
                                 <TableCell className="text-xs">
                                   {a.due_date ? formatDate(a.due_date) : "—"}
                                 </TableCell>
                                 <TableCell className="text-right text-xs tabular-nums">
-                                  {formatCurrency(a.principal ?? 0)}
+                                  {currencyOrDash(a.principal)}
                                 </TableCell>
                                 <TableCell className="text-right text-xs tabular-nums">
-                                  {formatCurrency(a.interest ?? 0)}
+                                  {currencyOrDash(a.interest)}
                                 </TableCell>
                                 {loanHasScb && (
                                   <TableCell className="text-right text-xs tabular-nums text-brand-orange">
-                                    {formatCurrency(periodScb(a.period))}
+                                    {periodScb(a)}
                                   </TableCell>
                                 )}
                                 <TableCell
@@ -5305,10 +5480,13 @@ export default function LoanDetailPage({
                                     (a.penalty ?? 0) > 0 && "text-destructive"
                                   )}
                                 >
-                                  {formatCurrency(a.penalty ?? 0)}
+                                  {currencyOrDash(a.penalty)}
+                                  {scheduleRows && (
+                                    <PenaltyMonthsNote note={allocationPenaltyNoteFor(scheduleRows, a)} />
+                                  )}
                                 </TableCell>
                                 <TableCell className="text-right text-xs font-semibold tabular-nums">
-                                  {formatCurrency(applied)}
+                                  {currencyOrDash(applied)}
                                 </TableCell>
                                 <TableCell className="text-right text-xs tabular-nums">
                                   {isFullySettled ? (
@@ -5317,7 +5495,7 @@ export default function LoanDetailPage({
                                     </span>
                                   ) : (
                                     <span className="text-muted-foreground">
-                                      {formatCurrency(remaining)}
+                                      {currencyOrDash(remaining)}
                                     </span>
                                   )}
                                 </TableCell>
@@ -5345,42 +5523,44 @@ export default function LoanDetailPage({
                       New Outstanding Balance
                     </p>
                     <p className="text-lg font-bold tabular-nums break-words">
-                      {formatCurrency(
-                        Math.max(
-                          0,
-                          (loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0) -
-                            (paymentPreview.total_principal ?? 0)
-                        )
-                      )}
+                      {currencyOrDash(previewOutstandingAfter(paymentPreview))}
                     </p>
                     <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
-                      was{" "}
-                      {formatCurrency(
-                        loanSummary?.outstanding_balance ?? loan.outstanding_balance ?? 0
-                      )}
+                      was {currencyOrDash(previewOutstandingBefore(paymentPreview))}
                     </p>
                   </div>
 
-                  {(paymentPreview.excess ?? 0) > 0 && (
-                    <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-900/20 min-w-0">
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
-                        Excess → Share Capital / Future Periods
+                  {paymentExcessTiles.map((tile) => (
+                    <div
+                      key={tile.key}
+                      className={cn(
+                        "rounded-lg border p-3 min-w-0",
+                        tile.key === "build_up"
+                          ? "border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/20"
+                          : "border-blue-300 bg-blue-50 dark:border-blue-700 dark:bg-blue-900/20"
+                      )}
+                    >
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">{tile.label}</p>
+                      <p
+                        className={cn(
+                          "text-lg font-bold tabular-nums break-words",
+                          tile.key === "build_up"
+                            ? "text-amber-700 dark:text-amber-400"
+                            : "text-blue-700 dark:text-blue-400"
+                        )}
+                      >
+                        {formatCurrency(tile.amount)}
                       </p>
-                      <p className="text-lg font-bold text-amber-700 dark:text-amber-400 tabular-nums break-words">
-                        {formatCurrency(paymentPreview.excess ?? 0)}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5 break-words">
-                        will be applied per allocation rules
-                      </p>
+                      {tile.note && <p className="text-[10px] text-muted-foreground mt-0.5 break-words">{tile.note}</p>}
                     </div>
-                  )}
+                  ))}
                 </div>
 
                 {/* Reconciliation footer */}
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed bg-muted/30 px-3 py-2 text-xs">
                   <span className="text-muted-foreground">Total Recorded</span>
                   <span className="font-bold tabular-nums">
-                    {formatCurrency(Number(paymentAmount) || 0)}
+                    {formatCurrency(paymentAmountCheck.amount ?? 0)}
                   </span>
                 </div>
               </div>
@@ -5398,7 +5578,14 @@ export default function LoanDetailPage({
             <Button
               className="w-full sm:w-auto bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
               onClick={handleRecordPayment}
-              disabled={actionLoading || !paymentAmount || Number(paymentAmount) <= 0}
+              disabled={
+                actionLoading ||
+                paymentAmountCheck.amount === null ||
+                paymentAmountCheck.amount <= 0 ||
+                paymentReferenceProblem !== null ||
+                paymentRefusal !== null ||
+                paymentDayIsCounted
+              }
             >
               {actionLoading ? (
                 <>
@@ -5407,7 +5594,7 @@ export default function LoanDetailPage({
                 </>
               ) : (
                 <>
-                  <DollarSign className="mr-2 h-4 w-4" />
+                  <PhilippinePeso className="mr-2 h-4 w-4" />
                   Record Payment
                 </>
               )}
@@ -5433,53 +5620,105 @@ export default function LoanDetailPage({
               Extend Loan
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This will move the loan&apos;s due date forward by one cycle.
-              The principal and any remaining balance are unchanged.{" "}
+              {extensionMoveDescription(extendPreview.preview?.cycles ?? null, extendCycleUnit)} The
+              principal and any remaining balance are unchanged.{" "}
               {extendInterestOption === "pay"
-                ? "The interest due below will be collected as a payment before the loan extends."
+                ? "The amount below will be collected as a payment before the loan extends."
                 : "The interest due below stays unpaid and is added to the new period's interest."}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="rounded-md border-2 border-emerald-300 bg-emerald-50 px-3 py-2 dark:border-emerald-700 dark:bg-emerald-950/30">
-            <p className="text-[10px] text-emerald-800 dark:text-emerald-300 uppercase tracking-wide font-semibold">
-              {extendInterestOption === "pay"
-                ? "Interest Due — will be collected to extend"
-                : "Interest Due — carried into the new period"}
-            </p>
-            <p className="text-2xl font-bold tabular-nums text-emerald-900 dark:text-emerald-200">
-              {formatCurrencyPrecise(currentInterestDue)}
-            </p>
-            {extendInterestOption === "defer" && extendDeferredInterestTotal !== null && (
-              // Spells out the stacking the team described: ₱50 already due
-              // plus ₱50 fresh becomes ₱100 owed on the new period.
-              <p className="mt-1 text-xs text-emerald-800 dark:text-emerald-300">
-                Stays unpaid — the new period will owe{" "}
-                <span className="font-semibold tabular-nums">
-                  {formatCurrencyPrecise(extendDeferredInterestTotal)}
-                </span>{" "}
-                once this cycle&apos;s interest is added.
+          {/* Every figure here is the server's extension preview for the
+              option chosen; nothing is worked out in the browser. */}
+          <div
+            className="rounded-md border-2 border-emerald-300 bg-emerald-50 px-3 py-2 dark:border-emerald-700 dark:bg-emerald-950/30"
+            aria-live="polite"
+            aria-busy={extendPreview.loading}
+          >
+            {extendPreview.loading ? (
+              <p className="flex items-center gap-2 py-2 text-sm text-emerald-800 dark:text-emerald-300">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                Getting the extension figures...
               </p>
+            ) : extendPreview.preview === null ? (
+              <p className="py-2 text-sm text-red-700 dark:text-red-400" role="alert">
+                {extendPreview.error ?? "We couldn't preview this extension. Please try again."}
+              </p>
+            ) : (
+              <>
+                <p className="text-[10px] text-emerald-800 dark:text-emerald-300 uppercase tracking-wide font-semibold">
+                  {extendPreview.preview.collectNow
+                    ? "Collected now to extend"
+                    : "Interest Due — carried into the new period"}
+                </p>
+                <p className="text-2xl font-bold tabular-nums text-emerald-900 dark:text-emerald-200">
+                  {currencyOrDash(
+                    extendPreview.preview.collectNow
+                      ? extendPreview.preview.collectNow.amount
+                      : extendPreview.preview.carryInterest,
+                  )}
+                </p>
+                {extendPreview.preview.collectNow && (
+                  // Each part the server collects, in the order it takes
+                  // them, and its total: as sent, a dash when missing,
+                  // never added up here.
+                  <dl className="mt-2 grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 text-xs text-emerald-900 dark:text-emerald-200">
+                    {collectNowRows(extendPreview.preview.collectNow).map((row) => (
+                      <Fragment key={row.label}>
+                        <dt>{row.label}</dt>
+                        <dd className="text-right tabular-nums">{currencyOrDash(row.amount)}</dd>
+                      </Fragment>
+                    ))}
+                    <dt className="font-semibold">Total collected now</dt>
+                    <dd className="text-right font-semibold tabular-nums">
+                      {currencyOrDash(extendPreview.preview.collectNow.amount)}
+                    </dd>
+                  </dl>
+                )}
+                {(extendPreview.preview.collectNow?.insurancePart ?? 0) > 0 && (
+                  <p className="mt-1 text-xs text-emerald-800 dark:text-emerald-300">
+                    The insurance premium still owed on the loan is collected first (interest-free).
+                  </p>
+                )}
+                <dl className="mt-2 grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 border-t border-emerald-200 pt-2 text-xs text-emerald-900 dark:border-emerald-800 dark:text-emerald-200">
+                  <dt>Interest carried over</dt>
+                  <dd className="text-right tabular-nums">{formatCurrency(extendPreview.preview.carryInterest)}</dd>
+                  <dt>{freshInterestLabel(extendPreview.preview.cycles, extendCycleUnit)}</dt>
+                  <dd className="text-right tabular-nums">{formatCurrency(extendPreview.preview.freshInterest)}</dd>
+                  <dt>New period&apos;s interest</dt>
+                  <dd className="text-right tabular-nums">{formatCurrency(extendPreview.preview.newInterestDue)}</dd>
+                  <dt className="font-semibold">New period&apos;s total due</dt>
+                  <dd className="text-right font-semibold tabular-nums">{formatCurrency(extendPreview.preview.newTotalDue)}</dd>
+                </dl>
+                {(() => {
+                  // With the new period's figures, not under what "pay"
+                  // collects now: these months' interest is owed later.
+                  const sentence = extensionCyclesSentence(extendPreview.preview.cycles, extendCycleUnit);
+                  return sentence === null ? null : (
+                    <p className="mt-1 text-xs font-medium text-emerald-900 dark:text-emerald-200">{sentence}</p>
+                  );
+                })()}
+              </>
             )}
           </div>
           <div className="space-y-2">
             <Label className="text-xs">Interest Due Option</Label>
             <Select
               value={extendInterestOption}
-              onValueChange={(v) => setExtendInterestOption(v as "pay" | "defer")}
+              onValueChange={(v) => setExtendInterestOption(v as ExtensionInterestOption)}
             >
               <SelectTrigger className="w-full">
                 {/* Render function, else the trigger shows the raw value */}
                 <SelectValue>
                   {(value: string | null) =>
-                    value === "defer" ? "Defer Outstanding Interest" : "Pay Outstanding Interest"
+                    value === "defer" ? "Defer Outstanding Interest" : "Pay what's owed now"
                   }
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="pay">
-                  <span className="font-medium">Pay Outstanding Interest</span>
+                  <span className="font-medium">Pay what&apos;s owed now</span>
                   <span className="block text-xs text-muted-foreground">
-                    Pay the accrued interest before extension
+                    Pay the premium owed, late penalty and interest before extension
                   </span>
                 </SelectItem>
                 <SelectItem value="defer">
@@ -5491,36 +5730,39 @@ export default function LoanDetailPage({
               </SelectContent>
             </Select>
           </div>
+          {extendInterestOption === "pay" && (
+            <MethodReferenceFields
+              idPrefix="extend"
+              options={PAYMENT_METHOD_OPTIONS}
+              method={extendMethod}
+              reference={extendReference}
+              onChange={(next) => {
+                setExtendMethod(next.method);
+                setExtendReference(next.reference);
+              }}
+              referenceRequired={extendMethod !== "cash"}
+              problem={extendReferenceProblem}
+              disabled={actionLoading}
+            />
+          )}
           <div className="space-y-2">
             <Label className="text-xs">Extension Details</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                type="number"
-                value={1}
-                disabled
-                className="w-20"
-                aria-label="Extension duration"
-              />
-              <Select value="months" disabled>
-                <SelectTrigger className="flex-1">
-                  <SelectValue placeholder="Months" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="days">Days</SelectItem>
-                  <SelectItem value="months">Months</SelectItem>
-                  <SelectItem value="years">Years</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Every extension moves the due date forward by one fixed cycle.
-            </p>
-            <div className="rounded-md border bg-muted/30 px-3 py-2">
-              <p className="text-xs text-muted-foreground">New Maturity Date</p>
-              <p className="text-sm font-medium">
-                {extendPreviewMaturityDate ? formatDateObj(extendPreviewMaturityDate) : "—"}
-              </p>
-            </div>
+            {/* Both from the server's preview; a dash until it answers, and
+                for the cycles when it sent none. */}
+            <dl className="grid grid-cols-2 gap-2">
+              <div className="rounded-md border bg-muted/30 px-3 py-2">
+                <dt className="text-xs text-muted-foreground">Due Date Moves</dt>
+                <dd className="text-sm font-medium tabular-nums">
+                  {extensionCyclesLabel(extendPreview.preview?.cycles ?? null, extendCycleUnit)}
+                </dd>
+              </div>
+              <div className="rounded-md border bg-muted/30 px-3 py-2">
+                <dt className="text-xs text-muted-foreground">New Due Date</dt>
+                <dd className="text-sm font-medium">
+                  {extendPreview.preview ? formatDate(extendPreview.preview.newDueDate) : "—"}
+                </dd>
+              </div>
+            </dl>
           </div>
           <div className="space-y-2">
             <Label htmlFor="extend-remarks" className="text-xs">
@@ -5530,7 +5772,7 @@ export default function LoanDetailPage({
               id="extend-remarks"
               value={extendRemarks}
               onChange={(e) => setExtendRemarks(e.target.value)}
-              placeholder="e.g. borrower requested extension"
+              placeholder="e.g. member requested extension"
               rows={2}
             />
           </div>
@@ -5538,7 +5780,9 @@ export default function LoanDetailPage({
             <AlertDialogCancel disabled={actionLoading}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleExtendLoan}
-              disabled={actionLoading}
+              disabled={
+                actionLoading || extendReferenceProblem !== null || !canConfirmExtension(extendPreview.preview)
+              }
               className="bg-brand-blue text-brand-blue-foreground shadow-sm hover:bg-brand-blue-dark hover:shadow-md transition-all"
             >
               {actionLoading ? (
@@ -5557,44 +5801,51 @@ export default function LoanDetailPage({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Partial-Payment Extend Prompt (Upon Maturity — Process 2) */}
-      <AlertDialog open={partialExtendOpen} onOpenChange={setPartialExtendOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Extend loan?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Payment is not enough to fully settle this loan. Do you want to
-              extend the loan? The remaining principal and interest will be
-              carried over to the next cycle.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel
-              disabled={actionLoading}
-              onClick={handlePartialExtendDecline}
-            >
-              No, thanks
-            </AlertDialogCancel>
-            <AlertDialogAction
-              disabled={actionLoading}
-              onClick={handlePartialExtendConfirm}
-              className="bg-brand-blue text-brand-blue-foreground shadow-sm hover:bg-brand-blue-dark hover:shadow-md transition-all"
-            >
-              {actionLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Extending...
-                </>
-              ) : (
-                <>
-                  <CalendarPlus className="mr-2 h-4 w-4" />
-                  Yes, extend
-                </>
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Partial-payment "Extend loan?" prompt (Process 2), shared with Payment Entry */}
+      <PartialExtendPrompt
+        open={partialExtendOpen}
+        busy={actionLoading}
+        memberStatus={loan.borrower?.status ?? null}
+        onChoice={(choice) => void handlePartialExtendChoice(choice)}
+      />
+
+      {/* Void a payment: the reason is required, as the server requires it */}
+      <ReasonDialog
+        open={voidOpen}
+        onOpenChange={setVoidOpen}
+        {...voidPaymentDialog(voidTarget === null ? undefined : repaymentsById.get(voidTarget))}
+        maxLength={LOAN_DECISION_NOTE_MAX}
+        onConfirm={(reason) => (voidTarget === null ? Promise.resolve() : voidPayment(voidTarget, reason))}
+      />
+
+      {/* Approve or reject a pending adjustment, with remarks */}
+      <ReasonDialog
+        open={adjustmentDecisionOpen}
+        onOpenChange={setAdjustmentDecisionOpen}
+        {...adjustmentDecisionDialog(
+          adjustmentDecision?.action ?? "approve",
+          adjustmentDecision ? ADJUSTMENT_TYPE_LABELS[adjustmentDecision.adjustment.adjustment_type] : undefined,
+        )}
+        maxLength={LOAN_DECISION_NOTE_MAX}
+        onConfirm={(remarks) =>
+          adjustmentDecision === null
+            ? Promise.resolve()
+            : decideAdjustment(adjustmentDecision.adjustment.id, adjustmentDecision.action, remarks)
+        }
+      />
+
+      {/* Cancel an approved adjustment before it is applied, with a reason */}
+      <ReasonDialog
+        open={cancelAdjustmentOpen}
+        onOpenChange={setCancelAdjustmentOpen}
+        {...cancelAdjustmentDialog(
+          adjustmentToCancel ? ADJUSTMENT_TYPE_LABELS[adjustmentToCancel.adjustment_type] : undefined,
+        )}
+        maxLength={ADJUSTMENT_CANCEL_REASON_MAX}
+        onConfirm={(reason) =>
+          adjustmentToCancel === null ? Promise.resolve() : cancelAdjustment(adjustmentToCancel.id, reason)
+        }
+      />
 
       {/* Create Adjustment Dialog */}
       <Dialog open={createAdjustmentOpen} onOpenChange={setCreateAdjustmentOpen}>
@@ -5602,7 +5853,7 @@ export default function LoanDetailPage({
           <DialogHeader>
             <DialogTitle>Create Loan Adjustment</DialogTitle>
             <DialogDescription>
-              Submit an adjustment request for loan {loan.loan_account_number || loan.application_number}.
+              Submit an adjustment request for loan {loanNumber}.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 pt-2">
@@ -5645,14 +5896,28 @@ export default function LoanDetailPage({
             {/* Dynamic fields based on adjustment type */}
             {adjType === "balance_adjustment" && (
               <div className="space-y-1.5">
-                <Label htmlFor="adj-new-balance">New Outstanding Balance <span className="text-red-500">*</span></Label>
+                <Label htmlFor="adj-target-principal">
+                  Target Principal Balance <span className="text-red-500">*</span>
+                </Label>
                 <Input
-                  id="adj-new-balance"
+                  id="adj-target-principal"
                   type="number"
+                  inputMode="decimal"
+                  min="0"
                   placeholder="0.00"
                   step="0.01"
-                  value={adjNewBalance}
-                  onChange={(e) => setAdjNewBalance(e.target.value)}
+                  value={adjTargetPrincipal}
+                  onChange={(e) => setAdjTargetPrincipal(e.target.value)}
+                  aria-describedby="adj-target-principal-help adj-target-principal-preview"
+                />
+                <p id="adj-target-principal-help" className="text-xs text-muted-foreground">
+                  The principal the loan should carry after this adjustment. Interest and penalty are not entered here.
+                </p>
+                <BalanceAdjustmentPreviewBox
+                  id="adj-target-principal-preview"
+                  typed={adjTargetPrincipal.trim() !== ""}
+                  valid={adjTarget !== null}
+                  {...adjPreview}
                 />
               </div>
             )}
@@ -5675,7 +5940,9 @@ export default function LoanDetailPage({
             )}
             {adjType === "term_extension" && (
               <div className="space-y-1.5">
-                <Label htmlFor="adj-extend-term">Additional Months <span className="text-red-500">*</span></Label>
+                <Label htmlFor="adj-extend-term">
+                  {extendsByMonth ? "Additional Months" : "Additional Instalments"} <span className="text-red-500">*</span>
+                </Label>
                 <Input
                   id="adj-extend-term"
                   type="number"
@@ -5685,9 +5952,11 @@ export default function LoanDetailPage({
                   onChange={(e) => setAdjAdditionalMonths(e.target.value)}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Current term is {loanTerm ?? "—"} {loanTerm === 1 ? "month" : "months"}
+                  Current term is {loanTerm ?? "—"} {loanTermUnitWord}
                   {adjAdditionalMonths && Number(adjAdditionalMonths) > 0
-                    ? ` — this extends it to ${(loanTerm ?? 0) + Number(adjAdditionalMonths)} months.`
+                    ? extendsByMonth
+                      ? ` — this extends it to ${(loanTerm ?? 0) + Number(adjAdditionalMonths)} months.`
+                      : ` — this adds ${Number(adjAdditionalMonths)} instalment(s).`
                     : "."}
                 </p>
               </div>
@@ -5709,7 +5978,11 @@ export default function LoanDetailPage({
             <Button
               className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
               onClick={handleCreateAdjustment}
-              disabled={actionLoading}
+              disabled={
+                actionLoading ||
+                (adjType === "balance_adjustment" &&
+                  (adjPreview.preview === null || adjPreview.preview.adjustment === 0))
+              }
             >
               <Plus className="mr-2 h-4 w-4" />
               Submit Adjustment
@@ -5722,7 +5995,7 @@ export default function LoanDetailPage({
       {loan && (
         <AutoPayToggleDialog
           loanId={loan.id}
-          loanAccountNumber={loan.loan_account_number}
+          loanAccountNumber={loanNumber}
           currentEnabled={loan.auto_pay_enabled ?? false}
           currentCbsReference={loan.auto_pay_cbs_reference}
           open={autoPayDialogOpen}
@@ -5732,19 +6005,11 @@ export default function LoanDetailPage({
           }}
           isPostRelease={autoPayIsPostRelease}
           onSuccess={(settings) => {
-            setLoan((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    auto_pay_enabled: settings.auto_pay_enabled,
-                    auto_pay_cbs_reference: settings.cbs_reference,
-                  }
-                : prev
-            );
+            setLoan((prev) => (prev ? applyAutoPaySettings(prev, settings) : prev));
             setAutoPayIsPostRelease(false);
           }}
         />
       )}
-    </div>
+    </PageFill>
   );
 }

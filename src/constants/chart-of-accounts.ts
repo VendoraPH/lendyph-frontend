@@ -1,11 +1,13 @@
 /**
- * The default Lendy chart of accounts.
+ * The default Lendy chart of accounts, and the cooperative template built on it.
  *
  * A TEMPLATE, not a fixed structure — administrators add, rename and
- * deactivate accounts, and a cooperative's equity and liability sections look
- * different from a lending corporation's (share capital, statutory funds and
- * undivided net surplus in place of capital and retained earnings). This is
- * what a new organisation is seeded with on day one.
+ * deactivate accounts. `POST /accounting/accounts/seed` takes one of two
+ * templates (`ChartTemplate`): the lending company chart below
+ * (`DEFAULT_CHART_OF_ACCOUNTS`, the default), or the cooperative chart, which
+ * is the same chart plus `COOPERATIVE_CHART_ADDITIONS` (savings and time
+ * deposits, statutory funds and undivided net surplus). Both mirror
+ * lendyph-backend's `ChartOfAccountsSeeder`.
  *
  * Codes follow the classification convention `account.ts` relies on: 1xxx
  * asset, 2xxx liability, 3xxx equity, 4xxx income, 5xxx expense. Keep it that
@@ -15,8 +17,10 @@
 import type {
   Account,
   AccountMapping,
+  SavingsPostingRole,
   AccountType,
   CashAccountKind,
+  ChartTemplate,
   NormalBalance,
 } from "@/types/accounting";
 
@@ -52,11 +56,30 @@ export const DEFAULT_CHART_OF_ACCOUNTS: SeedAccount[] = [
   { code: "1160", name: "Penalty Receivable", type: "asset", parent: "1000" },
   { code: "1170", name: "Other Receivables", type: "asset", parent: "1000" },
 
+  // Where a balance adjustment clears. It reads zero once each adjustment is
+  // reviewed; any balance here needs review.
+  { code: "1180", name: "Loan Adjustments Clearing", type: "asset", parent: "1000" },
+
+  // Money moving between branches (Phase 6 MB-BE5): debited in the sending
+  // branch, credited in the receiving one. Across branches it reads only what
+  // is still in transit.
+  { code: "1190", name: "Interbranch Clearing", type: "asset", parent: "1000" },
+
   // Credit-balanced asset: it REDUCES loans receivable. Net Loans Receivable
   // is gross minus this, which is why `is_contra` has to be set.
   {
     code: "1200",
     name: "Allowance for Credit Losses",
+    type: "asset",
+    is_contra: true,
+    parent: "1000",
+  },
+  // Interest and penalty a restructure capitalised into the new loan's
+  // principal, not yet earned. A contra asset like 1200, and under 1000, not
+  // 1100, so the loans receivable heading never sums it.
+  {
+    code: "1210",
+    name: "Unearned Interest and Penalty – Restructured Loans",
     type: "asset",
     is_contra: true,
     parent: "1000",
@@ -80,6 +103,10 @@ export const DEFAULT_CHART_OF_ACCOUNTS: SeedAccount[] = [
 
   { code: "2010", name: "Accounts Payable", type: "liability", parent: "2000" },
   { code: "2020", name: "Accrued Expenses", type: "liability", parent: "2000" },
+  // Withheld at release on someone else's behalf (the notary, the insurer)
+  // and owed on until it is paid over: never income.
+  { code: "2030", name: "Notarial Fees Payable", type: "liability", parent: "2000" },
+  { code: "2040", name: "Insurance Premium Payable", type: "liability", parent: "2000" },
 
   { code: "2100", name: "Loans Payable", type: "liability", parent: "2000" },
   { code: "2110", name: "Other Borrowings", type: "liability", parent: "2000" },
@@ -87,33 +114,39 @@ export const DEFAULT_CHART_OF_ACCOUNTS: SeedAccount[] = [
   { code: "2200", name: "Taxes Payable", type: "liability", is_group: true, parent: "2000" },
   { code: "2210", name: "Withholding Tax Payable", type: "liability", parent: "2200" },
   { code: "2220", name: "Other Taxes Payable", type: "liability", parent: "2200" },
+  // A Documentary Stamp Tax withheld at release, owed to the BIR until remitted.
+  {
+    code: "2230",
+    name: "Documentary Stamp Tax Payable",
+    type: "liability",
+    parent: "2200",
+  },
 
   { code: "2300", name: "Other Liabilities", type: "liability", parent: "2000" },
+  // Money received that cannot be identified yet, held until it is.
+  { code: "2390", name: "Suspense Account", type: "liability", parent: "2000" },
 
   // ── Equity ──
-  // A cooperative replaces these with Share Capital, Statutory Funds, Reserve
-  // Fund and Undivided Net Surplus. Left as the corporate default; the
-  // organisation type decides which set is seeded.
+  // The lending company's equity. The cooperative template keeps 3010-3030
+  // (an admin can deactivate them, and every mapping keeps working) and adds
+  // its statutory funds and Undivided Net Surplus (`COOPERATIVE_CHART_ADDITIONS`).
   { code: "3000", name: "Equity", type: "equity", is_group: true },
   { code: "3010", name: "Capital", type: "equity", parent: "3000" },
   { code: "3020", name: "Additional Capital", type: "equity", parent: "3000" },
   { code: "3030", name: "Retained Earnings", type: "equity", parent: "3000" },
-  // A heading, never a postable account. `buildBalanceSheet` DERIVES the
-  // period's result from the trial balance and pushes it into the equity
-  // section as a synthetic line carrying this very code, so a real balance
-  // here would put two lines with code 3040 — different names, different
-  // amounts — side by side in one section with no way to tell the posted
-  // figure from the derived one. The sheet still balances (`difference` is
-  // identically zero whenever the trial balance balances, whatever is split
-  // out of it), which is precisely why nothing would catch it. `is_group`
-  // blocks posting and makes that unreachable. Year-end closing moves the
-  // result into 3030 Retained Earnings.
+  // A heading, never a postable account. The server's balance sheet shows the
+  // year's result as a derived "Current Year Earnings" line with no account
+  // code, so a posted balance here would sit beside it under the same name and
+  // count the year's result twice. `is_group` blocks posting. Year-end closing
+  // moves the result into 3030 Retained Earnings.
   { code: "3040", name: "Current Year Earnings", type: "equity", is_group: true, parent: "3000" },
   // The named plug for the opening-balance difference the accounting backfill
   // computes. Folded into 3030 Retained Earnings it would be indistinguishable
-  // from real earnings forever. NOT 3045 — `statements.ts` already uses that
-  // code for its synthetic prior-period line.
+  // from real earnings forever. Not to be confused with the balance sheet's
+  // derived "Prior Period Earnings" line, which the server sends with no code.
   { code: "3050", name: "Opening Balance Equity", type: "equity", parent: "3000" },
+  // Share capital a member pays through a release deduction.
+  { code: "3060", name: "Share Capital", type: "equity", parent: "3000" },
 
   // ── Income ──
   { code: "4000", name: "Income", type: "income", is_group: true },
@@ -124,6 +157,10 @@ export const DEFAULT_CHART_OF_ACCOUNTS: SeedAccount[] = [
   { code: "4050", name: "Membership Fee Income", type: "income", parent: "4000" },
   { code: "4060", name: "Other Lending Income", type: "income", parent: "4000" },
   { code: "4070", name: "Other Income", type: "income", parent: "4000" },
+  // Configured catalog fees (Settings → Fees) withheld at release.
+  { code: "4080", name: "Other Fee Income", type: "income", parent: "4000" },
+  // The charge on a GCash Cash In or Cash Out.
+  { code: "4090", name: "GCash Service Income", type: "income", parent: "4000" },
 
   // ── Expenses ──
   { code: "5000", name: "Expenses", type: "expense", is_group: true },
@@ -169,6 +206,17 @@ export const DEFAULT_ACCOUNT_MAPPING_CODES = {
   interest_income: "4010",
   penalty_income: "4020",
   processing_fee_income: "4030",
+  // Release deductions, credited by type. Anything without a role of its own
+  // stays on processing_fee_income.
+  service_fee_income: "4040",
+  notarial_fees_payable: "2030",
+  insurance_premium_payable: "2040",
+  share_capital: "3060",
+  other_fee_income: "4080",
+  // Taxes withheld at release are owed to the government, never income.
+  documentary_stamp_tax_payable: "2230",
+  withholding_tax_payable: "2210",
+  other_taxes_payable: "2220",
   credit_loss_expense: "5140",
   allowance_credit_losses: "1200",
   accounts_payable: "2010",
@@ -176,7 +224,70 @@ export const DEFAULT_ACCOUNT_MAPPING_CODES = {
   // payable is owed to a supplier, and one account for both makes a payables
   // ageing report unreadable.
   borrower_advances: "2300",
-} as const satisfies Record<keyof AccountMapping, string>;
+  gcash_service_income: "4090",
+  // Balance adjustments clear here, against loans receivable.
+  loan_adjustments: "1180",
+  // Interest and penalty a restructure capitalised, recognised as the new
+  // loan's principal is collected.
+  unearned_restructure_income: "1210",
+  // Interbranch transfers clear here between the two branches' books.
+  interbranch_clearing: "1190",
+  // Where the year-end close moves the result. Retained Earnings on a
+  // company chart; a cooperative chart points it at its own net surplus.
+  net_surplus: "3030",
+  suspense: "2390",
+} as const satisfies Record<Exclude<keyof AccountMapping, SavingsPostingRole>, string>;
+
+/**
+ * What the cooperative template adds to the lending company chart. Mirrors
+ * lendyph-backend `ChartOfAccountsSeeder::COOPERATIVE_ADDITIONS` code for code
+ * and name for name; the codes stay off 2500/2510.
+ */
+export const COOPERATIVE_CHART_ADDITIONS: SeedAccount[] = [
+  // Members' deposits, owed back to them.
+  { code: "2050", name: "Savings Deposits", type: "liability", parent: "2000" },
+  { code: "2060", name: "Time Deposits", type: "liability", parent: "2000" },
+  // Declared out of the net surplus and owed to members until paid.
+  { code: "2070", name: "Interest on Share Capital Payable", type: "liability", parent: "2000" },
+  { code: "2080", name: "Patronage Refund Payable", type: "liability", parent: "2000" },
+  // The funds a cooperative must set aside from its net surplus.
+  { code: "3070", name: "Statutory Funds", type: "equity", is_group: true, parent: "3000" },
+  { code: "3071", name: "Reserve Fund", type: "equity", parent: "3070" },
+  { code: "3072", name: "Education and Training Fund", type: "equity", parent: "3070" },
+  { code: "3073", name: "Community Development Fund", type: "equity", parent: "3070" },
+  { code: "3074", name: "Optional Fund", type: "equity", parent: "3070" },
+  // Where a cooperative's year-end close moves the result.
+  { code: "3080", name: "Undivided Net Surplus", type: "equity", parent: "3000" },
+  // Interest paid on members' savings and time deposits (Phase 3).
+  { code: "5160", name: "Interest Expense on Deposits", type: "expense", parent: "5000" },
+];
+
+/**
+ * The cooperative template's posting roles that differ from
+ * `DEFAULT_ACCOUNT_MAPPING_CODES`: its year-end result goes to Undivided Net
+ * Surplus, not Retained Earnings. It also maps the four savings roles (Phase 3),
+ * which a lending company chart leaves unmapped: deposits to 2050 and 2060,
+ * their interest to 5160, and the tax withheld from it to 2210.
+ */
+export const COOPERATIVE_MAPPING_OVERRIDES = {
+  net_surplus: "3080",
+  savings_deposits: "2050",
+  time_deposits: "2060",
+  interest_expense_deposits: "5160",
+  withholding_tax_deposits: "2210",
+} as const satisfies Partial<Record<keyof AccountMapping, string>>;
+
+/**
+ * The rows a template seeds, in code order: what the seed card previews before
+ * the chart is created. The lending company template is
+ * `DEFAULT_CHART_OF_ACCOUNTS` itself.
+ */
+export function templateChart(template: ChartTemplate): SeedAccount[] {
+  if (template === "lending_company") return DEFAULT_CHART_OF_ACCOUNTS;
+  return [...DEFAULT_CHART_OF_ACCOUNTS, ...COOPERATIVE_CHART_ADDITIONS].sort((a, b) =>
+    a.code.localeCompare(b.code),
+  );
+}
 
 /** The normal balance a seed row implies, for building the account record. */
 export function seedNormalBalance(seed: SeedAccount): NormalBalance {

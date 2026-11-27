@@ -1,20 +1,25 @@
 "use client";
 
 /**
- * Step 1 — pick the branch and the two files. Nothing is uploaded here.
+ * Step 1 — pick the branch and the files. Nothing is uploaded here.
  *
  * Two things on this screen are load-bearing rather than decorative: the branch
  * is a hard requirement the shared hook does not treat as one (see `BranchGate`
- * below), and the files go in two separately-labelled slots because the
- * importer keys them by name (see `file-slot.tsx`).
+ * below), and the files go in separately-labelled slots because the importer
+ * keys them by name (see `file-slot.tsx`). The share capital slot and its
+ * template show only to someone who can record share capital, as the server
+ * rules (./import-files).
  */
 
-import { useEffect, useState } from "react";
+import { useMenuVisibility } from "@/hooks/use-menu-visibility";
+import { dataImportParts } from "@/lib/hidden-module-parts";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, Building2, RotateCw } from "lucide-react";
+import { AlertTriangle, ArrowRight, Building2, Download, RotateCw } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -25,10 +30,23 @@ import {
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { useBranches } from "@/hooks";
-import { formatDate } from "@/lib/format";
+import { branchPicker } from "@/lib/user-branches";
+import { importBranchChoice } from "./import-branch";
+import { useAuthStore } from "@/store";
+import { formatDate, todayISO } from "@/lib/format";
+import {
+  downloadImportTemplate,
+  importTemplates,
+  MEMBERS_TEMPLATE_NOTE,
+  SHARE_CAPITAL_TEMPLATE_NOTE,
+} from "@/lib/import-template";
+import { notifyError } from "@/lib/notify";
+import { cn } from "@/lib/utils";
 import type { ImportRunStatus } from "@/types/data-import";
 
+import { BALANCES_AS_OF_EARLIEST, BALANCES_AS_OF_HINT, balancesAsOfProblem } from "../_lib/balances-as-of";
 import { FileSlot } from "./file-slot";
+import { fileSlots, filesProblem, filesRule, membersRequired } from "./import-files";
 import type { ImportFiles } from "./data-import-view";
 
 /**
@@ -44,6 +62,11 @@ const CAUTION =
 export interface StepPrepareProps {
   branchId: number | null;
   onBranchChange: (branchId: number | null) => void;
+  /** "Balances as of", `YYYY-MM-DD`: the run's `as_of_date`. */
+  asOfDate: string;
+  onAsOfDateChange: (date: string) => void;
+  /** The server's refusal of the date, in its words, shown on the field. */
+  asOfRefusal: string | null;
   files: ImportFiles;
   onFilesChange: (files: ImportFiles) => void;
   /**
@@ -93,17 +116,28 @@ function BranchGate({
   onRetry: () => void;
   children: React.ReactNode;
 }) {
-  const { branches, loading, error } = useBranches();
+  const { branches: loaded, loading, error } = useBranches();
+  // Without `branches:view_all` only the caller's own branches can take the
+  // import (the API refuses any other), so only those are offered. Memoised:
+  // the one-branch preselect below depends on this list.
+  const caller = useAuthStore((s) => s.user);
+  const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
+  const branches = useMemo(
+    () => branchPicker(loaded, caller, viewAll).branches,
+    [loaded, caller, viewAll],
+  );
 
   // binhs-coop production has exactly one branch. Pre-selecting it removes a
   // click that has no decision in it — but the control stays on screen and
   // captioned, because a branch silently chosen for you is the one field nobody
   // checks, and it is the field that decides where an entire book lands.
+  // A branch the picker no longer offers is dropped, so the run never sends
+  // one the server refuses.
   useEffect(() => {
-    if (value === null && branches.length === 1) {
-      onChange(branches[0].id);
-    }
-  }, [branches, value, onChange]);
+    if (loading) return;
+    const choice = importBranchChoice(branches, value);
+    if (choice !== value) onChange(choice);
+  }, [branches, value, onChange, loading]);
 
   if (loading) {
     return (
@@ -116,13 +150,19 @@ function BranchGate({
 
   if (error || branches.length === 0) {
     const noBranches = !error && branches.length === 0;
+    // A caller without `view_all` sees only their own branches, so an empty
+    // list means none of THEIRS is active, and adding a branch is not theirs
+    // to do.
+    const noOwnBranches = noBranches && !viewAll;
     return (
       <Alert variant="destructive">
         <AlertTriangle />
         <AlertTitle>
-          {noBranches
-            ? "No active branch to import into"
-            : "Branches could not be loaded"}
+          {noOwnBranches
+            ? "None of your branches is active. Ask an administrator."
+            : noBranches
+              ? "No active branch to import into"
+              : "Branches could not be loaded"}
         </AlertTitle>
         <AlertDescription className="space-y-3">
           <p>
@@ -138,15 +178,17 @@ function BranchGate({
                 Try again
               </Button>
             )}
-            <Button
-              size="sm"
-              variant="outline"
-              nativeButton={false}
-              render={<Link href="/settings/branches" />}
-            >
-              <Building2 className="size-3.5" aria-hidden="true" />
-              {noBranches ? "Add a branch" : "Open branch settings"}
-            </Button>
+            {!noOwnBranches && (
+              <Button
+                size="sm"
+                variant="outline"
+                nativeButton={false}
+                render={<Link href="/settings/branches" />}
+              >
+                <Building2 className="size-3.5" aria-hidden="true" />
+                {noBranches ? "Add a branch" : "Open branch settings"}
+              </Button>
+            )}
           </div>
         </AlertDescription>
       </Alert>
@@ -167,7 +209,7 @@ function BranchGate({
             onChange(next ? Number(next) : null)
           }
         >
-          <SelectTrigger id="import-branch" className="h-9 w-full sm:w-72">
+          <SelectTrigger id="import-branch" className="w-full sm:w-72">
             <SelectValue>
               {() => selected?.name ?? "Choose a branch…"}
             </SelectValue>
@@ -182,13 +224,67 @@ function BranchGate({
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">
-          {branches.length === 1
-            ? "1 active branch configured, and it is selected. Every imported member and loan lands here."
-            : `${branches.length} active branches configured. Every imported member and loan lands in the one you pick.`}
+          {viewAll
+            ? branches.length === 1
+              ? "1 active branch configured, and it is selected. Every imported member and loan lands here."
+              : `${branches.length} active branches configured. Every imported member and loan lands in the one you pick.`
+            : branches.length === 1
+              ? "1 of your branches is active, and it is selected. Every imported member and loan lands here."
+              : `${branches.length} of your branches are active. Every imported member and loan lands in the one you pick.`}
         </p>
       </div>
 
       {children}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Balances as of
+// ---------------------------------------------------------------------------
+
+/**
+ * The run's `as_of_date` (finish run round 6). Imported loans refuse payments
+ * dated on or before it, so the usual cut-over is the last day before going
+ * live. Today by default; the rule is the server's (`../_lib/balances-as-of`),
+ * and the server's own refusal shows here too.
+ */
+function BalancesAsOfField({
+  value,
+  today,
+  onChange,
+  error,
+}: {
+  value: string;
+  today: string;
+  onChange: (date: string) => void;
+  error: string | null;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor="import-as-of" className="text-sm font-medium">
+        Balances as of <span className="text-destructive" aria-hidden="true">*</span>
+      </Label>
+      <Input
+        id="import-as-of"
+        type="date"
+        required
+        className="w-full sm:w-72"
+        value={value}
+        min={BALANCES_AS_OF_EARLIEST}
+        max={today}
+        onChange={(event) => onChange(event.target.value)}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? "import-as-of-hint import-as-of-error" : "import-as-of-hint"}
+      />
+      <p id="import-as-of-hint" className="text-xs text-muted-foreground">
+        {BALANCES_AS_OF_HINT}
+      </p>
+      {error ? (
+        <p id="import-as-of-error" role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -200,6 +296,9 @@ function BranchGate({
 export function StepPrepare({
   branchId,
   onBranchChange,
+  asOfDate,
+  onAsOfDateChange,
+  asOfRefusal,
   files,
   onFilesChange,
   priorRun,
@@ -207,10 +306,16 @@ export function StepPrepare({
   onNext,
 }: StepPrepareProps) {
   const [branchReload, setBranchReload] = useState(0);
+  // The share capital file goes while Menu Visibility hides Share Capital.
+  const { isHidden } = useMenuVisibility();
+  const shareCapitalAllowed =
+    useAuthStore((s) => s.hasPermission("share_capital:create")) && dataImportParts(isHidden).shareCapitalFile;
 
-  const hasAnyFile = Boolean(files.customers || files.loans);
+  const problem = filesProblem(files, shareCapitalAllowed);
   const loansOnly = Boolean(files.loans && !files.customers);
-  const canContinue = branchId !== null && hasAnyFile;
+  const today = todayISO();
+  const dateProblem = balancesAsOfProblem(asOfDate, today);
+  const canContinue = branchId !== null && problem === null && dateProblem === null && asOfRefusal === null;
 
   return (
     <div className="space-y-5">
@@ -254,40 +359,73 @@ export function StepPrepare({
         onChange={onBranchChange}
         onRetry={() => setBranchReload((n) => n + 1)}
       >
+        <BalancesAsOfField
+          value={asOfDate}
+          today={today}
+          onChange={onAsOfDateChange}
+          error={asOfRefusal ?? dateProblem}
+        />
+
         <fieldset className="space-y-3">
           <legend className="text-sm font-medium">Files</legend>
           <p className="text-xs text-muted-foreground">
-            At least one file is required; most migrations use both. They go in
-            separate slots because the importer has to be told which is which —
-            it cannot work that out from the order you picked them in.
+            {filesRule(shareCapitalAllowed)} They go in separate slots because the importer
+            has to be told which is which — it cannot work that out from the order you
+            picked them in.
           </p>
 
-          <FileSlot
-            label="Members file"
-            description="One row per member of the existing book."
-            hint="Exported as CSV from your spreadsheet: File → Save As (or Download) → CSV."
-            file={files.customers}
-            onSelect={(file) => onFilesChange({ ...files, customers: file })}
-            optional
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            {importTemplates(shareCapitalAllowed).map((template) => (
+              <Button
+                key={template.shape}
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  downloadImportTemplate(template).catch(() =>
+                    notifyError(null, "We couldn't download the template. Please try again."),
+                  );
+                }}
+              >
+                <Download className="size-4" aria-hidden="true" />
+                {template.buttonLabel}
+              </Button>
+            ))}
+            <p className="basis-full text-xs text-muted-foreground">
+              Each template is the header row only, with the columns in the order the importer
+              reads them. Keep the header row and add one row per member, loan or share capital
+              entry below it.
+            </p>
+            <p className="basis-full text-xs text-muted-foreground">{MEMBERS_TEMPLATE_NOTE}</p>
+            {shareCapitalAllowed ? (
+              <p className="basis-full text-xs text-muted-foreground">{SHARE_CAPITAL_TEMPLATE_NOTE}</p>
+            ) : null}
+          </div>
 
-          <FileSlot
-            label="Loans file"
-            description="One row per loan, referencing members by their account number."
-            hint="Loans are matched to members by account number, so both files must use the same one."
-            file={files.loans}
-            onSelect={(file) => onFilesChange({ ...files, loans: file })}
-            optional
-          />
+          {/* The files side by side from md, all three from lg */}
+          <div className={cn("grid gap-3 md:grid-cols-2", shareCapitalAllowed && "lg:grid-cols-3")}>
+            {fileSlots(shareCapitalAllowed).map((slot) => (
+              <FileSlot
+                key={slot.kind}
+                label={slot.label}
+                description={slot.description}
+                hint={slot.hint}
+                file={files[slot.kind]}
+                onSelect={(file) => onFilesChange({ ...files, [slot.kind]: file })}
+                // The members file is optional once share capital comes alone.
+                optional={slot.kind === "customers" ? !membersRequired(files, shareCapitalAllowed) : slot.optional}
+              />
+            ))}
+          </div>
 
           {loansOnly ? (
             <Alert className={CAUTION}>
               <AlertTriangle className="text-amber-600" />
-              <AlertTitle>Loans only — no members will be created</AlertTitle>
+              <AlertTitle>The loans file needs its members file</AlertTitle>
               <AlertDescription>
-                Every loan has to match a member that already exists in Lendyph.
-                Any loan whose account number is not found is reported as failed
-                rather than creating the member for you.
+                Loans are matched to the members in the same import, so pick the
+                members file too. Members already in Lendyph are matched rather
+                than created again.
               </AlertDescription>
             </Alert>
           ) : null}
@@ -299,9 +437,7 @@ export function StepPrepare({
               visible text instead — which also answers it for everyone else. */}
           {!canContinue ? (
             <p className="text-xs text-muted-foreground">
-              {branchId === null
-                ? "Choose a branch to continue."
-                : "Pick at least one file to continue."}
+              {branchId === null ? "Choose a branch to continue." : (problem ?? "Fix the Balances as of date to continue.")}
             </p>
           ) : null}
           <Button type="button" onClick={onNext} disabled={!canContinue}>

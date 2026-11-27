@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { RouteGuard } from "@/components/common";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
 import { Camera, KeyRound, Loader2, User } from "lucide-react";
@@ -20,31 +20,17 @@ import { ChangePasswordForm } from "@/components/common/change-password-form";
 import { getInitials } from "@/lib/initials";
 import { userBranches } from "@/lib/user-branches";
 import { useAuth } from "@/hooks/use-auth";
+import { useRoleLabel } from "@/hooks/use-role-label";
 import { authService } from "@/services";
 import type { Role } from "@/types/rbac";
 
 // ── Helpers ──
 
-const ROLE_LABELS: Record<Role, string> = {
-  admin: "Administrator",
-  loan_officer: "Loan Officer",
-  loan_processor: "Loan Processor",
-  cashier: "Cashier",
-  general_bookkeeper: "General Bookkeeper",
-  collector: "Collector",
-  viewer: "Viewer",
-  manager: "Manager",
-  bod1: "BOD1",
-  bod2: "BOD2",
-  bod3: "BOD3",
-  bod4: "BOD4",
-  bod5: "BOD5",
-  bod6: "BOD6",
-  bod7: "BOD7",
-};
-
 const ROLE_BADGE_CLASS: Record<Role, string> = {
+  super_admin: "bg-brand-orange/10 text-brand-orange border-brand-orange/30",
   admin: "bg-brand-orange/10 text-brand-orange border-brand-orange/30",
+  accountant: "bg-amber-100 text-amber-700 border-amber-200",
+  compliance_officer: "bg-rose-100 text-rose-700 border-rose-200",
   loan_officer: "bg-blue-100 text-blue-700 border-blue-200",
   loan_processor: "bg-teal-100 text-teal-700 border-teal-200",
   cashier: "bg-green-100 text-green-700 border-green-200",
@@ -65,11 +51,11 @@ const ROLE_BADGE_CLASS: Record<Role, string> = {
 
 function ProfileCard() {
   const { user } = useAuth();
+  const primaryRole = user?.roles?.[0] ?? "";
+  const roleLabel = useRoleLabel(primaryRole);
   if (!user) return null;
 
   const initials = getInitials(user.full_name);
-  const primaryRole = user.roles?.[0] ?? "";
-  const roleLabel = (ROLE_LABELS as Record<string, string>)[primaryRole] ?? primaryRole;
   const roleBadgeClass = (ROLE_BADGE_CLASS as Record<string, string>)[primaryRole] ?? "";
 
   return (
@@ -191,9 +177,9 @@ function EditProfileCard() {
       <Separator />
       <CardContent className="pt-6">
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {/* Full Name */}
-            <div className="space-y-2 sm:col-span-2">
+            <div className="space-y-2 md:col-span-2">
               <Label htmlFor="profile-name">Full Name *</Label>
               <Input
                 id="profile-name"
@@ -309,25 +295,31 @@ function ChangePasswordCard() {
 
 // ── Main Page ──
 
+/**
+ * The signed-in user's own profile. Every signed-in, active user may read and
+ * save it (GET and PATCH /auth/me need no permission on the server), so the
+ * page has no guard of its own: the app shell already needs a signed-in user,
+ * and nothing here reads under another permission.
+ */
 export default function ProfileSettingsPage() {
   return (
-    <RouteGuard permission="settings:view" pageName="Profile Settings">
-    <div className="space-y-6 min-w-0">
+    <PageFill className="min-w-0">
       {/* Header */}
-      <div>
+      <div className="shrink-0">
         <h1 className="text-2xl font-bold tracking-tight">My Profile</h1>
         <p className="text-muted-foreground">Manage your account settings</p>
       </div>
 
-      {/* Profile summary card */}
-      <ProfileCard />
+      <ScrollBox className="space-y-6 p-px">
+        {/* Profile summary card */}
+        <ProfileCard />
 
-      {/* Edit profile form */}
-      <EditProfileCard />
-
-      {/* Change password form */}
-      <ChangePasswordCard />
-    </div>
-    </RouteGuard>
+        {/* Edit profile and change password: side by side from xl */}
+        <div className="grid items-start gap-6 xl:grid-cols-2">
+          <EditProfileCard />
+          <ChangePasswordCard />
+        </div>
+      </ScrollBox>
+    </PageFill>
   );
 }

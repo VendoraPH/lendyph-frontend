@@ -56,7 +56,7 @@ export default defineConfig({
 
   projects: [
     // Signs in once through the real login form and parks the session in
-    // .auth/user.json. It skips itself when credentials are absent, which is
+    // e2e/.auth/user.json. It skips itself when credentials are absent, which is
     // also why `storageState` is set on the spec project and not globally:
     // nothing reads that file unless a test is actually going to run.
     { name: "setup", testMatch: /.*\.setup\.ts$/ },

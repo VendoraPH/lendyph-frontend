@@ -1,15 +1,34 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMenuVisibility } from "@/hooks/use-menu-visibility";
+import { Suspense, useEffect, useId, useState } from "react";
+import { LOADING_BRANCHES } from "@/lib/branch-filter";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { RouteGuard } from "@/components/common";
+import { AccessDenied, RouteGuard } from "@/components/common";
 // Deep import, not the barrel: re-exporting this one costs every page that
 // imports `@/components/common` ~52 kB it cannot use. See the note in the barrel.
 import { SubjectPicker } from "@/components/common/subject-picker";
+import {
+  ACCOUNT_REPORT_HINT,
+  CUTOFF_SCOPE,
+  cutoffProblem,
+  cutoffRange,
+  noDateRangeScope,
+  linkedBranchId,
+  presetAccountId,
+  presetBranchId,
+  presetMemberId,
+  presetPeriodRange,
+  reportPickPrompt,
+  reportSubjectNoun,
+} from "../_lib/report-subject";
+import { toMemberOption, type MemberOption } from "@/hooks/use-member-search";
 import { useAuth, useBranches } from "@/hooks";
+import { useWorkingBranchPreset } from "@/hooks/use-working-branch";
 import { useBrandingStore } from "@/store/branding-store";
+import { branchPicker, pickedBranchLabel } from "@/lib/user-branches";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,7 +50,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { formatDateISO } from "@/lib/format";
+import { todayISO } from "@/lib/format";
 import {
   ArrowLeft,
   ChevronDown,
@@ -46,12 +65,25 @@ import {
   RefreshCw,
   Table as TableIcon,
 } from "lucide-react";
-import { reportService } from "@/services";
-import { REPORT_CATALOG } from "../_lib/report-catalog";
+import { borrowerService, reportService } from "@/services";
+import { REPORT_CATALOG, reportAccess, visibleReports } from "../_lib/report-catalog";
+import { reportIcon3D } from "../_lib/report-icons-3d";
+import { Icon3D } from "@/components/common/icon-3d";
+import { csvFileName } from "../_lib/export-file-name";
+import { PRESETS, presetRange, type Preset } from "../_lib/report-period";
 import { CATEGORY_META, MAX_REPORT_SPAN_YEARS, exceedsReportSpanCap } from "../_lib/types";
 import type { DateRange, ReportDocument, ReportId } from "../_lib/types";
 import { ReportPreview } from "../_components/report-preview";
+import { ReportPrintSheet } from "../_components/report-print-sheet";
 import { applyChrome, loadLogoDataUrl } from "../_lib/report-chrome";
+import { reportScopeParams } from "../_lib/report-catalog";
+import { savingsCsvReport } from "../_lib/savings-csv";
+import { ProductFilter } from "../../savings/_components/product-filter";
+import { OptionSelect } from "../../savings/_components/option-select";
+import { ALL_PRODUCTS, productIdParam } from "../../savings/_lib/product-filter";
+import { ExpandableCard } from "@/components/common/expandable-card";
+import { hasIllustration, Illustration } from "@/components/common/illustration";
+import { PageFill } from "@/components/common/page-fill";
 
 type BackendExporter = (params?: Record<string, unknown>) => Promise<Blob>;
 
@@ -60,6 +92,14 @@ const BACKEND_CSV_EXPORTERS: Partial<Record<ReportId, BackendExporter>> = {
   repayments_list: reportService.exportRepayments,
   due_past_due_list: reportService.exportDuePastDue,
 };
+
+/** The server's CSV for a report: a loan list's export, or the savings report's own. */
+function backendCsvExporter(id: ReportId, subjectId: number | null): BackendExporter | undefined {
+  const savings = savingsCsvReport(id, subjectId);
+  return savings
+    ? (params) => reportService.exportSavingsReport(savings, params)
+    : BACKEND_CSV_EXPORTERS[id];
+}
 
 type ExportFormat = "excel" | "pdf" | "docx" | "csv" | "print";
 
@@ -103,96 +143,100 @@ const EXPORT_FORMATS: {
 
 /** Sentinel for "no branch filter" — Select needs a string, not null. */
 const ALL_BRANCHES = "all";
+/** What an unfiltered report is labelled for a caller with `branches:view_all`. */
+const ALL_BRANCHES_LABEL = "All Branches";
 
-type Preset =
-  | "today"
-  | "yesterday"
-  | "last_7"
-  | "this_month"
-  | "last_month"
-  | "ytd"
-  | "custom";
-
-const PRESETS: { id: Preset; label: string }[] = [
-  { id: "today", label: "Today" },
-  { id: "yesterday", label: "Yesterday" },
-  { id: "last_7", label: "Last 7 Days" },
-  { id: "this_month", label: "This Month" },
-  { id: "last_month", label: "Last Month" },
-  { id: "ytd", label: "Year to Date" },
-  { id: "custom", label: "Custom" },
-];
-
-/**
- * Preset ranges are serialised with formatDateISO, which reads the Date's
- * *local* calendar parts. `toISOString()` used to shift every preset a day
- * earlier in Manila (UTC+8) — "Today" literally queried yesterday.
- */
-function presetRange(preset: Preset, fallback: DateRange): DateRange {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = now.getMonth();
-  const d = now.getDate();
-  switch (preset) {
-    case "today": {
-      const t = formatDateISO(new Date(y, m, d));
-      return { from: t, to: t };
-    }
-    case "yesterday": {
-      const t = formatDateISO(new Date(y, m, d - 1));
-      return { from: t, to: t };
-    }
-    case "last_7":
-      return {
-        from: formatDateISO(new Date(y, m, d - 6)),
-        to: formatDateISO(new Date(y, m, d)),
-      };
-    case "this_month":
-      return {
-        from: formatDateISO(new Date(y, m, 1)),
-        to: formatDateISO(new Date(y, m, d)),
-      };
-    case "last_month":
-      return {
-        from: formatDateISO(new Date(y, m - 1, 1)),
-        to: formatDateISO(new Date(y, m, 0)),
-      };
-    case "ytd":
-      return {
-        from: formatDateISO(new Date(y, 0, 1)),
-        to: formatDateISO(new Date(y, m, d)),
-      };
-    case "custom":
-    default:
-      return fallback;
-  }
-}
-
-export default function ReportDetailPage() {
+function ReportDetailContent({
+  memberParam,
+  accountParam,
+  periodParam,
+  branchParam,
+}: {
+  memberParam: number | null;
+  accountParam: number | null;
+  /** `?from=&to=`, already checked: both real dates, in order. */
+  periodParam: DateRange | null;
+  branchParam: number | null;
+}) {
   const params = useParams();
   const router = useRouter();
   const reportId = params?.reportId as string | undefined;
-  const report = useMemo(
-    () => REPORT_CATALOG.find((r) => r.id === (reportId as ReportId)),
-    [reportId]
-  );
+  const { user, hasPermission } = useAuth();
+  // A report this deployment or user can't open is never loaded, so its data is
+  // never requested. One that is switched off reads "not found", the same as an
+  // unknown id; one the user lacks the permission for says so.
+  // A report of a menu Menu Visibility hides reads "not found" too.
+  const { isHidden } = useMenuVisibility();
+  const report = visibleReports(hasPermission, isHidden).find((r) => r.id === (reportId as ReportId));
+  const access = reportAccess(reportId ?? "", hasPermission, isHidden);
 
-  const [preset, setPreset] = useState<Preset>("this_month");
+  // A link's `?from=&to=` opens the report on that period, as a custom range,
+  // on reports that have date controls. It only presets them; nothing runs
+  // until Generate.
+  const linkedPeriod = report?.noDateRange ? null : periodParam;
+  const defaultPreset: Preset = linkedPeriod ? "custom" : (report?.defaultPeriod ?? "this_month");
+  const [preset, setPreset] = useState<Preset>(defaultPreset);
   const [range, setRange] = useState<DateRange>(() =>
-    presetRange("this_month", { from: "", to: "" })
+    linkedPeriod ?? presetRange(defaultPreset, { from: "", to: "" })
   );
-  const [branchId, setBranchId] = useState<number | null>(null);
-  const [subjectId, setSubjectId] = useState<number | null>(null);
+  // A report run to one cutoff date opens on today, or on a link's `?to=`.
+  const [cutoff, setCutoff] = useState<string>(() => (report?.cutoffDate ? periodParam?.to : undefined) ?? todayISO());
+  // A link's `?branch=<id>` presets the picker on reports that filter by
+  // branch, else the working branch (multi-branch flag). Either counts only
+  // once the picker offers it (see `linkedBranchId`).
+  const [branchChoice, setBranchChoice] = useWorkingBranchPreset<number | null>((working) =>
+    report?.supportsBranch ? (branchParam ?? working) : null
+  );
+  // The savings product filter, and its words for the report's subtitle.
+  const [product, setProduct] = useState<{ value: string; label: string }>({ value: ALL_PRODUCTS, label: "" });
+  const [groupBy, setGroupBy] = useState<string | null>(report?.groupBy?.options[0]?.value ?? null);
+  // `?member=<id>` opens a member's report with them selected. Reading a member
+  // needs `borrowers:view`, the same as the picker; without it nothing is preset.
+  const presetId =
+    report?.subject === "borrower" && hasPermission("borrowers:view") ? memberParam : null;
+  const [subjectId, setSubjectId] = useState<number | null>(presetId);
+  // `?account=<id>` names the savings account a statement reads. There is no
+  // picker: the statement is opened from the account's own page.
+  const accountId = report?.accountParam ? accountParam : null;
+  const [presetMember, setPresetMember] = useState<MemberOption | null>(null);
   const [doc, setDoc] = useState<ReportDocument | null>(null);
   const [generating, setGenerating] = useState(false);
   const [exportingFormat, setExportingFormat] = useState<ExportFormat | null>(null);
 
-  const { branches } = useBranches();
-  const { user } = useAuth();
+  const { branches, loading: branchesLoading } = useBranches();
+  // Without `branches:view_all` the API answers 403 to a branch outside the
+  // caller's own, so the picker offers only theirs.
+  const picker = branchPicker(branches, user, hasPermission("branches:view_all"));
+  // The branch the report runs and is labelled on: a choice the picker doesn't
+  // offer (a linked id it hasn't loaded yet, or one this user can't pick) reads
+  // as no branch, so the label never names one the request doesn't send.
+  const branchId = linkedBranchId(branchChoice, picker.branches, !branchesLoading);
+  // A linked branch still waiting on the list holds Generate, so the first run
+  // can't go out for every branch while the link asked for one.
+  const branchPending = branchChoice !== null && branchesLoading;
+  const branchFieldId = useId();
   const logoUrl = useBrandingStore((s) => s.logoUrl);
   const loadBranding = useBrandingStore((s) => s.load);
 
   const [logoData, setLogoData] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (presetId === null) return;
+    let cancelled = false;
+    borrowerService
+      .detail(presetId)
+      .then((member) => {
+        if (!cancelled) setPresetMember(toMemberOption(member));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSubjectId((current) => (current === presetId ? null : current));
+        toast.error("We couldn't open that member. Please pick one.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [presetId]);
 
   // Warms branding for the case where Reports is the first page of the session
   // to need it, so the logo is on screen before anyone clicks Generate. The
@@ -214,27 +258,34 @@ export default function ReportDetailPage() {
     };
   }, [logoUrl]);
 
-  const activeRange = preset === "custom" ? range : presetRange(preset, range);
+  const activeRange = report?.cutoffDate
+    ? cutoffRange(cutoff)
+    : preset === "custom"
+      ? range
+      : presetRange(preset, range);
+
+  if (!report && access === "no_access") {
+    const title = REPORT_CATALOG.find((r) => r.id === reportId)?.title;
+    return <AccessDenied pageName={title ? `the ${title}` : "this report"} />;
+  }
 
   if (!report) {
     return (
-      <RouteGuard permission="reports:view" pageName="Reports">
-        <div className="max-w-xl mx-auto py-16 text-center space-y-3">
-          <h1 className="text-xl font-semibold">Report not found</h1>
-          <p className="text-sm text-muted-foreground">
-            The report you&apos;re looking for doesn&apos;t exist or has been
-            moved.
-          </p>
-          <Button
-            variant="outline"
-            onClick={() => router.push("/reports")}
-            className="mt-2"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Reports
-          </Button>
-        </div>
-      </RouteGuard>
+      <div className="max-w-xl mx-auto py-16 text-center space-y-3">
+        <h1 className="text-xl font-semibold">Report not found</h1>
+        <p className="text-sm text-muted-foreground">
+          The report you&apos;re looking for doesn&apos;t exist or has been
+          moved.
+        </p>
+        <Button
+          variant="outline"
+          onClick={() => router.push("/reports")}
+          className="mt-2"
+        >
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to Reports
+        </Button>
+      </div>
     );
   }
 
@@ -246,27 +297,48 @@ export default function ReportDetailPage() {
     }
   }
 
+  // The "Branch:" line on screen and in every export. Without `view_all` an
+  // unfiltered report covers only the caller's branches, so it says so.
   const branchLabel = report.supportsBranch
-    ? (branches.find((b) => b.id === branchId)?.name ?? "All Branches")
+    ? pickedBranchLabel(picker, branchId, ALL_BRANCHES_LABEL)
     : null;
 
   // Subject-scoped reports cannot run against nothing.
-  const missingSubject = !!report.subject && !subjectId;
+  const missingSubject = (!!report.subject && !subjectId) || (!!report.accountParam && !accountId);
 
   // The API caps the reporting period, so a range wider than that is a 422 the
   // user can see coming. Mirrors `ReportController::assertSpanWithinCap`; only
   // the two custom date inputs can reach it, since every preset is narrower.
   const spanTooWide = exceedsReportSpanCap(activeRange);
 
+  // A cutoff date is a whole real day, never after today (the API's 422).
+  const cutoffIssue = report.cutoffDate ? cutoffProblem(cutoff, todayISO()) : null;
+
+  // What the preview and the CSV are scoped to, so the two always agree.
+  const scope = {
+    range: activeRange,
+    branchId: report.supportsBranch ? branchId : null,
+    subjectId: report.subject ? subjectId : report.accountParam ? accountId : null,
+    productId: report.supportsProduct ? (productIdParam(product.value) ?? null) : null,
+    groupBy: report.groupBy ? groupBy : null,
+  };
+
   async function handleGenerate() {
-    if (!report || missingSubject || spanTooWide) return;
+    if (!report || missingSubject || spanTooWide || branchPending || cutoffIssue) return;
     setGenerating(true);
     try {
-      const result = await report.build({
-        range: activeRange,
-        branchId: report.supportsBranch ? branchId : null,
-        subjectId: report.subject ? subjectId : null,
-      });
+      const built = await report.build(scope);
+      // A product filter says so on screen and in every export.
+      const result =
+        scope.productId && product.label
+          ? {
+              ...built,
+              meta: {
+                ...built.meta,
+                subtitle: [built.meta.subtitle, `Product: ${product.label}`].filter(Boolean).join(" · "),
+              },
+            }
+          : built;
       // Identity is stamped once, here, so the preview and every exported
       // format quote the same reference, logo, and preparer.
       //
@@ -331,7 +403,9 @@ export default function ReportDetailPage() {
           break;
         }
         case "csv": {
-          const backendExporter = reportId ? BACKEND_CSV_EXPORTERS[reportId as ReportId] : undefined;
+          const backendExporter = reportId
+            ? backendCsvExporter(reportId as ReportId, scope.subjectId ?? null)
+            : undefined;
           if (backendExporter) {
             // The scope has to travel with the export, or a branch-filtered
             // report downloads as the whole book while the preview beside it
@@ -339,12 +413,12 @@ export default function ReportDetailPage() {
             const blob = await backendExporter({
               date_from: activeRange.from,
               date_to: activeRange.to,
-              ...(report.supportsBranch && branchId ? { branch_id: branchId } : {}),
+              ...reportScopeParams(scope),
             });
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
             link.href = url;
-            link.download = `${reportId}-${activeRange.from}-${activeRange.to}.csv`;
+            link.download = csvFileName(reportId as string, report, activeRange, todayISO());
             link.click();
             URL.revokeObjectURL(url);
           } else {
@@ -366,77 +440,95 @@ export default function ReportDetailPage() {
   }
 
   const categoryLabel = CATEGORY_META[report.category].label;
-  const Icon = report.icon;
 
   return (
-    <RouteGuard permission="reports:view" pageName="Reports">
-      <div className="space-y-6">
-        {/* Breadcrumb + back */}
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Link
-            href="/reports"
-            className="hover:text-foreground transition-colors"
+    <PageFill className="fit:gap-3">
+      {/* Breadcrumb + back */}
+      <div className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
+        <Link
+          href="/reports"
+          className="hover:text-foreground transition-colors"
+        >
+          Reports
+        </Link>
+        <ChevronRight className="h-3.5 w-3.5" />
+        <span className="text-foreground">{report.title}</span>
+      </div>
+
+      {/* Header */}
+      <div className="flex shrink-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex items-start gap-4 min-w-0">
+          <div
+            className={cn(
+              "flex h-12 w-12 shrink-0 items-center justify-center rounded-lg ring-1",
+              report.accent.bg,
+              report.accent.ring
+            )}
           >
-            Reports
-          </Link>
-          <ChevronRight className="h-3.5 w-3.5" />
-          <span className="text-foreground">{report.title}</span>
-        </div>
-
-        {/* Header */}
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex items-start gap-4 min-w-0">
-            <div
-              className={cn(
-                "flex h-12 w-12 shrink-0 items-center justify-center rounded-lg ring-1",
-                report.accent.bg,
-                report.accent.ring
-              )}
-            >
-              <Icon className={cn("h-6 w-6", report.accent.text)} />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {categoryLabel}
-              </p>
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight mt-0.5">
-                {report.title}
-              </h1>
-              <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-                {report.description}
-              </p>
-            </div>
+            <Icon3D name={reportIcon3D(report.icon)} size={36} />
           </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <Button variant="outline" onClick={() => router.push("/reports")}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              All Reports
-            </Button>
-            <ExportMenu
-              doc={doc}
-              exportingFormat={exportingFormat}
-              onExport={handleExport}
-            />
+          <div className="min-w-0">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              {categoryLabel}
+            </p>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight mt-0.5">
+              {report.title}
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
+              {report.description}
+            </p>
           </div>
         </div>
 
-        {/* Controls card */}
-        <Card>
-          <CardContent className="p-4 sm:p-5">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div className="space-y-2 min-w-0 flex-1">
+        <div className="flex items-center gap-2 shrink-0">
+          <Button variant="outline" onClick={() => router.push("/reports")}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            All Reports
+          </Button>
+          <ExportMenu
+            doc={doc}
+            noCsv={report.noCsv === true}
+            exportingFormat={exportingFormat}
+            onExport={handleExport}
+          />
+        </div>
+      </div>
+
+      {/* Controls card */}
+      {/* At fit the card is compact: the date presets stay on one row that
+          scrolls sideways, so the preview below keeps most of the screen. */}
+      <Card className="shrink-0 fit:py-0">
+        <CardContent className="p-4 sm:p-5 fit:p-3">
+          <div className="flex flex-col gap-4 fit:gap-3 lg:flex-row lg:items-end lg:justify-between">
+            {report.noDateRange ? (
+              <p className="text-sm text-muted-foreground min-w-0 flex-1">
+                {noDateRangeScope(report.subject)}
+              </p>
+            ) : report.cutoffDate ? (
+              <p className="text-sm text-muted-foreground min-w-0 flex-1">{CUTOFF_SCOPE}</p>
+            ) : (
+              <div className="space-y-2 fit:space-y-1 min-w-0 flex-1">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Date Range
                 </p>
-                <div className="flex flex-wrap gap-1.5">
+                {/* At fit one row that scrolls sideways. Its right edge fades
+                    while more presets lie beyond it; the trailing padding lets
+                    the last one scroll clear of the fade. The vertical padding
+                    keeps the focus outline inside the scroll box, and the
+                    matching negative margin keeps the presets on the date
+                    fields' line. */}
+                <div className="flex flex-wrap gap-1.5 fit:flex-nowrap fit:overflow-x-auto fit:-my-0.5 fit:py-0.5 fit:pr-8 fit:scroll-pe-8 fit:[mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)]">
                   {PRESETS.map((p) => (
                     <button
                       key={p.id}
                       type="button"
                       onClick={() => applyPreset(p.id)}
+                      // Chrome leaves a focused, partly visible preset under the
+                      // row's fade; with the row's scroll padding this brings it
+                      // fully into view.
+                      onFocus={(e) => e.currentTarget.scrollIntoView({ block: "nearest", inline: "nearest" })}
                       className={cn(
-                        "h-8 px-3 text-xs rounded-md border transition-colors",
+                        "h-8 shrink-0 whitespace-nowrap px-3 text-xs rounded-md border transition-colors",
                         preset === p.id
                           ? "bg-brand-orange text-brand-orange-foreground border-brand-orange"
                           : "bg-background hover:bg-muted border-border text-muted-foreground hover:text-foreground"
@@ -447,150 +539,271 @@ export default function ReportDetailPage() {
                   ))}
                 </div>
               </div>
+            )}
 
-              <div className="flex items-end gap-2">
+            <div className="flex items-end gap-2">
+              {report.cutoffDate && (
                 <div className="space-y-1">
-                  <Label htmlFor="from-date" className="text-xs">
-                    From
+                  <Label htmlFor="cutoff-date" className="text-xs">
+                    Cutoff Date
                   </Label>
                   <Input
-                    id="from-date"
+                    id="cutoff-date"
                     type="date"
-                    value={activeRange.from}
+                    value={cutoff}
+                    max={todayISO()}
                     onChange={(e) => {
-                      setPreset("custom");
-                      setRange({ ...activeRange, from: e.target.value });
+                      setCutoff(e.target.value);
                       setDoc(null);
                     }}
-                    className="h-9 w-40"
+                    className="w-40"
                   />
                 </div>
-                <div className="space-y-1">
-                  <Label htmlFor="to-date" className="text-xs">
-                    To
-                  </Label>
-                  <Input
-                    id="to-date"
-                    type="date"
-                    value={activeRange.to}
-                    onChange={(e) => {
-                      setPreset("custom");
-                      setRange({ ...activeRange, to: e.target.value });
-                      setDoc(null);
-                    }}
-                    className="h-9 w-40"
-                  />
-                </div>
-                <Button
-                  onClick={handleGenerate}
-                  disabled={generating || missingSubject || spanTooWide}
-                  className="h-9 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                >
-                  {generating ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Generating…
-                    </>
-                  ) : doc ? (
-                    <>
-                      <RefreshCw className="mr-2 h-4 w-4" />
-                      Regenerate
-                    </>
-                  ) : (
-                    <>
-                      <Play className="mr-2 h-4 w-4" />
-                      Generate Preview
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-
-            {/* Scope row — only the reports whose endpoints accept these
-                filters get to show them, so the controls never imply a
-                narrowing the API would silently ignore. */}
-            {(report.supportsBranch || report.subject) && (
-              <div className="mt-4 flex flex-wrap items-end gap-4 border-t pt-4">
-                {report.supportsBranch && (
+              )}
+              {!report.noDateRange && !report.cutoffDate && (
+                <>
                   <div className="space-y-1">
-                    <Label className="text-xs">Branch</Label>
-                    <Select
-                      value={branchId === null ? ALL_BRANCHES : String(branchId)}
-                      onValueChange={(v: string | null) => {
-                        setBranchId(
-                          !v || v === ALL_BRANCHES ? null : Number(v)
-                        );
+                    <Label htmlFor="from-date" className="text-xs">
+                      From
+                    </Label>
+                    <Input
+                      id="from-date"
+                      type="date"
+                      value={activeRange.from}
+                      onChange={(e) => {
+                        setPreset("custom");
+                        setRange({ ...activeRange, from: e.target.value });
                         setDoc(null);
                       }}
-                    >
-                      <SelectTrigger className="h-9 w-56">
-                        <SelectValue>{() => branchLabel}</SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={ALL_BRANCHES}>
-                          All Branches
-                        </SelectItem>
-                        {branches.map((b) => (
-                          <SelectItem key={b.id} value={String(b.id)}>
-                            {b.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      className="w-40"
+                    />
                   </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="to-date" className="text-xs">
+                      To
+                    </Label>
+                    <Input
+                      id="to-date"
+                      type="date"
+                      value={activeRange.to}
+                      onChange={(e) => {
+                        setPreset("custom");
+                        setRange({ ...activeRange, to: e.target.value });
+                        setDoc(null);
+                      }}
+                      className="w-40"
+                    />
+                  </div>
+                </>
+              )}
+              <Button
+                onClick={handleGenerate}
+                disabled={generating || missingSubject || spanTooWide || branchPending || cutoffIssue !== null}
+                className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+              >
+                {generating ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Generating…
+                  </>
+                ) : doc ? (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Regenerate
+                  </>
+                ) : (
+                  <>
+                    <Play className="mr-2 h-4 w-4" />
+                    Generate Preview
+                  </>
                 )}
-
-                {report.subject && (
-                  <SubjectPicker
-                    subject={report.subject}
-                    value={subjectId}
-                    onChange={(id) => {
-                      setSubjectId(id);
-                      setDoc(null);
-                    }}
-                  />
-                )}
-
-                {missingSubject && (
-                  <p className="text-xs text-muted-foreground pb-2">
-                    Select a {report.subject} to generate this report.
-                  </p>
-                )}
-
-                {spanTooWide && (
-                  <p className="text-xs text-destructive pb-2">
-                    The reporting period may not exceed {MAX_REPORT_SPAN_YEARS}{" "}
-                    years. Narrow the date range to generate this report.
-                  </p>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Preview area */}
-        {!doc && !generating && <EmptyPreview reportTitle={report.title} />}
-        {generating && (
-          <div className="rounded-xl border bg-muted/30 py-24 flex items-center justify-center">
-            <div className="flex flex-col items-center gap-3 text-muted-foreground">
-              <Loader2 className="h-6 w-6 animate-spin" />
-              <p className="text-sm">Fetching data &amp; building preview…</p>
+              </Button>
             </div>
           </div>
-        )}
-        {doc && !generating && <ReportPreview doc={doc} />}
-      </div>
+
+          {/* Scope row — only the reports whose endpoints accept these
+              filters get to show them, so the controls never imply a
+              narrowing the API would silently ignore. */}
+          {(report.supportsBranch ||
+            report.supportsProduct ||
+            report.groupBy ||
+            report.subject ||
+            report.accountParam ||
+            cutoffIssue) && (
+            <div className="mt-4 flex flex-wrap items-end gap-4 border-t pt-4 fit:mt-3 fit:gap-3 fit:pt-3">
+              {report.supportsBranch && (
+                <div className="space-y-1">
+                  <Label htmlFor={branchFieldId} className="text-xs">
+                    Branch
+                  </Label>
+                  <Select
+                    value={branchId === null ? ALL_BRANCHES : String(branchId)}
+                    onValueChange={(v: string | null) => {
+                      setBranchChoice(
+                        !v || v === ALL_BRANCHES ? null : Number(v)
+                      );
+                      setDoc(null);
+                    }}
+                  >
+                    <SelectTrigger id={branchFieldId} className="w-56">
+                      {/* A preset branch waits on the list: never "All Branches" first. */}
+                      <SelectValue>{() => (branchPending ? LOADING_BRANCHES : branchLabel)}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL_BRANCHES}>
+                        {pickedBranchLabel(picker, null, ALL_BRANCHES_LABEL)}
+                      </SelectItem>
+                      {picker.branches.map((b) => (
+                        <SelectItem key={b.id} value={String(b.id)}>
+                          {b.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {report.supportsProduct && (
+                <ProductFilter
+                  value={product.value}
+                  kind={report.productKind}
+                  onChange={(value, label) => {
+                    setProduct({ value, label });
+                    setDoc(null);
+                  }}
+                />
+              )}
+
+              {report.groupBy && groupBy !== null && (
+                <div className="space-y-1">
+                  <Label htmlFor="report-group-by" className="text-xs">
+                    {report.groupBy.label}
+                  </Label>
+                  <OptionSelect
+                    id="report-group-by"
+                    value={groupBy}
+                    onChange={(value) => {
+                      setGroupBy(value);
+                      setDoc(null);
+                    }}
+                    options={report.groupBy.options}
+                    className="w-40"
+                  />
+                </div>
+              )}
+
+              {report.subject && (
+                <SubjectPicker
+                  subject={report.subject}
+                  value={subjectId}
+                  onChange={(id) => {
+                    setSubjectId(id);
+                    setDoc(null);
+                  }}
+                  presetId={presetId}
+                  presetMember={presetMember}
+                />
+              )}
+
+              {missingSubject && report.subject && (
+                <p className="text-xs text-muted-foreground pb-2">
+                  Select a {reportSubjectNoun(report.subject)} to generate this report.
+                </p>
+              )}
+
+              {missingSubject && report.accountParam && (
+                <p className="text-xs text-muted-foreground pb-2">{ACCOUNT_REPORT_HINT}</p>
+              )}
+
+              {cutoffIssue && <p className="text-xs text-destructive pb-2">{cutoffIssue}</p>}
+
+              {spanTooWide && (
+                <p className="text-xs text-destructive pb-2">
+                  The reporting period may not exceed {MAX_REPORT_SPAN_YEARS}{" "}
+                  years. Narrow the date range to generate this report.
+                </p>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Preview area */}
+      {!doc && !generating && (
+        <EmptyPreview
+          reportTitle={report.title}
+          pick={reportPickPrompt(report)}
+        />
+      )}
+      {generating && (
+        <div className="rounded-xl border bg-muted/30 py-24 flex items-center justify-center fit:flex-1 fit:min-h-0 fit:py-0">
+          <div className="flex flex-col items-center gap-3 text-muted-foreground">
+            <Loader2 className="h-6 w-6 animate-spin" />
+            <p className="text-sm">Fetching data &amp; building preview…</p>
+          </div>
+        </div>
+      )}
+      {/* The preview scrolls in its own card at fit, and opens full size. A
+          plain scroller, not a ScrollBox: the preview keeps its own header band
+          and totals tint (shared with print), so its tables are left unpinned. */}
+      {doc && !generating && (
+        <ExpandableCard title="Preview">
+          <div data-unpinned className="min-w-0 overflow-x-auto fit:flex-1 fit:min-h-0 fit:overflow-auto p-px">
+            <ReportPreview doc={doc} />
+          </div>
+        </ExpandableCard>
+      )}
+      {doc && !generating && <ReportPrintSheet doc={doc} />}
+    </PageFill>
+  );
+}
+
+/**
+ * Keyed by everything a link presets (member, account, period and branch), so
+ * following a second link to the same report starts afresh.
+ */
+function ReportDetailRoute() {
+  const searchParams = useSearchParams();
+  const memberParam = presetMemberId(searchParams.get("member"));
+  const accountParam = presetAccountId(searchParams.get("account"));
+  const periodParam = presetPeriodRange(searchParams.get("from"), searchParams.get("to"));
+  const branchParam = presetBranchId(searchParams.get("branch"));
+  const key = [
+    memberParam ?? "none",
+    accountParam ?? "none",
+    periodParam ? `${periodParam.from}..${periodParam.to}` : "none",
+    branchParam ?? "none",
+  ].join(":");
+  return (
+    <ReportDetailContent
+      key={key}
+      memberParam={memberParam}
+      accountParam={accountParam}
+      periodParam={periodParam}
+      branchParam={branchParam}
+    />
+  );
+}
+
+export default function ReportDetailPage() {
+  return (
+    <RouteGuard permission="reports:view" pageName="Reports">
+      <Suspense fallback={null}>
+        <ReportDetailRoute />
+      </Suspense>
     </RouteGuard>
   );
 }
 
 interface ExportMenuProps {
   doc: ReportDocument | null;
+  /** Hides the CSV export for a report the server writes no CSV for. */
+  noCsv?: boolean;
   exportingFormat: ExportFormat | null;
   onExport: (format: ExportFormat) => void;
 }
 
-function ExportMenu({ doc, exportingFormat, onExport }: ExportMenuProps) {
+function ExportMenu({ doc, noCsv = false, exportingFormat, onExport }: ExportMenuProps) {
   const disabled = !doc;
   const exporting = exportingFormat !== null;
 
@@ -629,7 +842,7 @@ function ExportMenu({ doc, exportingFormat, onExport }: ExportMenuProps) {
           <DropdownMenuGroup>
             <DropdownMenuLabel>Export as…</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {EXPORT_FORMATS.map((fmt) => {
+            {EXPORT_FORMATS.filter((fmt) => !(noCsv && fmt.id === "csv")).map((fmt) => {
               const Icon = fmt.icon;
               return (
                 <DropdownMenuItem
@@ -658,18 +871,24 @@ function ExportMenu({ doc, exportingFormat, onExport }: ExportMenuProps) {
   );
 }
 
-function EmptyPreview({ reportTitle }: { reportTitle: string }) {
+function EmptyPreview({ reportTitle, pick }: { reportTitle: string; pick: string }) {
   return (
-    <div className="rounded-xl border border-dashed bg-muted/20 py-16 px-6">
-      <div className="max-w-md mx-auto text-center space-y-3">
-        <div className="mx-auto h-12 w-12 rounded-full bg-brand-orange/10 flex items-center justify-center">
-          <FileSpreadsheet className="h-6 w-6 text-brand-orange" />
-        </div>
+    // At fit it fills the space left and centres in it (my-auto, not
+    // justify-center, so a short space scrolls instead of cutting the top).
+    <div className="flex flex-col rounded-xl border border-dashed bg-muted/20 py-16 px-6 fit:flex-1 fit:min-h-0 fit:overflow-auto fit:py-0">
+      <div className="max-w-md mx-auto my-auto text-center space-y-3 fit:space-y-2">
+        {hasIllustration("pickReport") ? (
+          <Illustration name="pickReport" className="mx-auto fit:max-h-[min(8rem,14dvh)]" />
+        ) : (
+          <div className="mx-auto h-12 w-12 rounded-full bg-brand-orange/10 flex items-center justify-center">
+            <FileSpreadsheet className="h-6 w-6 text-brand-orange" />
+          </div>
+        )}
         <h3 className="text-base font-semibold">
           Ready to generate {reportTitle}
         </h3>
         <p className="text-sm text-muted-foreground">
-          Pick a date range above and click{" "}
+          Pick {pick} above and click{" "}
           <span className="font-medium text-foreground">Generate Preview</span>.
           What you see will match the exported Excel exactly.
         </p>

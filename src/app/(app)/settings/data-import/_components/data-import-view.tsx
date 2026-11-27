@@ -18,6 +18,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { AlertTriangle, Info, RotateCw } from "lucide-react";
 
+import { FillSection, ScrollBox } from "@/components/common/page-fill";
 import { StepIndicator } from "@/components/common/step-indicator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -28,12 +29,15 @@ import {
   ProgressValue,
 } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
+import { todayISO } from "@/lib/format";
 import { clearImportSession, type ImportSession } from "@/lib/import-session";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { cn } from "@/lib/utils";
 import type { ImportRunStatus } from "@/types/data-import";
 
 import {
   reattachProbeLabel,
+  seededRunId,
   useImportReattach,
   type ImportReattachHit,
   type ReattachProbe,
@@ -43,6 +47,7 @@ import { StepCheck } from "./step-check";
 import { StepUpload } from "./step-upload";
 import { StepProcessing } from "./step-processing";
 import { StepResult } from "./step-result";
+import { filesProblem } from "./import-files";
 
 // ---------------------------------------------------------------------------
 // Vocabulary
@@ -68,12 +73,13 @@ const STEP_LABELS: Record<ImportStep, string> = {
 
 /**
  * The picked files, keyed by `ImportFileKind` — never a positional array. The
- * server has no way to tell a members file from a loans file except by the key
- * we send it.
+ * server has no way to tell a members file from a loans or share capital file
+ * except by the key we send it.
  */
 export interface ImportFiles {
   customers: File | null;
   loans: File | null;
+  share_capital: File | null;
 }
 
 /**
@@ -89,7 +95,7 @@ export type PrecheckOutcome = Pick<
   "hasHeaderRow" | "dateFormat" | "productMap"
 >;
 
-const NO_FILES: ImportFiles = { customers: null, loans: null };
+const NO_FILES: ImportFiles = { customers: null, loans: null, share_capital: null };
 
 // ---------------------------------------------------------------------------
 // Reattach panel
@@ -249,6 +255,10 @@ export function DataImportView() {
 
   const [step, setStep] = useState<ImportStep>("prepare");
   const [branchId, setBranchId] = useState<number | null>(null);
+  // The run's `as_of_date`: today unless the admin says otherwise.
+  const [asOfDate, setAsOfDate] = useState<string>(todayISO);
+  // The server's refusal of that date, shown on the field (step 1).
+  const [asOfRefusal, setAsOfRefusal] = useState<string | null>(null);
   const [files, setFiles] = useState<ImportFiles>(NO_FILES);
   const [precheck, setPrecheck] = useState<PrecheckOutcome | null>(null);
   const [runId, setRunId] = useState<number | null>(null);
@@ -267,7 +277,9 @@ export function DataImportView() {
   // paints the intermediate result.
   if (!checking && hit && seededHit !== hit) {
     setSeededHit(hit);
-    setRunId(hit.runId);
+    // A finished run is kept only to show its result; on step 1 it is the
+    // prior-import notice, and the next Continue opens a new run.
+    setRunId(seededRunId(hit));
     setBranchId(hit.status.branch_id ?? null);
     setStep(hit.step);
   }
@@ -287,6 +299,22 @@ export function DataImportView() {
     setRunId(null);
     setPrecheck(null);
     setFiles(NO_FILES);
+    setStep("prepare");
+  }, []);
+
+  /**
+   * A finished run never takes another upload. Forgotten here, the files and
+   * the answers stay, and the upload opens a new run.
+   */
+  const forgetRun = useCallback(() => {
+    clearImportSession();
+    setRunId(null);
+  }, []);
+
+  // Stable, because the upload step's open-the-run effect lists it: a new
+  // function each render would re-run that effect after a failed open.
+  const refuseAsOfDate = useCallback((message: string) => {
+    setAsOfRefusal(message);
     setStep("prepare");
   }, []);
 
@@ -310,7 +338,9 @@ export function DataImportView() {
     );
   }
 
-  const hasAnyFile = Boolean(files.customers || files.loans);
+  // The members file, the share capital file, or both, make an import; a loans
+  // file only rides along with the members file (./import-files).
+  const hasImportableFiles = filesProblem(files) === null;
 
   function renderStep() {
     switch (step) {
@@ -319,6 +349,12 @@ export function DataImportView() {
           <StepPrepare
             branchId={branchId}
             onBranchChange={setBranchId}
+            asOfDate={asOfDate}
+            onAsOfDateChange={(date) => {
+              setAsOfDate(date);
+              setAsOfRefusal(null);
+            }}
+            asOfRefusal={asOfRefusal}
             files={files}
             onFilesChange={setFiles}
             priorRun={priorRun}
@@ -350,7 +386,7 @@ export function DataImportView() {
       // requirements apply. A reload that lands here with neither gets a panel
       // rather than a crash on a null the child was promised would not be one.
       case "check":
-        if (runId === null && (branchId === null || !hasAnyFile)) {
+        if (runId === null && (branchId === null || !hasImportableFiles)) {
           return <LostThreadPanel onStartOver={startOver} />;
         }
         return (
@@ -367,16 +403,19 @@ export function DataImportView() {
         );
 
       case "upload":
-        if (runId === null && (branchId === null || !hasAnyFile || !precheck)) {
+        if (runId === null && (branchId === null || !hasImportableFiles || !precheck)) {
           return <LostThreadPanel onStartOver={startOver} />;
         }
         return (
           <StepUpload
             branchId={branchId}
+            asOfDate={asOfDate}
+            onAsOfDateRefused={refuseAsOfDate}
             files={files}
             precheck={precheck}
             runId={runId}
             onRunCreated={setRunId}
+            onRunFinished={forgetRun}
             onBack={() => setStep("check")}
             onUploaded={() => setStep("processing")}
           />
@@ -403,11 +442,11 @@ export function DataImportView() {
   }
 
   return (
-    <div className="space-y-4">
+    <FillSection className="gap-4">
       {notice ? (
         // A caution, not a failure: nothing broke, an expected thing turned out
         // not to be there. Amber, matching the prior-import notice on step 1.
-        <Alert className="border-amber-200 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-900/10">
+        <Alert className="shrink-0 border-amber-200 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-900/10">
           <Info className="text-amber-600" />
           <AlertTitle>Picking up where you left off wasn&apos;t possible</AlertTitle>
           <AlertDescription className="space-y-3">
@@ -419,18 +458,20 @@ export function DataImportView() {
         </Alert>
       ) : null}
 
-      <Card>
-        <CardContent className="py-6">
-          <StepIndicator current={currentIndex + 1} labels={stepLabels} />
+      <Card className={FIT_CLASSES.section}>
+        <CardContent className={cn(FIT_CLASSES.section, "py-6")}>
+          <div className="shrink-0">
+            <StepIndicator current={currentIndex + 1} labels={stepLabels} />
 
-          <p className="mb-4 text-[11px] font-bold tracking-widest text-brand-orange uppercase">
-            Step {currentIndex + 1} of {IMPORT_STEPS.length} —{" "}
-            {STEP_LABELS[step]}
-          </p>
+            <p className="mb-4 text-[11px] font-bold tracking-widest text-brand-orange uppercase">
+              Step {currentIndex + 1} of {IMPORT_STEPS.length} —{" "}
+              {STEP_LABELS[step]}
+            </p>
+          </div>
 
-          {renderStep()}
+          <ScrollBox className="p-px">{renderStep()}</ScrollBox>
         </CardContent>
       </Card>
-    </div>
+    </FillSection>
   );
 }

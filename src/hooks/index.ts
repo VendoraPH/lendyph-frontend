@@ -1,6 +1,5 @@
 export { useAuth } from "./use-auth";
 export { useBranches } from "./use-branches";
-export { useGCashNonMembers } from "./use-gcash-non-members";
 export { useIsMobile } from "./use-mobile";
 export { usePasswordChangeGuard } from "./use-password-change-guard";
 export { usePermission } from "./use-permission";
@@ -13,3 +12,5 @@ export type { ApiResource } from "./use-api-resource";
 export { useChartOfAccounts } from "./use-chart-of-accounts";
 export type { ChartOfAccounts } from "./use-chart-of-accounts";
 export { useLoanApproval } from "./use-loan-approval";
+export { useDialogOpening } from "./use-dialog-opening";
+export { useIsClient } from "./use-is-client";

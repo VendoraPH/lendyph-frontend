@@ -1,0 +1,46 @@
+/**
+ * The Executive Dashboard stays behind NEXT_PUBLIC_ENABLE_EXECUTIVE_DASHBOARD,
+ * off by default, like Credit Scoring and Linda. Read from source: layouts and
+ * pages are components, which `tsx --test` doesn't render.
+ */
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
+
+test("the flag is read literally, so Next inlines it into the browser bundle", () => {
+  assert.match(
+    read("src/config/env.ts"),
+    /executiveDashboard: parseBoolEnvValue\(process\.env\.NEXT_PUBLIC_ENABLE_EXECUTIVE_DASHBOARD\)/,
+  );
+});
+
+test("the flag is documented in .env.example and off there", () => {
+  assert.match(read(".env.example"), /^NEXT_PUBLIC_ENABLE_EXECUTIVE_DASHBOARD=false$/m);
+});
+
+test("a direct URL answers not found while the flag is off", () => {
+  const layout = read("src/app/(app)/dashboard/executive/layout.tsx");
+  assert.match(layout, /if \(!env\.features\.executiveDashboard\) notFound\(\);/);
+});
+
+test("the menu lists it only while the flag is on", () => {
+  assert.match(read("src/constants/navigation.ts"), /env\.features\.executiveDashboard \? \[EXECUTIVE_DASHBOARD_NAV\]/);
+});
+
+test("a card's tooltip says how its figure is worked out in words, never an API path", () => {
+  const card = read("src/app/(app)/dashboard/executive/_components/kpi-card.tsx");
+  assert.match(card, /<p>\{card\.formula\}<\/p>/);
+  assert.doesNotMatch(card, /\{[\w.]*source\}|font-mono/);
+});
+
+test("the page fits the screen: sections scroll inside their own box, full width", () => {
+  const page = read("src/app/(app)/dashboard/executive/page.tsx");
+  assert.match(page, /<PageFill className="gap-4">/);
+  assert.match(page, /<ScrollBox className=\{L\.scrollBox\}>/);
+  assert.doesNotMatch(page, /max-w-\[/);
+  // Only the header and filter bar stay pinned: the KPI cards scroll with the sections.
+  assert.ok(page.indexOf("<ScrollBox ") < page.indexOf("cards.map("), "the KPI cards are inside the scroll box");
+});

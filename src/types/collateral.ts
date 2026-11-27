@@ -29,6 +29,8 @@ export interface CollateralType {
 export interface ActiveLoanRef {
   id: number;
   loan_account_number: string | null;
+  /** The number the loan is shown by (`loanNumberLabel`): an imported loan's Loan No. */
+  display_number?: string | null;
 }
 
 export interface Collateral {
@@ -77,8 +79,15 @@ export interface Collateral {
 export interface LoanCollateral extends Collateral {
   type?: CollateralType;
   collateral_type?: CollateralType;
+  /** The server's valuation, as on every `CollateralController` response. */
+  effective_value?: number;
+  value_unknown?: boolean;
   pivot?: {
     loan_id: number;
+    /**
+     * The value the loan holds this collateral at. Set by the server when it
+     * is attached (decision 11a); read it, never send it.
+     */
     snapshot_value: number;
     attached_at: string | null;
   };
@@ -99,6 +108,85 @@ export interface CollateralWithMeta extends Collateral {
   lock: CollateralLock;
   /** Live value used in pickers — for share_capital source this is the borrower's current balance. */
   effective_value: number;
+}
+
+// ── Collateral register (`GET /collaterals/register`) ──
+
+/**
+ * A collateral as the register sends it: valued on the server, with its type
+ * and its active holders loaded.
+ *
+ * `value_unknown` is true only for a share-capital collateral whose balance the
+ * caller may not see; `effective_value` is then 0 and must not be displayed.
+ */
+export interface RegisterCollateral extends Collateral {
+  effective_value: number;
+  value_unknown: boolean;
+  collateral_type?: CollateralType;
+}
+
+/**
+ * One member's collaterals, and the figures over them. Every figure is over the
+ * rows that matched the request's `search` / `collateral_type_id`, not over the
+ * member's whole book.
+ */
+export interface CollateralRegisterGroup {
+  borrower_id: number;
+  /** The member's full name, or `Member #{id}` when `meta.names_hidden`. */
+  borrower_name: string;
+  collaterals_count: number;
+  /** Rows held by at least one active loan. */
+  tagged_count: number;
+  /** Sum of `effective_value` over the rows whose value is known. */
+  total_value: number;
+  /** Rows left out of `total_value` because their value is withheld. */
+  unknown_count: number;
+  /** Newest first. */
+  collaterals: RegisterCollateral[];
+}
+
+export type CollateralRegisterSort = "member" | "collaterals" | "total_value" | "tagged";
+
+export type CollateralRegisterDirection = "asc" | "desc";
+
+export interface CollateralRegisterParams {
+  search?: string;
+  collateral_type_id?: number;
+  sort?: CollateralRegisterSort;
+  direction?: CollateralRegisterDirection;
+  page?: number;
+  per_page?: number;
+}
+
+export interface CollateralRegisterTotals {
+  /** The whole book — ignores `search` and `collateral_type_id`. */
+  total_collaterals: number;
+  /** The whole book — ignores `search` and `collateral_type_id`. */
+  tagged_to_active_loans: number;
+  /** The filtered rows whose value is known. */
+  total_value: number;
+  /** The filtered rows whose value is withheld. */
+  unknown_count: number;
+  /** The filtered groups; equals `meta.total`. */
+  members: number;
+}
+
+/**
+ * The whole body, read with `api.getRaw`: `meta` carries the paging, the KPI
+ * totals and `names_hidden`, and `api.get` would discard all three.
+ */
+export interface CollateralRegisterResponse {
+  data: CollateralRegisterGroup[];
+  meta: {
+    current_page: number;
+    last_page: number;
+    per_page: number;
+    /** Groups (members), not collaterals. */
+    total: number;
+    /** True when the caller lacks `borrowers:view`, so every name is `Member #{id}`. */
+    names_hidden: boolean;
+    totals: CollateralRegisterTotals;
+  };
 }
 
 export function computeSecurityStatus(

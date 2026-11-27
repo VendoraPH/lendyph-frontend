@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { reconcileCounts, reconciliationLine, RECONCILIATION_FORMULA } from "./outcome-tiles";
+import { reconcileCounts, reconciliationFormula, reconciliationLine, RECONCILIATION_FORMULA, tilesFor } from "./outcome-tiles";
 import type { ImportCounts } from "@/types/data-import";
 
 /**
@@ -108,4 +108,35 @@ test("the formula is stated in the same terms the tiles use", () => {
   for (const term of ["imported", "matched", "already imported", "skipped", "failed"]) {
     assert.ok(RECONCILIATION_FORMULA.includes(term), `formula is missing "${term}"`);
   }
+});
+
+test("one row read reads in the singular", () => {
+  const line = reconciliationLine(counts({ total: 1, imported: 1 }));
+  assert.match(line, /^1 row read = /);
+});
+
+test("share capital rows read as ledger entries, with no member to match", () => {
+  const tiles = tilesFor("share_capital");
+
+  assert.deepEqual(tiles.map((tile) => tile.key), ["total", "imported", "already_imported", "skipped", "failed"]);
+  assert.equal(tiles.find((tile) => tile.key === "imported")?.note, "Added to the member's share capital ledger, marked imported.");
+  assert.equal(
+    tiles.find((tile) => tile.key === "skipped")?.note,
+    "Not imported: the row didn't pass the checks, or it repeats an entry already on the ledger. See the report below.",
+  );
+  assert.equal(tiles.find((tile) => tile.key === "already_imported")?.note, "Brought in by an earlier import. Nothing was written twice.");
+  for (const tile of tiles) assert.doesNotMatch(tile.note, /[Bb]orrower|_/);
+
+  assert.ok(tilesFor("customers").some((tile) => tile.key === "matched_existing"), "members still match");
+});
+
+test("a share capital file's line and formula have no matched figure, as it has no Matched tile", () => {
+  const line = reconciliationLine(counts({ total: 4, imported: 3, skipped: 1 }), "share_capital");
+  assert.equal(line, "4 rows read = 3 imported + 0 already imported + 1 skipped + 0 failed");
+  assert.doesNotMatch(reconciliationFormula("share_capital"), /matched/);
+  assert.equal(reconciliationFormula("share_capital"), "rows read = imported + already imported + skipped + failed");
+
+  // The members and loans files keep theirs.
+  assert.match(reconciliationLine(counts({ total: 1, imported: 1 }), "customers"), /0 matched/);
+  assert.equal(reconciliationFormula("loans"), RECONCILIATION_FORMULA);
 });

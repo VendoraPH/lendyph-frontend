@@ -2,6 +2,17 @@ export type GCashTransactionType = "cash_in" | "cash_out";
 
 export type GCashTransactionStatus = "pending" | "paid" | "completed";
 
+/**
+ * `GET /gcash/transactions/preview`: the charge and total recording this
+ * transaction would use, resolved by the server from its fee tiers.
+ */
+export interface GCashChargePreview {
+  type: GCashTransactionType;
+  amount: number;
+  charge_amount: number;
+  total_amount: number;
+}
+
 export interface GCashTransaction {
   id: number;
   reference_no: string;
@@ -17,6 +28,12 @@ export interface GCashTransaction {
   borrower?: { id: number; full_name: string; borrower_code: string } | null;
   gcash_non_member_id?: number | null;
   non_member?: { id: number; full_name: string; mobile_number?: string | null } | null;
+  /**
+   * The branch a walk-in transaction was done in; null for a member's, for
+   * head office, and for walk-ins recorded before backend #283 (which also
+   * leaves it out).
+   */
+  branch_id?: number | null;
   transactor_user_id: number;
   transactor_user?: { id: number; full_name: string };
   remarks?: string | null;
@@ -49,6 +66,13 @@ export interface GCashPendingItem {
   transaction_date: string;
   borrower?: { id: number; full_name: string; borrower_code: string } | null;
   non_member?: { id: number; full_name: string } | null;
+  /**
+   * Optional (backend B-FU): the walk-in's own branch, the member's branch,
+   * or null for head office. Older answers leave both out.
+   */
+  branch_id?: number | null;
+  /** The branch in words, "Head office" for none. */
+  branch_name?: string | null;
   amount: number;
   charge_amount: number;
   total_amount: number;
@@ -60,6 +84,12 @@ export type CreateGCashTransactionData = {
   amount: number;
   is_pending?: boolean;
   remarks?: string;
+  /**
+   * Walk-ins only: one of the caller's branches, or null (view_all only) for
+   * head office. Left out, the server uses the caller's only branch. A
+   * member's transaction never sends it.
+   */
+  branch_id?: number | null;
 } & ({ borrower_id: number } | { gcash_non_member_id: number });
 
 export type GCashListFilters = {
@@ -73,6 +103,27 @@ export type GCashListFilters = {
   per_page?: number;
 };
 
+/**
+ * `GET /gcash/transactions` `meta.totals`: the server's figures over every
+ * transaction the list's scope and filters match, across all pages. Money is a
+ * 2-decimal string, shown as sent and never added up here.
+ */
+export interface GCashTransactionTotals {
+  count: number;
+  /** Every transaction's amount, Cash In and Cash Out together. */
+  amount: string;
+  cash_in: string;
+  cash_out: string;
+  charges: string;
+  /** Every transaction's total (Cash In adds the charge, Cash Out takes it off). */
+  total: string;
+  /**
+   * The part of the figures above on pending transactions, counted whenever the
+   * status filter lets them in. Their charge isn't income until they're paid.
+   */
+  pending: { count: number; amount: string; charges: string; total: string };
+}
+
 export type GCashTierInput = Omit<GCashTier, "id">;
 
 /**
@@ -83,8 +134,10 @@ export interface GCashNonMember {
   id: number;
   full_name: string;
   mobile_number: string;
-  id_type: string;
-  id_number: string;
+  /** Null when the walk-in gave no ID; set together with id_number. */
+  id_type: string | null;
+  /** Null when the walk-in gave no ID; set together with id_type. */
+  id_number: string | null;
   remarks?: string | null;
   transaction_count?: number;
   created_at: string;
@@ -94,9 +147,15 @@ export interface GCashNonMember {
 export type GCashNonMemberInput = {
   full_name: string;
   mobile_number: string;
-  id_type: string;
-  id_number: string;
+  /** Optional: both ID fields or neither. */
+  id_type: string | null;
+  id_number: string | null;
   remarks?: string | null;
+  /**
+   * Saves a walk-in without an ID even though another walk-in has the same
+   * name and mobile number (the server's `possible_duplicate` warning).
+   */
+  acknowledge_possible_duplicate?: boolean;
 };
 
 export type GCashNonMemberFilters = {

@@ -1,8 +1,229 @@
-import type { Role, RoleConfig } from "@/types";
+import type { Permission, Role, RoleConfig } from "@/types";
 
 /**
- * What each role is DOCUMENTED to have — the roles screen reads this to seed a
- * role's permission grid and to label it.
+ * The sixteen CDA Compliance permissions, as lendyph-backend seeds them
+ * (`CdaAccess::PERMISSIONS`), in that order.
+ */
+export const CDA_PERMISSIONS: readonly Permission[] = [
+  "cda:view",
+  "cda:prepare",
+  "cda:upload",
+  "cda:review",
+  "cda:approve",
+  "cda:finalize",
+  "cda:reopen",
+  "cda:submit",
+  "cda:export",
+  "cda:settings",
+  "cda:manage_officers",
+  "cda:manage_social",
+  "cda:manage_mediation",
+  "cda:view_mediation",
+  "cda:view_audit",
+  "cda:view_tax",
+];
+
+/**
+ * The six Member Portal staff permissions, as lendyph-backend seeds them
+ * (migration 2026_11_11_700200), in that order.
+ */
+export const MEMBER_PORTAL_PERMISSIONS: readonly Permission[] = [
+  "member_portal:view",
+  "member_portal:invite",
+  "member_portal:manage",
+  "member_portal:requests",
+  "member_portal:announcements",
+  "member_portal:settings",
+];
+
+/**
+ * The thirteen AMLA permissions, as lendyph-backend seeds them (Phase 6, X0),
+ * in that order.
+ */
+export const AMLA_PERMISSIONS: readonly Permission[] = [
+  "amla:view",
+  "amla:alerts",
+  "amla:cases",
+  "amla:cdd",
+  "amla:screening",
+  "amla:sanctions",
+  "amla:ctr",
+  "amla:str",
+  "amla:approve",
+  "amla:export",
+  "amla:submit",
+  "amla:settings",
+  "amla:audit",
+];
+
+/**
+ * Every permission lendyph-backend creates (RoleAndPermissionSeeder and the
+ * permission migrations) but `loans:edit_in_approval`. The seeder syncs
+ * `Permission::all()` to both super_admin and admin, and each permission
+ * migration grants both, so both entries document this list. The Chair's own
+ * `loans:edit_in_approval` is left out of that sync: only `bod1` holds it.
+ */
+const EVERY_PERMISSION: Permission[] = [
+  "dashboard:view",
+  "borrowers:view",
+  "borrowers:create",
+  "borrowers:update",
+  "borrowers:delete",
+  "borrowers:approve",
+  "loans:view",
+  "loans:create",
+  "loans:update",
+  "loans:delete",
+  "loans:approve",
+  "loans:reject",
+  "loans:release",
+  "loans:void",
+  "loans:extend",
+  "loans:restructure",
+  // Writing off a restructure's shortfall; its own checkbox in the editor.
+  "loans:write_off",
+  // Creating, editing and deleting loan products. Seeded for admin and
+  // super_admin only; viewing products needs just `loans:view`.
+  "loan_products:manage",
+  // Extensions and balance adjustments; no checkbox in the editor.
+  "loan_adjustments:view",
+  "loan_adjustments:create",
+  "loan_adjustments:approve",
+  "payments:view",
+  "payments:create",
+  "payments:update",
+  "payments:void",
+  "collections:view",
+  "collections:mark_collected",
+  "reports:view",
+  "reports:export",
+  "settings:view",
+  "settings:update",
+  "settings:delete",
+  "fees:view",
+  "fees:create",
+  "fees:update",
+  "fees:delete",
+  // Settings → Penalties (Phase 4). Seeded for admin and super_admin only.
+  "penalties:view",
+  "penalties:create",
+  "penalties:update",
+  "penalties:delete",
+  "users:view",
+  "users:create",
+  "users:update",
+  "users:delete",
+  "users:reset_password",
+  // Sees every branch's data, not only assigned ones.
+  "branches:view_all",
+  "audit_logs:view",
+  "audit_logs:export",
+  "share_capital:view",
+  "share_capital:create",
+  "share_capital:update",
+  "auto_pay:view",
+  "auto_pay:process",
+  "auto_pay:toggle",
+  // Crediting members' share capital in a batch; no checkbox in the editor.
+  "auto_credit:process",
+  "collaterals:view",
+  "collaterals:create",
+  "collaterals:update",
+  "collaterals:delete",
+  "gcash:view",
+  "gcash:transact",
+  "gcash:settings",
+  // CSV migration. Granted to `super_admin` and `admin` only; no other role
+  // in this map gets it.
+  "imports:process",
+  // Accounting — the full set, including the three that move or lock the
+  // books: post, reverse and close.
+  "accounting:view",
+  "accounting:reconcile",
+  "accounting:close",
+  "accounting:settings",
+  // Posting the allowance for credit losses. Seeded for super_admin, admin
+  // and accountant only (round C).
+  "accounting:allowance",
+  "chart_of_accounts:view",
+  "chart_of_accounts:create",
+  "chart_of_accounts:update",
+  "chart_of_accounts:delete",
+  "journals:view",
+  "journals:create",
+  "journals:post",
+  "journals:reverse",
+  "expenses:view",
+  "expenses:create",
+  "expenses:update",
+  "expenses:pay",
+  "cash_accounts:view",
+  "cash_accounts:transfer",
+  // Credit Scoring. Seeded for admin and super_admin only (lendyph-backend
+  // #174); its endpoints answer 501 until they are built, so the screens
+  // show "Not connected yet". Other roles get it only through the roles
+  // screen.
+  "credit_scoring:view",
+  "credit_scoring:override",
+  // `:settings`, not `:configure` — the design spec originally said
+  // `configure` (since corrected, but older copies were not). A backend
+  // seeded from that wording creates a permission nothing here reads.
+  "credit_scoring:settings",
+  // Reminders (Phase 2). Seeded for admin and super_admin only; other
+  // roles get them only through the roles screen. `:settings` holds the
+  // SMS/email provider credentials.
+  "reminders:view",
+  "reminders:send",
+  "reminders:pause",
+  "reminders:settings",
+  // Savings & Deposits (Phase 3). Seeded for admin and super_admin only;
+  // other roles get them only through the roles screen.
+  "savings:view",
+  "savings:create",
+  "savings:transact",
+  "savings:close",
+  "savings:approve",
+  "savings:post",
+  "savings:settings",
+  // CDA Compliance (Phase 3). Seeded for admin and super_admin only; other
+  // roles get them only through the roles screen, and each needs
+  // `branches:view_all` to work.
+  ...CDA_PERMISSIONS,
+  // Member Portal, staff side (Phase 3). Seeded for admin and super_admin
+  // only. Suggested, not granted: a manager view, invite, manage and requests;
+  // a cashier requests; a loan officer view and invite.
+  ...MEMBER_PORTAL_PERMISSIONS,
+  // Linda, the AI assistant (Linda v1). Seeded for admin and super_admin only;
+  // `linda:settings` also needs `branches:view_all` to open Settings → Linda.
+  "linda:use",
+  "linda:settings",
+  // Phase 6 (X0). Seeded for admin and super_admin only; the Compliance
+  // Officer also holds the AMLA keys.
+  ...AMLA_PERMISSIONS,
+  "dashboard:analytics",
+  "dashboard:export",
+  "dashboard:settings",
+  "branches:manage",
+  "borrowers:transfer",
+  "interbranch_transfers:view",
+  "interbranch_transfers:create",
+  "interbranch_transfers:approve",
+  "interbranch_transfers:receive",
+  "loan_origination:view",
+  "loan_origination:update",
+  "loan_origination:assess",
+  "loan_origination:convert",
+  "loan_origination:settings",
+  // Settings → Menu Visibility (finish run round 6). Seeded for admin and
+  // super_admin only; the page also needs the administrator password.
+  "menu_visibility:manage",
+];
+
+/**
+ * What each role is DOCUMENTED to have. Screens read it to label a role (its
+ * name when no display name is saved) and for a role's description when the
+ * API sends none. The roles screen fills each role's permission grid from
+ * `GET /roles`, never from here.
  *
  * It is not the gate. Every guard in the app (`RouteGuard`, `PermissionGate`,
  * `usePermission().can`) asks the auth store, which holds `user.permissions`
@@ -11,62 +232,34 @@ import type { Role, RoleConfig } from "@/types";
  * behave exactly as the server says.
  */
 export const ROLES: Record<Role, RoleConfig> = {
+  // The platform team's role. It labels the role; it is never offered as a
+  // choice (see ROLE_OPTIONS).
+  super_admin: {
+    label: "Super Admin",
+    description:
+      "Platform super administrator — holds every permission. Reserved for the platform team, not client staff.",
+    permissions: [...EVERY_PERMISSION],
+  },
   admin: {
     label: "Admin",
     description: "Full access to all modules",
+    permissions: [...EVERY_PERMISSION],
+  },
+  // Mirrors `RoleAndPermissionSeeder::ACCOUNTANT_PERMISSIONS` exactly (round C).
+  // Every accounting permission and every branch, but only read access to the
+  // lending side, and no `borrowers:view` (round fz personal-data rule), users
+  // or settings. No `audit_logs:view` either: audit rows carry members'
+  // personal data (backend #249 review).
+  accountant: {
+    label: "Accountant",
+    description:
+      "Keeps the books: journals, expenses, reconciliation, period and year-end close, opening balances and the allowance. Assigned by the owner.",
     permissions: [
-      "dashboard:view",
-      "borrowers:view",
-      "borrowers:create",
-      "borrowers:update",
-      "borrowers:delete",
-      "loans:view",
-      "loans:create",
-      "loans:update",
-      "loans:delete",
-      "loans:approve",
-      "loans:reject",
-      "loans:release",
-      "payments:view",
-      "payments:create",
-      "payments:update",
-      "payments:void",
-      "collections:view",
-      "collections:mark_collected",
-      "reports:view",
-      "reports:export",
-      "settings:view",
-      "settings:update",
-      "fees:view",
-      "fees:create",
-      "fees:update",
-      "fees:delete",
-      "users:view",
-      "users:create",
-      "users:update",
-      "users:delete",
-      "audit_logs:view",
-      "audit_logs:export",
-      "share_capital:view",
-      "share_capital:create",
-      "share_capital:update",
-      "collaterals:view",
-      "collaterals:create",
-      "collaterals:update",
-      "collaterals:delete",
-      "gcash:view",
-      "gcash:transact",
-      "gcash:settings",
-      // CSV migration. Deliberately on `admin` only — no other role in this map
-      // gets it, and `super_admin` (which the backend also grants) has no entry
-      // here at all; see the note on the `Role` union in @/types/rbac.
-      "imports:process",
-      // Accounting — the full set, including the three that move or lock the
-      // books: post, reverse and close.
       "accounting:view",
       "accounting:reconcile",
       "accounting:close",
       "accounting:settings",
+      "accounting:allowance",
       "chart_of_accounts:view",
       "chart_of_accounts:create",
       "chart_of_accounts:update",
@@ -78,36 +271,49 @@ export const ROLES: Record<Role, RoleConfig> = {
       "expenses:view",
       "expenses:create",
       "expenses:update",
+      "expenses:pay",
       "cash_accounts:view",
       "cash_accounts:transfer",
-      // Credit Scoring — DOCUMENTED ONLY. Do NOT grant these server-side yet.
-      //
-      // The module is a UI shell: all eleven endpoints are unbuilt and
-      // `credit_scoring` appears nowhere in lendyph-backend (checked on
-      // `development` and `main`, 2026-09-19). These three lines are what an
-      // admin WOULD hold once it exists; they grant nothing today, because
-      // every gate reads `user.permissions` from the server (see the note at
-      // the top of this file).
-      //
-      // That cuts both ways. The menu is invisible in production ONLY because
-      // the server sends no `credit_scoring:*`. Seed them and all seven
-      // Credit Scoring menu items appear for this role immediately — no
-      // frontend change, no deploy, no review. `RouteGuard` will not catch it;
-      // it reads the same store as the sidebar.
-      //
-      // Grant these only in the release that ships the endpoints. Contract:
-      // `docs/CREDIT_SCORING_BACKEND_HANDOFF.md`.
-      "credit_scoring:view",
-      "credit_scoring:override",
-      // `:settings`, not `:configure` — the design spec originally said
-      // `configure` (since corrected, but older copies were not). A backend
-      // seeded from that wording creates a permission nothing here reads.
-      "credit_scoring:settings",
+      "branches:view_all",
+      "dashboard:view",
+      "reports:view",
+      "reports:export",
+      "loans:view",
+      "payments:view",
+      "loan_adjustments:view",
+      "share_capital:view",
+      "gcash:view",
+      "fees:view",
+    ],
+  },
+  // Mirrors `RoleAndPermissionSeeder::COMPLIANCE_OFFICER_PERMISSIONS` exactly
+  // (Phase 6, X0; AMLA analysis §4.12). Every AMLA permission and every
+  // branch, with read-only lending, savings and GCash, so alerts and cases can
+  // be traced to their records. No `audit_logs:view` or `reports:export`.
+  compliance_officer: {
+    label: "Compliance Officer",
+    description:
+      "Anti-money laundering compliance: alerts, cases, due diligence, screening, sanctions, covered and suspicious transaction reports and the AMLA log, with read-only lending, savings and GCash in every branch. Assigned by the owner.",
+    permissions: [
+      ...AMLA_PERMISSIONS,
+      "branches:view_all",
+      "borrowers:view",
+      "reports:view",
+      "dashboard:view",
+      "loans:view",
+      "loan_adjustments:view",
+      "payments:view",
+      "collaterals:view",
+      "fees:view",
+      "share_capital:view",
+      "auto_pay:view",
+      "savings:view",
+      "gcash:view",
     ],
   },
   loan_officer: {
     label: "Loan Officer",
-    description: "Manage loans and borrowers",
+    description: "Manage loans and members",
     permissions: [
       "dashboard:view",
       "borrowers:view",
@@ -127,22 +333,11 @@ export const ROLES: Record<Role, RoleConfig> = {
       "collaterals:view",
       "collaterals:create",
       "collaterals:update",
-      // Credit Scoring — DOCUMENTED ONLY. Do NOT grant these server-side yet;
-      // the eleven endpoints behind the module do not exist. See the fuller
-      // note on `admin` above. Granting `credit_scoring:view` here reveals five
-      // dead menu items to every loan officer (the two `:settings` screens stay
-      // hidden without `credit_scoring:settings`).
-      //
-      // `:override` gates the Record Decision action on the borrower profile,
-      // not a page of its own — it posts to `POST /credit-scoring/decisions`,
-      // which is also unbuilt.
-      "credit_scoring:view",
-      "credit_scoring:override",
     ],
   },
   cashier: {
     label: "Cashier",
-    description: "Record payments and view borrowers",
+    description: "Record payments and view members",
     permissions: [
       "dashboard:view",
       "borrowers:view",
@@ -240,11 +435,6 @@ export const ROLES: Record<Role, RoleConfig> = {
       "journals:view",
       "expenses:view",
       "cash_accounts:view",
-      // Credit Scoring — DOCUMENTED ONLY. Do NOT grant this server-side yet;
-      // the eleven endpoints behind the module do not exist. See the fuller
-      // note on `admin` above. Granting it here reveals five dead menu items to
-      // every branch manager.
-      "credit_scoring:view",
     ],
   },
   bod1: {
@@ -259,6 +449,9 @@ export const ROLES: Record<Role, RoleConfig> = {
       "reports:view",
       "share_capital:view",
       "collaterals:view",
+      // The Chairman/Chairwoman edits a loan while it waits at their approval
+      // step. Seeded for this role alone (RoleAndPermissionSeeder::CHAIR_ROLE).
+      "loans:edit_in_approval",
     ],
   },
   bod2: {
@@ -347,8 +540,14 @@ export const ROLES: Record<Role, RoleConfig> = {
   },
 };
 
-export const ROLE_OPTIONS = Object.entries(ROLES).map(([value, config]) => ({
-  value: value as Role,
-  label: config.label,
-  description: config.description,
-}));
+/**
+ * The roles a picker may offer: every catalog role but `super_admin`, which is
+ * reserved for the platform team and never assigned from the app.
+ */
+export const ROLE_OPTIONS = Object.entries(ROLES)
+  .filter(([value]) => value !== "super_admin")
+  .map(([value, config]) => ({
+    value: value as Role,
+    label: config.label,
+    description: config.description,
+  }));

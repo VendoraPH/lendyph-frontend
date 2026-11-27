@@ -1,6 +1,10 @@
 "use client";
 
+import { useId } from "react";
 import { useBranches } from "@/hooks";
+import { shownBranchValue } from "@/lib/branch-filter";
+import { branchFilterItems, branchPicker } from "@/lib/user-branches";
+import { useAuthStore } from "@/store";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -20,19 +24,35 @@ interface BranchFilterProps {
 }
 
 export function BranchFilter({ value, onChange }: BranchFilterProps) {
-  const { branches } = useBranches();
+  const id = useId();
+  const { branches, loading } = useBranches();
+  // Without `branches:view_all` the API answers 403 to a `branch_id` outside
+  // the caller's branches, so only theirs are offered, and "all" means all of
+  // theirs. `items` and the rendered options read the same viewer.
+  const caller = useAuthStore((s) => s.user);
+  const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
+  const picker = branchPicker(branches, caller, viewAll);
+  const items = branchFilterItems(branches, ALL_BRANCHES, picker.viewer);
+  // A preset branch the list hasn't brought yet reads "Loading branches…", never its id.
+  const shown = shownBranchValue(value, items, loading);
 
   return (
-    <div className="space-y-1.5">
-      <Label className="text-xs text-muted-foreground">Branch</Label>
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor={id} className="text-xs text-muted-foreground">
+        Branch
+      </Label>
       {/* This Select hands back `string | null`; there is no null option here. */}
-      <Select value={value} onValueChange={(v) => onChange(v ?? ALL_BRANCHES)}>
-        <SelectTrigger className="w-[180px]">
-          <SelectValue />
+      <Select
+        value={shown.value}
+        onValueChange={(v) => onChange(v ?? ALL_BRANCHES)}
+        items={items}
+      >
+        <SelectTrigger id={id} className="w-[180px]">
+          <SelectValue placeholder={shown.placeholder} />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={ALL_BRANCHES}>All branches</SelectItem>
-          {branches.map((branch) => (
+          <SelectItem value={ALL_BRANCHES}>{picker.allLabel}</SelectItem>
+          {picker.branches.map((branch) => (
             <SelectItem key={branch.id} value={String(branch.id)}>
               {branch.name}
             </SelectItem>
@@ -51,7 +71,7 @@ interface DateFilterProps {
 
 export function DateFilter({ label, value, onChange }: DateFilterProps) {
   return (
-    <div className="space-y-1.5">
+    <div className="flex flex-col gap-1.5">
       <Label className="text-xs text-muted-foreground">{label}</Label>
       <Input
         type="date"
@@ -70,7 +90,7 @@ export function branchParam(value: string): number | undefined {
 
 export function FilterBar({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-card p-4">
+    <div className="flex shrink-0 flex-wrap items-end gap-3 rounded-lg border bg-card p-4 fit:p-3">
       {children}
     </div>
   );

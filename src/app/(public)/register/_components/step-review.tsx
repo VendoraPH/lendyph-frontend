@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { CIVIL_STATUS_OPTIONS, SUFFIX_OPTIONS, VALID_ID_OPTIONS } from "@/constants";
+import { formatCurrency } from "@/lib/format";
 import type { StepOneData } from "./step-personal";
 import type { StepTwoData } from "./step-contact";
 import type { StepSpouseData } from "./step-spouse";
@@ -221,13 +222,13 @@ export function StepReview({
             label="Monthly Income"
             value={
               employment.monthly_income
-                ? `₱${Number(employment.monthly_income).toLocaleString()}`
+                ? formatCurrency(employment.monthly_income)
                 : ""
             }
           />
           <Row
             label="Pledge Amount"
-            value={`₱${(Number(employment.pledge_amount) || 0).toLocaleString()}`}
+            value={formatCurrency(employment.pledge_amount)}
           />
         </div>
       </div>

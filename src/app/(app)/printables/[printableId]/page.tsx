@@ -1,34 +1,33 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMenuVisibility } from "@/hooks/use-menu-visibility";
+import { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { RouteGuard } from "@/components/common";
+import { usePermission } from "@/hooks";
 // Deep import, not the barrel: re-exporting this one costs every page that
 // imports `@/components/common` ~52 kB it cannot use. See the note in the barrel.
 import { SubjectPicker } from "@/components/common/subject-picker";
 import { LoanSubjectPicker } from "./_components/loan-subject-picker";
+import { SavingsSubjectPicker } from "./_components/savings-subject-picker";
+import { fetchReceiptPage, type ReceiptOption } from "./_lib/receipt-search";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-} from "@/components/ui/combobox";
+import { SearchPicker } from "@/components/common/search-picker";
+import { searchEmptyMessage, searchStatus, useSearchPage } from "@/hooks/use-search-page";
 import { cn } from "@/lib/utils";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { printableIcon3D } from "@/lib/printables/icons-3d";
+import { Icon3D } from "@/components/common/icon-3d";
 import { ArrowLeft, ChevronRight, FileStack, Loader2, Printer } from "lucide-react";
 import { repaymentService } from "@/services";
-import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
-import { PRINTABLE_CATALOG, findPrintable } from "@/lib/printables/catalog";
+import { PrintableRefusedError, visiblePrintables } from "@/lib/printables/catalog";
 import { SUBJECT_ACCENT, SUBJECT_META } from "@/lib/printables/types";
 import { applyPrintChrome, resolvePrintableOrg } from "@/lib/printables/print-chrome";
 import { openPrintable } from "@/lib/printables/print-open";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 
 /**
  * Pick a subject, open the document. There is no on-screen preview on purpose —
@@ -40,7 +39,12 @@ export default function PrintableDetailPage() {
   const params = useParams();
   const router = useRouter();
   const printableId = params?.printableId as string | undefined;
-  const printable = useMemo(() => findPrintable(printableId), [printableId]);
+  const { can } = usePermission();
+  // A document this deployment or user can't open answers "not found", the
+  // same as an unknown id, so its data is never requested.
+  const { isHidden } = useMenuVisibility();
+  const catalog = visiblePrintables(can, isHidden);
+  const printable = catalog.find((p) => p.id === printableId);
 
   const [subjectId, setSubjectId] = useState<number | null>(null);
   // Only the loan picker uses this — it selects the member first — but it is
@@ -70,7 +74,6 @@ export default function PrintableDetailPage() {
     );
   }
 
-  const Icon = printable.icon;
   const accent = SUBJECT_ACCENT[printable.subject];
   const subjectLabel = SUBJECT_META[printable.subject].label;
   async function handleOpen() {
@@ -103,8 +106,13 @@ export default function PrintableDetailPage() {
           toast.error("This browser can't open the document for printing.");
           break;
       }
-    } catch {
-      toast.error("We couldn't prepare the document. Please try again.");
+    } catch (err) {
+      // A record the server refused (a 422) says why; anything else broke the open.
+      toast.error(
+        err instanceof PrintableRefusedError
+          ? err.message
+          : "We couldn't prepare the document. Please try again."
+      );
     } finally {
       setOpening(false);
     }
@@ -112,9 +120,9 @@ export default function PrintableDetailPage() {
 
   return (
     <RouteGuard permission="reports:view" pageName="Documents">
-      <div className="space-y-6">
+      <PageFill>
         {/* Breadcrumb */}
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
           <Link href="/printables" className="hover:text-foreground transition-colors">
             Documents
           </Link>
@@ -123,7 +131,7 @@ export default function PrintableDetailPage() {
         </div>
 
         {/* Header */}
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex shrink-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex items-start gap-4 min-w-0">
             <div
               className={cn(
@@ -132,7 +140,7 @@ export default function PrintableDetailPage() {
                 accent.ring
               )}
             >
-              <Icon className={cn("h-6 w-6", accent.text)} />
+              <Icon3D name={printableIcon3D(printable.icon)} size={36} />
             </div>
             <div className="min-w-0">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -172,46 +180,57 @@ export default function PrintableDetailPage() {
           </div>
         </div>
 
-        {/* Subject picker */}
-        <Card>
-          <CardContent className="p-4 sm:p-5">
-            {printable.subject === "loan" ? (
-              // Two steps, not one: the member by name, then their loan off a
-              // table. See `LoanSubjectPicker`.
-              <LoanSubjectPicker
-                borrowerId={borrowerId}
-                onBorrowerChange={setBorrowerId}
-                value={subjectId}
-                onChange={setSubjectId}
-              />
-            ) : (
-              <div className="flex flex-wrap items-end gap-4">
-                {printable.subject === "repayment" ? (
-                  <RepaymentPicker value={subjectId} onChange={setSubjectId} />
-                ) : (
-                  <SubjectPicker
-                    subject={printable.subject}
-                    value={subjectId}
-                    onChange={setSubjectId}
-                  />
-                )}
+        <ScrollBox className="space-y-6 p-px">
+          {/* Subject picker */}
+          <Card>
+            <CardContent className="p-4 sm:p-5">
+              {printable.subject === "loan" ? (
+                // Two steps, not one: the member by name, then their loan off a
+                // table. See `LoanSubjectPicker`.
+                <LoanSubjectPicker
+                  borrowerId={borrowerId}
+                  onBorrowerChange={setBorrowerId}
+                  value={subjectId}
+                  onChange={setSubjectId}
+                />
+              ) : (
+                <div className="flex flex-wrap items-end gap-4">
+                  {printable.subject === "repayment" ? (
+                    <RepaymentPicker value={subjectId} onChange={setSubjectId} />
+                  ) : printable.subject === "savings_account" ||
+                    printable.subject === "savings_withdrawal" ||
+                    printable.subject === "time_deposit" ? (
+                    <SavingsSubjectPicker
+                      key={printable.subject}
+                      subject={printable.subject}
+                      value={subjectId}
+                      onChange={setSubjectId}
+                    />
+                  ) : (
+                    <SubjectPicker
+                      subject={printable.subject}
+                      value={subjectId}
+                      onChange={setSubjectId}
+                    />
+                  )}
 
-                {!subjectId && (
-                  <p className="text-xs text-muted-foreground pb-2">
-                    Select a {subjectLabel.toLowerCase()} to open this document.
-                  </p>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  {!subjectId && (
+                    <p className="text-xs text-muted-foreground pb-2">
+                      Select a {subjectLabel.toLowerCase()} to open this document.
+                    </p>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-        {/* The loan table is the guidance once a member is chosen — repeating
-            "choose a loan above" under it would only push it off the fold. */}
-        {!(printable.subject === "loan" && borrowerId) && (
-          <EmptyState title={printable.title} subjectLabel={subjectLabel} />
-        )}
-      </div>
+          {/* The loan table is the guidance once a member is chosen — repeating
+              "choose a loan above" under it would only push it off the fold. */}
+          {!(printable.subject === "loan" && borrowerId) && (
+            <EmptyState title={printable.title} subjectLabel={subjectLabel} count={catalog.length} />
+          )}
+        </ScrollBox>
+      </PageFill>
     </RouteGuard>
   );
 }
@@ -224,23 +243,13 @@ export default function PrintableDetailPage() {
 // widening its union would make every caller handle a case it cannot produce.
 // ---------------------------------------------------------------------------
 
-interface RepaymentOption {
-  id: number;
-  label: string;
-  hint?: string;
-}
+const fetchReceipts = (query: string) => fetchReceiptPage(repaymentService.listPage, query);
 
-/** The fields `RepaymentResource` sends that the `Repayment` type omits. */
-interface RepaymentListRow {
-  id: number;
-  receipt_number?: string;
-  borrower_name?: string;
-  loan_account_number?: string;
-  amount_paid?: number;
-  payment_date?: string;
-  status?: string;
-}
-
+/**
+ * Searches the server as you type, 25 rows at a time. The chosen receipt stays
+ * shown whatever the search has moved on to. Payments need `payments:view`,
+ * which the documents screen does not; without it the picker is locked.
+ */
 function RepaymentPicker({
   value,
   onChange,
@@ -248,117 +257,46 @@ function RepaymentPicker({
   value: number | null;
   onChange: (id: number | null) => void;
 }) {
-  const [options, setOptions] = useState<RepaymentOption[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  // Set only when the drain gave up with pages outstanding, so this picker is
-  // knowingly missing payments. Null means complete.
-  const [shortfall, setShortfall] = useState<{
-    shown: number;
-    total: number | null;
-  } | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    repaymentService
-      // Drained across pages, filtered in the browser — the same trade-off
-      // `SubjectPicker` makes, and the same reason: no debounce, no request per
-      // keystroke. It asked for `per_page: 200`, which the server clamps to
-      // 100 in silence.
-      //
-      // The clamp was the smaller of the two bugs here. `listAll` was an
-      // `api.get`, which unwraps the paginator to a bare array, so `res?.data`
-      // was `undefined` on EVERY response and this picker rendered "No payment
-      // found." with a full book of payments behind it. Identical to the bug
-      // `SubjectPicker` documents having had, in the file next door.
-      .listAll()
-      .then(({ rows: repayments, truncated, total }) => {
-        if (cancelled) return;
-        const rows = repayments as unknown as RepaymentListRow[];
-        setShortfall(truncated ? { shown: rows.length, total } : null);
-        setOptions(
-          rows.map((row) => ({
-            id: row.id,
-            label: row.receipt_number ?? `Payment #${row.id}`,
-            hint: [
-              row.borrower_name,
-              row.amount_paid !== undefined ? formatCurrency(row.amount_paid) : null,
-              row.payment_date ? formatDate(row.payment_date) : null,
-              // A voided payment is still printable — as a VOID receipt — so
-              // it stays in the list, but it is labelled before it is chosen.
-              row.status === "voided" ? "VOID" : null,
-            ]
-              .filter(Boolean)
-              .join(" · "),
-          }))
-        );
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setError("Unable to load payments.");
-          setShortfall(null);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const selected = useMemo(
-    () => options.find((o) => o.id === value) ?? null,
-    [options, value]
-  );
+  const canListPayments = usePermission().can("payments:view");
+  const [everOpened, setEverOpened] = useState(false);
+  const [chosen, setChosen] = useState<ReceiptOption | null>(null);
+  const { query, setQuery, reset, rows, view } = useSearchPage({
+    enabled: canListPayments && everOpened,
+    fetchPage: fetchReceipts,
+  });
+  const selected = chosen?.id === value ? chosen : null;
 
   return (
     <div className="space-y-1">
       <Label className="text-xs">Payment</Label>
-      <Combobox
-        items={options}
-        value={selected}
-        onValueChange={(item: RepaymentOption | null) => onChange(item?.id ?? null)}
-        itemToStringLabel={(item: RepaymentOption) => item.label}
-      >
-        <ComboboxInput
-          placeholder={
-            loading
-              ? "Loading payments…"
-              : (error ?? SUBJECT_META.repayment.placeholder)
-          }
-          disabled={loading || !!error}
-          showClear
-          className="h-9 w-72"
-        />
-        <ComboboxContent>
-          <ComboboxEmpty>No payment found.</ComboboxEmpty>
-          <ComboboxList>
-            {(item: RepaymentOption) => (
-              <ComboboxItem key={item.id} value={item}>
-                <div className="flex flex-col min-w-0">
-                  <span className="truncate">{item.label}</span>
-                  {item.hint && (
-                    <span className="text-xs text-muted-foreground truncate">
-                      {item.hint}
-                    </span>
-                  )}
-                </div>
-              </ComboboxItem>
+      <SearchPicker
+        valueLabel={selected?.label ?? null}
+        selectedId={selected?.id ?? null}
+        placeholder={SUBJECT_META.repayment.placeholder}
+        searchPlaceholder="Search receipt, member or loan account..."
+        disabled={!canListPayments}
+        search={{ query, setQuery, reset }}
+        rows={rows}
+        renderRow={(item) => (
+          <div className="flex flex-col min-w-0">
+            <span className="truncate">{item.label}</span>
+            {item.hint && (
+              <span className="text-xs text-muted-foreground truncate">{item.hint}</span>
             )}
-          </ComboboxList>
-        </ComboboxContent>
-      </Combobox>
-      {shortfall && (
-        <IncompleteListNotice
-          shown={shortfall.shown}
-          total={shortfall.total}
-          noun="payments"
-          consequence="A payment missing from this list cannot be selected, so its receipt cannot be printed from here."
-          className="mt-2"
-        />
-      )}
+          </div>
+        )}
+        pending={view.pending}
+        status={searchStatus(view, { plural: "payments", firstHint: "a receipt number" })}
+        emptyMessage={searchEmptyMessage(view, "payment")}
+        onPick={(item) => {
+          const next = item.id === selected?.id ? null : item;
+          setChosen(next);
+          onChange(next?.id ?? null);
+        }}
+        onOpen={() => setEverOpened(true)}
+        aria-label="Payment"
+        className="w-72"
+      />
     </div>
   );
 }
@@ -366,9 +304,11 @@ function RepaymentPicker({
 function EmptyState({
   title,
   subjectLabel,
+  count,
 }: {
   title: string;
   subjectLabel: string;
+  count: number;
 }) {
   return (
     <div className="rounded-xl border border-dashed bg-muted/20 py-16 px-6">
@@ -384,7 +324,7 @@ function EmptyState({
           and its own print button.
         </p>
         <p className="text-xs text-muted-foreground/80">
-          {PRINTABLE_CATALOG.length} documents are available from the catalog.
+          {count} documents are available from the catalog.
         </p>
       </div>
     </div>

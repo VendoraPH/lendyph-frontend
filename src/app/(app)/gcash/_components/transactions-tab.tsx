@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState, type SyntheticEvent } from "react";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import {
@@ -21,9 +21,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { usePermission } from "@/hooks";
+import { useBranchChoiceSource } from "@/hooks/use-branch-choice-source";
+import { pickableBranches } from "@/lib/branch-choice";
 import { gcashService } from "@/services/gcash.service";
 import { extractGCashErrorMessage } from "@/lib/gcash-errors";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCurrencyExact, formatDate } from "@/lib/format";
 import type {
   GCashListFilters,
   GCashTransaction,
@@ -32,9 +35,20 @@ import type {
 } from "@/types";
 import { PaidButton } from "./paid-button";
 import { PartyCell } from "./party-cell";
+import { TransactionsReportActions } from "./transactions-report-actions";
+import { DATE_RANGE_REVERSED, dateRangeReady, dateRangeReversed, type PartialDates } from "../_lib/date-range";
+import { gcashCanMarkPaid } from "../_lib/row-actions";
+import { gcashRowBranchLabel } from "../_lib/walk-in-branch";
+import { DataState } from "@/components/common/data-state";
+import { ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 
+// Passed to <Select items>: Base UI resolves the trigger label from `items`,
+// not from the mounted <SelectItem> children — without it the trigger shows
+// the raw value ("all").
 const TYPE_OPTIONS: { value: GCashTransactionType | "all"; label: string }[] = [
-  { value: "all", label: "All Types" },
+  { value: "all", label: "All" },
   { value: "cash_in", label: "Cash In" },
   { value: "cash_out", label: "Cash Out" },
 ];
@@ -42,7 +56,7 @@ const STATUS_OPTIONS: {
   value: GCashTransactionStatus | "all";
   label: string;
 }[] = [
-  { value: "all", label: "All Status" },
+  { value: "all", label: "All" },
   { value: "pending", label: "Pending" },
   { value: "paid", label: "Paid" },
   { value: "completed", label: "Completed" },
@@ -55,6 +69,9 @@ function statusBadge(s: GCashTransactionStatus) {
 }
 
 export function TransactionsTab() {
+  const { can } = usePermission();
+  // Names for the rows' `branch_id`: every branch with view_all, else the caller's own.
+  const branches = pickableBranches(useBranchChoiceSource());
   const [filters, setFilters] = useState<{
     type: GCashTransactionType | "all";
     status: GCashTransactionStatus | "all";
@@ -72,9 +89,48 @@ export function TransactionsTab() {
   const [loading, setLoading] = useState(true);
   const [reloadToken, setReloadToken] = useState(0);
 
+  const branchOf = useCallback((row: GCashTransaction) => gcashRowBranchLabel(row, branches), [branches]);
+  const reportFilters = useMemo(
+    () => ({ from: filters.start_date, to: filters.end_date, type: filters.type, status: filters.status }),
+    [filters],
+  );
   const refresh = useCallback(() => setReloadToken((n) => n + 1), []);
+  // Whether the empty list is down to the filters (a "no results" picture) or there is nothing yet.
+  const filtersActive =
+    filters.type !== "all" || filters.status !== "all" || filters.start_date !== "" || filters.end_date !== "";
+  // Date inputs typed only in part (month and day, no year): the browser reports "" for them.
+  const [partialDates, setPartialDates] = useState<PartialDates>({});
+  const dateFromId = useId();
+  const dateToId = useId();
+  // A date still being typed (year 0002, 0020, 0202, or no year yet) waits: no request, and the last rows stay.
+  const rangeReady = dateRangeReady(filters.start_date, filters.end_date, partialDates);
+  // Only a typed date reverses the range (the pickers bound each other), and the API answers it with a 422.
+  const rangeReversed = rangeReady && dateRangeReversed(filters.start_date, filters.end_date);
+
+  /** Reads whether a date input holds a part-typed date, on every keystroke and on leaving it. */
+  function notePartial(end: keyof PartialDates) {
+    return (e: SyntheticEvent<HTMLInputElement>) => {
+      const partial = e.currentTarget.validity.badInput;
+      setPartialDates((p) => (Boolean(p[end]) === partial ? p : { ...p, [end]: partial }));
+    };
+  }
+
+  /** A new Date From or Date To. A reversed range asks nothing and shows none of the last filters' rows. */
+  function setDates(dates: Partial<Pick<typeof filters, "start_date" | "end_date">>) {
+    const next = { ...filters, ...dates };
+    setFilters(next);
+    if (
+      dateRangeReady(next.start_date, next.end_date, partialDates) &&
+      dateRangeReversed(next.start_date, next.end_date)
+    ) {
+      setRows([]);
+      setTotalPages(1);
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
+    if (!rangeReady || rangeReversed) return;
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -98,11 +154,11 @@ export function TransactionsTab() {
     return () => {
       cancelled = true;
     };
-  }, [filters, page, reloadToken]);
+  }, [filters, page, reloadToken, rangeReady, rangeReversed]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-2 items-end">
+    <div className={cn("gap-4", FIT_CLASSES.section)}>
+      <div className="flex shrink-0 flex-wrap gap-2 items-end">
         <div className="space-y-1">
           <label className="text-xs text-muted-foreground">Type</label>
           <Select
@@ -113,6 +169,7 @@ export function TransactionsTab() {
                 type: v as GCashTransactionType | "all",
               }))
             }
+            items={TYPE_OPTIONS}
           >
             <SelectTrigger className="w-[140px]">
               <SelectValue />
@@ -137,6 +194,7 @@ export function TransactionsTab() {
                 status: v as GCashTransactionStatus | "all",
               }))
             }
+            items={STATUS_OPTIONS}
           >
             <SelectTrigger className="w-[140px]">
               <SelectValue />
@@ -152,104 +210,138 @@ export function TransactionsTab() {
         </div>
 
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">From</label>
+          <label htmlFor={dateFromId} className="text-xs text-muted-foreground">
+            Date From
+          </label>
           <Input
+            id={dateFromId}
             type="date"
             value={filters.start_date}
-            onChange={(e) =>
-              setFilters((p) => ({ ...p, start_date: e.target.value }))
-            }
+            max={filters.end_date || undefined}
+            onInput={notePartial("from")}
+            onKeyUp={notePartial("from")}
+            onBlur={notePartial("from")}
+            onChange={(e) => {
+              notePartial("from")(e);
+              setDates({ start_date: e.target.value });
+            }}
           />
         </div>
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">To</label>
+          <label htmlFor={dateToId} className="text-xs text-muted-foreground">
+            Date To
+          </label>
           <Input
+            id={dateToId}
             type="date"
             value={filters.end_date}
-            onChange={(e) =>
-              setFilters((p) => ({ ...p, end_date: e.target.value }))
-            }
+            min={filters.start_date || undefined}
+            aria-invalid={rangeReversed || undefined}
+            aria-describedby={rangeReversed ? "gcash-date-range-error" : undefined}
+            onInput={notePartial("to")}
+            onKeyUp={notePartial("to")}
+            onBlur={notePartial("to")}
+            onChange={(e) => {
+              notePartial("to")(e);
+              setDates({ end_date: e.target.value });
+            }}
           />
         </div>
 
         <Button variant="ghost" onClick={refresh}>
           Refresh
         </Button>
+
+        <div className="ml-auto">
+          <TransactionsReportActions filters={reportFilters} partialDates={partialDates} branchOf={branchOf} />
+        </div>
       </div>
 
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead>Reference</TableHead>
-              <TableHead>Customer</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead className="text-right">Amount</TableHead>
-              <TableHead className="text-right">Charge</TableHead>
-              <TableHead className="text-right">Total</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Transactor</TableHead>
-              <TableHead></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
+      {rangeReversed && (
+        <p id="gcash-date-range-error" role="alert" className="shrink-0 text-sm text-destructive">
+          {DATE_RANGE_REVERSED}
+        </p>
+      )}
+
+      {!loading && rows.length === 0 ? (
+        <DataState
+          resource={{ data: rows, loading: false, unavailable: false, error: null, refetch: refresh }}
+          endpoints={["GET /gcash/transactions"]}
+          summary="GCash Cash In and Cash Out transactions."
+          isEmpty={(list) => list.length === 0}
+          emptyMessage="No transactions found."
+          emptyIllustration={filtersActive ? "noResults" : "emptyWallet"}
+        >
+          {() => null}
+        </DataState>
+      ) : (
+        <ScrollBox className="rounded-md border">
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={10} className="text-center py-8">
-                  <Loader2 className="inline h-5 w-5 animate-spin" />
-                </TableCell>
+                <TableHead>Date</TableHead>
+                <TableHead>Reference</TableHead>
+                <TableHead>Customer</TableHead>
+                <TableHead>Branch</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
+                <TableHead className="text-right">Charge</TableHead>
+                <TableHead className="text-right">Total</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Transactor</TableHead>
+                <TableHead></TableHead>
               </TableRow>
-            ) : rows.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={10}
-                  className="text-center text-muted-foreground py-8"
-                >
-                  No transactions found.
-                </TableCell>
-              </TableRow>
-            ) : (
-              rows.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell>{formatDate(r.transaction_date)}</TableCell>
-                  <TableCell className="font-mono text-xs">
-                    {r.reference_no}
-                  </TableCell>
-                  <TableCell>
-                    <PartyCell borrower={r.borrower} nonMember={r.non_member} />
-                  </TableCell>
-                  <TableCell>
-                    {r.type === "cash_in" ? "Cash In" : "Cash Out"}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {formatCurrency(r.amount)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {formatCurrency(r.charge_amount)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {formatCurrency(r.total_amount)}
-                  </TableCell>
-                  <TableCell>{statusBadge(r.status)}</TableCell>
-                  <TableCell>{r.transactor_user?.full_name ?? "—"}</TableCell>
-                  <TableCell className="text-right">
-                    {r.type === "cash_in" && r.status === "pending" && (
-                      <PaidButton
-                        transactionId={r.id}
-                        referenceNo={r.reference_no}
-                        onPaid={refresh}
-                      />
-                    )}
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={11} className="text-center py-8">
+                    <Loader2 className="inline h-5 w-5 animate-spin" />
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+              ) : (
+                rows.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell>{formatDate(r.transaction_date)}</TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {r.reference_no}
+                    </TableCell>
+                    <TableCell>
+                      <PartyCell borrower={r.borrower} nonMember={r.non_member} />
+                    </TableCell>
+                    <TableCell>{gcashRowBranchLabel(r, branches)}</TableCell>
+                    <TableCell>
+                      {r.type === "cash_in" ? "Cash In" : "Cash Out"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatCurrencyExact(r.amount)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatCurrencyExact(r.charge_amount)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatCurrencyExact(r.total_amount)}
+                    </TableCell>
+                    <TableCell>{statusBadge(r.status)}</TableCell>
+                    <TableCell>{r.transactor_user?.full_name ?? "—"}</TableCell>
+                    <TableCell className="text-right">
+                      {gcashCanMarkPaid(can, r) && (
+                        <PaidButton
+                          transactionId={r.id}
+                          referenceNo={r.reference_no}
+                          onPaid={refresh}
+                        />
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </ScrollBox>
+      )}
 
-      <div className="flex justify-end gap-2 items-center text-sm">
+      <div data-fab-clear className="flex shrink-0 justify-end gap-2 items-center text-sm">
         <span className="text-muted-foreground">
           Page {page} of {totalPages}
         </span>

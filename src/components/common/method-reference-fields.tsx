@@ -1,0 +1,107 @@
+"use client";
+
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CASH_REFERENCE_PLACEHOLDER, type AutoReference } from "@/lib/cash-reference";
+import { referenceAfterMethodChange } from "@/lib/payment-reference";
+
+/**
+ * How money came in or went out, and its reference number: the pair every
+ * money screen asks for (release, extension, share capital entries,
+ * auto-credit). Changing the method clears a reference typed for the old one.
+ * Whether the reference is required, and what to say when it's missing, are
+ * the caller's (`paymentReferenceError`). With `autoReference` the server
+ * numbers the entry: the field is read-only and shows its preview.
+ */
+export function MethodReferenceFields<M extends string>({
+  idPrefix,
+  methodLabel = "Payment Method",
+  options,
+  method,
+  reference,
+  onChange,
+  referenceRequired,
+  problem,
+  autoReference = null,
+  disabled = false,
+  className = "grid gap-3 sm:grid-cols-2",
+}: {
+  idPrefix: string;
+  methodLabel?: string;
+  options: readonly { value: M; label: string }[];
+  method: M;
+  reference: string;
+  onChange: (next: { method: M; reference: string }) => void;
+  referenceRequired: boolean;
+  problem: string | null;
+  autoReference?: AutoReference | null;
+  disabled?: boolean;
+  className?: string;
+}) {
+  const labelOf = (value: unknown) => options.find((o) => o.value === value)?.label ?? "";
+  const hintId = `${idPrefix}-reference-hint`;
+  const hint = autoReference?.hint ?? problem;
+  return (
+    <div className={className}>
+      {/* Columns with a gap, not space-y: the select puts a hidden input after
+          its trigger, which would take the spacing and leave the method 6 px
+          taller than the fields beside it. */}
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <Label id={`${idPrefix}-method-label`}>
+          {methodLabel} <span className="text-red-500">*</span>
+        </Label>
+        <Select
+          value={method}
+          disabled={disabled}
+          onValueChange={(value) => {
+            const next = options.find((o) => o.value === value)?.value ?? method;
+            onChange({ method: next, reference: referenceAfterMethodChange(method, next, reference) });
+          }}
+        >
+          <SelectTrigger className="w-full" aria-labelledby={`${idPrefix}-method-label`}>
+            <SelectValue>{(value: M) => labelOf(value)}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {options.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <Label htmlFor={`${idPrefix}-reference`}>
+          Reference Number
+          {referenceRequired && <span className="text-red-500"> *</span>}
+        </Label>
+        <Input
+          id={`${idPrefix}-reference`}
+          placeholder={
+            autoReference !== null
+              ? CASH_REFERENCE_PLACEHOLDER
+              : referenceRequired
+                ? "Required for this method"
+                : "Optional"
+          }
+          maxLength={100}
+          value={autoReference?.value ?? reference}
+          disabled={disabled}
+          readOnly={autoReference !== null}
+          onChange={(e) => onChange({ method, reference: e.target.value })}
+          required={autoReference === null && referenceRequired}
+          aria-describedby={hint !== null ? hintId : undefined}
+          className={autoReference !== null ? "w-full bg-muted font-mono text-muted-foreground" : "w-full"}
+        />
+        {/* Wraps even inside a table cell (TableCell is whitespace-nowrap), as on
+            Pledge Entry's expanded row. */}
+        {hint !== null && (
+          <p id={hintId} className="text-xs whitespace-normal text-muted-foreground">
+            {hint}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}

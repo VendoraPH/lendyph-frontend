@@ -1,17 +1,23 @@
 import { api } from "@/lib/api-client";
+import axiosClient from "@/lib/axios-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
+import { cashReferenceParams } from "@/lib/cash-reference";
 import { fetchAllPages, type DrainResult } from "@/lib/paginate";
 import type {
   ShareCapitalLedgerEntry,
+  ShareCapitalMemberPeriod,
+  ShareCapitalMembersResponse,
   Pledge,
   AutoCreditStatus,
   AutoCreditProcessResult,
+  CashReferencePreview,
   CreateLedgerEntryData,
   UpdatePledgeData,
   CreatePledgeEntryData,
   BulkPledgeEntryData,
   PaginatedResponse,
 } from "@/types";
+import type { AutoCreditProcessData } from "@/types/share-capital";
 
 export const shareCapitalService = {
   // ── Ledger ──
@@ -52,38 +58,37 @@ export const shareCapitalService = {
     ),
 
   /**
-   * Every ledger entry matching `params`, across as many pages as it takes.
-   *
-   * For the screens that need a WHOLE ledger rather than a page of it, which
-   * here is most of them: every share-capital figure in this app is an
-   * aggregate — a balance, a running balance, a member summary, a grand total —
-   * and an aggregate over a page is not a smaller version of the right answer,
-   * it is a different number.
-   *
-   * They asked for `per_page: 9999`, which the controller clamps to
-   * `min(per_page, 100)` without complaining. Reproduced against a stub with a
-   * 240-entry ledger: the balance came back ₱40,000 against a true ₱180,000.
-   * A second member with the same 100-row cap read ₱100,000 against a true
-   * ₱25,000 — TOO HIGH, because a clamped ledger drops debits as readily as
-   * credits. That is what makes this worse than the usual truncated list: the
-   * error has no direction, so "it will be low, so it will fail safe" is not
-   * available as a consolation.
-   *
-   * Returns a `DrainResult`, NOT a row array, on purpose — the same call
-   * `borrowerService.listAll` makes and for the same reason. `truncated` is
-   * part of the answer and the caller has to decide what to show for it;
-   * handing back a bare array would let a screen go back to summing an
-   * incomplete ledger as if it were the whole thing, which is the bug itself.
-   *
-   * `page` and `per_page` are set by the drain — passing them in `params` has
-   * no effect.
+   * One member's entries for the Subsidiary Ledger's detail view, drained, each
+   * with the server's `running_balance`, plus the server's period figures
+   * (`meta.summary`: opening balance, credits, debits, ending balance) for the
+   * same date range. The page adds nothing up itself.
    */
-  ledgerListAll: (
-    params?: Record<string, unknown>
-  ): Promise<DrainResult<ShareCapitalLedgerEntry>> =>
-    fetchAllPages<ShareCapitalLedgerEntry>(({ page, per_page }) =>
-      shareCapitalService.ledgerList({ ...params, page, per_page })
-    ),
+  memberLedger: async (
+    borrowerId: number,
+    range: { date_from?: string; date_to?: string } = {}
+  ): Promise<DrainResult<ShareCapitalLedgerEntry> & { summary: ShareCapitalMemberPeriod | null }> => {
+    let summary: ShareCapitalMemberPeriod | null = null;
+    const drained = await fetchAllPages<ShareCapitalLedgerEntry>(async ({ page, per_page }) => {
+      const res = await shareCapitalService.ledgerList({ ...range, borrower_id: borrowerId, page, per_page });
+      const meta = (res as { meta?: { summary?: ShareCapitalMemberPeriod } } | undefined)?.meta;
+      if (page === 1) summary = meta?.summary ?? null;
+      return res;
+    });
+    return { ...drained, summary };
+  },
+
+  /**
+   * `GET /share-capital/members`: one page of members with each one's credits,
+   * debits and balance over every entry, plus the book's totals. `getRaw`, so
+   * `meta` (paging and totals) survives. Params: `page`, `per_page` (≤ 100),
+   * `search`, `sort` (`name` | `balance`), `direction` (`asc` | `desc`).
+   */
+  members: (params?: Record<string, unknown>) =>
+    api.getRaw<ShareCapitalMembersResponse>(API_ENDPOINTS.SHARE_CAPITAL.MEMBERS, { params }),
+
+  /** The CSH number the next cash entry dated `date` (today when left out) would get. */
+  nextCashReference: (date?: string) =>
+    api.get<CashReferencePreview>(API_ENDPOINTS.SHARE_CAPITAL.NEXT_CASH_REFERENCE, { params: cashReferenceParams(date) }),
 
   ledgerCreate: (data: CreateLedgerEntryData) =>
     api.post<ShareCapitalLedgerEntry>(
@@ -118,8 +123,9 @@ export const shareCapitalService = {
    * total — it silently excludes members from a posting run, and the run looks
    * like it completed.
    *
-   * `DrainResult` rather than a row array, for the reason spelled out on
-   * `ledgerListAll` above.
+   * `DrainResult` rather than a row array, the same call
+   * `borrowerService.listAll` makes: `truncated` is part of the answer and the
+   * caller has to decide what to show for it.
    */
   pledgeListAll: (
     params?: Record<string, unknown>
@@ -131,8 +137,9 @@ export const shareCapitalService = {
   pledgeUpdate: (id: number, data: UpdatePledgeData) =>
     api.put<Pledge>(API_ENDPOINTS.PLEDGES.UPDATE(id), data),
 
-  pledgeToggleAutoCredit: (id: number) =>
-    api.patch<Pledge>(API_ENDPOINTS.PLEDGES.TOGGLE_AUTO_CREDIT(id)),
+  /** The whole answer, `{ message, auto_credit }`: it carries no `data`, so it isn't unwrapped. */
+  pledgeToggleAutoCredit: async (id: number): Promise<{ message?: string; auto_credit?: boolean }> =>
+    (await axiosClient.patch<{ message?: string; auto_credit?: boolean }>(API_ENDPOINTS.PLEDGES.TOGGLE_AUTO_CREDIT(id))).data,
 
   pledgeCreateEntry: (id: number, data: CreatePledgeEntryData) =>
     api.post<ShareCapitalLedgerEntry>(
@@ -140,17 +147,20 @@ export const shareCapitalService = {
       data
     ),
 
+  /** Each row's reference in the batch's order: its own CSH number for cash, the batch's one reference otherwise. */
   pledgeBulkEntries: (data: BulkPledgeEntryData) =>
-    api.post<{ processed_count: number }>(
+    api.post<{ processed_count: number; reference_numbers?: (string | null)[] }>(
       API_ENDPOINTS.PLEDGES.BULK_ENTRIES,
       data
     ),
 
   // ── Auto-Credit ──
 
-  autoCreditStatus: () =>
-    api.get<AutoCreditStatus>(API_ENDPOINTS.AUTO_CREDIT.STATUS),
+  /** The run's preview for one cycle (`?cycle_date=`); left out, the server's current cycle. */
+  autoCreditStatus: (cycleDate?: string) =>
+    api.get<AutoCreditStatus>(API_ENDPOINTS.AUTO_CREDIT.STATUS, cycleDate ? { params: { cycle_date: cycleDate } } : undefined),
 
-  autoCreditProcess: () =>
-    api.post<AutoCreditProcessResult>(API_ENDPOINTS.AUTO_CREDIT.PROCESS),
+  /** One journal per member credited for the cycle picked, through the settlement account picked (Bank by default). */
+  autoCreditProcess: (data: AutoCreditProcessData) =>
+    api.post<AutoCreditProcessResult>(API_ENDPOINTS.AUTO_CREDIT.PROCESS, data),
 };

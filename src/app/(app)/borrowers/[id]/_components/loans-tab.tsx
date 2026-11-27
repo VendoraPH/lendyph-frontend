@@ -7,18 +7,25 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { AlertTriangle, ChevronDown, ChevronRight, UserCheck, Loader2 } from "lucide-react";
-import type { CoMaker, Loan, LoanSchedule } from "@/types";
+import type { Loan, LoanSchedule } from "@/types";
 import {
   LOAN_STATUS_COLORS,
-  LOAN_STATUS_LABELS,
   PAYMENT_FREQUENCY_LABELS,
 } from "@/constants";
+import { loanDisplayStatus, loanRowStatusLabel } from "@/constants/loan-status";
 import { loanService } from "@/services";
-import { formatCurrency } from "@/lib/format";
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
+import { coMakerName } from "@/lib/co-maker-name";
+import { relationshipInWords } from "@/lib/co-maker-relationship";
+import { formatCurrency, formatDate } from "@/lib/format";
+import { rateWithPeriod, readTermUnit } from "@/lib/loan-terms";
+import { statusInWords } from "@/app/(app)/borrowers/_components/utils";
+import { loanNeedsCoMaker } from "../_lib/co-maker-recommendation";
+import { loanOutstandingCell } from "../_lib/loan-outstanding-cell";
+import { memberLoanNumber } from "../_lib/member-loan-number";
+import { scheduleToRead } from "../_lib/schedule-to-read";
+import { ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 
 const scheduleStatusColor: Record<string, string> = {
   paid: "bg-green-100 text-green-700 border-green-200",
@@ -29,7 +36,6 @@ const scheduleStatusColor: Record<string, string> = {
 
 interface LoansTabProps {
   loans: Loan[];
-  coMakers: CoMaker[];
 }
 
 function ScheduleTable({ schedule }: { schedule: LoanSchedule[] }) {
@@ -55,7 +61,7 @@ function ScheduleTable({ schedule }: { schedule: LoanSchedule[] }) {
               <TableCell className="text-sm text-right tabular-nums font-medium">{formatCurrency(s.amount_due)}</TableCell>
               <TableCell className="text-sm text-right tabular-nums">{formatCurrency(s.amount_paid)}</TableCell>
               <TableCell>
-                <Badge variant="outline" className={scheduleStatusColor[s.status]}>{s.status}</Badge>
+                <Badge variant="outline" className={scheduleStatusColor[s.status]}>{statusInWords(s.status)}</Badge>
               </TableCell>
             </TableRow>
           ))}
@@ -65,7 +71,7 @@ function ScheduleTable({ schedule }: { schedule: LoanSchedule[] }) {
   );
 }
 
-export function LoansTab({ loans, coMakers }: LoansTabProps) {
+export function LoansTab({ loans }: LoansTabProps) {
   const [expandedLoan, setExpandedLoan] = useState<number | null>(null);
   const [schedules, setSchedules] = useState<Record<number, LoanSchedule[]>>({});
   const [loadingSchedule, setLoadingSchedule] = useState<number | null>(null);
@@ -85,10 +91,11 @@ export function LoansTab({ loans, coMakers }: LoansTabProps) {
   }, [schedules]);
 
   useEffect(() => {
-    if (expandedLoan && !schedules[expandedLoan]) {
-      fetchSchedule(expandedLoan);
+    const loanId = scheduleToRead(loans, expandedLoan, schedules);
+    if (loanId !== null) {
+      fetchSchedule(loanId);
     }
-  }, [expandedLoan, schedules, fetchSchedule]);
+  }, [loans, expandedLoan, schedules, fetchSchedule]);
 
   const sortedLoans = [...loans].sort((a, b) => {
     const order: Record<string, number> = {
@@ -98,13 +105,14 @@ export function LoansTab({ loans, coMakers }: LoansTabProps) {
   });
 
   return (
-    <Card>
-      <CardContent className="p-0">
-        <div className="overflow-x-auto">
+    <Card className={FIT_CLASSES.section}>
+      <CardContent className={cn("p-0", FIT_CLASSES.section)}>
+        <ScrollBox>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-8" />
+                <TableHead>Loan No.</TableHead>
                 <TableHead>Purpose</TableHead>
                 <TableHead className="text-right">Principal</TableHead>
                 <TableHead>Rate</TableHead>
@@ -122,9 +130,9 @@ export function LoansTab({ loans, coMakers }: LoansTabProps) {
                 const hasSchedule = schedule.length > 0 || (expandedLoan === loan.id && loadingSchedule === loan.id);
                 const isExpanded = expandedLoan === loan.id;
 
-                const loanCoMakers = coMakers.filter((cm) => cm.loan_id === loan.id);
+                const loanCoMakers = loan.co_makers ?? [];
                 const hasCoMaker = loanCoMakers.length > 0;
-                const needsCoMaker = !hasCoMaker && loan.principal_amount >= 50000 && loan.status !== "completed";
+                const needsCoMaker = loanNeedsCoMaker(loan);
                 const isExpandable = hasSchedule || loanCoMakers.length > 0 || needsCoMaker;
 
                 return (
@@ -145,14 +153,15 @@ export function LoansTab({ loans, coMakers }: LoansTabProps) {
                             <ChevronRight className="h-4 w-4 text-muted-foreground" />
                           ))}
                       </TableCell>
+                      <TableCell className="font-mono text-xs whitespace-nowrap">{memberLoanNumber(loan)}</TableCell>
                       <TableCell className="font-medium">{loan.purpose || "—"}</TableCell>
                       <TableCell className="text-right tabular-nums">{formatCurrency(loan.principal_amount)}</TableCell>
-                      <TableCell>{loan.interest_rate}%</TableCell>
+                      <TableCell>{rateWithPeriod(loan.interest_rate, loan.interest_rate_frequency)}</TableCell>
                       <TableCell>
-                        {loan.term ?? loan.term_months ?? 0}mo · {(PAYMENT_FREQUENCY_LABELS[(loan.frequency ?? loan.payment_frequency ?? "") as keyof typeof PAYMENT_FREQUENCY_LABELS] ?? loan.frequency ?? loan.payment_frequency) || "—"}
+                        {loan.term ?? loan.term_months ?? 0}{readTermUnit(loan.term_unit) === "days" ? "d" : "mo"} · {(PAYMENT_FREQUENCY_LABELS[(loan.frequency ?? loan.payment_frequency ?? "") as keyof typeof PAYMENT_FREQUENCY_LABELS] ?? loan.frequency ?? loan.payment_frequency) || "—"}
                       </TableCell>
                       <TableCell className="text-right tabular-nums font-medium text-brand-orange">
-                        {(loan.outstanding_balance ?? 0) > 0 ? formatCurrency(loan.outstanding_balance ?? 0) : "Paid"}
+                        {loanOutstandingCell(loan)}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {loan.released_at ? formatDate(loan.released_at) : "—"}
@@ -161,8 +170,8 @@ export function LoansTab({ loans, coMakers }: LoansTabProps) {
                         {loan.maturity_date ? formatDate(loan.maturity_date) : "—"}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className={LOAN_STATUS_COLORS[loan.status]}>
-                          {LOAN_STATUS_LABELS[loan.status] ?? loan.status}
+                        <Badge variant="outline" className={LOAN_STATUS_COLORS[loanDisplayStatus(loan)]}>
+                          {loanRowStatusLabel(loan)}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -183,7 +192,7 @@ export function LoansTab({ loans, coMakers }: LoansTabProps) {
                     </TableRow>
                     {isExpanded && (
                       <TableRow key={`${loan.id}-details`}>
-                        <TableCell colSpan={10} className="p-0">
+                        <TableCell colSpan={11} className="p-0">
                           {/* Co-maker info */}
                           {loanCoMakers.length > 0 && (
                             <div className="mx-4 mt-4 mb-2 rounded-lg border bg-green-50/50 p-3">
@@ -195,9 +204,12 @@ export function LoansTab({ loans, coMakers }: LoansTabProps) {
                                   <div key={cm.id} className="flex items-center gap-3 rounded-md border bg-card p-2">
                                     <UserCheck className="h-4 w-4 text-green-600 shrink-0" />
                                     <div className="min-w-0">
-                                      <p className="text-sm font-medium truncate">{cm.full_name}</p>
+                                      <p className="text-sm font-medium truncate">{coMakerName(cm) || "—"}</p>
                                       <p className="text-xs text-muted-foreground">
-                                        {cm.relationship} · {cm.phone}
+                                        {[
+                                          cm.relationship_to_borrower ? relationshipInWords(cm.relationship_to_borrower) : null,
+                                          cm.contact_number,
+                                        ].filter(Boolean).join(" · ") || "—"}
                                       </p>
                                     </div>
                                   </div>
@@ -230,14 +242,14 @@ export function LoansTab({ loans, coMakers }: LoansTabProps) {
               })}
               {loans.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
+                  <TableCell colSpan={11} className="h-24 text-center text-muted-foreground">
                     No loans found.
                   </TableCell>
                 </TableRow>
               )}
             </TableBody>
           </Table>
-        </div>
+        </ScrollBox>
       </CardContent>
     </Card>
   );

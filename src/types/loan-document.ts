@@ -13,21 +13,17 @@
  * ever printed came from an inline reconstruction of the loan object instead.
  *
  * Fields are typed as nullable where the underlying column is nullable, so a
- * consumer has to decide what to print for a member with no e-mail address
- * rather than interpolating `null` onto a signed document.
+ * consumer has to decide what to print for a member with no address rather than
+ * interpolating `null` onto a signed document.
  */
 
-import type { LoanDeduction } from "./loan";
+import type { RateFrequency } from "@/lib/loan-terms";
+import type { LoanDeduction, PenaltyBracket } from "./loan";
 
 /** Borrower block, common to both documents. */
 export interface LoanDocumentBorrower {
   borrower_code: string | null;
   full_name: string;
-  address: string | null;
-  contact_number: string | null;
-  email: string | null;
-  employer_or_business: string | null;
-  monthly_income: number;
 }
 
 /** One period of the amortization table carried by the disclosure. */
@@ -51,9 +47,17 @@ export interface LoanDisclosureTerms {
   principal_amount: number;
   interest_rate: number;
   interest_method: string;
+  /** The period `interest_rate` is quoted per ("annual" reads "per year"). */
+  interest_rate_frequency: RateFrequency;
   term: number;
   frequency: string;
   penalty_rate: number;
+  /**
+   * The day ranges of the penalty configuration copied at creation, and its
+   * name; both null on a loan charged by `penalty_rate`.
+   */
+  penalty_config_name: string | null;
+  penalty_brackets: PenaltyBracket[] | null;
   grace_period_days: number;
   start_date: string;
   maturity_date: string;
@@ -70,15 +74,79 @@ export interface LoanDisclosureTotals {
   total_principal: number;
   total_interest: number;
   total_obligation: number;
+  /** The schedule's Total Amortization column, added up by the server. */
+  total_amortization: number;
   total_deductions: number;
+  net_proceeds: number;
+  /**
+   * Interest plus the coop's own fees (R.A. 3765 finance charges). Notarial
+   * fee, insurance, taxes and share capital are not in it.
+   */
+  total_finance_charges: number;
+  /** Notarial fee, insurance premium (in full) and taxes. */
+  total_non_finance_charges: number;
+  /**
+   * `total_deductions` less the itemised `deductions.items`. The server
+   * classifies it into `finance_charges.items` ("Other Charges" when > 0,
+   * "Adjustment" when < 0); the document prints no line of its own for it.
+   */
+  unitemised_deductions: number;
+}
+
+/** A charge line as the server classified it. */
+export interface LoanDisclosureChargeItem {
+  name: string;
+  amount: number;
+}
+
+/** Interest and the coop's own fees; `total` = `totals.total_finance_charges`. */
+export interface LoanDisclosureFinanceCharges {
+  interest: number;
+  items: LoanDisclosureChargeItem[];
+  total: number;
+}
+
+/**
+ * A non-finance charge. For the insurance premium `amount` is the full
+ * premium, `deducted` what was collected at release and `owed` the part
+ * still owed on the loan (interest-free, collected first).
+ */
+export interface LoanDisclosureNonFinanceItem extends LoanDisclosureChargeItem {
+  deducted: number;
+  owed: number;
+}
+
+export interface LoanDisclosureNonFinanceCharges {
+  items: LoanDisclosureNonFinanceItem[];
+  total: number;
+}
+
+/**
+ * Principal less what was deducted of each kind, less share capital, equals
+ * `net_proceeds` exactly (centavos), as the server works it out.
+ */
+export interface LoanDisclosureProceeds {
+  principal: number;
+  finance_charges_deducted: number;
+  non_finance_charges_deducted: number;
+  share_capital: number;
   net_proceeds: number;
 }
 
-/** Co-maker as the disclosure carries it — name and contact only. */
+/** Percentages, as the server states and solves them. */
+export interface LoanDisclosureRates {
+  contractual_rate: number;
+  rate_frequency: string;
+  /** Null when the period the rate is quoted per is unknown. */
+  nominal_annual_rate: number | null;
+  /** Effective interest rate (BSP Circular 730); null when it can't be solved. */
+  effective_rate_monthly: number | null;
+  effective_rate_annual: number | null;
+}
+
+/** Co-maker as the disclosure carries it: the name only. */
 export interface LoanDisclosureCoMaker {
   full_name: string;
-  address: string | null;
-  contact_number: string | null;
 }
 
 export interface LoanDisclosure {
@@ -90,23 +158,31 @@ export interface LoanDisclosure {
   loan_terms: LoanDisclosureTerms;
   deductions: LoanDisclosureDeductions;
   totals: LoanDisclosureTotals;
+  finance_charges: LoanDisclosureFinanceCharges;
+  non_finance_charges: LoanDisclosureNonFinanceCharges;
+  proceeds: LoanDisclosureProceeds;
+  rates: LoanDisclosureRates;
   /**
    * Persisted rows once the loan is released; before that, the server-built
    * preview. Never absent, but may be empty for a loan with no schedule.
    */
   amortization_schedule: LoanDocumentScheduleRow[];
   co_makers: LoanDisclosureCoMaker[];
+  /**
+   * The terms this statement states, for `POST /loans/{loan}/print-log`: the
+   * print records what the paper shows. Absent from an older API.
+   */
+  terms_fingerprint?: string;
+  terms_version?: number;
 }
 
 // ---------------------------------------------------------------------------
 // Promissory Note — GET /loans/{id}/promissory-note
 // ---------------------------------------------------------------------------
 
-/** The note repeats the disclosure's borrower block and adds civil details. */
+/** The note repeats the disclosure's borrower block and adds the address. */
 export interface LoanPromissoryNoteBorrower extends LoanDocumentBorrower {
-  birthdate: string | null;
-  civil_status: string | null;
-  gender: string | null;
+  address: string | null;
 }
 
 /**
@@ -117,10 +193,6 @@ export interface LoanPromissoryNoteCoMaker {
   co_maker_code: string | null;
   full_name: string;
   address: string | null;
-  contact_number: string | null;
-  occupation: string | null;
-  employer: string | null;
-  monthly_income: number;
   relationship_to_borrower: string | null;
 }
 
@@ -130,6 +202,8 @@ export interface LoanPromissoryNoteTerms {
   principal_amount: number;
   interest_rate: number;
   interest_method: string;
+  /** The period `interest_rate` is quoted per ("annual" reads "per year"). */
+  interest_rate_frequency: RateFrequency;
   term: number;
   frequency: string;
   start_date: string;
@@ -138,6 +212,12 @@ export interface LoanPromissoryNoteTerms {
   total_interest: number;
   total_obligation: number;
   penalty_rate: number;
+  /**
+   * The day ranges of the penalty configuration copied at creation, and its
+   * name; both null on a loan charged by `penalty_rate`.
+   */
+  penalty_config_name: string | null;
+  penalty_brackets: PenaltyBracket[] | null;
   grace_period_days: number;
 }
 
@@ -176,4 +256,7 @@ export interface LoanPromissoryNote {
   payment_schedule_summary: LoanPromissoryNoteScheduleSummary;
   branch: LoanPromissoryNoteBranch;
   signatures: LoanPromissoryNoteSignatures;
+  /** As on the disclosure: the terms this note states, for the print log. */
+  terms_fingerprint?: string;
+  terms_version?: number;
 }

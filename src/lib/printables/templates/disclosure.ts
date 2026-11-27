@@ -5,9 +5,28 @@
  * Ported from `generateDisclosureHTML` in `src/lib/loan-document-templates.ts`,
  * removed in the reporting & printables release; see git history for the
  * original, which is what makes "the legal wording is unchanged" checkable.
- * The statutory wording — the legal reference line, the six numbered sections
- * and the borrower's acknowledgment — is carried over verbatim. Only the
- * carrier changed: blocks instead of a 200-line HTML string.
+ * The statutory wording — the legal reference line and the borrower's
+ * acknowledgment — is carried over verbatim. The carrier changed (blocks
+ * instead of a 200-line HTML string), and so did the sections: charges are
+ * split the way R.A. 3765 and BSP Circular 730 classify them, by the server.
+ *
+ * Every figure is the server's (`DisclosureService`, worked out in centavos):
+ * - III. Finance Charges: interest and the coop's own fees
+ *   (`finance_charges`), totalled by `totals.total_finance_charges`.
+ * - IV. Non-Finance Charges: notarial fee, insurance premium, taxes
+ *   (`non_finance_charges`), with the insurance still owed on the loan noted.
+ * - V. Net Proceeds: principal less what was deducted of each, less share
+ *   capital (a deduction from proceeds, not a charge), from `proceeds`.
+ * - VI. Rate Information: the contractual, nominal annual and effective
+ *   interest rates from `rates`; none is annualised or solved here.
+ * A figure the server did not send prints as a dash.
+ *
+ * Before release the server adds the catalog fees the release will charge,
+ * each marked `provisional`, and its totals and net proceeds already include
+ * them. The wording follows the server's `provisional_reason`: "release_fee"
+ * says "(to be charged at release)", "carried_premium" (premium a
+ * restructure will carry) "(subject to change until release)". Nothing is
+ * summed here.
  *
  * Two things the port fixes rather than preserves:
  *
@@ -39,7 +58,7 @@
 import type { PrintableDocument, PrintBlock, PrintChargeLine } from "../types";
 import {
   BLANK_ORG,
-  annualRateLabel,
+  DASH,
   asArray,
   asRecord,
   currencyOrDash,
@@ -48,52 +67,84 @@ import {
   formatCurrency,
   generatedAt,
   humanize,
+  percentLabel,
   pick,
   pickNumber,
   presentFields,
+  rateFrequencyFrom,
   rateLabel,
-  sum,
   termLabelFrom,
   toNumber,
-  unitemisedRemainder,
   type PrintableBuildOptions,
 } from "./shared";
+import { penaltyShortText, readDocumentPenaltyTerms } from "@/lib/penalty-terms";
 
 /** Long schedules get their own page so the terms above stay on page one. */
 const SCHEDULE_PAGE_BREAK_AT = 12;
 
-/** Deduction rows the statute wants named individually under finance charges. */
-interface DeductionItem {
+/** A charge as the server classified it, named on its own lettered line. */
+interface ChargeItem {
   name: string;
-  amount: number;
+  /** The server's pesos; null when it sent none, printed as a dash. */
+  amount: number | null;
+  /**
+   * Non-finance only: the part owed on the loan (unpaid at release, or all of
+   * a premium carried over from the loan a restructure closed).
+   */
+  owed: number | null;
+  /** The server may still change it before release (`provisional`). */
+  provisional: boolean;
+  /** Why, as the server says (`provisional_reason`); null when it sent none. */
+  provisionalReason: string | null;
 }
 
-function readDeductions(
-  deductionsBlock: Record<string, unknown> | null,
-  root: Record<string, unknown> | null
-): DeductionItem[] {
-  // Real payload: deductions.items[] = { name, amount, type, original_value }.
-  const items = asArray(pick(deductionsBlock, ["items"]) ?? deductionsBlock);
-  const named = items
-    .map((item) => ({
-      name: String(pick(item, ["name", "label", "description"]) ?? "Deduction"),
-      amount: toNumber(pick(item, ["amount", "value"])) ?? 0,
-    }))
-    .filter((item) => item.amount !== 0 || item.name !== "Deduction");
-  if (named.length > 0) return named;
+/** `finance_charges.items` or `non_finance_charges.items`, as sent. */
+function readChargeItems(block: Record<string, unknown> | null): ChargeItem[] {
+  return asArray(pick(block, ["items"])).map((item) => ({
+    name: String(pick(item, ["name", "label"]) ?? "Charge"),
+    amount: toNumber(pick(item, ["amount"])),
+    owed: toNumber(pick(item, ["owed"])),
+    provisional: pick(item, ["provisional"]) === true,
+    provisionalReason: typeof pick(item, ["provisional_reason"]) === "string"
+      ? String(pick(item, ["provisional_reason"]))
+      : null,
+  }));
+}
 
-  // Legacy flat shape — the fixed Processing / Service / Other rows the old
-  // template hardcoded. Zeroes are dropped so a statement never claims a
-  // charge that was not levied.
+/** The note each `provisional_reason` prints after a line's name. */
+const PROVISIONAL_NOTES: Record<string, string> = {
+  release_fee: " (to be charged at release)",
+  carried_premium: " (subject to change until release)",
+};
+
+/**
+ * What a provisional line says, by the server's reason: a catalog fee is
+ * deducted when the loan is released; a premium carried from the loan a
+ * restructure closes still moves with payments on that loan until release.
+ * A provisional line with no reason the printable knows says the general
+ * "(subject to change until release)".
+ */
+function provisionalNote(item: ChargeItem): string {
+  if (!item.provisional) return "";
   return (
-    [
-      { name: "Processing / Service Fee", amount: pickNumber(root, ["processing_fee"]) },
-      { name: "Service Fee", amount: pickNumber(root, ["service_fee"]) },
-      { name: "Other Charges", amount: pickNumber(root, ["other_deductions"]) },
-    ] as { name: string; amount: number | null }[]
-  )
-    .filter((item): item is DeductionItem => (item.amount ?? 0) > 0)
-    .map((item) => ({ name: item.name, amount: item.amount }));
+    (item.provisionalReason !== null ? PROVISIONAL_NOTES[item.provisionalReason] : undefined) ??
+    PROVISIONAL_NOTES.carried_premium
+  );
+}
+
+/** a., b., c. … — the statute's lettered enumeration under a heading. */
+function letter(index: number): string {
+  return String.fromCharCode(97 + index);
+}
+
+/** A "Less:" line: the server's figure in brackets, or a dash. */
+function lessLine(label: string, amount: number | null): PrintChargeLine {
+  return { label, amount: amount === null ? DASH : `(${formatCurrency(amount)})` };
+}
+
+/** A server rate in its own words, or a dash when it sent none. */
+function rateOrDash(percent: number | null, phrase: string): string {
+  return percentLabel(percent, phrase) ?? DASH;
 }
 
 function normalizeScheduleRow(raw: Record<string, unknown>): Record<string, unknown> {
@@ -114,7 +165,6 @@ export function buildDisclosureDoc(
   const root = asRecord(raw);
   const terms = asRecord(pick(root, ["loan_terms", "terms"])) ?? root;
   const borrower = asRecord(pick(root, ["borrower"]));
-  const deductionsBlock = asRecord(pick(root, ["deductions"]));
   const totals = asRecord(pick(root, ["totals"]));
 
   const borrowerName =
@@ -123,69 +173,87 @@ export function buildDisclosureDoc(
     pick(terms, ["loan_account_number", "application_number"]) ??
     pick(root, ["reference_number", "application_number", "loan_id"]);
 
-  const principal = pickNumber(terms, ["principal_amount", "principal"]) ?? 0;
-  const rate = pickNumber(terms, ["interest_rate", "rate"]) ?? 0;
+  const principal = pickNumber(terms, ["principal_amount", "principal"]);
   const interestMethod = humanize(
     pick(terms, ["interest_method", "interest_type"])
   );
-  // The raw enum value drives the term unit and the annualisation; the
-  // humanized one is only ever printed. `humanize` turns `bi_weekly` into
-  // "Bi weekly", which no longer matches the enum, so the two cannot share.
+  // The raw enum value drives the term unit; the humanized one is only ever
+  // printed. `humanize` turns `bi_weekly` into "Bi weekly", which no longer
+  // matches the enum, so the two cannot share.
   const rawFrequency = pick(terms, ["frequency", "payment_frequency"]);
   const frequency = humanize(rawFrequency);
 
-  const deductions = readDeductions(deductionsBlock, root);
-  const itemisedTotal = deductions.reduce((acc, d) => acc + d.amount, 0);
-  const totalDeductions =
-    pickNumber(deductionsBlock, ["total_deductions", "total"]) ??
-    pickNumber(totals, ["total_deductions"]) ??
-    pickNumber(root, ["total_deductions"]) ??
-    itemisedTotal;
+  const financeBlock = asRecord(pick(root, ["finance_charges"]));
+  const nonFinanceBlock = asRecord(pick(root, ["non_finance_charges"]));
+  const proceeds = asRecord(pick(root, ["proceeds"]));
+  const shareCapitalDeducted = pickNumber(proceeds, ["share_capital"]);
+  const rates = asRecord(pick(root, ["rates"]));
 
   const totalPayable =
     pickNumber(totals, ["total_obligation", "total_payable"]) ??
     pickNumber(root, ["total_payable"]);
 
-  // Interest is the statement's headline finance charge. Prefer the figure the
-  // API computed from the schedule; only derive it when the payload is the old
-  // flat shape, and never let a rounding artefact print as a negative charge.
+  // Interest is the statement's headline finance charge.
   const totalInterest =
-    pickNumber(totals, ["total_interest"]) ??
-    (totalPayable !== null ? Math.max(0, totalPayable - principal) : null);
+    pickNumber(financeBlock, ["interest"]) ?? pickNumber(totals, ["total_interest"]);
 
-  const netProceeds =
-    pickNumber(deductionsBlock, ["net_proceeds"]) ??
-    pickNumber(totals, ["net_proceeds"]) ??
-    pickNumber(root, ["net_proceeds"]) ??
-    principal - totalDeductions;
+  // Interest plus the coop's own fees, added by the server. Non-finance
+  // charges and share capital are not in it.
+  const totalFinanceCharges =
+    pickNumber(totals, ["total_finance_charges"]) ?? pickNumber(financeBlock, ["total"]);
+  const totalNonFinanceCharges =
+    pickNumber(nonFinanceBlock, ["total"]) ?? pickNumber(totals, ["total_non_finance_charges"]);
 
-  const totalFinanceCharges = totalDeductions + (totalInterest ?? 0);
+  // The contractual rate as quoted; the loan terms stand in when `rates` is
+  // absent. Only its wording is chosen here — no rate is derived from it.
+  const contractualRate =
+    pickNumber(rates, ["contractual_rate"]) ?? pickNumber(terms, ["interest_rate", "rate"]);
+  const rateFrequency = pick(rates, ["rate_frequency"]) ?? rateFrequencyFrom(terms);
+  const penaltyTerms = readDocumentPenaltyTerms(terms);
 
   const scheduleRows = asArray(
     pick(root, ["amortization_schedule", "amortization_schedules", "schedule"])
   ).map(normalizeScheduleRow);
 
   /**
-   * The lettered finance-charge lines, continuing the statute's enumeration
-   * after `a. Interest`.
-   *
-   * `totalDeductions` is the server's figure and outranks the sum of the items
-   * it sent alongside — but then the letters below must still add up to
-   * "2. Total Finance Charges", or a borrower reading down the column arrives
-   * at a different number than the one the statement declares. Anything the
-   * items do not account for is disclosed as a charge of its own rather than
-   * left as a discrepancy for the reader to find.
+   * III. Finance Charges: `a. Interest`, then the server's finance items
+   * lettered on (its "Other Charges" / "Adjustment" for anything the
+   * deductions list does not itemise), then the server's total.
    */
-  const chargeItems: DeductionItem[] = [...deductions];
-  const unitemised = unitemisedRemainder(totalDeductions, itemisedTotal);
-  if (unitemised !== 0) {
-    chargeItems.push({
-      // Negative only when the items sum to more than the total the server
-      // sent — one of the two is stale, and the total is the one that governs.
-      name: unitemised > 0 ? "Other Charges" : "Adjustment",
-      amount: unitemised,
-    });
-  }
+  const financeLines: PrintChargeLine[] = readChargeItems(financeBlock).map((item, index) => ({
+    label: `${letter(index + 1)}. ${item.name}${provisionalNote(item)}`,
+    amount: currencyOrDash(item.amount),
+    indent: true,
+  }));
+
+  /**
+   * IV. Non-Finance Charges. The insurance premium is its full amount; when
+   * part of it was not collected at release, a note under it says that part
+   * is owed on the loan and collected first from each payment, from the
+   * server's `owed` figure. The note carries no figure in the column, so the
+   * column still adds up to the total.
+   */
+  const nonFinanceLines: PrintChargeLine[] = readChargeItems(nonFinanceBlock).flatMap((item, index) => {
+    const line: PrintChargeLine = {
+      label: `${letter(index)}. ${item.name}${provisionalNote(item)}`,
+      amount: currencyOrDash(item.amount),
+      indent: true,
+    };
+    if (item.owed === null || item.owed <= 0) return [line];
+    // Nothing of it deducted (premium a restructure carried over from the
+    // loan it closed, or none collected at release): all of it is owed.
+    const allOwed = item.amount !== null && item.owed >= item.amount;
+    return [
+      line,
+      {
+        label: allOwed
+          ? "all owed on the loan — interest-free, collected first"
+          : `of which ${formatCurrency(item.owed)} unpaid at release is owed on the loan — interest-free, collected first`,
+        amount: "",
+        indent: true,
+      },
+    ];
+  });
 
   const blocks: PrintBlock[] = [
     {
@@ -207,7 +275,7 @@ export function buildDisclosureDoc(
           pick(terms, ["start_date", "release_date", "released_at"])
         ),
         field("Type of Loan", pick(terms, ["loan_product_name"]) ?? interestMethod),
-        field("Term of Loan", termLabelFrom(terms, rawFrequency)),
+        field("Term of Loan", termLabelFrom(terms)),
         field("Mode of Payment", frequency),
       ]),
     },
@@ -215,67 +283,83 @@ export function buildDisclosureDoc(
       kind: "charges",
       title: "II. Amount of Credit / Loan",
       lines: [
-        { label: "1. Principal Loan Amount", amount: formatCurrency(principal) },
+        { label: "1. Principal Loan Amount", amount: currencyOrDash(principal) },
       ],
     },
     {
       kind: "charges",
       title: "III. Finance Charges",
       lines: [
-        {
-          label: "a. Interest",
-          amount: currencyOrDash(totalInterest),
-          indent: true,
-        },
-        ...chargeItems.map(
-          (item, index): PrintChargeLine => ({
-            // b., c., d. … continuing the statute's lettered enumeration after
-            // interest, so each charge is disclosed on its own line.
-            label: `${String.fromCharCode(98 + index)}. ${item.name}`,
-            amount: formatCurrency(item.amount),
-            indent: true,
-          })
-        ),
+        { label: "a. Interest", amount: currencyOrDash(totalInterest), indent: true },
+        ...financeLines,
         {
           label: "2. Total Finance Charges",
-          amount: formatCurrency(totalFinanceCharges),
+          amount: currencyOrDash(totalFinanceCharges),
           rule: "total",
         },
       ],
     },
     {
       kind: "charges",
-      title: "IV. Net Proceeds",
+      title: "IV. Non-Finance Charges",
       lines: [
-        { label: "Principal Loan Amount", amount: formatCurrency(principal) },
+        ...nonFinanceLines,
         {
-          label: "Less: Upfront Deductions",
-          amount: `(${formatCurrency(totalDeductions)})`,
+          label: "3. Total Non-Finance Charges",
+          amount: currencyOrDash(totalNonFinanceCharges),
+          rule: "total",
         },
+      ],
+    },
+    {
+      kind: "charges",
+      title: "V. Net Proceeds",
+      lines: [
         {
-          label: "3. Net Proceeds of Loan (Amount Received by Borrower)",
-          amount: formatCurrency(netProceeds),
+          label: "Principal Loan Amount",
+          amount: currencyOrDash(pickNumber(proceeds, ["principal"])),
+        },
+        lessLine("Less: Finance Charges Deducted", pickNumber(proceeds, ["finance_charges_deducted"])),
+        lessLine("Less: Non-Finance Charges Deducted", pickNumber(proceeds, ["non_finance_charges_deducted"])),
+        // No share capital withheld: no line. An unsent figure still prints a dash.
+        ...(shareCapitalDeducted === 0
+          ? []
+          : [lessLine("Less: Share Capital (deducted from proceeds; not a charge)", shareCapitalDeducted)]),
+        {
+          label: "4. Net Proceeds of Loan (Amount Received by Borrower)",
+          amount: currencyOrDash(pickNumber(proceeds, ["net_proceeds"])),
           rule: "grand",
         },
       ],
     },
     {
       kind: "fields",
-      title: "V. Rate Information",
+      title: "VI. Rate Information",
       columns: 2,
       items: presentFields([
-        field("Contractual Interest Rate", rateLabel(rate, rawFrequency)),
-        // BSP 730 asks for the rate restated per annum. Annualised by the
-        // loan's OWN frequency: `interest_rate` is charged once per period, so
-        // a 1%-per-day loan is 365% nominal, not the 12% a fixed ×12 printed.
-        // Null — a rule to be completed — when the frequency is unknown, since
-        // there is no honest multiplier to reach for.
-        field("Nominal Annual Rate", annualRateLabel(rate, rawFrequency)),
+        field("Contractual Interest Rate", rateLabel(contractualRate, rateFrequency) ?? DASH),
+        // BSP 730 asks for the rate restated per annum, and for the
+        // effective interest rate. Both are the server's (`rates`): it knows
+        // the period the rate is quoted per and solves the EIR from the
+        // schedule. Null — an unknown period, an EIR that can't be solved —
+        // prints a dash.
+        field("Nominal Annual Rate", rateOrDash(pickNumber(rates, ["nominal_annual_rate"]), "per annum")),
+        field(
+          "Effective Interest Rate (Monthly)",
+          rateOrDash(pickNumber(rates, ["effective_rate_monthly"]), "per month")
+        ),
+        field(
+          "Effective Interest Rate (Per Annum)",
+          rateOrDash(pickNumber(rates, ["effective_rate_annual"]), "per annum")
+        ),
         field(
           "Interest Computation",
           `${interestMethod ?? "Diminishing"} Balance`
         ),
         field("Total Amount Payable", currencyOrDash(totalPayable)),
+        // The loan's own late penalty terms in short form (wording in
+        // src/lib/penalty-terms.ts); terms not sent print a rule to complete.
+        field("Late Payment Penalty", penaltyTerms ? penaltyShortText(penaltyTerms) : null),
       ]),
     },
   ];
@@ -286,7 +370,7 @@ export function buildDisclosureDoc(
     }
     blocks.push({
       kind: "table",
-      title: "VI. Amortization Schedule",
+      title: "VII. Amortization Schedule",
       columns: [
         { key: "period", header: "No.", align: "center", width: "6%" },
         { key: "due_date", header: "Due Date", format: "date", width: "18%" },
@@ -296,11 +380,12 @@ export function buildDisclosureDoc(
         { key: "balance", header: "Outstanding Balance", format: "currency", align: "right", width: "19%" },
       ],
       rows: scheduleRows,
+      // The server's column totals; never the rows added up here.
       totals: {
         due_date: "TOTAL",
-        principal: formatCurrency(sum(scheduleRows, "principal")),
-        interest: formatCurrency(sum(scheduleRows, "interest")),
-        amount_due: formatCurrency(sum(scheduleRows, "amount_due")),
+        principal: currencyOrDash(pickNumber(totals, ["total_principal"])),
+        interest: currencyOrDash(totalInterest),
+        amount_due: currencyOrDash(pickNumber(totals, ["total_amortization"])),
       },
     });
   }

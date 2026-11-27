@@ -1,92 +1,59 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
+import { useState } from "react";
 import { RouteGuard } from "@/components/common/route-guard";
+import { MemberSearchPicker } from "@/components/common/member-search-picker";
 import { CreditScoringPageHeader } from "../_components/page-header";
 import { CreditAssessmentPanel } from "./_components/credit-assessment-panel";
-import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { borrowerService } from "@/services";
-import type { Borrower } from "@/types";
+import { usePermission } from "@/hooks";
+import type { MemberOption } from "@/hooks/use-member-search";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 
-export default function CreditAssessmentPage() {
-  const [borrowers, setBorrowers] = useState<Borrower[]>([]);
-  const [borrowerId, setBorrowerId] = useState<string>("");
-  // Set only when the borrower drain gave up with pages outstanding, i.e. the
-  // picker below is knowingly missing people. Null means complete.
-  const [borrowerShortfall, setBorrowerShortfall] = useState<{
-    shown: number;
-    total: number | null;
-  } | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    borrowerService
-      .listAll()
-      .then((drain) => {
-        if (cancelled) return;
-        setBorrowers(drain.rows);
-        setBorrowerShortfall(
-          drain.truncated ? { shown: drain.rows.length, total: drain.total } : null,
-        );
-      })
-      .catch(() => {
-        if (!cancelled) toast.error("We couldn't load borrowers. Please try again.");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const handleSelect = useCallback((v: string | null) => setBorrowerId(v ?? ""), []);
+function CreditAssessmentContent() {
+  const [member, setMember] = useState<MemberOption | null>(null);
+  // The member list needs `borrowers:view`; without it the picker is locked
+  // rather than asking and being refused.
+  const canListMembers = usePermission().can("borrowers:view");
 
   return (
-    <RouteGuard permission="credit_scoring:view" pageName="Credit Assessment">
-      <div className="space-y-6">
-        <CreditScoringPageHeader
-          title="Credit Assessment"
-          description="Run a fresh credit assessment for any borrower."
-        />
+    <PageFill>
+      <CreditScoringPageHeader
+        title="Credit Assessment"
+        description="See a member's current credit score, worked out every night and when their records change."
+      />
 
-        {borrowerShortfall && (
-          <IncompleteListNotice
-            shown={borrowerShortfall.shown}
-            total={borrowerShortfall.total}
-            noun="borrowers"
-            consequence="Some borrowers are missing from the picker below and cannot be selected."
+      <p className="max-w-2xl shrink-0 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+        To assess a loan application, open the loan while it is a draft or for approval. Its Credit Assessment card
+        takes the application&apos;s details and scores that application.
+      </p>
+
+      <div className="grid shrink-0 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+        <div className="space-y-1.5">
+          <Label>Member</Label>
+          <MemberSearchPicker
+            value={member}
+            onChange={setMember}
+            canSearch={canListMembers}
+            placeholder="Select a member"
+            aria-label="Member"
           />
-        )}
-
-        <div className="max-w-sm space-y-1.5">
-          <Label>Borrower</Label>
-          <Select
-            value={borrowerId}
-            onValueChange={handleSelect}
-            items={borrowers.map((b) => ({ value: String(b.id), label: b.full_name }))}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select a borrower" />
-            </SelectTrigger>
-            <SelectContent>
-              {borrowers.map((b) => (
-                <SelectItem key={b.id} value={String(b.id)}>
-                  {b.full_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
-
-        {borrowerId && <CreditAssessmentPanel borrowerId={Number(borrowerId)} />}
       </div>
+
+      {member && (
+        <ScrollBox className="p-px">
+          <CreditAssessmentPanel borrowerId={member.id} />
+        </ScrollBox>
+      )}
+    </PageFill>
+  );
+}
+
+export default function CreditAssessmentPage() {
+  return (
+    <RouteGuard permission="credit_scoring:view" pageName="Credit Assessment">
+      <CreditAssessmentContent />
     </RouteGuard>
   );
 }

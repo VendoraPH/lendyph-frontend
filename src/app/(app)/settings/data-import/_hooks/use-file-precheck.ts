@@ -42,12 +42,22 @@ import {
   type CsvRecord,
 } from "@/lib/csv-parse";
 import { readCsvFile, type CsvFileNotice } from "@/lib/csv-read";
+import { todayISO } from "@/lib/format";
+import { loanFieldProblems } from "@/lib/import-loan-fields";
+import { serverLength } from "@/lib/import-server-values";
+import { memberFieldProblems } from "@/lib/import-member-fields";
+import { shareCapitalFieldProblems, shareCapitalRepeats } from "@/lib/import-share-capital";
 import {
   blockingSizeProblems,
+  canonicalMemberNumber,
   columnsFor,
   detectHeaderRow,
+  expectedWidthWords,
   fieldSizeProblems,
   identifyShape,
+  isEarlierLayout,
+  layoutWidth,
+  listWords,
   missingRequiredFields,
   normaliseRow,
   resolveRowEnums,
@@ -63,8 +73,10 @@ import {
   type DateFormatInference,
   type DateOrder,
 } from "@/lib/import-date";
-import { formatCount } from "@/lib/report-format";
+import { formatCount, formatCountOf } from "@/lib/report-format";
 import type { ImportFileKind, ImportIssueSeverity } from "@/types/data-import";
+import { FILE_LABELS, IMPORT_FILE_KINDS, fileNameInSentence } from "../_components/import-files";
+import { emailWarning } from "../_lib/import-email";
 
 // ---------------------------------------------------------------------------
 // Ceilings
@@ -110,14 +122,14 @@ const SLOT_SAMPLE_ROWS = 5;
 export const SHAPE_BY_KIND: Record<ImportFileKind, ImportShape> = {
   customers: "customer",
   loans: "loans",
+  share_capital: "share_capital",
 };
 
-/** What each slot is CALLED, in the admin's own workbook vocabulary. Exported
- *  for the same reason: `FileInspection.label` is this map, and a resumed run
- *  has no inspection to take it from. */
-export const FILE_LABELS: Record<ImportFileKind, string> = {
-  customers: "Customer Profile",
-  loans: "Loans",
+/** The other way round: the file a shape is, for a wrong-slot message. */
+const KIND_BY_SHAPE: Record<ImportShape, ImportFileKind> = {
+  customer: "customers",
+  loans: "loans",
+  share_capital: "share_capital",
 };
 
 export type PrecheckCategory =
@@ -172,6 +184,11 @@ export interface FileInspection {
   notices: CsvFileNotice[];
   /** Everything the complete parse produced, header row included. */
   records: CsvRecord[];
+  /**
+   * The width every row of this file is held to: the file's own layout
+   * (today's, or the workbook's earlier one) when its commonest width is one
+   * of them, else today's. See `layoutWidth`.
+   */
   expectedColumns: number;
   /** Run on record 0. `null` for a file with no records at all. */
   header: HeaderDetection | null;
@@ -270,28 +287,30 @@ function delimiterWords(delimiter: string): string {
 }
 
 /**
- * Which of the two files does this one look like?
+ * Which of the files does this one look like?
  *
  * A header row settles it on its labels alone. Without one, a single data row
  * is thin evidence — a customer row missing its email scores no better than a
- * loans row — so up to five are polled and the majority wins. Wrong-slot is a
- * hard blocker, and a hard blocker raised on one row would stop a good import.
+ * loans row — so up to five are polled and the majority wins (a tie names
+ * none). Wrong-slot is a hard blocker, and a hard blocker raised on one row
+ * would stop a good import.
  */
 function guessSlot(records: readonly CsvRecord[], headerPresent: boolean): ShapeGuess | null {
   if (records.length === 0) return null;
   if (headerPresent) return identifyShape(records[0].fields);
 
   const sample = records.slice(0, SLOT_SAMPLE_ROWS).map((r) => identifyShape(r.fields));
-  const votes = { customer: 0, loans: 0 };
+  const votes: Record<ImportShape, number> = { customer: 0, loans: 0, share_capital: 0 };
   for (const guess of sample) if (guess.shape) votes[guess.shape] += 1;
 
-  const winner =
-    votes.customer === votes.loans ? null : votes.customer > votes.loans ? "customer" : "loans";
+  const [best, second] = (Object.entries(votes) as Array<[ImportShape, number]>).sort((a, b) => b[1] - a[1]);
+  const winner = best[1] > 0 && best[1] > second[1] ? best[0] : null;
   const first = sample[0];
   return {
     shape: winner,
     customerScore: first.customerScore,
     loansScore: first.loansScore,
+    shareCapitalScore: first.shareCapitalScore,
     basis: first.basis,
   };
 }
@@ -325,7 +344,12 @@ export async function inspectFile(
       options.onProgress?.({ kind, fileName: file.name, ratio, records }),
   });
 
-  const header = result.records.length > 0 ? detectHeaderRow(result.records[0].fields, shape) : null;
+  const widths = widthHistogram(result.records);
+  // Held to the rows' layout, as the server holds it, never to its own length.
+  const header =
+    result.records.length > 0
+      ? detectHeaderRow(result.records[0].fields, shape, layoutWidth(shape, widths[0]?.columns))
+      : null;
 
   return {
     kind,
@@ -339,11 +363,11 @@ export async function inspectFile(
     delimiterRows: result.sniff?.rows ?? 0,
     notices: result.notices,
     records: result.records,
-    expectedColumns: columnsFor(shape).length,
+    expectedColumns: layoutWidth(shape, widths[0]?.columns),
     header,
     headerFields: result.records[0]?.fields ?? null,
     slot: guessSlot(result.records, header?.isHeader ?? false),
-    widths: widthHistogram(result.records),
+    widths,
   };
 }
 
@@ -359,10 +383,13 @@ function dateColumns(shape: ImportShape): ImportColumn[] {
   return columnsFor(shape).filter((column) => column.type === "date");
 }
 
-/** The column that names the row in a message: the account, or the loan. */
+/**
+ * The column that names the row in a message: the account (a members or share
+ * capital row), or the loan.
+ */
 function identityColumn(shape: ImportShape): ImportColumn {
-  const key = shape === "customer" ? "account_no" : "loan_no";
-  // Present in both tables by construction; the find is for type narrowing.
+  const key = shape === "loans" ? "loan_no" : "account_no";
+  // Present in every table by construction; the find is for type narrowing.
   return columnsFor(shape).find((column) => column.key === key) ?? columnsFor(shape)[0];
 }
 
@@ -382,7 +409,12 @@ function settleDates(
   chosen: Readonly<Partial<Record<string, DateOrder>>>,
 ): DateColumnFinding[] {
   const columns = columnsFor(inspection.shape);
-  return dateColumns(inspection.shape).map((column) => {
+  // Only the columns the file's own layout has: an old 22-column members file
+  // has no Date Hired or Membership Date to settle, rather than two blank ones.
+  const present = dateColumns(inspection.shape).filter(
+    (column) => columns.indexOf(column) < inspection.expectedColumns,
+  );
+  return present.map((column) => {
     const index = columns.indexOf(column);
     const values = rows.map((row) => String(row.fields[index] ?? ""));
     const inference = inferDateFormat(values);
@@ -418,13 +450,12 @@ function quoteOptions(options: readonly { label: string }[]): string {
 function sizeMessage(problem: FieldSizeProblem): string {
   switch (problem.reason) {
     case "too-long":
-      return `${problem.label} is ${problem.raw.length} characters; this field holds ${problem.limit}.`;
-    case "too-large":
-      return `${problem.label} is larger than this field can store (limit ${problem.limit}).`;
-    case "too-precise":
-      return `${problem.label} has more decimal places than this field stores (${problem.limit}).`;
-    case "not-a-number":
-      return `${problem.label} is "${problem.raw}", which is not a number.`;
+      // Measured on what the server stores, which `kept` holds when it differs,
+      // in characters as the server counts them.
+      return problem.severity === "warning"
+        ? // A column the server imports blank when too long (the email).
+          `${problem.label} is ${serverLength(problem.kept ?? problem.raw)} characters; this field holds ${problem.limit}, so it will be imported as blank. The row still imports; shorten it in the file to keep it, or add it later on the member's page.`
+        : `${problem.label} is ${serverLength(problem.kept ?? problem.raw)} characters; this field holds ${problem.limit}.`;
     case "multiple-values":
       // `kept` is the server's own predicted output, so an empty one means the
       // cell had no digits at all and this is not really "two numbers" — it is
@@ -443,21 +474,6 @@ function sizeMessage(problem: FieldSizeProblem): string {
       return `${problem.label} holds more than one number. The import keeps ${problem.kept}${
         problem.dropped?.length ? ` and drops ${problem.dropped.join(", ")}` : ""
       }.`;
-  }
-}
-
-function dateMessage(label: string, raw: string, reason: string, order: DateOrder | null | undefined): string {
-  switch (reason) {
-    case "impossible": {
-      const reading = order === "dmy" ? " read day-first" : order === "mdy" ? " read month-first" : "";
-      return `${label} "${raw}" is not a real date${reading}.`;
-    }
-    case "two-digit-year":
-      return `${label} "${raw}" has a two-digit year, so the century cannot be known. Write the year in full.`;
-    case "unrecognised":
-      return `${label} "${raw}" is not a date.`;
-    default:
-      return `${label} "${raw}" could not be read as a date.`;
   }
 }
 
@@ -488,9 +504,20 @@ interface RowCheckContext {
   kind: ImportFileKind;
   shape: ImportShape;
   dates: readonly DateColumnFinding[];
-  /** Account numbers from the customers file, or `null` when it was not read. */
+  /**
+   * Account numbers from the customers file, for a loans or share capital
+   * file, or `null` when it was not read.
+   */
   knownAccounts: ReadonlySet<string> | null;
+  /** The file's layout width (`FileInspection.expectedColumns`). */
   expectedColumns: number;
+  /** Today in Manila, `YYYY-MM-DD`. Defaults to the real today. */
+  today?: string;
+  /**
+   * Whether the person importing can edit members, which the membership
+   * columns need on top of importing. Defaults to yes; the server decides.
+   */
+  membershipAllowed?: boolean;
 }
 
 interface RowCheckTotals {
@@ -506,7 +533,7 @@ interface RowCheckTotals {
  *
  * Pure and exported so it can be unit-tested without a DOM or a `File`.
  *
- * Two things are deliberately NOT errors here:
+ * Three things are deliberately NOT errors here:
  *  - a loans row whose account number is absent from the customers file. The
  *    coop already has 44 self-registered members who exist server-side and are
  *    not in the migration sheet, and the client cannot replicate the server's
@@ -515,6 +542,11 @@ interface RowCheckTotals {
  *  - anything `fieldSizeProblems` marks `warning`. The severity is decided
  *    there, by what the SERVER will do with the value, and re-deciding it at
  *    the call site is how a repairable value lands in a failure total.
+ *  - a cell the server imports blank: a member's blank one the workbook asks
+ *    for (a birthdate), a gender or civil status it doesn't recognise or an
+ *    email its rule refuses (`../_lib/import-email`), and
+ *    a loan's blank Purpose or Loan Product. Only the cells it refuses a row
+ *    for are errors (`refusedWhenBlank`, `refusedWhenUnrecognised`).
  */
 export function checkRows(
   rows: readonly CsvRecord[],
@@ -536,6 +568,12 @@ export function checkRows(
   };
 
   const firstSeenAt = new Map<string, number>();
+  const memberNumberAt = new Map<string, number>();
+  // A share capital file's own repeat rule, the server's (./import-share-capital).
+  const shareCapitalRepeat = context.shape === "share_capital" ? shareCapitalRepeats() : null;
+  const today = context.today ?? todayISO();
+  const membershipAllowed = context.membershipAllowed ?? true;
+  const fileLabel = fileNameInSentence(context.kind);
   let sequence = 0;
   let rowHasError = false;
 
@@ -572,15 +610,16 @@ export function checkRows(
     const reference = String(fields[identityIndex] ?? "").trim();
 
     if (fields.length !== context.expectedColumns) {
+      const needs = isEarlierLayout(context.shape, context.expectedColumns)
+        ? `this ${fileLabel} is in the earlier ${context.expectedColumns}-column layout, so every row needs ${context.expectedColumns}`
+        : `the ${fileLabel} needs ${context.expectedColumns}`;
       add(line, reference, {
         column: null,
         severity: "error",
         category: "columns",
         message: `This row has ${fields.length} ${
           fields.length === 1 ? "column" : "columns"
-        }; the ${context.shape === "customer" ? "Customer Profile" : "Loans"} file needs ${
-          context.expectedColumns
-        }. Every value after the gap lines up with the wrong field.`,
+        }; ${needs}. Every value after the gap lines up with the wrong field.`,
         value: null,
       });
     }
@@ -588,22 +627,28 @@ export function checkRows(
     const raw = normaliseRow(fields, context.shape);
     const { row, unknown } = resolveRowEnums(raw, context.shape);
 
+    // Refused or imported blank, as the server decides (the column's markers).
     for (const bad of unknown) {
+      const options = quoteOptions(bad.options);
       add(line, reference, {
         column: bad.label,
-        severity: "error",
+        severity: bad.refused ? "error" : "warning",
         category: "value",
-        message: `"${bad.raw}" is not a value ${bad.label} accepts. Expected one of: ${quoteOptions(bad.options)}.`,
+        message: bad.refused
+          ? `"${bad.raw}" is not a value ${bad.label} accepts. Expected one of: ${options}.`
+          : `${bad.label} "${bad.raw}" isn't one the import recognises, so it will be imported blank; add it later on the member's page. Expected one of: ${options}.`,
         value: bad.raw,
       });
     }
 
-    for (const label of missingRequiredFields(row, context.shape)) {
+    for (const missing of missingRequiredFields(row, context.shape)) {
       add(line, reference, {
-        column: label,
-        severity: "error",
+        column: missing.label,
+        severity: missing.refused ? "error" : "warning",
         category: "required",
-        message: `${label} is blank, and this row cannot be imported without it.`,
+        message: missing.refused
+          ? `${missing.label} is blank, and this row cannot be imported without it.`
+          : `${missing.label} is blank. ${missing.whenBlank ?? "The member will be imported without it; add it later on their page."}`,
         value: null,
       });
     }
@@ -623,6 +668,8 @@ export function checkRows(
       });
     }
 
+    // Each date as read, for the rules that compare one with another.
+    const readDates: Record<string, string> = {};
     for (const date of context.dates) {
       // A blocked column is reported once, for the whole file, in `blockers`.
       // A column still waiting on the admin is not judged at all yet: parsing
@@ -631,18 +678,93 @@ export function checkRows(
       const index = dateIndex.get(date.key) ?? -1;
       const cell = String(fields[index] ?? "").trim();
       if (!cell) continue; // Blank is `missingRequiredFields`' question.
+      // Read as the server reads it, in its words (`parseImportDate`).
       const parsed = parseImportDate(cell, date.order);
-      if (parsed.ok) continue;
+      if (parsed.ok) {
+        readDates[date.key] = parsed.iso;
+        if (parsed.warning) {
+          add(line, reference, { column: date.label, severity: "warning", category: "date", message: parsed.warning, value: cell });
+        }
+        continue;
+      }
       add(line, reference, {
         column: date.label,
         severity: "error",
         category: "date",
-        message: dateMessage(date.label, cell, parsed.reason, date.order),
+        message: parsed.message,
         value: cell,
       });
     }
 
-    if (reference) {
+    if (context.shape === "customer") {
+      // Imported blank by the server, so a warning: the row still imports.
+      const emailCell = row.email ?? "";
+      const badEmail = emailWarning(emailCell);
+      if (badEmail) {
+        add(line, reference, { column: columns.find((column) => column.key === "email")?.label ?? "email", severity: "warning", category: "value", message: badEmail, value: emailCell.trim() });
+      }
+
+      for (const problem of memberFieldProblems(row, { dates: readDates, today, membershipAllowed })) {
+        add(line, reference, {
+          column: problem.label,
+          severity: problem.severity,
+          category: problem.category,
+          message: problem.message,
+          value: problem.raw,
+        });
+      }
+
+      // A number is one member's: the server keeps the first row that has it
+      // and refuses the rest, so the pre-check says so of the rest.
+      const memberNumber = membershipAllowed ? canonicalMemberNumber(row.membership_number ?? "") : "";
+      if (memberNumber) {
+        const seen = memberNumberAt.get(memberNumber);
+        if (seen === undefined) memberNumberAt.set(memberNumber, line);
+        else {
+          add(line, reference, {
+            column: "Membership Number",
+            severity: "error",
+            category: "duplicate",
+            message: `Membership Number ${memberNumber} is already on line ${seen}. Each member's number is their own, so this row can't be imported with it.`,
+            value: (row.membership_number ?? "").trim(),
+          });
+        }
+      }
+    }
+
+    if (context.shape === "loans") {
+      for (const problem of loanFieldProblems(row, { dates: readDates })) {
+        add(line, reference, {
+          column: problem.label,
+          severity: problem.severity,
+          category: problem.category,
+          message: problem.message,
+          value: problem.raw,
+        });
+      }
+    }
+
+    if (context.shape === "share_capital") {
+      for (const problem of shareCapitalFieldProblems(row, today)) {
+        add(line, reference, {
+          column: problem.label,
+          severity: problem.severity,
+          category: problem.category,
+          message: problem.message,
+          value: problem.raw,
+        });
+      }
+
+      // Only a row the server takes is remembered as the first, as it does.
+      const repeat = rowHasError ? null : shareCapitalRepeat?.(row, line);
+      if (repeat) {
+        add(line, reference, { column: repeat.column, severity: "error", category: "duplicate", message: repeat.message, value: repeat.value });
+      }
+    }
+
+    // A member's account on many rows is what a share capital file is, so its
+    // rows repeat by the rule above instead.
+    if (reference && context.shape !== "share_capital") {
       const seen = firstSeenAt.get(reference);
       if (seen === undefined) firstSeenAt.set(reference, line);
       else {
@@ -656,14 +778,17 @@ export function checkRows(
       }
     }
 
-    if (context.knownAccounts && accountIndex >= 0 && context.shape === "loans") {
+    if (context.knownAccounts && accountIndex >= 0 && context.shape !== "customer") {
       const account = String(fields[accountIndex] ?? "").trim();
       if (account && !context.knownAccounts.has(account)) {
         add(line, reference, {
-          column: "Account No.",
+          column: columns[accountIndex].label,
           severity: "warning",
           category: "cross-file",
-          message: `No member with Account No. ${account} is in the customers file. Members who already exist in Lendyph are matched on the server, so this loan can still land — but if they do not exist, this row will fail.`,
+          message:
+            context.shape === "share_capital"
+              ? `No member with account number ${account} is in the members file. A member already in Lendyph is matched on the server by account number or member ID, so this row can still land; if no member has it, the row is refused.`
+              : `No member with Account No. ${account} is in the customers file. Members who already exist in Lendyph are matched on the server, so this loan can still land — but if they do not exist, this row will fail.`,
           value: account,
         });
       }
@@ -699,6 +824,7 @@ export function fileBlockers(
   inspection: FileInspection,
   rows: readonly CsvRecord[],
   dates: readonly DateColumnFinding[],
+  headerSkipped = false,
 ): string[] {
   const blockers: string[] = [];
 
@@ -707,19 +833,27 @@ export function fileBlockers(
   }
 
   if (rows.length === 0) {
-    blockers.push(
+    const empty =
       inspection.records.length === 0
         ? "No rows were found in this file."
-        : "The only row in this file is the header row, so there is nothing to import.",
+        : "The only row in this file is the header row, so there is nothing to import.";
+    // A members-only import is allowed, so an empty loans file is one to drop,
+    // and so is an empty share capital file.
+    blockers.push(
+      inspection.kind === "loans"
+        ? `${empty} The loans file is optional: leave it out when there are no loans to bring over.`
+        : inspection.kind === "share_capital"
+          ? `${empty} The share capital file is optional: leave it out when there is no share capital to bring over.`
+          : empty,
     );
   }
 
   const wrongSlot = inspection.slot?.shape && inspection.slot.shape !== inspection.shape;
   if (wrongSlot) {
     blockers.push(
-      `This looks like the ${
-        inspection.slot?.shape === "customer" ? "Customer Profile" : "Loans"
-      } file, but it was chosen as the ${inspection.label} file. Importing it here would write each value into the wrong field.`,
+      `This looks like the ${fileNameInSentence(
+        KIND_BY_SHAPE[inspection.slot?.shape ?? inspection.shape],
+      )}, but it was chosen as the ${fileNameInSentence(inspection.kind)}. Importing it here would write each value into the wrong field.`,
     );
   }
 
@@ -728,7 +862,25 @@ export function fileBlockers(
   const modal = inspection.widths[0];
   if (!wrongSlot && modal && rows.length > 0 && modal.columns !== inspection.expectedColumns) {
     blockers.push(
-      `Most rows have ${modal.columns} columns, but the ${inspection.label} file needs ${inspection.expectedColumns}. Check the file was exported whole and that no columns were added or removed.`,
+      `Most rows have ${modal.columns} columns, but the ${fileNameInSentence(inspection.kind)} needs ${expectedWidthWords(inspection.shape)}. Check the file was exported whole and that no columns were added or removed.`,
+    );
+  }
+
+  // The server holds a header to every column of the rows' layout, and a
+  // blank label matches no column, so a header that leaves one unnamed is a
+  // file it refuses. A label that merely differs may be one of the server's
+  // accepted spellings, which this check cannot know, so only blanks block.
+  const widthFits = Boolean(modal && modal.columns === inspection.expectedColumns);
+  const unnamed =
+    headerSkipped && widthFits && inspection.header?.isHeader
+      ? inspection.header.mismatched.filter((mismatch) => mismatch.found.trim() === "")
+      : [];
+  if (!wrongSlot && unnamed.length > 0) {
+    const named = listWords(unnamed.map((mismatch) => mismatch.expected));
+    blockers.push(
+      `Row 1 is the header, but it leaves ${unnamed.length === 1 ? "a column" : `${unnamed.length} columns`} unnamed: ${named}. The import holds the header to every column the rows have, so it would refuse this file. Add the missing labels; the ${
+        inspection.shape === "customer" ? "members" : inspection.shape === "loans" ? "loans" : "share capital"
+      } template has them all.`,
     );
   }
 
@@ -752,15 +904,21 @@ function describeUnusable(inference: DateFormatInference): string {
   const stats = inference.stats;
   const bits: string[] = [];
   if (stats.shortYear > 0) {
-    bits.push(`${formatCount(stats.shortYear)} have a two-digit year (${stats.shortYearSamples.join(", ")})`);
+    bits.push(
+      `${formatCount(stats.shortYear)} ${stats.shortYear === 1 ? "has" : "have"} a two-digit year (${stats.shortYearSamples.join(", ")})`,
+    );
   }
   if (stats.invalid > 0) {
-    bits.push(`${formatCount(stats.invalid)} are not real dates (${stats.invalidSamples.join(", ")})`);
+    bits.push(
+      `${formatCount(stats.invalid)} ${stats.invalid === 1 ? "is not a real date" : "are not real dates"} (${stats.invalidSamples.join(", ")})`,
+    );
   }
   if (stats.unrecognised > 0) {
-    bits.push(`${formatCount(stats.unrecognised)} are not dates at all (${stats.unrecognisedSamples.join(", ")})`);
+    bits.push(
+      `${formatCount(stats.unrecognised)} ${stats.unrecognised === 1 ? "isn't written in a form the import reads" : "aren't written in a form the import reads"} (${stats.unrecognisedSamples.join(", ")})`,
+    );
   }
-  return bits.length > 0 ? `Of ${formatCount(stats.total)} values, ${bits.join("; ")}.` : "";
+  return bits.length > 0 ? `Of ${formatCountOf(stats.total, "value")}, ${bits.join("; ")}.` : "";
 }
 
 function pendingFor(dates: readonly DateColumnFinding[]): string[] {
@@ -781,6 +939,7 @@ export function computeFindings(
   skipHeader: Partial<Record<ImportFileKind, boolean>>,
   dateChoices: Partial<Record<ImportFileKind, Record<string, DateOrder>>>,
   rowCeiling: number = ROW_CHECK_CEILING,
+  membershipAllowed = true,
 ): Partial<Record<ImportFileKind, FileFindings>> {
   const customers = inspections.customers;
   const knownAccounts = customers
@@ -789,7 +948,7 @@ export function computeFindings(
 
   const findings: Partial<Record<ImportFileKind, FileFindings>> = {};
 
-  for (const kind of ["customers", "loans"] as const) {
+  for (const kind of IMPORT_FILE_KINDS) {
     const inspection = inspections[kind];
     if (!inspection) continue;
 
@@ -802,8 +961,10 @@ export function computeFindings(
       kind,
       shape: inspection.shape,
       dates,
-      knownAccounts: kind === "loans" ? knownAccounts : null,
+      // Loans and share capital name members by account; members are the list.
+      knownAccounts: kind === "customers" ? null : knownAccounts,
       expectedColumns: inspection.expectedColumns,
+      membershipAllowed,
     });
 
     findings[kind] = {
@@ -813,7 +974,10 @@ export function computeFindings(
       rowsNotChecked: rows.length - checked.length,
       dates,
       ...totals,
-      blockers: fileBlockers(inspection, rows, dates),
+      // Every file's blockers share one list on screen, so each names its file.
+      blockers: fileBlockers(inspection, rows, dates, skip).map(
+        (blocker) => `${inspection.label} (${inspection.fileName}): ${blocker}`,
+      ),
       pendingDecisions: pendingFor(dates),
     };
   }
@@ -889,6 +1053,33 @@ export function sessionAnswers(
   return { hasHeaderRow, dateFormat };
 }
 
+/** The files whose date columns the server reads with an order. */
+const DATED_FILES = ["customers", "loans"] as const;
+
+/**
+ * The date order the Check step settled for each date column, as the run that
+ * imports the files carries it to the server (`date_orders`, finish run round
+ * 4): `dmy` or `mdy`, or `null` where the column needed none (ISO dates and
+ * spreadsheet date numbers). The server reads those columns with it.
+ *
+ * Read back from the patterns `sessionAnswers` wrote, so the run says exactly
+ * what the session recorded. The share capital file's dates are written
+ * year-month-day, so it carries none.
+ */
+export function runDateOrders(
+  dateFormat: SessionAnswers["dateFormat"],
+): Partial<Record<(typeof DATED_FILES)[number], Record<string, DateOrder | null>>> {
+  const orderOf = (pattern: string): DateOrder | null =>
+    (Object.keys(DATE_FORMAT_PATTERNS) as DateOrder[]).find((order) => DATE_FORMAT_PATTERNS[order] === pattern) ?? null;
+  const orders: Partial<Record<(typeof DATED_FILES)[number], Record<string, DateOrder | null>>> = {};
+  for (const kind of DATED_FILES) {
+    const columns = dateFormat[kind];
+    if (!columns) continue;
+    orders[kind] = Object.fromEntries(Object.entries(columns).map(([column, pattern]) => [column, orderOf(pattern)]));
+  }
+  return orders;
+}
+
 // ---------------------------------------------------------------------------
 // The hook
 // ---------------------------------------------------------------------------
@@ -908,9 +1099,13 @@ function readFailureMessage(error: unknown, fileName: string): string {
  * steady — a fresh object literal every render re-reads both files. A slot may
  * be `null` as well as absent: a shell that clears a slot sets it to `null`,
  * and the two mean the same thing here.
+ *
+ * `membershipAllowed` is whether the admin can edit members, which the
+ * membership columns need on top of importing (the server's rule).
  */
 export function useFilePrecheck(
   files: Partial<Record<ImportFileKind, File | null | undefined>>,
+  { membershipAllowed = true }: { membershipAllowed?: boolean } = {},
 ): UseFilePrecheckResult {
   const [inspections, setInspections] = useState<Partial<Record<ImportFileKind, FileInspection>>>({});
   const [findings, setFindings] = useState<Partial<Record<ImportFileKind, FileFindings>>>({});
@@ -925,12 +1120,14 @@ export function useFilePrecheck(
 
   const customersFile = files.customers ?? null;
   const loansFile = files.loans ?? null;
+  const shareCapitalFile = files.share_capital ?? null;
   const lastProgressAt = useRef(0);
 
   useEffect(() => {
     const picked: Array<[ImportFileKind, File]> = [];
     if (customersFile) picked.push(["customers", customersFile]);
     if (loansFile) picked.push(["loans", loansFile]);
+    if (shareCapitalFile) picked.push(["share_capital", shareCapitalFile]);
 
     // A new set of files invalidates every override made about the old ones.
     setInspections({});
@@ -975,7 +1172,7 @@ export function useFilePrecheck(
     })();
 
     return () => controller.abort();
-  }, [customersFile, loansFile, attempt]);
+  }, [customersFile, loansFile, shareCapitalFile, attempt]);
 
   // Off the render path on purpose: 20,000 rows is ~125 ms of work, and doing
   // it inside a useMemo blocks the paint that would have shown "Checking…".
@@ -987,7 +1184,7 @@ export function useFilePrecheck(
     let cancelled = false;
     setComputing(true);
     const handle = setTimeout(() => {
-      const next = computeFindings(inspections, skipHeaderState, dateChoices);
+      const next = computeFindings(inspections, skipHeaderState, dateChoices, ROW_CHECK_CEILING, membershipAllowed);
       if (cancelled) return;
       setFindings(next);
       setComputing(false);
@@ -996,7 +1193,7 @@ export function useFilePrecheck(
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [inspections, skipHeaderState, dateChoices]);
+  }, [inspections, skipHeaderState, dateChoices, membershipAllowed]);
 
   const skipHeader = useCallback(
     (kind: ImportFileKind) => skipHeaderState[kind] ?? inspections[kind]?.header?.isHeader ?? false,
@@ -1023,7 +1220,7 @@ export function useFilePrecheck(
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
   const list = useMemo(
-    () => [findings.customers, findings.loans].filter((f): f is FileFindings => Boolean(f)),
+    () => IMPORT_FILE_KINDS.map((kind) => findings[kind]).filter((f): f is FileFindings => Boolean(f)),
     [findings],
   );
 

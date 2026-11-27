@@ -1,9 +1,13 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { CheckCircle2, CircleDashed, HelpCircle } from "lucide-react";
+import { useCallback, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Plus } from "lucide-react";
+import { toast } from "sonner";
 import { RouteGuard } from "@/components/common";
-import { Badge } from "@/components/ui/badge";
+import { FillSection, PageFill, ScrollBox } from "@/components/common/page-fill";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
@@ -13,141 +17,186 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useAccountingResource, useChartOfAccounts } from "@/hooks";
+import { useAccountingResource } from "@/hooks";
+import { useBranchChoiceSource } from "@/hooks/use-branch-choice-source";
+import { pickableBranches } from "@/lib/branch-choice";
 import { accountingService } from "@/services";
-import { formatCentavos } from "@/lib/accounting/money";
-import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { DrainResult } from "@/lib/paginate";
-import type { Reconciliation, ReconciliationMatch } from "@/types";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { AccountingPageHeader } from "../_components/page-header";
 import { DataState } from "../_components/data-state";
 import { FilterBar } from "../_components/accounting-filters";
 import { AccountSelect } from "../_components/account-select";
+import { BranchAccessNotice } from "./_components/branch-access-notice";
+import { BranchScopeFilter } from "./_components/branch-scope-filter";
+import { FigureWithNote } from "./_components/figure-with-note";
+import { ReconciledBadge, RowMatchBadge } from "./_components/match-badge";
+import { NewReconciliationDialog } from "./_components/new-reconciliation-dialog";
+import { ReasonButton } from "./_components/reason-button";
+import { useStartAccounts } from "./_components/use-start-accounts";
+import {
+  ANY_BRANCH,
+  branchScopeLabel,
+  reconciliationBranchChoice,
+  reconciliationFilterItems,
+  reconciliationFilterParams,
+} from "./_lib/branch-scope";
+import { NO_BRANCH_ASSIGNED, accountLabel, reconciledLabel, rowFigures } from "./_lib/reconciliation-view";
+import { signedCentavos } from "./_lib/signed-money";
+import { startAccountsReason } from "./_lib/start-accounts";
+import type { ReconciliationDetail } from "./_lib/types";
+import { useBranchFilter } from "@/hooks/use-working-branch";
 
-const MATCH_META: Record<
-  ReconciliationMatch,
-  { label: string; icon: typeof CheckCircle2; className: string }
-> = {
-  matched: {
-    label: "Matched",
-    icon: CheckCircle2,
-    className: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30",
-  },
-  possible: {
-    label: "Possible match",
-    icon: HelpCircle,
-    className: "bg-amber-500/10 text-amber-700 border-amber-500/30",
-  },
-  unmatched: {
-    label: "Unmatched",
-    icon: CircleDashed,
-    className: "bg-slate-500/10 text-slate-700 border-slate-500/30",
-  },
-};
+const DESCRIPTION = "Prove each money account against its statement.";
 
-export default function ReconciliationPage() {
-  const { postable, loading: chartLoading } = useChartOfAccounts();
+function detailHref(id: number): string {
+  return `/accounting/reconciliation/${id}`;
+}
+
+function ReconciliationContent() {
+  const router = useRouter();
+  const startAccounts = useStartAccounts();
+  const accountsLoading = startAccounts.status === "loading";
+  const moneyAccounts = startAccounts.status === "ready" ? startAccounts.accounts : [];
   const [accountId, setAccountId] = useState<number | null>(null);
-
-  const moneyAccounts = useMemo(
-    () => postable.filter((a) => Boolean(a.cash_kind)),
-    [postable],
-  );
+  const [branchFilter, setBranchFilter] = useBranchFilter({ fallback: ANY_BRANCH });
+  const [creating, setCreating] = useState(false);
+  const branchSource = useBranchChoiceSource();
+  const unassigned = reconciliationBranchChoice(branchSource).kind === "unassigned";
+  const filterItems = reconciliationFilterItems(branchSource.viewAll, pickableBranches(branchSource));
 
   // Drained. The account filter below narrows what is already in hand, so a
   // short page makes "No reconciliation for this account" a lie rather than an
-  // empty state.
+  // empty state. The list answers the same worksheet as the reconciliation's
+  // own page, ids and counts included.
+  // The branch filter is the server's (`branch_id`), so changing it reads the list again.
   const fetcher = useCallback(
-    () => accountingService.reconciliationsListAll(),
-    [],
+    () =>
+      accountingService.reconciliationsListAll(reconciliationFilterParams(branchFilter)) as Promise<
+        DrainResult<ReconciliationDetail>
+      >,
+    [branchFilter],
   );
-  const resource = useAccountingResource<DrainResult<Reconciliation>>(fetcher);
+  const resource = useAccountingResource<DrainResult<ReconciliationDetail>>(fetcher);
+
+  const createReason = unassigned ? NO_BRANCH_ASSIGNED : startAccountsReason(startAccounts);
+
+  const created = (reconciliation: ReconciliationDetail) => {
+    setCreating(false);
+    const branch = branchScopeLabel(reconciliation);
+    toast.success(`Reconciliation started for ${reconciliation.period}${branch ? `, ${branch}` : ""}`);
+    router.push(detailHref(reconciliation.id));
+  };
 
   return (
-    <RouteGuard permission="accounting:reconcile" pageName="Reconciliation">
-      <div className="space-y-6">
-        <AccountingPageHeader
-          title="Reconciliation"
-          description="Prove each money account against its statement."
+    <PageFill>
+      <AccountingPageHeader
+        title="Reconciliation"
+        description={DESCRIPTION}
+        actions={
+          <ReasonButton reason={accountsLoading ? null : createReason} disabled={accountsLoading} onClick={() => setCreating(true)}>
+            <Plus className="mr-1 size-4" />
+            New reconciliation
+          </ReasonButton>
+        }
+      />
+
+      {/*
+        Said plainly because the point of reconciling is easy to lose: it is
+        not about making a number look tidy. A difference here means either
+        the ledger is missing something real or the statement is — and the
+        only way to know which is to look line by line.
+      */}
+      <div className="shrink-0 rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
+        A difference between your books and the statement is a real
+        discrepancy, not a rounding artefact. Find the missing line rather
+        than adjusting the balance.
+      </div>
+
+      {unassigned && <BranchAccessNotice message={NO_BRANCH_ASSIGNED} />}
+
+      <FilterBar>
+        <BranchScopeFilter items={filterItems} value={branchFilter} onChange={setBranchFilter} />
+        <AccountSelect
+          label="Account"
+          accounts={moneyAccounts}
+          value={accountId}
+          onChange={setAccountId}
+          placeholder={accountsLoading ? "Loading…" : "All money accounts"}
         />
+      </FilterBar>
 
-        {/*
-          Said plainly because the point of reconciling is easy to lose: it is
-          not about making a number look tidy. A difference here means either
-          the ledger is missing something real or the statement is — and the
-          only way to know which is to look line by line.
-        */}
-        <div className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
-          A difference between your books and the statement is a real
-          discrepancy, not a rounding artefact. Find the missing line rather
-          than adjusting the balance.
-        </div>
+      <DataState
+        resource={resource}
+        summary="Book balance against the bank, GCash or Maya statement, with each line marked matched, unmatched or a possible match."
+        endpoints={[
+          "GET /accounting/reconciliations",
+          "POST /accounting/reconciliations",
+          "POST /accounting/reconciliations/{id}/match",
+        ]}
+        isEmpty={(drain) => drain.rows.length === 0}
+        emptyMessage={
+          branchFilter === ANY_BRANCH ? "No reconciliation has been started." : "No reconciliation for this branch."
+        }
+      >
+        {({ rows: items, truncated, total }) => {
+          const shown =
+            accountId === null
+              ? items
+              : items.filter((item) => item.account_id === accountId);
 
-        <FilterBar>
-          <AccountSelect
-            label="Account"
-            accounts={moneyAccounts}
-            value={accountId}
-            onChange={setAccountId}
-            placeholder={chartLoading ? "Loading…" : "All money accounts"}
-          />
-        </FilterBar>
+          const notice = truncated ? (
+            <IncompleteListNotice
+              shown={items.length}
+              total={total}
+              noun="reconciliations"
+              consequence="A reconciliation missing here will not appear under its account either."
+            />
+          ) : null;
 
-        <DataState
-          resource={resource}
-          summary="Book balance against the bank, GCash or Maya statement, with each line marked matched, unmatched or a possible match."
-          endpoints={[
-            "GET /accounting/reconciliations",
-            "POST /accounting/reconciliations",
-            "POST /accounting/reconciliations/{id}/match",
-          ]}
-          isEmpty={(drain) => drain.rows.length === 0}
-          emptyMessage="No reconciliation has been started."
-        >
-          {({ rows: items, truncated, total }) => {
-            const shown =
-              accountId === null
-                ? items
-                : items.filter((item) => item.account_id === accountId);
-
-            const notice = truncated ? (
-              <IncompleteListNotice
-                shown={items.length}
-                total={total}
-                noun="reconciliations"
-                consequence="A reconciliation missing here will not appear under its account either."
-              />
-            ) : null;
-
-            if (shown.length === 0) {
-              return (
-                <div className="space-y-4">
-                  {notice}
-                  <Card>
-                    <CardContent className="py-12 text-center text-sm text-muted-foreground">
-                      No reconciliation for this account.
-                    </CardContent>
-                  </Card>
-                </div>
-              );
-            }
-
+          if (shown.length === 0) {
             return (
               <div className="space-y-4">
                 {notice}
-                {shown.map((item) => (
-                  <ReconciliationCard
-                    key={`${item.account_id}-${item.period}`}
-                    reconciliation={item}
-                  />
-                ))}
+                <Card>
+                  <CardContent className="py-12 text-center text-sm text-muted-foreground">
+                    No reconciliation for this account.
+                  </CardContent>
+                </Card>
               </div>
             );
-          }}
-        </DataState>
-      </div>
+          }
+
+          return (
+            <FillSection className="gap-4">
+              {notice}
+              {/* The reconciliations scroll under the filters. */}
+              <ScrollBox className="space-y-4 p-px">
+                {shown.map((item) => (
+                  <ReconciliationCard key={item.id} reconciliation={item} />
+                ))}
+              </ScrollBox>
+            </FillSection>
+          );
+        }}
+      </DataState>
+
+      <NewReconciliationDialog
+        open={creating}
+        accounts={moneyAccounts}
+        branchSource={branchSource}
+        onOpenChange={setCreating}
+        onCreated={created}
+      />
+    </PageFill>
+  );
+}
+
+export default function ReconciliationPage() {
+  return (
+    <RouteGuard permission="accounting:reconcile" pageName="Reconciliation">
+      <ReconciliationContent />
     </RouteGuard>
   );
 }
@@ -155,25 +204,31 @@ export default function ReconciliationPage() {
 function ReconciliationCard({
   reconciliation,
 }: {
-  reconciliation: Reconciliation;
+  reconciliation: ReconciliationDetail;
 }) {
-  const clean = reconciliation.difference === 0;
+  const clean = reconciliation.is_reconciled;
+  const href = detailHref(reconciliation.id);
+  const branch = branchScopeLabel(reconciliation);
 
   return (
     <Card className={cn("border-2", clean ? "border-emerald-500/40" : "border-amber-500/50")}>
-      <CardContent className="space-y-4 pt-6">
+      <CardContent className="space-y-4 pt-6 fit:pt-0">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="font-medium">{reconciliation.period}</p>
-          <Badge
-            variant="outline"
-            className={
-              clean
-                ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/30"
-                : "bg-amber-500/10 text-amber-700 border-amber-500/30"
-            }
-          >
-            {clean ? "Reconciled" : "Difference"}
-          </Badge>
+          <div className="space-y-0.5">
+            <Link href={href} className="font-medium underline-offset-2 hover:underline">
+              {reconciliation.period}
+            </Link>
+            <p className="text-sm text-muted-foreground">
+              {accountLabel(reconciliation)}
+              {branch && <> · {branch}</>}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <ReconciledBadge reconciled={clean} label={reconciledLabel(reconciliation)} />
+            <Link href={href} className={buttonVariants({ variant: "outline", size: "sm" })}>
+              Open
+            </Link>
+          </div>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-3">
@@ -197,24 +252,22 @@ function ReconciliationCard({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {reconciliation.lines.map((line, i) => {
-              const meta = MATCH_META[line.match];
-              const Icon = meta.icon;
+            {reconciliation.lines.map((line) => {
+              const figures = rowFigures(line);
               return (
-                <TableRow key={`${line.journal_id ?? "ext"}-${i}`}>
-                  <TableCell className="text-sm">{formatDate(line.date)}</TableCell>
+                <TableRow key={`${line.statement_line_id ?? "l"}-${line.journal_line_id ?? "s"}`}>
+                  <TableCell className="text-sm">
+                    <FigureWithNote figure={figures.date} note={figures.dateNote} />
+                  </TableCell>
                   <TableCell className="text-sm">{line.description}</TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground">
                     {line.external_reference || "—"}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className={meta.className}>
-                      <Icon className="mr-1 h-3 w-3" />
-                      {meta.label}
-                    </Badge>
+                    <RowMatchBadge row={line} />
                   </TableCell>
                   <TableCell className="text-right font-mono text-sm">
-                    {formatCentavos(line.amount)}
+                    <FigureWithNote figure={figures.amount} note={figures.amountNote} />
                   </TableCell>
                 </TableRow>
               );
@@ -239,7 +292,7 @@ function Figure({
     <div className="space-y-1">
       <p className="text-sm text-muted-foreground">{label}</p>
       <p className={cn("font-mono text-lg font-semibold", className)}>
-        {formatCentavos(value)}
+        {signedCentavos(value)}
       </p>
     </div>
   );

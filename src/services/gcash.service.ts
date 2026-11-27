@@ -3,17 +3,26 @@ import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { fetchAllPages, type DrainResult } from "@/lib/paginate";
 import type {
   GCashTransaction,
+  GCashTransactionType,
+  GCashChargePreview,
   GCashTier,
   GCashTierInput,
   GCashIncomeReport,
   GCashPendingItem,
   CreateGCashTransactionData,
   GCashListFilters,
+  GCashTransactionTotals,
   GCashNonMember,
   GCashNonMemberInput,
   GCashNonMemberFilters,
   PaginatedResponse,
 } from "@/types";
+
+/** `meta.totals` off a transactions page, or null when it carried none (PHP sends an empty one as `[]`). */
+function transactionTotals(res: unknown): GCashTransactionTotals | null {
+  const totals = (res as { meta?: { totals?: unknown } } | null | undefined)?.meta?.totals;
+  return totals && typeof totals === "object" && !Array.isArray(totals) ? (totals as GCashTransactionTotals) : null;
+}
 
 export const gcashService = {
   // Backend returns a raw Laravel paginator ({data, links, meta}) for this
@@ -25,8 +34,50 @@ export const gcashService = {
       { params },
     ),
 
+  /**
+   * Every transaction the filters match, across as many pages as it takes, for
+   * the tab's report export, with the server's `meta.totals` off the first and
+   * the last page (null when one sent none). The pages are read one after
+   * another, so a transaction recorded or marked paid meanwhile can shift them
+   * or change the totals: the export checks the rows and both totals
+   * (`transactionsExportRefusal`) and refuses a `truncated` drain.
+   */
+  listAllTransactions: async (
+    params?: Omit<GCashListFilters, "page" | "per_page">,
+    options?: { maxPages?: number },
+  ): Promise<
+    DrainResult<GCashTransaction> & {
+      totals: GCashTransactionTotals | null;
+      lastPageTotals: GCashTransactionTotals | null;
+    }
+  > => {
+    let totals: GCashTransactionTotals | null = null;
+    let lastPageTotals: GCashTransactionTotals | null = null;
+    const drained = await fetchAllPages<GCashTransaction>(async ({ page, per_page }) => {
+      const res = await gcashService.listTransactions({ ...params, page, per_page });
+      // The drain keeps rows and paging only. The server works `meta.totals` out on every
+      // request: page 1's are the report's, and the last page's show whether the list moved.
+      lastPageTotals = transactionTotals(res);
+      if (page === 1) totals = lastPageTotals;
+      return res;
+    }, options);
+    return { ...drained, totals, lastPageTotals };
+  },
+
   createTransaction: (data: CreateGCashTransactionData) =>
     api.post<GCashTransaction>(API_ENDPOINTS.GCASH.TRANSACTIONS_CREATE, data),
+
+  /**
+   * The charge and total the server would record for this type and amount.
+   * Rejects with a 422 (`errors.amount`) when no fee tier covers the amount,
+   * the same message recording it would give, and a 403 without
+   * `gcash:transact`. `signal` lets a superseded preview be cancelled.
+   */
+  previewCharge: (type: GCashTransactionType, amount: number, signal?: AbortSignal) =>
+    api.get<GCashChargePreview>(API_ENDPOINTS.GCASH.TRANSACTIONS_PREVIEW, {
+      params: { type, amount },
+      signal,
+    }),
 
   markPaid: (id: number) =>
     api.patch<GCashTransaction>(API_ENDPOINTS.GCASH.TRANSACTIONS_MARK_PAID(id)),
@@ -68,6 +119,7 @@ export const gcashService = {
   updateNonMember: (id: number, data: GCashNonMemberInput) =>
     api.put<GCashNonMember>(API_ENDPOINTS.GCASH.NON_MEMBERS_UPDATE(id), data),
 
+  /** Soft delete: past transactions keep their walk-in. */
   deleteNonMember: (id: number) =>
     api.delete<void>(API_ENDPOINTS.GCASH.NON_MEMBERS_DELETE(id)),
 
@@ -81,6 +133,20 @@ export const gcashService = {
       params: { start_date, end_date },
     }),
 
-  pendingList: () =>
-    api.get<GCashPendingItem[]>(API_ENDPOINTS.GCASH.REPORTS_PENDING),
+  /**
+   * Every Cash In still awaiting payment.
+   *
+   * `GCashReportController::pending()` answers the whole set with `->get()`,
+   * not a paginator — one request today, however many are outstanding. Drained
+   * regardless: this is a worklist, and a pending Cash In that falls off a
+   * clamped page cannot be marked paid from the screen that exists to do it.
+   * `DrainResult` for the reason on `borrowerService.listAll` — the Reports tab
+   * renders `truncated`.
+   */
+  pendingListAll: (): Promise<DrainResult<GCashPendingItem>> =>
+    fetchAllPages<GCashPendingItem>(({ page, per_page }) =>
+      api.getRaw<{ data: GCashPendingItem[] }>(API_ENDPOINTS.GCASH.REPORTS_PENDING, {
+        params: { page, per_page },
+      }),
+    ),
 };

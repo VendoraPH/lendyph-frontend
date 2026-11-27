@@ -1,4 +1,5 @@
-import { asArray, asRecord, pick, sum } from "@/lib/api-payload";
+import { asArray, asRecord, pick } from "@/lib/api-payload";
+import { LOAN_STATUS_LABELS } from "@/constants/loan-status";
 import {
   DASH,
   countOrDash,
@@ -10,6 +11,7 @@ import {
   formatPercent,
   formatValue,
   percentOrDash,
+  rateOrDash,
   toNumber,
 } from "@/lib/report-format";
 import type {
@@ -20,6 +22,9 @@ import type {
   ReportDocument,
   ReportSection,
 } from "./types";
+import type { LoanStatus } from "@/types/loan";
+import { paidBeforeImportNote } from "@/lib/paid-before-import";
+import { statementReferenceKey } from "./report-chrome";
 
 /**
  * Pure payload → ReportDocument builders.
@@ -45,31 +50,11 @@ export const LIST_PAGE_SIZE = 200;
 // ---------------------------------------------------------------------------
 // Raw payload helpers
 //
-// `pick` / `asRecord` / `asArray` / `sum` live in `@/lib/api-payload`, shared
-// with the printable templates so both read a response the same way.
+// `pick` / `asRecord` / `asArray` live in `@/lib/api-payload`, shared with the
+// printable templates so both read a response the same way. Money totals are
+// read as the server sent them, never added up from the rows, and a total the
+// server did not send is "—".
 // ---------------------------------------------------------------------------
-
-/**
- * Add up sibling fields of a nested block (e.g. outstanding.{principal,
- * interest,penalty}). Returns null when the block is missing entirely so the
- * KPI shows "—" instead of a misleading ₱0.00.
- */
-function sumFields(
-  obj: Record<string, unknown> | null,
-  keys: string[]
-): number | null {
-  if (!obj) return null;
-  let total = 0;
-  let found = false;
-  for (const key of keys) {
-    const n = toNumber(obj[key]);
-    if (n !== null) {
-      total += n;
-      found = true;
-    }
-  }
-  return found ? total : null;
-}
 
 /**
  * `org` is deliberately empty here.
@@ -80,7 +65,7 @@ function sumFields(
  * filled by `applyChrome()` from branding settings — exactly the way the logo
  * already is — with `siteConfig.name` as the fallback.
  */
-function meta(
+export function meta(
   title: string,
   range: DateRange,
   subtitle?: string
@@ -94,7 +79,7 @@ function meta(
   };
 }
 
-function kpi(label: string, value: string, opts: Partial<KpiItem> = {}): KpiItem {
+export function kpi(label: string, value: string, opts: Partial<KpiItem> = {}): KpiItem {
   return { label, value, ...opts };
 }
 
@@ -108,10 +93,10 @@ const RELEASE_COLUMNS: ReportColumn[] = [
   // sends the application number on every row and it was being dropped.
   { key: "application_number", header: "Application #", format: "text", width: 140 },
   { key: "loan_account_number", header: "Loan #", format: "text", width: 120 },
-  { key: "borrower_name", header: "Borrower", format: "text", width: 220 },
+  { key: "borrower_name", header: "Member", format: "text", width: 220 },
   { key: "principal", header: "Principal", format: "currency", align: "right", width: 140 },
   { key: "term", header: "Term", format: "text", align: "right", width: 80 },
-  { key: "interest_rate", header: "Rate", format: "percent", align: "right", width: 80 },
+  { key: "interest_rate", header: "Rate", format: "rate", align: "right", width: 80 },
   { key: "status", header: "Status", format: "text", width: 110 },
 ];
 
@@ -120,7 +105,7 @@ const REPAYMENT_COLUMNS: ReportColumn[] = [
   // a phantom time-of-day on every row.
   { key: "paid_at", header: "Paid On", format: "date", width: 140 },
   { key: "loan_account_number", header: "Loan #", format: "text", width: 120 },
-  { key: "borrower_name", header: "Borrower", format: "text", width: 220 },
+  { key: "borrower_name", header: "Member", format: "text", width: 220 },
   { key: "amount", header: "Amount", format: "currency", align: "right", width: 140 },
   { key: "penalty_amount", header: "Penalty", format: "currency", align: "right", width: 120 },
   { key: "method", header: "Method", format: "text", width: 110 },
@@ -135,7 +120,7 @@ const DUE_COLUMNS: ReportColumn[] = [
   { key: "due_date", header: "Due Date", format: "date", width: 110 },
   { key: "period_number", header: "Period", format: "number", align: "center", width: 70 },
   { key: "loan_account_number", header: "Loan #", format: "text", width: 120 },
-  { key: "borrower_name", header: "Borrower", format: "text", width: 200 },
+  { key: "borrower_name", header: "Member", format: "text", width: 200 },
   { key: "principal_due", header: "Principal", format: "currency", align: "right", width: 120 },
   { key: "interest_due", header: "Interest", format: "currency", align: "right", width: 110 },
   { key: "penalty_amount", header: "Penalty", format: "currency", align: "right", width: 110 },
@@ -151,6 +136,9 @@ const DUE_COLUMNS: ReportColumn[] = [
 // borrower objects. The first key in each list is the one the API actually
 // sends today; the rest are legacy/defensive aliases.
 
+// A loan reads by the server's `display_number` first (the LN- number, else an
+// imported loan's Loan No., else the application number; backend #401), and by
+// its own numbers as before while the server doesn't send it.
 function normalizeReleaseRow(raw: Record<string, unknown>): Record<string, unknown> {
   const borrower = asRecord(raw.borrower);
   return {
@@ -159,15 +147,38 @@ function normalizeReleaseRow(raw: Record<string, unknown>): Record<string, unkno
       pick(borrower, ["release_date"]),
     application_number: pick(raw, ["application_number", "app_number"]),
     loan_account_number:
-      pick(raw, ["loan_account_number", "account_number", "application_number"]),
+      pick(raw, ["display_number", "loan_display_number", "loan_account_number", "account_number", "application_number"]),
     borrower_name:
       pick(raw, ["borrower_name", "borrower_full_name"]) ??
       pick(borrower, ["full_name", "name"]),
     principal: pick(raw, ["principal_amount", "principal", "amount"]),
     term: pick(raw, ["term", "term_months", "term_label"]),
     interest_rate: pick(raw, ["interest_rate", "rate"]),
-    status: pick(raw, ["status"]),
+    // The server's display_status reads Past Due for a loan past grace.
+    status: loanStatusText(pick(raw, ["display_status", "status"])),
   };
+}
+
+/** How a payment was received, as the app's screens name it. */
+const PAYMENT_METHOD_NAMES: Record<string, string> = {
+  cash: "Cash",
+  gcash: "GCash",
+  maya: "Maya",
+  bank_transfer: "Bank Transfer",
+  online: "Online",
+  auto_pay: "Auto Pay",
+};
+
+/** A stored payment method in words ("bank_transfer" → "Bank Transfer"); anything else as sent. */
+function paymentMethodText(value: unknown): unknown {
+  return typeof value === "string" ? (PAYMENT_METHOD_NAMES[value] ?? value) : value;
+}
+
+/** A stored payment status in words ("completed" → "Completed"). */
+function paymentStatusText(value: unknown): unknown {
+  return typeof value === "string" && value !== ""
+    ? value.charAt(0).toUpperCase() + value.slice(1).replace(/_/g, " ")
+    : value;
 }
 
 function normalizeRepaymentRow(raw: Record<string, unknown>): Record<string, unknown> {
@@ -176,15 +187,15 @@ function normalizeRepaymentRow(raw: Record<string, unknown>): Record<string, unk
   return {
     paid_at: pick(raw, ["paid_at", "payment_date", "created_at"]),
     loan_account_number:
-      pick(raw, ["loan_account_number", "account_number"]) ??
-      pick(loan, ["loan_account_number", "account_number", "application_number"]),
+      pick(raw, ["display_number", "loan_display_number", "loan_account_number", "account_number"]) ??
+      pick(loan, ["display_number", "loan_display_number", "loan_account_number", "account_number", "application_number"]),
     borrower_name:
       pick(raw, ["borrower_name", "borrower_full_name"]) ??
       pick(borrower, ["full_name", "name"]),
     amount: pick(raw, ["amount", "amount_paid", "total_amount"]),
     penalty_amount: pick(raw, ["penalty_amount", "penalty_applied", "penalty"]),
-    method: pick(raw, ["method", "payment_method"]),
-    status: pick(raw, ["status"]),
+    method: paymentMethodText(pick(raw, ["method", "payment_method"])),
+    status: paymentStatusText(pick(raw, ["status"])),
   };
 }
 
@@ -192,19 +203,14 @@ function normalizeDueRow(raw: Record<string, unknown>): Record<string, unknown> 
   const borrower = asRecord(raw.borrower);
   const loan = asRecord(raw.loan);
 
-  // The API reports what was paid per component, not a combined figure, so the
-  // "Paid" column adds them. sumFields returns null when neither key is
-  // present, keeping the cell a dash rather than claiming nothing was paid.
-  const amountPaid = sumFields(raw, ["principal_paid", "interest_paid"]);
-
   return {
     due_date: pick(raw, ["due_date", "scheduled_date", "date"]),
     period_number: pick(raw, ["period_number", "period", "installment_number"]),
     // The API sends days_overdue per schedule; it is never derived client-side.
     days_overdue: pick(raw, ["days_overdue", "days_past_due"]) ?? 0,
     loan_account_number:
-      pick(raw, ["loan_account_number", "account_number"]) ??
-      pick(loan, ["loan_account_number", "account_number", "application_number"]),
+      pick(raw, ["display_number", "loan_display_number", "loan_account_number", "account_number"]) ??
+      pick(loan, ["display_number", "loan_display_number", "loan_account_number", "account_number", "application_number"]),
     borrower_name:
       pick(raw, ["borrower_name", "borrower_full_name"]) ??
       pick(borrower, ["full_name", "name"]),
@@ -212,7 +218,9 @@ function normalizeDueRow(raw: Record<string, unknown>): Record<string, unknown> 
     interest_due: pick(raw, ["interest_due", "interest"]),
     penalty_amount: pick(raw, ["penalty_amount", "penalty", "penalty_due"]),
     amount_due: pick(raw, ["total_due", "amount_due", "scheduled_amount"]),
-    amount_paid: amountPaid,
+    // The server's per-row paid figure, the one `totals.total_paid` adds up.
+    // A row without it is "—", never its components added here.
+    amount_paid: pick(raw, ["amount_paid"]),
     // `amount_remaining` is the API's name for the unpaid balance of a schedule.
     balance: pick(raw, [
       "amount_remaining",
@@ -220,7 +228,7 @@ function normalizeDueRow(raw: Record<string, unknown>): Record<string, unknown> 
       "outstanding_balance",
       "remaining_balance",
     ]),
-    status: pick(raw, ["status"]),
+    status: periodStatusText(pick(raw, ["status"])),
   };
 }
 
@@ -241,7 +249,7 @@ interface ListEnvelope {
  * ({ data, meta, totals }) survives intact — the page of rows alone can never
  * be trusted for totals.
  */
-function readListEnvelope(raw: unknown): ListEnvelope {
+export function readListEnvelope(raw: unknown): ListEnvelope {
   const obj = asRecord(raw);
   const metaBlock = asRecord(obj?.meta);
   const totals =
@@ -260,23 +268,6 @@ function readListEnvelope(raw: unknown): ListEnvelope {
   };
 }
 
-interface ResolvedTotal {
-  value: number;
-  fromServer: boolean;
-}
-
-/** Prefer the server total; fall back to summing the page we were given. */
-function resolveTotal(
-  totals: Record<string, unknown> | null,
-  keys: string[],
-  rows: Record<string, unknown>[],
-  rowKey: string
-): ResolvedTotal {
-  const server = toNumber(pick(totals, keys));
-  if (server !== null) return { value: server, fromServer: true };
-  return { value: sum(rows, rowKey), fromServer: false };
-}
-
 /** "Principal ₱1,200.00 · Interest ₱300.00" — skips figures the API omits. */
 function breakdownHint(parts: [string, unknown][]): string | undefined {
   const segments = parts
@@ -288,60 +279,123 @@ function breakdownHint(parts: [string, unknown][]): string | undefined {
   return segments.length > 0 ? segments.join(" · ") : undefined;
 }
 
-/**
- * Warn in the preview (and in every export) when the table is only the first
- * page, so a partial list is never read as the complete one.
- */
-function truncationNote(
-  shown: number,
-  totalRows: number | null,
-  totalsFromServer: boolean
-): ReportSection | null {
+/** "Showing the first 200 of 450 members.", or null when every row is listed. */
+function truncationScope(shown: number, totalRows: number | null, noun: string): string | null {
   const truncated =
     totalRows !== null ? totalRows > shown : shown >= LIST_PAGE_SIZE;
   if (!truncated || shown === 0) return null;
 
-  const scope =
-    totalRows !== null
-      ? `Showing the first ${formatCount(shown)} of ${formatCount(totalRows)} rows.`
-      : `Showing the first ${formatCount(shown)} rows — the API did not report a row count, so there may be more.`;
-  const totalsScope = totalsFromServer
-    ? "The totals above cover every row in the period, not just the rows listed."
-    : "The totals above cover only the rows listed.";
+  return totalRows !== null
+    ? `Showing the first ${formatCount(shown)} of ${formatCount(totalRows)} ${noun}.`
+    : `Showing the first ${formatCount(shown)} ${noun} — the API did not report a count, so there may be more.`;
+}
 
-  return {
-    kind: "note",
-    text: `${scope} ${totalsScope} Export to CSV for the complete list.`,
-  };
+/**
+ * Truncation note for a table whose totals row shows only the server's
+ * figures: a total the server did not send is "—", never a sum of this page.
+ * `noun` names what one row is ("repayments", "loans", "borrowers") because the
+ * count comes from the server's `meta.total`, which counts those. There is no
+ * "Export to CSV" pointer: these reports export the document, which holds only
+ * the rows listed. `totals` is the block the server sent, if any: without one
+ * the footers are dashes, so the note says so instead of calling them the
+ * server's figures.
+ */
+export function serverTotalsTruncationNote(
+  shown: number,
+  totalRows: number | null,
+  noun: string,
+  totals: Record<string, unknown> | null
+): ReportSection | null {
+  const scope = truncationScope(shown, totalRows, noun);
+  if (!scope) return null;
+
+  const totalsScope = totals
+    ? `The table totals are the server's figures for the whole period, not a sum of the ${noun} listed.`
+    : `The server did not provide totals for the period, so the table totals show "—" rather than a sum of the ${noun} listed.`;
+
+  return { kind: "note", text: `${scope} ${totalsScope}` };
 }
 
 // ---------------------------------------------------------------------------
 // KPI-only reports
 // ---------------------------------------------------------------------------
 
+/**
+ * The summary KPIs, plus the accounts behind them when the repayments for the
+ * same window are supplied. `/reports/daily-collection` only returns totals, so
+ * the account list comes from `/reports/repayments` over the same dates; it is
+ * left out (not shown empty) when that read failed, so a failed read is never
+ * mistaken for "nothing was collected".
+ */
 export function buildDailyCollectionDoc(
   raw: unknown,
-  range: DateRange
+  range: DateRange,
+  repaymentsRaw?: unknown
 ): ReportDocument {
   const obj = asRecord(raw);
 
+  // The three collected figures are the server's own and are never added up
+  // here. They are counted on different bases, so they need not add up to
+  // each other: `total_collected` counts by period (principal plus interest
+  // paid on the periods falling due in the range), while `penalty_collected`
+  // and `total_received` are cash-basis (the penalty, and the money, taken by
+  // payments dated in the range; the premium is left out). A figure the server
+  // did not send is "—".
   const items: KpiItem[] = [
     kpi("Total Due", currencyOrDash(pick(obj, ["total_due", "due", "total_scheduled"]))),
-    kpi(
-      "Total Collected",
-      currencyOrDash(pick(obj, ["total_collected", "collected", "total_amount"])),
-      { tone: "positive" }
-    ),
+    kpi("Collected (Principal + Interest)", currencyOrDash(pick(obj, ["total_collected"])), {
+      tone: "positive",
+    }),
+    kpi("Penalty Collected", currencyOrDash(pick(obj, ["penalty_collected"]))),
+    kpi("Total Received", currencyOrDash(pick(obj, ["total_received"])), { tone: "positive" }),
     kpi("Collection Rate", percentOrDash(pick(obj, ["collection_rate", "rate"]))),
     kpi("Uncollected", currencyOrDash(pick(obj, ["uncollected", "outstanding"])), {
       tone: "negative",
     }),
   ];
 
+  const sections: ReportSection[] = [{ kind: "kpi_grid", items }];
+
+  if (repaymentsRaw != null) {
+    const { rows: rawRows, totals, totalRows } = readListEnvelope(repaymentsRaw);
+    const rows = rawRows.map(normalizeRepaymentRow);
+
+    const note = serverTotalsTruncationNote(rows.length, totalRows, "repayments", totals);
+    if (note) sections.push(note);
+
+    // Footer figures come only from the server's period-wide `totals`; a
+    // missing one is "—", never the rows on this page added up.
+    sections.push({
+      kind: "table",
+      title: "Payments Collected",
+      columns: REPAYMENT_COLUMNS,
+      rows,
+      totals:
+        rows.length > 0
+          ? [
+              {
+                column: "amount",
+                label: "Total",
+                value: currencyOrDash(pick(totals, ["total_amount_paid"])),
+              },
+              {
+                column: "penalty_amount",
+                value: currencyOrDash(pick(totals, ["total_penalty_applied"])),
+              },
+            ]
+          : undefined,
+      emptyText: "No collections were recorded in the selected period.",
+    });
+  }
+
   return {
     reportId: "daily_collection",
-    meta: meta("Daily Collection Report", range, "Summary of amounts due vs collected"),
-    sections: [{ kind: "kpi_grid", items }],
+    meta: meta(
+      "Daily Collection Report",
+      range,
+      "Amounts due vs collected, and the payments collected"
+    ),
+    sections,
   };
 }
 
@@ -359,12 +413,13 @@ const BY_BRANCH_COLUMNS: ReportColumn[] = [
     width: 160,
   },
   {
-    key: "outstanding_balance",
-    header: "Outstanding Balance",
+    key: "principal_balance",
+    header: "Principal Balance",
     format: "currency",
     align: "right",
     width: 170,
   },
+  { key: "outstanding", header: "Outstanding", format: "currency", align: "right", width: 170 },
 ];
 
 const COMPOSITION_COLUMNS: ReportColumn[] = [
@@ -378,16 +433,23 @@ const COMPOSITION_COLUMNS: ReportColumn[] = [
  * summary; it was fetched and dropped, so a multi-branch cooperative could
  * only ever see the consolidated figure.
  */
-function byBranchSection(rows: Record<string, unknown>[]): ReportSection | null {
+function byBranchSection(
+  rows: Record<string, unknown>[],
+  totals: Record<string, unknown> | null
+): ReportSection | null {
   if (rows.length === 0) return null;
 
   const normalized = rows.map((raw) => ({
     branch_name: pick(raw, ["branch_name", "name"]) ?? "Unassigned",
     loan_count: pick(raw, ["loan_count", "loans", "count"]),
     total_released: pick(raw, ["total_released", "released"]),
-    outstanding_balance: pick(raw, ["outstanding_balance", "outstanding"]),
+    // Never the deprecated `outstanding_balance`, which is principal plus premium.
+    principal_balance: pick(raw, ["outstanding_principal"]),
+    outstanding: pick(raw, ["total_outstanding"]),
   }));
 
+  // The footer is the server's `by_branch_totals`; a figure it did not send is
+  // "—", never the branch rows added up.
   return {
     kind: "table",
     title: "Breakdown by Branch",
@@ -397,26 +459,33 @@ function byBranchSection(rows: Record<string, unknown>[]): ReportSection | null 
       {
         column: "loan_count",
         label: "Total",
-        value: formatCount(sum(normalized, "loan_count")),
+        value: countOrDash(pick(totals, ["loan_count"])),
       },
-      { column: "total_released", value: formatCurrency(sum(normalized, "total_released")) },
+      { column: "total_released", value: currencyOrDash(pick(totals, ["total_released"])) },
       {
-        column: "outstanding_balance",
-        value: formatCurrency(sum(normalized, "outstanding_balance")),
+        column: "principal_balance",
+        value: currencyOrDash(pick(totals, ["outstanding_principal"])),
       },
+      { column: "outstanding", value: currencyOrDash(pick(totals, ["total_outstanding"])) },
     ],
     emptyText: "No branch breakdown was returned for this period.",
   };
 }
 
 /**
- * Principal / interest / penalty, outstanding against overdue. Both blocks
- * come back on every response and neither was rendered — the headline balance
- * alone cannot tell a collections officer what the arrears are made of.
+ * Principal / interest / penalty / premium, outstanding against overdue. Both
+ * blocks come back on every response and neither was rendered — the headline
+ * balance alone cannot tell a collections officer what the arrears are made of.
+ *
+ * Outstanding means everything owed, so the premium has its row and the column's
+ * footer is the server's `total_outstanding`, the same figure as the card. The
+ * Overdue footer is its block's `total`; the premium is never past due. A figure
+ * the server did not send shows "—", never the rows added up.
  */
 function compositionSection(
   outstanding: Record<string, unknown> | null,
-  overdue: Record<string, unknown> | null
+  overdue: Record<string, unknown> | null,
+  totalOutstanding: unknown
 ): ReportSection | null {
   if (!outstanding && !overdue) return null;
 
@@ -424,6 +493,7 @@ function compositionSection(
     ["Principal", "principal"],
     ["Interest", "interest"],
     ["Penalty", "penalty"],
+    ["Insurance Premium", "insurance"],
   ];
   const rows = components
     .map(([label, key]) => ({
@@ -443,27 +513,34 @@ function compositionSection(
     columns: COMPOSITION_COLUMNS,
     rows,
     totals: [
-      { column: "outstanding", label: "Total", value: formatCurrency(sum(rows, "outstanding")) },
-      { column: "overdue", value: formatCurrency(sum(rows, "overdue")) },
+      {
+        column: "outstanding",
+        label: "Total",
+        value: currencyOrDash(totalOutstanding),
+      },
+      { column: "overdue", value: currencyOrDash(pick(overdue, ["total"])) },
     ],
   };
 }
 
-export function buildPortfolioSummaryDoc(
-  raw: unknown,
-  range: DateRange
-): ReportDocument {
+/**
+ * The range is not read: this report is the whole portfolio as of a day, the same
+ * book as the Dashboard's Total Portfolio. The signature keeps it for the
+ * catalog's mapper type.
+ */
+export function buildPortfolioSummaryDoc(raw: unknown, range?: DateRange): ReportDocument;
+export function buildPortfolioSummaryDoc(raw: unknown): ReportDocument {
   const obj = asRecord(raw);
-  // The API sends flat headline figures alongside the nested blocks; read the
-  // headline first and keep the nested blocks as the fallback.
   const portfolio = asRecord(obj?.portfolio);
   const outstanding = asRecord(obj?.outstanding);
   const overdue = asRecord(obj?.overdue);
 
   const loanCount = pick(obj, ["active_loans"]) ?? pick(portfolio, ["loan_count"]);
-  const flatOutstanding = pick(obj, ["outstanding_balance"]);
-  const outstandingTotal =
-    flatOutstanding ?? sumFields(outstanding, ["principal", "interest", "penalty"]);
+  // The headline figures are the server's flat ones only. Never the deprecated
+  // `outstanding_balance` (principal plus premium), and never the nested
+  // components added up.
+  const principalBalance = pick(obj, ["outstanding_principal"]);
+  const totalOutstanding = pick(obj, ["total_outstanding"]);
   const atRisk = pick(obj, ["at_risk_amount"]) ?? pick(portfolio, ["at_risk_amount"]);
   const parRatio = pick(obj, ["par_ratio"]) ?? pick(portfolio, ["par_ratio"]);
   const overdueLoans = toNumber(pick(overdue, ["loan_count"]));
@@ -474,9 +551,9 @@ export function buildPortfolioSummaryDoc(
     kpi("Total Active Loans", countOrDash(loanCount), {
       hint: `Released: ${currencyOrDash(pick(portfolio, ["total_released"]))}`,
     }),
-    kpi("Outstanding Balance", currencyOrDash(outstandingTotal), {
-      // The headline balance includes insurance; the nested fallback does not.
-      hint: flatOutstanding === null ? "Principal + interest + penalty" : undefined,
+    kpi("Principal Balance", currencyOrDash(principalBalance)),
+    kpi("Outstanding", currencyOrDash(totalOutstanding), {
+      hint: "Principal, interest, penalty and insurance premium still owed",
     }),
     kpi(`At Risk (>${formatCount(thresholdDays)}d overdue)`, currencyOrDash(atRisk), {
       tone: "negative",
@@ -485,52 +562,140 @@ export function buildPortfolioSummaryDoc(
           ? undefined
           : `${formatCount(overdueLoans)} overdue ${overdueLoans === 1 ? "loan" : "loans"}`,
     }),
-    // PAR is computed server-side against outstanding *principal*, so it will
-    // not reproduce at-risk ÷ outstanding balance on screen. Never recompute it.
+    // PAR is computed server-side against the Principal Balance, so it will not
+    // reproduce at-risk ÷ Outstanding on screen. Never recompute it.
     kpi("PAR Ratio", percentOrDash(parRatio), {
       tone: "negative",
-      hint: "Portfolio at Risk, on outstanding principal",
+      hint: "Portfolio at Risk, on the Principal Balance",
     }),
   ];
 
   const sections: ReportSection[] = [{ kind: "kpi_grid", items }];
 
-  const composition = compositionSection(outstanding, overdue);
+  const composition = compositionSection(outstanding, overdue, totalOutstanding);
   if (composition) sections.push(composition);
 
-  const branches = byBranchSection(asArray(pick(obj, ["by_branch", "branches"])));
+  const branches = byBranchSection(
+    asArray(pick(obj, ["by_branch", "branches"])),
+    asRecord(pick(obj, ["by_branch_totals"]))
+  );
   if (branches) sections.push(branches);
 
   return {
     reportId: "portfolio_summary",
-    meta: meta("Portfolio Summary", range, "Overall loan portfolio status"),
+    meta: {
+      title: "Portfolio Summary",
+      subtitle: "Overall loan portfolio status",
+      asOf: formatValue(pick(obj, ["as_of", "generated_at"]) ?? new Date(), "date"),
+      generatedAt: formatGeneratedAt(),
+      org: "",
+    },
     sections,
   };
 }
 
-export function buildIncomeDoc(raw: unknown, range: DateRange): ReportDocument {
+// Keyed to the fields GET /reports/income/by-loan sends, so each row renders as
+// sent: the server works out each loan's interest, penalty and processing fee,
+// and each row's Total Income.
+const INCOME_BY_LOAN_COLUMNS: ReportColumn[] = [
+  { key: "loan_account_number", header: "Loan #", format: "text", width: 130 },
+  { key: "borrower_name", header: "Member", format: "text", width: 220 },
+  { key: "payments", header: "Payments", format: "number", align: "right", width: 90 },
+  { key: "interest_income", header: "Interest", format: "currency", align: "right", width: 130 },
+  { key: "penalty_income", header: "Penalty", format: "currency", align: "right", width: 120 },
+  { key: "processing_fee", header: "Processing Fee", format: "currency", align: "right", width: 130 },
+  { key: "service_fee", header: "Service Fee", format: "currency", align: "right", width: 120 },
+  { key: "other_fees", header: "Other Fees", format: "currency", align: "right", width: 120 },
+  { key: "total_income", header: "Total Income", format: "currency", align: "right", width: 140 },
+];
+
+/**
+ * The summary KPIs, plus the per-loan rows behind them when
+ * `/reports/income/by-loan` for the same window is supplied. The list is left
+ * out (not shown empty) when that read failed.
+ */
+export function buildIncomeDoc(
+  raw: unknown,
+  range: DateRange,
+  byLoanRaw?: unknown
+): ReportDocument {
   const obj = asRecord(raw);
 
   const interest = toNumber(pick(obj, ["interest_income", "interest"]));
   const fees = toNumber(pick(obj, ["processing_fees", "fees", "fee_income"]));
   const penalties = toNumber(pick(obj, ["penalty_income", "penalties"]));
-  const total =
-    toNumber(pick(obj, ["total_income", "total"])) ??
-    (interest !== null || fees !== null || penalties !== null
-      ? (interest ?? 0) + (fees ?? 0) + (penalties ?? 0)
-      : null);
+  // Fee income booked at release to 4040 and 4080, as the server classed it.
+  const serviceFees = toNumber(pick(obj, ["service_fee"]));
+  const otherFees = toNumber(pick(obj, ["other_fees"]));
+  // The server's total, or "—" when it sent none: never the components added
+  // up here.
+  const total = toNumber(pick(obj, ["total_income", "total"]));
 
   const items: KpiItem[] = [
     kpi("Interest Income", currencyOrDash(interest), { tone: "positive" }),
     kpi("Processing Fees", currencyOrDash(fees), { tone: "positive" }),
+    kpi("Service Fees", currencyOrDash(serviceFees), { tone: "positive" }),
+    kpi("Other Fees", currencyOrDash(otherFees), { tone: "positive" }),
     kpi("Penalty Income", currencyOrDash(penalties)),
     kpi("Total Income", currencyOrDash(total), { tone: "positive" }),
   ];
 
+  const sections: ReportSection[] = [{ kind: "kpi_grid", items }];
+
+  if (byLoanRaw != null) {
+    const { rows, totals, totalRows } = readListEnvelope(byLoanRaw);
+
+    const note = serverTotalsTruncationNote(rows.length, totalRows, "loans", totals);
+    if (note) sections.push(note);
+
+    // Footer figures come only from the server's period-wide `totals`; a
+    // missing one is "—", never the rows on this page added up.
+    sections.push({
+      kind: "table",
+      title: "Income by Loan Account",
+      columns: INCOME_BY_LOAN_COLUMNS,
+      rows,
+      totals:
+        rows.length > 0
+          ? [
+              {
+                column: "payments",
+                label: "Total",
+                value: countOrDash(pick(totals, ["payments"])),
+              },
+              {
+                column: "interest_income",
+                value: currencyOrDash(pick(totals, ["interest_income"])),
+              },
+              {
+                column: "penalty_income",
+                value: currencyOrDash(pick(totals, ["penalty_income"])),
+              },
+              {
+                column: "processing_fee",
+                value: currencyOrDash(pick(totals, ["processing_fee"])),
+              },
+              { column: "service_fee", value: currencyOrDash(pick(totals, ["service_fee"])) },
+              { column: "other_fees", value: currencyOrDash(pick(totals, ["other_fees"])) },
+              {
+                column: "total_income",
+                value: currencyOrDash(pick(totals, ["total_income"])),
+              },
+            ]
+          : undefined,
+      emptyText: "No income was collected on any loan account in the selected period.",
+    });
+    sections.push({
+      kind: "note",
+      text:
+        "Interest and penalty are taken from the repayments posted in the period, and processing, service and other fees from the loans released in the period, per loan account.",
+    });
+  }
+
   return {
     reportId: "income_report",
     meta: meta("Income Report", range, "Interest, fees, and penalty income"),
-    sections: [{ kind: "kpi_grid", items }],
+    sections,
   };
 }
 
@@ -598,8 +763,9 @@ const AGING_COLUMNS: ReportColumn[] = [
 /**
  * The aging schedule proper. Four KPI cards state the buckets but cannot show
  * concentration — which bucket holds the arrears is the entire question an
- * aging report exists to answer, so each bucket's share of the total is
- * computed here from the amounts the API already sent.
+ * aging report exists to answer — so each row carries its share of the total:
+ * the server's `share_percent`, worked out from centavos. A share it did not
+ * send is "—"; none is divided out here.
  */
 function agingScheduleSection(
   buckets: Record<string, unknown> | null,
@@ -611,31 +777,26 @@ function agingScheduleSection(
     return {
       bucket: label,
       amount: toNumber(bucket ? bucket.amount : value),
+      // Null from the server when the total is 0, and absent from an older
+      // payload: "—" either way.
+      share: toNumber(bucket?.share_percent),
       count: toNumber(bucket?.count),
     };
   }).filter((r) => r.amount !== null);
 
   if (rows.length === 0) return null;
 
-  // Prefer the server's total as the denominator; fall back to the buckets we
-  // were given so the shares still add to 100% rather than to nothing.
-  const totalAmount = toNumber(total?.amount) ?? sum(rows, "amount");
-  const withShare = rows.map((r) => ({
-    ...r,
-    // A zero total would make every share NaN — report no share instead.
-    share: totalAmount > 0 ? ((r.amount ?? 0) / totalAmount) * 100 : null,
-  }));
-
   return {
     kind: "table",
     title: "Aging Schedule",
     columns: AGING_COLUMNS,
-    rows: withShare,
+    rows,
     totals: [
-      { column: "amount", label: "Total", value: formatCurrency(totalAmount) },
+      // The server's total; the buckets are never added up here.
+      { column: "amount", label: "Total", value: currencyOrDash(total?.amount) },
       // Deliberately no total for `count`: bucket counts double-count a loan
       // that is late in two buckets, so a column sum would be wrong.
-      { column: "share", value: totalAmount > 0 ? formatPercent(100) : DASH },
+      { column: "share", value: percentOrDash(total?.share_percent) },
     ],
   };
 }
@@ -670,29 +831,117 @@ export function buildAgingDoc(raw: unknown, range: DateRange): ReportDocument {
   };
 }
 
-export function buildBorrowerDoc(raw: unknown, range: DateRange): ReportDocument {
+// Keyed to the fields GET /reports/borrowers/list sends, so each row renders as
+// sent. `markers` is the one cell shaped here, from the server's two flags.
+const MEMBER_LIST_COLUMNS: ReportColumn[] = [
+  { key: "borrower_code", header: "Member No.", format: "text", width: 110 },
+  { key: "borrower_name", header: "Member", format: "text", width: 220 },
+  { key: "branch_name", header: "Branch", format: "text", width: 140 },
+  { key: "markers", header: "New / Repeat", format: "text", width: 110 },
+  { key: "active_loans", header: "Active Loans", format: "number", align: "right", width: 110 },
+  { key: "loans_released", header: "Loans Released", format: "number", align: "right", width: 120 },
+  { key: "outstanding", header: "Outstanding", format: "currency", align: "right", width: 140 },
+  { key: "last_release_date", header: "Last Release", format: "date", width: 120 },
+];
+
+/**
+ * A loan status as the loans screens label it; a value they don't know, as
+ * sent. `released` and legacy `ongoing` both read "Current", the reports' word
+ * for a live loan.
+ */
+function loanStatusText(value: unknown): unknown {
+  return typeof value === "string" && Object.hasOwn(LOAN_STATUS_LABELS, value)
+    ? LOAN_STATUS_LABELS[value as LoanStatus]
+    : value;
+}
+
+/** Display shaping only: every figure stays exactly as the server sent it. */
+function normalizeMemberRow(raw: Record<string, unknown>): Record<string, unknown> {
+  const markers = [raw.is_new === true && "New", raw.is_repeat === true && "Repeat"].filter(Boolean);
+  return { ...raw, markers: markers.length > 0 ? markers.join(", ") : null };
+}
+
+/**
+ * The summary KPIs, plus the members behind them when `/reports/borrowers/list`
+ * for the same window is supplied. The list is left out (not shown empty) when
+ * that read failed.
+ */
+export function buildBorrowerDoc(
+  raw: unknown,
+  range: DateRange,
+  listRaw?: unknown
+): ReportDocument {
   const obj = asRecord(raw);
 
   const items: KpiItem[] = [
     kpi(
-      "Total Active Borrowers",
+      "Total Active Members",
       countOrDash(pick(obj, ["total_active_borrowers", "active_borrowers", "total_active"]))
     ),
-    kpi("New Borrowers", countOrDash(pick(obj, ["new_borrowers", "new"])), {
+    kpi("New Members", countOrDash(pick(obj, ["new_borrowers", "new"])), {
       tone: "positive",
     }),
     kpi("Avg Loan Size", currencyOrDash(pick(obj, ["avg_loan_size", "average_loan"]))),
-    kpi("Repeat Borrowers", countOrDash(pick(obj, ["repeat_borrowers", "repeat"]))),
+    kpi("Repeat Members", countOrDash(pick(obj, ["repeat_borrowers", "repeat"]))),
   ];
+
+  const sections: ReportSection[] = [{ kind: "kpi_grid", items }];
+
+  if (listRaw != null) {
+    const { rows: rawRows, totalRows } = readListEnvelope(listRaw);
+    const rows = rawRows.map(normalizeMemberRow);
+
+    const scope = truncationScope(rows.length, totalRows, "members");
+    if (scope) sections.push({ kind: "note", text: scope });
+
+    // No footer: the server sends counts for the cards, not column totals, and
+    // rows are never added up here. The list holds every member a card
+    // counts: active, new and repeat.
+    sections.push({
+      kind: "table",
+      title: "Active, New and Repeat Members",
+      columns: MEMBER_LIST_COLUMNS,
+      rows,
+      emptyText: "No active, new or repeat members for the selected period.",
+    });
+    sections.push({
+      kind: "note",
+      text:
+        "Active: at least one collectible loan as of the end of the period, going by each loan's current status, not its status back then. New: registered in the period. Repeat: at least 2 loans released. This table lists every active, new and repeat member, so each member a card counts has a row here.",
+    });
+  }
 
   return {
     reportId: "borrower_report",
-    meta: meta("Borrower Report", range, "Active, new, and repeat borrower activity"),
-    sections: [{ kind: "kpi_grid", items }],
+    meta: meta("Member Report", range, "Active, new, and repeat member activity"),
+    sections,
   };
 }
 
-export function buildDisbursementDoc(raw: unknown, range: DateRange): ReportDocument {
+// Net Proceeds leads because it is what the "Total Disbursed" KPI adds up
+// (`disbursementReport()` sums `net_proceeds`), so the first money total in the
+// table is the figure staff compare it with. Principal, which is larger by the
+// deductions, follows.
+const DISBURSEMENT_COLUMNS: ReportColumn[] = [
+  { key: "release_date", header: "Release Date", format: "date", width: 120 },
+  { key: "loan_account_number", header: "Loan #", format: "text", width: 130 },
+  { key: "borrower_name", header: "Member", format: "text", width: 220 },
+  { key: "net_proceeds", header: "Net Proceeds", format: "currency", align: "right", width: 150 },
+  { key: "principal", header: "Principal Released", format: "currency", align: "right", width: 160 },
+  { key: "status", header: "Status", format: "text", width: 110 },
+];
+
+/**
+ * The summary figures, plus the loan accounts behind the total disbursed when
+ * the period's releases are supplied. `/reports/disbursements` returns totals
+ * only, so the list is read from `/reports/releases` over the same window; it
+ * is left out (not shown empty) when that read failed.
+ */
+export function buildDisbursementDoc(
+  raw: unknown,
+  range: DateRange,
+  releasesRaw?: unknown
+): ReportDocument {
   const obj = asRecord(raw);
 
   const items: KpiItem[] = [
@@ -706,10 +955,47 @@ export function buildDisbursementDoc(raw: unknown, range: DateRange): ReportDocu
     kpi("Pending Release", countOrDash(pick(obj, ["pending_release", "pending"]))),
   ];
 
+  const sections: ReportSection[] = [{ kind: "kpi_grid", items }];
+
+  if (releasesRaw != null) {
+    const { rows: rawRows, totals, totalRows } = readListEnvelope(releasesRaw);
+    const rows = rawRows.map((raw) => ({
+      ...normalizeReleaseRow(raw),
+      net_proceeds: pick(raw, ["net_proceeds", "net_amount", "proceeds"]),
+    }));
+
+    const note = serverTotalsTruncationNote(rows.length, totalRows, "loans", totals);
+    if (note) sections.push(note);
+
+    // Footer figures come only from the server's period-wide `totals`; a
+    // missing one is "—", never the rows on this page added up.
+    sections.push({
+      kind: "table",
+      title: "Disbursed Loan Accounts",
+      columns: DISBURSEMENT_COLUMNS,
+      rows,
+      totals:
+        rows.length > 0
+          ? [
+              {
+                column: "net_proceeds",
+                label: "Total",
+                value: currencyOrDash(pick(totals, ["total_net_proceeds"])),
+              },
+              {
+                column: "principal",
+                value: currencyOrDash(pick(totals, ["total_principal"])),
+              },
+            ]
+          : undefined,
+      emptyText: "No loans were released in the selected period.",
+    });
+  }
+
   return {
     reportId: "disbursement_report",
-    meta: meta("Disbursement Report", range, "Loan releases during the selected period"),
-    sections: [{ kind: "kpi_grid", items }],
+    meta: meta("Disbursement Summary", range, "Loan releases during the selected period"),
+    sections,
   };
 }
 
@@ -720,18 +1006,14 @@ export function buildDisbursementDoc(raw: unknown, range: DateRange): ReportDocu
 export function buildReleasesListDoc(raw: unknown, range: DateRange): ReportDocument {
   const { rows: rawRows, totals, totalRows } = readListEnvelope(raw);
   const rows = rawRows.map(normalizeReleaseRow);
-  const principal = resolveTotal(
-    totals,
-    ["total_principal", "principal", "principal_amount"],
-    rows,
-    "principal"
-  );
+  // Every money total is the server's period-wide figure, or "—" when it sent
+  // none: never the rows on this page added up.
+  const principal = pick(totals, ["total_principal", "principal", "principal_amount"]);
   const netProceeds = pick(totals, ["total_net_proceeds"]);
-  const outstanding = pick(totals, ["total_outstanding_balance"]);
 
   const items: KpiItem[] = [
     kpi("Total Releases", countOrDash(totalRows ?? rows.length)),
-    kpi("Total Principal", formatCurrency(principal.value), { tone: "positive" }),
+    kpi("Total Principal", currencyOrDash(principal), { tone: "positive" }),
   ];
   // Only shown when the API sends period-wide totals — never summed from a page.
   if (netProceeds !== null) {
@@ -741,13 +1023,15 @@ export function buildReleasesListDoc(raw: unknown, range: DateRange): ReportDocu
       })
     );
   }
-  if (outstanding !== null) {
-    items.push(kpi("Outstanding Balance", currencyOrDash(outstanding)));
-  }
+  // Never the deprecated `total_outstanding_balance`, principal plus premium.
+  items.push(
+    kpi("Principal Balance", currencyOrDash(pick(totals, ["outstanding_principal"]))),
+    kpi("Outstanding", currencyOrDash(pick(totals, ["total_outstanding"])))
+  );
 
   const sections: ReportSection[] = [{ kind: "kpi_grid", items }];
 
-  const note = truncationNote(rows.length, totalRows, principal.fromServer);
+  const note = serverTotalsTruncationNote(rows.length, totalRows, "loans", totals);
   if (note) sections.push(note);
 
   sections.push({
@@ -757,7 +1041,7 @@ export function buildReleasesListDoc(raw: unknown, range: DateRange): ReportDocu
     rows,
     totals:
       rows.length > 0
-        ? [{ column: "principal", label: "Total", value: formatCurrency(principal.value) }]
+        ? [{ column: "principal", label: "Total", value: currencyOrDash(principal) }]
         : undefined,
     emptyText: "No loans were released in the selected period.",
   });
@@ -772,41 +1056,40 @@ export function buildReleasesListDoc(raw: unknown, range: DateRange): ReportDocu
 export function buildRepaymentsListDoc(raw: unknown, range: DateRange): ReportDocument {
   const { rows: rawRows, totals, totalRows } = readListEnvelope(raw);
   const rows = rawRows.map(normalizeRepaymentRow);
-  const amount = resolveTotal(
-    totals,
-    ["total_amount_paid", "amount", "total_amount", "amount_paid"],
-    rows,
-    "amount"
-  );
-  const penalty = resolveTotal(
-    totals,
-    ["total_penalty_applied", "penalty_amount", "total_penalty", "penalty_applied"],
-    rows,
-    "penalty_amount"
-  );
+  // Server totals only; "—" when one was not sent, never a page sum.
+  const amount = pick(totals, ["total_amount_paid", "amount", "total_amount", "amount_paid"]);
+  const penalty = pick(totals, [
+    "total_penalty_applied",
+    "penalty_amount",
+    "total_penalty",
+    "penalty_applied",
+  ]);
 
   const sections: ReportSection[] = [
     {
       kind: "kpi_grid",
       items: [
         kpi("Total Repayments", countOrDash(totalRows ?? rows.length)),
-        kpi("Total Collected", formatCurrency(amount.value), {
+        kpi("Total Collected", currencyOrDash(amount), {
           tone: "positive",
-          hint: breakdownHint([
-            ["Principal", pick(totals, ["total_principal_applied"])],
-            ["Interest", pick(totals, ["total_interest_applied"])],
-          ]),
+          // The premium total always shows, "—" when the server sent none,
+          // so a missing figure is never read as "no premium collected".
+          hint: [
+            `Insurance premium ${currencyOrDash(pick(totals, ["total_insurance_applied"]))}`,
+            breakdownHint([
+              ["Principal", pick(totals, ["total_principal_applied"])],
+              ["Interest", pick(totals, ["total_interest_applied"])],
+            ]),
+          ]
+            .filter((segment): segment is string => segment !== undefined)
+            .join(" · "),
         }),
-        kpi("Penalty Collected", formatCurrency(penalty.value)),
+        kpi("Penalty Collected", currencyOrDash(penalty)),
       ],
     },
   ];
 
-  const note = truncationNote(
-    rows.length,
-    totalRows,
-    amount.fromServer && penalty.fromServer
-  );
+  const note = serverTotalsTruncationNote(rows.length, totalRows, "repayments", totals);
   if (note) sections.push(note);
 
   sections.push({
@@ -817,8 +1100,8 @@ export function buildRepaymentsListDoc(raw: unknown, range: DateRange): ReportDo
     totals:
       rows.length > 0
         ? [
-            { column: "amount", label: "Total", value: formatCurrency(amount.value) },
-            { column: "penalty_amount", value: formatCurrency(penalty.value) },
+            { column: "amount", label: "Total", value: currencyOrDash(amount) },
+            { column: "penalty_amount", value: currencyOrDash(penalty) },
           ]
         : undefined,
     emptyText: "No repayments were recorded in the selected period.",
@@ -840,7 +1123,7 @@ const SOA_SCHEDULE_COLUMNS: ReportColumn[] = [
   { key: "due_date", header: "Due Date", format: "date", width: 110 },
   {
     key: "beginning_balance",
-    header: "Beginning Balance",
+    header: "Beginning Principal",
     format: "currency",
     align: "right",
     width: 150,
@@ -849,12 +1132,15 @@ const SOA_SCHEDULE_COLUMNS: ReportColumn[] = [
   { key: "interest_due", header: "Interest", format: "currency", align: "right", width: 110 },
   { key: "penalty_amount", header: "Penalty", format: "currency", align: "right", width: 110 },
   { key: "total_due", header: "Total Due", format: "currency", align: "right", width: 130 },
-  { key: "amount_paid", header: "Paid", format: "currency", align: "right", width: 120 },
-  { key: "balance", header: "Balance", format: "currency", align: "right", width: 130 },
+  // Each period's own figures, penalty included. "Total Paid" in the summary is
+  // everything received, so these two say what they cover.
+  { key: "total_paid", header: "Period Paid", format: "currency", align: "right", width: 120 },
+  { key: "balance", header: "Period Balance", format: "currency", align: "right", width: 130 },
   { key: "status", header: "Status", format: "text", width: 100 },
 ];
 
-const SOA_TRANSACTION_COLUMNS: ReportColumn[] = [
+/** A ledger's transaction lines; the subsidiary ledger reads these. */
+const TRANSACTION_COLUMNS: ReportColumn[] = [
   { key: "date", header: "Date", format: "date", width: 110 },
   { key: "reference", header: "Reference", format: "text", width: 140 },
   { key: "particulars", header: "Particulars", format: "text", width: 220 },
@@ -863,6 +1149,61 @@ const SOA_TRANSACTION_COLUMNS: ReportColumn[] = [
   { key: "credit", header: "Credit", format: "currency", align: "right", width: 130 },
   { key: "running_balance", header: "Balance", format: "currency", align: "right", width: 140 },
 ];
+
+/** Added after Total Due on a loan with a Share Capital Build-Up. */
+const SOA_BUILD_UP_SCHEDULE_COLUMNS: ReportColumn[] = [
+  { key: "build_up_due", header: "Share Capital Build-Up", format: "currency", align: "right", width: 180 },
+  { key: "total_payment", header: "Total Payment", format: "currency", align: "right", width: 130 },
+];
+
+function soaScheduleColumns(hasBuildUp: boolean): ReportColumn[] {
+  if (!hasBuildUp) return SOA_SCHEDULE_COLUMNS;
+  const afterTotalDue = SOA_SCHEDULE_COLUMNS.findIndex((c) => c.key === "total_due") + 1;
+  return [
+    ...SOA_SCHEDULE_COLUMNS.slice(0, afterTotalDue),
+    ...SOA_BUILD_UP_SCHEDULE_COLUMNS,
+    ...SOA_SCHEDULE_COLUMNS.slice(afterTotalDue),
+  ];
+}
+
+/**
+ * The Statement of Account's lines split each amount the way the server applied
+ * it, so a line adds up to the amount received, and end on the principal
+ * balance. The split is the server's: nothing here is worked out from the amount.
+ */
+function soaTransactionColumns(
+  hasBuildUp: boolean,
+  hasOverpayment: boolean,
+  hasPremium: boolean
+): ReportColumn[] {
+  const money = (key: string, header: string, width: number): ReportColumn => ({
+    key,
+    header,
+    format: "currency",
+    align: "right",
+    width,
+  });
+  const [date, reference, particulars, method, debit, credit] = TRANSACTION_COLUMNS;
+  return [
+    date,
+    reference,
+    particulars,
+    // Wider than the ledger's: this one also carries the reference number.
+    { ...method, width: 190 },
+    // The whole receipt. Credit is what it took off the debt, so it leaves out
+    // build-up and overpayment.
+    money("amount_paid", "Receipt Amount", 130),
+    debit,
+    credit,
+    money("principal_applied", "Principal", 120),
+    money("interest_applied", "Interest", 110),
+    money("penalty_applied", "Penalty", 110),
+    ...(hasPremium ? [money("insurance_applied", "Insurance Premium", 140)] : []),
+    ...(hasBuildUp ? [money("build_up_applied", "Build-Up", 110)] : []),
+    ...(hasOverpayment ? [money("overpayment_applied", "Overpayment", 120)] : []),
+    money("principal_balance", "Principal Balance", 140),
+  ];
+}
 
 function normalizeScheduleRow(raw: Record<string, unknown>): Record<string, unknown> {
   return {
@@ -873,12 +1214,23 @@ function normalizeScheduleRow(raw: Record<string, unknown>): Record<string, unkn
     interest_due: pick(raw, ["interest_due", "interest"]),
     penalty_amount: pick(raw, ["penalty_amount", "penalty", "penalty_due"]),
     total_due: pick(raw, ["total_due", "amount_due", "scheduled_amount"]),
-    amount_paid:
-      sumFields(raw, ["principal_paid", "interest_paid"]) ??
-      toNumber(pick(raw, ["amount_paid", "total_paid"])),
-    balance: pick(raw, ["amount_remaining", "balance", "remaining_balance"]),
-    status: pick(raw, ["status"]),
+    build_up_due: pick(raw, ["build_up_due"]),
+    total_payment: pick(raw, ["total_payment"]),
+    // What the server says was paid on the period; "—" when it is missing, never
+    // `amount_paid` or the components added here.
+    total_paid: pick(raw, ["total_paid"]),
+    // What the period still owes, as the server worked it out; "—" without it.
+    balance: pick(raw, ["amount_remaining"]),
+    status: periodStatusText(pick(raw, ["status"])),
+    note: pick(raw, ["note"]),
   };
+}
+
+/** A period's status in words with capitals: `partial` reads "Partial". */
+function periodStatusText(value: unknown): unknown {
+  return typeof value === "string"
+    ? value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
+    : value;
 }
 
 /**
@@ -898,15 +1250,87 @@ function normalizeTransactionRow(raw: Record<string, unknown>): Record<string, u
 
   return {
     date: pick(raw, ["date", "transaction_date", "paid_at", "payment_date", "created_at"]),
-    reference: pick(raw, ["reference", "reference_no", "receipt_no", "or_number", "id"]),
+    // The receipt number; never the row's database id. "—" without one.
+    reference: pick(raw, ["receipt_number", "reference", "reference_no", "receipt_no", "or_number"]),
     particulars:
       pick(raw, ["particulars", "description", "remarks", "narration"]) ??
       (type ? type.replace(/_/g, " ") : null),
-    method: pick(raw, ["method", "payment_method"]),
+    method: paymentMethodText(pick(raw, ["method", "payment_method"])),
     debit: explicitDebit ?? (isDebit && !isCredit ? amount : null),
     credit: explicitCredit ?? (isCredit ? amount : null),
     running_balance: pick(raw, ["running_balance", "balance", "outstanding_balance"]),
   };
+}
+
+/**
+ * One Statement of Account line, as the loan's Ledger has it: the release, a
+ * charge, a payment, a waiver or an adjustment. Every figure is the server's, and
+ * a line without one shows "—".
+ *
+ * Only a payment line shows its receipt amount and applied parts. The server
+ * gives a release or charge negative parts ("-₱60,000.00"), which say the same as
+ * its debit, so those lines show the debit and a dash in each part. An imported
+ * loan's "Paid before the loan was imported" line (`paid_before_import`) is money
+ * paid with no receipt: it shows its parts, which add up to its credit, and a
+ * dash for the receipt.
+ *
+ * A voided payment stays listed and moves nothing: its receipt's amount is in
+ * the mark, never under Credit, and the server's totals leave it out.
+ *
+ * `balance` is the alias of `principal_balance` the server keeps for one release;
+ * `running_balance` is another figure (principal plus premium), so it is never
+ * read for this column.
+ */
+function normalizeSoaTransactionRow(raw: Record<string, unknown>): Record<string, unknown> {
+  const method = paymentMethodText(pick(raw, ["payment_method", "method"]));
+  const reference = pick(raw, ["reference_number"]);
+  const referenceText = reference ? `Ref. ${reference}` : null;
+  const line = normalizeTransactionRow(raw);
+  const voided = pick(raw, ["voided"]) === true;
+  const type = pick(raw, ["type"]);
+  const isPayment = typeof type !== "string" || /payment/.test(type);
+  const showsParts = isPayment || type === "paid_before_import";
+  const part = (key: string) => (showsParts ? toNumber(pick(raw, [key])) : null);
+
+  return {
+    ...line,
+    particulars: voided
+      ? voidedParticulars(line.particulars, pick(raw, ["amount_paid"]))
+      : line.particulars,
+    amount_paid: isPayment && !voided ? toNumber(pick(raw, ["amount_paid"])) : null,
+    debit: voided ? null : line.debit,
+    credit: voided ? null : line.credit,
+    voided,
+    method: method && referenceText ? `${method} (${referenceText})` : (method ?? referenceText),
+    principal_applied: part("principal_applied"),
+    interest_applied: part("interest_applied"),
+    penalty_applied: part("penalty_applied"),
+    insurance_applied: part("insurance_applied"),
+    build_up_applied: part("build_up_applied"),
+    overpayment_applied: part("overpayment_applied"),
+    principal_balance: pick(raw, ["principal_balance", "balance"]),
+  };
+}
+
+/** A voided line's words: the mark, capitalised, and the receipt's amount when sent. */
+function voidedParticulars(particulars: unknown, amount: unknown): string {
+  const text = typeof particulars === "string" ? particulars : "";
+  const marked = /void/i.test(text)
+    ? text.replace("(voided)", "(Voided)")
+    : text === ""
+      ? "Voided"
+      : `${text} (Voided)`;
+  const receipt = toNumber(amount);
+  return receipt !== null && receipt > 0 ? `${marked}: ${formatCurrency(receipt)}` : marked;
+}
+
+type AccountField = [string, unknown, "text" | "currency" | "date" | "rate"];
+
+function rateField(loan: Record<string, unknown> | null): AccountField[] {
+  const label = pick(loan, ["rate_label"]);
+  return label
+    ? [["Interest Rate", label, "text"]]
+    : [["Interest Rate", pick(loan, ["interest_rate", "rate"]), "rate"]];
 }
 
 /** Label→value particulars for the account the statement covers. */
@@ -914,18 +1338,28 @@ function accountFields(
   loan: Record<string, unknown> | null,
   borrower: Record<string, unknown> | null
 ): FieldItem[] {
-  const fields: [string, unknown, "text" | "currency" | "date" | "percent"][] = [
-    ["Borrower", pick(borrower, ["full_name", "name", "borrower_name"]), "text"],
+  const fields: AccountField[] = [
+    ["Member", pick(borrower, ["full_name", "name", "borrower_name"]), "text"],
     ["Member No.", pick(borrower, ["borrower_code", "member_no", "code"]), "text"],
-    ["Loan Account No.", pick(loan, ["loan_account_number", "account_number"]), "text"],
+    ["Address", pick(loan, ["member_address"]) ?? pick(borrower, ["address"]), "text"],
+    ["Loan Account No.", pick(loan, ["display_number", "loan_display_number", "loan_account_number", "account_number"]), "text"],
     ["Application No.", pick(loan, ["application_number"]), "text"],
     ["Loan Product", pick(loan, ["product_name", "loan_product_name"]), "text"],
+    ["Branch", pick(loan, ["branch_name"]), "text"],
+    ["Account Officer", pick(loan, ["account_officer_name"]), "text"],
     ["Principal", pick(loan, ["principal_amount", "principal"]), "currency"],
-    ["Interest Rate", pick(loan, ["interest_rate", "rate"]), "percent"],
+    // The server's labels carry the units ("3.0% per month", "6 months").
+    ...rateField(loan),
+    ["Interest Type", pick(loan, ["interest_type"]), "text"],
     ["Term", pick(loan, ["term_label", "term"]), "text"],
+    ["Payment Frequency", pick(loan, ["payment_frequency"]), "text"],
+    // Only a loan that has been extended has anything to say here.
+    ["Extensions", (toNumber(pick(loan, ["extensions_count"])) ?? 0) > 0 ? pick(loan, ["extensions_count"]) : null, "text"],
     ["Release Date", pick(loan, ["release_date", "released_at"]), "date"],
     ["Maturity Date", pick(loan, ["maturity_date", "end_date"]), "date"],
-    ["Status", pick(loan, ["status"]), "text"],
+    // The server's label reads "Past Due" when the Past Due figure is above
+    // ₱0.00, which `status` alone can't say.
+    ["Status", pick(loan, ["status_label"]) ?? loanStatusText(pick(loan, ["status"])), "text"],
   ];
 
   // Only particulars the API actually sent — a statement padded with dashes
@@ -938,21 +1372,54 @@ function accountFields(
     }));
 }
 
-export function buildStatementOfAccountDoc(
-  raw: unknown,
-  range: DateRange
-): ReportDocument {
+/** Red only when something is actually owed: ₱0.00 and a dash are nothing wrong. */
+function owedTone(value: unknown): KpiItem["tone"] {
+  return (toNumber(value) ?? 0) > 0 ? "negative" : "neutral";
+}
+
+/**
+ * The notes under the schedule. The server's own note names what restated or
+ * replaced a period. Without it, each period's own note is listed, because a
+ * period number can otherwise skip with no explanation.
+ */
+function scheduleNotes(note: unknown, rows: Record<string, unknown>[]): ReportSection[] {
+  if (typeof note === "string" && note !== "") return [{ kind: "note", text: note }];
+  return rows.flatMap((row): ReportSection[] =>
+    typeof row.note === "string" && row.note !== ""
+      ? [{ kind: "note", text: `Period ${row.period_number}: ${row.note}` }]
+      : []
+  );
+}
+
+/**
+ * The range is not read: this statement covers the whole loan up to the server's
+ * `as_of`, whatever range a caller holds. The signature keeps it because the
+ * catalog's mapper type and the loan page both pass one.
+ */
+export function buildStatementOfAccountDoc(raw: unknown, range?: DateRange): ReportDocument;
+export function buildStatementOfAccountDoc(raw: unknown): ReportDocument {
   const obj = asRecord(raw);
   const loan = asRecord(pick(obj, ["loan"])) ?? obj;
   const borrower = asRecord(pick(obj, ["borrower"])) ?? asRecord(pick(loan, ["borrower"]));
   const summary = asRecord(pick(obj, ["summary", "balance", "totals"]));
+  // Both footers are the server's own totals; a figure it did not send is "—",
+  // never a column added up here.
+  const scheduleTotals = asRecord(pick(obj, ["schedule_totals"]));
+  const transactionTotals = asRecord(pick(obj, ["transaction_totals"]));
 
   const scheduleRows = asArray(
     pick(obj, ["schedule", "amortization_schedule", "schedules", "installments"])
   ).map(normalizeScheduleRow);
   const transactionRows = asArray(
     pick(obj, ["transactions", "repayments", "payments", "ledger", "entries"])
-  ).map(normalizeTransactionRow);
+  ).map(normalizeSoaTransactionRow);
+  const hasBuildUp = pick(loan, ["has_build_up"]) === true;
+  const hasOverpayment = transactionRows.some(
+    (row) => row.overpayment_applied !== null && row.overpayment_applied !== 0
+  );
+  const hasPremium = transactionRows.some(
+    (row) => row.insurance_applied !== null && row.insurance_applied !== 0
+  );
 
   const outstanding =
     pick(summary, ["outstanding_balance", "total_balance", "balance"]) ??
@@ -960,6 +1427,12 @@ export function buildStatementOfAccountDoc(
   const totalPaid =
     pick(summary, ["total_paid", "amount_paid", "total_amount_paid"]) ??
     pick(obj, ["total_paid"]);
+  // On an imported loan Total Paid also holds what its file says was paid
+  // before the import, which no receipt line carries; said in words.
+  const paidBeforeImport = pick(summary, ["paid_before_import"]);
+  const totalPaidNote = paidBeforeImportNote(paidBeforeImport);
+
+  const overdueAmount = pick(summary, ["overdue_amount"]);
 
   const sections: ReportSection[] = [];
 
@@ -973,20 +1446,51 @@ export function buildStatementOfAccountDoc(
     title: "Balance Summary",
     items: [
       kpi("Principal", currencyOrDash(pick(loan, ["principal_amount", "principal"]))),
-      kpi("Total Paid", currencyOrDash(totalPaid), { tone: "positive" }),
-      kpi("Outstanding Balance", currencyOrDash(outstanding), { tone: "negative" }),
-      kpi(
-        "Past Due",
-        currencyOrDash(pick(summary, ["overdue_amount", "past_due_amount", "total_overdue"])),
-        { tone: "negative" }
-      ),
+      kpi("Total Paid", currencyOrDash(totalPaid), {
+        tone: "positive",
+        ...(totalPaidNote ? { hint: totalPaidNote } : {}),
+      }),
+      kpi("Outstanding Balance", currencyOrDash(outstanding), {
+        tone: owedTone(outstanding),
+        hint: "Principal, interest, penalty and insurance premium still owed",
+      }),
+      // The server's grace-rule figure, the same as the loan summary's
+      // overdue amount; "—" when it was not sent.
+      kpi("Past Due", currencyOrDash(overdueAmount), { tone: owedTone(overdueAmount) }),
+      kpi("Insurance Premium Owed", currencyOrDash(pick(summary, ["insurance_owed"]))),
+    ],
+  });
+
+  // Total Paid is everything received. Its parts are how it reconciles with the
+  // narrower figures on the schedule; each is the server's, never worked out.
+  sections.push({
+    kind: "fields",
+    title: "What Has Been Paid",
+    items: [
+      { label: "Principal Paid", value: currencyOrDash(pick(summary, ["principal_paid"])) },
+      { label: "Interest Paid", value: currencyOrDash(pick(summary, ["interest_paid"])) },
+      { label: "Penalty Paid", value: currencyOrDash(pick(summary, ["penalty_paid"])) },
+      { label: "Insurance Premium Paid", value: currencyOrDash(pick(summary, ["insurance_paid"])) },
+      ...(hasBuildUp
+        ? [{ label: "Share Capital Build-Up Paid", value: currencyOrDash(pick(summary, ["build_up_paid"])) }]
+        : []),
+      // Excess a payment left over, which the parts above leave out.
+      ...((toNumber(pick(summary, ["overpayment_paid"])) ?? 0) > 0
+        ? [{ label: "Overpayment", value: currencyOrDash(pick(summary, ["overpayment_paid"])) }]
+        : []),
+      { label: "Total Paid", value: currencyOrDash(totalPaid) },
+      // Inside Total Paid (and the principal and interest above it).
+      ...(totalPaidNote
+        ? [{ label: "Of Which Paid Before the Import", value: currencyOrDash(paidBeforeImport) }]
+        : []),
     ],
   });
 
   sections.push({
     kind: "table",
     title: "Amortization Schedule",
-    columns: SOA_SCHEDULE_COLUMNS,
+    columns: soaScheduleColumns(hasBuildUp),
+    compact: hasBuildUp,
     rows: scheduleRows,
     totals:
       scheduleRows.length > 0
@@ -994,34 +1498,81 @@ export function buildStatementOfAccountDoc(
             {
               column: "principal_due",
               label: "Total",
-              value: formatCurrency(sum(scheduleRows, "principal_due")),
+              value: currencyOrDash(pick(scheduleTotals, ["principal_due"])),
             },
-            { column: "interest_due", value: formatCurrency(sum(scheduleRows, "interest_due")) },
+            {
+              column: "interest_due",
+              value: currencyOrDash(pick(scheduleTotals, ["interest_due"])),
+            },
             {
               column: "penalty_amount",
-              value: formatCurrency(sum(scheduleRows, "penalty_amount")),
+              value: currencyOrDash(pick(scheduleTotals, ["penalty_amount"])),
             },
-            { column: "total_due", value: formatCurrency(sum(scheduleRows, "total_due")) },
-            { column: "amount_paid", value: formatCurrency(sum(scheduleRows, "amount_paid")) },
+            { column: "total_due", value: currencyOrDash(pick(scheduleTotals, ["total_due"])) },
+            ...(hasBuildUp
+              ? [
+                  {
+                    column: "build_up_due",
+                    value: currencyOrDash(pick(scheduleTotals, ["build_up_due"])),
+                  },
+                  {
+                    column: "total_payment",
+                    value: currencyOrDash(pick(scheduleTotals, ["total_payment"])),
+                  },
+                ]
+              : []),
+            {
+              column: "total_paid",
+              value: currencyOrDash(pick(scheduleTotals, ["total_paid"])),
+            },
+            { column: "balance", value: currencyOrDash(pick(scheduleTotals, ["balance"])) },
           ]
         : undefined,
     emptyText: "No amortization schedule is available for this loan.",
   });
 
+  sections.push(...scheduleNotes(pick(obj, ["schedule_note"]), scheduleRows));
+
   sections.push({
     kind: "table",
     title: "Transaction History",
-    columns: SOA_TRANSACTION_COLUMNS,
+    columns: soaTransactionColumns(hasBuildUp, hasOverpayment, hasPremium),
+    compact: true,
     rows: transactionRows,
     totals:
       transactionRows.length > 0
         ? [
             {
-              column: "debit",
+              column: "amount_paid",
               label: "Total",
-              value: formatCurrency(sum(transactionRows, "debit")),
+              // The server's total of the receipts on the lines. Never Total
+              // Paid in its place: on an imported loan that also holds what was
+              // paid before the import. The Credit total is smaller: Debit less
+              // Credit is what is owed.
+              value: currencyOrDash(pick(transactionTotals, ["amount_paid"])),
             },
-            { column: "credit", value: formatCurrency(sum(transactionRows, "credit")) },
+            { column: "debit", value: currencyOrDash(pick(transactionTotals, ["debit"])) },
+            { column: "credit", value: currencyOrDash(pick(transactionTotals, ["credit"])) },
+            ...(hasPremium
+              ? [
+                  {
+                    column: "insurance_applied",
+                    // Every collected premium is on a line, so the summary's
+                    // figure is this column's total when the lines' isn't sent.
+                    value: currencyOrDash(
+                      pick(transactionTotals, ["insurance_applied"]) ?? pick(summary, ["insurance_paid"])
+                    ),
+                  },
+                ]
+              : []),
+            ...(hasOverpayment
+              ? [
+                  {
+                    column: "overpayment_applied",
+                    value: currencyOrDash(pick(transactionTotals, ["overpayment_applied"])),
+                  },
+                ]
+              : []),
           ]
         : undefined,
     emptyText: "No transactions have been recorded against this loan.",
@@ -1029,13 +1580,16 @@ export function buildStatementOfAccountDoc(
 
   return {
     reportId: "statement_of_account",
-    meta: meta(
-      "Statement of Account",
-      range,
-      pick(loan, ["loan_account_number", "account_number"])
-        ? `Loan ${pick(loan, ["loan_account_number", "account_number"])}`
-        : "Schedule, payments, and balance for a single loan"
-    ),
+    meta: {
+      title: "Statement of Account",
+      subtitle: statementReferenceKey(loan)
+        ? `Loan ${statementReferenceKey(loan)}`
+        : "Schedule, payments, and balance for a single loan",
+      asOf: formatValue(pick(obj, ["as_of"]), "date"),
+      generatedAt: formatGeneratedAt(),
+      org: "",
+      referenceKey: statementReferenceKey(loan),
+    },
     sections,
   };
 }
@@ -1045,7 +1599,8 @@ const LEDGER_LOAN_COLUMNS: ReportColumn[] = [
   { key: "release_date", header: "Released", format: "date", width: 110 },
   { key: "principal", header: "Principal", format: "currency", align: "right", width: 140 },
   { key: "total_paid", header: "Total Paid", format: "currency", align: "right", width: 140 },
-  { key: "balance", header: "Outstanding", format: "currency", align: "right", width: 140 },
+  { key: "principal_balance", header: "Principal Balance", format: "currency", align: "right", width: 150 },
+  { key: "outstanding", header: "Outstanding", format: "currency", align: "right", width: 140 },
   { key: "overdue", header: "Past Due", format: "currency", align: "right", width: 130 },
   { key: "status", header: "Status", format: "text", width: 110 },
 ];
@@ -1053,6 +1608,7 @@ const LEDGER_LOAN_COLUMNS: ReportColumn[] = [
 function normalizeLedgerLoanRow(raw: Record<string, unknown>): Record<string, unknown> {
   return {
     loan_account_number: pick(raw, [
+      "display_number",
       "loan_account_number",
       "account_number",
       "application_number",
@@ -1060,9 +1616,16 @@ function normalizeLedgerLoanRow(raw: Record<string, unknown>): Record<string, un
     release_date: pick(raw, ["release_date", "released_at", "start_date"]),
     principal: pick(raw, ["principal_amount", "principal"]),
     total_paid: pick(raw, ["total_paid", "amount_paid", "total_amount_paid"]),
-    balance: pick(raw, ["outstanding_balance", "balance", "remaining_balance"]),
+    // The server's two figures, as the loan pages name them: unpaid principal,
+    // and everything still owed (principal, interest, penalty and premium).
+    // Never the deprecated `outstanding_balance`, which is principal plus
+    // premium and was labelled Outstanding.
+    principal_balance: pick(raw, ["outstanding_principal"]),
+    outstanding: pick(raw, ["total_outstanding"]),
     overdue: pick(raw, ["overdue_amount", "past_due_amount", "total_overdue"]),
-    status: pick(raw, ["status"]),
+    // The server's display_status: Past Due for a released or ongoing loan
+    // past grace, as the loans screens read it; otherwise the stored status.
+    status: loanStatusText(pick(raw, ["display_status", "status"])),
   };
 }
 
@@ -1072,7 +1635,15 @@ export function buildSubsidiaryLedgerDoc(
 ): ReportDocument {
   const obj = asRecord(raw);
   const borrower = asRecord(pick(obj, ["borrower", "member"])) ?? obj;
-  const summary = asRecord(pick(obj, ["summary", "totals"]));
+  // Every ledger total is the server's; a figure it did not send is "—",
+  // never the loan rows added up.
+  const totals = asRecord(pick(obj, ["totals"]));
+  const loansTotals = asRecord(pick(obj, ["loans_totals"]));
+  const totalPrincipal = pick(totals, ["total_principal"]);
+  const totalPaid = pick(totals, ["total_paid"]);
+  // What imported loans' files say was paid before the import, inside Total Paid.
+  const totalPaidNote = paidBeforeImportNote(pick(totals, ["paid_before_import"]));
+  const totalOutstanding = pick(totals, ["total_outstanding"]);
 
   const loanRows = asArray(pick(obj, ["loans", "accounts"])).map(normalizeLedgerLoanRow);
   const entryRows = asArray(
@@ -1082,7 +1653,7 @@ export function buildSubsidiaryLedgerDoc(
   const sections: ReportSection[] = [];
 
   const memberFields: [string, unknown][] = [
-    ["Borrower", pick(borrower, ["full_name", "name", "borrower_name"])],
+    ["Member", pick(borrower, ["full_name", "name", "borrower_name"])],
     ["Member No.", pick(borrower, ["borrower_code", "member_no", "code"])],
     ["Branch", pick(borrower, ["branch_name"]) ?? pick(asRecord(borrower?.branch), ["name"])],
     ["Status", pick(borrower, ["status"])],
@@ -1094,29 +1665,17 @@ export function buildSubsidiaryLedgerDoc(
     sections.push({ kind: "fields", title: "Member Particulars", items: fields });
   }
 
-  // Loan-level figures are summed from the account rows only when the API
-  // sends no summary block of its own.
   sections.push({
     kind: "kpi_grid",
     title: "Ledger Summary",
     items: [
-      kpi("Total Loans", countOrDash(pick(summary, ["loan_count", "total_loans"]) ?? loanRows.length)),
-      kpi(
-        "Total Released",
-        currencyOrDash(pick(summary, ["total_released", "total_principal"]) ?? sum(loanRows, "principal")),
-      ),
-      kpi(
-        "Total Paid",
-        currencyOrDash(pick(summary, ["total_paid", "total_amount_paid"]) ?? sum(loanRows, "total_paid")),
-        { tone: "positive" }
-      ),
-      kpi(
-        "Outstanding Balance",
-        currencyOrDash(
-          pick(summary, ["outstanding_balance", "total_balance"]) ?? sum(loanRows, "balance")
-        ),
-        { tone: "negative" }
-      ),
+      kpi("Total Loans", countOrDash(pick(totals, ["total_loans"]))),
+      kpi("Total Released", currencyOrDash(totalPrincipal)),
+      kpi("Total Paid", currencyOrDash(totalPaid), {
+        tone: "positive",
+        ...(totalPaidNote ? { hint: totalPaidNote } : {}),
+      }),
+      kpi("Outstanding", currencyOrDash(totalOutstanding), { tone: "negative" }),
     ],
   });
 
@@ -1128,31 +1687,25 @@ export function buildSubsidiaryLedgerDoc(
     totals:
       loanRows.length > 0
         ? [
-            {
-              column: "principal",
-              label: "Total",
-              value: formatCurrency(sum(loanRows, "principal")),
-            },
-            { column: "total_paid", value: formatCurrency(sum(loanRows, "total_paid")) },
-            { column: "balance", value: formatCurrency(sum(loanRows, "balance")) },
-            { column: "overdue", value: formatCurrency(sum(loanRows, "overdue")) },
+            { column: "principal", label: "Total", value: currencyOrDash(totalPrincipal) },
+            { column: "total_paid", value: currencyOrDash(totalPaid) },
+            { column: "principal_balance", value: currencyOrDash(pick(loansTotals, ["outstanding_principal"])) },
+            { column: "outstanding", value: currencyOrDash(totalOutstanding) },
+            { column: "overdue", value: currencyOrDash(pick(loansTotals, ["overdue_amount"])) },
           ]
         : undefined,
-    emptyText: "This borrower has no loan accounts on record.",
+    emptyText: "This member has no loan accounts on record.",
   });
 
   // Only rendered when the API returns entries — an empty transaction table on
   // a ledger reads as "no payments", which would be a claim we cannot make.
+  // No totals row: the server states no debit or credit total for the entries.
   if (entryRows.length > 0) {
     sections.push({
       kind: "table",
       title: "Payment History",
-      columns: SOA_TRANSACTION_COLUMNS,
+      columns: TRANSACTION_COLUMNS,
       rows: entryRows,
-      totals: [
-        { column: "debit", label: "Total", value: formatCurrency(sum(entryRows, "debit")) },
-        { column: "credit", value: formatCurrency(sum(entryRows, "credit")) },
-      ],
     });
   }
 
@@ -1163,7 +1716,7 @@ export function buildSubsidiaryLedgerDoc(
       range,
       pick(borrower, ["full_name", "name"])
         ? String(pick(borrower, ["full_name", "name"]))
-        : "All loans and payments for a single borrower"
+        : "All loans and payments for a single member"
     ),
     sections,
   };
@@ -1172,18 +1725,12 @@ export function buildSubsidiaryLedgerDoc(
 export function buildDuePastDueListDoc(raw: unknown, range: DateRange): ReportDocument {
   const { rows: rawRows, totals, totalRows } = readListEnvelope(raw);
   const rows = rawRows.map(normalizeDueRow);
-  const due = resolveTotal(
-    totals,
-    ["total_due", "amount_due", "total_amount_due"],
-    rows,
-    "amount_due"
-  );
-  const balance = resolveTotal(
-    totals,
-    ["total_balance", "amount_remaining", "total_remaining", "balance"],
-    rows,
-    "balance"
-  );
+  // Every money figure below, KPI and footer alike, is the server's
+  // period-wide total or "—" when it sent none: never this page added up, so
+  // the footer never mixes a period total in one column with a page sum in
+  // the next.
+  const due = pick(totals, ["total_due", "amount_due", "total_amount_due"]);
+  const balance = pick(totals, ["total_balance", "amount_remaining", "total_remaining", "balance"]);
 
   const serverOverdueCount = toNumber(
     pick(totals, ["overdue_count", "overdue", "past_due_count"])
@@ -1200,7 +1747,7 @@ export function buildDuePastDueListDoc(raw: unknown, range: DateRange): ReportDo
         kpi("Overdue Count", countOrDash(overdueCount), {
           tone: overdueCount > 0 ? "negative" : "neutral",
         }),
-        kpi("Total Amount Due", formatCurrency(due.value), {
+        kpi("Total Amount Due", currencyOrDash(due), {
           tone: "negative",
           hint: breakdownHint([
             ["Principal", pick(totals, ["total_principal_due"])],
@@ -1208,29 +1755,13 @@ export function buildDuePastDueListDoc(raw: unknown, range: DateRange): ReportDo
             ["Penalty", pick(totals, ["total_penalty"])],
           ]),
         }),
-        kpi("Total Balance", formatCurrency(balance.value)),
+        kpi("Total Balance", currencyOrDash(balance)),
       ],
     },
   ];
 
-  const note = truncationNote(
-    rows.length,
-    totalRows,
-    due.fromServer && balance.fromServer && serverOverdueCount !== null
-  );
+  const note = serverTotalsTruncationNote(rows.length, totalRows, "schedules", totals);
   if (note) sections.push(note);
-
-  // Each component prefers the server's period-wide total and falls back to
-  // summing the page, exactly as the headline figures do — so the footer never
-  // mixes a period total in one column with a page total in the next.
-  const principalDue = resolveTotal(
-    totals,
-    ["total_principal_due"],
-    rows,
-    "principal_due"
-  );
-  const interestDue = resolveTotal(totals, ["total_interest_due"], rows, "interest_due");
-  const penalty = resolveTotal(totals, ["total_penalty"], rows, "penalty_amount");
 
   sections.push({
     kind: "table",
@@ -1243,13 +1774,16 @@ export function buildDuePastDueListDoc(raw: unknown, range: DateRange): ReportDo
             {
               column: "principal_due",
               label: "Total",
-              value: formatCurrency(principalDue.value),
+              value: currencyOrDash(pick(totals, ["total_principal_due"])),
             },
-            { column: "interest_due", value: formatCurrency(interestDue.value) },
-            { column: "penalty_amount", value: formatCurrency(penalty.value) },
-            { column: "amount_due", value: formatCurrency(due.value) },
-            { column: "amount_paid", value: formatCurrency(sum(rows, "amount_paid")) },
-            { column: "balance", value: formatCurrency(balance.value) },
+            { column: "interest_due", value: currencyOrDash(pick(totals, ["total_interest_due"])) },
+            { column: "penalty_amount", value: currencyOrDash(pick(totals, ["total_penalty"])) },
+            { column: "amount_due", value: currencyOrDash(due) },
+            {
+              column: "amount_paid",
+              value: currencyOrDash(pick(totals, ["total_paid", "total_amount_paid"])),
+            },
+            { column: "balance", value: currencyOrDash(balance) },
           ]
         : undefined,
     emptyText: "No schedules due or past due for the selected period.",
@@ -1301,62 +1835,12 @@ function statementLines(
 }
 
 /**
- * A section total: the server's figure when it sent one, otherwise the sum of
- * the lines it did send.
- *
- * Returns null — not 0 — when the block is missing entirely, so a failed
- * request shows "—" rather than asserting a zero the server never reported.
+ * The server's figure for one key, or null when it sent none. Reads exactly
+ * that key: a total or a rate the server omitted is "—", never re-derived from
+ * the rows or the other figures beside it.
  */
-function lineTotal(lines: StatementLine[], server: unknown): number | null {
-  const fromServer = toNumber(server);
-  if (fromServer !== null) return fromServer;
-  const present = lines.filter((line) => line.amount !== null);
-  return present.length === 0
-    ? null
-    : present.reduce((acc, line) => acc + (line.amount ?? 0), 0);
-}
-
-/** Sum a column, or null when not one row carried a figure for it. */
-function sumOrNull(rows: Record<string, unknown>[], key: string): number | null {
-  const present = rows.filter((r) => toNumber(r[key]) !== null);
-  return present.length === 0 ? null : sum(present, key);
-}
-
-/**
- * Whole-percent ratio of two figures, or null when it cannot be stated.
- *
- * Only ever a fallback: every one of these endpoints computes its own rates
- * server-side, where both sides of the ratio are scoped identically. A rate
- * derived here from two rounded display figures can disagree with the server's
- * in the last decimal, so the server's always wins.
- */
-function ratioPercent(part: number | null, whole: number | null): number | null {
-  if (part === null || whole === null || whole <= 0) return null;
-  return (part / whole) * 100;
-}
-
-/**
- * Normalise a rate that may arrive as a fraction into whole percent.
- *
- * Report percentages are always whole (12.5 means 12.5%), so a provisioning
- * ladder sent as 0.05/0.15/0.25/0.50 has to be scaled up or a 5% provision
- * prints as 0.05%.
- *
- * "At or below 1 is a fraction" is a guess, and it is wrong for exactly one
- * input: a genuine whole 1, meaning 1%, comes back out as 100. The assumption
- * that makes it safe is not about provisioning ladders in general — it is
- * about the single call site. `buildProvisioningDoc()` reads the API's
- * `rate_percent` first and only falls back to the raw `rate`/`provision_rate`
- * when that key is absent, which no response omits; and the raw key is a
- * fraction in every one of them. So the ambiguous input is unreachable.
- *
- * That is a property of the caller, not of this function. Anything that could
- * hand it a whole percent has to carry its own unit rather than have the unit
- * guessed here — do not widen the rule to cover it.
- */
-function scaleToPercent(value: number | null): number | null {
-  if (value === null) return null;
-  return value > 0 && value <= 1 ? value * 100 : value;
+function serverFigure(block: Record<string, unknown> | null, key: string): number | null {
+  return toNumber(pick(block, [key]));
 }
 
 /** Positive figures read green, negative red — a net movement is either. */
@@ -1385,6 +1869,9 @@ const CASH_INFLOW_REPAYMENT_LINES: [string, string[]][] = [
   ["Principal collected", ["principal", "principal_applied", "principal_collected"]],
   ["Interest collected", ["interest", "interest_applied", "interest_collected"]],
   ["Penalty collected", ["penalty", "penalty_applied", "penalty_collected"]],
+  // Premium owed on a loan, collected first from its payments: cash in,
+  // inside the repayments total, never income.
+  ["Insurance premium collected", ["insurance", "insurance_applied", "insurance_collected"]],
   ["Overpayment received", ["overpayment", "overpayment_received", "excess"]],
 ];
 
@@ -1426,22 +1913,13 @@ const CASH_FLOW_BRANCH_COLUMNS: ReportColumn[] = [
 ];
 
 function cashFlowBranchRows(rows: Record<string, unknown>[]): Record<string, unknown>[] {
-  return rows.map((raw) => {
-    // `inflow_total` / `outflow_total` are the API's names; the plain forms are
-    // the fallback.
-    const inflows = toNumber(pick(raw, ["inflow_total", "inflows", "total_inflows", "cash_in"]));
-    const outflows = toNumber(
-      pick(raw, ["outflow_total", "outflows", "total_outflows", "cash_out"])
-    );
-    return {
-      branch_name: pick(raw, ["branch_name", "name"]) ?? "Unassigned",
-      inflows,
-      outflows,
-      net:
-        toNumber(pick(raw, ["net_movement", "net", "net_cash_flow"])) ??
-        (inflows !== null && outflows !== null ? inflows - outflows : null),
-    };
-  });
+  return rows.map((raw) => ({
+    branch_name: pick(raw, ["branch_name", "name"]) ?? "Unassigned",
+    inflows: serverFigure(raw, "inflow_total"),
+    outflows: serverFigure(raw, "outflow_total"),
+    // The row's own net: never cash in less cash out worked out here.
+    net: serverFigure(raw, "net_movement"),
+  }));
 }
 
 /**
@@ -1450,6 +1928,25 @@ function cashFlowBranchRows(rows: Record<string, unknown>[]): Record<string, unk
  * the net is restated as its own block rather than left as one KPI card among
  * four.
  */
+/**
+ * The Cash Flow branch breakdown's share capital sentence, by the rule that
+ * placed the rows. Either branch scope means a branch filter was applied, so
+ * no Unassigned row is listed and the sentence names none; only the unfiltered
+ * answer mentions it.
+ */
+function cashFlowBranchNote(scope: unknown): string {
+  if (scope === "posted_branch") {
+    return (
+      "Share capital paid in and out is in the row of the branch where each entry was posted; " +
+      "a member who moved keeps their earlier entries in their old branch."
+    );
+  }
+  if (scope === "borrower_branch") {
+    return "Share capital paid in and out is in the row of the branch each member belongs to.";
+  }
+  return "Share capital paid in and out is in its branch's row; entries with no branch are under Unassigned.";
+}
+
 export function buildCashFlowDoc(raw: unknown, range: DateRange): ReportDocument {
   const obj = asRecord(raw);
   const inflowBlock = asRecord(pick(obj, ["inflows", "cash_in"]));
@@ -1487,20 +1984,11 @@ export function buildCashFlowDoc(raw: unknown, range: DateRange): ReportDocument
     },
   ];
 
-  const totalIn = lineTotal(
-    inflowLines,
-    pick(inflowBlock, ["total"]) ?? pick(obj, ["total_inflows"])
-  );
-  const totalOut = lineTotal(
-    outflowLines,
-    pick(outflowBlock, ["total"]) ?? pick(obj, ["total_outflows"])
-  );
-
-  // The server states the net; subtracting the two totals is the fallback, and
-  // it is only meaningful when both sides actually came back.
-  const net =
-    toNumber(pick(obj, ["net_movement", "net_cash_flow", "net"])) ??
-    (totalIn !== null && totalOut !== null ? totalIn - totalOut : null);
+  // The three headline figures are the server's. A missing one is "—": the
+  // lines are never added up, nor one total taken from the other.
+  const totalIn = serverFigure(inflowBlock, "total");
+  const totalOut = serverFigure(outflowBlock, "total");
+  const net = serverFigure(obj, "net_movement");
 
   // Deductions are withheld at release and never leave the till, so they are
   // not an outflow. Shown beside the statement so the gross principal released
@@ -1512,6 +2000,25 @@ export function buildCashFlowDoc(raw: unknown, range: DateRange): ReportDocument
   const principalReleased = pick(nonCashBlock, ["principal_released"]);
 
   const branchRows = cashFlowBranchRows(asArray(pick(obj, ["by_branch", "branches"])));
+  const branchTotals = asRecord(pick(obj, ["by_branch_totals"]));
+
+  // Share capital credited from loan payments (build-up), net of voids. It is
+  // cash already inside the repayment's overpayment, so the server leaves it
+  // out of the share capital lines and every total; said here so a reader can
+  // reconcile with the Share Capital report, which counts it.
+  const buildUp = toNumber(pick(shareBlock, ["build_up_from_payments"]));
+  const buildUpNote: ReportSection[] =
+    buildUp === null || buildUp === 0
+      ? []
+      : [
+          {
+            kind: "note",
+            text:
+              `Share capital build-up from loan payments (${currencyOrDash(buildUp)}, net of voids) ` +
+              "is cash already counted in Overpayment received, so it is not repeated under " +
+              "Share capital contributions. The Share Capital report includes it in the members' credits.",
+          },
+        ];
 
   const sections: ReportSection[] = [
     {
@@ -1538,6 +2045,7 @@ export function buildCashFlowDoc(raw: unknown, range: DateRange): ReportDocument
       totals: [totalCell("amount", totalIn, "Total Cash Inflows")],
       emptyText: "No cash inflows were reported for this period.",
     },
+    ...buildUpNote,
     {
       kind: "table",
       title: "Cash Outflows",
@@ -1564,28 +2072,22 @@ export function buildCashFlowDoc(raw: unknown, range: DateRange): ReportDocument
       columns: CASH_FLOW_BRANCH_COLUMNS,
       rows: branchRows,
       totals: [
-        totalCell("inflows", sumOrNull(branchRows, "inflows"), "Total"),
-        totalCell("outflows", sumOrNull(branchRows, "outflows")),
-        totalCell("net", sumOrNull(branchRows, "net")),
+        totalCell("inflows", serverFigure(branchTotals, "inflow_total"), "Total"),
+        totalCell("outflows", serverFigure(branchTotals, "outflow_total")),
+        totalCell("net", serverFigure(branchTotals, "net_movement")),
       ],
     });
-    // The branch rows are loan cash ONLY: they sum to the repayment and
-    // net-proceeds lines, not to the statement totals.
+    // Each branch row holds that branch's loan cash plus the share capital
+    // paid in and out on its own; a row with no branch is in the server's
+    // "Unassigned" row (`branch_id` null).
     //
-    // The server's wording wins because it is now scope-dependent — with a
-    // branch filter applied, share capital IS scoped through the member's
-    // branch (matching the Share Capital report), and only the unfiltered case
-    // is organisation-wide. What never changes is that share capital is
-    // excluded from `by_branch`, so the fallback claims only that.
-    sections.push({
-      kind: "note",
-      text: String(
-        pick(shareBlock, ["note"]) ??
-          "Share capital cannot be attributed to a branch row, so the branch breakdown " +
-            "covers loan collections and releases only; add the share capital lines back " +
-            "to reach the totals above."
-      ),
-    });
+    // Always a plain sentence: the server's `share_capital.note` is written
+    // for developers (field names and formulas) and is never printed on the
+    // report. `share_capital.branch_scope` says which rule placed the rows
+    // when a branch filter is applied: `posted_branch` since backend #334,
+    // `borrower_branch` before. Unfiltered (`organisation`) it doesn't say,
+    // so that sentence holds under both and is the only one naming Unassigned.
+    sections.push({ kind: "note", text: cashFlowBranchNote(pick(shareBlock, ["branch_scope"])) });
   }
 
   return {
@@ -1613,50 +2115,39 @@ function efficiencyColumns(header: string, width: number): ReportColumn[] {
   ];
 }
 
+/** The four figures the server sends on the headline and on every row. */
+function efficiencyFigures(raw: Record<string, unknown> | null) {
+  return {
+    total_due: serverFigure(raw, "total_due"),
+    total_collected: serverFigure(raw, "total_collected"),
+    uncollected: serverFigure(raw, "uncollected"),
+    collection_rate: serverFigure(raw, "collection_rate"),
+  };
+}
+
 function normalizeEfficiencyRow(
   raw: Record<string, unknown>,
   labelKeys: string[],
   fallbackLabel: string
 ): Record<string, unknown> {
-  const due = toNumber(pick(raw, ["total_due", "due", "amount_due"]));
-  const collected = toNumber(
-    pick(raw, ["total_collected", "collected", "amount_collected"])
-  );
-
   return {
     label: pick(raw, labelKeys) ?? fallbackLabel,
-    total_due: due,
-    total_collected: collected,
-    uncollected:
-      toNumber(pick(raw, ["uncollected", "outstanding", "balance"])) ??
-      (due !== null && collected !== null ? Math.max(0, due - collected) : null),
-    collection_rate:
-      toNumber(pick(raw, ["collection_rate", "efficiency", "rate"])) ??
-      ratioPercent(collected, due),
+    ...efficiencyFigures(raw),
   };
 }
 
 /**
- * Footer for an efficiency table. The rate is the period rate the server
- * reported, never the average of the rates above it — averaging per-branch
- * rates weights a branch with ₱5,000 due the same as one with ₱5,000,000.
+ * Footer for an efficiency table: the headline four, as the server sent them.
+ * The rate is the period rate, never the average of the rates above it —
+ * averaging per-branch rates weights a branch with ₱5,000 due the same as one
+ * with ₱5,000,000.
  */
-function efficiencyTotals(
-  rows: Record<string, unknown>[],
-  headlineDue: number | null,
-  headlineCollected: number | null,
-  headlineUncollected: number | null,
-  headlineRate: number | null
-) {
-  const due = headlineDue ?? sumOrNull(rows, "total_due");
-  const collected = headlineCollected ?? sumOrNull(rows, "total_collected");
-  const rate = headlineRate ?? ratioPercent(collected, due);
-
+function efficiencyTotals(headline: ReturnType<typeof efficiencyFigures>) {
   return [
-    totalCell("total_due", due, "Total"),
-    totalCell("total_collected", collected),
-    totalCell("uncollected", headlineUncollected ?? sumOrNull(rows, "uncollected")),
-    { column: "collection_rate", value: percentOrDash(rate) },
+    totalCell("total_due", headline.total_due, "Total"),
+    totalCell("total_collected", headline.total_collected),
+    totalCell("uncollected", headline.uncollected),
+    { column: "collection_rate", value: percentOrDash(headline.collection_rate) },
   ];
 }
 
@@ -1672,15 +2163,7 @@ export function buildCollectionEfficiencyDoc(
   range: DateRange
 ): ReportDocument {
   const obj = asRecord(raw);
-
-  const due = toNumber(pick(obj, ["total_due", "due"]));
-  const collected = toNumber(pick(obj, ["total_collected", "collected"]));
-  const uncollected =
-    toNumber(pick(obj, ["uncollected", "outstanding"])) ??
-    (due !== null && collected !== null ? Math.max(0, due - collected) : null);
-  const rate =
-    toNumber(pick(obj, ["collection_rate", "efficiency", "rate"])) ??
-    ratioPercent(collected, due);
+  const headline = efficiencyFigures(obj);
 
   const branchRows = asArray(pick(obj, ["by_branch", "branches"])).map((r) =>
     normalizeEfficiencyRow(r, ["branch_name", "name"], "Unassigned")
@@ -1693,12 +2176,12 @@ export function buildCollectionEfficiencyDoc(
     {
         kind: "kpi_grid",
         items: [
-          kpi("Total Due", currencyOrDash(due)),
-          kpi("Total Collected", currencyOrDash(collected), { tone: "positive" }),
-          kpi("Collection Efficiency", percentOrDash(rate), {
+          kpi("Total Due", currencyOrDash(headline.total_due)),
+          kpi("Total Collected", currencyOrDash(headline.total_collected), { tone: "positive" }),
+          kpi("Collection Efficiency", percentOrDash(headline.collection_rate), {
             hint: "Collected over due, scoped identically on both sides",
           }),
-          kpi("Uncollected", currencyOrDash(uncollected), { tone: "negative" }),
+          kpi("Uncollected", currencyOrDash(headline.uncollected), { tone: "negative" }),
         ],
       },
       {
@@ -1707,9 +2190,7 @@ export function buildCollectionEfficiencyDoc(
         columns: efficiencyColumns("Branch", 200),
         rows: branchRows,
         totals:
-          branchRows.length > 0
-            ? efficiencyTotals(branchRows, due, collected, uncollected, rate)
-            : undefined,
+          branchRows.length > 0 ? efficiencyTotals(headline) : undefined,
         emptyText: "No branch breakdown was returned for this period.",
       },
       {
@@ -1718,9 +2199,7 @@ export function buildCollectionEfficiencyDoc(
         columns: efficiencyColumns("Period", 140),
         rows: periodRows,
         totals:
-          periodRows.length > 0
-            ? efficiencyTotals(periodRows, due, collected, uncollected, rate)
-            : undefined,
+          periodRows.length > 0 ? efficiencyTotals(headline) : undefined,
         emptyText: "No monthly breakdown was returned for this period.",
       },
   ];
@@ -1753,7 +2232,14 @@ const PRODUCT_COLUMNS: ReportColumn[] = [
   { key: "loan_count", header: "Loans", format: "number", align: "right", width: 80 },
   { key: "total_released", header: "Released", format: "currency", align: "right", width: 155 },
   {
-    key: "outstanding_balance",
+    key: "principal_balance",
+    header: "Principal Balance",
+    format: "currency",
+    align: "right",
+    width: 155,
+  },
+  {
+    key: "outstanding",
     header: "Outstanding",
     format: "currency",
     align: "right",
@@ -1766,7 +2252,7 @@ const PRODUCT_COLUMNS: ReportColumn[] = [
     align: "right",
     width: 105,
   },
-  { key: "avg_interest_rate", header: "Avg Rate", format: "percent", align: "right", width: 100 },
+  { key: "avg_interest_rate", header: "Avg Rate", format: "rate", align: "right", width: 100 },
   { key: "overdue_amount", header: "Overdue", format: "currency", align: "right", width: 145 },
   { key: "par_ratio", header: "PAR", format: "percent", align: "right", width: 90 },
 ];
@@ -1777,9 +2263,9 @@ function normalizeProductRow(raw: Record<string, unknown>): Record<string, unkno
       pick(raw, ["product_name", "loan_product_name", "name"]) ?? "Unassigned",
     loan_count: pick(raw, ["loan_count", "loans", "count"]),
     total_released: pick(raw, ["total_released", "released", "principal"]),
-    // `outstanding` is the API's name; it already includes insurance, exactly
-    // as the Portfolio Summary's headline balance does.
-    outstanding_balance: pick(raw, ["outstanding", "outstanding_balance", "balance"]),
+    // Never the old `outstanding` or `outstanding_balance`, principal plus premium.
+    principal_balance: pick(raw, ["outstanding_principal"]),
+    outstanding: pick(raw, ["total_outstanding"]),
     // Which product dominates the book is the question this report exists to
     // answer, and the server already computed the share.
     portfolio_share: pick(raw, ["portfolio_share", "share"]),
@@ -1792,37 +2278,27 @@ function normalizeProductRow(raw: Record<string, unknown>): Record<string, unkno
 /**
  * Which products earn and which carry the risk.
  *
- * Every money column prefers the server's `totals` block. PAR has no fallback
- * at all: it is computed against outstanding principal server-side, so neither
- * summing nor averaging the column reproduces it, and a wrong PAR is worse
- * than an absent one.
+ * Every total is the server's `totals` block; a figure it did not send is
+ * "—", never the product rows added up. PAR is computed against outstanding
+ * principal server-side, so neither summing nor averaging the column
+ * reproduces it, and a wrong PAR is worse than an absent one.
  */
 export function buildPortfolioByProductDoc(
   raw: unknown,
   range: DateRange
 ): ReportDocument {
   const obj = asRecord(raw);
-  const totals = asRecord(pick(obj, ["totals", "summary"]));
+  const totals = asRecord(pick(obj, ["totals"]));
   const rows = asArray(pick(obj, ["products", "by_product", "data"])).map(
     normalizeProductRow
   );
 
-  const released =
-    toNumber(pick(totals, ["total_released", "released"])) ??
-    sumOrNull(rows, "total_released");
-  const outstanding =
-    toNumber(pick(totals, ["outstanding", "outstanding_balance"])) ??
-    sumOrNull(rows, "outstanding_balance");
-  const overdue =
-    toNumber(pick(totals, ["overdue_amount", "overdue"])) ??
-    sumOrNull(rows, "overdue_amount");
-  const loanCount =
-    toNumber(pick(totals, ["loan_count", "loans"])) ?? sumOrNull(rows, "loan_count");
-  // A response carrying an empty product list genuinely means zero products; a
-  // failed request means we know nothing, so it dashes rather than claiming a
-  // zero the server never sent.
-  const productCount =
-    toNumber(pick(totals, ["product_count"])) ?? (obj === null ? null : rows.length);
+  const released = serverFigure(totals, "total_released");
+  const principalBalance = serverFigure(totals, "outstanding_principal");
+  const outstanding = serverFigure(totals, "total_outstanding");
+  const overdue = serverFigure(totals, "overdue_amount");
+  const loanCount = serverFigure(totals, "loan_count");
+  const productCount = serverFigure(totals, "product_count");
   // Weighted server-side across the whole book. Quoted as hints rather than as
   // column footers, because neither is a sum of the column above it.
   const parRatio = pick(totals, ["par_ratio", "par"]);
@@ -1849,9 +2325,10 @@ export function buildPortfolioByProductDoc(
           }),
           kpi("Total Released", currencyOrDash(released), {
             tone: "positive",
-            hint: avgRate === null ? undefined : `Avg rate ${percentOrDash(avgRate)}`,
+            hint: avgRate === null ? undefined : `Avg rate ${rateOrDash(avgRate)}`,
           }),
-          kpi("Outstanding Balance", currencyOrDash(outstanding)),
+          kpi("Principal Balance", currencyOrDash(principalBalance)),
+          kpi("Outstanding", currencyOrDash(outstanding)),
           kpi("Overdue Amount", currencyOrDash(overdue), {
             tone: "negative",
             hint:
@@ -1875,7 +2352,8 @@ export function buildPortfolioByProductDoc(
                   value: countOrDash(loanCount),
                 },
                 totalCell("total_released", released),
-                totalCell("outstanding_balance", outstanding),
+                totalCell("principal_balance", principalBalance),
+                totalCell("outstanding", outstanding),
                 totalCell("overdue_amount", overdue),
                 // The shares are of the same denominator, so they do add to
                 // 100% — unlike the two rate columns below them.
@@ -1928,16 +2406,11 @@ const SHARE_CAPITAL_MEMBER_COLUMNS: ReportColumn[] = [
   { key: "balance", header: "Closing", format: "currency", align: "right", width: 150 },
 ];
 
-/** Credits/debits/net, shared by the monthly and per-member breakdowns. */
+/** Credits and debits, shared by the monthly and per-member breakdowns. */
 function shareCapitalMovement(raw: Record<string, unknown>) {
-  const credits = toNumber(pick(raw, ["credits", "credit", "total_credits"]));
-  const debits = toNumber(pick(raw, ["debits", "debit", "total_debits"]));
   return {
-    credits,
-    debits,
-    net:
-      toNumber(pick(raw, ["net", "net_movement"])) ??
-      (credits !== null && debits !== null ? credits - debits : null),
+    credits: toNumber(pick(raw, ["credits", "credit", "total_credits"])),
+    debits: toNumber(pick(raw, ["debits", "debit", "total_debits"])),
   };
 }
 
@@ -1952,12 +2425,10 @@ export function buildShareCapitalDoc(raw: unknown, range: DateRange): ReportDocu
   const opening = toNumber(pick(obj, ["opening_balance", "beginning_balance"]));
   const credits = toNumber(pick(obj, ["total_credits", "credits"]));
   const debits = toNumber(pick(obj, ["total_debits", "debits"]));
-  const net =
-    toNumber(pick(obj, ["net_movement", "net"])) ??
-    (credits !== null && debits !== null ? credits - debits : null);
-  const closing =
-    toNumber(pick(obj, ["closing_balance", "ending_balance"])) ??
-    (opening !== null && net !== null ? opening + net : null);
+  // The net and the closing balance are the server's; a missing one is "—",
+  // never credits less debits, or opening plus the net, worked out here.
+  const net = serverFigure(obj, "net_movement");
+  const closing = serverFigure(obj, "closing_balance");
 
   const pledges = asRecord(pick(obj, ["subscription", "pledges"]));
   // `total_subscribed_per_period` is the sum of PER-SCHEDULE pledges (the
@@ -1981,21 +2452,21 @@ export function buildShareCapitalDoc(raw: unknown, range: DateRange): ReportDocu
   const monthRows = asArray(pick(obj, ["by_month", "by_period", "months"])).map((r) => ({
     label: pick(r, ["period_label", "label", "period", "month"]) ?? DASH,
     ...shareCapitalMovement(r),
+    net: serverFigure(r, "net_movement"),
     closing_balance: pick(r, ["closing_balance", "balance", "running_balance"]),
   }));
+  const monthTotals = asRecord(pick(obj, ["by_month_totals"]));
 
-  const memberRows = asArray(pick(obj, ["by_member", "members_breakdown"])).map((r) => {
-    const movement = shareCapitalMovement(r);
-    return {
-      member_name:
-        pick(r, ["borrower_name", "member_name", "full_name", "name"]) ?? "Unassigned",
-      member_no: pick(r, ["borrower_code", "member_no", "code"]),
-      opening_balance: pick(r, ["opening_balance", "beginning_balance"]),
-      credits: movement.credits,
-      debits: movement.debits,
-      balance: pick(r, ["closing_balance", "balance", "total"]) ?? movement.net,
-    };
-  });
+  const memberRows = asArray(pick(obj, ["by_member", "members_breakdown"])).map((r) => ({
+    member_name:
+      pick(r, ["borrower_name", "member_name", "full_name", "name"]) ?? "Unassigned",
+    member_no: pick(r, ["borrower_code", "member_no", "code"]),
+    opening_balance: pick(r, ["opening_balance", "beginning_balance"]),
+    ...shareCapitalMovement(r),
+    balance: serverFigure(r, "closing_balance"),
+  }));
+  // Null when the roster is withheld, like `by_member` itself.
+  const memberTotals = asRecord(pick(obj, ["by_member_totals"]));
 
   const scope = pick(obj, ["branch_scope"]);
 
@@ -2042,9 +2513,9 @@ export function buildShareCapitalDoc(raw: unknown, range: DateRange): ReportDocu
         totals:
           monthRows.length > 0
             ? [
-                totalCell("credits", sumOrNull(monthRows, "credits"), "Total"),
-                totalCell("debits", sumOrNull(monthRows, "debits")),
-                totalCell("net", sumOrNull(monthRows, "net")),
+                totalCell("credits", serverFigure(monthTotals, "credits"), "Total"),
+                totalCell("debits", serverFigure(monthTotals, "debits")),
+                totalCell("net", serverFigure(monthTotals, "net_movement")),
                 // No total for `closing_balance`: it is a running figure, and
                 // adding a column of balances together means nothing.
               ]
@@ -2074,10 +2545,10 @@ export function buildShareCapitalDoc(raw: unknown, range: DateRange): ReportDocu
       totals:
         memberRows.length > 0
           ? [
-              totalCell("opening_balance", sumOrNull(memberRows, "opening_balance"), "Total"),
-              totalCell("credits", sumOrNull(memberRows, "credits")),
-              totalCell("debits", sumOrNull(memberRows, "debits")),
-              totalCell("balance", sumOrNull(memberRows, "balance")),
+              totalCell("opening_balance", serverFigure(memberTotals, "opening_balance"), "Total"),
+              totalCell("credits", serverFigure(memberTotals, "credits")),
+              totalCell("debits", serverFigure(memberTotals, "debits")),
+              totalCell("balance", serverFigure(memberTotals, "closing_balance")),
             ]
           : undefined,
       emptyText: "No member share capital activity was recorded in this period.",
@@ -2092,9 +2563,18 @@ export function buildShareCapitalDoc(raw: unknown, range: DateRange): ReportDocu
     sections.push({ kind: "note", text: String(pledgeNote) });
   }
 
-  // `branch_id` IS honoured here, through the member's branch rather than a
-  // column on the ledger, so the scope is stated rather than assumed.
-  if (scope === "borrower_branch") {
+  // `branch_id` IS honoured here, so the scope is stated rather than assumed.
+  // Since backend #334 (`posted_branch`) each entry counts in the branch whose
+  // books it posted in; an older backend (`borrower_branch`) used the
+  // member's current branch.
+  if (scope === "posted_branch") {
+    sections.push({
+      kind: "note",
+      text:
+        "Scoped to the selected branch: share capital counts in the branch where each entry was posted. " +
+        "A member who moved to another branch keeps their earlier entries in their old branch.",
+    });
+  } else if (scope === "borrower_branch") {
     sections.push({
       kind: "note",
       text:
@@ -2150,7 +2630,14 @@ const PERFORMANCE_VALUE_COLUMNS: ReportColumn[] = [
     width: 155,
   },
   {
-    key: "outstanding_balance",
+    key: "principal_balance",
+    header: "Principal Balance (to date)",
+    format: "currency",
+    align: "right",
+    width: 165,
+  },
+  {
+    key: "outstanding",
     header: "Outstanding (to date)",
     format: "currency",
     align: "right",
@@ -2166,7 +2653,7 @@ const PERFORMANCE_VALUE_COLUMNS: ReportColumn[] = [
   { key: "par_ratio", header: "PAR (to date)", format: "percent", align: "right", width: 115 },
   {
     key: "active_borrowers",
-    header: "Borrowers (to date)",
+    header: "Members (to date)",
     format: "number",
     align: "right",
     width: 145,
@@ -2195,7 +2682,9 @@ function normalizePerformanceRow(
     released_count: pick(raw, ["released_count", "loans_released"]),
     released_amount: pick(raw, ["released_amount", "total_released", "released"]),
     collected_amount: pick(raw, ["collected", "collected_amount", "total_collected"]),
-    outstanding_balance: pick(raw, ["outstanding", "outstanding_balance", "balance"]),
+    // Never the old `outstanding` or `outstanding_balance`, principal plus premium.
+    principal_balance: pick(raw, ["outstanding_principal"]),
+    outstanding: pick(raw, ["total_outstanding"]),
     overdue_amount: pick(raw, ["overdue_amount", "overdue", "past_due_amount"]),
     par_ratio: pick(raw, ["par_ratio", "par"]),
     active_borrowers: pick(raw, ["active_borrowers", "borrower_count", "borrowers"]),
@@ -2203,25 +2692,24 @@ function normalizePerformanceRow(
 }
 
 /**
- * Footer for a performance table.
- *
- * Every loan belongs to exactly one branch and to exactly one officer row —
- * "Unassigned" included — so the money and release counts sum exactly. PAR and
+ * Footer for a performance table: the server's totals block for that table,
+ * a figure it did not send shown as "—", never the rows added up. PAR and
  * `active_borrowers` deliberately have no footer: PAR is a weighted ratio, and
- * a borrower served by two officers is still one borrower, so both would be
- * wrong as a column sum and the API states neither as a grand total.
+ * a borrower served by two officers is still one borrower, so the API states
+ * neither as a grand total.
  */
-function performanceTotals(rows: Record<string, unknown>[]) {
+function performanceTotals(totals: Record<string, unknown> | null) {
   return [
     {
       column: "released_count",
       label: "Total",
-      value: countOrDash(sumOrNull(rows, "released_count")),
+      value: countOrDash(serverFigure(totals, "released_count")),
     },
-    totalCell("released_amount", sumOrNull(rows, "released_amount")),
-    totalCell("collected_amount", sumOrNull(rows, "collected_amount")),
-    totalCell("outstanding_balance", sumOrNull(rows, "outstanding_balance")),
-    totalCell("overdue_amount", sumOrNull(rows, "overdue_amount")),
+    totalCell("released_amount", serverFigure(totals, "released_amount")),
+    totalCell("collected_amount", serverFigure(totals, "collected")),
+    totalCell("principal_balance", serverFigure(totals, "outstanding_principal")),
+    totalCell("outstanding", serverFigure(totals, "total_outstanding")),
+    totalCell("overdue_amount", serverFigure(totals, "overdue_amount")),
   ];
 }
 
@@ -2232,10 +2720,12 @@ function performanceTotals(rows: Record<string, unknown>[]) {
  */
 export function buildPerformanceDoc(raw: unknown, range: DateRange): ReportDocument {
   const obj = asRecord(raw);
-  // The API sends no grand-total block: every headline below is summed from
-  // the officer rows, which is exact because each loan appears in exactly one
-  // of them ("Unassigned" included).
-  const totals = asRecord(pick(obj, ["totals", "summary"]));
+  // Three server totals blocks: the headline, and one per table. Every loan
+  // sits in exactly one officer row and one branch row ("Unassigned"
+  // included), so the server's figures agree; none is added up here.
+  const totals = asRecord(pick(obj, ["totals"]));
+  const officerTotals = asRecord(pick(obj, ["by_officer_totals"]));
+  const branchTotals = asRecord(pick(obj, ["by_branch_totals"]));
 
   const officerRows = asArray(pick(obj, ["by_officer", "officers"])).map((r) =>
     normalizePerformanceRow(
@@ -2248,23 +2738,14 @@ export function buildPerformanceDoc(raw: unknown, range: DateRange): ReportDocum
     normalizePerformanceRow(r, ["branch_name", "name"], "Unassigned")
   );
 
-  const headline = officerRows.length > 0 ? officerRows : branchRows;
-
-  const releasedCount =
-    toNumber(pick(totals, ["released_count", "loans_released"])) ??
-    sumOrNull(headline, "released_count");
-  const releasedAmount =
-    toNumber(pick(totals, ["released_amount", "total_released"])) ??
-    sumOrNull(headline, "released_amount");
-  const collected =
-    toNumber(pick(totals, ["collected", "collected_amount", "total_collected"])) ??
-    sumOrNull(headline, "collected_amount");
-  // Outstanding sums exactly and is always available; `active_borrowers` does
-  // not (a borrower can be counted under two officers) and the API states no
-  // distinct total, so the fourth headline is the one that can be trusted.
-  const outstanding =
-    toNumber(pick(totals, ["outstanding", "outstanding_balance"])) ??
-    sumOrNull(headline, "outstanding_balance");
+  const releasedCount = serverFigure(totals, "released_count");
+  const releasedAmount = serverFigure(totals, "released_amount");
+  const collected = serverFigure(totals, "collected");
+  // `active_borrowers` has no headline (a borrower can be counted under two
+  // officers and the API states no distinct total), so the last KPIs are the
+  // book: its principal, and everything owed on it.
+  const principalBalance = serverFigure(totals, "outstanding_principal");
+  const outstanding = serverFigure(totals, "total_outstanding");
 
   const sections: ReportSection[] = [
     {
@@ -2273,7 +2754,10 @@ export function buildPerformanceDoc(raw: unknown, range: DateRange): ReportDocum
         kpi("Loans Released", countOrDash(releasedCount), { hint: "In the selected period" }),
         kpi("Amount Released", currencyOrDash(releasedAmount), { tone: "positive" }),
         kpi("Total Collected", currencyOrDash(collected), { tone: "positive" }),
-        kpi("Outstanding Balance", currencyOrDash(outstanding), {
+        kpi("Principal Balance", currencyOrDash(principalBalance), {
+          hint: "Whole book, as of today",
+        }),
+        kpi("Outstanding", currencyOrDash(outstanding), {
           hint: "Whole book, as of today",
         }),
       ],
@@ -2283,7 +2767,7 @@ export function buildPerformanceDoc(raw: unknown, range: DateRange): ReportDocum
       title: "By Account Officer",
       columns: performanceColumns("Account Officer", 190),
       rows: officerRows,
-      totals: officerRows.length > 0 ? performanceTotals(officerRows) : undefined,
+      totals: officerRows.length > 0 ? performanceTotals(officerTotals) : undefined,
       emptyText: "No account officer activity was recorded in this period.",
     },
     {
@@ -2291,7 +2775,7 @@ export function buildPerformanceDoc(raw: unknown, range: DateRange): ReportDocum
       title: "By Branch",
       columns: performanceColumns("Branch", 190),
       rows: branchRows,
-      totals: branchRows.length > 0 ? performanceTotals(branchRows) : undefined,
+      totals: branchRows.length > 0 ? performanceTotals(branchTotals) : undefined,
       emptyText: "No branch activity was recorded in this period.",
     },
   ];
@@ -2305,7 +2789,7 @@ export function buildPerformanceDoc(raw: unknown, range: DateRange): ReportDocum
     text: String(
       clockNote ??
         "Released and collected figures cover the selected period; outstanding, overdue, " +
-          "PAR and borrower counts are as of today over each officer's whole book."
+          "PAR and member counts are as of today over each officer's whole book."
     ),
   });
 
@@ -2327,15 +2811,80 @@ export function buildPerformanceDoc(raw: unknown, range: DateRange): ReportDocum
 const PROVISIONING_COLUMNS: ReportColumn[] = [
   { key: "bucket", header: "Aging Bucket", format: "text", width: 170 },
   { key: "amount", header: "Overdue Amount", format: "currency", align: "right", width: 180 },
-  { key: "rate", header: "Provision Rate", format: "percent", align: "right", width: 150 },
+  // Text, from `exactRate`: the server's rate as sent ("5%", "2.375%"), the same as the Principal Basis.
+  { key: "rate", header: "Provision Rate", format: "text", align: "right", width: 150 },
   {
     key: "required_allowance",
-    header: "Required Allowance",
+    header: "Provision on Overdue Amount",
     format: "currency",
     align: "right",
     width: 190,
   },
 ];
+
+/** The allowance calculator's principal basis (round C, C4), beside the overdue schedule. */
+const PROVISIONING_BASIS_COLUMNS: ReportColumn[] = [
+  { key: "bucket", header: "Bucket", format: "text", width: 150 },
+  { key: "count", header: "Loans", format: "number", align: "right", width: 90 },
+  { key: "principal", header: "Principal", format: "currency", align: "right", width: 170 },
+  { key: "rate", header: "Rate", format: "text", align: "right", width: 100 },
+  {
+    key: "required_allowance",
+    header: "Required Allowance",
+    format: "currency",
+    align: "right",
+    width: 170,
+  },
+];
+
+/** A rate exactly as the server wrote it ("2.375" reads "2.375%", never rounded); null when absent. */
+function exactRate(block: Record<string, unknown> | null): string | null {
+  const rate = pick(block, ["rate_percent"]);
+  if (rate === null || rate === undefined || rate === "") return null;
+  return `${String(rate)}%`;
+}
+
+/**
+ * The `principal_basis` block: each bucket's outstanding principal, its loans,
+ * the rate and the required allowance, all the server's (in pesos, converted
+ * once from the allowance calculator's centavos). Every bucket shows even when
+ * the block is missing, with dashes; nothing is added up or multiplied here.
+ */
+function provisioningBasisSections(raw: unknown): ReportSection[] {
+  const basis = asRecord(raw);
+  const buckets = asRecord(pick(basis, ["buckets"]));
+  const totals = asRecord(pick(basis, ["totals"]));
+  const rows = AGING_BUCKETS.map(([label, keys]) => {
+    const bucket = asRecord(pick(buckets, keys));
+    return {
+      bucket: label,
+      count: serverFigure(bucket, "count"),
+      principal: serverFigure(bucket, "principal"),
+      rate: exactRate(bucket),
+      required_allowance: serverFigure(bucket, "required_allowance"),
+    };
+  });
+  const note = pick(basis, ["basis_note"]);
+
+  const sections: ReportSection[] = [
+    {
+      kind: "table",
+      title: "Principal Basis",
+      columns: PROVISIONING_BASIS_COLUMNS,
+      rows,
+      totals: [
+        { column: "count", label: "Total", value: countOrDash(serverFigure(totals, "count")) },
+        totalCell("principal", serverFigure(totals, "principal")),
+        totalCell("required_allowance", serverFigure(totals, "required_allowance")),
+      ],
+      emptyText: "No overdue principal required a provision on this date.",
+    },
+  ];
+  if (typeof note === "string" && note.trim() !== "") {
+    sections.push({ kind: "note", text: note });
+  }
+  return sections;
+}
 
 /**
  * Required allowance by aging bucket.
@@ -2347,60 +2896,55 @@ const PROVISIONING_COLUMNS: ReportColumn[] = [
 export function buildProvisioningDoc(raw: unknown, range: DateRange): ReportDocument {
   const obj = asRecord(raw);
   const buckets = asRecord(pick(obj, ["buckets", "aging_buckets"]));
-  const total = asRecord(pick(obj, ["total", "totals"]));
-  const rates = asRecord(pick(obj, ["provision_rates", "rates"]));
+  const totals = asRecord(pick(obj, ["totals"]));
 
   // `buckets` is an object keyed by bucket, not an array — the same shape the
   // Aging Report returns — so AGING_BUCKETS drives both the iteration order
   // and the labels, and the two reports can never disagree on either.
+  //
+  // Every figure is the server's. The API sends BOTH `rate` (a fraction, 0.05)
+  // and `rate_percent` (whole, 5); everything in a report is whole percent, so
+  // only `rate_percent` is read, exactly as sent (`exactRate`), as the
+  // Principal Basis reads it. A missing allowance is "—", never amount times
+  // rate worked out here.
   const rows = AGING_BUCKETS.map(([label, keys]) => {
     const bucket = asRecord(pick(buckets, keys));
-    const amount = toNumber(bucket?.amount);
-
-    // The API sends BOTH `rate` (a fraction, 0.05) and `rate_percent` (whole,
-    // 5). Everything in a report is whole percent, so reading `rate` would
-    // print a 5% provision as 0.1%. `rate_percent` first; a bare fraction from
-    // `rates` is scaled up rather than trusted as-is.
-    const ratePercent =
-      toNumber(pick(bucket, ["rate_percent"])) ??
-      scaleToPercent(toNumber(pick(bucket, ["rate", "provision_rate"]))) ??
-      scaleToPercent(toNumber(pick(rates, keys)));
-
     return {
       bucket: label,
-      amount,
-      rate: ratePercent,
-      count: toNumber(bucket?.count),
-      // Server-first. The fallback is the report's own definition — amount
-      // times rate — and only runs when the server sent both inputs, so it
-      // cannot invent a figure.
-      required_allowance:
-        toNumber(pick(bucket, ["required_allowance", "allowance", "provision"])) ??
-        (amount !== null && ratePercent !== null ? (amount * ratePercent) / 100 : null),
+      amount: serverFigure(bucket, "amount"),
+      rate: exactRate(bucket),
+      count: serverFigure(bucket, "count"),
+      required_allowance: serverFigure(bucket, "required_allowance"),
     };
   });
 
-  const totalAmount = toNumber(total?.amount) ?? sumOrNull(rows, "amount");
-  const totalAllowance =
-    toNumber(pick(total, ["required_allowance", "allowance", "provision"])) ??
-    sumOrNull(rows, "required_allowance");
-  const delinquentLoans = toNumber(total?.count);
-  // Weighted, not the average of the four rates — the mix of buckets is the
-  // whole point of the report.
-  const effectiveRate =
-    toNumber(pick(total, ["effective_rate"])) ??
-    toNumber(pick(obj, ["effective_rate", "provision_rate"])) ??
-    ratioPercent(totalAllowance, totalAmount);
+  // The server's totals; a missing one is "—", never the buckets added up nor
+  // allowance over amount. The effective rate is weighted server-side, not the
+  // average of the four rates — the mix of buckets is the whole point.
+  const totalAmount = serverFigure(totals, "amount");
+  const totalAllowance = serverFigure(totals, "required_allowance");
+  const delinquentLoans = serverFigure(totals, "count");
+  const effectiveRate = serverFigure(totals, "effective_rate");
   const asOf = pick(obj, ["as_of_date", "as_of"]);
+  // The headline Required Allowance is the posted basis: past-due principal in
+  // each bucket at its rate, the figure the allowance posting books (Arvin,
+  // 2026-11-19). The overdue amount's own provision keeps its place under its
+  // own name. Both are the server's; a missing one is "—", never the other.
+  const basisTotals = asRecord(pick(asRecord(pick(obj, ["principal_basis"])), ["totals"]));
+  const requiredAllowance = serverFigure(basisTotals, "required_allowance");
 
   const sections: ReportSection[] = [
     {
       kind: "kpi_grid",
       items: [
         kpi("Total Overdue", currencyOrDash(totalAmount), { tone: "negative" }),
-        kpi("Required Allowance", currencyOrDash(totalAllowance), { tone: "negative" }),
+        kpi("Required Allowance", currencyOrDash(requiredAllowance), {
+          tone: "negative",
+          hint: "On past-due principal, the basis the allowance posting uses",
+        }),
+        kpi("Provision on Overdue Amount", currencyOrDash(totalAllowance), { tone: "negative" }),
         kpi("Effective Provision Rate", percentOrDash(effectiveRate), {
-          hint: "Required allowance over total overdue",
+          hint: "Provision on overdue amount over total overdue",
         }),
         kpi("Delinquent Loans", countOrDash(delinquentLoans)),
       ],
@@ -2422,8 +2966,9 @@ export function buildProvisioningDoc(raw: unknown, range: DateRange): ReportDocu
       kind: "note",
       text:
         `${asOf ? `Computed as of ${formatValue(asOf, "date")}. ` : ""}` +
-        "Required allowance is the overdue amount in each bucket multiplied by that bucket's " +
-        "provisioning rate. " +
+        "Provision on overdue amount is the overdue amount in each bucket multiplied by that bucket's " +
+        "provisioning rate. The Required Allowance is worked out on past-due principal (the Principal " +
+        "Basis below), the basis the allowance posting uses. " +
         // The server carries its own wording for why the ladder is a constant;
         // prefer it, so a board that changes the policy changes one place.
         String(
@@ -2433,6 +2978,7 @@ export function buildProvisioningDoc(raw: unknown, range: DateRange): ReportDocu
         " Bucket amounts add up to the total overdue; the delinquent loan count does not — a loan " +
         "that is late in two buckets is still one delinquent loan.",
     },
+    ...provisioningBasisSections(pick(obj, ["principal_basis"])),
   ];
 
   return {

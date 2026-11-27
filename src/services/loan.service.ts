@@ -1,8 +1,51 @@
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { fetchAllPages, type DrainResult } from "@/lib/paginate";
-import type { Loan, LoanSchedule, LoanLedgerEntry, PaginatedResponse, AutoPayToggleData, AutoPaySettings } from "@/types";
+import type { LoanLedger, LoanSummary } from "@/types/loan";
+import type { AmortizationPreviewResponse, AmortizationCalculatorRequest, AmortizationCalculatorResult, Loan, LoanAmortizationBalances, LoanApprovalEditState, LoanCoMaker, LoanExtensionPreview, ExtensionInterestOption, LoanFormPreview, LoanFormPreviewRequest, LoanReleasePreview, LoanSchedule, LoanLedgerEntry, PaginatedResponse, AutoPayToggleData, AutoPaySettings } from "@/types";
 import type { ApiAmortizationSchedule } from "@/lib/amortization";
+import type { CreateCoMakerData } from "./co-maker.service";
+import type { LoanDeduction as LoanDeductionInput } from "@/lib/loan-restructure";
+import type { RecordPaymentMethod } from "@/constants/payment-methods";
+
+/**
+ * `POST /loans` and `PUT /loans/{id}`. `deductions` go up as rates and pesos
+ * and the API works out each item's amount, so they are not the stored items
+ * a `Loan` reads back.
+ */
+export type LoanApplicationPayload = Omit<Partial<Loan>, "deductions"> & {
+  deductions?: LoanDeductionInput[];
+  /**
+   * `PUT /loans/{id}` only: the loan's full collateral list. The server
+   * detaches the unlisted ones, attaches the new ones at its own valuation,
+   * and leaves the ones already attached untouched with their original
+   * snapshot. `[]` detaches everything. Absent, the loan's collaterals are
+   * not touched. Sending it needs `collaterals:update`.
+   */
+  collaterals?: LoanCollateralInput[];
+};
+
+/**
+ * `PATCH /loans/{id}/approval-edit`: the Chairman/Chairwoman's edit at their
+ * approval step. The loan form's fields with the term and frequency, but not
+ * the member, product or policy exception, which stay as they are, and the
+ * `version` read when the edit opened.
+ */
+export type LoanApprovalEditPayload = Omit<
+  LoanApplicationPayload,
+  "borrower_id" | "loan_product_id" | "policy_exception" | "policy_exception_details" | "purpose"
+> & {
+  version: string;
+  /** Null clears it. */
+  purpose?: string | null;
+  /** Member ids, as the loan form's co-maker picker sends them; only when they changed. */
+  co_maker_ids?: number[];
+};
+
+/** One collateral in an edit's `collaterals` list: by id only, never a value. */
+export type LoanCollateralInput = {
+  collateral_id: number;
+};
 
 export type ReleaseLoanPayload = {
   insurance_premium_percentage?: number;
@@ -10,7 +53,47 @@ export type ReleaseLoanPayload = {
   insurance_payment_type?: "full" | "partial";
   insurance_partial_amount?: number;
   insurance_remaining_balance?: number;
+  /**
+   * The `fee_fingerprint` of the release preview the figures on screen came
+   * from. The release is refused with a 409, and nothing written, if the fee
+   * configuration has changed since.
+   */
+  fee_fingerprint?: string;
+  /** How the proceeds are paid out; the server takes cash when it is left out. */
+  method?: RecordPaymentMethod;
+  /** Required unless the method is cash, at most 100 characters. */
+  reference_number?: string;
 };
+
+/**
+ * `POST /loans/{id}/extend`. On "pay" the collection takes `method` (cash when
+ * left out) and `reference_number` (required unless cash); "defer" collects
+ * nothing and sends neither.
+ */
+export type ExtendLoanPayload = {
+  remarks?: string;
+  interest_option: ExtensionInterestOption;
+  method?: RecordPaymentMethod;
+  reference_number?: string;
+};
+
+/**
+ * The insurance `GET /loans/{id}/release-preview` is asked about, as the
+ * release would send it. Validated as the release validates it: a partial
+ * amount above the server's premium is a 422 on `insurance_partial_amount`.
+ */
+export type ReleasePreviewInsuranceQuery = {
+  insurance_premium_percentage: number;
+  insurance_payment_type: "full" | "partial";
+  insurance_partial_amount?: number;
+};
+
+/**
+ * `POST /loans/{id}/co-makers`: link one of the borrower's registered
+ * co-makers by its co-maker record id, or send a new co-maker's details to
+ * create it on the borrower and link it in the same request.
+ */
+export type AddLoanCoMakerPayload = { co_maker_id: number } | CreateCoMakerData;
 
 /**
  * The statuses that count as "this borrower already owes us something", as one
@@ -73,7 +156,9 @@ export const loanService = {
    * `active`), `branch_id`, `borrower_id`, `loan_product_id`,
    * `date_from`/`date_to` (inclusive whole-day on `created_at`), `sort` and
    * `dir`. `sort` accepts columns only — there is no key for the
-   * schedule-derived `next_due_date` or `overdue_amount`.
+   * schedule-derived `next_due_date` or `overdue_amount`. `awaiting_me=1`
+   * keeps only loans waiting on the signed-in user (the badge's count is
+   * `loanApprovalService.countAwaitingMe`).
    */
   list: (params?: Record<string, unknown>) =>
     api.getRaw<PaginatedResponse<Loan>>(API_ENDPOINTS.LOANS.LIST, { params }),
@@ -136,23 +221,88 @@ export const loanService = {
   detail: (id: number) =>
     api.get<Loan>(API_ENDPOINTS.LOANS.DETAIL(id)),
 
-  create: (data: Partial<Loan>) =>
+  create: (data: LoanApplicationPayload) =>
     api.post<Loan>(API_ENDPOINTS.LOANS.CREATE, data),
 
-  update: (id: number, data: Partial<Loan>) =>
+  /**
+   * `POST /loans/preview` for the loan form and the restructure page: the
+   * collateral total, security status, "Short by", deductions, schedule and,
+   * for a restructure (`source_loan_id`), the shortfall, all worked out by the
+   * server for the terms entered so far. Writes nothing. Needs `loans:create`
+   * or `loans:update` (403 otherwise); malformed input, or a share capital
+   * collateral the role may not value, is a 422. `signal` lets a superseded
+   * preview be cancelled.
+   */
+  preview: (data: LoanFormPreviewRequest, signal?: AbortSignal) =>
+    api.post<LoanFormPreview>(API_ENDPOINTS.LOANS.PREVIEW, data, { signal }),
+
+  /**
+   * `POST /loans/amortization-calculator`: the Amortization Calculator's
+   * schedule for a what-if loan with no product, built by the server with the
+   * code a release writes the real schedule with. `compare: true` adds every
+   * method's schedule. Writes nothing; needs `loans:view`; bad input is a 422.
+   */
+  amortizationCalculator: (data: AmortizationCalculatorRequest) =>
+    api.post<AmortizationCalculatorResult>(API_ENDPOINTS.LOANS.AMORTIZATION_CALCULATOR, data),
+
+  update: (id: number, data: LoanApplicationPayload) =>
     api.put<Loan>(API_ENDPOINTS.LOANS.UPDATE(id), data),
+
+  /**
+   * `GET /loans/{id}/approval-edit`: whether the signed-in user may edit the
+   * loan at its approval step now, why not in words, and the `version` the
+   * save sends back. Needs `loans:edit_in_approval` (403 otherwise).
+   */
+  approvalEditState: (id: number) =>
+    api.get<LoanApprovalEditState>(API_ENDPOINTS.LOANS.APPROVAL_EDIT(id)),
+
+  /**
+   * `POST /loans/{id}/approval-edit/preview`: the loan form's preview for the
+   * Chairman/Chairwoman's edit, answered as `preview` answers. Writes nothing.
+   * `signal` lets a superseded preview be cancelled.
+   */
+  approvalEditPreview: (id: number, data: LoanFormPreviewRequest, signal?: AbortSignal) =>
+    api.post<LoanFormPreview>(API_ENDPOINTS.LOANS.APPROVAL_EDIT_PREVIEW(id), data, { signal }),
+
+  /**
+   * `PATCH /loans/{id}/approval-edit`: save the Chairman/Chairwoman's edit.
+   * The loan stays at their step, to approve or forward. A loan changed since
+   * `version` was read answers 409; a figure outside the product's limits, or
+   * a field that can't change, 422; another user's step 403. Each in words.
+   */
+  approvalEdit: (id: number, data: LoanApprovalEditPayload) =>
+    api.patch<Loan>(API_ENDPOINTS.LOANS.APPROVAL_EDIT(id), data),
 
   delete: (id: number) =>
     api.delete(API_ENDPOINTS.LOANS.DELETE(id)),
 
-  approve: (id: number, data?: { approval_remarks?: string }) =>
-    api.patch<Loan>(API_ENDPOINTS.LOANS.APPROVE(id), data),
-
-  reject: (id: number, data?: { approval_remarks?: string }) =>
-    api.patch<Loan>(API_ENDPOINTS.LOANS.REJECT(id), data),
-
   release: (id: number, payload?: ReleaseLoanPayload) =>
     api.patch<Loan>(API_ENDPOINTS.LOANS.RELEASE(id), payload),
+
+  /**
+   * Sends an approved, unreleased restructure back into review, with a reason
+   * (required, at most 1000 characters), so its figures are taken again on
+   * re-submit and approval. Answers the loan, now `for_review`. Offered only
+   * when the loan's `can_send_back_approved` is true; the server refuses
+   * anything else (409 when the loan changed meanwhile, 422 on `status` or
+   * `reason`).
+   */
+  sendBackApproved: (id: number, data: { reason: string }) =>
+    api.patch<Loan>(API_ENDPOINTS.LOANS.SEND_BACK_APPROVED(id), data),
+
+  /**
+   * What releasing the loan would withhold and pay out. With `insurance`, the
+   * server also works out the premium and the deductions and net after it.
+   * Needs `loans:release`, and 422s unless the loan is `approved`, when the
+   * fees would exceed the principal (with a message naming the figures), or
+   * when the insurance fails the release's own validation. `signal` lets a
+   * superseded insurance preview be cancelled.
+   */
+  releasePreview: (id: number, insurance?: ReleasePreviewInsuranceQuery | null, signal?: AbortSignal) =>
+    api.get<LoanReleasePreview>(API_ENDPOINTS.LOANS.RELEASE_PREVIEW(id), {
+      ...(insurance && { params: insurance }),
+      signal,
+    }),
 
   submit: (id: number) =>
     api.patch<Loan>(API_ENDPOINTS.LOANS.SUBMIT(id)),
@@ -160,15 +310,23 @@ export const loanService = {
   void: (id: number) =>
     api.patch<Loan>(API_ENDPOINTS.LOANS.VOID(id)),
 
+  /**
+   * The schedule release would store, read whole: its `totals` sit beside
+   * `data`, which `get` would drop.
+   */
   amortizationPreview: (id: number) =>
-    api.get<LoanSchedule[]>(API_ENDPOINTS.LOANS.AMORTIZATION_PREVIEW(id)),
+    api.getRaw<AmortizationPreviewResponse>(API_ENDPOINTS.LOANS.AMORTIZATION_PREVIEW(id)),
 
   amortizationSchedule: (id: number) =>
     api.get<ApiAmortizationSchedule>(API_ENDPOINTS.LOANS.AMORTIZATION_SCHEDULE(id)),
 
+  /** What is still owed on each period, per component, as the server works it out. */
+  amortizationBalances: (id: number) =>
+    api.get<LoanAmortizationBalances>(API_ENDPOINTS.LOANS.AMORTIZATION_BALANCES(id)),
+
   /** Loan balance summary (replaces the old /schedule endpoint) */
   summary: (id: number) =>
-    api.get(API_ENDPOINTS.LOANS.SUMMARY(id)),
+    api.get<LoanSummary>(API_ENDPOINTS.LOANS.SUMMARY(id)),
 
   /** Alias — maps to amortization-schedule for backward compat */
   schedule: (id: number) =>
@@ -181,11 +339,27 @@ export const loanService = {
    * ("defer"). The API performs the collection itself, in the same
    * transaction as the extension.
    */
-  extend: (id: number, data: { remarks?: string; interest_option: "pay" | "defer" }) =>
+  extend: (id: number, data: ExtendLoanPayload) =>
     api.post<Loan>(API_ENDPOINTS.LOANS.EXTEND(id), data),
+
+  /**
+   * What `extend` would collect now and store for `interestOption`, worked
+   * out by the server. Writes nothing. Needs `loans:extend`, and answers 422
+   * wherever the extension itself would be refused. `signal` lets a preview
+   * for an option since switched away from be cancelled.
+   */
+  extensionPreview: (id: number, interestOption: ExtensionInterestOption, signal?: AbortSignal) =>
+    api.get<LoanExtensionPreview>(API_ENDPOINTS.LOANS.EXTENSION_PREVIEW(id), {
+      params: { interest_option: interestOption },
+      signal,
+    }),
 
   restructure: (id: number, data: Record<string, unknown>) =>
     api.post<Loan>(API_ENDPOINTS.LOANS.RESTRUCTURE(id), data),
+
+  /** The Ledger: every row and running balance from the server — see `LoanLedger`. */
+  ledger: (id: number) =>
+    api.get<LoanLedger>(API_ENDPOINTS.LOANS.LEDGER(id)),
 
   /** Debit/credit postings against the loan's interest — see `LoanLedgerEntry`. */
   ledgerEntries: (id: number) =>
@@ -193,4 +367,17 @@ export const loanService = {
 
   toggleAutoPay: (id: number, data: AutoPayToggleData) =>
     api.patch<AutoPaySettings>(API_ENDPOINTS.LOANS.TOGGLE_AUTO_PAY(id), data),
+
+  /** Works at any status, unlike `update`, which refuses a loan past for_review. */
+  assignAccountOfficer: (id: number, accountOfficerId: number) =>
+    api.patch<Loan>(API_ENDPOINTS.LOANS.ACCOUNT_OFFICER(id), { account_officer_id: accountOfficerId }),
+
+  /**
+   * Link a co-maker to the loan, answering with the linked co-maker. Needs
+   * `loans:release`, and only while the loan is `approved`: past release the
+   * API refuses with a 422 whose message says so, which the caller should show.
+   * `POST /borrowers/{id}/co-makers` is not a substitute, it links to no loan.
+   */
+  addCoMaker: (id: number, payload: AddLoanCoMakerPayload) =>
+    api.post<LoanCoMaker>(API_ENDPOINTS.LOANS.CO_MAKERS(id), payload),
 };

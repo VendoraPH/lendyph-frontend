@@ -1,19 +1,32 @@
 "use client";
 
+import { useMenuVisibility } from "@/hooks/use-menu-visibility";
+import { memberPageParts } from "@/lib/hidden-module-parts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { User, MapPin, Briefcase, CreditCard } from "lucide-react";
-import { formatCurrency } from "@/lib/format";
-import type { Borrower, Loan, CoMaker } from "@/types";
+import { formatCurrency, formatDate } from "@/lib/format";
+import type { Borrower, BorrowerLoanSummary, Loan, CoMaker } from "@/types";
+import { loanNeedsCoMaker } from "../_lib/co-maker-recommendation";
+import { hasMembership } from "../../_lib/member-membership";
+import { MembershipCard } from "./membership-card";
+import { NotificationPreferencesCard } from "./notification-preferences-card";
+import { PortalAccessCard } from "./portal-access-card";
+import { env } from "@/config/env";
+import { usePermission } from "@/hooks";
 // Constants removed — valid_id_type not in API response
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
 
 interface OverviewTabProps {
   borrower: Borrower;
   loans: Loan[];
   coMakers: CoMaker[];
+  /**
+   * The server's loan totals (GET /borrowers/{id}/loan-summary), or null while
+   * loading or after a failure. Adding up `loans` here counted drafts, rejected
+   * and void applications as money borrowed.
+   */
+  summary: BorrowerLoanSummary | null;
+  /** After the Membership card saves: the member's record as the server answered it. */
+  onMembershipSaved: (saved: Borrower) => void;
 }
 
 function InfoItem({ label, value }: { label: string; value?: string | null }) {
@@ -25,21 +38,24 @@ function InfoItem({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
-export function OverviewTab({ borrower, loans, coMakers }: OverviewTabProps) {
-  // "Current" in this count also includes legacy "ongoing" responses, since
-  // older backend versions emit that status for the same lifecycle stage.
-  const currentLoans = loans.filter(
-    (l) => l.status === "current" || l.status === "ongoing"
-  ).length;
-  const completedLoans = loans.filter((l) => l.status === "completed").length;
-  const defaultedLoans = loans.filter((l) => l.status === "defaulted").length;
-  const totalOutstanding = loans.reduce((sum, l) => sum + (l.outstanding_balance ?? 0), 0);
-  const totalPrincipal = loans.reduce((sum, l) => sum + l.principal_amount, 0);
+export function OverviewTab({ borrower, loans, coMakers, summary, onMembershipSaved }: OverviewTabProps) {
+  const money = (amount: number | undefined) => (amount === undefined ? "—" : formatCurrency(amount));
+  const count = (n: number | undefined) => (n === undefined ? "—" : String(n));
+  const { can } = usePermission();
+  // Menu Visibility: the portal access card and the reminder preferences go
+  // while their menus (Member Portal, Loans → Reminders) are hidden.
+  const { isHidden } = useMenuVisibility();
+  const parts = memberPageParts(isHidden);
+  // Members only: an applicant still pending (or rejected) has no portal access to manage.
+  const showPortal =
+    env.features.memberPortal &&
+    parts.portalAccess &&
+    can("member_portal:view") &&
+    borrower.status !== "pending" &&
+    borrower.status !== "rejected";
 
   const totalCoMakers = coMakers.length;
-  const loansNeedingCoMaker = loans.filter(
-    (l) => l.principal_amount >= 50000 && l.status !== "completed" && !coMakers.some((cm) => cm.loan_id === l.id)
-  ).length;
+  const loansNeedingCoMaker = loans.filter(loanNeedsCoMaker).length;
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -59,9 +75,12 @@ export function OverviewTab({ borrower, loans, coMakers }: OverviewTabProps) {
             label="Civil Status"
             value={borrower.civil_status ? borrower.civil_status.charAt(0).toUpperCase() + borrower.civil_status.slice(1) : undefined}
           />
-          <InfoItem label="Borrower Code" value={borrower.borrower_code} />
+          <InfoItem label="Member Code" value={borrower.borrower_code} />
         </CardContent>
       </Card>
+
+      {/* Membership: members only; a pending or rejected registration has none. */}
+      {hasMembership(borrower) && <MembershipCard borrower={borrower} onSaved={onMembershipSaved} />}
 
       {/* Address */}
       <Card>
@@ -89,6 +108,7 @@ export function OverviewTab({ borrower, loans, coMakers }: OverviewTabProps) {
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-4">
           <InfoItem label="Employer / Business" value={borrower.employer_or_business} />
+          <InfoItem label="Date Hired" value={borrower.date_hired ? formatDate(borrower.date_hired) : undefined} />
           <InfoItem label="Monthly Income" value={borrower.monthly_income ? formatCurrency(Number(borrower.monthly_income)) : undefined} />
         </CardContent>
       </Card>
@@ -109,20 +129,20 @@ export function OverviewTab({ borrower, loans, coMakers }: OverviewTabProps) {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Total Borrowed</p>
-              <p className="text-2xl font-bold">{formatCurrency(totalPrincipal)}</p>
+              <p className="text-2xl font-bold">{money(summary?.total_borrowed)}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Outstanding</p>
-              <p className="text-2xl font-bold text-brand-orange">{formatCurrency(totalOutstanding)}</p>
+              <p className="text-2xl font-bold text-brand-orange">{money(summary?.total_outstanding)}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Current / Completed / Defaulted</p>
               <p className="text-2xl font-bold">
-                <span className="text-green-600">{currentLoans}</span>
+                <span className="text-green-600">{count(summary?.current_loans)}</span>
                 {" / "}
-                <span className="text-gray-600">{completedLoans}</span>
+                <span className="text-gray-600">{count(summary?.counts.completed)}</span>
                 {" / "}
-                <span className="text-red-600">{defaultedLoans}</span>
+                <span className="text-red-600">{count(summary?.counts.defaulted)}</span>
               </p>
             </div>
             <div>
@@ -138,6 +158,10 @@ export function OverviewTab({ borrower, loans, coMakers }: OverviewTabProps) {
           </div>
         </CardContent>
       </Card>
+
+      {parts.reminderPreferences && <NotificationPreferencesCard borrowerId={borrower.id} />}
+
+      {showPortal && <PortalAccessCard borrowerId={borrower.id} memberName={borrower.full_name} />}
     </div>
   );
 }

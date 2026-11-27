@@ -65,3 +65,8 @@ test("isAlreadyRegisteredError is false for non-422 / network errors", () => {
   assert.equal(isAlreadyRegisteredError(new Error("Network Error")), false);
   assert.equal(isAlreadyRegisteredError(httpErr(500, {})), false);
 });
+
+test("the server's member wording still reads as a duplicate", () => {
+  assert.equal(isDuplicateNameMessage("A similar member already exists."), true);
+  assert.equal(isDuplicateNameMessage("A similar member was found."), true);
+});

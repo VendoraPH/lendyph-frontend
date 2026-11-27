@@ -3,33 +3,33 @@ import assert from "node:assert/strict";
 import {
   SHARE_CAPITAL_UNAVAILABLE_LABEL,
   hasShareCapitalBalance,
+  ledgerAmounts,
   shareCapitalUnavailableReason,
   toShareCapitalBalance,
 } from "./share-capital";
 import { fetchAllPages, type PageFetcher } from "@/lib/paginate";
-import type { DrainResult } from "@/lib/paginate";
-import type { ShareCapitalLedgerEntry } from "@/types";
+import type { ShareCapitalLedgerEntry, ShareCapitalMemberPeriod } from "@/types";
 
 type Entry = ShareCapitalLedgerEntry;
 
 let nextId = 0;
-const entry = (type: "credit" | "debit", amount: number): Entry =>
-  ({
-    id: ++nextId,
+/** One `ShareCapitalLedgerResource` row: the amount sits in one column, the other is 0. */
+const entry = (side: "credit" | "debit", amount: number): Entry => {
+  const id = ++nextId;
+  return {
+    id,
     borrower_id: 7,
+    borrower_name: "Juana Dela Cruz",
+    borrower_code: "MBR-0001",
     date: "2026-01-01",
-    description: type === "credit" ? "Monthly contribution" : "Partial withdrawal",
-    type,
-    amount,
-  }) as Entry;
-
-const drain = (rows: Entry[], over: Partial<DrainResult<Entry>> = {}): DrainResult<Entry> => ({
-  rows,
-  total: rows.length,
-  truncated: false,
-  pagesFetched: 1,
-  ...over,
-});
+    description: side === "credit" ? "Monthly contribution" : "Partial withdrawal",
+    reference: `SC-20260101-${String(id).padStart(6, "0")}`,
+    debit: side === "debit" ? amount : 0,
+    credit: side === "credit" ? amount : 0,
+    created_by_user: { id: 1, name: "Carlo Uy" },
+    created_at: "2026-01-01T01:00:00.000000Z",
+  };
+};
 
 /**
  * A stand-in for `ShareCapitalLedgerController::index()`, reproducing the one
@@ -53,54 +53,64 @@ function stubLedger(rows: Entry[], maxPerPage = 100): PageFetcher {
   };
 }
 
-// ---------------------------------------------------------------------------
-// The bug, in both directions
-// ---------------------------------------------------------------------------
-
-/**
- * These two are the whole argument for the result type.
- *
- * A clamped ledger drops credits AND debits, so the resulting balance is wrong
- * in EITHER direction depending only on the order the rows happen to arrive in
- * — and the controller orders `date DESC, id DESC`, which nobody controls.
- * "It errs low, so it fails safe" is not available as a defence.
- */
-test("a clamped ledger reads TOO LOW when the newest page holds the debits", async () => {
-  // 140 old credits + 60 newer credits + 40 newest debits = 240 entries.
-  // Newest-first, so page 1 is 60 credits and 40 debits.
-  const newest = [
-    ...Array.from({ length: 40 }, () => entry("debit", 500)),
-    ...Array.from({ length: 60 }, () => entry("credit", 1000)),
-  ];
-  const rows = [...newest, ...Array.from({ length: 140 }, () => entry("credit", 1000))];
-
-  const onePage = await stubLedger(rows)({ page: 1, per_page: 9999 });
-  const clamped = toShareCapitalBalance(
-    drain((onePage as { data: Entry[] }).data, { total: rows.length }),
-  );
-  const whole = toShareCapitalBalance(await fetchAllPages<Entry>(stubLedger(rows)));
-
-  assert.equal(clamped.status, "ok"); // looks complete — that is the problem
-  assert.equal(hasShareCapitalBalance(clamped) && clamped.balance, 40_000);
-  assert.equal(hasShareCapitalBalance(whole) && whole.balance, 180_000);
-  assert.equal(hasShareCapitalBalance(whole) && whole.entries, 240);
+const period = (ending_balance: number): ShareCapitalMemberPeriod => ({
+  opening_balance: 0,
+  total_credits: 0,
+  total_debits: 0,
+  ending_balance,
 });
 
-test("a clamped ledger reads TOO HIGH when the debits are older than the cap", async () => {
-  // Newest 100 credits, oldest 50 debits = 150 entries.
-  const rows = [
-    ...Array.from({ length: 100 }, () => entry("credit", 1000)),
-    ...Array.from({ length: 50 }, () => entry("debit", 1500)),
-  ];
+// ---------------------------------------------------------------------------
+// The server's balance (`meta.summary.ending_balance`), never a browser sum
+// ---------------------------------------------------------------------------
 
-  const onePage = await stubLedger(rows)({ page: 1, per_page: 9999 });
-  const clamped = toShareCapitalBalance(
-    drain((onePage as { data: Entry[] }).data, { total: rows.length }),
-  );
-  const whole = toShareCapitalBalance(await fetchAllPages<Entry>(stubLedger(rows)));
+test("the balance is the server's ending balance, as sent", () => {
+  // Not credits minus debits of anything in hand: the server's figure covers
+  // the member's whole ledger, whatever page the list stopped at.
+  const result = toShareCapitalBalance(period(183_456.78));
+  assert.equal(result.status, "ok");
+  assert.equal(hasShareCapitalBalance(result) && result.balance, 183_456.78);
+});
 
-  assert.equal(hasShareCapitalBalance(clamped) && clamped.balance, 100_000);
-  assert.equal(hasShareCapitalBalance(whole) && whole.balance, 25_000);
+test("a ledger that has paid out more than it took in stays negative", () => {
+  const result = toShareCapitalBalance(period(-300));
+  assert.equal(hasShareCapitalBalance(result) && result.balance, -300);
+});
+
+test("a zero ending balance is a real zero, and says so", () => {
+  const result = toShareCapitalBalance(period(0));
+  assert.equal(result.status, "ok");
+  assert.equal(hasShareCapitalBalance(result) && result.balance, 0);
+  assert.equal(shareCapitalUnavailableReason(result), null);
+});
+
+test("no summary from the server is unavailable, never 0", () => {
+  for (const summary of [null, undefined]) {
+    const result = toShareCapitalBalance(summary);
+    assert.equal(result.status, "unavailable");
+    // No `balance` key to fall back on: a caller cannot `?? 0` its way to a
+    // member with "no share capital".
+    assert.equal("balance" in result, false);
+    assert.match(shareCapitalUnavailableReason(result) ?? "", /not the same as zero/);
+  }
+});
+
+test("a string ending balance off the wire is read as its number", () => {
+  const result = toShareCapitalBalance({
+    ...period(0),
+    ending_balance: "1000.25" as unknown as number,
+  });
+  assert.equal(hasShareCapitalBalance(result) && result.balance, 1000.25);
+});
+
+test("an unreadable ending balance is unavailable, never 0", () => {
+  for (const bad of ["not a number", null, Number.POSITIVE_INFINITY]) {
+    const result = toShareCapitalBalance({
+      ...period(0),
+      ending_balance: bad as unknown as number,
+    });
+    assert.equal(result.status, "unavailable");
+  }
 });
 
 test("the drain asks for the documented ceiling, not a guess above it", async () => {
@@ -114,83 +124,34 @@ test("the drain asks for the documented ceiling, not a guess above it", async ()
   assert.deepEqual(log, [100, 100, 100]);
 });
 
-// ---------------------------------------------------------------------------
-// Refusing to decide
-// ---------------------------------------------------------------------------
-
-test("a truncated drain refuses to report a balance at all", () => {
-  const result = toShareCapitalBalance(
-    drain(Array.from({ length: 2000 }, () => entry("credit", 1000)), {
-      truncated: true,
-      total: 5000,
-    }),
+test("a bad column counts as 0 without discarding the other side of the entry", () => {
+  assert.deepEqual(
+    ledgerAmounts({ debit: 100, credit: "not a number" as unknown as number }),
+    { debit: 100, credit: 0 },
   );
-
-  assert.equal(result.status, "incomplete");
-  // No `balance` key to fall back on — a caller cannot `?? 0` its way back to
-  // the bug.
-  assert.equal("balance" in result, false);
-  assert.equal(result.status === "incomplete" && result.shown, 2000);
-  assert.equal(result.status === "incomplete" && result.total, 5000);
-});
-
-test("an incomplete drain with no usable total still refuses, without inventing one", () => {
-  const result = toShareCapitalBalance(
-    drain([entry("credit", 1000)], { truncated: true, total: null }),
+  assert.deepEqual(
+    ledgerAmounts({ debit: Number.NaN, credit: 300 }),
+    { debit: 0, credit: 300 },
   );
-  assert.equal(result.status, "incomplete");
-  assert.match(shareCapitalUnavailableReason(result) ?? "", /^Only 1 share capital entries/);
-});
-
-test("an empty ledger is a real zero, and says so", () => {
-  const result = toShareCapitalBalance(drain([], { total: 0 }));
-  assert.equal(result.status, "ok");
-  assert.equal(hasShareCapitalBalance(result) && result.balance, 0);
-  assert.equal(shareCapitalUnavailableReason(result), null);
-});
-
-test("a genuine zero is distinguishable from a failure to read the ledger", () => {
-  const real = toShareCapitalBalance(drain([entry("credit", 500), entry("debit", 500)]));
-  const failed = { status: "unavailable" } as const;
-
-  assert.equal(hasShareCapitalBalance(real) && real.balance, 0);
-  assert.equal(hasShareCapitalBalance(failed), false);
-  // The old signature collapsed these two into the same `0`, which is how a
-  // network blip became "this member has no share capital".
-  assert.notEqual(real.status, failed.status);
-  assert.match(shareCapitalUnavailableReason(failed) ?? "", /not the same as zero/);
-});
-
-// ---------------------------------------------------------------------------
-// Arithmetic hygiene
-// ---------------------------------------------------------------------------
-
-test("unparseable amounts are skipped rather than poisoning the total with NaN", () => {
-  const rows = [
-    entry("credit", 1000),
-    { ...entry("credit", 0), amount: "not a number" as unknown as number },
-    { ...entry("debit", 0), amount: undefined as unknown as number },
-    entry("debit", 250),
-  ];
-  const result = toShareCapitalBalance(drain(rows));
-  assert.equal(hasShareCapitalBalance(result) && result.balance, 750);
-});
-
-test("a non-finite total is reported as unknown, never as 0", () => {
-  const rows = [entry("credit", Number.MAX_VALUE), entry("credit", Number.MAX_VALUE)];
-  const result = toShareCapitalBalance(drain(rows));
-  assert.equal(result.status, "unavailable");
-});
-
-test("string amounts off the wire still add up", () => {
-  const rows = [
-    { ...entry("credit", 0), amount: "1500.50" as unknown as number },
-    { ...entry("debit", 0), amount: "500.25" as unknown as number },
-  ];
-  const result = toShareCapitalBalance(drain(rows));
-  assert.equal(hasShareCapitalBalance(result) && result.balance, 1000.25);
 });
 
 test("every screen refusing to decide says the same words", () => {
   assert.equal(SHARE_CAPITAL_UNAVAILABLE_LABEL, "Balance unavailable");
+});
+
+test("a balance held back for want of access gives that reason, not a failed load", () => {
+  assert.equal(
+    shareCapitalUnavailableReason({ status: "unavailable", cause: "no_permission" }),
+    "Your role doesn't include Share Capital: View, so this member's share capital balance isn't shown.",
+  );
+  assert.equal(
+    shareCapitalUnavailableReason({ status: "unavailable", cause: "no_branch_access" }),
+    "This member's branch isn't one of your branches, so their share capital balance isn't shown.",
+  );
+  // A failed load keeps its own words.
+  assert.equal(
+    shareCapitalUnavailableReason({ status: "unavailable" }),
+    "The share capital ledger could not be loaded, so the balance is unknown — which is not the same as zero.",
+  );
+  assert.equal(shareCapitalUnavailableReason({ status: "ok", balance: 0 }), null);
 });

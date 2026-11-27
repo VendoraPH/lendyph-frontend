@@ -9,20 +9,24 @@ import { DataState } from "@/components/common/data-state";
 import { useApiResource } from "@/hooks";
 import { creditScoringService } from "@/services";
 import { CreditScoringPageHeader } from "../../_components/page-header";
-import { RiskLevelBadge } from "../../_components/risk-level-badge";
-import { ConfidenceBadge } from "../../_components/confidence-badge";
-import { ScoreBreakdownCard } from "../../_components/score-breakdown-card";
-import { ScoreFactorList } from "../../_components/score-factor-list";
+import { ScoreDetail } from "../../_components/score-detail";
+import { CapacitySection } from "../../_components/capacity-section";
 import { PolicyFlagAlert } from "../../_components/policy-flag-alert";
+import { ScoreHistoryChart } from "./_components/score-history-chart";
+import { MemberScoreHistory } from "./_components/member-score-history";
+import { MemberDecisions } from "./_components/member-decisions";
 import { ManualOverrideDialog } from "./_components/manual-override-dialog";
 import { LindaChatPlaceholder } from "./_components/linda-chat-placeholder";
 import { CicPlaceholder } from "./_components/cic-placeholder";
+import { useLindaAvailable } from "@/components/linda/linda-gate";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatDateTime } from "@/lib/format";
-import type { CreditScore, PolicyFlag } from "@/types/credit-scoring";
+import { SCORE_TYPE_LABELS } from "@/lib/credit-scoring/labels";
+import { isDetailsHidden } from "@/lib/credit-scoring/score-state";
+import type { CreditScore, PolicyFlagList } from "@/types/credit-scoring";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 
-export default function BorrowerCreditProfilePage({
+function BorrowerCreditProfileContent({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -30,6 +34,8 @@ export default function BorrowerCreditProfilePage({
   const { id } = use(params);
   const borrowerId = Number(id);
   const [overrideOpen, setOverrideOpen] = useState(false);
+  const [decisionsVersion, setDecisionsVersion] = useState(0);
+  const lindaOn = useLindaAvailable();
 
   const profileFetcher = useCallback(
     () => creditScoringService.getBorrowerCreditProfile(borrowerId),
@@ -41,83 +47,99 @@ export default function BorrowerCreditProfilePage({
     () => creditScoringService.listPolicyFlags(borrowerId),
     [borrowerId],
   );
-  const flagsResource = useApiResource<PolicyFlag[]>(flagsFetcher);
+  const flagsResource = useApiResource<PolicyFlagList>(flagsFetcher);
 
   return (
-    <RouteGuard permission="credit_scoring:view" pageName="Borrower Credit Profile">
-      <div className="space-y-6">
-        <DataState
-          resource={profileResource}
-          summary="This borrower's full credit score, breakdown, and factors will appear here once the backend is connected."
-          endpoints={[`GET /credit-scoring/borrowers/${borrowerId}`]}
-        >
-          {(profile) => (
+    <PageFill>
+      <DataState
+        resource={profileResource}
+        summary="This member's credit score, breakdown and factors."
+        endpoints={[`GET /credit-scoring/borrowers/${borrowerId}`]}
+      >
+        {(profile) => {
+          const summaryOnly = isDetailsHidden(profile, flagsResource.data);
+          return (
             <>
               <CreditScoringPageHeader
                 title={profile.borrower_name}
-                description={`Lendy Credit Score · ${profile.score_type === "application" ? "Application Score" : "Behavioral Score"}`}
+                description={[
+                  profile.borrower_code,
+                  "Lendy Credit Score",
+                  profile.score_type ? SCORE_TYPE_LABELS[profile.score_type] : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
                 actions={
-                  <PermissionGate permission="credit_scoring:override">
-                    <Button onClick={() => setOverrideOpen(true)}>Record Decision</Button>
-                  </PermissionGate>
+                  profile.id !== null && (
+                    <PermissionGate permission="credit_scoring:override">
+                      <Button onClick={() => setOverrideOpen(true)}>Record Decision</Button>
+                    </PermissionGate>
+                  )
                 }
               />
 
-              <Card>
-                <CardContent className="flex flex-wrap items-center gap-4 pt-6">
-                  <div>
-                    <p className="text-3xl font-semibold">{profile.score}</p>
-                    <p className="text-xs text-muted-foreground">out of 100</p>
-                  </div>
-                  <RiskLevelBadge level={profile.risk_level} />
-                  <ConfidenceBadge level={profile.confidence} />
-                  <span className="text-xs text-muted-foreground">
-                    Model {profile.model_version} · {formatDateTime(profile.calculated_at)}
-                  </span>
-                </CardContent>
-              </Card>
+              <ScrollBox className="space-y-6 p-px">
+                {summaryOnly ? null : flagsResource.unavailable || flagsResource.error ? (
+                  <Card>
+                    <CardContent className="pt-6 fit:pt-0 text-sm text-muted-foreground">
+                      Policy flags unavailable — this member&apos;s hard-flag status
+                      could not be loaded. Treat this member as unscreened for hard
+                      flags until this is resolved.
+                    </CardContent>
+                  </Card>
+                ) : (
+                  flagsResource.data &&
+                  flagsResource.data.data.length > 0 && <PolicyFlagAlert flags={flagsResource.data.data} />
+                )}
 
-              <Card>
-                <CardContent className="pt-6">
-                  <p className="text-sm font-medium">System Recommendation</p>
-                  <p className="mt-1 text-sm text-muted-foreground">{profile.recommendation}</p>
-                </CardContent>
-              </Card>
+                <ScoreDetail score={profile} detailsHidden={summaryOnly} />
 
-              {flagsResource.unavailable || flagsResource.error ? (
-                <Card>
-                  <CardContent className="pt-6 text-sm text-muted-foreground">
-                    Policy flags unavailable — this borrower&apos;s hard-flag status
-                    could not be loaded. Treat this borrower as unscreened for hard
-                    flags until this is resolved.
-                  </CardContent>
-                </Card>
-              ) : (
-                flagsResource.data &&
-                flagsResource.data.length > 0 && (
-                  <PolicyFlagAlert flags={flagsResource.data} />
-                )
+                {!summaryOnly && profile.status !== "not_scored" && (
+                  <Card>
+                    <CardContent className="pt-6 fit:pt-0">
+                      <CapacitySection capacity={profile.capacity ?? null} financialsHidden={profile.financials_hidden} />
+                    </CardContent>
+                  </Card>
+                )}
+
+                <ScoreHistoryChart borrowerId={borrowerId} />
+                <MemberDecisions key={decisionsVersion} borrowerId={borrowerId} />
+                <MemberScoreHistory borrowerId={borrowerId} />
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {lindaOn && <LindaChatPlaceholder />}
+                  <CicPlaceholder />
+                </div>
+              </ScrollBox>
+
+              {profile.id !== null && (
+                <ManualOverrideDialog
+                  open={overrideOpen}
+                  onOpenChange={setOverrideOpen}
+                  borrowerId={borrowerId}
+                  creditScoreId={profile.id}
+                  onDecisionRecorded={() => {
+                    profileResource.refetch();
+                    setDecisionsVersion((v) => v + 1);
+                  }}
+                />
               )}
-
-              <ScoreBreakdownCard breakdown={profile.category_breakdown} />
-              <ScoreFactorList factors={profile.factors} />
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <LindaChatPlaceholder />
-                <CicPlaceholder />
-              </div>
-
-              <ManualOverrideDialog
-                open={overrideOpen}
-                onOpenChange={setOverrideOpen}
-                borrowerId={borrowerId}
-                creditScoreId={profile.id}
-                onDecisionRecorded={() => profileResource.refetch()}
-              />
             </>
-          )}
-        </DataState>
-      </div>
+          );
+        }}
+      </DataState>
+    </PageFill>
+  );
+}
+
+export default function BorrowerCreditProfilePage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  return (
+    <RouteGuard permission="credit_scoring:view" pageName="Member Credit Profile">
+      <BorrowerCreditProfileContent params={params} />
     </RouteGuard>
   );
 }

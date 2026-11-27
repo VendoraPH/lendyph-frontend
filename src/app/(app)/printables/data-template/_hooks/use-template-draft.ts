@@ -11,7 +11,7 @@ import type { TemplateSheet } from "@/lib/data-template/types";
  * Every mutation is a `sheet -> sheet` function from `lib/data-template/draft`,
  * so this hook holds state and nothing else — no rules, no validation of its
  * own. `useState(createDraft)` rather than `useState(createDraft())`: the
- * initialiser must not rebuild a 22-column workbook on every render.
+ * initialiser must not rebuild a 26-column workbook on every render.
  */
 export function useTemplateDraft() {
   const [draft, setDraft] = useState(createDraft);

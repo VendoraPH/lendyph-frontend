@@ -2,7 +2,8 @@
  * Amortization Schedule — standalone printable.
  *
  * Source: `loanService.detail(id)`, reading the `amortization_schedules`
- * relation (`AmortizationScheduleResource`).
+ * relation (`AmortizationScheduleResource`) and its column totals,
+ * `amortization_schedule_totals`, added up by the server.
  *
  * The disclosure statement already prints a schedule, but only as its section
  * VI and only with what the statute requires. Branches hand members a schedule
@@ -11,6 +12,8 @@
  * disclosure describes the loan as granted, not as it stands today.
  */
 
+import { restructureSuccessor } from "@/lib/loan-restructure";
+import { restructureWriteOffFigures, writeOffFigureText } from "@/lib/restructure-write-off";
 import type { PrintableDocument, PrintBlock } from "../types";
 import {
   BLANK_ORG,
@@ -18,6 +21,7 @@ import {
   asRecord,
   currencyOrDash,
   dateField,
+  dateOrDash,
   field,
   formatCurrency,
   generatedAt,
@@ -25,8 +29,8 @@ import {
   pick,
   pickNumber,
   presentFields,
+  rateFrequencyFrom,
   rateLabel,
-  sum,
   termLabelFrom,
   type PrintableBuildOptions,
 } from "./shared";
@@ -48,6 +52,49 @@ function normalizeRow(raw: Record<string, unknown>): Record<string, unknown> {
   };
 }
 
+/**
+ * Where a restructured loan's balance went, with the forgiveness approved and
+ * the principal the books wrote off; null for any other loan.
+ */
+function restructuredText(loan: Record<string, unknown> | null): string | null {
+  if (pick(loan, ["status"]) !== "restructured") return null;
+  const restructuredAt = pick(loan, ["restructured_at"]);
+  const balance = pickNumber(loan, ["restructured_balance"]);
+  const restructuredInto = asArray(pick(loan, ["restructured_into"]));
+  const successor = restructureSuccessor(restructuredInto);
+  // The forgiveness approved and the principal the books wrote off: two
+  // different figures, each labelled, each the server's (a dash when not sent).
+  const writeOffs = restructureWriteOffFigures({
+    write_off_amount: pick(loan, ["write_off_amount"]),
+    restructured_into: restructuredInto,
+  })
+    .map((f) => ` ${f.label}: ${writeOffFigureText(f.amount)}.`)
+    .join("");
+  const successorNumber = pick(successor, ["display_number", "loan_account_number", "external_loan_no", "application_number"]);
+  return (
+    (restructuredAt
+      ? `This loan was restructured on ${dateOrDash(restructuredAt)}`
+      : "This loan was restructured") +
+    ", and its remaining balance" +
+    (balance !== null ? ` of ${formatCurrency(balance)}` : "") +
+    (successorNumber ? ` moved to loan ${String(successorNumber)}` : " moved to a new loan") +
+    "." +
+    writeOffs
+  );
+}
+
+/**
+ * Why the schedule table is empty. A loan closed by a restructure has had its
+ * unpaid periods deleted, so it has no schedule left rather than none yet, and
+ * the member holding this page needs to know where the balance went.
+ */
+function emptyScheduleText(loan: Record<string, unknown> | null): string {
+  const restructured = restructuredText(loan);
+  return restructured === null
+    ? "No amortization schedule has been generated for this loan yet. A schedule is created when the loan is released."
+    : `${restructured} No instalments remain on it.`;
+}
+
 export function buildAmortizationScheduleDoc(
   raw: unknown,
   options: PrintableBuildOptions = {}
@@ -63,12 +110,17 @@ export function buildAmortizationScheduleDoc(
   const borrowerName =
     pick(borrower, ["full_name", "name"]) ?? pick(loan, ["borrower_name"]);
   const accountNumber =
-    pick(loan, ["loan_account_number", "application_number"]) ?? null;
+    pick(loan, ["display_number", "loan_account_number", "external_loan_no", "application_number"]) ?? null;
   const rate = pickNumber(loan, ["interest_rate", "rate"]);
+  const scheduleTotals = asRecord(pick(loan, ["amortization_schedule_totals"]));
   // This document used to print "% per month" beside a term counted in
   // "period(s)" — two different units for one loan, on one page. Both now come
   // from the loan's own frequency.
   const rawFrequency = pick(loan, ["frequency", "payment_frequency"]);
+
+  // A restructured loan with rows left (paid ones) still says where its
+  // balance went, with both write-off figures, under the table.
+  const restructuredNote = rows.length > 0 ? restructuredText(loan) : null;
 
   const blocks: PrintBlock[] = [
     {
@@ -81,7 +133,7 @@ export function buildAmortizationScheduleDoc(
       title: "Loan Details",
       columns: 2,
       items: presentFields([
-        field("Borrower", borrowerName),
+        field("Member", borrowerName),
         field("Loan Account No.", accountNumber),
         field(
           "Member No.",
@@ -95,8 +147,8 @@ export function buildAmortizationScheduleDoc(
           "Principal Amount",
           currencyOrDash(pick(loan, ["principal_amount", "principal"]))
         ),
-        field("Interest Rate", rateLabel(rate, rawFrequency)),
-        field("Term", termLabelFrom(loan, rawFrequency)),
+        field("Interest Rate", rateLabel(rate, rateFrequencyFrom(loan))),
+        field("Term", termLabelFrom(loan)),
         field("Payment Frequency", humanize(rawFrequency)),
         dateField("Start Date", pick(loan, ["start_date", "release_date"])),
         dateField("Maturity Date", pick(loan, ["maturity_date"])),
@@ -117,21 +169,22 @@ export function buildAmortizationScheduleDoc(
       ],
       rows,
       // A column of figures with no total is the fastest way to have a member
-      // and a bookkeeper disagree, so every money column carries one.
+      // and a bookkeeper disagree, so every money column carries one: the
+      // server's, or a dash where it sent none.
       totals:
         rows.length > 0
           ? {
               due_date: "TOTAL",
-              principal: formatCurrency(sum(rows, "principal")),
-              interest: formatCurrency(sum(rows, "interest")),
-              penalty: formatCurrency(sum(rows, "penalty")),
-              total_due: formatCurrency(sum(rows, "total_due")),
-              amount_paid: formatCurrency(sum(rows, "amount_paid")),
+              principal: currencyOrDash(pick(scheduleTotals, ["principal"])),
+              interest: currencyOrDash(pick(scheduleTotals, ["interest"])),
+              penalty: currencyOrDash(pick(scheduleTotals, ["penalty"])),
+              total_due: currencyOrDash(pick(scheduleTotals, ["total_due"])),
+              amount_paid: currencyOrDash(pick(scheduleTotals, ["amount_paid"])),
             }
           : undefined,
-      emptyText:
-        "No amortization schedule has been generated for this loan yet. A schedule is created when the loan is released.",
+      emptyText: emptyScheduleText(loan),
     },
+    ...(restructuredNote !== null ? [{ kind: "note" as const, text: restructuredNote }] : []),
     {
       kind: "note",
       text:

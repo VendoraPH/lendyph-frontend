@@ -8,6 +8,7 @@ import {
   assertPrintableShape,
   chargeAmount,
   fieldValue,
+  hasChargeLine,
   isBlankField,
   notes,
   prose,
@@ -58,7 +59,7 @@ test("official receipt: prints two copies and reuses the receipt number", () => 
   const doc = buildOfficialReceiptDoc(PAYMENT);
   assertPrintableShape(doc, "official_receipt");
 
-  assert.deepEqual(doc.copies, ["Borrower's Copy", "File Copy"]);
+  assert.deepEqual(doc.copies, ["Member's Copy", "File Copy"]);
   // Reprinting must quote the number the receipt was issued under, not mint a
   // second one for the same payment.
   assert.equal(doc.reference, "OR-20260826-0142");
@@ -71,7 +72,7 @@ test("official receipt: payment particulars come off the wire intact", () => {
   assert.equal(fieldValue(doc, "Receipt No."), "OR-20260826-0142");
   assert.equal(fieldValue(doc, "Received from"), "Juana Dela Cruz");
   assert.equal(fieldValue(doc, "Loan Account No."), "LN-2026-0042");
-  assert.equal(fieldValue(doc, "Payment Method"), "Bank transfer");
+  assert.equal(fieldValue(doc, "Payment Method"), "Bank Transfer");
   assert.equal(fieldValue(doc, "Reference No."), "BDO-99881");
   assert.equal(fieldValue(doc, "Loan Product"), "Regular Loan");
 });
@@ -89,32 +90,112 @@ test("official receipt: the application of payment sums to the amount paid", () 
   assert.equal(fieldValue(doc, "Amount in words"), amountInWords(18666.67));
 });
 
-test("official receipt: overpayment is only shown when there is one", () => {
+test("official receipt: build-up and overpayment each print under their own label", () => {
+  // Backend B-FU: `overpayment` holds the build-up as well on a build-up loan,
+  // so the split comes from its two own figures.
+  const doc = buildOfficialReceiptDoc({
+    ...PAYMENT,
+    overpayment: 750,
+    build_up_credited: "250.00",
+    overpayment_kept: "500.00",
+    amount_paid: 19416.67,
+  });
+  assert.equal(chargeAmount(doc, "Share Capital Build-Up"), formatCurrency(250));
+  assert.equal(chargeAmount(doc, "Advance / Overpayment"), formatCurrency(500));
+});
+
+test("official receipt: a build-up with no overpayment is never labelled an overpayment", () => {
+  const doc = buildOfficialReceiptDoc({
+    ...PAYMENT,
+    overpayment: 250,
+    build_up_credited: "250.00",
+    overpayment_kept: "0.00",
+  });
+  assert.equal(chargeAmount(doc, "Share Capital Build-Up"), formatCurrency(250));
+  assert.equal(hasChargeLine(doc, "Advance / Overpayment"), false);
+});
+
+test("official receipt: a null split figure prints a dash, never ₱0.00", () => {
+  const doc = buildOfficialReceiptDoc({ ...PAYMENT, build_up_credited: null, overpayment_kept: "0.00" });
+  assert.equal(chargeAmount(doc, "Share Capital Build-Up"), "—");
+  assert.equal(hasChargeLine(doc, "Advance / Overpayment"), false);
+});
+
+test("official receipt: an older answer's combined excess prints once, under a neutral label", () => {
   const doc = buildOfficialReceiptDoc(PAYMENT);
-  assert.throws(() => chargeAmount(doc, "Advance / Overpayment"));
+  assert.equal(hasChargeLine(doc, "Build-Up / Overpayment"), false);
 
   const withExcess = buildOfficialReceiptDoc({
     ...PAYMENT,
     overpayment: 500,
     amount_paid: 19166.67,
   });
-  assert.equal(
-    chargeAmount(withExcess, "Advance / Overpayment"),
-    formatCurrency(500)
-  );
+  assert.equal(chargeAmount(withExcess, "Build-Up / Overpayment"), formatCurrency(500));
+  assert.equal(hasChargeLine(withExcess, "Advance / Overpayment"), false);
   assert.equal(
     chargeAmount(withExcess, "TOTAL AMOUNT PAID"),
     formatCurrency(16666.67 + 1800 + 200 + 500)
   );
 });
 
-test("official receipt: the balance before and after the payment are both stated", () => {
+test("official receipt: both split figures null keep the combined line, so the breakdown still adds up", () => {
+  // An old build-up payment the server can't split: ₱750.00 over the periods.
+  const doc = buildOfficialReceiptDoc({
+    ...PAYMENT,
+    overpayment: 750,
+    build_up_credited: null,
+    overpayment_kept: null,
+    amount_paid: 19416.67,
+  });
+  assert.equal(chargeAmount(doc, "Build-Up / Overpayment"), formatCurrency(750));
+  assert.equal(hasChargeLine(doc, "Share Capital Build-Up"), false);
+  assert.equal(hasChargeLine(doc, "Advance / Overpayment"), false);
+  assert.equal(chargeAmount(doc, "TOTAL AMOUNT PAID"), formatCurrency(16666.67 + 1800 + 200 + 750));
+});
+
+test("official receipt: one split figure and one null print the split, the null as a dash", () => {
+  const doc = buildOfficialReceiptDoc({
+    ...PAYMENT,
+    overpayment: 750,
+    build_up_credited: "250.00",
+    overpayment_kept: null,
+  });
+  assert.equal(chargeAmount(doc, "Share Capital Build-Up"), formatCurrency(250));
+  assert.equal(chargeAmount(doc, "Advance / Overpayment"), "—");
+  assert.equal(hasChargeLine(doc, "Build-Up / Overpayment"), false);
+});
+
+test("official receipt: insurance premium collected first is its own line, only when there is one", () => {
+  const doc = buildOfficialReceiptDoc(PAYMENT);
+  assert.throws(() => chargeAmount(doc, "Applied to Insurance Premium"));
+
+  // ₱300 of the premium left unpaid at release, collected first.
+  const withInsurance = buildOfficialReceiptDoc({
+    ...PAYMENT,
+    insurance_applied: 300,
+    amount_paid: 18966.67,
+  });
+  assert.equal(chargeAmount(withInsurance, "Applied to Insurance Premium"), formatCurrency(300));
+  assert.equal(
+    chargeAmount(withInsurance, "TOTAL AMOUNT PAID"),
+    formatCurrency(16666.67 + 1800 + 200 + 300)
+  );
+});
+
+test("official receipt: the principal balance before and after the payment are both stated", () => {
   const doc = buildOfficialReceiptDoc(PAYMENT);
 
-  assert.equal(fieldValue(doc, "Balance before payment"), formatCurrency(100000));
-  assert.equal(fieldValue(doc, "Balance after payment"), formatCurrency(83333.33));
+  // The stored balances are principal only, so the labels say so.
+  assert.equal(fieldValue(doc, "Principal balance before payment"), formatCurrency(100000));
+  assert.equal(fieldValue(doc, "Principal balance after payment"), formatCurrency(83333.33));
   // Principal applied is what moves the balance.
   assert.equal(100000 - 16666.67, 83333.33);
+  assert.throws(() => fieldValue(doc, "Insurance premium collected"));
+});
+
+test("official receipt: the insurance premium collected is stated beside the principal balances", () => {
+  const doc = buildOfficialReceiptDoc({ ...PAYMENT, insurance_applied: 300, amount_paid: 18966.67 });
+  assert.equal(fieldValue(doc, "Insurance premium collected"), formatCurrency(300));
 });
 
 test("official receipt: it is signed by both sides of the counter", () => {
@@ -136,7 +217,7 @@ test("official receipt: a voided payment prints conspicuously as VOID", () => {
     titleBlock(doc).subtitle,
     "VOID — CANCELLED, NOT VALID PROOF OF PAYMENT"
   );
-  assert.deepEqual(doc.copies, ["VOID — Borrower's Copy", "VOID — File Copy"]);
+  assert.deepEqual(doc.copies, ["VOID — Member's Copy", "VOID — File Copy"]);
   assert.match(prose(doc), /\*\*\* V O I D \*\*\*/);
   assert.match(prose(doc), /not<\/strong> valid proof of payment/);
   assert.equal(doc.footerNote, "VOIDED PAYMENT — NOT A VALID OFFICIAL RECEIPT");
@@ -211,7 +292,7 @@ test("official receipt: an unreadable payment states no amount at all", () => {
 test("official receipt: a null payload still prints a blank two-copy form", () => {
   const doc = buildOfficialReceiptDoc(null);
 
-  assert.deepEqual(doc.copies, ["Borrower's Copy", "File Copy"]);
+  assert.deepEqual(doc.copies, ["Member's Copy", "File Copy"]);
   assert.equal(doc.reference, undefined);
   assert.ok(isBlankField(doc, "Receipt No."));
   assert.ok(isBlankField(doc, "Received from"));
@@ -225,4 +306,53 @@ test("official receipt: a payment that did load is never flagged incomplete", ()
   const zero = buildOfficialReceiptDoc({ ...PAYMENT, amount_paid: 0, amount: 0 });
   assert.equal(zero.incomplete, undefined);
   assert.equal(chargeAmount(zero, "TOTAL AMOUNT PAID"), formatCurrency(0));
+});
+
+test("official receipt: the legacy method line prints as a clean remark", () => {
+  const typed = buildOfficialReceiptDoc({
+    ...PAYMENT,
+    remarks: "Over the counter\n[method=GCash | ref=ABC123 | collected_by=Carlo Uy]",
+  });
+  assert.equal(
+    fieldValue(typed, "Remarks"),
+    "Over the counter. Recorded as GCash, reference ABC123, collected by Carlo Uy",
+  );
+
+  const onlyLegacy = buildOfficialReceiptDoc({
+    ...PAYMENT,
+    remarks: "[method=GCash | ref=ABC123 | collected_by=Carlo Uy]",
+  });
+  assert.equal(
+    fieldValue(onlyLegacy, "Remarks"),
+    "Recorded as GCash, reference ABC123, collected by Carlo Uy",
+  );
+});
+
+test("official receipt: the voider is named, never shown as a user id", () => {
+  assert.equal(
+    fieldValue(buildOfficialReceiptDoc({ ...VOIDED, voided_by: 12 }), "Voided by"),
+    "Ana Bautista",
+  );
+
+  const noUser = buildOfficialReceiptDoc({ ...VOIDED, voided_by: 12, voided_by_user: undefined });
+  assert.ok(isBlankField(noUser, "Voided by"));
+});
+
+test("official receipt: Member No. reads the repayment's own borrower_code", () => {
+  const doc = buildOfficialReceiptDoc({ ...PAYMENT, borrower_code: "BRW-000123" });
+  assert.equal(fieldValue(doc, "Member No."), "BRW-000123");
+});
+
+test("official receipt: the repayment's borrower_code wins over a nested member's", () => {
+  const doc = buildOfficialReceiptDoc({
+    ...PAYMENT,
+    borrower_code: "BRW-000123",
+    borrower: { borrower_code: "BRW-999999" },
+  });
+  assert.equal(fieldValue(doc, "Member No."), "BRW-000123");
+});
+
+test("official receipt: the payment method reads its label", () => {
+  assert.equal(fieldValue(buildOfficialReceiptDoc({ ...PAYMENT, method: "gcash" }), "Payment Method"), "GCash");
+  assert.equal(fieldValue(buildOfficialReceiptDoc({ ...PAYMENT, method: "auto_pay" }), "Payment Method"), "Auto-Pay");
 });

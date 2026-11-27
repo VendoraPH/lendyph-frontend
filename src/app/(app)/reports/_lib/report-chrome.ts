@@ -1,8 +1,7 @@
 import { siteConfig } from "@/config/site";
 import { API_BASE_URL } from "@/lib/axios-client";
-import { buildDocumentReference } from "@/lib/document-reference";
 import { useBrandingStore } from "@/store/branding-store";
-import type { ReportChrome, ReportDocument, ReportId, ReportSection } from "./types";
+import type { DocumentId, ReportChrome, ReportDocument, ReportSection } from "./types";
 
 /**
  * Document identity, applied after a report is built.
@@ -18,10 +17,10 @@ import type { ReportChrome, ReportDocument, ReportId, ReportSection } from "./ty
 /**
  * Short prefixes for the document reference, one per report.
  *
- * Exhaustive over `ReportId` on purpose: adding a report without a prefix is a
+ * Exhaustive over `DocumentId` on purpose: adding a report without a prefix is a
  * compile error, not a document that quietly references `undefined-20260826`.
  */
-const REFERENCE_PREFIX: Record<ReportId, string> = {
+const REFERENCE_PREFIX: Record<DocumentId, string> = {
   daily_collection: "DCR",
   portfolio_summary: "PSR",
   income_report: "INC",
@@ -39,21 +38,82 @@ const REFERENCE_PREFIX: Record<ReportId, string> = {
   share_capital: "SCP",
   performance: "PRF",
   provisioning: "PRV",
+  profit_sharing: "PSH",
+  // Savings report prefixes never start like a savings record's own number
+  // (SAV- accounts, SVT- transactions, SVI- interest rows, TD- certificates),
+  // so a printed report can't be mistaken for a transaction.
+  savings_balances: "SBR",
+  savings_transactions: "STR",
+  time_deposit_maturities: "TMR",
+  savings_interest_postings: "SIR",
+  savings_dormant: "SDR",
+  savings_statement: "SSA",
+  savings_gl_control: "SGC",
+  savings_summary: "SDS",
+  savings_accounts: "SAL",
+  savings_deposits: "SDP",
+  savings_withdrawals: "SWR",
+  savings_large_transactions: "SLT",
+  savings_time_deposits: "STO",
+  savings_interest_accrual: "SIA",
+  savings_account_activity: "SAA",
+  savings_member_statement: "MDS",
+  executive_dashboard: "EXD",
+  share_capital_ledger: "SCL",
+  gcash_transactions: "GCT",
 };
+
+/** The prefixes of savings records' own numbers, which no report reference may start with. */
+export const SAVINGS_RECORD_PREFIXES = ["SAV", "SVT", "SVI", "TD"] as const;
 
 /** Sign-off roles. Cooperative reports are prepared, checked, then approved. */
 const SIGNATORY_ROLES = ["Prepared by", "Checked by", "Approved by"];
 
+/** A statement goes to the member, who acknowledges receiving it. */
+const STATEMENT_SIGNATURES: ReportSection = {
+  kind: "signatures",
+  roles: [...SIGNATORY_ROLES, "Received by (Member)"],
+  lines: ["Name", "Date"],
+};
+
+const manilaStamp = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Manila",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+});
+
 /**
- * `AGE-20260806-0915` — prefix, generation date, generation time.
- *
- * The stamp itself is `buildDocumentReference`, shared with the printables so
- * a report and a receipt are referenced the same way. It is built from local
- * calendar parts rather than `toISOString()`, which would stamp a
- * Manila-evening report with the previous day's date.
+ * The number a Statement of Account's reference carries: the loan's LN-
+ * number, else, on a loan migrated in by Data Import, the file's own Loan No.
+ * (`external_loan_no`). The importer leaves an imported loan's LN- number empty
+ * on purpose (the release sequence reads it), so its reference used to carry no
+ * loan at all (finish run round 6). Undefined when the statement sent neither.
  */
-export function buildReference(reportId: ReportId, at = new Date()): string {
-  return buildDocumentReference(REFERENCE_PREFIX[reportId], at);
+export function statementReferenceKey(loan: Record<string, unknown> | null | undefined): string | undefined {
+  for (const key of ["loan_account_number", "account_number", "external_loan_no"]) {
+    const value = loan?.[key];
+    if (typeof value === "string" && value.trim() !== "") return value.trim();
+  }
+  return undefined;
+}
+
+/**
+ * `AGE-20260806-0915` — prefix, generation date, generation time, in Philippine
+ * time whatever the computer is set to. A document about one record has that
+ * record and the seconds in it too (`SOA-LN-000004-20261105-091207`): three
+ * members' statements generated in the same minute once carried one reference,
+ * and one loan's could still repeat within a minute.
+ */
+export function buildReference(reportId: DocumentId, at = new Date(), key?: string): string {
+  const part = Object.fromEntries(manilaStamp.formatToParts(at).map((p) => [p.type, p.value]));
+  const stamp =
+    `${part.year}${part.month}${part.day}-${part.hour}${part.minute}` + (key ? part.second : "");
+  return [REFERENCE_PREFIX[reportId], key, stamp].filter(Boolean).join("-");
 }
 
 /**
@@ -168,16 +228,20 @@ export async function applyChrome(
   doc: ReportDocument,
   chrome: ReportChrome
 ): Promise<ReportDocument> {
+  const org = await loadOrgName(chrome.org, doc.meta.org);
+  const { address, contact } = useBrandingStore.getState();
   const withMeta: ReportDocument = {
     ...doc,
     meta: {
       ...doc.meta,
-      org: await loadOrgName(chrome.org, doc.meta.org),
+      org,
+      orgAddress: address?.trim() || null,
+      orgContact: contact?.trim() || null,
       logoUrl: chrome.logoUrl ?? null,
       logoData: chrome.logoData ?? null,
       preparedBy: chrome.preparedBy ?? null,
       branchLabel: chrome.branchLabel ?? null,
-      reference: chrome.reference ?? buildReference(doc.reportId),
+      reference: chrome.reference ?? buildReference(doc.reportId, new Date(), doc.meta.referenceKey),
     },
   };
 
@@ -187,6 +251,9 @@ export async function applyChrome(
   const hasSignatures = withMeta.sections.some((s) => s.kind === "signatures");
   if (hasSignatures) return withMeta;
 
-  const signatures: ReportSection = { kind: "signatures", roles: SIGNATORY_ROLES };
+  const signatures: ReportSection =
+    doc.reportId === "statement_of_account" || doc.reportId === "savings_member_statement"
+      ? STATEMENT_SIGNATURES
+      : { kind: "signatures", roles: SIGNATORY_ROLES };
   return { ...withMeta, sections: [...withMeta.sections, signatures] };
 }

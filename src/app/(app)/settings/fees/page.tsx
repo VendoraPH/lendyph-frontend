@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { RouteGuard, PermissionButton } from "@/components/common";
+import { PageFill, PageLoader, ScrollBox } from "@/components/common/page-fill";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,16 +18,39 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Receipt, Plus, Pencil, Trash2, Loader2, Search, Percent, DollarSign,
+  ReceiptText, Plus, Pencil, Trash2, Loader2, Search, Percent, PhilippinePeso, Calculator,
 } from "lucide-react";
 import { toast } from "sonner";
 import { feeService, loanProductService } from "@/services";
 import type { Fee, FeeType, FeeConditions, LoanProduct } from "@/types";
 import { cn } from "@/lib/utils";
-import { formatCurrencyExact } from "@/lib/format";
-import { buildFeePayload } from "@/lib/fee-form";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { FormStep, FormStepper, type FormStepperHandle } from "@/components/common/form-stepper";
+import { errorMessages, FORM_STEP_GRID } from "@/lib/form-stepper";
+import { validationErrors } from "@/lib/credit-scoring/field-errors";
+import { formatCurrencyExact, formatRate } from "@/lib/format";
+import { decimalInputValue } from "@/lib/percent";
+import {
+  buildFeePayload, describeFormulaFee, EMPTY_FORMULA_FIELDS, FORMULA_FEE_HELP, formulaExpressionError,
+  type FormulaFieldsInput, type FormulaMode,
+} from "@/lib/fee-form";
 import { notifyError } from "@/lib/notify";
 import { getErrorMessage } from "@/lib/api-error";
+import { usePermission } from "@/hooks";
+import { completeRows } from "@/lib/paginate";
+import { env } from "@/config/env";
+import { FormulaExpressionField } from "./_components/formula-expression-field";
+import { useFormulaCheck } from "./_hooks/use-formula-check";
+import { FEE_STEPS, FORMULA_CHECK_PENDING, feeStepErrors, isWrittenFormula, type FeeStepInput } from "./_lib/fee-steps";
+import { feeProductsRead, feeProductsText } from "./_lib/fee-products";
+
+// Formula fees written as an expression, where the backend evaluates them.
+const FEE_FORMULAS = env.features.feeFormulas;
+
+const FORMULA_MODES: readonly { mode: FormulaMode; label: string }[] = [
+  { mode: "rate", label: "Rate of principal" },
+  { mode: "expression", label: "Write a formula" },
+];
 
 // ---------------------------------------------------------------------------
 // Fee Form Dialog
@@ -38,7 +62,10 @@ import { getErrorMessage } from "@/lib/api-error";
 const FEE_TYPE_ITEMS: { value: FeeType; label: string }[] = [
   { value: "fixed", label: "Fixed Amount" },
   { value: "percentage", label: "Percentage" },
+  { value: "formula", label: "Formula" },
 ];
+
+const FEE_TYPE_BADGES: Record<FeeType, string> = { fixed: "Fixed", percentage: "Percentage", formula: "Formula" };
 
 interface FeeFormDialogProps {
   open: boolean;
@@ -55,23 +82,46 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
   const [value, setValue] = useState("");
   const [selectedProducts, setSelectedProducts] = useState<number[]>([]);
   const [conditions, setConditions] = useState<FeeConditions>({});
+  const [formula, setFormula] = useState<FormulaFieldsInput>(EMPTY_FORMULA_FIELDS);
   const [saving, setSaving] = useState(false);
+  const [formulaSaveError, setFormulaSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (fee) {
       setName(fee.name);
       setType(fee.type);
-      setValue(String(fee.value));
+      setValue(decimalInputValue(fee.value));
       setSelectedProducts(fee.applicable_product_ids ?? []);
       setConditions(fee.conditions ?? {});
+      setFormula({
+        perMonth: Boolean(fee.per_month),
+        minAmount: fee.min_amount != null ? decimalInputValue(fee.min_amount) : "",
+        maxAmount: fee.max_amount != null ? decimalInputValue(fee.max_amount) : "",
+        // A formula fee saved before expressions existed keeps its rate recipe.
+        mode: fee.formula_expression ? "expression" : "rate",
+        expression: fee.formula_expression ?? "",
+      });
     } else {
       setName("");
       setType("fixed");
       setValue("");
       setSelectedProducts([]);
       setConditions({});
+      setFormula({ ...EMPTY_FORMULA_FIELDS, mode: "rate", expression: "" });
     }
+    setFormulaSaveError(null);
   }, [fee, open]);
+
+  const stepperRef = useRef<FormStepperHandle>(null);
+  const feeForm: FeeStepInput["form"] = { name, type, value, productIds: selectedProducts, conditions, formula };
+  const writtenFormula = isWrittenFormula({ form: feeForm, expressions: FEE_FORMULAS });
+  const formulaCheck = useFormulaCheck({
+    enabled: open && writtenFormula,
+    expression: formula.expression ?? "",
+    minAmount: formula.minAmount,
+    maxAmount: formula.maxAmount,
+  });
+  const stepInput: FeeStepInput = { form: feeForm, expressions: FEE_FORMULAS, formulaCheckValid: formulaCheck.valid };
 
   function toggleProduct(id: number) {
     setSelectedProducts((prev) =>
@@ -94,9 +144,13 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (saving) return;
-    const result = buildFeePayload({ name, type, value, productIds: selectedProducts, conditions });
+    const result = buildFeePayload(feeForm, { expressions: FEE_FORMULAS });
     if ("error" in result) {
       toast.error(result.error);
+      return;
+    }
+    if (writtenFormula && !formulaCheck.valid) {
+      toast.error(FORMULA_CHECK_PENDING);
       return;
     }
     const { payload } = result;
@@ -113,7 +167,10 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
       onOpenChange(false);
       onSave();
     } catch (err) {
+      if (writtenFormula) setFormulaSaveError(formulaExpressionError(err));
       notifyError(err, isEdit ? "We couldn't update the fee. Please try again." : "We couldn't create the fee. Please try again.");
+      const fieldErrors = validationErrors(err);
+      if (fieldErrors) stepperRef.current?.showErrors(fieldErrors);
     } finally {
       setSaving(false);
     }
@@ -121,7 +178,7 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+      <DialogContent size="xl">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit Fee" : "Add New Fee"}</DialogTitle>
           <DialogDescription>
@@ -130,158 +187,256 @@ function FeeFormDialog({ open, onOpenChange, fee, products, onSave }: FeeFormDia
               : "Create a reusable fee that can apply to one or more loan products."}
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="fee-name">
-                Fee Name <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="fee-name"
-                placeholder="e.g. Notarial Fee"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="fee-type">
-                Type <span className="text-destructive">*</span>
-              </Label>
-              <Select value={type} onValueChange={(v) => setType(v as FeeType)} items={FEE_TYPE_ITEMS}>
-                <SelectTrigger id="fee-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="fixed">Fixed Amount</SelectItem>
-                  <SelectItem value="percentage">Percentage</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <FormStepper
+            ref={stepperRef}
+            layout="dialog"
+            mode={isEdit ? "edit" : "create"}
+            steps={FEE_STEPS}
+            validateStep={(stepId) => feeStepErrors(stepId, stepInput)}
+            onInvalid={(errors) => toast.error(errorMessages(errors)[0])}
+            submitLabel={isEdit ? "Update Fee" : "Create Fee"}
+            submitting={saving}
+            submitDisabled={!name.trim() || (writtenFormula ? !formulaCheck.valid : value === "")}
+            actions={
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+            }
+          >
+            <FormStep id="details">
+              <div className={FORM_STEP_GRID.roomy}>
+                <div className="space-y-2">
+                  <Label htmlFor="fee-name">
+                    Fee Name <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="fee-name"
+                    name="name"
+                    placeholder="e.g. Notarial Fee"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2" data-field="type">
+                  <Label htmlFor="fee-type">
+                    Type <span className="text-destructive">*</span>
+                  </Label>
+                  <Select value={type} onValueChange={(v) => setType(v as FeeType)} items={FEE_TYPE_ITEMS}>
+                    <SelectTrigger id="fee-type" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="fixed">Fixed Amount</SelectItem>
+                      <SelectItem value="percentage">Percentage</SelectItem>
+                      <SelectItem value="formula">Formula</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </FormStep>
 
-          <div className="space-y-2">
-            <Label htmlFor="fee-value">
-              {type === "fixed" ? "Amount (₱)" : "Rate (%)"}{" "}
-              <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="fee-value"
-              type="number"
-              min="0"
-              step={type === "fixed" ? "1" : "0.01"}
-              placeholder={type === "fixed" ? "500" : "2"}
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Applicable Loan Products</Label>
-            <p className="text-xs text-muted-foreground">
-              Select which loan products this fee applies to. Leave empty to apply to all.
-            </p>
-            <div className="max-h-40 overflow-y-auto rounded-md border p-2 space-y-1.5">
-              {products.length === 0 ? (
-                <p className="text-xs text-muted-foreground py-2 text-center">
-                  No loan products defined yet.
-                </p>
-              ) : (
-                products.map((p) => (
-                  <label
-                    key={p.id}
-                    className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 rounded px-2 py-1"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedProducts.includes(p.id)}
-                      onChange={() => toggleProduct(p.id)}
-                      className="h-4 w-4 rounded border-border"
-                    />
-                    <span>{p.name}</span>
-                  </label>
-                ))
+            <FormStep id="amount">
+              {FEE_FORMULAS && type === "formula" && (
+                <div role="radiogroup" aria-label="How the formula fee is worked out" className={FORM_STEP_GRID.roomy}>
+                  {FORMULA_MODES.map(({ mode, label }) => (
+                    <label
+                      key={mode}
+                      className={cn(
+                        "flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm",
+                        formula.mode === mode && "border-brand-orange bg-brand-orange/5",
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="formula-mode"
+                        value={mode}
+                        checked={formula.mode === mode}
+                        onChange={() => setFormula((prev) => ({ ...prev, mode }))}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
               )}
-            </div>
-          </div>
 
-          <div className="space-y-2">
-            <Label>Conditions (optional)</Label>
-            <p className="text-xs text-muted-foreground">
-              Leave blank to always apply. Fill only the conditions you need.
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="cond-term-gt" className="text-xs">Term days &gt;</Label>
-                <Input
-                  id="cond-term-gt"
-                  type="number"
-                  value={conditions.term_days_gt ?? ""}
-                  onChange={(e) => updateCondition("term_days_gt", e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="cond-term-lt" className="text-xs">Term days &lt;</Label>
-                <Input
-                  id="cond-term-lt"
-                  type="number"
-                  value={conditions.term_days_lt ?? ""}
-                  onChange={(e) => updateCondition("term_days_lt", e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="cond-term-eq" className="text-xs">Term days =</Label>
-                <Input
-                  id="cond-term-eq"
-                  type="number"
-                  value={conditions.term_days_eq ?? ""}
-                  onChange={(e) => updateCondition("term_days_eq", e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="cond-amt-gt" className="text-xs">Loan amount &gt;</Label>
-                <Input
-                  id="cond-amt-gt"
-                  type="number"
-                  value={conditions.loan_amount_gt ?? ""}
-                  onChange={(e) => updateCondition("loan_amount_gt", e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="cond-amt-lt" className="text-xs">Loan amount &lt;</Label>
-                <Input
-                  id="cond-amt-lt"
-                  type="number"
-                  value={conditions.loan_amount_lt ?? ""}
-                  onChange={(e) => updateCondition("loan_amount_lt", e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="cond-amt-eq" className="text-xs">Loan amount =</Label>
-                <Input
-                  id="cond-amt-eq"
-                  type="number"
-                  value={conditions.loan_amount_eq ?? ""}
-                  onChange={(e) => updateCondition("loan_amount_eq", e.target.value)}
-                />
-              </div>
-            </div>
-          </div>
+              <div className={FORM_STEP_GRID.roomy}>
+                {writtenFormula ? (
+                  <div className={FORM_STEP_GRID.wide} data-field="formula_expression">
+                    <FormulaExpressionField
+                      value={formula.expression ?? ""}
+                      onChange={(expression) => {
+                        setFormula((prev) => ({ ...prev, expression }));
+                        setFormulaSaveError(null);
+                      }}
+                      check={formulaCheck}
+                      saveError={formulaSaveError}
+                    />
+                  </div>
+                ) : (
+                <div className="space-y-2">
+                  <Label htmlFor="fee-value">
+                    {type === "fixed" ? "Amount (₱)" : "Rate (%)"}{" "}
+                    <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="fee-value"
+                    name="value"
+                    type="number"
+                    min="0"
+                    step={type === "fixed" ? "0.01" : "0.0001"}
+                    placeholder={type === "fixed" ? "500" : "2"}
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                    required
+                  />
+                </div>
+                )}
 
-          <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={saving || !name.trim() || value === ""}
-              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-            >
-              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {isEdit ? "Update Fee" : "Create Fee"}
-            </Button>
-          </div>
+                {type === "formula" && (
+                  <div className={cn("h-fit space-y-3 rounded-md border p-3", !writtenFormula && FORM_STEP_GRID.wide)}>
+                    {!writtenFormula && <p className="text-xs text-muted-foreground">{FORMULA_FEE_HELP}</p>}
+                    {!writtenFormula && (
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        name="per_month"
+                        checked={formula.perMonth}
+                        onChange={(e) => setFormula((prev) => ({ ...prev, perMonth: e.target.checked }))}
+                        className="rounded border-input"
+                      />
+                      Per month of term
+                    </label>
+                    )}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="fee-min-amount">Minimum (₱)</Label>
+                        <Input
+                          id="fee-min-amount"
+                          name="min_amount"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="None"
+                          value={formula.minAmount}
+                          onChange={(e) => setFormula((prev) => ({ ...prev, minAmount: e.target.value }))}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="fee-max-amount">Maximum (₱)</Label>
+                        <Input
+                          id="fee-max-amount"
+                          name="max_amount"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="None"
+                          value={formula.maxAmount}
+                          onChange={(e) => setFormula((prev) => ({ ...prev, maxAmount: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </FormStep>
+
+            <FormStep id="products">
+              <div className="space-y-2" data-field="applicable_product_ids">
+                <Label>Applicable Loan Products</Label>
+                <p className="text-xs text-muted-foreground">
+                  Select which loan products this fee applies to. Leave empty to apply to all.
+                </p>
+                {/* The product list grows with the catalogue, so it scrolls in its own box. */}
+                <div className="max-h-48 overflow-y-auto rounded-md border p-2 grid gap-1.5 md:grid-cols-2 xl:grid-cols-3">
+                  {products.length === 0 ? (
+                    <p className="col-span-full text-xs text-muted-foreground py-2 text-center">
+                      No loan products defined yet.
+                    </p>
+                  ) : (
+                    products.map((p) => (
+                      <label
+                        key={p.id}
+                        className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 rounded px-2 py-1"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedProducts.includes(p.id)}
+                          onChange={() => toggleProduct(p.id)}
+                          className="h-4 w-4 rounded border-border"
+                        />
+                        <span>{p.name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2" data-field="conditions">
+                <Label>Conditions (optional)</Label>
+                <p className="text-xs text-muted-foreground">
+                  Leave blank to always apply. Fill only the conditions you need.
+                </p>
+                <div className={FORM_STEP_GRID.roomy}>
+                  <div className="space-y-1">
+                    <Label htmlFor="cond-term-gt" className="text-xs">Term days &gt;</Label>
+                    <Input
+                      id="cond-term-gt"
+                      type="number"
+                      value={conditions.term_days_gt ?? ""}
+                      onChange={(e) => updateCondition("term_days_gt", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="cond-term-lt" className="text-xs">Term days &lt;</Label>
+                    <Input
+                      id="cond-term-lt"
+                      type="number"
+                      value={conditions.term_days_lt ?? ""}
+                      onChange={(e) => updateCondition("term_days_lt", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="cond-term-eq" className="text-xs">Term days =</Label>
+                    <Input
+                      id="cond-term-eq"
+                      type="number"
+                      value={conditions.term_days_eq ?? ""}
+                      onChange={(e) => updateCondition("term_days_eq", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="cond-amt-gt" className="text-xs">Loan amount &gt;</Label>
+                    <Input
+                      id="cond-amt-gt"
+                      type="number"
+                      value={conditions.loan_amount_gt ?? ""}
+                      onChange={(e) => updateCondition("loan_amount_gt", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="cond-amt-lt" className="text-xs">Loan amount &lt;</Label>
+                    <Input
+                      id="cond-amt-lt"
+                      type="number"
+                      value={conditions.loan_amount_lt ?? ""}
+                      onChange={(e) => updateCondition("loan_amount_lt", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="cond-amt-eq" className="text-xs">Loan amount =</Label>
+                    <Input
+                      id="cond-amt-eq"
+                      type="number"
+                      value={conditions.loan_amount_eq ?? ""}
+                      onChange={(e) => updateCondition("loan_amount_eq", e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+            </FormStep>
+          </FormStepper>
         </form>
       </DialogContent>
     </Dialog>
@@ -351,7 +506,8 @@ function DeleteFeeDialog({ open, onOpenChange, fee, onConfirm }: DeleteFeeDialog
 // ---------------------------------------------------------------------------
 
 function formatFeeValue(fee: Fee): string {
-  if (fee.type === "percentage") return `${fee.value}%`;
+  if (fee.type === "percentage") return `${formatRate(fee.value)}%`;
+  if (fee.type === "formula") return describeFormulaFee(fee);
   // Same reason as formatConditions below: this is the amount that will be
   // deducted, and a ₱250.50 notarial fee must not be listed as ₱251.
   return formatCurrencyExact(fee.value);
@@ -382,34 +538,47 @@ function FeesContent() {
   const [editFee, setEditFee] = useState<Fee | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Fee | null>(null);
+  const [reloadCount, setReloadCount] = useState(0);
+  // Fees are scoped to loan products, and listing those needs `loans:view`.
+  // Without it the list isn't asked for (`feeProductsRead`): the fees show,
+  // their products read in words, and adding or editing a fee, which picks
+  // its products, stays off as it does when the list can't be loaded.
+  const canListProducts = usePermission().can("loans:view");
 
-  const fetchData = useCallback(async () => {
+  // Runs on mount and on every `reload`, which first puts the page back to the
+  // state it starts in (loading, no errors) — so this only records how the
+  // requests ended.
+  useEffect(() => {
+    // Both APIs return complete resource collections. A product permission
+    // failure must not hide successfully loaded fees.
+    Promise.allSettled([
+      feeService.listAll().then(completeRows),
+      feeProductsRead(canListProducts, () => loanProductService.listAll()).then(completeRows),
+    ]).then(([feesResult, productsResult]) => {
+      if (feesResult.status === "fulfilled") {
+        setFees(feesResult.value);
+      } else {
+        setLoadError(getErrorMessage(feesResult.reason));
+      }
+      if (productsResult.status === "fulfilled") {
+        setProducts(productsResult.value);
+      } else {
+        setProductsError(getErrorMessage(productsResult.reason));
+      }
+      setLoading(false);
+    });
+  }, [reloadCount, canListProducts]);
+
+  // Retry, and the refresh after a save or delete.
+  function reload() {
     setLoading(true);
     setLoadError(null);
     setProductsError(null);
-    // Both APIs return complete resource collections. A product permission
-    // failure must not hide successfully loaded fees.
-    const [feesResult, productsResult] = await Promise.allSettled([
-      feeService.list({}), loanProductService.list({}),
-    ]);
-    if (feesResult.status === "fulfilled") {
-      setFees(feesResult.value);
-    } else {
-      setLoadError(getErrorMessage(feesResult.reason));
-    }
-    if (productsResult.status === "fulfilled") {
-      setProducts(productsResult.value);
-    } else {
-      setProductsError(getErrorMessage(productsResult.reason));
-    }
-    setLoading(false);
-  }, []);
+    setReloadCount((n) => n + 1);
+  }
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  const productNameById = new Map(products.map((p) => [p.id, p.name]));
+  // Null when the products weren't read: a scoped fee then reads its count in words.
+  const productNameById = canListProducts ? new Map(products.map((p) => [p.id, p.name])) : null;
 
   const filtered = fees.filter((f) => {
     if (!search.trim()) return true;
@@ -418,6 +587,7 @@ function FeesContent() {
 
   const fixedCount = fees.filter((f) => f.type === "fixed").length;
   const percentageCount = fees.filter((f) => f.type === "percentage").length;
+  const formulaCount = fees.filter((f) => f.type === "formula").length;
 
   function handleAdd() {
     setEditFee(null);
@@ -435,17 +605,13 @@ function FeesContent() {
   }
 
   if (loading) {
-    return (
-      <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <PageLoader />;
   }
 
   return (
     <>
-      <div className="space-y-6">
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+      <PageFill>
+        <div className="flex shrink-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Fees</h1>
             <p className="text-sm text-muted-foreground">
@@ -454,7 +620,7 @@ function FeesContent() {
           </div>
           <PermissionButton
             permission="fees:create"
-            disabled={!!productsError || !!loadError}
+            disabled={!!productsError || !!loadError || !canListProducts}
             className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
             onClick={handleAdd}
           >
@@ -464,18 +630,23 @@ function FeesContent() {
         </div>
 
         {(loadError || productsError) && (
-          <div role="alert" className="rounded-lg border border-destructive/30 p-4 text-sm space-y-2">
+          <div role="alert" className="shrink-0 rounded-lg border border-destructive/30 p-4 text-sm space-y-2">
             {loadError && <p>Fees could not be loaded. {loadError}</p>}
             {productsError && <p>Loan products could not be loaded. {productsError} Fee editing is unavailable until they load.</p>}
-            <Button variant="outline" size="sm" onClick={fetchData}>Retry</Button>
+            <Button variant="outline" size="sm" onClick={reload}>Retry</Button>
           </div>
         )}
+        {!canListProducts && !loadError && (
+          <p className="shrink-0 text-sm text-muted-foreground">
+            Product names need loan access. Adding or editing a fee needs it too, since a fee picks its loan products.
+          </p>
+        )}
         {!loadError && <>
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid shrink-0 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Total Fees</CardTitle>
-              <Receipt className="h-4 w-4 text-muted-foreground" />
+              <ReceiptText className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-bold">{fees.length}</p>
@@ -484,7 +655,7 @@ function FeesContent() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Fixed</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
+              <PhilippinePeso className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-bold">{fixedCount}</p>
@@ -499,9 +670,18 @@ function FeesContent() {
               <p className="text-2xl font-bold">{percentageCount}</p>
             </CardContent>
           </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Formula</CardTitle>
+              <Calculator className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-bold">{formulaCount}</p>
+            </CardContent>
+          </Card>
         </div>
 
-        <div className="relative max-w-sm">
+        <div className="relative max-w-sm shrink-0">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search fees..."
@@ -511,9 +691,9 @@ function FeesContent() {
           />
         </div>
 
-        <Card>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
+        <Card className={FIT_CLASSES.section}>
+          <CardContent className={cn(FIT_CLASSES.section, "p-0")}>
+            <ScrollBox>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -527,19 +707,6 @@ function FeesContent() {
                 </TableHeader>
                 <TableBody>
                   {filtered.map((fee) => {
-                    // Fall back to a placeholder rather than dropping the id.
-                    // An id that did not resolve used to be filtered out, and an empty
-                    // list renders as "All products" below — so a fee scoped to
-                    // ONE product was displayed as applying to EVERY product, a
-                    // false statement about what borrowers are charged.
-                    //
-                    // Not a rare edge case: productNameById is built from a
-                    // single loanProductService.list() whose shape guard falls
-                    // back to [] silently, so one unexpected envelope relabels
-                    // every product-scoped fee at once, with no error shown.
-                    const productNames =
-                      (fee.applicable_product_ids ?? [])
-                        .map((id) => productNameById.get(id) ?? `Product #${id}`);
                     return (
                       <TableRow key={fee.id}>
                         <TableCell className="font-medium">{fee.name}</TableCell>
@@ -552,18 +719,14 @@ function FeesContent() {
                                 : "bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/30"
                             )}
                           >
-                            {fee.type === "fixed" ? "Fixed" : "Percentage"}
+                            {FEE_TYPE_BADGES[fee.type] ?? fee.type}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right tabular-nums font-medium">
                           {formatFeeValue(fee)}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          {productNames.length === 0
-                            ? "All products"
-                            : productNames.length <= 2
-                              ? productNames.join(", ")
-                              : `${productNames.slice(0, 2).join(", ")} +${productNames.length - 2}`}
+                          {feeProductsText(fee.applicable_product_ids, productNameById)}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {formatConditions(fee.conditions)}
@@ -572,7 +735,7 @@ function FeesContent() {
                           <div className="flex items-center justify-end gap-2">
                             <PermissionButton
                               permission="fees:update"
-                              disabled={!!productsError}
+                              disabled={!!productsError || !canListProducts}
                               variant="outline"
                               size="sm"
                               className="h-7 gap-1 text-xs"
@@ -605,7 +768,7 @@ function FeesContent() {
                   )}
                 </TableBody>
               </Table>
-            </div>
+            </ScrollBox>
           </CardContent>
         </Card>
 
@@ -615,16 +778,16 @@ function FeesContent() {
           onOpenChange={setFormOpen}
           fee={editFee}
           products={products}
-          onSave={fetchData}
+          onSave={reload}
         />
 
         <DeleteFeeDialog
           open={deleteOpen}
           onOpenChange={setDeleteOpen}
           fee={deleteTarget}
-          onConfirm={fetchData}
+          onConfirm={reload}
         />
-      </div>
+      </PageFill>
     </>
   );
 }

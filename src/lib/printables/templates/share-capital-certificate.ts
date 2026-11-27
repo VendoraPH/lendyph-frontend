@@ -14,24 +14,22 @@
  *
  *   - it is ordered **newest-first** (`ShareCapitalLedgerController::index()`
  *     does `->orderByDesc('date')->orderByDesc('id')`), so entries are sorted
- *     back into date order before anything is accumulated. Adding up a
- *     descending ledger from an opening balance produces a reverse-cumulative
- *     in every Balance cell while the footer total stays right — a table that
- *     looks plausible and where no line reconciles;
- *   - it carries no running balance at all (`ShareCapitalLedgerResource` sends
- *     `debit` and `credit` and nothing else), so the balance column is derived
- *     here;
+ *     back into date order, the order a ledger reads in;
+ *   - it carries no running balance, no totals and no closing balance
+ *     (`ShareCapitalLedgerResource` sends `debit` and `credit` and nothing
+ *     else). With no balance from the server there is nothing to certify, so
+ *     it prints as a ledger extract, never a certificate;
  *   - and it is **capped at 100 rows** by the server. A member with 240 entries
- *     gets one page. A closing balance computed from one page of a longer
- *     ledger is not the member's share capital, so when the ledger may have
- *     been truncated this document stops being a certificate: it drops the
- *     certifying clause and the balance column, says on its face that it is a
- *     partial extract, and is signed as one.
+ *     gets one page, so when the ledger may have been truncated the extract
+ *     also says on its face that it is partial.
  *
- * Two shapes of entry are read for the same reason: `ShareCapitalLedgerResource`
- * serialises separate `debit` and `credit` columns, while
- * `ShareCapitalLedgerEntry` in `src/types/share-capital.ts` declares a
- * `type` + `amount` pair. The resource is what the API actually sends.
+ * Both sources send an entry as separate `debit` and `credit` columns, so that
+ * is the only shape read.
+ *
+ * Every balance and total is the statement's: `opening_balance`, each entry's
+ * `running_balance`, `total_credit`, `total_debit` and `closing_balance`. None
+ * is accumulated here, so an extract prints dashes where the statement would
+ * have printed its totals.
  */
 
 import { amountInWords } from "../amount-in-words";
@@ -39,8 +37,10 @@ import type { PrintableDocument, PrintBlock, PrintChargeLine } from "../types";
 import {
   BLANK_LINE,
   BLANK_ORG,
+  DASH,
   asArray,
   asRecord,
+  currencyOrDash,
   dateOrBlank,
   escapeHtml,
   field,
@@ -50,27 +50,29 @@ import {
   pick,
   pickNumber,
   presentFields,
-  sum,
   toNumber,
   type PrintableBuildOptions,
 } from "./shared";
 
+/** One printed ledger line. A figure the server did not send is null, a dash. */
 interface LedgerRow extends Record<string, unknown> {
   date: unknown;
   reference: unknown;
   particulars: unknown;
-  debit: number;
-  credit: number;
-  balance: number;
+  debit: number | null;
+  credit: number | null;
+  balance: number | null;
 }
 
 /**
  * How much of the member's ledger this document is standing on.
  *
- * Only `complete` may certify a balance — the other two describe a document
- * that is deliberately not a certificate.
+ * Only `complete` may certify a balance — the others describe a document that
+ * is deliberately not a certificate. `partial` is a capped page of a longer
+ * ledger; `unbalanced` is every entry but no closing balance from the server
+ * (the list fallback), which can only be printed as an extract.
  */
-type Coverage = "complete" | "partial" | "unavailable";
+type Coverage = "complete" | "partial" | "unbalanced" | "unavailable";
 
 /**
  * Normalise a `shareCapitalService.ledgerList()` response into a payload this
@@ -79,14 +81,12 @@ type Coverage = "complete" | "partial" | "unavailable";
  * Lives here rather than in `catalog.ts` so the truncation rule is unit-tested
  * next to the document that depends on it.
  *
- * `meta.total` is the precise signal and is used when it is there — but note
- * that it usually is not: `api.get()` returns `response.data.data`, which for a
- * Laravel paginator is the row array with the `meta` block already discarded
- * (`api.getRaw()` is the method that keeps it). So the working signal is the
- * row count against the page size we asked for. That errs toward calling an
- * exactly-full page partial, which is the right direction to be wrong in: the
- * cost is a certificate reprinted once the statement endpoint is up, against
- * certifying a balance that is missing entries.
+ * `meta.total` is the precise signal, and `ledgerList()` reads through
+ * `api.getRaw()`, which keeps it. When a response carries none, the fallback
+ * signal is the row count against the page size we asked for. That errs toward
+ * calling an exactly-full page partial, which is the right direction to be
+ * wrong in: the cost is a certificate reprinted once the statement endpoint is
+ * up, against certifying a balance that is missing entries.
  */
 export function toShareCapitalLedgerFallback(
   raw: unknown,
@@ -102,18 +102,6 @@ export function toShareCapitalLedgerFallback(
   };
 }
 
-/** Split one entry into debit/credit, whichever convention it arrived in. */
-function readAmounts(raw: Record<string, unknown>): { debit: number; credit: number } {
-  const debit = toNumber(raw.debit);
-  const credit = toNumber(raw.credit);
-  if (debit !== null || credit !== null) {
-    return { debit: debit ?? 0, credit: credit ?? 0 };
-  }
-  const amount = toNumber(pick(raw, ["amount", "value"])) ?? 0;
-  const isDebit = String(pick(raw, ["type", "entry_type"]) ?? "").toLowerCase() === "debit";
-  return { debit: isDebit ? amount : 0, credit: isDebit ? 0 : amount };
-}
-
 function entryTime(entry: Record<string, unknown>): number | null {
   const parsed = parseApiDate(pick(entry, ["date", "entry_date", "created_at"]));
   return parsed === null ? null : parsed.getTime();
@@ -122,9 +110,8 @@ function entryTime(entry: Record<string, unknown>): number | null {
 /**
  * Entries in `(date, id)` order, oldest first.
  *
- * The only order a running balance can be accumulated in, and the order the
- * statement endpoint already returns — sorting it is a no-op there and the fix
- * for the descending list. Undated entries sort last and keep their relative
+ * The order a ledger reads in, and the order the statement endpoint already
+ * returns — sorting it is a no-op there and the fix for the descending list. Undated entries sort last and keep their relative
  * order rather than being dropped or landing at the start of the ledger.
  */
 function oldestFirst(
@@ -163,13 +150,19 @@ export function buildShareCapitalCertificateDoc(
     asArray(pick(root, ["entries", "data", "ledger", "transactions"]) ?? raw)
   );
 
+  const closingBalance = pickNumber(root, ["closing_balance", "ending_balance"]);
+
   const coverage: Coverage =
     root === null && !Array.isArray(raw)
       ? "unavailable"
       : pick(root, ["partial_ledger"]) === true
         ? "partial"
-        : "complete";
+        : closingBalance === null
+          ? "unbalanced"
+          : "complete";
   const certifies = coverage === "complete";
+  /** Printed as a ledger extract: the entries, but no balance stated. */
+  const extract = coverage === "partial" || coverage === "unbalanced";
 
   const borrower =
     asRecord(pick(root, ["borrower", "member"])) ??
@@ -181,42 +174,34 @@ export function buildShareCapitalCertificateDoc(
     pick(root, ["borrower_name"]);
   const memberCode = pick(borrower, ["borrower_code", "member_no", "code"]);
 
-  const openingBalance =
-    pickNumber(root, ["opening_balance", "beginning_balance"]) ?? 0;
+  const openingBalance = pickNumber(root, ["opening_balance", "beginning_balance"]);
 
-  let running = openingBalance;
-  const rows: LedgerRow[] = entries.map((entry) => {
-    const { debit, credit } = readAmounts(entry);
-    // Prefer the server's running balance; only accumulate when it is absent.
-    // Either way the entries have been sorted into date order first, so the
-    // accumulation and the supplied figures describe the same sequence.
-    const supplied = toNumber(pick(entry, ["running_balance", "balance"]));
-    running = supplied ?? Math.round((running + credit - debit) * 100) / 100;
-    return {
-      date: pick(entry, ["date", "entry_date", "created_at"]),
-      reference: pick(entry, ["reference", "reference_number"]),
-      particulars: pick(entry, ["description", "particulars", "remarks"]),
-      debit,
-      credit,
-      balance: running,
-    };
-  });
+  const rows: LedgerRow[] = entries.map((entry) => ({
+    date: pick(entry, ["date", "entry_date", "created_at"]),
+    reference: pick(entry, ["reference", "reference_number"]),
+    particulars: pick(entry, ["description", "particulars", "remarks"]),
+    debit: toNumber(entry.debit),
+    credit: toNumber(entry.credit),
+    // The statement's running balance; the list fallback sends none.
+    balance: toNumber(pick(entry, ["running_balance", "balance"])),
+  }));
 
   const periodBlock = asRecord(pick(root, ["period", "totals", "summary"]));
   const totalCredits =
-    pickNumber(periodBlock, ["credits", "total_credits"]) ?? sum(rows, "credit");
+    pickNumber(root, ["total_credit"]) ?? pickNumber(periodBlock, ["credits", "total_credits"]);
   const totalDebits =
-    pickNumber(periodBlock, ["debits", "total_debits"]) ?? sum(rows, "debit");
-  const closingBalance =
-    pickNumber(root, ["closing_balance", "ending_balance"]) ??
-    Math.round((openingBalance + totalCredits - totalDebits) * 100) / 100;
+    pickNumber(root, ["total_debit"]) ?? pickNumber(periodBlock, ["debits", "total_debits"]);
+  const withdrawn = (value: number | null) =>
+    value === null ? DASH : `(${formatCurrency(value)})`;
 
   const subtitle =
     coverage === "complete"
       ? "Statement of Member's Share Capital"
       : coverage === "partial"
         ? "PARTIAL LEDGER EXTRACT — NOT A CERTIFICATION OF BALANCE"
-        : "BLANK FORM — MEMBER RECORD UNAVAILABLE";
+        : coverage === "unbalanced"
+          ? "LEDGER EXTRACT — NOT A CERTIFICATION OF BALANCE"
+          : "BLANK FORM — MEMBER RECORD UNAVAILABLE";
 
   const blocks: PrintBlock[] = [
     {
@@ -250,8 +235,20 @@ export function buildShareCapitalCertificateDoc(
         `<strong>${escapeHtml(memberName ? String(memberName) : "_______________")}</strong> ` +
         "is a member of the cooperative and, per the books of account as of " +
         `<strong>${escapeHtml(dateOrBlank(asOf))}</strong>, holds paid-up share capital in the ` +
-        `amount of <strong>${escapeHtml(formatCurrency(closingBalance))}</strong> ` +
-        `(${escapeHtml(amountInWords(closingBalance))}).`,
+        `amount of <strong>${escapeHtml(currencyOrDash(closingBalance))}</strong> ` +
+        `(${escapeHtml(closingBalance === null ? DASH : amountInWords(closingBalance))}).`,
+    });
+  } else if (coverage === "unbalanced") {
+    blocks.push({
+      kind: "paragraph",
+      html:
+        "<strong>This document is an extract of the share capital ledger of </strong>" +
+        `<strong>${escapeHtml(memberName ? String(memberName) : "_______________")}</strong>` +
+        "<strong>, not a certificate.</strong> The member's share capital statement, which " +
+        "carries the balances, could not be retrieved, so this lists the entries only. It " +
+        "does <strong>not</strong> state the member's paid-up share capital balance and must " +
+        "not be issued or relied upon as proof of it. Print the Share Capital Certificate " +
+        "again once the full statement is available.",
     });
   } else if (coverage === "partial") {
     blocks.push({
@@ -281,7 +278,9 @@ export function buildShareCapitalCertificateDoc(
     title:
       coverage === "partial"
         ? "Share Capital Ledger (partial extract)"
-        : "Share Capital Ledger",
+        : coverage === "unbalanced"
+          ? "Share Capital Ledger (extract)"
+          : "Share Capital Ledger",
     columns: [
       { key: "date", header: "Date", format: "date", width: "14%" },
       { key: "reference", header: "Reference", width: "16%" },
@@ -308,9 +307,9 @@ export function buildShareCapitalCertificateDoc(
       rows.length > 0
         ? {
             particulars: "TOTAL",
-            debit: formatCurrency(totalDebits),
-            credit: formatCurrency(totalCredits),
-            ...(certifies ? { balance: formatCurrency(closingBalance) } : {}),
+            debit: currencyOrDash(totalDebits),
+            credit: currencyOrDash(totalCredits),
+            ...(certifies ? { balance: currencyOrDash(closingBalance) } : {}),
           }
         : undefined,
     emptyText:
@@ -320,53 +319,57 @@ export function buildShareCapitalCertificateDoc(
   });
 
   const summaryLines: PrintChargeLine[] =
-    coverage === "partial"
+    extract
       ? // No opening balance and no closing balance: neither is knowable from
-        // an extract. What IS true of these rows is what they add up to.
+        // an extract. The list sends no totals either, so these are dashes
+        // unless the server sent them; the rows are never added up here.
         [
           {
             label: "Contributions (entries shown)",
-            amount: formatCurrency(totalCredits),
+            amount: currencyOrDash(totalCredits),
           },
           {
             label: "Withdrawals (entries shown)",
-            amount: `(${formatCurrency(totalDebits)})`,
+            amount: withdrawn(totalDebits),
           },
         ]
       : [
           {
             label: "Opening Balance",
-            amount: certifies ? formatCurrency(openingBalance) : BLANK_LINE,
+            amount: certifies ? currencyOrDash(openingBalance) : BLANK_LINE,
           },
           {
             label: "Add: Contributions",
-            amount: certifies ? formatCurrency(totalCredits) : BLANK_LINE,
+            amount: certifies ? currencyOrDash(totalCredits) : BLANK_LINE,
             indent: true,
           },
           {
             label: "Less: Withdrawals",
-            amount: certifies ? `(${formatCurrency(totalDebits)})` : BLANK_LINE,
+            amount: certifies ? withdrawn(totalDebits) : BLANK_LINE,
             indent: true,
           },
           {
             label: "CLOSING SHARE CAPITAL BALANCE",
-            amount: certifies ? formatCurrency(closingBalance) : BLANK_LINE,
+            amount: certifies ? currencyOrDash(closingBalance) : BLANK_LINE,
             rule: "grand",
           },
         ];
 
   blocks.push({
     kind: "charges",
-    title: coverage === "partial" ? "Total of Entries Shown" : "Summary",
+    title: extract ? "Total of Entries Shown" : "Summary",
     lines: summaryLines,
   });
 
-  if (coverage !== "partial") {
+  if (!extract) {
     blocks.push({
       kind: "fields",
       items: [
         certifies
-          ? { label: "Balance in words", value: amountInWords(closingBalance) }
+          ? {
+              label: "Balance in words",
+              value: closingBalance === null ? DASH : amountInWords(closingBalance),
+            }
           : { label: "Balance in words", underline: true },
       ],
     });
@@ -414,7 +417,9 @@ export function buildShareCapitalCertificateDoc(
       : undefined
     : coverage === "partial"
       ? "PARTIAL LEDGER EXTRACT — not a Share Capital Certificate"
-      : "BLANK FORM — member share capital record unavailable";
+      : coverage === "unbalanced"
+        ? "LEDGER EXTRACT — not a Share Capital Certificate"
+        : "BLANK FORM — member share capital record unavailable";
 
   return {
     id: "share_capital_certificate",

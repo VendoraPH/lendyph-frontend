@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { BrandLogo, PoweredByLendy } from "@/components/common";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks";
@@ -22,7 +21,6 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [form, setForm] = useState({ login: "", password: "" });
-  const [rememberMe, setRememberMe] = useState(false);
 
   const validate = (): boolean => {
     const missing: string[] = [];
@@ -42,19 +40,12 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const { token, user } = await authService.login({
+      const { token, expires_in, user } = await authService.login({
         login: form.login,
         password: form.password,
-        remember: rememberMe,
       });
 
-      tokenManager.setAccessToken(token);
-
-      if (rememberMe) {
-        localStorage.setItem("lendy_remember_me", "true");
-      } else {
-        localStorage.removeItem("lendy_remember_me");
-      }
+      tokenManager.setAccessToken(token, expires_in);
 
       setUser(user);
 
@@ -131,7 +122,7 @@ export default function LoginPage() {
             {/* Organization logo — <BrandLogo> resolves the admin-configured
                 logo, so this is the tenant's mark, not the Lendy one. The
                 Lendy attribution lives in the footer below. */}
-            <div className="inline-flex items-center rounded-2xl bg-white px-6 py-4 shadow-lg shadow-black/10">
+            <div className="inline-flex max-w-full items-center rounded-2xl bg-white px-6 py-4 shadow-lg shadow-black/10">
               <BrandLogo className="h-40 w-auto drop-shadow-sm" />
             </div>
             <p className="mt-3 text-sm font-medium text-white/80 tracking-wide">
@@ -144,7 +135,7 @@ export default function LoginPage() {
               Manage your lending business with confidence
             </h2>
             <p className="mt-4 text-lg text-white/80 leading-relaxed">
-              Track borrowers, process loans, collect payments, and monitor your
+              Track members, process loans, collect payments, and monitor your
               portfolio — all in one place.
             </p>
 
@@ -229,22 +220,6 @@ export default function LoginPage() {
                   )}
                 </button>
               </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="remember"
-                checked={rememberMe}
-                onCheckedChange={(checked) =>
-                  setRememberMe(checked as boolean)
-                }
-              />
-              <Label
-                htmlFor="remember"
-                className="text-sm font-normal text-muted-foreground cursor-pointer"
-              >
-                Remember me for 30 days
-              </Label>
             </div>
 
             <Button

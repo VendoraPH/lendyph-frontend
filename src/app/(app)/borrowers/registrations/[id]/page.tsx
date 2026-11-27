@@ -2,14 +2,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { formatDateLong } from "@/lib/format";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
+import { registrationSubmittedAt, sentencesMessage } from "@/app/(app)/borrowers/_components/utils";
 import { AxiosError } from "axios";
 import { ArrowLeft, AlertTriangle, Maximize2 } from "lucide-react";
 import { RouteGuard, ImagePreviewDialog, type PreviewImage } from "@/components/common";
-import { Spinner } from "@/components/ui/spinner";
 import {
   registrationService,
   type Registration,
@@ -31,8 +32,27 @@ import {
   type ValidIdDraft,
 } from "./_components/registration-valid-ids-editor";
 import { compressImage } from "@/lib/image-compress";
+import { ApprovalBranchField } from "./_components/approval-branch-field";
+import { useApprovalBranch } from "./_hooks/use-approval-branch";
+import { APPROVAL_BRANCH_REQUIRED, approvalBranchError, approvalPayload } from "./_lib/approval-branch";
+import { PossibleDuplicateNotice } from "./_components/possible-duplicate-notice";
+import { PossibleDuplicateDialog } from "./_components/possible-duplicate-dialog";
+import { useDuplicateConfirmation } from "./_hooks/use-duplicate-confirmation";
+import {
+  acknowledgedApprovalPayload,
+  approvalEmailRefusal,
+  possibleDuplicateRefusal,
+} from "./_lib/possible-duplicate";
+import {
+  syncValidIdDrafts,
+  validIdDraftErrors,
+  ValidIdSyncError,
+} from "./_lib/valid-id-sync";
+import { PageFill, PageLoader, ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 
-export default function RegistrationReviewPage() {
+function RegistrationReviewContent() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const registrationId = Number(id);
@@ -50,6 +70,11 @@ export default function RegistrationReviewPage() {
   const [rejectOpen, setRejectOpen] = useState(false);
   const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
   const [idPreview, setIdPreview] = useState<{ title: string; images: PreviewImage[] } | null>(null);
+  const branch = useApprovalBranch(registration?.branch_id);
+  const duplicate = useDuplicateConfirmation(registration?.possible_duplicate);
+  // The server holds an approval while the email is on another member; its
+  // words stay on the panel until the next try.
+  const [emailRefusal, setEmailRefusal] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -83,18 +108,53 @@ export default function RegistrationReviewPage() {
     setDraft((prev) => ({ ...prev, [field]: value }));
   }
 
-  async function handleApprove() {
+  // The server refuses an approval with no branch; say so before asking it,
+  // and before an edit-and-approve saves anything.
+  function branchMissing(): boolean {
+    if (branch.branchId !== null) return false;
+    branch.setError(APPROVAL_BRANCH_REQUIRED);
+    return true;
+  }
+
+  // A refusal of the branch also shows under the picker, in the server's words.
+  function showBranchRefusal(err: unknown) {
+    const message = approvalBranchError(err);
+    if (message) branch.setError(message);
+  }
+
+  // The approval's body: the branch, plus the reviewer's confirmation once a
+  // possible duplicate was checked (the server refuses it without one).
+  function approvalBody(acknowledged: boolean) {
+    const payload = approvalPayload(branch.branchId);
+    return acknowledged ? acknowledgedApprovalPayload(payload) : payload;
+  }
+
+  function handleApprove() {
+    if (branchMissing()) return;
+    duplicate.guard(approve);
+  }
+
+  async function approve(acknowledged: boolean) {
     setApproving(true);
+    setEmailRefusal(null);
     try {
-      await registrationService.approve(registrationId);
+      await registrationService.approve(registrationId, approvalBody(acknowledged));
       toast.success("Registration approved. Member profile activated.");
       router.push(`/borrowers/${registrationId}`);
     } catch (err) {
       // Approval is gated server-side (still pending + at least one valid ID on
       // file). Those 422s explain exactly what is missing, so surface the
       // server's wording — a generic "please try again" sends the operator
-      // round in circles looking for a fault that isn't there.
-      notifyError(err, "We couldn't approve the registration. Please try again.");
+      // round in circles looking for a fault that isn't there. A refusal for
+      // want of the possible duplicate's confirmation opens that question.
+      const refusal = possibleDuplicateRefusal(err);
+      if (refusal) {
+        duplicate.askAfterRefusal(refusal, () => void approve(true));
+      } else {
+        showBranchRefusal(err);
+        setEmailRefusal(approvalEmailRefusal(err));
+        notifyError(err, "We couldn't approve the registration. Please try again.");
+      }
     } finally {
       setApproving(false);
     }
@@ -113,62 +173,12 @@ export default function RegistrationReviewPage() {
   }
 
   async function syncValidIds() {
-    // Entries removed from the editor (existing id no longer present) → delete.
-    const keptIds = new Set(
-      idDrafts.filter((d) => d.id != null).map((d) => d.id as number)
-    );
-    for (const v of validIds) {
-      if (!keptIds.has(v.id)) {
-        await deleteValidIdIdempotent(v.id);
-      }
-    }
-
-    for (const d of idDrafts) {
-      const isNew = d.id == null;
-      const replaced = !isNew && (d.front_file != null || d.back_file != null);
-      if (!isNew && !replaced) continue; // unchanged existing entry
-
-      // Replacing an existing entry: there is no per-side update endpoint, so
-      // we have to delete the old grouped entry and re-create it. Resolve ALL
-      // files (new uploads + refetches of the untouched side) BEFORE deleting,
-      // so a CORS-blocked refetch doesn't silently lose the untouched side.
-      const front = d.front_file
-        ? await compressImage(d.front_file)
-        : replaced
-        ? await urlToFile(d.front_existing_url, "front.jpg")
-        : null;
-      const back = d.back_file
-        ? await compressImage(d.back_file)
-        : replaced
-        ? await urlToFile(d.back_existing_url, "back.jpg")
-        : null;
-
-      if (replaced) {
-        const lostFront = !d.front_file && d.front_existing_url && !front;
-        const lostBack = !d.back_file && d.back_existing_url && !back;
-        if (lostFront || lostBack) {
-          throw new Error(
-            "Couldn't preserve the unchanged side of an ID image (storage blocked the refetch). Please re-upload both sides and try again."
-          );
-        }
-      }
-
-      if (!d.type || (!front && !back)) continue; // skip incomplete entries
-
-      if (replaced) {
-        await deleteValidIdIdempotent(d.id as number);
-      }
-
-      const fd = new FormData();
-      fd.append("type", d.type);
-      if (d.type === "others" && d.custom_type_name.trim()) {
-        fd.append("custom_type_name", d.custom_type_name.trim());
-      }
-      if (d.id_number.trim()) fd.append("id_number", d.id_number.trim());
-      if (front) fd.append("front_file", front);
-      if (back) fd.append("back_file", back);
-      await registrationService.uploadValidId(registrationId, fd);
-    }
+    await syncValidIdDrafts(validIds, idDrafts, {
+      prepare: compressImage,
+      fetchExisting: urlToFile,
+      upload: (data) => registrationService.uploadValidId(registrationId, data),
+      remove: deleteValidIdIdempotent,
+    });
   }
 
   // Re-read the valid IDs the server actually holds. Run after any failed
@@ -186,8 +196,19 @@ export default function RegistrationReviewPage() {
     }
   }
 
-  async function handleSaveEdit() {
+  function handleSaveEdit() {
+    const idErrors = validIdDraftErrors(idDrafts);
+    if (idErrors.length > 0) {
+      toast.error(sentencesMessage(idErrors));
+      return;
+    }
+    if (branchMissing()) return;
+    duplicate.guard(saveEdit);
+  }
+
+  async function saveEdit(acknowledged: boolean) {
     setSavingEdit(true);
+    setEmailRefusal(null);
     // Which step we're on. Each one commits before the next begins, so a
     // failure has to name the step that actually failed — claiming "nothing
     // was saved" after `update()` has already landed pushes the operator into
@@ -198,22 +219,31 @@ export default function RegistrationReviewPage() {
       phase = "ids";
       await syncValidIds();
       phase = "approve";
-      await registrationService.approve(registrationId);
+      await registrationService.approve(registrationId, approvalBody(acknowledged));
       toast.success("Registration updated and approved. Member profile activated.");
       router.push(`/borrowers/${registrationId}`);
     } catch (err) {
+      const refusal = phase === "approve" ? possibleDuplicateRefusal(err) : null;
       if (phase === "details") {
         notifyError(err, "We couldn't save this registration. Please try again.");
+      } else if (err instanceof ValidIdSyncError) {
+        toast.error(err.message, { description: "The rest of your changes were saved." });
       } else if (phase === "ids") {
         notifyError(
           err,
           "We couldn't finish updating the valid IDs. Please try again.",
           "The rest of your changes were saved."
         );
+      } else if (refusal) {
+        // The changes are saved; only the approval waits for the confirmation.
+        duplicate.askAfterRefusal(refusal, () => void approve(true));
       } else {
         // Only the approval gate refused — the applicant is no longer pending,
-        // or still has no valid ID on file. Stay in edit mode so the operator
-        // can fix the cause rather than losing the screen.
+        // still has no valid ID on file, or kept an email another member
+        // holds. Stay in edit mode so the operator can fix the cause rather
+        // than losing the screen.
+        showBranchRefusal(err);
+        setEmailRefusal(approvalEmailRefusal(err));
         notifyError(
           err,
           "We couldn't approve this registration. Please try again.",
@@ -257,16 +287,12 @@ export default function RegistrationReviewPage() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Spinner className="size-8 text-muted-foreground" />
-      </div>
-    );
+    return <PageLoader />;
   }
 
   if (loadError || !registration) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3 text-center">
+      <div className={cn(FIT_CLASSES.loader, "flex-col gap-3 text-center")}>
         <AlertTriangle className="h-10 w-10 text-destructive/60" />
         <p className="text-sm text-muted-foreground">{loadError ?? "Registration not found."}</p>
         <Link href="/borrowers" className="text-sm text-brand-orange hover:underline">
@@ -277,58 +303,66 @@ export default function RegistrationReviewPage() {
   }
 
   const fullName = `${registration.first_name} ${registration.last_name}`;
+  const submittedAt = registrationSubmittedAt(registration);
   // Drives the copy and hides the review controls: this page is reachable
   // from the Rejected tab, where the decision has already been made.
   const isRejected = registration.status === "rejected";
 
   return (
-    <RouteGuard permission="borrowers:approve" pageName="Review Registration">
-      <>
-        <div className="space-y-4 max-w-7xl mx-auto">
-          {/* Header */}
-          <Link
-            href="/borrowers"
-            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+    <>
+      <PageFill className="gap-4">
+        {/* Header */}
+        <Link
+          href="/borrowers"
+          className="inline-flex items-center gap-1 self-start text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Members
+        </Link>
+        <div className="flex shrink-0 items-center gap-5">
+          <button
+            type="button"
+            aria-label={registration.photo_url ? "View profile photo" : "Profile photo"}
+            onClick={() => registration.photo_url && setPhotoViewerOpen(true)}
+            disabled={!registration.photo_url}
+            className="group relative block shrink-0 rounded-full"
           >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Members
-          </Link>
-          <div className="flex items-center gap-5">
-            <button
-              type="button"
-              aria-label={registration.photo_url ? "View profile photo" : "Profile photo"}
-              onClick={() => registration.photo_url && setPhotoViewerOpen(true)}
-              disabled={!registration.photo_url}
-              className="group relative block shrink-0 rounded-full"
-            >
-              <Avatar className="size-20 sm:size-24">
-                {registration.photo_url ? (
-                  <AvatarImage src={fileUrl(registration.photo_url)} alt={fullName} />
-                ) : null}
-                <AvatarFallback className="bg-brand-orange/10 text-brand-orange text-2xl font-semibold">
-                  {getInitials(fullName)}
-                </AvatarFallback>
-              </Avatar>
+            <Avatar className="size-20 sm:size-24">
               {registration.photo_url ? (
-                <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Maximize2 className="h-5 w-5 text-white" />
-                </div>
+                <AvatarImage src={fileUrl(registration.photo_url)} alt={fullName} />
               ) : null}
-            </button>
-            <div className="flex-1 min-w-0">
-              <h1 className="text-2xl font-bold tracking-tight truncate">
-                {isRejected ? "Rejected Application" : "Review Registration"} — {fullName}
-              </h1>
-              <p className="text-sm text-muted-foreground mt-1">
-                Submitted {registration.submitted_at ? new Date(registration.submitted_at).toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" }) : "—"} ·{" "}
-                {isRejected ? "Rejected — see the reason on the right" : "Pending verification"}
-              </p>
-            </div>
+              <AvatarFallback className="bg-brand-orange/10 text-brand-orange text-2xl font-semibold">
+                {getInitials(fullName)}
+              </AvatarFallback>
+            </Avatar>
+            {registration.photo_url ? (
+              <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Maximize2 className="h-5 w-5 text-white" />
+              </div>
+            ) : null}
+          </button>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-2xl font-bold tracking-tight truncate">
+              {isRejected ? "Rejected Application" : "Review Registration"} — {fullName}
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Submitted {submittedAt ? formatDateLong(submittedAt) : "—"} ·{" "}
+              {isRejected ? "Rejected — see the reason on the right" : "Pending verification"}
+            </p>
           </div>
+        </div>
 
-          {/* Two-column layout */}
+        {/* Two-column layout; at fit it scrolls in its own box and the
+            decision panel stays pinned at the box's top. */}
+        <ScrollBox className="p-px">
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
             <div className="space-y-4 min-w-0">
+              {registration.possible_duplicate ? (
+                <PossibleDuplicateNotice
+                  duplicate={registration.possible_duplicate}
+                  pending={!isRejected}
+                />
+              ) : null}
               <RegistrationInfoCards
                 registration={registration}
                 editMode={editMode}
@@ -337,7 +371,7 @@ export default function RegistrationReviewPage() {
               />
 
               <Card>
-                <CardContent className="pt-5">
+                <CardContent className="pt-5 fit:pt-0">
                   <h3 className="text-xs font-bold uppercase tracking-widest text-brand-orange mb-3 pb-2 border-b border-brand-orange/20">
                     Valid IDs
                   </h3>
@@ -351,7 +385,7 @@ export default function RegistrationReviewPage() {
                       No valid IDs were uploaded with this application.
                     </p>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-4 pt-1">
                       {validIds.map((item) => {
                         const label =
                           item.custom_type_name?.trim() ||
@@ -427,41 +461,60 @@ export default function RegistrationReviewPage() {
                 setDraft({});
               }}
               onSaveEdit={handleSaveEdit}
+              branchField={<ApprovalBranchField branch={branch} disabled={approving || savingEdit} />}
+              approvalRefusal={emailRefusal}
             />
           </div>
-        </div>
+        </ScrollBox>
+      </PageFill>
 
-        <RejectDialog
-          open={rejectOpen}
-          onOpenChange={setRejectOpen}
-          onConfirm={handleReject}
-        />
+      <RejectDialog
+        open={rejectOpen}
+        onOpenChange={setRejectOpen}
+        onConfirm={handleReject}
+      />
 
-        <ImagePreviewDialog
-          open={!!idPreview}
-          onOpenChange={(o) => !o && setIdPreview(null)}
-          title={idPreview?.title}
-          images={idPreview?.images ?? []}
-        />
+      <PossibleDuplicateDialog
+        text={duplicate.text}
+        onCancel={duplicate.cancel}
+        onConfirm={duplicate.confirm}
+      />
 
-        <Dialog open={photoViewerOpen} onOpenChange={setPhotoViewerOpen}>
-          <DialogContent size="lg" className="p-0">
-            <DialogHeader className="p-4 pb-2">
-              <DialogTitle>{fullName}</DialogTitle>
-            </DialogHeader>
-            {registration.photo_url ? (
-              <div className="flex items-center justify-center p-4 pt-0">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={fileUrl(registration.photo_url)}
-                  alt={fullName}
-                  className="max-h-[70vh] w-auto max-w-full rounded-lg object-contain"
-                />
-              </div>
-            ) : null}
-          </DialogContent>
-        </Dialog>
-      </>
+      <ImagePreviewDialog
+        open={!!idPreview}
+        onOpenChange={(o) => !o && setIdPreview(null)}
+        title={idPreview?.title}
+        images={idPreview?.images ?? []}
+      />
+
+      <Dialog open={photoViewerOpen} onOpenChange={setPhotoViewerOpen}>
+        <DialogContent size="lg" className="p-0">
+          <DialogHeader className="p-4 pb-2">
+            <DialogTitle>{fullName}</DialogTitle>
+          </DialogHeader>
+          {registration.photo_url ? (
+            <div className="flex items-center justify-center p-4 pt-0">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={fileUrl(registration.photo_url)}
+                alt={fullName}
+                className="max-h-[70vh] w-auto max-w-full rounded-lg object-contain"
+              />
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+// The review starts by reading the registration, which needs `borrowers:view`.
+export default function RegistrationReviewPage() {
+  return (
+    <RouteGuard permission="borrowers:approve" pageName="Review Registration">
+      <RouteGuard permission="borrowers:view" pageName="Review Registration">
+        <RegistrationReviewContent />
+      </RouteGuard>
     </RouteGuard>
   );
 }

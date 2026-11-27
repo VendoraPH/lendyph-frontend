@@ -1,0 +1,227 @@
+/**
+ * The loan page's money figures, pinned against the server's fields.
+ *
+ * The page used to work several of these out in the browser: the Record
+ * Payment presets added up each open period's total payment (leaving out the
+ * premium and penalty owed, and counting a part-paid period in full), the
+ * "Outstanding" tiles fell back from the summary's everything-owed figure to
+ * the loan's principal-plus-premium one, and Total Payable fell back to the
+ * schedule's total payment (one Share Capital Build-Up per period inside it).
+ *
+ * WHAT THIS PROVES: each figure shown is the one field the server sent for
+ * it, a figure it did not send is null (a dash on screen) while 0 stays 0,
+ * the presets offered are only the ones it sent, and "Outstanding" never
+ * swaps meaning when the summary is missing.
+ * WHAT IT DOES NOT PROVE: the figures; those are the backend's tests.
+ */
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import {
+  advancePresetAmount,
+  interestAmountFigure,
+  offeredAdvancePresets,
+  outstandingPrincipal,
+  presetButtons,
+  previewOutstandingAfter,
+  previewOutstandingBefore,
+  readAdvancePresets,
+  readPayoffAmount,
+  totalOutstanding,
+  totalPayableFigures,
+} from "./loan-figures";
+
+test("readAdvancePresets keeps the server's presets, amounts as numbers", () => {
+  assert.deepEqual(
+    readAdvancePresets({
+      advance_presets: [
+        { periods: 1, amount: 12200 },
+        { periods: 2, amount: "24000.50" },
+      ],
+    }),
+    [
+      { periods: 1, amount: 12200 },
+      { periods: 2, amount: 24000.5 },
+    ],
+  );
+});
+
+test("readAdvancePresets is empty when the summary sent none or is missing", () => {
+  assert.deepEqual(readAdvancePresets({}), []);
+  assert.deepEqual(readAdvancePresets(null), []);
+  assert.deepEqual(readAdvancePresets({ advance_presets: "x" }), []);
+});
+
+test("readAdvancePresets drops an entry with no readable amount or period count", () => {
+  assert.deepEqual(
+    readAdvancePresets({
+      advance_presets: [
+        { periods: 1, amount: 100 },
+        { periods: 2 },
+        { periods: "3", amount: 300 },
+        { periods: 4, amount: "abc" },
+      ],
+    }),
+    [{ periods: 1, amount: 100 }],
+  );
+});
+
+test("advancePresetAmount reads advance_presets[n-1], never a sum of periods", () => {
+  const presets = [
+    { periods: 1, amount: 12200 },
+    { periods: 2, amount: 24000 },
+    { periods: 3, amount: 35800 },
+  ];
+  assert.equal(advancePresetAmount(presets, 1), 12200);
+  assert.equal(advancePresetAmount(presets, 3), 35800);
+});
+
+test("advancePresetAmount is null for a preset the server did not send", () => {
+  const presets = [{ periods: 1, amount: 12200 }];
+  assert.equal(advancePresetAmount(presets, 2), null);
+  assert.equal(advancePresetAmount([], 1), null);
+  // An entry at n-1 that is for another period count is not that preset.
+  assert.equal(advancePresetAmount([{ periods: 2, amount: 5 }], 1), null);
+});
+
+test("offeredAdvancePresets offers only the presets the server sent", () => {
+  const sixOpen = [1, 2, 3, 4, 5, 6, 7].map((n) => ({ periods: n, amount: n * 100 }));
+  assert.deepEqual(
+    offeredAdvancePresets(sixOpen, [1, 2, 3, 6]).map((p) => p.periods),
+    [1, 2, 3, 6],
+  );
+  // A Share Capital Build-Up loan: the server sends only the 1-period entry.
+  assert.deepEqual(
+    offeredAdvancePresets([{ periods: 1, amount: 11900 }], [1, 2, 3, 6]),
+    [{ periods: 1, amount: 11900 }],
+  );
+  assert.deepEqual(offeredAdvancePresets([], [1, 2, 3, 6]), []);
+});
+
+test("readPayoffAmount reads payoff_amount, null when not sent, 0 kept", () => {
+  assert.equal(readPayoffAmount({ payoff_amount: "70800.00" }), 70800);
+  assert.equal(readPayoffAmount({ payoff_amount: 0 }), 0);
+  assert.equal(readPayoffAmount({ outstanding_balance: 70800 }), null);
+  assert.equal(readPayoffAmount(null), null);
+});
+
+test("totalOutstanding reads the summary's total_outstanding first", () => {
+  assert.equal(
+    totalOutstanding({ total_outstanding: 70800, outstanding_balance: 1 }, { total_outstanding: 2 }),
+    70800,
+  );
+});
+
+test("totalOutstanding falls back to the loan's total_outstanding, same meaning", () => {
+  assert.equal(totalOutstanding(null, { total_outstanding: "70800.00", outstanding_balance: 60400 }), 70800);
+  assert.equal(totalOutstanding({}, { total_outstanding: 0 }), 0);
+});
+
+test("totalOutstanding never reads outstanding_balance from either source", () => {
+  assert.equal(totalOutstanding({ outstanding_balance: 70800 }, { outstanding_balance: 60400 }), null);
+  assert.equal(totalOutstanding(null, null), null);
+});
+
+test("outstandingPrincipal reads outstanding_principal from either source", () => {
+  assert.equal(outstandingPrincipal({ outstanding_principal: 50000 }, { outstanding_principal: 1 }), 50000);
+  assert.equal(outstandingPrincipal(null, { outstanding_principal: "60000" }), 60000);
+  assert.equal(outstandingPrincipal({ outstanding_balance: 1 }, { outstanding_balance: 2 }), null);
+});
+
+test("totalPayableFigures: before release, Total Payable is a dash and the contract total stands alone", () => {
+  assert.deepEqual(totalPayableFigures({ total_payable: null, contract_total: 70800 }), {
+    totalPayable: null,
+    contractTotal: 70800,
+  });
+});
+
+test("totalPayableFigures never falls back to a schedule total", () => {
+  // A paid-off loan owes 0: that is a real figure, not a gap to fill.
+  assert.deepEqual(totalPayableFigures({ total_payable: 0, contract_total: "70800.00" }), {
+    totalPayable: 0,
+    contractTotal: 70800,
+  });
+  assert.deepEqual(totalPayableFigures({}), { totalPayable: null, contractTotal: null });
+  assert.deepEqual(totalPayableFigures(null), { totalPayable: null, contractTotal: null });
+});
+
+test("previewOutstanding reads total_outstanding_before/after, not balance_before/after", () => {
+  const preview = {
+    balance_before: 60400,
+    balance_after: 60000,
+    total_outstanding_before: 71200,
+    total_outstanding_after: 70200,
+  };
+  assert.equal(previewOutstandingBefore(preview), 71200);
+  assert.equal(previewOutstandingAfter(preview), 70200);
+  assert.equal(previewOutstandingAfter({ balance_after: 60000 }), null);
+  assert.equal(previewOutstandingBefore(null), null);
+  assert.equal(previewOutstandingAfter({ total_outstanding_after: "0.00" }), 0);
+});
+
+test("presetButtons: one button per preset the server sent, then Pay all remaining", () => {
+  const summary = {
+    advance_presets: [1, 2, 3, 4, 5, 6, 7].map((n) => ({ periods: n, amount: n * 100 })),
+    payoff_amount: "70800.00",
+  };
+  assert.deepEqual(presetButtons(summary, 7), [
+    { label: "1 period", periods: 1, amount: 100 },
+    { label: "2 periods", periods: 2, amount: 200 },
+    { label: "3 periods", periods: 3, amount: 300 },
+    { label: "6 periods", periods: 6, amount: 600 },
+    { label: "Pay all remaining", periods: 7, amount: 70800 },
+  ]);
+});
+
+test("presetButtons on a Share Capital Build-Up loan: only the 1-period preset, no Pay all remaining", () => {
+  // The server sends payoff_amount: null on a Build-Up loan.
+  const summary = { advance_presets: [{ periods: 1, amount: 11900 }], payoff_amount: null };
+  assert.deepEqual(
+    presetButtons(summary, 6).map((b) => [b.label, b.amount]),
+    [["1 period", 11900]],
+  );
+});
+
+test("presetButtons: Pay all remaining is left out when payoff_amount is null or not sent", () => {
+  const presetsOnly = [{ label: "1 period", periods: 1, amount: 100 }];
+  assert.deepEqual(presetButtons({ advance_presets: [{ periods: 1, amount: 100 }] }, 3), presetsOnly);
+  assert.deepEqual(
+    presetButtons({ advance_presets: [{ periods: 1, amount: 100 }], payoff_amount: null }, 3),
+    presetsOnly,
+  );
+  // Never the presets added up, never the last preset standing in.
+  assert.deepEqual(presetButtons(null, 2), []);
+  assert.deepEqual(presetButtons({ payoff_amount: null }, 2), []);
+});
+
+test("presetButtons: a payoff of 0.00 is a real figure and keeps the button", () => {
+  assert.deepEqual(presetButtons({ payoff_amount: "0.00" }, 1), [
+    { label: "Pay all remaining", periods: 1, amount: 0 },
+  ]);
+});
+
+test("interestAmountFigure: the server's contract_interest when it is sent", () => {
+  // A restructured source: the original contract's interest, so that
+  // Principal + Interest = Contract Total, whatever its schedule now holds.
+  assert.equal(
+    interestAmountFigure({ principal_amount: 80000, contract_total: "93587.65", contract_interest: "13587.65" }, 2000),
+    13587.65,
+  );
+  assert.equal(interestAmountFigure({ contract_interest: 2000 }, 1500), 2000);
+  // 0 is a real figure; null was sent on purpose and reads as a dash.
+  assert.equal(interestAmountFigure({ contract_interest: "0.00" }, 2000), 0);
+  assert.equal(interestAmountFigure({ contract_interest: null }, 2000), null);
+});
+
+test("interestAmountFigure: without contract_interest, the stored schedule's interest, never contract total less principal", () => {
+  assert.equal(interestAmountFigure({ principal_amount: 80000, contract_total: "93587.65" }, 2000), 2000);
+  assert.equal(interestAmountFigure({ principal_amount: 80000, contract_total: "93587.65" }, null), null);
+  assert.equal(interestAmountFigure(null, 0), 0);
+});
+
+test("the loan page's Interest Amount reads interestAmountFigure", () => {
+  const page = readFileSync(join(process.cwd(), "src/app/(app)/loans/[id]/page.tsx"), "utf8");
+  assert.match(page, /const loanInterestAmount: number \| null = interestAmountFigure\(\s*loan,/);
+  assert.doesNotMatch(page, /contract_total\)?\s*-\s*Number\(loan\.principal_amount/);
+});

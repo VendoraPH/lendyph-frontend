@@ -30,14 +30,17 @@ export function BrandLogo({ className }: BrandLogoProps) {
 
   // Same className, so the space the logo will occupy is reserved and nothing
   // around it shifts when the image arrives.
-  if (!loaded) return <span aria-hidden className={cn("inline-block", className)} />;
+  if (!loaded) return <span aria-hidden className={cn("inline-block max-w-full", className)} />;
 
   const src = logoUrl
     ? withVersion(fileUrl(logoUrl), version)
     : "/Logo/Lendy_logo.png";
 
+  // object-contain + max-w-full: a caller sets the height, and when the space
+  // is narrower than that height allows (a flex item shrinking, a narrow
+  // window, zoom) the logo scales down whole instead of squeezing.
   return (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={src} alt={siteConfig.name} className={className} />
+    <img src={src} alt={siteConfig.name} className={cn("max-w-full object-contain", className)} />
   );
 }

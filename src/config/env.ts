@@ -104,19 +104,18 @@ export const env = {
   },
   auth: {
     tokenKey: getEnvVar("NEXT_PUBLIC_AUTH_TOKEN_KEY", "lendy_access_token"),
-    refreshTokenKey: getEnvVar(
-      "NEXT_PUBLIC_REFRESH_TOKEN_KEY",
-      "lendy_refresh_token",
-    ),
     // Minutes of genuine inactivity before the idle warning appears.
     //
     // This was briefly 60, on the reasonable complaint that thirty was short
     // enough that reading a long loan page counted as idling. It is back to 30
     // by decision: these are shared cooperative workstations, and this number
     // is how long a member's name, birthdate, contact number and loan balances
-    // stay readable on an unattended screen. The server-side token expiry is a
-    // separate 30-minute sliding window in `CheckTokenExpiry` and is unaffected
-    // either way — this value only governs when the browser clears.
+    // stay readable on an unattended screen. It only governs when the browser
+    // clears. The server's token is separate: it expires a fixed 30 minutes
+    // after it was issued, NOT 30 minutes after its last use, and can only be
+    // renewed while still valid, so SessionProvider renews it ahead of expiry
+    // while the user is active (see lib/session-token.ts). This window is also
+    // the fallback token lifetime for an API that does not send `expires_in`.
     //
     // If "reading a long page counts as idling" comes back, widen what counts
     // as activity rather than widening this window.
@@ -152,6 +151,65 @@ export const env = {
     binhsAmortization: parseBoolEnvValue(
       process.env.NEXT_PUBLIC_ENABLE_BINHS_AMORTIZATION,
     ),
+    // Linda, the AI lending assistant. Off by default: the header icon and
+    // panel stay hidden on a deployment until its backend serves
+    // POST /linda/chat, so production never offers an assistant that can only
+    // answer "not available". Literal reference for the same reason as above.
+    linda: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_LINDA),
+    // Receipt share links: "Share link" on the payment receipt and the public
+    // /r/{token} page that opens one receipt, masked, without signing in. Off
+    // by default until the backend serves them (RECEIPT_SHARE_LINKS_ENABLED);
+    // the button also waits for the server to answer. Literal reference.
+    receiptShareLinks: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_RECEIPT_SHARE_LINKS),
+    // Cash share capital entries numbered by the server (CSH-[admin id]-[year]-
+    // [0001]): the Reference Number field locks on Cash and shows the next one.
+    // Off until the backend assigns them. Literal reference, as above.
+    cashPledgeReference: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_CASH_PLEDGE_REFERENCE),
+    // Cash time deposit placements numbered by the server (TD-[admin id]-[year]-
+    // [0001]): Place Time Deposit locks the Reference field on Cash and shows
+    // the next one. Off until the backend assigns them. Literal reference.
+    timeDepositCashReference: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_TD_CASH_REFERENCE),
+    // Savings & Deposits (staff side). Off by default: the menu and every
+    // /savings route stay hidden. Turned on for staging only, where the
+    // backend serves the /savings endpoints. Literal reference, as above.
+    savings: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_SAVINGS),
+    // CDA Compliance (the annual CDA reports, registers and filings). Off by
+    // default: the menu and every /cda route stay hidden. Turned on for
+    // staging only, where the backend serves /cda. Literal reference, as above.
+    cda: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_CDA),
+    // Member Portal (members' own sign-in under /member, plus the staff portal
+    // screens). Off by default: /member and the staff portal menu stay hidden.
+    // Turned on for staging only, where the backend serves /portal and
+    // /portal-admin. Literal reference, as above.
+    memberPortal: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_MEMBER_PORTAL),
+    // Credit Scoring. Off by default: the menu and every route stay hidden until
+    // its endpoints stop answering 501. Literal reference for the same reason.
+    creditScoring: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_CREDIT_SCORING),
+    // Loan Origination (online applications: Loans → Loan Origination and the
+    // public /apply/{token} pages). Off by default until the backend serves
+    // /loan-origination and /public/apply. Literal reference, as above.
+    loanOrigination: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_LOAN_ORIGINATION),
+    // Formula fees written as an expression (Settings → Fees). Off by default:
+    // the Formula type keeps only its rate recipe until the backend stores and
+    // evaluates `formula_expression`. Literal reference, as above.
+    feeFormulas: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_FEE_FORMULAS),
+    // Settings → Penalties: overdue-day penalty brackets assigned to loan
+    // products. Off by default until the backend serves /penalty-configs.
+    // While on, the loan product form shows the product's penalty source
+    // instead of its Penalty Rate input. Literal reference, as above.
+    penaltyConfigs: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_PENALTY_CONFIGS),
+    // The Executive Dashboard (/dashboard/executive and its link on the
+    // Dashboard). Off by default; turned on for staging builds only. Literal
+    // reference, as above.
+    executiveDashboard: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_EXECUTIVE_DASHBOARD),
+    // AMLA Compliance (Phase 6: monitoring, cases, CTR and STR, screening and
+    // the AMLA log). Off by default: no AMLA screen shows until the backend
+    // serves /amla. Literal reference, as above.
+    amla: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_AMLA),
+    // Multi-branch operations (Phase 6: branch management, member transfers,
+    // interbranch transfers and the branch selector). Off by default until the
+    // backend serves them. Literal reference, as above.
+    multiBranch: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_MULTI_BRANCH),
   },
   debug: {
     enabled: getBoolEnvVar("NEXT_PUBLIC_DEBUG", false),

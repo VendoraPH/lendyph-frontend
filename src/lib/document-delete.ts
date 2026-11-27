@@ -1,0 +1,37 @@
+import type { Document } from "@/services/document.service";
+import type { BorrowerValidId } from "@/services/borrower.service";
+import { validIdTypeLabel } from "@/lib/valid-id-names";
+
+type Named = Pick<Document, "id" | "label">;
+type NamedId = Pick<BorrowerValidId, "type" | "custom_type_name" | "id_number">;
+
+/** How the Documents tab names a document: its label, else its number. */
+export function documentName(doc: Named): string {
+  return doc.label?.trim() || `Document #${doc.id}`;
+}
+
+/** The open icon's accessible name. */
+export function openDocumentLabel(doc: Named): string {
+  return `Open ${documentName(doc)}`;
+}
+
+/** The delete icon's accessible name. */
+export function deleteDocumentLabel(doc: Named): string {
+  return `Delete ${documentName(doc)}`;
+}
+
+/** A valid ID's type in words: the picker's label, or the name typed for "Others". */
+export function validIdLabel(entry: NamedId): string {
+  return validIdTypeLabel(entry.type, entry.custom_type_name);
+}
+
+/** A valid ID's type with its number, so two IDs of one type read apart. */
+export function validIdName(entry: NamedId): string {
+  const number = entry.id_number?.trim();
+  return number ? `${validIdLabel(entry)} ${number}` : validIdLabel(entry);
+}
+
+/** The valid ID delete icon's accessible name. */
+export function deleteValidIdLabel(entry: NamedId): string {
+  return `Delete ${validIdName(entry)}`;
+}

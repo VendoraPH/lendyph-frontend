@@ -5,12 +5,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { RouteGuard } from "@/components/common";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { MembersTab } from "./_components/members-tab";
-import { NonMembersTab } from "./_components/non-members-tab";
 import { TransactionsTab } from "./_components/transactions-tab";
 import { ReportsTab } from "./_components/reports-tab";
+import { PageFill } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 
-type TabKey = "members" | "non-members" | "transactions" | "reports";
-const TABS: TabKey[] = ["members", "non-members", "transactions", "reports"];
+type TabKey = "members" | "transactions" | "reports";
+const TABS: TabKey[] = ["members", "transactions", "reports"];
 
 function GCashPageContent() {
   const router = useRouter();
@@ -30,36 +32,32 @@ function GCashPageContent() {
   );
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
+    <PageFill>
+      <div className="shrink-0">
         <h1 className="text-2xl font-semibold">GCash</h1>
         <p className="text-sm text-muted-foreground">
-          Record Cash In / Cash Out transactions for members and walk-in
-          non-members, manage pending payments, and view income reports.
+          Record Cash In / Cash Out transactions for members and walk-ins,
+          manage pending payments, and view income reports.
         </p>
       </div>
 
-      <Tabs value={active} onValueChange={setTab}>
-        <TabsList>
+      <Tabs value={active} onValueChange={setTab} className={FIT_CLASSES.section}>
+        <TabsList className="shrink-0">
           <TabsTrigger value="members">Members</TabsTrigger>
-          <TabsTrigger value="non-members">Non-Members</TabsTrigger>
           <TabsTrigger value="transactions">Transactions</TabsTrigger>
           <TabsTrigger value="reports">Reports</TabsTrigger>
         </TabsList>
-        <TabsContent value="members" className="mt-4">
+        <TabsContent value="members" className={cn("mt-4", FIT_CLASSES.section)}>
           <MembersTab />
         </TabsContent>
-        <TabsContent value="non-members" className="mt-4">
-          <NonMembersTab />
-        </TabsContent>
-        <TabsContent value="transactions" className="mt-4">
+        <TabsContent value="transactions" className={cn("mt-4", FIT_CLASSES.section)}>
           <TransactionsTab />
         </TabsContent>
-        <TabsContent value="reports" className="mt-4">
+        <TabsContent value="reports" className={cn("mt-4", FIT_CLASSES.section)}>
           <ReportsTab />
         </TabsContent>
       </Tabs>
-    </div>
+    </PageFill>
   );
 }
 

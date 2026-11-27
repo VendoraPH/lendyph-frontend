@@ -23,7 +23,8 @@ import type { LoanStatus } from "./loan";
  */
 export type ApprovalStepKind = "submit" | "approve" | "release";
 
-export type ApprovalStepStatus = "waiting" | "pending" | "approved" | "sent_back";
+/** `cancelled`: an open step closed when its loan was voided (stamped with who voided it and when). */
+export type ApprovalStepStatus = "waiting" | "pending" | "approved" | "sent_back" | "cancelled";
 
 export interface LoanApprovalStep {
   /**
@@ -43,6 +44,8 @@ export interface LoanApprovalStep {
   /** The chain-config slug (e.g. `"loan-processor"`). Display/diagnostics only. */
   step_id: number | string;
   name: string;
+  /** The step's Status label, copied when the chain was seeded. Shown as the loan's status while it waits here. */
+  status_label?: string | null;
   role: string;
   kind: ApprovalStepKind;
   status: ApprovalStepStatus;
@@ -58,6 +61,13 @@ export interface LoanApprovalStep {
    * a button early, never to decide whether an action is allowed.
    */
   can_act?: boolean;
+  /**
+   * Who the step was forwarded to (`forward_to_user_id` on submit or approve),
+   * by name only, or null. While they still qualify only they, admin or
+   * super_admin may act on it; once they don't, the step is its role's again
+   * and `can_act` says so.
+   */
+  assigned_to?: { id: number; name: string } | null;
 }
 
 /** A completed revision round, closed when an approver sends the loan back. */
@@ -69,13 +79,84 @@ export interface LoanApprovalRound {
   steps: LoanApprovalStep[];
 }
 
+/**
+ * A step the loan's chain left out because its minimum principal is above the
+ * amount the loan is measured by (Phase 6 MB-BE6): a restructure counts the
+ * larger of its new principal and the amount it restructures. The server
+ * lists them for the current round; the browser never works one out.
+ */
+export interface LoanApprovalLeftOutStep {
+  /** The chain-config slug, as on `LoanApprovalStep.step_id`. */
+  step_id: number | string;
+  name: string;
+  /** Pesos with two decimals, as the server stores the minimum ("50000.00"). */
+  min_principal: string;
+  /** The server's sentence, shown as it is. */
+  description: string;
+  /**
+   * The `step_id` of the kept step it follows in the loan's chain, or null
+   * (it comes before the first kept approval step). Absent on an API from
+   * before it: the card then puts it just before Release.
+   */
+  after_step_id?: number | string | null;
+}
+
 export interface LoanApprovalState {
   current_steps: LoanApprovalStep[];
   rounds: LoanApprovalRound[];
+  /**
+   * The steps the current round left out by their minimum; an empty list when
+   * nothing was skipped. Absent on an API from before it: read it as none.
+   */
+  left_out_steps?: LoanApprovalLeftOutStep[];
 }
 
-export interface ApproveStepPayload {
+/** Forward the step this action makes pending to one named user. */
+export interface ForwardToPayload {
+  /** One of `GET /loans/{loan}/approval/forward-candidates`' users; absent means anyone with the role. */
+  forward_to_user_id?: number;
+}
+
+export interface ApproveStepPayload extends ForwardToPayload {
   remarks?: string;
+}
+
+/** `PATCH /loans/{id}/submit`: the draft's first approval step can be forwarded too. */
+export type SubmitLoanPayload = ForwardToPayload;
+
+/** The step a submit or approve would make pending, as the candidates read names it. */
+export interface ForwardNextStep {
+  name: string;
+  role: string;
+  /** The role in words. */
+  role_label: string;
+  kind: ApprovalStepKind;
+}
+
+/**
+ * `GET /loans/{loan}/approval/forward-candidates`: who the next step can be
+ * forwarded to, by name, as `{id, name}` only. `next_step` is null (and
+ * `users` empty) when the pending step is the last.
+ */
+export interface ForwardCandidates {
+  next_step: ForwardNextStep | null;
+  users: { id: number; name: string }[];
+}
+
+/**
+ * `GET /loans/{loan}/approval-edit`: whether the signed-in user may edit the
+ * loan at its approval step now. Only the Chairman/Chairwoman holds
+ * `loans:edit_in_approval`, and only at their own role's step (not one
+ * forwarded to someone else). `reason` says why not, in words; `version` is
+ * what the save sends back, so a loan changed since reads as stale (409).
+ */
+export interface LoanApprovalEditState {
+  can_edit: boolean;
+  reason: string | null;
+  /** The step the loan waits at, or null when it waits at none. */
+  step: { id: number; name: string } | null;
+  /** Only with `can_edit`. */
+  version: string | null;
 }
 
 export interface SendBackStepPayload {
@@ -99,6 +180,15 @@ export const APPROVAL_CHAIN_HIDDEN_STATUSES: readonly LoanStatus[] = [
 
 export function isApprovalChainHidden(status: string | undefined): boolean {
   return APPROVAL_CHAIN_HIDDEN_STATUSES.includes(status as LoanStatus);
+}
+
+/**
+ * Whether the loan page reads the loan's approval chain. A voided loan's chain
+ * is read (read only) even though its card stays hidden: Workflow History
+ * shows the steps the void cancelled. A rejected loan's is not read.
+ */
+export function readsApprovalChain(status: string | undefined): boolean {
+  return status === "void" || !isApprovalChainHidden(status);
 }
 
 /**

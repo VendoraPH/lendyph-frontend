@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback } from "react";
-import { Card, CardContent } from "@/components/ui/card";
+import { ExpandableCard } from "@/components/common/expandable-card";
+import { ScrollBox } from "@/components/common/page-fill";
 import {
   Table,
   TableBody,
@@ -13,16 +14,18 @@ import {
 } from "@/components/ui/table";
 import { useAccountingResource } from "@/hooks";
 import { accountingService } from "@/services";
-import { formatCentavos } from "@/lib/accounting/money";
 import { formatDate } from "@/lib/format";
 import type { AccountingBook, BookKind } from "@/types";
 import { DataState } from "../../_components/data-state";
+import { cellText, totalText } from "../_lib/column-book";
 
 interface BookReportProps {
   kind: BookKind;
   from: string;
   to: string;
   branchId?: number;
+  /** The book's name, as its tab reads; the card's heading. */
+  title: string;
   /** What this book is for, in the operator's words. */
   summary: string;
   endpoint: string;
@@ -38,6 +41,7 @@ export function BookReport({
   from,
   to,
   branchId,
+  title,
   summary,
   endpoint,
 }: BookReportProps) {
@@ -54,76 +58,76 @@ export function BookReport({
       endpoints={[endpoint]}
       isEmpty={(book) => book.rows.length === 0}
       emptyMessage="Nothing recorded in this book for the chosen dates."
+      emptyIllustration="emptyLedger"
     >
       {(book) => (
-        <Card>
-          <CardContent className="pt-6">
-            <p className="mb-4 text-sm text-muted-foreground">
-              {formatDate(book.from)} to {formatDate(book.to)} ·{" "}
-              {book.rows.length} {book.rows.length === 1 ? "line" : "lines"}
-            </p>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-28">Date</TableHead>
-                    <TableHead className="w-32">Entry no.</TableHead>
-                    <TableHead className="w-32">Reference</TableHead>
-                    <TableHead>Particulars</TableHead>
-                    <TableHead>Account</TableHead>
-                    <TableHead className="w-32 text-right">Debit</TableHead>
-                    <TableHead className="w-32 text-right">Credit</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {book.rows.map((row, i) => (
-                    <TableRow key={`${row.journal_no}-${i}`}>
-                      <TableCell className="text-sm">{formatDate(row.date)}</TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {row.journal_no}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground">
-                        {row.reference || "—"}
-                      </TableCell>
-                      <TableCell className="text-sm">{row.particulars}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {row.account_code ? (
-                          <>
-                            <span className="font-mono text-xs">
-                              {row.account_code}
-                            </span>{" "}
-                            {row.account_name}
-                          </>
-                        ) : (
-                          "—"
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-sm">
-                        {row.debit ? formatCentavos(row.debit) : ""}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-sm">
-                        {row.credit ? formatCentavos(row.credit) : ""}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-                <TableFooter>
-                  <TableRow>
-                    <TableCell colSpan={5} className="font-semibold">
-                      Total
+        <ExpandableCard
+          title={title}
+          description={`${formatDate(book.from)} to ${formatDate(book.to)} · ${book.rows.length} ${
+            book.rows.length === 1 ? "line" : "lines"
+          }`}
+        >
+          <ScrollBox>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-28">Date</TableHead>
+                  <TableHead className="w-32">Entry no.</TableHead>
+                  <TableHead className="w-32">Reference</TableHead>
+                  <TableHead>Particulars</TableHead>
+                  <TableHead>Account</TableHead>
+                  <TableHead className="w-32 text-right">Debit</TableHead>
+                  <TableHead className="w-32 text-right">Credit</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {book.rows.map((row, i) => (
+                  <TableRow key={`${row.journal_no}-${i}`}>
+                    <TableCell className="text-sm">{formatDate(row.date)}</TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {row.journal_no}
                     </TableCell>
-                    <TableCell className="text-right font-mono font-semibold">
-                      {formatCentavos(book.total_debit)}
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {row.reference || "—"}
                     </TableCell>
-                    <TableCell className="text-right font-mono font-semibold">
-                      {formatCentavos(book.total_credit)}
+                    <TableCell className="text-sm">{row.particulars}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {row.account_code ? (
+                        <>
+                          <span className="font-mono text-xs">
+                            {row.account_code}
+                          </span>{" "}
+                          {row.account_name}
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-sm">
+                      {cellText(row.debit)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-sm">
+                      {cellText(row.credit)}
                     </TableCell>
                   </TableRow>
-                </TableFooter>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
+                ))}
+              </TableBody>
+              <TableFooter>
+                <TableRow>
+                  <TableCell colSpan={5} className="font-semibold">
+                    Total
+                  </TableCell>
+                  <TableCell className="text-right font-mono font-semibold">
+                    {totalText(book.total_debit)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono font-semibold">
+                    {totalText(book.total_credit)}
+                  </TableCell>
+                </TableRow>
+              </TableFooter>
+            </Table>
+          </ScrollBox>
+        </ExpandableCard>
       )}
     </DataState>
   );

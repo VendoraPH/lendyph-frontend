@@ -20,12 +20,21 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
+import { usePermission } from "@/hooks";
+import { useBranchChoiceSource } from "@/hooks/use-branch-choice-source";
+import { pickableBranches } from "@/lib/branch-choice";
 import { gcashService } from "@/services/gcash.service";
 import { extractGCashErrorMessage } from "@/lib/gcash-errors";
-import { formatCurrency, formatDate, formatDateISO } from "@/lib/format";
+import { formatCurrencyExact, formatDate, formatDateISO } from "@/lib/format";
 import type { GCashIncomeReport, GCashPendingItem } from "@/types";
 import { PaidButton } from "./paid-button";
 import { PartyCell } from "./party-cell";
+import { gcashCanMarkPendingPaid } from "../_lib/row-actions";
+import { gcashRowBranchLabel } from "../_lib/walk-in-branch";
+import { ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 
 // First and last day of the current month. Both bounds are built at LOCAL
 // midnight, which toISOString() then rolled back a day in Manila (UTC+8) — the
@@ -39,9 +48,19 @@ function defaultRange(): { start: string; end: string } {
 }
 
 export function ReportsTab() {
+  const { can } = usePermission();
+  const canMarkPaid = gcashCanMarkPendingPaid(can);
+  // Names for a row's `branch_id`: the same rule as the Transactions tab.
+  const branches = pickableBranches(useBranchChoiceSource());
   const [{ start, end }, setRange] = useState(defaultRange);
   const [report, setReport] = useState<GCashIncomeReport | null>(null);
   const [pending, setPending] = useState<GCashPendingItem[]>([]);
+  // Set only when the pending drain gave up with pages outstanding, i.e. the
+  // worklist below is knowingly missing Cash Ins. Null means complete.
+  const [pendingShortfall, setPendingShortfall] = useState<{
+    shown: number;
+    total: number | null;
+  } | null>(null);
   const [incomeLoading, setIncomeLoading] = useState(true);
   const [pendingLoading, setPendingLoading] = useState(true);
   const [reloadToken, setReloadToken] = useState(0);
@@ -71,8 +90,11 @@ export function ReportsTab() {
     (async () => {
       setPendingLoading(true);
       try {
-        const res = await gcashService.pendingList();
-        if (!cancelled) setPending(Array.isArray(res) ? res : []);
+        const { rows, total, truncated } = await gcashService.pendingListAll();
+        if (!cancelled) {
+          setPending(rows);
+          setPendingShortfall(truncated ? { shown: rows.length, total } : null);
+        }
       } catch (err) {
         toast.error(extractGCashErrorMessage(err));
       } finally {
@@ -85,8 +107,8 @@ export function ReportsTab() {
   }, [reloadToken]);
 
   return (
-    <div className="space-y-6">
-      <Card>
+    <div className={cn("gap-6", FIT_CLASSES.section)}>
+      <Card className="shrink-0">
         <CardHeader>
           <CardTitle>Total Income</CardTitle>
           <CardDescription>
@@ -130,7 +152,7 @@ export function ReportsTab() {
                   Total Income
                 </div>
                 <div className="text-2xl font-semibold">
-                  {formatCurrency(report.total_income)}
+                  {formatCurrencyExact(report.total_income)}
                 </div>
               </div>
               <div>
@@ -158,22 +180,32 @@ export function ReportsTab() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className={FIT_CLASSES.section}>
         <CardHeader>
           <CardTitle>Pending Payments</CardTitle>
           <CardDescription>
-            Cash In transactions awaiting cash collection. Click Paid once the
-            customer settles.
+            Cash In transactions awaiting cash collection.
+            {canMarkPaid && " Click Paid once the customer settles."}
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="rounded-md border">
+        <CardContent className={cn("gap-4", FIT_CLASSES.section)}>
+          {pendingShortfall && (
+            <IncompleteListNotice
+              shown={pendingShortfall.shown}
+              total={pendingShortfall.total}
+              noun="pending payments"
+              className="shrink-0"
+              consequence="A pending Cash In that is not listed here cannot be marked paid from this screen."
+            />
+          )}
+          <ScrollBox className="rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Date</TableHead>
                   <TableHead>Reference</TableHead>
                   <TableHead>Customer</TableHead>
+                  <TableHead>Branch</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
                   <TableHead className="text-right">Charge</TableHead>
                   <TableHead className="text-right">Total</TableHead>
@@ -184,14 +216,14 @@ export function ReportsTab() {
               <TableBody>
                 {pendingLoading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8">
+                    <TableCell colSpan={9} className="text-center py-8">
                       <Loader2 className="inline h-5 w-5 animate-spin" />
                     </TableCell>
                   </TableRow>
                 ) : pending.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={8}
+                      colSpan={9}
                       className="text-center text-muted-foreground py-8"
                     >
                       No pending payments.
@@ -210,31 +242,34 @@ export function ReportsTab() {
                           nonMember={p.non_member}
                         />
                       </TableCell>
+                      <TableCell>{gcashRowBranchLabel(p, branches)}</TableCell>
                       <TableCell className="text-right">
-                        {formatCurrency(p.amount)}
+                        {formatCurrencyExact(p.amount)}
                       </TableCell>
                       <TableCell className="text-right">
-                        {formatCurrency(p.charge_amount)}
+                        {formatCurrencyExact(p.charge_amount)}
                       </TableCell>
                       <TableCell className="text-right">
-                        {formatCurrency(p.total_amount)}
+                        {formatCurrencyExact(p.total_amount)}
                       </TableCell>
                       <TableCell className="text-right">
                         {p.days_pending}
                       </TableCell>
                       <TableCell className="text-right">
-                        <PaidButton
-                          transactionId={p.id}
-                          referenceNo={p.reference_no}
-                          onPaid={refresh}
-                        />
+                        {canMarkPaid && (
+                          <PaidButton
+                            transactionId={p.id}
+                            referenceNo={p.reference_no}
+                            onPaid={refresh}
+                          />
+                        )}
                       </TableCell>
                     </TableRow>
                   ))
                 )}
               </TableBody>
             </Table>
-          </div>
+          </ScrollBox>
         </CardContent>
       </Card>
     </div>

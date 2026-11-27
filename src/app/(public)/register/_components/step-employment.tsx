@@ -1,6 +1,7 @@
 "use client";
 
 import { Input } from "@/components/ui/input";
+import { todayISO } from "@/lib/format";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 
@@ -42,7 +43,7 @@ export function StepEmployment({ employment, onChange, onNext, onBack }: Props) 
             <Input
               id="date_hired"
               type="date"
-              max={new Date().toLocaleDateString("en-CA")}
+              max={todayISO()}
               value={employment.date_hired}
               onChange={(e) => onChange("date_hired", e.target.value)}
             />
@@ -51,7 +52,7 @@ export function StepEmployment({ employment, onChange, onNext, onBack }: Props) 
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label htmlFor="monthly_income">Monthly Income (PHP)</Label>
+            <Label htmlFor="monthly_income">Monthly Income (₱)</Label>
             <Input
               id="monthly_income"
               type="number"
@@ -64,7 +65,7 @@ export function StepEmployment({ employment, onChange, onNext, onBack }: Props) 
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="pledge_amount">Pledge Amount (PHP)</Label>
+            <Label htmlFor="pledge_amount">Pledge Amount (₱)</Label>
             <Input
               id="pledge_amount"
               type="number"

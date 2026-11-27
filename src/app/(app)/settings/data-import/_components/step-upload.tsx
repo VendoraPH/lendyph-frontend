@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * The upload step: open the run, send both CSVs a piece at a time, resume.
+ * The upload step: open the run, send its CSVs a piece at a time, resume.
  *
  * The engine lives in ../_hooks/use-chunk-upload; this is the screen over it.
  * What it has to get right, beyond drawing a bar:
@@ -18,7 +18,7 @@
  *    as real members and loans.
  *  - **A digest mismatch is not a restart.** The server keeps the chunks
  *    precisely so specific pieces can be re-sent, so that is what is offered.
- *  - **Once both files are assembled the file stops mattering.** The import
+ *  - **Once every file is assembled the file stops mattering.** The import
  *    continues on the server whether or not this tab is open.
  */
 
@@ -37,9 +37,8 @@ import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress
 import { Spinner } from "@/components/ui/spinner";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { api } from "@/lib/api-client";
-import { getErrorMessage } from "@/lib/api-error";
+import { getErrorMessage, httpStatusOf } from "@/lib/api-error";
 import { CSV_FILE_ACCEPT } from "@/lib/csv-file";
-import { todayISO } from "@/lib/format";
 import {
   loadImportSession,
   recordUploadedChunk,
@@ -57,6 +56,9 @@ import {
   type ChunkUploadFileState,
   type DigestMismatch,
 } from "../_hooks/use-chunk-upload";
+import { keepsRunForUpload } from "../_hooks/use-import-reattach";
+import { runDateOrders } from "../_hooks/use-file-precheck";
+import { balancesAsOfRefusal } from "../_lib/balances-as-of";
 
 /* ------------------------------------------------------------------ */
 /* The seam                                                             */
@@ -67,10 +69,16 @@ import {
 // compiled on its own branch; now that both are on one branch they are imported,
 // so there is one definition rather than two that agree until someone edits one.
 import type { ImportFiles, PrecheckOutcome } from "./data-import-view";
+import { FILE_LABELS, IMPORT_FILE_KINDS, fileNameInSentence, filesPhrase, filesProblem } from "./import-files";
+import { piecesAccepted } from "@/lib/count-words";
 
 export interface StepUploadProps {
   /** The branch the members and loans are created under. Null on a resume. */
   branchId: number | null;
+  /** "Balances as of", sent as the run's `as_of_date` when this step opens it. */
+  asOfDate: string;
+  /** The server refused that date: back to step 1, its words on the field. */
+  onAsOfDateRefused: (message: string) => void;
   /** The picked files. Both null on a resume — this step asks for them again. */
   files: ImportFiles;
   /** What step 2 settled. Null on a resume; the run already carries it. */
@@ -79,17 +87,18 @@ export interface StepUploadProps {
   runId: number | null;
   /** Fired once, with the id of the run this step opened. */
   onRunCreated: (id: number) => void;
+  /**
+   * The run turned out to be finished (completed, failed or cancelled). A
+   * finished run never takes another upload: the wizard forgets it, and this
+   * step opens a new run with the same files.
+   */
+  onRunFinished: () => void;
   /** Back to the pre-check step. */
   onBack: () => void;
-  /** Both files are on the server and verified. */
+  /** Every file of the run is on the server and verified. */
   onUploaded: () => void;
   className?: string;
 }
-
-const KIND_LABEL: Record<ImportFileKind, string> = {
-  customers: "Members",
-  loans: "Loans",
-};
 
 /* ------------------------------------------------------------------ */
 /* Pure — unit tested in ./step-upload.test.ts                          */
@@ -112,6 +121,32 @@ export function chunkLabel(currentIndex: number | null, totalChunks: number): st
   return `Piece ${currentIndex + 1} of ${totalChunks}`;
 }
 
+/** One file as the create-run request declares it. */
+interface DeclaredFile {
+  filename: string;
+  size_bytes: number;
+  sha256: string;
+}
+
+/**
+ * The create-run `files`: each picked file, in the order the import reads
+ * them. The server takes the members file, the share capital file or both,
+ * and a loans file only beside the members file (`StoreCsvImportRunRequest`);
+ * `filesProblem` holds the picks to that before a run is opened.
+ */
+export function declaredFiles(
+  picked: Partial<Record<ImportFileKind, { name: string; size: number } | null>>,
+  digests: Partial<Record<ImportFileKind, string | undefined>>,
+): Partial<Record<ImportFileKind, DeclaredFile>> {
+  const declared: Partial<Record<ImportFileKind, DeclaredFile>> = {};
+  for (const kind of IMPORT_FILE_KINDS) {
+    const file = picked[kind];
+    const sha256 = digests[kind];
+    if (file && sha256) declared[kind] = { filename: file.name, size_bytes: file.size, sha256 };
+  }
+  return declared;
+}
+
 /** The create-run body, as `StoreCsvImportRunRequest` validates it. */
 interface CreateRunBody {
   message?: string;
@@ -125,10 +160,13 @@ interface CreateRunBody {
 
 export function StepUpload({
   branchId,
+  asOfDate,
+  onAsOfDateRefused,
   files,
   precheck,
   runId,
   onRunCreated,
+  onRunFinished,
   onBack,
   onUploaded,
   className,
@@ -156,6 +194,7 @@ export function StepUpload({
     () => ({
       customers: repicked.customers ?? files.customers,
       loans: repicked.loans ?? files.loans,
+      share_capital: repicked.share_capital ?? files.share_capital,
     }),
     [files, repicked],
   );
@@ -164,9 +203,15 @@ export function StepUpload({
 
   useEffect(() => {
     if (runId !== null || openingRef.current) return;
-    const customers = merged.customers;
-    const loans = merged.loans;
-    if (branchId === null || !customers || !loans || !precheck) return;
+    const picked: Record<ImportFileKind, File | null> = {
+      customers: merged.customers ?? null,
+      loans: merged.loans ?? null,
+      share_capital: merged.share_capital ?? null,
+    };
+    // The picked files must make an import: the members file, the share
+    // capital file or both, with loans only beside the members file
+    // (./import-files).
+    if (branchId === null || !precheck || filesProblem(picked) !== null) return;
 
     openingRef.current = true;
     setOpening(true);
@@ -174,10 +219,14 @@ export function StepUpload({
 
     void (async () => {
       try {
-        const [customersSha, loansSha] = await Promise.all([
-          sha256Hex(customers),
-          sha256Hex(loans),
-        ]);
+        const digests: Partial<Record<ImportFileKind, string>> = Object.fromEntries(
+          await Promise.all(
+            IMPORT_FILE_KINDS.flatMap((kind) => {
+              const file = picked[kind];
+              return file ? [sha256Hex(file).then((sha) => [kind, sha] as const)] : [];
+            }),
+          ),
+        );
 
         /**
          * `api.rawPost`, NOT `dataImportService.createRun` — and this is a
@@ -196,15 +245,10 @@ export function StepUpload({
          */
         const created = await api.rawPost<CreateRunBody>(API_ENDPOINTS.DATA_IMPORT.RUNS, {
           branch_id: branchId,
-          as_of_date: todayISO(),
-          files: {
-            customers: {
-              filename: customers.name,
-              size_bytes: customers.size,
-              sha256: customersSha,
-            },
-            loans: { filename: loans.name, size_bytes: loans.size, sha256: loansSha },
-          },
+          as_of_date: asOfDate,
+          files: declaredFiles(picked, digests),
+          // The server reads each date column with the order settled here.
+          date_orders: runDateOrders(precheck.dateFormat),
         });
 
         const id = created?.run?.id;
@@ -213,6 +257,14 @@ export function StepUpload({
         }
 
         setChunkSize(created.chunk_size);
+
+        const sessionFile = (file: File) => ({
+          name: file.name,
+          size: file.size,
+          lastModified: file.lastModified,
+          totalChunks: Math.ceil(file.size / created.chunk_size),
+          uploadedChunks: [],
+        });
 
         // Persisted immediately, because everything after this point depends on
         // being able to find the run again — and the tab can die at any moment.
@@ -227,22 +279,12 @@ export function StepUpload({
           hasHeaderRow: precheck.hasHeaderRow,
           dateFormat: precheck.dateFormat,
           chunkSize: created.chunk_size,
-          files: {
-            customers: {
-              name: customers.name,
-              size: customers.size,
-              lastModified: customers.lastModified,
-              totalChunks: Math.ceil(customers.size / created.chunk_size),
-              uploadedChunks: [],
-            },
-            loans: {
-              name: loans.name,
-              size: loans.size,
-              lastModified: loans.lastModified,
-              totalChunks: Math.ceil(loans.size / created.chunk_size),
-              uploadedChunks: [],
-            },
-          },
+          files: Object.fromEntries(
+            IMPORT_FILE_KINDS.flatMap((kind) => {
+              const file = picked[kind];
+              return file ? [[kind, sessionFile(file)] as const] : [];
+            }),
+          ),
           startedAt: Date.now(),
         };
         saveImportSession(stored);
@@ -252,13 +294,18 @@ export function StepUpload({
         onRunCreated(id);
       } catch (err) {
         openingRef.current = false;
+        const refusedDate = balancesAsOfRefusal(err);
+        if (refusedDate) {
+          onAsOfDateRefused(refusedDate);
+          return;
+        }
         setOpenError(getErrorMessage(err, "Could not open the import."));
         notifyError(err, "Could not open the import.");
       } finally {
         setOpening(false);
       }
     })();
-  }, [runId, branchId, merged, precheck, onRunCreated]);
+  }, [runId, branchId, asOfDate, merged, precheck, onRunCreated, onAsOfDateRefused]);
 
   /* -------------------- the upload -------------------- */
 
@@ -272,7 +319,7 @@ export function StepUpload({
     onUploaded();
   }, [onUploaded]);
 
-  const { state, start, resend } = useChunkUpload({
+  const { state, serverStatus, start, resend } = useChunkUpload({
     runId,
     files: merged,
     advertisedChunkSize: chunkSize,
@@ -286,6 +333,15 @@ export function StepUpload({
     setRepicked((current) => ({ ...current, [kind]: file }));
   }, []);
 
+  // A run the server says has finished is never uploaded into: it is handed
+  // back to be forgotten, and this step opens a new run. Only this run's own
+  // status counts, never one read for the run before it.
+  useEffect(() => {
+    if (runId !== null && serverStatus?.id === runId && !keepsRunForUpload(serverStatus)) {
+      onRunFinished();
+    }
+  }, [runId, serverStatus, onRunFinished]);
+
   const cancelAndGoBack = useCallback(async () => {
     if (runId === null) {
       onBack();
@@ -295,12 +351,19 @@ export function StepUpload({
     try {
       await dataImportService.cancel(runId);
     } catch (err) {
-      notifyError(err, "Could not cancel this run.");
+      // A finished run cannot be cancelled (409), and never takes another
+      // upload: forget it, so going back and on opens a new run instead of
+      // landing in this one again.
+      const finished =
+        httpStatusOf(err) === 409 &&
+        !keepsRunForUpload(await dataImportService.status(runId).catch(() => null));
+      if (finished) onRunFinished();
+      else notifyError(err, "Could not cancel this run.");
     } finally {
       setCancelling(false);
       onBack();
     }
-  }, [runId, onBack]);
+  }, [runId, onBack, onRunFinished]);
 
   const assembled = state.phase === "assembled";
   const busy =
@@ -309,6 +372,7 @@ export function StepUpload({
     state.phase === "assembling" ||
     state.phase === "checking";
   const refused = state.files.some((file) => file.blocked?.kind === "refuse");
+  const phrase = filesPhrase(state.files.map((file) => file.kind));
 
   return (
     <div className={cn("space-y-6", className)}>
@@ -324,7 +388,7 @@ export function StepUpload({
       {/* The one place a screen reader is told what is happening. */}
       <p role="status" aria-live="polite" className="sr-only">
         {assembled
-          ? "Both files uploaded and verified."
+          ? phrase.announced
           : state.phase === "paused"
             ? "Upload paused, waiting for the connection."
             : state.phase === "uploading"
@@ -423,9 +487,7 @@ export function StepUpload({
         >
           <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-green-600" aria-hidden="true" />
           <div>
-            <p className="font-medium text-green-900 dark:text-green-200">
-              Both files are on the server and verified
-            </p>
+            <p className="font-medium text-green-900 dark:text-green-200">{phrase.verified}</p>
             <p className="mt-0.5 text-muted-foreground">
               The file on your computer no longer matters. The import runs on the
               server from here — you can close this page, switch devices, or come
@@ -447,7 +509,7 @@ export function StepUpload({
         ) : null}
         {busy && state.files.length > 0 ? (
           <span className="text-sm text-muted-foreground tabular-nums">
-            {Math.round(state.overallPercent)}% of both files sent
+            {Math.round(state.overallPercent)}% {phrase.sent}
           </span>
         ) : null}
       </div>
@@ -474,7 +536,7 @@ function FileProgress({
     <div className="rounded-lg border p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-medium">{KIND_LABEL[file.kind]}</p>
+          <p className="font-medium">{FILE_LABELS[file.kind]}</p>
           <p className="truncate text-sm text-muted-foreground" title={file.filename}>
             {file.filename}
             {file.totalBytes > 0 ? ` · ${formatBytes(file.totalBytes)}` : ""}
@@ -485,7 +547,7 @@ function FileProgress({
             <span className="text-green-600 dark:text-green-400">Verified</span>
           ) : (
             <span className="text-muted-foreground">
-              {file.uploadedChunks} of {file.totalChunks} pieces accepted
+              {piecesAccepted(file.uploadedChunks, file.totalChunks)}
             </span>
           )}
         </div>
@@ -514,7 +576,7 @@ function FileProgress({
           <p className="mt-0.5 text-muted-foreground">{file.blocked.reason}</p>
 
           <label htmlFor={inputId} className="sr-only">
-            Choose the {KIND_LABEL[file.kind].toLowerCase()} CSV
+            Choose the {fileNameInSentence(file.kind)}
           </label>
           <input
             id={inputId}
@@ -538,7 +600,7 @@ function FileProgress({
           <Progress
             value={percent}
             className="mt-3"
-            aria-label={`${KIND_LABEL[file.kind]} upload progress`}
+            aria-label={`${FILE_LABELS[file.kind]} upload progress`}
           >
             <ProgressLabel>{file.assembled ? "Uploaded" : (piece ?? "Waiting")}</ProgressLabel>
             <ProgressValue />

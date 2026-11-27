@@ -2,33 +2,54 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { notFound, useRouter } from "next/navigation";
 import { RouteGuard } from "@/components/common";
-import {
-  AreaChart,
-  Area,
-  PieChart,
-  Pie,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-} from "recharts";
+import { ExpandableCard } from "@/components/common/expandable-card";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { NoBranchBanner } from "@/components/common/no-branch-banner";
+import { useIsClient, usePermission } from "@/hooks";
+import { useMenuVisibility, useVisibleNav } from "@/hooks/use-menu-visibility";
+import { dashboardParts, linkShown } from "@/lib/hidden-module-parts";
+import { dashboardLanding } from "@/lib/landing-page";
+import { AreaChart, Area } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Wallet, FileText, DollarSign, AlertTriangle, TrendingUp, CircleCheck, Clock, CircleAlert, Landmark } from "lucide-react";
-import { getInitials } from "@/lib/initials";
-import { formatDateFull } from "@/lib/format";
-import { fetchAllPages } from "@/lib/paginate";
+import { TrendingUp, TrendingDown } from "lucide-react";
+import { Icon3D } from "@/components/common/icon-3d";
+import { cn } from "@/lib/utils";
+import { formatCurrency, formatDateFull } from "@/lib/format";
 import { shareCapitalService } from "@/services";
 import { dashboardService } from "@/services/dashboard.service";
-import type { ShareCapitalLedgerEntry } from "@/types";
+import type { DailyDuesSummary } from "@/types";
+import { shareCapitalBookBalance } from "./_lib/share-capital-kpi";
+import {
+  collectionBadge,
+  collectionPieSlices,
+  isNothingDue,
+  shownCollectionRate,
+  todaySummaryRows,
+} from "./_lib/collection-pie";
+import { DuesDonut } from "./_components/dues-donut";
+import { DuesTable, TransactionsTable, type DueItemView, type LoadState } from "./_components/dashboard-tables";
+import { dueItemViews, type DailyDueItem } from "./_lib/daily-dues";
+import {
+  DASHBOARD_PAGE_CLASS,
+  DUES_TABLE_PANEL_CLASS,
+  DUES_TABS_LIST_CLASS,
+  KPI_ICONS_3D,
+  TRANSACTIONS_TABLE_PANEL_CLASS,
+  dashboardKpiClasses,
+} from "./_lib/kpi-layout";
+import { insuranceCollected } from "./_lib/insurance-collected";
+import { recentTransactionRows, type RecentTransactionRow } from "./_lib/recent-transactions";
+import {
+  hasSparklineData,
+  isIsolatedPoint,
+  sparklinePoints,
+  type SparklinePoint,
+} from "./_lib/sparkline";
 
 // ---------------------------------------------------------------------------
 // Backend response shapes
@@ -37,71 +58,25 @@ import type { ShareCapitalLedgerEntry } from "@/types";
 // substitute invented data when a response is empty or fails — an empty
 // dashboard must read as empty. See the empty/loading states below.
 
-type SparklinePoint = { v: number };
-
 /** Sparkline series returned by GET /dashboard/stats. Keys mirror KPI_CARD_STRUCTURE. */
 type SparklineKey = "portfolio" | "active_loans" | "collected" | "overdue";
 
 interface DashboardStats {
   total_portfolio?: number;
   active_loans?: number;
+  /** Collected over the period, the insurance premium left out. */
   total_collected?: number;
+  /** The insurance premium collected over the same period, on its own. */
+  insurance_collected?: number | string | null;
   overdue_count?: number;
   share_capital_total?: number;
   sparklines?: Partial<Record<SparklineKey, SparklinePoint[]>>;
 }
 
-interface DailyDueItem {
-  id?: number;
-  borrower?: string;
-  borrower_name?: string;
-  loan_id?: number | string;
-  loan_account_number?: string;
-  amount_due?: number;
-  amount_paid?: number;
-  status?: "paid" | "partial" | "overdue" | "pending" | "collected";
-}
-
-interface RecentTransactionItem {
-  id?: number;
-  name?: string;
-  borrower_name?: string;
-  description?: string;
-  desc?: string;
-  amount?: number;
-  date?: string;
-  created_at?: string;
-  type?: "release" | "repayment";
-}
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// View models — what the UI renders, after mapping the API response
-// ---------------------------------------------------------------------------
-
-/** Request lifecycle for a section, so empty data and a failed fetch render differently. */
-type LoadState = "loading" | "ready" | "error";
-
-type DueItemView = {
-  id: number;
-  borrower: string;
-  loanId: string;
-  amountDue: number;
-  amountPaid: number;
-  status: "collected" | "partial" | "pending";
-};
-
-type TransactionView = {
-  id: number;
-  name: string;
-  desc: string;
-  amount: number;
-  date: string;
-  color: string;
-};
 
 // ---------------------------------------------------------------------------
 // KPI Card structure (values and sparklines populated from state)
@@ -111,21 +86,21 @@ type TransactionView = {
 // decorative one.
 
 const KPI_CARD_STRUCTURE = [
-  { key: "portfolio" as const, sparkKey: "portfolio" as const, icon: Wallet, label: "Total Portfolio", color: "#7c3aed", href: "/loans" },
-  { key: "active_loans" as const, sparkKey: "active_loans" as const, icon: FileText, label: "Active Loans", color: "#e879f9", href: "/loans" },
-  { key: "collected" as const, sparkKey: "collected" as const, icon: DollarSign, label: "Collected", color: "#10b981", href: "/payments" },
+  { key: "portfolio" as const, sparkKey: "portfolio" as const, label: "Total Portfolio", color: "#7c3aed", href: "/loans" },
+  { key: "active_loans" as const, sparkKey: "active_loans" as const, label: "Active Loans", color: "#e879f9", href: "/loans" },
+  { key: "collected" as const, sparkKey: "collected" as const, label: "Collected", color: "#10b981", href: "/payments" },
   // `/collections` is not a route — it never existed, so this card 404'd on
   // click and on Next's prefetch. `/loans/past-due` is the purpose-built Past
   // Due Loans report, which is exactly what this card counts.
-  { key: "overdue" as const, sparkKey: "overdue" as const, icon: AlertTriangle, label: "Overdue", color: "#f87171", href: "/loans/past-due" },
-  { key: "share_capital" as const, sparkKey: null, icon: Landmark, label: "Share Capital", color: "#14b8a6", href: "/share-capital/ledger" },
+  { key: "overdue" as const, sparkKey: "overdue" as const, label: "Overdue", color: "#f87171", href: "/loans/past-due" },
+  { key: "share_capital" as const, sparkKey: null, label: "Share Capital", color: "#14b8a6", href: "/share-capital/ledger" },
 ];
 
 // ---------------------------------------------------------------------------
 // Sparkline component
 // ---------------------------------------------------------------------------
 
-function Sparkline({ data, color }: { data: { v: number }[]; color: string }) {
+function Sparkline({ data, color }: { data: SparklinePoint[]; color: string }) {
   const gradId = `spark-${color.replace("#", "")}`;
   return (
     <AreaChart width={80} height={40} data={data} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
@@ -141,7 +116,15 @@ function Sparkline({ data, color }: { data: { v: number }[]; color: string }) {
         stroke={color}
         strokeWidth={1.5}
         fill={`url(#${gradId})`}
-        dot={false}
+        // A day without a figure (`v: null`) is a gap, never bridged or zeroed.
+        // A real point with a gap on both sides has no segment, so it gets a
+        // dot; every other point draws none.
+        dot={({ cx, cy, index, key }) =>
+          isIsolatedPoint(data, index) && cx != null && cy != null ? (
+            <circle key={key} cx={cx} cy={cy} r={1.5} fill={color} />
+          ) : null
+        }
+        connectNulls={false}
         isAnimationActive={false}
       />
     </AreaChart>
@@ -149,90 +132,61 @@ function Sparkline({ data, color }: { data: { v: number }[]; color: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Placeholder row for a table with nothing to show
-// ---------------------------------------------------------------------------
-
-function TableEmptyRow({
-  colSpan,
-  state,
-  emptyText,
-}: {
-  colSpan: number;
-  state: LoadState;
-  emptyText: string;
-}) {
-  return (
-    <TableRow className="hover:bg-transparent">
-      <TableCell colSpan={colSpan} className="py-10 text-center text-sm text-muted-foreground">
-        {state === "loading"
-          ? "Loading…"
-          : state === "error"
-            ? "Couldn't load this data. Please refresh the page."
-            : emptyText}
-      </TableCell>
-    </TableRow>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Section visibility flags
-// ---------------------------------------------------------------------------
-// These dashboard sections are hidden temporarily — the underlying numbers
-// are placeholder/demo data and we don't want to show them to users until
-// they're driven by real backend metrics. Flip to `true` to bring them back.
-
-const SHOW_DAILY_COLLECTION_VS_ACTUAL = false;
-
-// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
+// KPI tiles abbreviate on purpose ("₱130K"); below ₱1,000 there is nothing to
+// abbreviate, so the figure is shown in full, to the centavo.
 function formatCompactCurrency(amount: number): string {
   if (amount >= 1_000_000) return `₱${(amount / 1_000_000).toFixed(1)}M`;
   if (amount >= 1_000) return `₱${(amount / 1_000).toFixed(0)}K`;
-  return `₱${Math.round(amount).toLocaleString()}`;
+  return formatCurrency(amount);
 }
 
-export default function DashboardPage() {
-  const [mounted, setMounted] = useState(false);
+/** A KPI card's link to its page, or a plain block when Menu Visibility hides that page. */
+function KpiLink({ href, children }: { href: string | null; children: React.ReactNode }) {
+  if (href === null) return <div className="group">{children}</div>;
+  return (
+    <Link href={href} className="group">
+      {children}
+    </Link>
+  );
+}
+
+function DashboardContent() {
+  const mounted = useIsClient();
+  const kpiClasses = dashboardKpiClasses();
+  // Menu Visibility: the Share Capital card (GET /share-capital/members) goes
+  // while Share Capital is hidden, and a card whose page is hidden isn't a link.
+  const { isHidden } = useMenuVisibility();
+  const shareCapitalShown = dashboardParts(isHidden).shareCapital;
+  const canViewShareCapital = usePermission().can("share_capital:view") && shareCapitalShown;
   const [shareCapitalTotal, setShareCapitalTotal] = useState<string>("—");
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [dailyDues, setDailyDues] = useState<DueItemView[]>([]);
-  const [recentTransactions, setRecentTransactions] = useState<TransactionView[]>([]);
+  const [duesSummary, setDuesSummary] = useState<DailyDuesSummary | null>(null);
+  const [recentTransactions, setRecentTransactions] = useState<RecentTransactionRow[]>([]);
   // "loading" until the request settles, then "ready" or "error" — so the UI can
   // tell a genuinely empty dataset apart from a request that never came back.
   const [txStatus, setTxStatus] = useState<LoadState>("loading");
   const [duesStatus, setDuesStatus] = useState<LoadState>("loading");
 
   useEffect(() => {
-    setMounted(true);
-
-    // Share capital — the KPI is a sum of the WHOLE ledger, so it has to read
-    // the whole ledger. It used to ask for `per_page: 9999`, which the API
-    // silently clamps to 100: the headline figure on the front page of the app
-    // was the sum of the hundred most recent entries, in a response shaped
-    // exactly like a complete one. Drained page by page instead.
-    fetchAllPages<ShareCapitalLedgerEntry>((params) =>
-      shareCapitalService.ledgerList(params)
-    )
-      .then(({ rows, truncated }) => {
-        let total = 0;
-        for (const e of rows) {
-          // Defensive coercion — bad/missing amounts shouldn't poison the running
-          // total with NaN (which would propagate to "₱NaN" in the UI).
-          const amount = Number(e.amount);
-          if (!Number.isFinite(amount)) continue;
-          total += e.type === "credit" ? amount : -amount;
-        }
-        const compact = formatCompactCurrency(Number.isFinite(total) ? total : 0);
-        // The drain hit its runaway guard, so this is a floor rather than the
-        // total. Say so with a "+" instead of presenting a short sum as final —
-        // quietly rounding down is the bug this whole change is about.
-        setShareCapitalTotal(truncated ? `${compact}+` : compact);
-      })
-      .catch(() => {
-        setShareCapitalTotal("—");
-      });
+    // Needs `share_capital:view`, which the dashboard does not; without it the
+    // card keeps its "—" rather than asking for figures it would be refused.
+    if (canViewShareCapital) {
+      // The book's balance as the server states it (`meta.totals`); one row is
+      // asked for because only the totals are read.
+      shareCapitalService
+        .members({ per_page: 1 })
+        .then((res) => {
+          const balance = shareCapitalBookBalance(res);
+          setShareCapitalTotal(balance === null ? "—" : formatCompactCurrency(balance));
+        })
+        .catch(() => {
+          setShareCapitalTotal("—");
+        });
+    }
 
     // Dashboard stats
     dashboardService
@@ -245,32 +199,15 @@ export default function DashboardPage() {
 
     // Daily dues
     dashboardService
-      .dailyDues()
+      .dailyDues<DailyDueItem>()
       .then((res) => {
-        const raw = Array.isArray(res)
-          ? (res as DailyDueItem[])
-          : ((res as { data?: DailyDueItem[] })?.data ?? []);
-        const statusMap: Record<string, DueItemView["status"]> = {
-          paid: "collected",
-          collected: "collected",
-          partial: "partial",
-          overdue: "pending",
-          pending: "pending",
-        };
-        setDailyDues(
-          raw.map((item, i) => ({
-            id: Number(item.id ?? i + 1),
-            borrower: item.borrower ?? item.borrower_name ?? "—",
-            loanId: String(item.loan_account_number ?? item.loan_id ?? "—"),
-            amountDue: Number(item.amount_due ?? 0),
-            amountPaid: Number(item.amount_paid ?? 0),
-            status: statusMap[item.status ?? "pending"] ?? "pending",
-          })),
-        );
+        setDailyDues(dueItemViews(Array.isArray(res?.data) ? res.data : []));
+        setDuesSummary(res?.summary ?? null);
         setDuesStatus("ready");
       })
       .catch(() => {
         setDailyDues([]);
+        setDuesSummary(null);
         setDuesStatus("error");
       });
 
@@ -278,27 +215,14 @@ export default function DashboardPage() {
     dashboardService
       .recentTransactions()
       .then((res) => {
-        const raw = Array.isArray(res)
-          ? (res as RecentTransactionItem[])
-          : ((res as { data?: RecentTransactionItem[] })?.data ?? []);
-        const palette = ["bg-purple-500", "bg-orange-500", "bg-green-500", "bg-blue-500"];
-        setRecentTransactions(
-          raw.slice(0, 10).map((tx, i) => ({
-            id: Number(tx.id ?? i + 1),
-            name: tx.name ?? tx.borrower_name ?? "—",
-            desc: tx.description ?? tx.desc ?? (tx.type === "release" ? "Loan released" : "Payment received"),
-            amount: Number(tx.amount ?? 0),
-            date: tx.date ?? tx.created_at ?? "",
-            color: palette[i % palette.length]!,
-          })),
-        );
+        setRecentTransactions(recentTransactionRows(res));
         setTxStatus("ready");
       })
       .catch(() => {
         setRecentTransactions([]);
         setTxStatus("error");
       });
-  }, []);
+  }, [canViewShareCapital]);
 
   // ---------------------------------------------------------------------
   // Derived values — live data only.
@@ -313,246 +237,162 @@ export default function DashboardPage() {
     overdue: stats?.overdue_count != null ? String(stats.overdue_count) : "—",
     share_capital: shareCapitalTotal,
   };
+  // The premium the Collected figure leaves out, as the server sent it.
+  const insuranceCollectedAmount = insuranceCollected(stats);
+  const insuranceCollectedLabel =
+    insuranceCollectedAmount === null ? "—" : formatCompactCurrency(insuranceCollectedAmount);
 
   const dueItems = dailyDues;
   const transactions = recentTransactions;
 
-  const totalDue = dueItems.reduce((sum, item) => sum + item.amountDue, 0);
-  const totalCollected = dueItems.reduce((sum, item) => sum + item.amountPaid, 0);
-  const totalPartial = dueItems
-    .filter((i) => i.status === "partial")
-    .reduce((sum, i) => sum + i.amountPaid, 0);
-  const totalFullyCollected = totalCollected - totalPartial;
-  const totalRemaining = totalDue - totalCollected;
-  const collectionRate = totalDue > 0 ? Math.round((totalCollected / totalDue) * 100) : 0;
-  const pieData = [
-    { name: "Collected", value: totalFullyCollected, color: "#10b981" },
-    { name: "Partial", value: totalPartial, color: "#f59e0b" },
-    { name: "Pending", value: totalRemaining, color: "#94a3b8" },
-  ];
+  // The pie, the rate and the "Today" list are the server's figures (GET
+  // /dashboard/daily-dues `summary`); a row's "Paid" includes penalty, so adding
+  // rows up here could pass 100%.
+  const collectionRate = shownCollectionRate(duesSummary);
+  const collectionRateLabel = collectionRate === null ? "—" : `${collectionRate}%`;
+  const pieData = collectionPieSlices(duesSummary);
+  const todayRows = todaySummaryRows(duesSummary);
+  const nothingDue = isNothingDue(duesSummary, duesStatus);
+  const badge = collectionBadge(collectionRate, nothingDue);
+  const BadgeArrow = badge.arrow === "up" ? TrendingUp : badge.arrow === "down" ? TrendingDown : null;
+  const rateBadgeClass = {
+    good: "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400",
+    fair: "border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400",
+    poor: "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400",
+    unknown: "border-border bg-muted text-muted-foreground",
+  }[badge.tone];
 
   return (
-    <RouteGuard permission="dashboard:view" pageName="Dashboard">
-    <div className="space-y-6">
+    <>
       {/* ----------------------------------------------------------------- */}
-      {/* Row 1: KPI Cards                                                  */}
+      {/* Row 1: KPI Cards (compact, natural height)                        */}
       {/* ----------------------------------------------------------------- */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        {KPI_CARD_STRUCTURE.map((kpi) => (
-          <Link key={kpi.label} href={kpi.href} className="group">
-            <Card className="rounded-xl border border-border shadow-sm transition-all duration-200 group-hover:shadow-md group-hover:border-brand-orange/30 group-hover:scale-[1.02] cursor-pointer">
-              <CardContent className="py-3 px-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div
-                      className="h-7 w-7 rounded-full flex items-center justify-center shrink-0"
-                      style={{ backgroundColor: kpi.color }}
-                    >
-                      <kpi.icon className="h-3.5 w-3.5 text-white" />
+      <div className={kpiClasses.grid}>
+        {KPI_CARD_STRUCTURE.filter((kpi) => kpi.key !== "share_capital" || shareCapitalShown).map((kpi) => {
+          // Only draw a trend line when the backend actually sent that
+          // series — no decorative curve next to a real figure.
+          const series = sparklinePoints(kpi.sparkKey ? stats?.sparklines?.[kpi.sparkKey] : undefined);
+          return (
+            <KpiLink key={kpi.label} href={linkShown(kpi.href, isHidden) ? kpi.href : null}>
+              <Card
+                size="sm"
+                className={cn(
+                  kpiClasses.card,
+                  "h-full rounded-xl border border-border shadow-sm transition-all duration-200 group-hover:shadow-md group-hover:border-brand-orange/30 group-hover:scale-[1.02] cursor-pointer",
+                )}
+              >
+                <CardContent className={kpiClasses.content}>
+                  <div className={kpiClasses.row}>
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <Icon3D name={KPI_ICONS_3D[kpi.key]} size={28} eager />
+                      <div className="min-w-0">
+                        <p className="text-lg font-bold leading-tight">{kpiValues[kpi.key]}</p>
+                        <p className="text-[11px] leading-tight text-muted-foreground">{kpi.label}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-lg font-bold leading-tight">{kpiValues[kpi.key]}</p>
-                      <p className="text-[11px] text-muted-foreground">{kpi.label}</p>
-                    </div>
+                    {hasSparklineData(series) ? (
+                      <div className={kpiClasses.sparkline}>
+                        <Sparkline data={series} color={kpi.color} />
+                      </div>
+                    ) : null}
                   </div>
-                  {(() => {
-                    // Only draw a trend line when the backend actually sent that
-                    // series — no decorative curve next to a real figure.
-                    const series = kpi.sparkKey ? stats?.sparklines?.[kpi.sparkKey] : undefined;
-                    return series?.length ? <Sparkline data={series} color={kpi.color} /> : null;
-                  })()}
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
+                  {kpi.key === "collected" && (
+                    <p className="text-[10px] leading-tight text-muted-foreground tabular-nums">
+                      Insurance premium collected: {insuranceCollectedLabel}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </KpiLink>
+          );
+        })}
       </div>
 
       {/* ----------------------------------------------------------------- */}
-      {/* Row 2: Expected vs Actual Daily Collection                        */}
-      {/* Hidden via SHOW_DAILY_COLLECTION_VS_ACTUAL — flip flag to restore. */}
+      {/* Row 2: one full-width card, a tab per table. At fit it takes the  */}
+      {/* height left and each table scrolls inside with every column shown. */}
       {/* ----------------------------------------------------------------- */}
-      {SHOW_DAILY_COLLECTION_VS_ACTUAL && (
-      <Card className="rounded-xl border border-border shadow-sm">
-        <div className="px-6 pt-5 pb-4">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-base font-semibold">Expected Daily Collection vs Actual Collection</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {formatDateFull(new Date())}
-              </p>
-            </div>
-            <Badge variant="outline" className={collectionRate >= 80 ? "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400" : collectionRate >= 50 ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400" : "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400"}>
-              <TrendingUp className="h-3 w-3 mr-1" />
-              {collectionRate}% collected
-            </Badge>
-          </div>
+      <ExpandableCard
+        title="Collections and Transactions"
+        description={formatDateFull(new Date())}
+        className="rounded-xl border border-border shadow-sm"
+        contentClassName="px-0"
+        actions={
+          <Badge variant="outline" className={rateBadgeClass}>
+            {BadgeArrow ? <BadgeArrow data-icon="inline-start" aria-hidden="true" /> : null}
+            {badge.text}
+          </Badge>
+        }
+      >
+        <Tabs defaultValue="dues" className={cn(FIT_CLASSES.section, "gap-3")}>
+          <TabsList className={DUES_TABS_LIST_CLASS}>
+            <TabsTrigger value="dues">Daily dues</TabsTrigger>
+            <TabsTrigger value="transactions">Recent transactions</TabsTrigger>
+          </TabsList>
 
-          {/* Pie chart */}
-          <div className="mb-5">
-            <div className="flex flex-col items-center justify-center">
-              <div className="relative" style={{ width: 200, height: 200 }}>
-                {mounted ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={pieData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={90}
-                        paddingAngle={3}
-                        dataKey="value"
-                        strokeWidth={0}
-                        isAnimationActive={false}
-                      >
-                        {pieData.map((entry) => (
-                          <Cell key={entry.name} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        formatter={(value) => `₱${Number(value).toLocaleString("en-PH")}`}
-                        contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid var(--border)" }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : null}
-                {/* Center label */}
-                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <p className="text-2xl font-bold">{collectionRate}%</p>
-                  <p className="text-[11px] text-muted-foreground">Collected</p>
-                </div>
-              </div>
-              {/* Legend */}
-              <div className="flex items-center gap-4 mt-2">
-                {pieData.map((entry) => (
-                  <div key={entry.name} className="flex items-center gap-1.5">
-                    <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
-                    <span className="text-[11px] text-muted-foreground">{entry.name}</span>
-                  </div>
-                ))}
+          <TabsContent value="dues" className={FIT_CLASSES.section}>
+            {/* The donut beside the table on a wide card, above it on a narrow one. */}
+            <div className="flex flex-col gap-4 @xl:flex-row fit:flex-1 fit:min-h-0">
+              <DuesDonut
+                rate={collectionRate}
+                rateLabel={collectionRateLabel}
+                slices={pieData}
+                rows={todayRows}
+                nothingDue={nothingDue}
+                mounted={mounted}
+              />
+              <div className={DUES_TABLE_PANEL_CLASS}>
+                <ScrollBox>
+                  <DuesTable items={dueItems} state={duesStatus} />
+                </ScrollBox>
               </div>
             </div>
+          </TabsContent>
 
-          </div>
-        </div>
+          <TabsContent value="transactions" className={FIT_CLASSES.section}>
+            <div className={TRANSACTIONS_TABLE_PANEL_CLASS}>
+              <ScrollBox>
+                <TransactionsTable rows={transactions} state={txStatus} />
+              </ScrollBox>
+            </div>
+          </TabsContent>
+        </Tabs>
+      </ExpandableCard>
+    </>
+  );
+}
 
-        {/* Breakdown table */}
-        <CardContent className="px-0 pb-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent bg-muted/50">
-                  <TableHead className="pl-6 text-muted-foreground">Borrower</TableHead>
-                  <TableHead className="text-muted-foreground">Loan ID</TableHead>
-                  <TableHead className="text-right text-muted-foreground">Amount Due</TableHead>
-                  <TableHead className="text-right text-muted-foreground">Paid</TableHead>
-                  <TableHead className="pr-6 text-right text-muted-foreground">Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {dueItems.length === 0 && (
-                  <TableEmptyRow
-                    colSpan={5}
-                    state={duesStatus}
-                    emptyText="Nothing due today."
-                  />
-                )}
-                {dueItems.map((item) => (
-                  <TableRow key={item.id} className="hover:bg-muted/40 transition-colors">
-                    <TableCell className="pl-6">
-                      <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-full bg-purple-500/15 flex items-center justify-center text-xs font-semibold text-purple-700 dark:text-purple-300 shrink-0">
-                          {getInitials(item.borrower)}
-                        </div>
-                        <span className="font-medium text-sm whitespace-nowrap">{item.borrower}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{item.loanId}</TableCell>
-                    <TableCell className="text-right text-sm font-medium">₱{item.amountDue.toLocaleString("en-PH")}</TableCell>
-                    <TableCell className="text-right text-sm font-medium">
-                      {item.amountPaid > 0 ? `₱${item.amountPaid.toLocaleString("en-PH")}` : "—"}
-                    </TableCell>
-                    <TableCell className="pr-6 text-right">
-                      <Badge
-                        variant="outline"
-                        className={
-                          item.status === "collected"
-                            ? "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/30"
-                            : item.status === "partial"
-                              ? "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/30"
-                              : "bg-muted text-muted-foreground border-border"
-                        }
-                      >
-                        {item.status === "collected" ? "Paid" : item.status === "partial" ? "Partial" : "Pending"}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-      )}
+export default function DashboardPage() {
+  const { can } = usePermission();
+  const router = useRouter();
+  const menu = useVisibleNav();
+  const { isHidden } = useMenuVisibility();
+  // Signing in lands everyone here. A user who can't see the dashboard (the
+  // seeded loan processor, manager and board roles), or anyone while Menu
+  // Visibility hides it, goes on to the first page the side menu offers them
+  // instead of "Access Restricted", which still shows when the menu offers
+  // them nothing (not found, when the dashboard is hidden).
+  const landing = dashboardLanding(menu, can, isHidden("dashboard"));
+  const goTo = landing.kind === "go" ? landing.href : null;
+  useEffect(() => {
+    if (goTo !== null) router.replace(goTo);
+  }, [goTo, router]);
 
-
-      {/* ----------------------------------------------------------------- */}
-      {/* Row 3: Recent Transactions Table                                   */}
-      {/* ----------------------------------------------------------------- */}
-      <Card className="rounded-xl border border-border shadow-sm">
-        <div className="px-6 pt-5 pb-3">
-          <h3 className="text-base font-semibold">Recent Transactions</h3>
-        </div>
-        <CardContent className="px-0 pb-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent bg-muted/50">
-                  <TableHead className="pl-6 text-muted-foreground">Name</TableHead>
-                  <TableHead className="text-muted-foreground">Description</TableHead>
-                  <TableHead className="text-right text-muted-foreground">Amount</TableHead>
-                  <TableHead className="pr-6 text-right text-muted-foreground">Date</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {transactions.length === 0 && (
-                  <TableEmptyRow
-                    colSpan={4}
-                    state={txStatus}
-                    emptyText="No transactions yet. Payments and loan releases will appear here."
-                  />
-                )}
-                {transactions.map((tx) => {
-                  const initials = getInitials(tx.name);
-                  return (
-                    <TableRow key={tx.id} className="hover:bg-muted/40 transition-colors">
-                      <TableCell className="pl-6">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-semibold text-white shrink-0 ${tx.color}`}
-                          >
-                            {initials}
-                          </div>
-                          <span className="font-medium text-sm whitespace-nowrap">{tx.name}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{tx.desc}</TableCell>
-                      <TableCell className="text-right text-sm font-medium">
-                        ₱{tx.amount.toLocaleString("en-PH")}
-                      </TableCell>
-                      <TableCell className="text-right text-sm text-muted-foreground pr-6">
-                        {tx.date}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+  if (landing.kind === "not_found") notFound();
+  if (landing.kind !== "dashboard") return null;
+  return (
+    <RouteGuard permission="dashboard:view" pageName="Dashboard">
+      <DashboardPageFill />
     </RouteGuard>
+  );
+}
+
+/** The page root: fills the main area at fit, and is the dashboard's size container. */
+function DashboardPageFill() {
+  return (
+    <PageFill className={cn(DASHBOARD_PAGE_CLASS, "gap-4")}>
+      <NoBranchBanner />
+      <DashboardContent />
+    </PageFill>
   );
 }

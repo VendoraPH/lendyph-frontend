@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { completeRows } from "@/lib/paginate";
 import { branchService, type ApiBranch } from "@/services/branch.service";
 
 /**
@@ -10,21 +11,27 @@ import { branchService, type ApiBranch } from "@/services/branch.service";
  *
  * Fails soft: an error leaves the list empty so callers fall back to
  * "All Branches" instead of blocking the page on a filter that is optional.
+ * An incomplete list counts as an error — a filter missing a branch cannot
+ * select it, and nothing on screen would say why.
  */
-export function useBranches() {
+export function useBranches(enabled = true) {
   const [branches, setBranches] = useState<ApiBranch[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Loads once per mount, so the initial state above already reads "loading,
+  // no error" — there is nothing to reset before the request goes out. A
+  // caller that doesn't need the list passes `enabled: false` and nothing is
+  // requested.
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
-    setLoading(true);
-    setError(null);
     branchService
-      .list()
-      .then((res) => {
+      .listAll()
+      .then(completeRows)
+      .then((rows) => {
         if (cancelled) return;
-        setBranches(Array.isArray(res) ? res.filter((b) => b.is_active) : []);
+        setBranches(rows.filter((b) => b.is_active));
       })
       .catch(() => {
         if (cancelled) return;
@@ -36,7 +43,7 @@ export function useBranches() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [enabled]);
 
-  return { branches, loading, error };
+  return { branches, loading: enabled && loading, error };
 }

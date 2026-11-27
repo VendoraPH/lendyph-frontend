@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useAuth } from "@/hooks";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useAuth, usePermission } from "@/hooks";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -24,124 +24,136 @@ import {
   LogOut,
   User,
   Menu,
-  Bell,
   ChevronRight,
   Settings,
   FilePlus,
   CreditCard,
 } from "lucide-react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { authService } from "@/services";
 import { tokenManager } from "@/lib/axios-client";
+import { signOut } from "@/lib/sign-out";
+import {
+  detailPageTitle,
+  humanizeSegment,
+  menuTitles,
+  nestedPageTitle,
+  nestedSegment,
+  rootPageTitle,
+  subPageTitle,
+} from "@/lib/page-titles";
 import { SIDEBAR_NAV } from "@/constants";
+import { useMenuVisibility, useVisibleNav } from "@/hooks/use-menu-visibility";
+import { breadcrumbParentShown, breadcrumbShown, paletteLinks, visibleByPath } from "@/lib/menu-visibility";
+import { OWN_PROFILE_HREF, accountSettingsHref } from "@/lib/account-menu";
+import type { Permission } from "@/types";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { NotificationBell } from "./notification-bell";
+import { accountMenuLabel } from "./account-menu-label";
+import { WorkingBranchSelector } from "./working-branch-selector";
+import { forgetUserWorkingBranch } from "@/hooks/use-working-branch";
 
 interface HeaderProps {
   onMenuClick: () => void;
 }
 
+/** The menu's title for each route the sidebar lists. */
+const menuTitle = menuTitles(SIDEBAR_NAV);
+
 /** Map first path segment to its nav title */
 function getPageTitle(segment: string): string {
-  for (const item of SIDEBAR_NAV) {
-    if (item.href === `/${segment}`) {
-      return item.title;
-    }
-  }
-  return segment.charAt(0).toUpperCase() + segment.slice(1).replace(/-/g, " ");
+  return menuTitle(`/${segment}`) ?? humanizeSegment(segment);
 }
 
-/** Map sub-segment to readable label */
-function getSubLabel(segment: string): string {
-  const labels: Record<string, string> = {
-    new: "New Application",
-    products: "Loan Products",
-    amortization: "Amortization Calculator",
-    restructure: "Restructure",
-    history: "History",
-    profile: "Profile",
-    "loan-products": "Loan Products",
-  };
-  return (
-    labels[segment] ||
-    segment.charAt(0).toUpperCase() + segment.slice(1).replace(/-/g, " ")
-  );
-}
-
-function Breadcrumb() {
+/** `editParam`: the `?edit=` value, so the loan form's edit page reads its own title. */
+function Breadcrumb({ editParam }: { editParam: string | null }) {
   const pathname = usePathname();
+  const { isPathHidden } = useMenuVisibility();
   const segments = pathname.split("/").filter(Boolean);
 
-  if (segments.length === 0) return null;
+  // A page of a module Menu Visibility hides is never named.
+  if (segments.length === 0 || !breadcrumbShown(pathname, isPathHidden)) return null;
 
   const firstSegment = segments[0];
   const pageTitle = getPageTitle(firstSegment);
 
   if (segments.length === 1) {
+    const rootLabel = rootPageTitle(firstSegment);
+    if (rootLabel === undefined) {
+      return <span className="truncate text-sm font-medium text-foreground">{pageTitle}</span>;
+    }
     return (
-      <span className="text-sm font-medium text-foreground">{pageTitle}</span>
+      <div className="flex min-w-0 items-center gap-1.5 text-sm">
+        <span className="truncate text-muted-foreground">{pageTitle}</span>
+        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+        <span className="truncate font-medium text-foreground">{rootLabel}</span>
+      </div>
     );
   }
 
   const subSegment = segments[1];
   const isId = /^\d+$/.test(subSegment);
-  const subLabel = isId ? "Detail" : getSubLabel(subSegment);
+  const subLabel = isId
+    ? detailPageTitle(firstSegment, segments[2])
+    : subPageTitle(firstSegment, subSegment, { edit: editParam, menuTitle });
+  // A page a level further down (`/accounting/journals/new`) adds its own part.
+  const nestedLabel =
+    !isId && segments.length > 2
+      ? nestedPageTitle(firstSegment, subSegment, nestedSegment(segments), menuTitle)
+      : null;
 
+  // On a narrow screen a three-part trail keeps only its last part, and any
+  // part truncates, so the header never pushes the account menu off-screen.
+  const narrowHidden = nestedLabel === null ? "" : "max-sm:hidden";
+  // A section whose own page Menu Visibility hides isn't named (Dashboard
+  // above Executive Dashboard while Dashboard is hidden).
+  const parentShown = breadcrumbParentShown(pathname, isPathHidden);
   return (
-    <div className="flex items-center gap-1.5 text-sm">
-      <span className="text-muted-foreground">{pageTitle}</span>
-      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/60" />
-      <span className="font-medium text-foreground">{subLabel}</span>
+    <div className="flex min-w-0 items-center gap-1.5 text-sm">
+      {parentShown && (
+        <>
+          <span className={`truncate text-muted-foreground ${narrowHidden}`}>{pageTitle}</span>
+          <ChevronRight className={`h-3.5 w-3.5 shrink-0 text-muted-foreground/60 ${narrowHidden}`} />
+        </>
+      )}
+      {nestedLabel === null ? (
+        <span className="truncate font-medium text-foreground">{subLabel}</span>
+      ) : (
+        <>
+          <span className="truncate text-muted-foreground max-sm:hidden">{subLabel}</span>
+          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60 max-sm:hidden" />
+          <span className="truncate font-medium text-foreground">{nestedLabel}</span>
+        </>
+      )}
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Notifications
-// ---------------------------------------------------------------------------
-
-interface Notification {
-  id: number;
-  title: string;
-  description: string;
-  time: string;
-  read: boolean;
-  icon: React.ElementType;
-  iconColor: string;
-  iconBg: string;
+/** The breadcrumb with the query string, which needs a Suspense boundary. */
+function BreadcrumbWithQuery() {
+  return <Breadcrumb editParam={useSearchParams().get("edit")} />;
 }
 
-// There is no notifications endpoint yet (neither routes/api.php nor
-// api-endpoints.ts defines one), so there is nothing real to show. This stays
-// empty — the bell renders its "No notifications" state and no unread badge —
-// until a backend feed exists to populate it. Do not reintroduce sample rows:
-// they read as real activity on a client's live dashboard.
-const INITIAL_NOTIFICATIONS: Notification[] = [];
-
-const QUICK_ACTIONS = [
-  { title: "New Loan", href: "/loans/new", icon: FilePlus },
-  { title: "Record Payment", href: "/payments", icon: CreditCard },
+// Each carries the permission its page needs to do the action, so the palette
+// offers only what the user can finish, as the sidebar does.
+const QUICK_ACTIONS: { title: string; href: string; icon: typeof FilePlus; permission: Permission }[] = [
+  { title: "New Loan", href: "/loans/new", icon: FilePlus, permission: "loans:create" },
+  { title: "Record Payment", href: "/payments", icon: CreditCard, permission: "payments:create" },
 ];
 
 export function Header({ onMenuClick }: HeaderProps) {
   const { user, clearAuth } = useAuth();
+  const { can } = usePermission();
+  // The menu without the modules Menu Visibility hides: the palette and the
+  // account menu's Settings follow it, as the side menu does.
+  const menu = useVisibleNav();
+  const { isPathHidden } = useMenuVisibility();
+  // The account menu's Settings: the first Settings page this user can open.
+  const settingsHref = accountSettingsHref(menu, can);
   const router = useRouter();
   const [commandOpen, setCommandOpen] = useState(false);
-  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
-
-  const unreadCount = notifications.filter((n) => !n.read).length;
-
-  const markAsRead = (id: number) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    );
-  };
-
-  const markAllAsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-  };
 
   // Cmd+K / Ctrl+K shortcut
   useEffect(() => {
@@ -164,16 +176,15 @@ export function Header({ onMenuClick }: HeaderProps) {
   );
 
   const handleLogout = async () => {
-    // Backend logout can fail (token already revoked, session expired, 500)
-    // but client-side logout must always succeed. Swallow the API error and
-    // proceed with local cleanup + redirect.
-    try {
-      await authService.logout();
-    } catch {
-      /* ignore — local cleanup runs unconditionally below */
-    }
-    tokenManager.clearTokens();
-    localStorage.removeItem("lendy_remember_me");
+    // Tokens are cleared before Log out goes out (it carries its own), so the
+    // pollers stop at once and no "Session Expired" dialog shows. Log out is
+    // best effort; local cleanup always runs.
+    await signOut({
+      getAccessToken: tokenManager.getAccessToken,
+      clearTokens: tokenManager.clearTokens,
+      forgetWorkingBranch: () => forgetUserWorkingBranch(user?.id),
+      logout: authService.logout,
+    });
     clearAuth();
     toast.success("Logged out");
     router.replace("/login");
@@ -188,9 +199,9 @@ export function Header({ onMenuClick }: HeaderProps) {
 
   return (
     <>
-      <header className="flex h-14 items-center justify-between border-b border-border px-4 sm:px-6">
-        {/* Left side: hamburger (mobile) + breadcrumb */}
-        <div className="flex items-center gap-3">
+      <header className="flex h-14 items-center justify-between gap-3 border-b border-border px-4 sm:px-6">
+        {/* Left side: hamburger (mobile) + breadcrumb; it gives way first */}
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           <Button
             variant="ghost"
             size="icon-sm"
@@ -200,89 +211,28 @@ export function Header({ onMenuClick }: HeaderProps) {
             <Menu className="h-5 w-5" />
             <span className="sr-only">Open menu</span>
           </Button>
-          <Breadcrumb />
+          <Suspense fallback={<Breadcrumb editParam={null} />}>
+            <BreadcrumbWithQuery />
+          </Suspense>
         </div>
 
-        {/* Right side: notifications + avatar */}
-        <div className="flex items-center gap-2">
+        {/* Right side: notifications + avatar; never shrinks off-screen */}
+        <div className="flex shrink-0 items-center gap-2">
+          {/* Working branch (multi-branch flag only) */}
+          <WorkingBranchSelector />
+
           {/* Theme toggle */}
           <ThemeToggle />
 
           {/* Notification bell with popover */}
-          <Popover>
-            <PopoverTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="relative rounded-full text-muted-foreground hover:bg-muted/50"
-                />
-              }
-            >
-              <Bell className="h-4 w-4" />
-              {unreadCount > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">
-                  {unreadCount}
-                </span>
-              )}
-              <span className="sr-only">Notifications</span>
-            </PopoverTrigger>
-            <PopoverContent align="end" sideOffset={8} className="w-80 p-0">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-                <h4 className="text-sm font-semibold">Notifications</h4>
-                {unreadCount > 0 && (
-                  <button
-                    onClick={markAllAsRead}
-                    className="text-xs text-brand-orange hover:text-brand-orange-dark font-medium transition-colors"
-                  >
-                    Mark all as read
-                  </button>
-                )}
-              </div>
-              <div className="max-h-80 overflow-y-auto">
-                {notifications.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                    <Bell className="h-8 w-8 mb-2 opacity-40" />
-                    <p className="text-sm">No notifications</p>
-                  </div>
-                ) : (
-                  notifications.map((n) => (
-                    <button
-                      key={n.id}
-                      onClick={() => markAsRead(n.id)}
-                      className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 ${
-                        !n.read ? "bg-brand-orange/5" : ""
-                      }`}
-                    >
-                      <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${n.iconBg}`}>
-                        <n.icon className={`h-4 w-4 ${n.iconColor}`} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className={`text-sm truncate ${!n.read ? "font-semibold" : "font-medium"}`}>
-                            {n.title}
-                          </p>
-                          {!n.read && (
-                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-orange" />
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground truncate mt-0.5">
-                          {n.description}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground/70 mt-1">
-                          {n.time}
-                        </p>
-                      </div>
-                    </button>
-                  ))
-                )}
-              </div>
-            </PopoverContent>
-          </Popover>
+          <NotificationBell />
 
           {/* User avatar only */}
           <DropdownMenu>
-            <DropdownMenuTrigger className="rounded-full outline-none">
+            <DropdownMenuTrigger
+              aria-label={accountMenuLabel(user?.full_name)}
+              className="rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+            >
               <Avatar className="h-8 w-8">
                 <AvatarFallback className="bg-brand-orange text-brand-orange-foreground text-xs">
                   {initials}
@@ -301,18 +251,16 @@ export function Header({ onMenuClick }: HeaderProps) {
                 </DropdownMenuLabel>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => router.push("/settings/profile")}
-              >
+              <DropdownMenuItem onClick={() => router.push(OWN_PROFILE_HREF)}>
                 <User className="mr-2 h-4 w-4" />
                 Profile
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => router.push("/settings/loan-products")}
-              >
-                <Settings className="mr-2 h-4 w-4" />
-                Settings
-              </DropdownMenuItem>
+              {settingsHref !== null && (
+                <DropdownMenuItem onClick={() => router.push(settingsHref)}>
+                  <Settings className="mr-2 h-4 w-4" />
+                  Settings
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleLogout}>
                 <LogOut className="mr-2 h-4 w-4" />
@@ -329,10 +277,10 @@ export function Header({ onMenuClick }: HeaderProps) {
         <CommandList>
           <CommandEmpty>No results found.</CommandEmpty>
           <CommandGroup heading="Navigation">
-            {SIDEBAR_NAV.map((item) => (
+            {paletteLinks(menu, can).map(({ item, href }) => (
               <CommandItem
                 key={item.href}
-                onSelect={() => handleSelect(item.href)}
+                onSelect={() => handleSelect(href)}
               >
                 <item.icon className="mr-2 h-4 w-4" />
                 {item.title}
@@ -340,7 +288,7 @@ export function Header({ onMenuClick }: HeaderProps) {
             ))}
           </CommandGroup>
           <CommandGroup heading="Quick Actions">
-            {QUICK_ACTIONS.map((action) => (
+            {visibleByPath(QUICK_ACTIONS, isPathHidden).filter((action) => can(action.permission)).map((action) => (
               <CommandItem
                 key={action.href}
                 onSelect={() => handleSelect(action.href)}

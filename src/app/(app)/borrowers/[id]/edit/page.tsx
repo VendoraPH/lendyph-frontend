@@ -7,7 +7,6 @@ import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Camera,
-  FileText,
   ImageIcon,
   Plus,
   X,
@@ -15,7 +14,13 @@ import {
   Crop as CropIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { idFileNameProblem } from "@/lib/file-validation";
 import { notifyError, notifyValidation } from "@/lib/notify";
+import { sentencesMessage } from "@/app/(app)/borrowers/_components/utils";
+import { isBlankValidId, validateValidIds } from "@/lib/valid-id";
+import { uploadFailureMessage, uploadMemberFiles } from "../_lib/member-uploads";
+import { useMemberValidIds } from "../_hooks/use-member-valid-ids";
+import { MemberValidIdsOnFile } from "../_components/member-valid-ids-on-file";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -35,15 +40,36 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Spinner } from "@/components/ui/spinner";
 
 import { api } from "@/lib/api-client";
 import { borrowerService } from "@/services/borrower.service";
 import { branchService, type ApiBranch } from "@/services/branch.service";
+import { completeRows } from "@/lib/paginate";
 import { IdCropDialog } from "@/components/borrower/id-crop-dialog";
 import { PhotoCropDialog } from "@/components/borrower/photo-crop-dialog";
+import { ValidIdFilePicker } from "@/components/borrower/valid-id-file-picker";
+import { removeValidIdRowLabel, validIdRowName } from "@/lib/valid-id-names";
 import { CIVIL_STATUS_OPTIONS, SUFFIX_OPTIONS, VALID_ID_OPTIONS } from "@/constants";
 import type { Borrower } from "@/types";
+import { PageFill, PageLoader } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { FormStep, FormStepper, type FormStepperHandle, type StepErrors } from "@/components/common/form-stepper";
+import { FORM_STEP_GRID } from "@/lib/form-stepper";
+import { todayISO } from "@/lib/format";
+import {
+  editMemberPayload,
+  memberFieldErrors,
+  memberFormSteps,
+  memberStepMessage,
+  requiredMemberFieldErrors,
+  validateMemberStep,
+  type MemberFormData,
+} from "../../_lib/member-form-steps";
+import {
+  EDIT_BRANCH_FILL_CAPTION,
+  EDIT_BRANCH_LOCKED_CAPTION,
+  editBranchLocked,
+} from "../../_lib/member-transfer";
 
 interface ValidIdEntry {
   type: string;
@@ -55,29 +81,7 @@ interface ValidIdEntry {
   back_preview: string | null;
 }
 
-interface BorrowerFormData {
-  first_name: string;
-  middle_name: string;
-  last_name: string;
-  suffix: string;
-  birthdate: string;
-  gender: string;
-  civil_status: string;
-  contact_number: string;
-  email: string;
-  address: string;
-  barangay: string;
-  city: string;
-  province: string;
-  employer_or_business: string;
-  monthly_income: string;
-  branch_id: string;
-  spouse_first_name: string;
-  spouse_middle_name: string;
-  spouse_last_name: string;
-  spouse_contact_number: string;
-  spouse_occupation: string;
-}
+type BorrowerFormData = MemberFormData;
 
 function emptyForm(): BorrowerFormData {
   return {
@@ -95,6 +99,7 @@ function emptyForm(): BorrowerFormData {
     city: "",
     province: "",
     employer_or_business: "",
+    date_hired: "",
     monthly_income: "",
     branch_id: "",
     spouse_first_name: "",
@@ -126,6 +131,7 @@ function borrowerToFormData(b: Borrower): BorrowerFormData {
     city: pick("city"),
     province: pick("province"),
     employer_or_business: b.employer_or_business ?? "",
+    date_hired: b.date_hired ?? "",
     monthly_income:
       b.monthly_income != null ? String(b.monthly_income) : "",
     branch_id: b.branch?.id != null ? String(b.branch.id) : "",
@@ -137,7 +143,7 @@ function borrowerToFormData(b: Borrower): BorrowerFormData {
   };
 }
 
-export default function EditBorrowerPage() {
+function EditBorrowerContent() {
   const router = useRouter();
   const params = useParams();
   const borrowerId = Number(params.id);
@@ -146,6 +152,8 @@ export default function EditBorrowerPage() {
   const [form, setForm] = useState<BorrowerFormData>(emptyForm());
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const stepperRef = useRef<FormStepperHandle>(null);
+  const steps = memberFormSteps({ mode: "edit", married: form.civil_status === "married" });
 
   // Branches for selector
   const [branches, setBranches] = useState<ApiBranch[]>([]);
@@ -168,6 +176,7 @@ export default function EditBorrowerPage() {
 
   // Valid IDs
   const [validIds, setValidIds] = useState<ValidIdEntry[]>([]);
+  const idsOnFile = useMemberValidIds(borrowerId);
   const [cropTarget, setCropTarget] = useState<{
     index: number;
     side: "front" | "back";
@@ -182,16 +191,18 @@ export default function EditBorrowerPage() {
       try {
         const [b, branchRes] = await Promise.all([
           borrowerService.detail(borrowerId),
-          branchService.list().catch(() => [] as ApiBranch[]),
+          // An incomplete branch list fails soft like any other failure: the
+          // picker then offers only the member's current branch.
+          branchService
+            .listAll()
+            .then(completeRows)
+            .catch(() => [] as ApiBranch[]),
         ]);
         if (cancelled) return;
         setBorrower(b);
         setForm(borrowerToFormData(b));
         if (b.photo_url) setPhotoPreview(b.photo_url);
-        const list = Array.isArray(branchRes)
-          ? branchRes
-          : ((branchRes as unknown as { data?: ApiBranch[] }).data ?? []);
-        setBranches(list.filter((br) => br.is_active));
+        setBranches(branchRes.filter((br) => br.is_active));
       } catch {
         if (!cancelled) toast.error("We couldn't load the member details. Please try again.");
       } finally {
@@ -335,6 +346,13 @@ export default function EditBorrowerPage() {
   ) {
     const file = e.target.files?.[0];
     if (!file) return;
+    const problem = idFileNameProblem(file.name);
+    if (problem) {
+      // Cleared, so picking the same file again still reports it.
+      e.target.value = "";
+      toast.error(problem);
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       setValidIds((prev) =>
@@ -358,6 +376,13 @@ export default function EditBorrowerPage() {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
+  // A step's missing fields read as before: one "Please complete: …" toast,
+  // and an incomplete ID or a refused Date Hired in sentences ("Enter the ID
+  // number for ID 2.").
+  function notifyStepErrors(errors: StepErrors) {
+    toast.error(memberStepMessage(errors));
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
@@ -365,80 +390,57 @@ export default function EditBorrowerPage() {
     // configuration problem, not something the operator can fix on this form.
     if (!form.branch_id) {
       toast.error("Your account is not assigned to a branch. Contact an administrator.");
+      stepperRef.current?.showErrors({ branch_id: "Assigned Branch" });
       return;
     }
 
     // Client-side validation — collect human labels for every empty required
     // field and surface them in a single consolidated toast.
-    const missing: string[] = [];
-    if (!form.first_name.trim()) missing.push("First name");
-    if (!form.last_name.trim()) missing.push("Last name");
     // middle_name is deliberately NOT required. The public registration form
     // lets an applicant register without one, so requiring it here made exactly
     // those members impossible to save again — an admin could open the profile
     // but never submit it. The backend has the column nullable.
-    if (!form.birthdate) missing.push("Date of birth");
-    if (!form.gender) missing.push("Gender");
-    if (!form.civil_status) missing.push("Civil status");
-    if (!form.contact_number.trim()) missing.push("Contact number");
-    if (!form.address.trim()) missing.push("Street address");
-    if (!form.city.trim()) missing.push("City / Municipality");
-    if (!form.province.trim()) missing.push("Province");
+    const missingFields = requiredMemberFieldErrors(form);
+    const missing = Object.values(missingFields);
 
     if (missing.length > 0) {
       notifyValidation(missing);
+      stepperRef.current?.showErrors(missingFields);
+      return;
+    }
+
+    // Date Hired, when given, by the server's rules and in its words: written
+    // year-month-day, after 1900, not after today and not before the birthdate.
+    const fieldProblems = memberFieldErrors(form, todayISO());
+    if (Object.keys(fieldProblems).length > 0) {
+      toast.error(sentencesMessage(Object.values(fieldProblems)));
+      stepperRef.current?.showErrors(fieldProblems);
+      return;
+    }
+
+    // An ID that was started must be complete: the server refuses one with no
+    // number, and an incomplete row must not be dropped without a word.
+    const idCheck = validateValidIds(validIds, { requireAtLeastOne: false });
+    if (!idCheck.ok) {
+      toast.error(sentencesMessage(idCheck.errors.map((e) => e.message)));
       return;
     }
 
     setSubmitting(true);
     try {
-      const payload: Record<string, unknown> = {
-        first_name: form.first_name.trim(),
-        last_name: form.last_name.trim(),
-        middle_name: form.middle_name.trim() || null,
-        suffix: form.suffix && form.suffix !== "none" ? form.suffix : null,
-        birthdate: form.birthdate || null,
-        gender: form.gender || null,
-        civil_status: form.civil_status || null,
-        contact_number: form.contact_number.trim() || null,
-        email: form.email.trim() || null,
-        address: form.address.trim() || null,
-        barangay: form.barangay.trim() || null,
-        city: form.city.trim() || null,
-        province: form.province.trim() || null,
-        employer_or_business: form.employer_or_business.trim() || null,
-        monthly_income: form.monthly_income ? Number(form.monthly_income) : null,
-        branch_id: Number(form.branch_id),
-      };
-
-      if (form.civil_status === "married") {
-        payload.spouse_first_name = form.spouse_first_name.trim() || null;
-        payload.spouse_middle_name = form.spouse_middle_name.trim() || null;
-        payload.spouse_last_name = form.spouse_last_name.trim() || null;
-        payload.spouse_contact_number = form.spouse_contact_number.trim() || null;
-        payload.spouse_occupation = form.spouse_occupation.trim() || null;
-      }
+      const payload = editMemberPayload(form);
 
       await borrowerService.update(borrowerId, payload as Partial<Borrower>);
 
-      if (profilePhoto) {
-        try {
+      const uploads = await uploadMemberFiles({
+        photo: profilePhoto,
+        ids: validIds.filter((v) => !isBlankValidId(v)),
+        uploadPhoto: (photo) => {
           const photoData = new FormData();
-          photoData.append("photo", profilePhoto);
-          await borrowerService.uploadPhoto(borrowerId, photoData);
-        } catch {
-          toast.error("Member updated but photo upload failed");
-        }
-      }
-
-      const validIdsToUpload = validIds.filter(
-        (v) =>
-          v.type &&
-          (v.front_file || v.back_file) &&
-          (v.type !== "others" || v.custom_type_name.trim())
-      );
-      for (const entry of validIdsToUpload) {
-        try {
+          photoData.append("photo", photo);
+          return borrowerService.uploadPhoto(borrowerId, photoData);
+        },
+        uploadId: (entry) => {
           const idData = new FormData();
           idData.append("type", entry.type);
           if (entry.type === "others" && entry.custom_type_name.trim()) {
@@ -447,15 +449,38 @@ export default function EditBorrowerPage() {
           if (entry.id_number.trim()) idData.append("id_number", entry.id_number.trim());
           if (entry.front_file) idData.append("front_file", entry.front_file);
           if (entry.back_file) idData.append("back_file", entry.back_file);
-          await api.upload(`/borrowers/${borrowerId}/valid-ids`, idData);
-        } catch {
-          toast.error(`We couldn't upload the ${entry.type} ID. Please try again.`);
-        }
+          return api.upload(`/borrowers/${borrowerId}/valid-ids`, idData);
+        },
+      });
+
+      // The details are saved either way. A saved photo or ID is dropped from
+      // the form, so saving again sends only what failed, never a duplicate.
+      // So is an ID that got no reply (it may be stored): the user checks the
+      // IDs on file, read again below, before adding it again.
+      if (uploads.photoError !== null) {
+        const { title, description } = uploadFailureMessage("photo", uploads.photoError);
+        toast.error(title, { description });
+      } else {
+        setProfilePhoto(null);
+      }
+      for (const failed of uploads.failedIds) {
+        const { title, description } = uploadFailureMessage("ID", failed.error);
+        toast.error(title, { description });
+      }
+      setValidIds(uploads.failedIds.filter((failed) => failed.refused).map((failed) => failed.entry));
+
+      // Stay on the page so the user can fix the file and save again.
+      if (uploads.anyFailed) {
+        idsOnFile.reload();
+        return;
       }
 
       toast.success("Member updated");
       router.push(`/borrowers/${borrowerId}`);
     } catch (err: unknown) {
+      // Open the step holding the first field the server refused.
+      const response = (err as { response?: { status?: number; data?: { errors?: StepErrors } } })?.response;
+      if (response?.status === 422 && response.data?.errors) stepperRef.current?.showErrors(response.data.errors);
       notifyError(err, "We couldn't save your changes. Please check the details and try again.");
     } finally {
       setSubmitting(false);
@@ -463,762 +488,775 @@ export default function EditBorrowerPage() {
   }
 
   if (loading) {
-    return (
-      <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
-        <Spinner className="size-6 text-muted-foreground" />
-      </div>
-    );
+    return <PageLoader />;
   }
 
   if (!borrower) {
     return (
-      <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
+      <div className={FIT_CLASSES.loader}>
         <p className="text-muted-foreground">Member not found.</p>
       </div>
     );
   }
 
+  // The branch is filled in here only while it's missing.
+  const branchLocked = editBranchLocked(borrower);
+
   return (
-    <RouteGuard permission="borrowers:update" pageName="Edit Member">
-      <div className="space-y-6 max-w-3xl mx-auto">
-        {/* Header */}
-        <div>
-          <Link
-            href={`/borrowers/${borrowerId}`}
-            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Member
-          </Link>
-          <h1 className="text-2xl font-bold tracking-tight">Edit Member</h1>
-          <p className="text-sm text-muted-foreground">
-            Update profile for {borrower.full_name} —{" "}
-            <span className="font-mono text-brand-orange">{borrower.borrower_code}</span>
-          </p>
-        </div>
+    <PageFill>
+      {/* Header */}
+      <div className="shrink-0">
+        <Link
+          href={`/borrowers/${borrowerId}`}
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Member
+        </Link>
+        <h1 className="text-2xl font-bold tracking-tight">Edit Member</h1>
+        <p className="text-sm text-muted-foreground">
+          Update profile for {borrower.full_name} —{" "}
+          <span className="font-mono text-brand-orange">{borrower.borrower_code}</span>
+        </p>
+      </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Profile Photo */}
-          <Card>
-            <CardContent className="pt-6 space-y-4">
-              <h2 className="text-base font-semibold">Profile Photo</h2>
-              <div className="flex items-center gap-6">
-                <div className="relative">
-                  {photoPreview ? (
-                    <div className="relative h-24 w-24 rounded-full overflow-hidden border-2 border-border">
-                      <img
-                        src={photoPreview}
-                        alt="Profile preview"
-                        className="h-full w-full object-cover"
-                      />
-                      <button
-                        type="button"
-                        onClick={removePhoto}
-                        className="absolute top-0 right-0 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center hover:bg-destructive/90"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="h-24 w-24 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center">
-                      <Camera className="h-6 w-6 text-muted-foreground/50" />
-                    </div>
-                  )}
-                  <input
-                    ref={photoInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handlePhotoChange}
-                    className="hidden"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">
-                    Upload a profile photo of the member.
-                  </p>
-                  <p className="text-xs text-muted-foreground">JPG, PNG up to 5MB</p>
-                  <div className="flex items-center gap-2 pt-1">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5"
-                      onClick={openCamera}
-                    >
-                      <Camera className="h-3.5 w-3.5" />
-                      Camera
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5"
-                      onClick={() => photoInputRef.current?.click()}
-                    >
-                      <ImageIcon className="h-3.5 w-3.5" />
-                      Gallery
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Camera Capture Dialog */}
-          <Dialog open={cameraOpen} onOpenChange={handleCameraDialogChange}>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Take Photo</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-black">
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="h-full w-full object-cover"
-                  />
-                </div>
-                <canvas ref={canvasRef} className="hidden" />
-                <div className="flex items-center justify-center gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-10 w-10 rounded-full"
-                    onClick={toggleFacingMode}
-                    title="Switch camera"
-                  >
-                    <SwitchCamera className="h-4 w-4" />
-                  </Button>
-                  <button
-                    type="button"
-                    onClick={capturePhoto}
-                    className="h-14 w-14 rounded-full border-4 border-brand-orange bg-white hover:bg-brand-orange/10 transition-colors flex items-center justify-center"
-                    title="Capture"
-                  >
-                    <div className="h-10 w-10 rounded-full bg-brand-orange" />
-                  </button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleCameraDialogChange(false)}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
-
-          {/* Branch Assignment */}
-          <Card>
-            <CardContent className="pt-6 space-y-4">
-              <h2 className="text-base font-semibold">Branch Assignment</h2>
-              <p className="text-sm text-muted-foreground">
-                Currently assigned to:{" "}
-                <span className="font-medium text-foreground">
-                  {borrower.branch?.name ?? "Not assigned"}
-                  {borrower.branch?.code ? ` (${borrower.branch.code})` : ""}
-                </span>
-              </p>
-              <div className="space-y-2">
-                <Label>
-                  Assigned Branch <span className="text-destructive">*</span>
-                </Label>
-                <Select
-                  value={form.branch_id || null}
-                  onValueChange={(v) => update("branch_id", v ?? "")}
-                >
-                  <SelectTrigger className="w-full sm:w-2/3">
-                    <SelectValue placeholder="Select branch">
-                      {(value: string | null) => {
-                        if (!value) return "Select branch";
-                        const match = branches.find((b) => String(b.id) === value);
-                        if (match) return `${match.name}${match.code ? ` (${match.code})` : ""}`;
-                        return borrower?.branch?.name ?? value;
-                      }}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {branches.length === 0 && borrower?.branch ? (
-                      <SelectItem value={String(borrower.branch.id)}>
-                        {borrower.branch.name}
-                      </SelectItem>
-                    ) : (
-                      branches.map((b) => (
-                        <SelectItem key={b.id} value={String(b.id)}>
-                          {b.name}
-                          {b.code ? ` (${b.code})` : ""}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Change the branch this member is assigned to.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Personal Information */}
-          <Card>
-            <CardContent className="pt-6 space-y-4">
-              <h2 className="text-base font-semibold">Personal Information</h2>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="first_name">
-                    First Name <span className="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    id="first_name"
-                    placeholder="Juan"
-                    value={form.first_name}
-                    onChange={(e) => update("first_name", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="last_name">
-                    Last Name <span className="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    id="last_name"
-                    placeholder="Santos"
-                    value={form.last_name}
-                    onChange={(e) => update("last_name", e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="middle_name">Middle Name</Label>
-                  <Input
-                    id="middle_name"
-                    placeholder="Dela Cruz"
-                    value={form.middle_name}
-                    onChange={(e) => update("middle_name", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Suffix</Label>
-                  <Select
-                    value={form.suffix || null}
-                    onValueChange={(v) => update("suffix", v ?? "")}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="None">
-                        {(value: string | null) =>
-                          value
-                            ? (SUFFIX_OPTIONS.find((o) => (o.value || "none") === value)?.label ?? value)
-                            : "None"
-                        }
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {SUFFIX_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.value || "none"} value={opt.value || "none"}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="birthdate">
-                    Birthdate <span className="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    id="birthdate"
-                    type="date"
-                    value={form.birthdate}
-                    onChange={(e) => update("birthdate", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>
-                    Gender <span className="text-destructive">*</span>
-                  </Label>
-                  <RadioGroup
-                    className="flex gap-4 pt-2"
-                    value={form.gender || null}
-                    onValueChange={(v) => update("gender", v ?? "")}
-                  >
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <RadioGroupItem value="male" />
-                      <span className="text-sm">Male</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <RadioGroupItem value="female" />
-                      <span className="text-sm">Female</span>
-                    </label>
-                  </RadioGroup>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>
-                  Civil Status <span className="text-destructive">*</span>
-                </Label>
-                <Select
-                  value={form.civil_status || null}
-                  onValueChange={(v) => update("civil_status", v ?? "")}
-                >
-                  <SelectTrigger className="w-full sm:w-1/2">
-                    <SelectValue placeholder="Select civil status">
-                      {(value: string | null) =>
-                        value
-                          ? (CIVIL_STATUS_OPTIONS.find((o) => o.value === value)?.label ?? value)
-                          : "Select civil status"
-                      }
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CIVIL_STATUS_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Spouse Information (visible only when married) */}
-          {form.civil_status === "married" && (
-            <Card>
-              <CardContent className="pt-6 space-y-4">
-                <h2 className="text-base font-semibold">Spouse Information</h2>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="spouse_first_name">First Name</Label>
-                    <Input
-                      id="spouse_first_name"
-                      placeholder="First name"
-                      value={form.spouse_first_name ?? ""}
-                      onChange={(e) => update("spouse_first_name", e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="spouse_middle_name">Middle Name</Label>
-                    <Input
-                      id="spouse_middle_name"
-                      placeholder="Middle name"
-                      value={form.spouse_middle_name ?? ""}
-                      onChange={(e) => update("spouse_middle_name", e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="spouse_last_name">Last Name</Label>
-                    <Input
-                      id="spouse_last_name"
-                      placeholder="Last name"
-                      value={form.spouse_last_name ?? ""}
-                      onChange={(e) => update("spouse_last_name", e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="spouse_contact_number">Contact Number</Label>
-                    <Input
-                      id="spouse_contact_number"
-                      type="tel"
-                      placeholder="09XXXXXXXXX"
-                      value={form.spouse_contact_number ?? ""}
-                      onChange={(e) => update("spouse_contact_number", e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="spouse_occupation">Occupation</Label>
-                    <Input
-                      id="spouse_occupation"
-                      placeholder="Occupation or employer"
-                      value={form.spouse_occupation ?? ""}
-                      onChange={(e) => update("spouse_occupation", e.target.value)}
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Contact Information */}
-          <Card>
-            <CardContent className="pt-6 space-y-4">
-              <h2 className="text-base font-semibold">Contact Information</h2>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="contact_number">
-                    Contact Number <span className="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    id="contact_number"
-                    type="tel"
-                    placeholder="09XXXXXXXXX"
-                    value={form.contact_number}
-                    onChange={(e) => update("contact_number", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="name@example.com"
-                    value={form.email}
-                    onChange={(e) => update("email", e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="address">
-                  Street Address <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="address"
-                  placeholder="House/Lot/Block number, Street name"
-                  value={form.address}
-                  onChange={(e) => update("address", e.target.value)}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="barangay">Barangay</Label>
-                  <Input
-                    id="barangay"
-                    placeholder="Barangay"
-                    value={form.barangay}
-                    onChange={(e) => update("barangay", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="city">
-                    City / Municipality <span className="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    id="city"
-                    placeholder="City name"
-                    value={form.city}
-                    onChange={(e) => update("city", e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="province">
-                  Province <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="province"
-                  placeholder="Province"
-                  value={form.province}
-                  onChange={(e) => update("province", e.target.value)}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Valid IDs */}
-          <Card>
-            <CardContent className="pt-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-base font-semibold">Add Valid IDs</h2>
-                <Button type="button" variant="outline" size="sm" onClick={addValidId}>
-                  <Plus className="h-3.5 w-3.5 mr-1" />
-                  Add ID
-                </Button>
-              </div>
-
-              {validIds.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-4 text-center">
-                  Attach additional valid IDs. Existing IDs are managed from the member detail
-                  page.
-                </p>
-              ) : (
-                <div className="space-y-4">
-                  {validIds.map((entry, index) => (
-                    <div
-                      key={index}
-                      className="relative space-y-3 p-4 rounded-lg border bg-muted/30"
-                    >
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => removeValidId(index)}
-                        className="absolute top-2 right-2 text-destructive hover:text-destructive"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pr-8">
-                        <div className="space-y-2">
-                          <Label>ID Type</Label>
-                          <Select
-                            value={entry.type || null}
-                            onValueChange={(v) => updateValidId(index, "type", v ?? "")}
-                          >
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Select ID type">
-                                {(value: string | null) =>
-                                  value
-                                    ? (VALID_ID_OPTIONS.find((o) => o.value === value)?.label ?? value)
-                                    : "Select ID type"
-                                }
-                              </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                              {VALID_ID_OPTIONS.map((opt) => (
-                                <SelectItem key={opt.value} value={opt.value}>
-                                  {opt.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>ID Number</Label>
-                          <Input
-                            placeholder="ID number"
-                            value={entry.id_number}
-                            onChange={(e) => updateValidId(index, "id_number", e.target.value)}
-                          />
-                        </div>
-                        {entry.type === "others" && (
-                          <div className="space-y-2 sm:col-span-2">
-                            <Label>
-                              ID Name <span className="text-destructive">*</span>
-                            </Label>
-                            <Input
-                              placeholder="e.g. Senior Citizen ID, Company ID"
-                              value={entry.custom_type_name}
-                              onChange={(e) =>
-                                updateValidId(index, "custom_type_name", e.target.value)
-                              }
-                            />
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="space-y-2">
-                          <Label>Front of ID</Label>
-                          {entry.front_preview ? (
-                            <div className="space-y-2">
-                              <div className="relative h-44 rounded-lg overflow-hidden border">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={entry.front_preview}
-                                  alt="Front ID preview"
-                                  className="h-full w-full object-cover"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    updateValidId(index, "front_file", null);
-                                    updateValidId(index, "front_preview", null);
-                                  }}
-                                  className="absolute top-1 right-1 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center hover:bg-destructive/90"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </div>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="w-full h-8 text-xs gap-1"
-                                onClick={() =>
-                                  setCropTarget({
-                                    index,
-                                    side: "front",
-                                    src: entry.front_preview!,
-                                  })
-                                }
-                              >
-                                <CropIcon className="h-3.5 w-3.5" />
-                                Crop
-                              </Button>
-                            </div>
-                          ) : (
-                            <label className="flex h-44 flex-col items-center justify-center gap-1 cursor-pointer rounded-lg border border-dashed border-muted-foreground/30 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors">
-                              <FileText className="h-5 w-5 text-muted-foreground" />
-                              <span className="text-xs text-muted-foreground">Upload Front</span>
-                              <input
-                                type="file"
-                                accept="image/*,.pdf"
-                                onChange={(e) => handleValidIdFile(index, "front", e)}
-                                className="hidden"
-                              />
-                            </label>
-                          )}
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Back of ID</Label>
-                          {entry.back_preview ? (
-                            <div className="space-y-2">
-                              <div className="relative h-44 rounded-lg overflow-hidden border">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={entry.back_preview}
-                                  alt="Back ID preview"
-                                  className="h-full w-full object-cover"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    updateValidId(index, "back_file", null);
-                                    updateValidId(index, "back_preview", null);
-                                  }}
-                                  className="absolute top-1 right-1 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center hover:bg-destructive/90"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </div>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="w-full h-8 text-xs gap-1"
-                                onClick={() =>
-                                  setCropTarget({
-                                    index,
-                                    side: "back",
-                                    src: entry.back_preview!,
-                                  })
-                                }
-                              >
-                                <CropIcon className="h-3.5 w-3.5" />
-                                Crop
-                              </Button>
-                            </div>
-                          ) : (
-                            <label className="flex h-44 flex-col items-center justify-center gap-1 cursor-pointer rounded-lg border border-dashed border-muted-foreground/30 hover:border-brand-orange/50 hover:bg-brand-orange/5 transition-colors">
-                              <FileText className="h-5 w-5 text-muted-foreground" />
-                              <span className="text-xs text-muted-foreground">Upload Back</span>
-                              <input
-                                type="file"
-                                accept="image/*,.pdf"
-                                onChange={(e) => handleValidIdFile(index, "back", e)}
-                                className="hidden"
-                              />
-                            </label>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Employment & Income */}
-          <Card>
-            <CardContent className="pt-6 space-y-4">
-              <h2 className="text-base font-semibold">Employment & Income</h2>
-
-              <div className="space-y-2">
-                <Label htmlFor="employer_or_business">Employer / Business Name</Label>
-                <Input
-                  id="employer_or_business"
-                  placeholder="Company or business name"
-                  value={form.employer_or_business}
-                  onChange={(e) => update("employer_or_business", e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="monthly_income">Monthly Income (PHP)</Label>
-                <Input
-                  id="monthly_income"
-                  type="number"
-                  min={0}
-                  step={100}
-                  placeholder="0"
-                  value={form.monthly_income}
-                  onChange={(e) => update("monthly_income", e.target.value)}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Submit */}
-          <div className="flex justify-end gap-3 pb-8">
+      <form onSubmit={handleSubmit} className={FIT_CLASSES.section}>
+        <FormStepper
+          ref={stepperRef}
+          steps={steps}
+          mode="edit"
+          validateStep={(id) => validateMemberStep(steps.find((s) => s.id === id), form, validIds)}
+          onInvalid={notifyStepErrors}
+          submitLabel="Save Changes"
+          submittingLabel="Saving..."
+          submitting={submitting}
+          actions={
             <Link
               href={`/borrowers/${borrowerId}`}
               className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
             >
               Cancel
             </Link>
-            <Button
-              type="submit"
-              disabled={submitting}
-              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-            >
-              {submitting ? (
-                <>
-                  <Spinner className="size-4 mr-2" />
-                  Saving...
-                </>
-              ) : (
-                "Save Changes"
-              )}
-            </Button>
+          }
+        >
+          <FormStep id="personal">
+            <div className="grid gap-6 xl:grid-cols-[20rem_minmax(0,1fr)]">
+              {/* Profile Photo */}
+              <Card>
+                <CardContent className="pt-6 fit:pt-0 space-y-4 lg:max-xl:flex lg:max-xl:items-center lg:max-xl:gap-4 lg:max-xl:space-y-0">
+                  <h3 className="text-base font-semibold">Profile Photo</h3>
+                  <div className="flex flex-wrap items-center gap-6 lg:max-xl:contents">
+                    <div className="relative lg:max-xl:order-first">
+                      {photoPreview ? (
+                        <div className="relative h-24 w-24 lg:max-xl:size-12 rounded-full overflow-hidden border-2 border-border">
+                          {/* eslint-disable-next-line @next/next/no-img-element -- signed /api/files photo URL or local data: preview; CLAUDE.md "Images" rule requires plain <img> */}
+                          <img
+                            src={photoPreview}
+                            alt="Profile preview"
+                            className="h-full w-full object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={removePhoto}
+                            className="absolute top-0 right-0 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center hover:bg-destructive/90"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="h-24 w-24 lg:max-xl:size-12 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center">
+                          <Camera className="h-6 w-6 text-muted-foreground/50" />
+                        </div>
+                      )}
+                      <input
+                        ref={photoInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handlePhotoChange}
+                        className="hidden"
+                      />
+                    </div>
+                    <div className="space-y-2 lg:max-xl:flex lg:max-xl:min-w-0 lg:max-xl:flex-1 lg:max-xl:items-center lg:max-xl:justify-between lg:max-xl:gap-4 lg:max-xl:space-y-0">
+                      <div className="space-y-2">
+                        <p className="text-sm text-muted-foreground">
+                          Upload a profile photo of the member.
+                        </p>
+                        <p className="text-xs text-muted-foreground">JPG, PNG up to 5MB</p>
+                      </div>
+                      <div className="flex items-center gap-2 pt-1 lg:max-xl:pt-0">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5"
+                          onClick={openCamera}
+                        >
+                          <Camera className="h-3.5 w-3.5" />
+                          Camera
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5"
+                          onClick={() => photoInputRef.current?.click()}
+                        >
+                          <ImageIcon className="h-3.5 w-3.5" />
+                          Gallery
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Personal Information */}
+              <Card>
+                <CardContent className="pt-6 fit:pt-0">
+                  <div className={`${FORM_STEP_GRID.grid} lg:grid-cols-4`}>
+                    <div className="space-y-2">
+                      <Label htmlFor="first_name">
+                        First Name <span className="text-destructive">*</span>
+                      </Label>
+                      <Input
+                        id="first_name"
+                        placeholder="Juan"
+                        value={form.first_name}
+                        onChange={(e) => update("first_name", e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="last_name">
+                        Last Name <span className="text-destructive">*</span>
+                      </Label>
+                      <Input
+                        id="last_name"
+                        placeholder="Santos"
+                        value={form.last_name}
+                        onChange={(e) => update("last_name", e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="middle_name">Middle Name</Label>
+                      <Input
+                        id="middle_name"
+                        placeholder="Dela Cruz"
+                        value={form.middle_name}
+                        onChange={(e) => update("middle_name", e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="suffix">Suffix</Label>
+                      <Select
+                        value={form.suffix || null}
+                        onValueChange={(v) => update("suffix", v ?? "")}
+                      >
+                        <SelectTrigger id="suffix" className="w-full">
+                          <SelectValue placeholder="None">
+                            {(value: string | null) =>
+                              value
+                                ? (SUFFIX_OPTIONS.find((o) => (o.value || "none") === value)?.label ?? value)
+                                : "None"
+                            }
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SUFFIX_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value || "none"} value={opt.value || "none"}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="birthdate">
+                        Birthdate <span className="text-destructive">*</span>
+                      </Label>
+                      <Input
+                        id="birthdate"
+                        type="date"
+                        value={form.birthdate}
+                        onChange={(e) => update("birthdate", e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2" data-field="gender">
+                      <Label id="gender-label">
+                        Gender <span className="text-destructive">*</span>
+                      </Label>
+                      <RadioGroup
+                        aria-labelledby="gender-label"
+                        className="flex gap-4 pt-2"
+                        value={form.gender || null}
+                        onValueChange={(v) => update("gender", v ?? "")}
+                      >
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <RadioGroupItem value="male" />
+                          <span className="text-sm">Male</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <RadioGroupItem value="female" />
+                          <span className="text-sm">Female</span>
+                        </label>
+                      </RadioGroup>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="civil_status">
+                        Civil Status <span className="text-destructive">*</span>
+                      </Label>
+                      <Select
+                        items={CIVIL_STATUS_OPTIONS}
+                        value={form.civil_status || null}
+                        onValueChange={(v) => update("civil_status", v ?? "")}
+                      >
+                        <SelectTrigger id="civil_status" className="w-full">
+                          <SelectValue placeholder="Select civil status">
+                            {(value: string | null) =>
+                              value
+                                ? (CIVIL_STATUS_OPTIONS.find((o) => o.value === value)?.label ?? value)
+                                : "Select civil status"
+                            }
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {CIVIL_STATUS_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </FormStep>
+
+          <FormStep id="branch">
+            {/* Branch Assignment */}
+            <Card>
+              <CardContent className="pt-6 fit:pt-0 space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Currently assigned to:{" "}
+                  <span className="font-medium text-foreground">
+                    {borrower.branch?.name ?? "Not assigned"}
+                    {borrower.branch?.code ? ` (${borrower.branch.code})` : ""}
+                  </span>
+                </p>
+                <div className="space-y-2" data-field="branch_id">
+                  <Label htmlFor="member-branch">
+                    Assigned Branch <span className="text-destructive">*</span>
+                  </Label>
+                  {/* Read-only once set: a move goes through Transfer member
+                      (backend MB-BE4 answers a changed branch with 422). The
+                      unchanged branch_id is still sent, which it accepts. */}
+                  <Select
+                    value={form.branch_id || null}
+                    onValueChange={(v) => update("branch_id", v ?? "")}
+                    disabled={branchLocked}
+                  >
+                    <SelectTrigger id="member-branch" className="w-full sm:w-2/3">
+                      <SelectValue placeholder="Select branch">
+                        {(value: string | null) => {
+                          if (!value) return "Select branch";
+                          const match = branches.find((b) => String(b.id) === value);
+                          if (match) return `${match.name}${match.code ? ` (${match.code})` : ""}`;
+                          return borrower?.branch?.name ?? value;
+                        }}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {branches.length === 0 && borrower?.branch ? (
+                        <SelectItem value={String(borrower.branch.id)}>
+                          {borrower.branch.name}
+                        </SelectItem>
+                      ) : (
+                        branches.map((b) => (
+                          <SelectItem key={b.id} value={String(b.id)}>
+                            {b.name}
+                            {b.code ? ` (${b.code})` : ""}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {branchLocked ? EDIT_BRANCH_LOCKED_CAPTION : EDIT_BRANCH_FILL_CAPTION}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </FormStep>
+
+          {/* Spouse Information (visible only when married) */}
+          {form.civil_status === "married" && (
+            <FormStep id="spouse">
+              <Card>
+                <CardContent className="pt-6 fit:pt-0">
+                  <div className={FORM_STEP_GRID.grid}>
+                    <div className="space-y-2">
+                      <Label htmlFor="spouse_first_name">First Name</Label>
+                      <Input
+                        id="spouse_first_name"
+                        placeholder="First name"
+                        value={form.spouse_first_name ?? ""}
+                        onChange={(e) => update("spouse_first_name", e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="spouse_middle_name">Middle Name</Label>
+                      <Input
+                        id="spouse_middle_name"
+                        placeholder="Middle name"
+                        value={form.spouse_middle_name ?? ""}
+                        onChange={(e) => update("spouse_middle_name", e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="spouse_last_name">Last Name</Label>
+                      <Input
+                        id="spouse_last_name"
+                        placeholder="Last name"
+                        value={form.spouse_last_name ?? ""}
+                        onChange={(e) => update("spouse_last_name", e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="spouse_contact_number">Contact Number</Label>
+                      <Input
+                        id="spouse_contact_number"
+                        type="tel"
+                        placeholder="09XXXXXXXXX"
+                        value={form.spouse_contact_number ?? ""}
+                        onChange={(e) => update("spouse_contact_number", e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="spouse_occupation">Occupation</Label>
+                      <Input
+                        id="spouse_occupation"
+                        placeholder="Occupation or employer"
+                        value={form.spouse_occupation ?? ""}
+                        onChange={(e) => update("spouse_occupation", e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </FormStep>
+          )}
+
+          <FormStep id="contact">
+            {/* Contact Information */}
+            <Card>
+              <CardContent className="pt-6 fit:pt-0">
+                <div className={FORM_STEP_GRID.grid}>
+                  <div className="space-y-2">
+                    <Label htmlFor="contact_number">
+                      Contact Number <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="contact_number"
+                      type="tel"
+                      placeholder="09XXXXXXXXX"
+                      value={form.contact_number}
+                      onChange={(e) => update("contact_number", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="name@example.com"
+                      value={form.email}
+                      onChange={(e) => update("email", e.target.value)}
+                    />
+                  </div>
+                  <div className={`space-y-2 ${FORM_STEP_GRID.wide}`} data-field="street_address">
+                    <Label htmlFor="address">
+                      Street Address <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="address"
+                      placeholder="House/Lot/Block number, Street name"
+                      value={form.address}
+                      onChange={(e) => update("address", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="barangay">Barangay</Label>
+                    <Input
+                      id="barangay"
+                      placeholder="Barangay"
+                      value={form.barangay}
+                      onChange={(e) => update("barangay", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="city">
+                      City / Municipality <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="city"
+                      placeholder="City name"
+                      value={form.city}
+                      onChange={(e) => update("city", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="province">
+                      Province <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="province"
+                      placeholder="Province"
+                      value={form.province}
+                      onChange={(e) => update("province", e.target.value)}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </FormStep>
+
+          <FormStep id="employment">
+            {/* Employment & Income */}
+            <Card>
+              <CardContent className="pt-6 fit:pt-0">
+                <div className={FORM_STEP_GRID.grid}>
+                  <div className="space-y-2">
+                    <Label htmlFor="employer_or_business">Employer / Business Name</Label>
+                    <Input
+                      id="employer_or_business"
+                      placeholder="Company or business name"
+                      value={form.employer_or_business}
+                      onChange={(e) => update("employer_or_business", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="date_hired">Date Hired</Label>
+                    <Input
+                      id="date_hired"
+                      type="date"
+                      max={todayISO()}
+                      value={form.date_hired}
+                      onChange={(e) => update("date_hired", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="monthly_income">Monthly Income (₱)</Label>
+                    <Input
+                      id="monthly_income"
+                      type="number"
+                      min={0}
+                      step={100}
+                      placeholder="0"
+                      value={form.monthly_income}
+                      onChange={(e) => update("monthly_income", e.target.value)}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </FormStep>
+
+          <FormStep id="valid_ids">
+            {/* Valid IDs */}
+            <Card>
+              <CardContent className="pt-6 fit:pt-0 space-y-4">
+                <div className="flex items-center justify-end">
+                  <Button type="button" variant="outline" size="sm" onClick={addValidId}>
+                    <Plus className="h-3.5 w-3.5 mr-1" />
+                    Add ID
+                  </Button>
+                </div>
+
+                <MemberValidIdsOnFile ids={idsOnFile.ids} status={idsOnFile.status} onRetry={idsOnFile.reload} />
+
+                {validIds.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-4 text-center">
+                    Add another valid ID with Add ID. Saving keeps the IDs already on file; to remove one,
+                    use the member&apos;s Documents tab.
+                  </p>
+                ) : (
+                  <div className="grid gap-4 xl:grid-cols-2">
+                    {validIds.map((entry, index) => (
+                      <div
+                        key={index}
+                        className="relative space-y-3 p-4 rounded-lg border bg-muted/30"
+                      >
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={removeValidIdRowLabel(entry, index)}
+                          onClick={() => removeValidId(index)}
+                          className="absolute top-2 right-2 text-destructive hover:text-destructive"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pr-8">
+                          <div className="space-y-2" data-field={`valid_ids.${index}.type`}>
+                            <Label htmlFor={`valid_id_type_${index}`}>ID Type</Label>
+                            <Select
+                              value={entry.type || null}
+                              onValueChange={(v) => updateValidId(index, "type", v ?? "")}
+                            >
+                              <SelectTrigger id={`valid_id_type_${index}`} className="w-full">
+                                <SelectValue placeholder="Select ID type">
+                                  {(value: string | null) =>
+                                    value
+                                      ? (VALID_ID_OPTIONS.find((o) => o.value === value)?.label ?? value)
+                                      : "Select ID type"
+                                  }
+                                </SelectValue>
+                              </SelectTrigger>
+                              <SelectContent>
+                                {VALID_ID_OPTIONS.map((opt) => (
+                                  <SelectItem key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2" data-field={`valid_ids.${index}.id_number`}>
+                            <Label htmlFor={`valid_id_number_${index}`}>ID Number</Label>
+                            <Input
+                              id={`valid_id_number_${index}`}
+                              placeholder="ID number"
+                              value={entry.id_number}
+                              onChange={(e) => updateValidId(index, "id_number", e.target.value)}
+                            />
+                          </div>
+                          {entry.type === "others" && (
+                            <div className="space-y-2 sm:col-span-2" data-field={`valid_ids.${index}.custom_type_name`}>
+                              <Label htmlFor={`valid_id_name_${index}`}>
+                                ID Name <span className="text-destructive">*</span>
+                              </Label>
+                              <Input
+                                id={`valid_id_name_${index}`}
+                                placeholder="e.g. Senior Citizen ID, Company ID"
+                                value={entry.custom_type_name}
+                                onChange={(e) =>
+                                  updateValidId(index, "custom_type_name", e.target.value)
+                                }
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-2" data-field={`valid_ids.${index}.front_file`}>
+                            <Label htmlFor={entry.front_preview ? undefined : `valid_id_front_${index}`}>Front of ID</Label>
+                            {entry.front_preview ? (
+                              <div className="space-y-2">
+                                <div className="relative h-44 rounded-lg overflow-hidden border">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={entry.front_preview}
+                                    alt="Front ID preview"
+                                    className="h-full w-full object-cover"
+                                  />
+                                  <button
+                                    type="button"
+                                    aria-label={`Remove front of ${validIdRowName(entry, index)}`}
+                                    onClick={() => {
+                                      updateValidId(index, "front_file", null);
+                                      updateValidId(index, "front_preview", null);
+                                    }}
+                                    className="absolute top-1 right-1 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center hover:bg-destructive/90"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="w-full h-8 text-xs gap-1"
+                                  aria-label={`Crop front of ${validIdRowName(entry, index)}`}
+                                  onClick={() =>
+                                    setCropTarget({
+                                      index,
+                                      side: "front",
+                                      src: entry.front_preview!,
+                                    })
+                                  }
+                                >
+                                  <CropIcon className="h-3.5 w-3.5" />
+                                  Crop
+                                </Button>
+                              </div>
+                            ) : (
+                              <ValidIdFilePicker
+                                controlId={`valid_id_front_${index}`}
+                                side="front"
+                                rowName={validIdRowName(entry, index)}
+                                onPick={(e) => handleValidIdFile(index, "front", e)}
+                              />
+                            )}
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor={entry.back_preview ? undefined : `valid_id_back_${index}`}>Back of ID</Label>
+                            {entry.back_preview ? (
+                              <div className="space-y-2">
+                                <div className="relative h-44 rounded-lg overflow-hidden border">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={entry.back_preview}
+                                    alt="Back ID preview"
+                                    className="h-full w-full object-cover"
+                                  />
+                                  <button
+                                    type="button"
+                                    aria-label={`Remove back of ${validIdRowName(entry, index)}`}
+                                    onClick={() => {
+                                      updateValidId(index, "back_file", null);
+                                      updateValidId(index, "back_preview", null);
+                                    }}
+                                    className="absolute top-1 right-1 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center hover:bg-destructive/90"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="w-full h-8 text-xs gap-1"
+                                  aria-label={`Crop back of ${validIdRowName(entry, index)}`}
+                                  onClick={() =>
+                                    setCropTarget({
+                                      index,
+                                      side: "back",
+                                      src: entry.back_preview!,
+                                    })
+                                  }
+                                >
+                                  <CropIcon className="h-3.5 w-3.5" />
+                                  Crop
+                                </Button>
+                              </div>
+                            ) : (
+                              <ValidIdFilePicker
+                                controlId={`valid_id_back_${index}`}
+                                side="back"
+                                rowName={validIdRowName(entry, index)}
+                                onPick={(e) => handleValidIdFile(index, "back", e)}
+                              />
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </FormStep>
+        </FormStepper>
+      </form>
+
+      {/* Camera Capture Dialog */}
+      <Dialog open={cameraOpen} onOpenChange={handleCameraDialogChange}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Take Photo</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-black">
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="h-full w-full object-cover"
+              />
+            </div>
+            <canvas ref={canvasRef} className="hidden" />
+            <div className="flex items-center justify-center gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-10 w-10 rounded-full"
+                onClick={toggleFacingMode}
+                title="Switch camera"
+              >
+                <SwitchCamera className="h-4 w-4" />
+              </Button>
+              <button
+                type="button"
+                onClick={capturePhoto}
+                className="h-14 w-14 rounded-full border-4 border-brand-orange bg-white hover:bg-brand-orange/10 transition-colors flex items-center justify-center"
+                title="Capture"
+              >
+                <div className="h-10 w-10 rounded-full bg-brand-orange" />
+              </button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => handleCameraDialogChange(false)}
+              >
+                Cancel
+              </Button>
+            </div>
           </div>
-        </form>
+        </DialogContent>
+      </Dialog>
 
-        {/* Profile Photo Crop Dialog */}
-        <PhotoCropDialog
-          open={photoCropOpen}
-          onOpenChange={(open) => {
-            setPhotoCropOpen(open);
-            if (!open) setPendingPhotoFile(null);
-          }}
-          imageFile={pendingPhotoFile}
-          onCropComplete={handlePhotoCropComplete}
-        />
+      {/* Profile Photo Crop Dialog */}
+      <PhotoCropDialog
+        open={photoCropOpen}
+        onOpenChange={(open) => {
+          setPhotoCropOpen(open);
+          if (!open) setPendingPhotoFile(null);
+        }}
+        imageFile={pendingPhotoFile}
+        onCropComplete={handlePhotoCropComplete}
+      />
 
-        {/* ID Crop Dialog */}
-        <IdCropDialog
-          open={!!cropTarget}
-          onOpenChange={(open) => {
-            if (!open) setCropTarget(null);
-          }}
-          imageSrc={cropTarget?.src ?? null}
-          onCropComplete={(blob, dataUrl) => {
-            if (!cropTarget) return;
-            const { index, side } = cropTarget;
-            const croppedFile = new File([blob], `${side}-id-cropped.jpg`, {
-              type: "image/jpeg",
-            });
-            setValidIds((prev) =>
-              prev.map((entry, i) => {
-                if (i !== index) return entry;
-                return side === "front"
-                  ? { ...entry, front_file: croppedFile, front_preview: dataUrl }
-                  : { ...entry, back_file: croppedFile, back_preview: dataUrl };
-              })
-            );
-            setCropTarget(null);
-            toast.success("ID cropped");
-          }}
-        />
-      </div>
+      {/* ID Crop Dialog */}
+      <IdCropDialog
+        open={!!cropTarget}
+        onOpenChange={(open) => {
+          if (!open) setCropTarget(null);
+        }}
+        imageSrc={cropTarget?.src ?? null}
+        onCropComplete={(blob, dataUrl) => {
+          if (!cropTarget) return;
+          const { index, side } = cropTarget;
+          const croppedFile = new File([blob], `${side}-id-cropped.jpg`, {
+            type: "image/jpeg",
+          });
+          setValidIds((prev) =>
+            prev.map((entry, i) => {
+              if (i !== index) return entry;
+              return side === "front"
+                ? { ...entry, front_file: croppedFile, front_preview: dataUrl }
+                : { ...entry, back_file: croppedFile, back_preview: dataUrl };
+            })
+          );
+          setCropTarget(null);
+          toast.success("ID cropped");
+        }}
+      />
+    </PageFill>
+  );
+}
+
+// Editing starts by reading the member, which needs `borrowers:view`.
+export default function EditBorrowerPage() {
+  return (
+    <RouteGuard permission="borrowers:update" pageName="Edit Member">
+      <RouteGuard permission="borrowers:view" pageName="Edit Member">
+        <EditBorrowerContent />
+      </RouteGuard>
     </RouteGuard>
   );
 }

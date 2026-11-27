@@ -32,7 +32,7 @@ export function PoweredByLendy({ className, onColor }: PoweredByLendyProps) {
         src="/Logo/Lendy_logo.png"
         alt="Lendy.PH"
         className={cn(
-          "h-3 w-auto",
+          "h-3 w-auto shrink-0 object-contain",
           onColor && "rounded-sm bg-white/95 px-1 py-0.5 box-content"
         )}
       />

@@ -60,7 +60,9 @@ function CommandDialog({
         )}
         showCloseButton={showCloseButton}
       >
-        {children}
+        {/* cmdk's input, list and items need its root above them, or
+            opening the dialog throws ("reading 'subscribe'"). */}
+        <Command>{children}</Command>
       </DialogContent>
     </Dialog>
   )

@@ -12,7 +12,8 @@
  *    gets a humanised name and no link.
  * 2. **A link is only offered where a route exists.** `loan` and `repayment`
  *    have detail pages; `expense` has a list but no detail page, and
- *    `expense_payment` has nothing at all. Linking them anyway would send the
+ *    `expense_payment`, `loan_adjustment`, `share_capital_entry` and
+ *    `gcash_transaction` have none keyed by their own id. Linking them anyway would send the
  *    user to a 404, so those render as text. {@see POSTABLE_ROUTES} is the
  *    only place that decision is made.
  *
@@ -50,14 +51,18 @@ export interface JournalSourceDocument {
  *
  * `expense` is absent on purpose: `/accounting/expenses` is a list with no
  * detail route, and deep-linking to a list that cannot select a row is worse
- * than not linking. `expense_payment` has no page of any kind. Adding either
- * one means shipping the route first.
+ * than not linking. `expense_payment` has no page of any kind. Nor do a loan
+ * adjustment, a share capital entry (a ledger row) or a GCash transaction:
+ * their screens are lists, never a page per record. Adding any of them means
+ * shipping the route first.
  */
 const POSTABLE_ROUTES: Record<string, ((id: number) => string) | undefined> = {
   loan: (id) => `/loans/${id}`,
   // A repayment's detail page is the receipt, keyed by the repayment id —
   // which is exactly what `postable_id` carries.
   repayment: (id) => `/payments/${id}`,
+  // A placement has its own page under Savings.
+  time_deposit: (id) => `/savings/time-deposits/${id}`,
 };
 
 /**
@@ -70,7 +75,28 @@ const POSTABLE_NAMES: Record<string, string | undefined> = {
   repayment: "Payment",
   expense: "Expense",
   expense_payment: "Expense payment",
+  loan_adjustment: "Loan adjustment",
+  share_capital_entry: "Share capital entry",
+  gcash_transaction: "GCash transaction",
+  accounting_year_close_entry: "Year-end close",
+  savings_transaction: "Savings transaction",
+  savings_interest_run: "Savings interest run",
+  time_deposit: "Time deposit",
 };
+
+/** The year a closing entry closes: closing entries are dated 31 December. */
+export function closedYear(date: string | undefined): string | null {
+  return date && /^\d{4}-/.test(date) ? date.slice(0, 4) : null;
+}
+
+/**
+ * A year-end close is named by the year it closes, as its own description
+ * reads ("Year-end close 2025"): its row id means nothing to a reader.
+ */
+function yearEndCloseText(date: string | undefined): string {
+  const year = closedYear(date);
+  return year ? `Year-end close ${year}` : "Year-end close";
+}
 
 /** "expense_payment" → "expense payment". Matches how the register renders `source`. */
 function humanise(type: string): string {
@@ -85,7 +111,8 @@ function humanise(type: string): string {
  * contains them.
  */
 export function sourceDocument(
-  entry: Pick<JournalEntry, "postable_type" | "postable_id" | "postable_label">
+  entry: Pick<JournalEntry, "postable_type" | "postable_id" | "postable_label"> &
+    Partial<Pick<JournalEntry, "source" | "date">>
 ): JournalSourceDocument | null {
   const type = entry.postable_type?.trim();
   if (!type) return null;
@@ -100,6 +127,10 @@ export function sourceDocument(
   const typeLabel = POSTABLE_NAMES[type] ?? humanise(type);
 
   const route = POSTABLE_ROUTES[type];
+
+  if (type === "accounting_year_close_entry") {
+    return { type, id, label, typeLabel, text: yearEndCloseText(entry.date), href: null };
+  }
 
   return {
     type,

@@ -3,6 +3,9 @@
 import { useState, useEffect } from "react";
 import { CalendarIcon } from "lucide-react";
 import { loanProductService } from "@/services/loan-product.service";
+import { completeRows } from "@/lib/paginate";
+import { notifyError } from "@/lib/notify";
+import { usePermission } from "@/hooks";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -23,8 +26,11 @@ interface FiltersStepProps {
 }
 
 export function FiltersStep({ onPreview, loading }: FiltersStepProps) {
+  // `GET /loan-products` needs `loans:view`, which auto-pay does not. Without
+  // it the list is not asked for, and "All Products" is the only choice.
+  const canListProducts = usePermission().can("loans:view");
   const [products, setProducts] = useState<LoanProduct[]>([]);
-  const [productsLoading, setProductsLoading] = useState(true);
+  const [productsLoading, setProductsLoading] = useState(canListProducts);
   const [allProducts, setAllProducts] = useState(true);
   const [selectedProductIds, setSelectedProductIds] = useState<number[]>([]);
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
@@ -33,12 +39,26 @@ export function FiltersStep({ onPreview, loading }: FiltersStepProps) {
   const [toOpen, setToOpen] = useState(false);
 
   useEffect(() => {
+    if (!canListProducts) return;
+    let cancelled = false;
     loanProductService
-      .list()
-      .then((res) => setProducts(res as LoanProduct[]))
-      .catch(() => {})
-      .finally(() => setProductsLoading(false));
-  }, []);
+      .listAll()
+      .then(completeRows)
+      .then((rows) => {
+        if (!cancelled) setProducts(rows);
+      })
+      .catch((err) => {
+        // "All Products" still works without the list, so the step stays
+        // usable — but picking specific products does not, and it says so.
+        if (!cancelled) notifyError(err, "We couldn't load the loan products. Please try again.");
+      })
+      .finally(() => {
+        if (!cancelled) setProductsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canListProducts]);
 
   function toggleProduct(id: number) {
     setAllProducts(false);
@@ -67,7 +87,8 @@ export function FiltersStep({ onPreview, loading }: FiltersStepProps) {
     (allProducts || selectedProductIds.length > 0);
 
   return (
-    <div className="space-y-6">
+    // Full width: the products and the date range sit side by side from md.
+    <div className="grid items-start gap-6 md:grid-cols-2">
       {/* Products */}
       <div className="space-y-2">
         <Label className="text-sm font-semibold">Loan Products</Label>
@@ -117,7 +138,7 @@ export function FiltersStep({ onPreview, loading }: FiltersStepProps) {
                 render={
                   <button
                     type="button"
-                    className="flex h-9 w-full items-center gap-2 rounded-lg border border-input bg-transparent px-3 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                    className="flex h-8 w-full items-center gap-2 rounded-lg border border-input bg-transparent px-3 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                   />
                 }
               >
@@ -148,7 +169,7 @@ export function FiltersStep({ onPreview, loading }: FiltersStepProps) {
                 render={
                   <button
                     type="button"
-                    className="flex h-9 w-full items-center gap-2 rounded-lg border border-input bg-transparent px-3 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                    className="flex h-8 w-full items-center gap-2 rounded-lg border border-input bg-transparent px-3 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                   />
                 }
               >
@@ -174,12 +195,12 @@ export function FiltersStep({ onPreview, loading }: FiltersStepProps) {
           </div>
         </div>
         <p className="text-xs text-muted-foreground">
-          Amortization dues with a due_date within this range will be included.
+          Amortization dues whose due date falls within this range will be included.
         </p>
       </div>
 
       <Button
-        className="w-full bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+        className="w-full bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark md:col-span-2 md:w-auto md:justify-self-end"
         onClick={handlePreview}
         disabled={!canPreview || loading}
       >

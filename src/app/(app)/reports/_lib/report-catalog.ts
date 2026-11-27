@@ -1,23 +1,42 @@
+import type { MenuModuleKey } from "@/constants/menu-modules";
+import { catalogEntryShown } from "@/lib/hidden-module-parts";
 import {
+  Activity,
   AlertTriangle,
+  ArrowDownToLine,
   ArrowLeftRight,
+  ArrowUpFromLine,
+  ChartColumn,
+  List,
+  Percent,
+  Siren,
+  UserRound,
   Banknote,
   BookOpen,
   ClipboardList,
   Clock,
+  Coins,
   FileText,
   Gauge,
+  HandCoins,
+  Hourglass,
+  Scale,
   Layers,
   ListChecks,
+  MoonStar,
   PieChart,
   PiggyBank,
-  Receipt,
+  ReceiptText,
   ShieldAlert,
   Target,
   TrendingUp,
   Users,
+  Wallet,
 } from "lucide-react";
+import { env } from "@/config/env";
+import { api } from "@/lib/api-client";
 import { reportService } from "@/services";
+import { REPORT_TITLES } from "@/lib/page-titles";
 import {
   LIST_PAGE_SIZE,
   buildAgingDoc,
@@ -38,8 +57,36 @@ import {
   buildStatementOfAccountDoc,
   buildSubsidiaryLedgerDoc,
 } from "./report-builders";
+import { buildProfitSharingDoc } from "./profit-sharing-report-builder";
+import {
+  buildSavingsBalancesDoc,
+  buildSavingsDormantDoc,
+  buildSavingsGlControlDoc,
+  buildSavingsInterestPostingsDoc,
+  buildSavingsStatementDoc,
+  buildSavingsTransactionsDoc,
+  buildTimeDepositMaturitiesDoc,
+} from "./savings-report-builders";
+import {
+  buildSavingsAccountActivityDoc,
+  buildSavingsAccountListDoc,
+  buildSavingsDepositsDoc,
+  buildSavingsInterestAccrualDoc,
+  buildSavingsLargeTransactionsDoc,
+  buildSavingsMemberStatementDoc,
+  buildSavingsSummaryDoc,
+  buildSavingsTimeDepositsDoc,
+  buildSavingsWithdrawalsDoc,
+} from "./savings-insight-report-builders";
+import type { Permission } from "@/types";
+import { AMLA_ROUTE_PERMISSION } from "@/lib/amla/access";
+import { AMLA_REPORT_TITLES, type AmlaReportKey } from "@/lib/amla/report-titles";
+import { amlaReportAccess } from "@/lib/amla/reports-access";
+import { CATEGORY_META } from "./types";
 import type {
+  AmlaReportDefinition,
   DateRange,
+  ReportCategory,
   ReportContext,
   ReportDefinition,
   ReportDocument,
@@ -51,6 +98,19 @@ import type {
  */
 
 type Fetcher = (params: Record<string, unknown>) => Promise<unknown>;
+
+/**
+ * The scope filters a report sends, preview and CSV alike: `branch_id`,
+ * `product_id` and `group_by`, each only when chosen. Sending `branch_id=null`
+ * would be a filter value to the API, not the absence of one.
+ */
+export function reportScopeParams(ctx: ReportContext): Record<string, unknown> {
+  return {
+    ...(ctx.branchId ? { branch_id: ctx.branchId } : {}),
+    ...(ctx.productId ? { product_id: ctx.productId } : {}),
+    ...(ctx.groupBy ? { group_by: ctx.groupBy } : {}),
+  };
+}
 type Mapper = (raw: unknown, range: DateRange) => ReportDocument;
 
 /**
@@ -65,7 +125,7 @@ function reportBuilder(fetcher: Fetcher, map: Mapper, extraParams: Record<string
     const raw = await fetcher({
       date_from: ctx.range.from,
       date_to: ctx.range.to,
-      ...(ctx.branchId ? { branch_id: ctx.branchId } : {}),
+      ...reportScopeParams(ctx),
       ...extraParams,
     }).catch(() => null);
     return map(raw, ctx.range);
@@ -92,7 +152,25 @@ function subjectReportBuilder(
   };
 }
 
+/**
+ * A report of the whole book as of today. The API narrows by release date when
+ * dates are sent, so none are: hiding the date controls alone would still report
+ * only the loans released in the default month.
+ */
+function pointInTimeBuilder(fetcher: Fetcher, map: Mapper) {
+  return async (ctx: ReportContext): Promise<ReportDocument> => {
+    const raw = await fetcher(reportScopeParams(ctx)).catch(() => null);
+    return map(raw, ctx.range);
+  };
+}
+
 const listParams = { per_page: LIST_PAGE_SIZE };
+
+/** Savings reports need `savings:view` and the deployment's savings switch. */
+const SAVINGS_REPORT = { permission: "savings:view", available: env.features.savings, modules: ["savings"] } as const;
+
+/** The members behind the Member Report's cards; a paginator envelope, so getRaw. */
+const MEMBER_LIST_ENDPOINT = "/reports/borrowers/list";
 
 // ---------------------------------------------------------------------------
 // Accent palettes — chosen per category to give the catalog visual rhythm.
@@ -121,26 +199,39 @@ const ACCENT = {
 export const REPORT_CATALOG: ReportDefinition[] = [
   {
     id: "daily_collection",
-    title: "Daily Collection Report",
+    title: REPORT_TITLES.daily_collection,
     description: "Today's collections versus the schedule.",
     category: "operations",
     icon: ClipboardList,
     accent: ACCENT.orange,
-    build: reportBuilder(reportService.dailyCollection, buildDailyCollectionDoc),
+    supportsBranch: true,
+    build: async (ctx) => {
+      const params = {
+        date_from: ctx.range.from,
+        date_to: ctx.range.to,
+        ...(ctx.branchId ? { branch_id: ctx.branchId } : {}),
+      };
+      // Independent reads: either failing leaves the other's section intact.
+      const [summary, repayments] = await Promise.all([
+        reportService.dailyCollection(params).catch(() => null),
+        reportService.repayments({ ...params, ...listParams }).catch(() => null),
+      ]);
+      return buildDailyCollectionDoc(summary, ctx.range, repayments);
+    },
   },
   {
     id: "repayments_list",
-    title: "Repayments List",
+    title: REPORT_TITLES.repayments_list,
     description: "Every repayment recorded in the period.",
     category: "operations",
-    icon: Receipt,
+    icon: ReceiptText,
     accent: ACCENT.emerald,
     supportsBranch: true,
     build: reportBuilder(reportService.repayments, buildRepaymentsListDoc, listParams),
   },
   {
     id: "collection_efficiency",
-    title: "Collection Efficiency",
+    title: REPORT_TITLES.collection_efficiency,
     description: "Amounts due against collected, by branch and by month.",
     category: "performance",
     icon: Gauge,
@@ -153,7 +244,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "performance",
-    title: "Officer / Branch Performance",
+    title: REPORT_TITLES.performance,
     description: "Releases, collections, and risk per account officer.",
     category: "performance",
     icon: Target,
@@ -163,7 +254,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "cash_flow",
-    title: "Cash Flow Statement",
+    title: REPORT_TITLES.cash_flow,
     description: "Cash received against cash paid out for the period.",
     category: "financial",
     icon: ArrowLeftRight,
@@ -173,7 +264,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "share_capital",
-    title: "Share Capital Report",
+    title: REPORT_TITLES.share_capital,
     description: "Member share capital movement and subscription status.",
     category: "financial",
     icon: PiggyBank,
@@ -182,11 +273,15 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     // honours `branch_id` by resolving it through the member's branch, and
     // reports which scope it applied via `branch_scope`.
     supportsBranch: true,
+    // Its totals and member roster need `share_capital:view` on top of
+    // `reports:view` (Phase 6 decision 10); the server answers 403 without it.
+    permission: "share_capital:view",
+    modules: ["share_capital"],
     build: reportBuilder(reportService.shareCapital, buildShareCapitalDoc),
   },
   {
     id: "provisioning",
-    title: "Loan Loss Provisioning",
+    title: REPORT_TITLES.provisioning,
     description: "Required allowance for probable losses by aging bucket.",
     category: "financial",
     icon: ShieldAlert,
@@ -195,27 +290,61 @@ export const REPORT_CATALOG: ReportDefinition[] = [
     build: reportBuilder(reportService.provisioning, buildProvisioningDoc),
   },
   {
+    id: "profit_sharing",
+    title: REPORT_TITLES.profit_sharing,
+    description: "Each member's share of the year's distributable profit, by share capital on the cutoff date.",
+    category: "financial",
+    icon: HandCoins,
+    accent: ACCENT.green,
+    // The whole cooperative: shared among every member by all members' share
+    // capital, so there is no branch filter.
+    supportsBranch: false,
+    cutoffDate: true,
+    // Each figure's source: share capital, expenses, the books, and every
+    // branch. The server answers 403 without any one of them.
+    permissions: ["share_capital:view", "expenses:view", "accounting:view", "branches:view_all"],
+    modules: ["share_capital", "accounting"],
+    // One cutoff date, sent as itself: the server works out the period from it.
+    build: async (ctx) => {
+      const raw = await reportService.profitSharing({ cutoff_date: ctx.range.to }).catch(() => null);
+      return buildProfitSharingDoc(raw, ctx.range);
+    },
+  },
+  {
     id: "portfolio_summary",
-    title: "Portfolio Summary",
+    title: REPORT_TITLES.portfolio_summary,
     description: "Active loans, outstanding balance, portfolio at risk.",
     category: "portfolio",
     icon: PieChart,
     accent: ACCENT.blue,
     supportsBranch: true,
-    build: reportBuilder(reportService.loanBalanceSummary, buildPortfolioSummaryDoc),
+    noDateRange: true,
+    build: pointInTimeBuilder(reportService.loanBalanceSummary, buildPortfolioSummaryDoc),
   },
   {
     id: "income_report",
-    title: "Income Report",
+    title: REPORT_TITLES.income_report,
     description: "Interest, processing fees, and penalty income.",
     category: "portfolio",
     icon: TrendingUp,
     accent: ACCENT.green,
-    build: reportBuilder(reportService.income, buildIncomeDoc),
+    build: async (ctx) => {
+      const params = {
+        date_from: ctx.range.from,
+        date_to: ctx.range.to,
+        ...(ctx.branchId ? { branch_id: ctx.branchId } : {}),
+      };
+      // Independent reads: either failing leaves the other's section intact.
+      const [summary, byLoan] = await Promise.all([
+        reportService.income(params).catch(() => null),
+        reportService.incomeByLoan({ ...params, ...listParams }).catch(() => null),
+      ]);
+      return buildIncomeDoc(summary, ctx.range, byLoan);
+    },
   },
   {
     id: "aging_report",
-    title: "Aging Report",
+    title: REPORT_TITLES.aging_report,
     description: "Overdue balances by 1–30, 31–60, 61–90, and 90+ buckets.",
     category: "portfolio",
     icon: Clock,
@@ -225,7 +354,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "portfolio_by_product",
-    title: "Loan Portfolio by Product",
+    title: REPORT_TITLES.portfolio_by_product,
     description: "Released, outstanding, and risk for each loan product.",
     category: "portfolio",
     icon: Layers,
@@ -235,7 +364,7 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "due_past_due_list",
-    title: "Due / Past Due List",
+    title: REPORT_TITLES.due_past_due_list,
     description: "Schedules due or overdue as of the selected period.",
     category: "portfolio",
     icon: AlertTriangle,
@@ -245,26 +374,50 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "borrower_report",
-    title: "Borrower Report",
-    description: "Active, new, and repeat borrower counts.",
+    title: REPORT_TITLES.borrower_report,
+    description: "Active, new, and repeat member counts.",
     category: "member",
     icon: Users,
     accent: ACCENT.purple,
-    build: reportBuilder(reportService.borrowers, buildBorrowerDoc),
+    build: async (ctx) => {
+      const params = {
+        date_from: ctx.range.from,
+        date_to: ctx.range.to,
+        ...(ctx.branchId ? { branch_id: ctx.branchId } : {}),
+      };
+      // Independent reads: either failing leaves the other's section intact.
+      const [summary, members] = await Promise.all([
+        reportService.borrowers(params).catch(() => null),
+        api.getRaw(MEMBER_LIST_ENDPOINT, { params: { ...params, ...listParams } }).catch(() => null),
+      ]);
+      return buildBorrowerDoc(summary, ctx.range, members);
+    },
   },
   {
     id: "disbursement_report",
-    title: "Disbursement Summary",
+    title: REPORT_TITLES.disbursement_report,
     description: "Totals for releases during the period.",
     category: "disbursement",
     icon: Banknote,
     accent: ACCENT.cyan,
     supportsBranch: true,
-    build: reportBuilder(reportService.disbursements, buildDisbursementDoc),
+    build: async (ctx) => {
+      const params = {
+        date_from: ctx.range.from,
+        date_to: ctx.range.to,
+        ...(ctx.branchId ? { branch_id: ctx.branchId } : {}),
+      };
+      // Independent reads: either failing leaves the other's section intact.
+      const [summary, releases] = await Promise.all([
+        reportService.disbursements(params).catch(() => null),
+        reportService.releases({ ...params, ...listParams }).catch(() => null),
+      ]);
+      return buildDisbursementDoc(summary, ctx.range, releases);
+    },
   },
   {
     id: "releases_list",
-    title: "Releases List",
+    title: REPORT_TITLES.releases_list,
     description: "Every loan released in the period with key terms.",
     category: "disbursement",
     icon: ListChecks,
@@ -274,12 +427,13 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "statement_of_account",
-    title: "Statement of Account",
+    title: REPORT_TITLES.statement_of_account,
     description: "Full schedule, payments, and balance for one loan.",
     category: "member",
     icon: FileText,
     accent: ACCENT.emerald,
     subject: "loan",
+    noDateRange: true,
     build: subjectReportBuilder(
       (id) => reportService.statementOfAccount(id),
       buildStatementOfAccountDoc
@@ -287,8 +441,8 @@ export const REPORT_CATALOG: ReportDefinition[] = [
   },
   {
     id: "subsidiary_ledger",
-    title: "Subsidiary Ledger",
-    description: "Every loan and payment for one borrower.",
+    title: REPORT_TITLES.subsidiary_ledger,
+    description: "Every loan and payment for one member.",
     category: "member",
     icon: BookOpen,
     accent: ACCENT.purple,
@@ -298,4 +452,347 @@ export const REPORT_CATALOG: ReportDefinition[] = [
       buildSubsidiaryLedgerDoc
     ),
   },
+  // Savings & Deposits: listed only where NEXT_PUBLIC_ENABLE_SAVINGS is on, and
+  // only to users who hold savings:view as well as reports:view.
+  {
+    id: "savings_balances",
+    title: REPORT_TITLES.savings_balances,
+    description: "Every savings account's balance, holds, pending approvals and accrued interest today.",
+    category: "savings",
+    icon: Wallet,
+    accent: ACCENT.emerald,
+    supportsBranch: true,
+    supportsProduct: true,
+    productKind: "regular",
+    noDateRange: true,
+    ...SAVINGS_REPORT,
+    build: pointInTimeBuilder(
+      (params) => reportService.savingsBalances({ ...params, ...listParams }),
+      buildSavingsBalancesDoc,
+    ),
+  },
+  {
+    id: "savings_transactions",
+    title: REPORT_TITLES.savings_transactions,
+    description: "Every deposit, withdrawal, transfer, interest and payout posted in the period.",
+    category: "savings",
+    icon: ArrowLeftRight,
+    accent: ACCENT.blue,
+    supportsBranch: true,
+    supportsProduct: true,
+    productKind: "regular",
+    ...SAVINGS_REPORT,
+    build: reportBuilder(reportService.savingsTransactions, buildSavingsTransactionsDoc, listParams),
+  },
+  {
+    id: "time_deposit_maturities",
+    title: REPORT_TITLES.time_deposit_maturities,
+    description: "Time deposits maturing in the period and the cash due on them.",
+    category: "savings",
+    icon: Hourglass,
+    accent: ACCENT.amber,
+    supportsBranch: true,
+    supportsProduct: true,
+    productKind: "time_deposit",
+    ...SAVINGS_REPORT,
+    defaultPeriod: "whole_month",
+    build: reportBuilder(reportService.timeDepositMaturities, buildTimeDepositMaturitiesDoc, listParams),
+  },
+  {
+    id: "savings_interest_postings",
+    title: REPORT_TITLES.savings_interest_postings,
+    description: "Interest runs posted in the period: gross interest, tax withheld and net credited.",
+    category: "savings",
+    icon: Coins,
+    accent: ACCENT.green,
+    supportsBranch: true,
+    supportsProduct: true,
+    productKind: "regular",
+    ...SAVINGS_REPORT,
+    build: reportBuilder(reportService.savingsInterestPostings, buildSavingsInterestPostingsDoc, listParams),
+  },
+  {
+    id: "savings_dormant",
+    title: REPORT_TITLES.savings_dormant,
+    description: "Accounts with no member activity for the dormancy period, and the balance they hold.",
+    category: "savings",
+    icon: MoonStar,
+    accent: ACCENT.indigo,
+    supportsBranch: true,
+    supportsProduct: true,
+    productKind: "regular",
+    noDateRange: true,
+    ...SAVINGS_REPORT,
+    build: pointInTimeBuilder(
+      (params) => reportService.savingsDormant({ ...params, ...listParams }),
+      (raw) => buildSavingsDormantDoc(raw),
+    ),
+  },
+  {
+    id: "savings_statement",
+    title: REPORT_TITLES.savings_statement,
+    description: "One savings account's transactions with its opening, running and closing balances.",
+    category: "savings",
+    icon: BookOpen,
+    accent: ACCENT.purple,
+    accountParam: true,
+    noCsv: true,
+    ...SAVINGS_REPORT,
+    build: async (ctx: ReportContext): Promise<ReportDocument> => {
+      if (!ctx.subjectId) return buildSavingsStatementDoc(null, ctx.range);
+      const raw = await reportService
+        .savingsStatement(ctx.subjectId, { date_from: ctx.range.from, date_to: ctx.range.to })
+        .catch(() => null);
+      return buildSavingsStatementDoc(raw, ctx.range);
+    },
+  },
+  {
+    id: "savings_gl_control",
+    title: REPORT_TITLES.savings_gl_control,
+    description: "The savings subledger against GL 2050 and 2060, by branch, as of today.",
+    category: "savings",
+    icon: Scale,
+    accent: ACCENT.red,
+    supportsBranch: true,
+    noDateRange: true,
+    ...SAVINGS_REPORT,
+    build: pointInTimeBuilder(reportService.savingsGlControl, (raw) => buildSavingsGlControlDoc(raw)),
+  },
+  // The rest of the Savings task's deposit reports (gap round S5). Every one
+  // takes the product filter; the GL control above has no product.
+  {
+    id: "savings_summary",
+    title: REPORT_TITLES.savings_summary,
+    description: "Opening balance, deposits, withdrawals, interest, fees and closing balance, by branch or by product.",
+    category: "savings",
+    icon: ChartColumn,
+    accent: ACCENT.emerald,
+    supportsBranch: true,
+    supportsProduct: true,
+    groupBy: {
+      label: "Group by",
+      options: [
+        { value: "branch", label: "Branch" },
+        { value: "product", label: "Product" },
+      ],
+    },
+    ...SAVINGS_REPORT,
+    build: reportBuilder(reportService.savingsSummary, buildSavingsSummaryDoc),
+  },
+  {
+    id: "savings_accounts",
+    title: REPORT_TITLES.savings_accounts,
+    description: "Every savings account, closed ones too, with its status, balance, dates and account officer.",
+    category: "savings",
+    icon: List,
+    accent: ACCENT.blue,
+    supportsBranch: true,
+    supportsProduct: true,
+    productKind: "regular",
+    noDateRange: true,
+    ...SAVINGS_REPORT,
+    build: pointInTimeBuilder(
+      (params) => reportService.savingsAccountList({ ...params, ...listParams }),
+      (raw) => buildSavingsAccountListDoc(raw),
+    ),
+  },
+  {
+    id: "savings_deposits",
+    title: REPORT_TITLES.savings_deposits,
+    description: "Deposits posted in the period; reversed ones are listed and left out of the totals.",
+    category: "savings",
+    icon: ArrowDownToLine,
+    accent: ACCENT.green,
+    supportsBranch: true,
+    supportsProduct: true,
+    productKind: "regular",
+    ...SAVINGS_REPORT,
+    build: reportBuilder(reportService.savingsDeposits, buildSavingsDepositsDoc, listParams),
+  },
+  {
+    id: "savings_withdrawals",
+    title: REPORT_TITLES.savings_withdrawals,
+    description: "Withdrawals and closing payouts posted in the period; reversed ones are listed and left out of the totals.",
+    category: "savings",
+    icon: ArrowUpFromLine,
+    accent: ACCENT.orange,
+    supportsBranch: true,
+    supportsProduct: true,
+    productKind: "regular",
+    ...SAVINGS_REPORT,
+    build: reportBuilder(reportService.savingsWithdrawals, buildSavingsWithdrawalsDoc, listParams),
+  },
+  {
+    id: "savings_large_transactions",
+    title: REPORT_TITLES.savings_large_transactions,
+    description: "Deposits, withdrawals and payouts at the large-transaction alert amount or more.",
+    category: "savings",
+    icon: Siren,
+    accent: ACCENT.red,
+    supportsBranch: true,
+    supportsProduct: true,
+    productKind: "regular",
+    ...SAVINGS_REPORT,
+    build: reportBuilder(reportService.savingsLargeTransactions, buildSavingsLargeTransactionsDoc, listParams),
+  },
+  {
+    id: "savings_time_deposits",
+    title: REPORT_TITLES.savings_time_deposits,
+    description: "Time deposits placed and not yet settled today, with the days left to maturity.",
+    category: "savings",
+    icon: Hourglass,
+    accent: ACCENT.amber,
+    supportsBranch: true,
+    supportsProduct: true,
+    productKind: "time_deposit",
+    noDateRange: true,
+    ...SAVINGS_REPORT,
+    build: pointInTimeBuilder(
+      (params) => reportService.savingsTimeDeposits({ ...params, ...listParams }),
+      (raw) => buildSavingsTimeDepositsDoc(raw),
+    ),
+  },
+  {
+    id: "savings_interest_accrual",
+    title: REPORT_TITLES.savings_interest_accrual,
+    description: "Interest earned and not yet credited on each open account, today. Shown only; nothing posts.",
+    category: "savings",
+    icon: Percent,
+    accent: ACCENT.green,
+    supportsBranch: true,
+    supportsProduct: true,
+    productKind: "regular",
+    noDateRange: true,
+    ...SAVINGS_REPORT,
+    build: pointInTimeBuilder(
+      (params) => reportService.savingsInterestAccrual({ ...params, ...listParams }),
+      (raw) => buildSavingsInterestAccrualDoc(raw),
+    ),
+  },
+  {
+    id: "savings_account_activity",
+    title: REPORT_TITLES.savings_account_activity,
+    description: "Each account's opening balance, money in and out, and closing balance for the period.",
+    category: "savings",
+    icon: Activity,
+    accent: ACCENT.indigo,
+    supportsBranch: true,
+    supportsProduct: true,
+    productKind: "regular",
+    ...SAVINGS_REPORT,
+    build: reportBuilder(reportService.savingsAccountActivity, buildSavingsAccountActivityDoc, listParams),
+  },
+  {
+    id: "savings_member_statement",
+    title: REPORT_TITLES.savings_member_statement,
+    description: "One member's savings accounts and time deposits for the period, account by account.",
+    category: "savings",
+    icon: UserRound,
+    accent: ACCENT.purple,
+    subject: "borrower",
+    ...SAVINGS_REPORT,
+    build: subjectReportBuilder(
+      (id, params) => reportService.savingsMemberStatement(id, params),
+      buildSavingsMemberStatementDoc,
+    ),
+  },
 ];
+
+// ---------------------------------------------------------------------------
+// AMLA Compliance (Phase 6, AMLA-B7): made, totalled and exported by the
+// server, each on its own page under /amla/reports
+// ---------------------------------------------------------------------------
+
+/** `Filings::CTR_READ` and `STR_READ`: who reads CTR and STR records. */
+const FILING_READERS: Permission[] = ["amla:ctr", "amla:approve", "amla:submit", "amla:export", "amla:str"];
+
+const amlaReport = (
+  key: AmlaReportKey,
+  description: string,
+  icon: AmlaReportDefinition["icon"],
+  permissions: Permission[],
+  headOffice: boolean,
+): AmlaReportDefinition => ({
+  key,
+  // One title for the catalog and the page's breadcrumb.
+  title: AMLA_REPORT_TITLES[key],
+  description,
+  icon,
+  accent: ACCENT.red,
+  href: `/amla/reports/${key}`,
+  permissions,
+  headOffice,
+  available: env.features.amla,
+});
+
+/** The ten AMLA reports, by the server's keys, titles and descriptions, each gated as the server gates it. */
+export const AMLA_REPORT_CATALOG: AmlaReportDefinition[] = [
+  amlaReport("covered_transactions", "Each covered transaction (CTR) candidate, why it qualified, its filing status and deadline.", Banknote, ["amla:ctr"], false),
+  amlaReport("suspicious_transactions", "Cases where suspicion was established, their related transactions, deadline and STR status. Never the narrative.", ShieldAlert, ["amla:str"], true),
+  amlaReport("transaction_monitoring", "Customer transactions by branch and channel: volume, screened, unscreened and flagged, with alert categories and rule versions.", Activity, ["amla:alerts"], false),
+  amlaReport("risk_assessment", "Each customer's AML risk level, its scored factors, changes and review dates.", Gauge, ["amla:cdd"], false),
+  amlaReport("customer_due_diligence", "Each customer's identification status, missing KYC details and documents, enhanced due diligence and review dates.", UserRound, ["amla:cdd"], false),
+  amlaReport("watchlist_screening", "Possible watchlist matches, their list version, review status, reviewer and resolution date.", Scale, ["amla:screening"], true),
+  amlaReport("case_register", "Every case opened in the period or still open: its alerts, owner, priority, age, history and decision.", FileText, ["amla:cases"], true),
+  amlaReport("submissions_register", "Each CTR and STR record: its period, status, deadline, submission and the facility's responses.", ClipboardList, FILING_READERS, false),
+  amlaReport("audit_history", "Every AMLA action in the period: changes, decisions, approvals, files, submissions, access and exports.", BookOpen, ["amla:audit"], true),
+  amlaReport("management_summary", "Transactions monitored, alerts, investigations, filings, missed deadlines, KYC and watchlist reviews, as totals only.", PieChart, ["amla:view"], true),
+];
+
+/**
+ * The AMLA reports this user may open, for the Reports page: none while the
+ * AMLA switch is off, and none without `amla:view`, since their pages sit
+ * under /amla.
+ */
+export function visibleAmlaReports(
+  can: (permission: Permission) => boolean,
+  isHidden: (key: MenuModuleKey) => boolean = () => false,
+): AmlaReportDefinition[] {
+  if (!can(AMLA_ROUTE_PERMISSION) || isHidden("amla")) return [];
+  return AMLA_REPORT_CATALOG.filter((r) => amlaReportAccess(r, can) === "open");
+}
+
+/** Whether the user holds every permission beyond `reports:view` the report's data needs. */
+function holdsReportPermissions(report: ReportDefinition, can: (permission: Permission) => boolean): boolean {
+  return (!report.permission || can(report.permission)) && (report.permissions ?? []).every((p) => can(p));
+}
+
+/**
+ * The reports this user may open: their module is switched on for this
+ * deployment, and they hold every extra permission the report's data needs.
+ */
+export function visibleReports(
+  can: (permission: Permission) => boolean,
+  isHidden: (key: MenuModuleKey) => boolean = () => false,
+): ReportDefinition[] {
+  return REPORT_CATALOG.filter(
+    (r) => r.available !== false && catalogEntryShown(r.modules, isHidden) && holdsReportPermissions(r, can),
+  );
+}
+
+/**
+ * A section's subtitle for this user, naming only reports they can open:
+ * without the Share Capital report, the Financial section doesn't mention it.
+ */
+export function categoryDescription(category: ReportCategory, visible: readonly ReportDefinition[]): string {
+  if (category === "financial" && !visible.some((r) => r.id === "share_capital")) {
+    return "Cash position and loan loss provisioning";
+  }
+  return CATEGORY_META[category].description;
+}
+
+/**
+ * Whether a report's page opens for this user. A report whose module is
+ * switched off for this deployment, or that doesn't exist, is "not_found", so
+ * nothing about a switched-off module is revealed. One that is on but needs a
+ * permission the user lacks is "no_access", as the server answers it (403).
+ */
+export function reportAccess(
+  id: string,
+  can: (permission: Permission) => boolean,
+  isHidden: (key: MenuModuleKey) => boolean = () => false,
+): "open" | "no_access" | "not_found" {
+  const report = REPORT_CATALOG.find((r) => r.id === id);
+  if (!report || report.available === false || !catalogEntryShown(report.modules, isHidden)) return "not_found";
+  return holdsReportPermissions(report, can) ? "open" : "no_access";
+}

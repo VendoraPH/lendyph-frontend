@@ -18,19 +18,20 @@ import { renderSheetCsv } from "./export";
 import type { TemplateSheet } from "./types";
 
 function profiles(): TemplateSheet {
-  const sheet = findSheet(createDraft(), "customer_profile");
+  const sheet = findSheet(createDraft(), "members");
   assert.ok(sheet);
   return sheet;
 }
 
-test("a fresh draft carries both sheets, each with one row to type into", () => {
+test("a fresh draft carries every sheet, each with one row to type into", () => {
   const draft = createDraft();
   assert.deepEqual(
     draft.sheets.map((s) => s.id),
-    ["customer_profile", "loans"]
+    ["members", "loans", "share_capital"]
   );
-  assert.equal(draft.sheets[0].columns.length, 22);
+  assert.equal(draft.sheets[0].columns.length, 26);
   assert.equal(draft.sheets[1].columns.length, 18);
+  assert.equal(draft.sheets[2].columns.length, 6);
   for (const sheet of draft.sheets) assert.equal(sheet.rows.length, 1);
 });
 
@@ -109,7 +110,7 @@ test("a row nobody typed into is not exported", () => {
 
 test("the CSV keeps the header row and follows the edited column order", () => {
   let draft = createDraft();
-  draft = mapSheet(draft, "customer_profile", (s) =>
+  draft = mapSheet(draft, "members", (s) =>
     moveColumn(updateCell(s, 0, "account_no", "1001"), "account_no", "right")
   );
   const csv = renderSheetCsv(draft.sheets[0]);

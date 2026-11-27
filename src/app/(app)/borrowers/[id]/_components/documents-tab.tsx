@@ -1,9 +1,13 @@
 "use client";
 
+import { useMenuVisibility } from "@/hooks/use-menu-visibility";
+import { memberPageParts } from "@/lib/hidden-module-parts";
 import { useState, useEffect, useCallback, useRef } from "react";
+import { formatDate } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmDeleteDialog } from "@/components/common/confirm-delete-dialog";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -11,25 +15,33 @@ import {
   Upload, FileText, Trash2, Loader2, IdCard,
 } from "lucide-react";
 import { toast } from "sonner";
+import { notifyError } from "@/lib/notify";
 import { documentService } from "@/services";
 import { borrowerService, type BorrowerValidId } from "@/services/borrower.service";
 import type { Document } from "@/services/document.service";
-import { VALID_ID_OPTIONS } from "@/constants";
 import { fileUrl } from "@/lib/file-url";
 import { ImagePreviewDialog, type PreviewImage } from "@/components/common";
+import { documentTypeFromName, documentTypeLabel } from "@/lib/document-type";
+import { DOCUMENT_ACCEPT } from "@/lib/file-validation";
+import {
+  deleteDocumentLabel,
+  deleteValidIdLabel,
+  documentName,
+  validIdLabel,
+  validIdName,
+} from "@/lib/document-delete";
+import { env } from "@/config/env";
+import { usePermission } from "@/hooks";
+import { PortalShareControl, sharedFromList } from "./portal-share-control";
 
 interface DocumentsTabProps {
   borrowerId: number;
 }
 
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
-function validIdLabel(entry: BorrowerValidId): string {
-  if (entry.type === "others") return entry.custom_type_name || "Others";
-  return VALID_ID_OPTIONS.find((o) => o.value === entry.type)?.label ?? entry.custom_type_name ?? entry.type;
-}
+/** The row whose delete is waiting for the user to confirm it. */
+type PendingDelete =
+  | { kind: "document"; doc: Document }
+  | { kind: "valid_id"; entry: BorrowerValidId };
 
 
 export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
@@ -38,9 +50,20 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [deletingDoc, setDeletingDoc] = useState<number | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [deletingValidId, setDeletingValidId] = useState<number | null>(null);
   const [preview, setPreview] = useState<{ title: string; images: PreviewImage[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { can } = usePermission();
+  const { isHidden } = useMenuVisibility();
+  // "Share with member" (Member Portal): member_portal:manage and borrowers:view, as the server checks,
+  // and not while Menu Visibility hides the Member Portal.
+  const canShare =
+    env.features.memberPortal &&
+    memberPageParts(isHidden).portalAccess &&
+    can("member_portal:manage") &&
+    can("borrowers:view");
+  const [sharedById, setSharedById] = useState<Record<number, boolean>>({});
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -69,13 +92,14 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("type", file.name.split(".").pop()?.toUpperCase() || "FILE");
+      formData.append("type", documentTypeFromName(file.name).toUpperCase());
       formData.append("label", file.name);
       await documentService.borrowerUpload(borrowerId, formData);
       toast.success("Document uploaded");
       fetchData();
-    } catch {
-      toast.error("We couldn't upload the document. Please try again.");
+    } catch (err) {
+      // A 422 (the file's type or size) in the server's words.
+      notifyError(err, "We couldn't upload the document. Please try again.");
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -92,6 +116,7 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
       toast.error("We couldn't delete this document. Please try again.");
     } finally {
       setDeletingDoc(null);
+      setPendingDelete(null);
     }
   }
 
@@ -105,6 +130,7 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
       toast.error("We couldn't delete this valid ID. Please try again.");
     } finally {
       setDeletingValidId(null);
+      setPendingDelete(null);
     }
   }
 
@@ -120,6 +146,7 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
   }
 
   const totalCount = validIds.length + documents.length;
+  const deleting = deletingDoc !== null || deletingValidId !== null;
 
   if (loading) {
     return (
@@ -140,7 +167,7 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
                 ref={fileInputRef}
                 type="file"
                 className="hidden"
-                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                accept={DOCUMENT_ACCEPT}
                 onChange={handleUpload}
               />
               <Button
@@ -198,9 +225,10 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
                         size="sm"
                         className="h-7 w-7 p-0 text-destructive hover:text-destructive"
                         disabled={deletingValidId === entry.id}
+                        aria-label={deleteValidIdLabel(entry)}
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleDeleteValidId(entry.id);
+                          setPendingDelete({ kind: "valid_id", entry });
                         }}
                       >
                         {deletingValidId === entry.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
@@ -217,22 +245,32 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <span className="text-sm font-medium truncate">{doc.label || `Document #${doc.id}`}</span>
+                        <span className="text-sm font-medium truncate">{documentName(doc)}</span>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="text-xs">{doc.type}</Badge>
+                      <Badge variant="outline" className="text-xs">{documentTypeLabel(doc.type)}</Badge>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{formatDate(doc.created_at)}</TableCell>
                     <TableCell className="text-right">
+                      {canShare && (
+                        <PortalShareControl
+                          borrowerId={borrowerId}
+                          documentId={doc.id}
+                          documentName={documentName(doc)}
+                          shared={sharedById[doc.id] ?? sharedFromList(doc)}
+                          onChanged={(shared) => setSharedById((prev) => ({ ...prev, [doc.id]: shared }))}
+                        />
+                      )}
                       <Button
                         variant="ghost"
                         size="sm"
                         className="h-7 w-7 p-0 text-destructive hover:text-destructive"
                         disabled={deletingDoc === doc.id}
+                        aria-label={deleteDocumentLabel(doc)}
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleDeleteDocument(doc.id);
+                          setPendingDelete({ kind: "document", doc });
                         }}
                       >
                         {deletingDoc === doc.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
@@ -245,6 +283,25 @@ export function DocumentsTab({ borrowerId }: DocumentsTabProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* Outside the table: a click inside the dialog must not reach the row, which opens the file. */}
+      <ConfirmDeleteDialog
+        open={pendingDelete !== null}
+        title={pendingDelete?.kind === "valid_id" ? "Delete this valid ID?" : "Delete this document?"}
+        description={
+          pendingDelete?.kind === "valid_id"
+            ? `${validIdName(pendingDelete.entry)} will be removed from this member's valid IDs.`
+            : pendingDelete?.kind === "document"
+              ? `${documentName(pendingDelete.doc)} will be removed from this member's documents.`
+              : null
+        }
+        busy={deleting}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => {
+          if (pendingDelete?.kind === "document") handleDeleteDocument(pendingDelete.doc.id);
+          else if (pendingDelete?.kind === "valid_id") handleDeleteValidId(pendingDelete.entry.id);
+        }}
+      />
 
       <ImagePreviewDialog
         open={!!preview}

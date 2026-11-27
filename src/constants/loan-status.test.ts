@@ -1,11 +1,20 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   ACTIVE_LOAN_STATUSES,
+  COLLECTIBLE_LOAN_STATUSES,
+  EVER_RELEASED_LOAN_STATUSES,
   isActiveLoanStatus,
+  isCollectibleLoanStatus,
+  isEverReleasedLoanStatus,
   LOAN_STATUS,
   LOAN_STATUS_COLORS,
   LOAN_STATUS_LABELS,
+  loanDisplayStatus,
+  loanRowStatusLabel,
+  loanStatusLabel,
 } from "./loan-status";
 import type { LoanStatus } from "@/types/loan";
 
@@ -93,6 +102,15 @@ test("the legacy `ongoing` status is still labelled and styled", () => {
   assert.equal(LOAN_STATUS_COLORS.ongoing, LOAN_STATUS_COLORS.current);
 });
 
+test("a released loan reads Current, the same as an ongoing one (decision 5a)", () => {
+  // `loans.status` keeps both values; only the wording is shared, and so is
+  // the pill, so one word never comes in two colours.
+  assert.equal(LOAN_STATUS_LABELS.released, "Current");
+  assert.equal(loanStatusLabel("released"), "Current");
+  assert.equal(LOAN_STATUS_LABELS.released, LOAN_STATUS_LABELS.ongoing);
+  assert.equal(LOAN_STATUS_COLORS.released, LOAN_STATUS_COLORS.ongoing);
+});
+
 // ── the active / inactive partition ────────────────────────────────────────
 //
 // The printables loan picker filters a member's loans by it, and "active" is
@@ -138,4 +156,182 @@ test("an unknown or absent status reads as inactive rather than throwing", () =>
   assert.equal(isActiveLoanStatus(null), false);
   assert.equal(isActiveLoanStatus(""), false);
   assert.equal(isActiveLoanStatus("some_future_status"), false);
+});
+
+// ── the collectible set ────────────────────────────────────────────────────
+//
+// Active means a current loan. A defaulted loan is not active, but it is still
+// owed: the server's collectible loans (released, ongoing, defaulted).
+
+test("the collectible set is released, ongoing and defaulted", () => {
+  assert.deepEqual([...COLLECTIBLE_LOAN_STATUSES], ["released", "ongoing", "defaulted"]);
+});
+
+test("a defaulted loan is collectible but not active", () => {
+  assert.equal(isCollectibleLoanStatus(LOAN_STATUS.DEFAULTED), true);
+  assert.equal(isActiveLoanStatus(LOAN_STATUS.DEFAULTED), false);
+});
+
+test("every collectible status the enum holds, except defaulted, is active", () => {
+  for (const status of COLLECTIBLE_LOAN_STATUSES) {
+    if (status === LOAN_STATUS.DEFAULTED) continue;
+    assert.ok(isActiveLoanStatus(status), status);
+  }
+});
+
+test("finished, never-released and unknown statuses are not collectible", () => {
+  for (const status of ["draft", "for_review", "approved", "rejected", "void", "completed", "restructured", "closed"]) {
+    assert.equal(isCollectibleLoanStatus(status), false, status);
+  }
+  assert.equal(isCollectibleLoanStatus(undefined), false);
+  assert.equal(isCollectibleLoanStatus(null), false);
+  assert.equal(isCollectibleLoanStatus("some_future_status"), false);
+});
+
+// ── the ever-released set ──────────────────────────────────────────────────
+//
+// The loan detail page reads the persisted schedule, repayments and ledger for
+// exactly these, and the restructure link picks the child loan in one of them.
+
+test("the ever-released set is the backend's Loan::EVER_RELEASED_STATUSES", () => {
+  assert.deepEqual(
+    [...EVER_RELEASED_LOAN_STATUSES],
+    ["released", "ongoing", "completed", "defaulted", "restructured"]
+  );
+});
+
+test("statuses the loans.status enum cannot hold are not ever-released", () => {
+  // Kept in the union for old payloads only; listing them made every copy of
+  // this set on the loan page longer than the enum it described.
+  for (const status of [LOAN_STATUS.CURRENT, LOAN_STATUS.PAST_DUE, LOAN_STATUS.CLOSED]) {
+    assert.equal(isEverReleasedLoanStatus(status), false, `${status} is not in the enum`);
+  }
+});
+
+test("a loan that never released is not ever-released", () => {
+  for (const status of [
+    LOAN_STATUS.DRAFT,
+    LOAN_STATUS.FOR_REVIEW,
+    LOAN_STATUS.APPROVED,
+    LOAN_STATUS.REJECTED,
+    LOAN_STATUS.VOID,
+  ]) {
+    assert.equal(isEverReleasedLoanStatus(status), false, `${status} never released`);
+  }
+  assert.equal(isEverReleasedLoanStatus(undefined), false);
+  assert.equal(isEverReleasedLoanStatus(null), false);
+  assert.equal(isEverReleasedLoanStatus(""), false);
+});
+
+test("a loan under approval reads \"For Approval\", with its approving officer when known", () => {
+  assert.equal(LOAN_STATUS_LABELS.for_review, "For Approval");
+  assert.equal(loanStatusLabel("for_review", "Manager"), "For Approval - Manager");
+  assert.equal(loanStatusLabel("for_review", "  Manager "), "For Approval - Manager");
+  assert.equal(loanStatusLabel("for_review", null), "For Approval");
+  assert.equal(loanStatusLabel("for_review", "  "), "For Approval");
+  assert.equal(loanStatusLabel("for_review"), "For Approval");
+});
+
+test("only For Approval carries an approver suffix", () => {
+  assert.equal(loanStatusLabel("approved", "Manager"), "Approved");
+  assert.equal(loanStatusLabel("draft", "Manager"), "Draft");
+});
+
+// The approval step's Status is what the loan shows while it waits at that
+// step. The backend sends it as `current_status_label`; a step without one
+// falls back to the step (approver) name, as before.
+test("a loan waiting at a step with a Status shows that Status", () => {
+  assert.equal(
+    loanStatusLabel("for_review", "Manager", "Credit Check"),
+    "For Approval - Credit Check",
+  );
+  assert.equal(
+    loanStatusLabel("for_review", null, "  Credit Check "),
+    "For Approval - Credit Check",
+  );
+});
+
+test("a step without a Status falls back to the step name", () => {
+  assert.equal(loanStatusLabel("for_review", "Manager", null), "For Approval - Manager");
+  assert.equal(loanStatusLabel("for_review", "Manager", "   "), "For Approval - Manager");
+  assert.equal(loanStatusLabel("for_review", null, null), "For Approval");
+});
+
+test("a step Status relabels only a loan under approval or awaiting release", () => {
+  assert.equal(loanStatusLabel("approved", "Manager", "Credit Check"), "Approved - Credit Check");
+  assert.equal(loanStatusLabel("released", null, "Credit Check"), "Current");
+});
+
+// ── the label at the Release step ──────────────────────────────────────────
+
+test("an approved loan reads the Release step's Status when it has one", () => {
+  assert.equal(loanStatusLabel("approved", null, "Ready for Release"), "Approved - Ready for Release");
+});
+
+test("an approved loan with no Status reads plain Approved, never the approver", () => {
+  assert.equal(loanStatusLabel("approved"), "Approved");
+  assert.equal(loanStatusLabel("approved", null, "   "), "Approved");
+  assert.equal(loanStatusLabel("approved", "Release Officer", null), "Approved");
+});
+
+test("a loan under approval keeps its step Status, then its approver", () => {
+  assert.equal(loanStatusLabel("for_review", "Manager", "Credit Check"), "For Approval - Credit Check");
+  assert.equal(loanStatusLabel("for_review", "Manager", null), "For Approval - Manager");
+  assert.equal(loanStatusLabel("for_review"), "For Approval");
+});
+
+// ── the status a loan shows ────────────────────────────────────────────────
+
+test("a loan past grace shows the server's display_status, in red", () => {
+  const display = loanDisplayStatus({ status: "ongoing", display_status: "past_due" });
+  assert.equal(display, "past_due");
+  assert.equal(LOAN_STATUS_LABELS[display], "Past Due");
+  assert.ok(LOAN_STATUS_COLORS[display].includes("text-red-700"));
+});
+
+test("a row with no display_status, or one the screen doesn't know, shows its status", () => {
+  assert.equal(loanDisplayStatus({ status: "ongoing" }), "ongoing");
+  assert.equal(loanDisplayStatus({ status: "ongoing", display_status: null }), "ongoing");
+  assert.equal(loanDisplayStatus({ status: "released", display_status: "someday" }), "released");
+});
+
+test("display_status never changes a loan that is not past due", () => {
+  assert.equal(loanDisplayStatus({ status: "completed", display_status: "completed" }), "completed");
+});
+
+// ── one label for every list of loans ──────────────────────────────────────
+
+test("a list row reads the same label on the Loans list and a member's Loans tab", () => {
+  assert.equal(
+    loanRowStatusLabel({ status: "for_review", current_approver: "Manager" }),
+    "For Approval - Manager",
+  );
+  assert.equal(
+    loanRowStatusLabel({ status: "for_review", current_approver: "Manager", current_status_label: "Credit Check" }),
+    "For Approval - Credit Check",
+  );
+  assert.equal(
+    loanRowStatusLabel({ status: "approved", current_status_label: "Ready for Release" }),
+    "Approved - Ready for Release",
+  );
+  assert.equal(loanRowStatusLabel({ status: "ongoing", display_status: "past_due" }), "Past Due");
+  assert.equal(loanRowStatusLabel({ status: "ongoing" }), "Current");
+});
+
+test("a restructure's row says so, except once it has itself been restructured", () => {
+  assert.equal(
+    loanRowStatusLabel({ status: "ongoing", display_status: "past_due", is_restructure: true }),
+    "Restructured — Past Due",
+  );
+  assert.equal(loanRowStatusLabel({ status: "restructured", is_restructure: true }), "Restructured");
+});
+
+test("the restructure page's loan picker reads the server's display_status, like the Loans list", () => {
+  // A loan the API reports past due reads "Past Due" (red), not "Current".
+  assert.equal(loanRowStatusLabel({ status: "ongoing", display_status: "past_due" }), "Past Due");
+  assert.match(LOAN_STATUS_COLORS[loanDisplayStatus({ status: "ongoing", display_status: "past_due" })], /red/);
+  const page = readFileSync(join(process.cwd(), "src/app/(app)/loans/restructure/page.tsx"), "utf8");
+  assert.ok(page.includes("LOAN_STATUS_COLORS[loanDisplayStatus(l)]"));
+  assert.ok(page.includes("{loanRowStatusLabel(l)}"));
+  assert.ok(!page.includes("LOAN_STATUS_LABELS[l.status]"));
 });

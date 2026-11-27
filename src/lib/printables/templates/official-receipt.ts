@@ -12,7 +12,10 @@
  * alongside them.
  */
 
+import { knownPaymentMethodName } from "@/constants/payment-methods";
+import { receiptExtraLines } from "@/lib/receipt-extras";
 import { amountInWords } from "../amount-in-words";
+import { readablePaymentRemarks } from "../legacy-remarks";
 import type { PrintableDocument, PrintBlock, PrintChargeLine } from "../types";
 import {
   BLANK_ORG,
@@ -33,7 +36,12 @@ import {
   type PrintableBuildOptions,
 } from "./shared";
 
-const COPIES = ["Borrower's Copy", "File Copy"];
+const COPIES = ["Member's Copy", "File Copy"];
+
+/** A payment method as the app labels it ("GCash", "Bank Transfer", "Auto-Pay"). */
+function methodLabel(method: unknown): string | null {
+  return knownPaymentMethodName(method) ?? humanize(method);
+}
 
 export function buildOfficialReceiptDoc(
   raw: unknown,
@@ -86,7 +94,9 @@ export function buildOfficialReceiptDoc(
     "penalty_paid",
     "penalty",
   ]);
-  const overpayment = pickNumber(payment, ["overpayment", "excess_amount"]);
+  // Insurance premium owed on the loan, collected before penalty, interest
+  // and principal. Shown only when this payment collected some.
+  const insurance = pickNumber(payment, ["insurance_applied"]);
   const balanceAfter = pickNumber(payment, ["balance_after", "new_balance"]);
   const balanceBefore = pickNumber(payment, ["balance_before", "previous_balance"]);
 
@@ -95,20 +105,25 @@ export function buildOfficialReceiptDoc(
     pick(payment, ["borrower_name"]) ??
     pick(loan, ["borrower_name"]);
   const accountNumber =
-    pick(payment, ["loan_account_number"]) ??
-    pick(loan, ["loan_account_number", "application_number"]);
+    pick(payment, ["loan_display_number", "loan_account_number"]) ??
+    pick(loan, ["display_number", "loan_account_number", "external_loan_no", "application_number"]);
 
   const breakdown: PrintChargeLine[] = [
     { label: "Applied to Principal", amount: currencyOrDash(principal), indent: true },
     { label: "Applied to Interest", amount: currencyOrDash(interest), indent: true },
     { label: "Applied to Penalty", amount: currencyOrDash(penalty), indent: true },
   ];
-  if ((overpayment ?? 0) > 0) {
+  if ((insurance ?? 0) > 0) {
     breakdown.push({
-      label: "Advance / Overpayment",
-      amount: formatCurrency(overpayment ?? 0),
+      label: "Applied to Insurance Premium",
+      amount: formatCurrency(insurance ?? 0),
       indent: true,
     });
+  }
+  // Build-up and overpayment as the server split them, or its one combined
+  // figure when it sent no split (receipt-extras).
+  for (const line of receiptExtraLines(payment)) {
+    breakdown.push({ label: line.label, amount: line.amount, indent: true });
   }
   breakdown.push({
     label: "TOTAL AMOUNT PAID",
@@ -144,10 +159,8 @@ export function buildOfficialReceiptDoc(
         columns: 2,
         items: presentFields([
           dateTimeField("Voided on", pick(payment, ["voided_at"])),
-          field(
-            "Voided by",
-            personName(payment, "voided_by_user", ["voided_by"])
-          ),
+          // `voided_by` is the user's id, so only the loaded user names anyone.
+          field("Voided by", personName(payment, "voided_by_user")),
           field("Reason", pick(payment, ["void_reason"])),
         ]),
       }
@@ -166,13 +179,14 @@ export function buildOfficialReceiptDoc(
         field("Loan Account No.", accountNumber),
         field(
           "Member No.",
-          pick(borrower, ["borrower_code", "member_no", "code"])
+          pick(payment, ["borrower_code"]) ??
+            pick(borrower, ["borrower_code", "member_no", "code"])
         ),
         field(
           "Loan Product",
           pick(payment, ["loan_product_name"]) ?? pick(loan, ["loan_product_name"])
         ),
-        field("Payment Method", humanize(pick(payment, ["method"]))),
+        field("Payment Method", methodLabel(pick(payment, ["method"]))),
         field("Reference No.", pick(payment, ["reference_number"])),
       ]),
     },
@@ -194,10 +208,13 @@ export function buildOfficialReceiptDoc(
       title: "Loan Balance",
       columns: 2,
       items: presentFields([
-        field("Balance before payment", currencyOrDash(balanceBefore)),
-        field("Balance after payment", currencyOrDash(balanceAfter)),
+        // The stored balances are principal only; the premium collected is
+        // stated beside them when there is some.
+        field("Principal balance before payment", currencyOrDash(balanceBefore)),
+        field("Principal balance after payment", currencyOrDash(balanceAfter)),
+        (insurance ?? 0) > 0 ? field("Insurance premium collected", formatCurrency(insurance ?? 0)) : null,
         dateField("Next due date", pick(payment, ["next_due_date"])),
-        field("Remarks", pick(payment, ["remarks"])),
+        field("Remarks", readablePaymentRemarks(pick<string>(payment, ["remarks"]))),
       ]),
     },
     {

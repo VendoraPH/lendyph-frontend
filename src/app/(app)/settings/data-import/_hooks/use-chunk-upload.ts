@@ -44,12 +44,14 @@ import {
   type ImportSession,
 } from "@/lib/import-session";
 import { getErrorMessage } from "@/lib/api-error";
+import { piecesOnServer } from "@/lib/count-words";
 import { dataImportService } from "@/services/data-import.service";
 import type {
   ImportFileKind,
   ImportFileStatus,
   ImportRunStatus,
 } from "@/types/data-import";
+import { IMPORT_FILE_KINDS } from "../_components/import-files";
 
 /* ------------------------------------------------------------------ */
 /* The per-file block                                                   */
@@ -91,8 +93,11 @@ export const RETRY_MAX_MS = 15_000;
  */
 export const OFFLINE_WAIT_MS = 15_000;
 
-/** The order files are sent in. Deterministic so progress is reproducible. */
-const KIND_ORDER: readonly ImportFileKind[] = ["customers", "loans"];
+/**
+ * The order files are sent in: the order the import reads them
+ * (`IMPORT_FILE_KINDS`). Deterministic so progress is reproducible.
+ */
+const KIND_ORDER: readonly ImportFileKind[] = IMPORT_FILE_KINDS;
 
 export const INSECURE_CONTEXT_MESSAGE =
   "This page must be served over HTTPS (or opened on localhost) to upload. " +
@@ -325,7 +330,7 @@ export function resumeVerdict(args: {
       kind: "needs-file",
       reason:
         received > 0
-          ? `${received} of ${total} pieces of ${name} are already on the server. Pick ${name} again to carry on from there — the file itself is never stored in this browser, so it has to be re-opened.`
+          ? `${piecesOnServer(received, total, name)} Pick ${name} again to carry on from there — the file itself is never stored in this browser, so it has to be re-opened.`
           : `Pick ${name} to start the upload.`,
     };
   }
@@ -452,7 +457,7 @@ export type ChunkUploadPhase =
 export interface ChunkUploadState {
   phase: ChunkUploadPhase;
   files: ChunkUploadFileState[];
-  /** Whole-run percentage across both files, by bytes. */
+  /** Whole-run percentage across the run's files, by bytes. */
   overallPercent: number;
   /** Friendly copy, always through `getErrorMessage`. */
   error: string | null;
@@ -479,7 +484,7 @@ export interface UseChunkUploadOptions {
   autoStart?: boolean;
   /** Fired per acknowledged chunk so the shell can persist progress. */
   onChunkAcknowledged?: (kind: ImportFileKind, index: number) => void;
-  /** Fired once both files are assembled, with a freshly read status. */
+  /** Fired once every file of the run is assembled, with a freshly read status. */
   onAssembled?: (status: ImportRunStatus) => void;
 }
 

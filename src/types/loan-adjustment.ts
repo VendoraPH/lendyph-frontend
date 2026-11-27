@@ -9,7 +9,8 @@ export type LoanAdjustmentStatus =
   | "pending"
   | "approved"
   | "rejected"
-  | "applied";
+  | "applied"
+  | "cancelled";
 
 export interface LoanAdjustment {
   id: number;
@@ -24,8 +25,21 @@ export interface LoanAdjustment {
   rejected_by?: string;
   rejected_at?: string;
   applied_at?: string;
+  /** The server's answer to "may this user cancel it now": approved, and the user holds `loan_adjustments:approve`. */
+  can_cancel?: boolean;
+  cancelled_at?: string | null;
+  cancelled_by_user?: { id: number; name: string } | null;
+  cancellation_reason?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** `GET /loans/{loan}/balance-adjustment-preview`: the server's figures for a target. */
+export interface BalanceAdjustmentPreview {
+  outstanding_principal: number | string;
+  target_principal_balance: number | string;
+  adjustment_amount: number | string;
+  resulting_principal_balance: number | string;
 }
 
 export interface CreateLoanAdjustmentData {

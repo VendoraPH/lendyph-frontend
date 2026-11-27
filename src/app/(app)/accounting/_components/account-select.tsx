@@ -9,10 +9,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Account } from "@/types";
+import { accountSelectItems } from "../_lib/select-items";
 
 interface AccountSelectProps {
+  /** Ties the label to the trigger, so the picker has an accessible name. */
+  id?: string;
   label?: string;
-  accounts: Account[];
+  accounts: readonly Pick<Account, "id" | "code" | "name">[];
   value: number | null;
   onChange: (id: number | null) => void;
   placeholder?: string;
@@ -24,6 +27,7 @@ interface AccountSelectProps {
  * out by the caller, because posting to a parent double-counts its children.
  */
 export function AccountSelect({
+  id,
   label,
   accounts,
   value,
@@ -32,13 +36,18 @@ export function AccountSelect({
   className = "w-[300px]",
 }: AccountSelectProps) {
   return (
-    <div className="space-y-1.5">
-      {label && <Label className="text-xs text-muted-foreground">{label}</Label>}
+    <div className="flex flex-col gap-1.5">
+      {label && (
+        <Label htmlFor={id} className="text-xs text-muted-foreground">
+          {label}
+        </Label>
+      )}
       <Select
-        value={value === null ? "" : String(value)}
+        value={value === null ? null : String(value)}
         onValueChange={(v) => onChange(v ? Number(v) : null)}
+        items={accountSelectItems(accounts)}
       >
-        <SelectTrigger className={className}>
+        <SelectTrigger id={id} className={className} aria-label={id ? undefined : label}>
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>

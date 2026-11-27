@@ -24,7 +24,7 @@ test("an untouched draft raises nothing — a blank row is not a row missing val
 });
 
 test("a started row is held to its required columns", () => {
-  const draft = fill(createDraft(), "customer_profile", 0, {
+  const draft = fill(createDraft(), "members", 0, {
     last_name: "Dela Cruz",
   });
   const issues = validateDraft(draft);
@@ -33,7 +33,7 @@ test("a started row is held to its required columns", () => {
 });
 
 test("the spouse block is only required once Civil Status says Married", () => {
-  const single = fill(createDraft(), "customer_profile", 0, {
+  const single = fill(createDraft(), "members", 0, {
     civil_status: "Single",
   });
   assert.equal(
@@ -41,7 +41,7 @@ test("the spouse block is only required once Civil Status says Married", () => {
     false
   );
 
-  const married = fill(createDraft(), "customer_profile", 0, {
+  const married = fill(createDraft(), "members", 0, {
     civil_status: "Married",
   });
   assert.equal(
@@ -56,9 +56,9 @@ test("the spouse block is only required once Civil Status says Married", () => {
 });
 
 test("member account numbers must be unique", () => {
-  let draft = mapSheet(createDraft(), "customer_profile", addRow);
-  draft = fill(draft, "customer_profile", 0, { account_no: "1001" });
-  draft = fill(draft, "customer_profile", 1, { account_no: "1001" });
+  let draft = mapSheet(createDraft(), "members", addRow);
+  draft = fill(draft, "members", 0, { account_no: "1001" });
+  draft = fill(draft, "members", 1, { account_no: "1001" });
   assert.equal(
     validateDraft(draft).filter((i) =>
       i.message.includes("appears more than once")
@@ -68,18 +68,18 @@ test("member account numbers must be unique", () => {
 });
 
 test("a loan account with no member row is flagged", () => {
-  let draft = fill(createDraft(), "customer_profile", 0, { account_no: "1001" });
+  let draft = fill(createDraft(), "members", 0, { account_no: "1001" });
   draft = fill(draft, "loans", 0, { account_no: "9999" });
   assert.equal(
     validateDraft(draft).some((i) =>
-      i.message.includes("no matching row on Customer Profile")
+      i.message.includes("no matching row on Members")
     ),
     true
   );
 });
 
 test("duplicate loan accounts are allowed — guideline 4d", () => {
-  let draft = fill(createDraft(), "customer_profile", 0, { account_no: "1001" });
+  let draft = fill(createDraft(), "members", 0, { account_no: "1001" });
   draft = mapSheet(draft, "loans", addRow);
   draft = fill(draft, "loans", 0, { account_no: "1001" });
   draft = fill(draft, "loans", 1, { account_no: "1001" });
@@ -98,7 +98,7 @@ test("a Loans sheet filled on its own is not accused of orphans", () => {
 });
 
 test("two columns sharing a header is a column-level issue", () => {
-  const draft = mapSheet(createDraft(), "customer_profile", (s) =>
+  const draft = mapSheet(createDraft(), "members", (s) =>
     renameColumn(s, "last_name", "First Name")
   );
   const issues = validateDraft(draft).filter((i) => i.row === null);
@@ -107,7 +107,7 @@ test("two columns sharing a header is a column-level issue", () => {
 });
 
 test("a column left unnamed is caught", () => {
-  const draft = mapSheet(createDraft(), "customer_profile", (s) =>
+  const draft = mapSheet(createDraft(), "members", (s) =>
     renameColumn(s, "last_name", "   ")
   );
   assert.equal(

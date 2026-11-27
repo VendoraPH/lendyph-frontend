@@ -181,17 +181,19 @@ test("29 February in a NON-leap year is impossible, not proof", () => {
   assert.equal(result.stats.invalid, 1);
 });
 
-test("an out-of-range year is rejected rather than imported", () => {
-  // Date-SHAPED but outside 1900-2100, so it lands in `invalid` ("not a date
-  // that exists") rather than `unrecognised` ("not a date at all") — the two
-  // send an admin to different fixes, which is why they are counted apart.
-  const result = expectStatus(inferDateFormat(["03/04/0201", "2999-01-01"]), "unusable");
-  assert.equal(result.stats.invalid, 2);
-  assert.equal(result.stats.unrecognised, 0);
-  assert.deepEqual(parseImportDate("2999-01-01", null), {
+test("any four-digit year reads, as the server reads it", () => {
+  // The server has no year window (ValueNormalizer::date()): a year is four
+  // digits, and the date must exist. Plausibility is each column's own rule.
+  assert.deepEqual(parseImportDate("2999-01-01", null), { ok: true, iso: "2999-01-01", warning: null });
+  assert.deepEqual(parseImportDate("0000-01-01", null), { ok: true, iso: "0000-01-01", warning: null });
+  assert.deepEqual(parseImportDate("03/04/2205", "dmy"), { ok: true, iso: "2205-04-03", warning: null });
+  // A chosen order reads a calendar date (PHP's checkdate()), which has no year 0.
+  assert.deepEqual(parseImportDate("03/04/0000", "dmy"), {
     ok: false,
     reason: "impossible",
+    message: '"03/04/0000" is not a real date read day-first, the order chosen for this column.',
   });
+  expectStatus(inferDateFormat(["03/04/0201", "2999-01-01"]), "ambiguous");
 });
 
 // ── Excel serial numbers ───────────────────────────────────────────────────
@@ -208,7 +210,8 @@ test("Excel serials count days from 1899-12-30", () => {
   assert.equal(fromExcelSerial(36526), "2000-01-01");
 });
 
-test("the serial window is closed at both ends", () => {
+test("the serial window is the server's, closed at both ends", () => {
+  assert.deepEqual([MIN_EXCEL_SERIAL, MAX_EXCEL_SERIAL], [20000, 60000]);
   assert.equal(looksLikeDate(String(MIN_EXCEL_SERIAL)), true);
   assert.equal(looksLikeDate(String(MAX_EXCEL_SERIAL)), true);
   assert.equal(looksLikeDate(String(MIN_EXCEL_SERIAL - 1)), false);
@@ -226,25 +229,16 @@ test("a bare integer outside the window is data, not a date", () => {
   assert.equal(result.stats.unrecognised, 3);
 });
 
-test("an elderly member's birthdate survives the round trip", () => {
-  // The bug the original 20000 floor shipped: the window started in Oct 1954,
-  // so a member aged 72+ — entirely ordinary in a cooperative — had their
-  // birthdate reported as `unrecognised` and their row blocked.
-  assert.equal(fromExcelSerial(17673), "1948-05-20");
-  assert.equal(fromExcelSerial(19301), "1952-11-03");
-  assert.deepEqual(parseImportDate("17673", null), { ok: true, iso: "1948-05-20" });
-
-  const result = expectStatus(inferDateFormat(["17673", "19301"]), "resolved");
-  assert.equal(result.order, null);
-  assert.equal(result.stats.serial, 2);
-});
-
-test("the serial floor reaches back to 1910", () => {
-  assert.equal(MIN_EXCEL_SERIAL, 3654);
-  assert.equal(fromExcelSerial(MIN_EXCEL_SERIAL), "1910-01-01");
-  // One day earlier is outside the window, so it reads as data rather than as
-  // a date. 1909 birthdates are a problem for the client, not for the parser.
-  assert.equal(looksLikeDate(String(MIN_EXCEL_SERIAL - 1)), false);
+test("a serial below the server's window is not a date the import reads", () => {
+  // ValueNormalizer::EXCEL_SERIAL_MIN is 20000 (3 October 1954): the server
+  // refuses an earlier one, so the Check step says so before the upload.
+  assert.equal(fromExcelSerial(MIN_EXCEL_SERIAL), "1954-10-03");
+  assert.deepEqual(parseImportDate("17673", null), {
+    ok: false,
+    reason: "unrecognised",
+    message: '"17673" is not a date this importer recognises. Use YYYY-MM-DD.',
+  });
+  expectStatus(inferDateFormat(["17673", "19301"]), "unusable");
 });
 
 test("serials mixed into a slash-dated column are counted, not confused", () => {
@@ -257,9 +251,13 @@ test("serials mixed into a slash-dated column are counted, not confused", () => 
   assert.equal(result.stats.pair, 2);
 });
 
-test("a serial parses the same whatever order the admin picked", () => {
+test("a serial parses the same whatever order the admin picked, with the server's warning", () => {
   for (const order of ["dmy", "mdy", null] as const) {
-    assert.deepEqual(parseImportDate("43831", order), { ok: true, iso: "2020-01-01" });
+    assert.deepEqual(parseImportDate("43831", order), {
+      ok: true,
+      iso: "2020-01-01",
+      warning: '"43831" is an Excel serial date number and will be read as 2020-01-01. Confirm it against the source workbook.',
+    });
   }
 });
 
@@ -272,6 +270,7 @@ test("a two-digit year is refused rather than assigned a century", () => {
   assert.deepEqual(parseImportDate("03/04/55", "dmy"), {
     ok: false,
     reason: "two-digit-year",
+    message: '"03/04/55" is not a date this importer recognises. Use YYYY-MM-DD.',
   });
 });
 
@@ -284,21 +283,22 @@ test("a column of two-digit years is unusable and quotes the offenders", () => {
 // ── Parsing ────────────────────────────────────────────────────────────────
 
 test("the same cell parses to different days under the two orders", () => {
-  assert.deepEqual(parseImportDate("03/04/2020", "dmy"), { ok: true, iso: "2020-04-03" });
-  assert.deepEqual(parseImportDate("03/04/2020", "mdy"), { ok: true, iso: "2020-03-04" });
+  assert.deepEqual(parseImportDate("03/04/2020", "dmy"), { ok: true, iso: "2020-04-03", warning: null });
+  assert.deepEqual(parseImportDate("03/04/2020", "mdy"), { ok: true, iso: "2020-03-04", warning: null });
 });
 
-test("an ambiguous cell with no order chosen is refused, not defaulted", () => {
+test("with no order, a slash date reads month-first with the server's warning when it reads both ways", () => {
+  // The server's reading for a column the Check step gave no order. A column
+  // of day/month/year dates always has one, so this is the run that predates
+  // date orders.
   assert.deepEqual(parseImportDate("03/04/2020", null), {
-    ok: false,
-    reason: "ambiguous",
+    ok: true,
+    iso: "2020-03-04",
+    warning: '"03/04/2020" could be read as 2020-03-04 (month first, which is what will be used) or as 2020-04-03 (day first). Check it against the source workbook.',
   });
-});
-
-test("a self-evident cell parses even with no order chosen", () => {
-  // Not a guess: 31 cannot be a month, so there is only one reading.
-  assert.deepEqual(parseImportDate("31/03/2020", null), { ok: true, iso: "2020-03-31" });
-  assert.deepEqual(parseImportDate("03/31/2020", null), { ok: true, iso: "2020-03-31" });
+  assert.deepEqual(parseImportDate("03/31/2020", null), { ok: true, iso: "2020-03-31", warning: null });
+  // Day-first with no order is not a date the server reads.
+  assert.equal(parseImportDate("31/03/2020", null).ok, false);
 });
 
 test("a cell that contradicts the chosen order FAILS instead of swapping itself", () => {
@@ -307,68 +307,59 @@ test("a cell that contradicts the chosen order FAILS instead of swapping itself"
   assert.deepEqual(parseImportDate("31/03/2020", "mdy"), {
     ok: false,
     reason: "impossible",
+    message: '"31/03/2020" is not a real date read month-first, the order chosen for this column.',
   });
   assert.deepEqual(parseImportDate("03/31/2020", "dmy"), {
     ok: false,
     reason: "impossible",
+    message: '"03/31/2020" is not a real date read day-first, the order chosen for this column.',
   });
 });
 
 test("an impossible date is rejected, NOT overflowed into the next month", () => {
   // `new Date(2020, 1, 31)` is 2 March. Importing that would post a maturity
   // date the borrower never agreed to, with nothing in the file to show for it.
-  assert.deepEqual(parseImportDate("31/02/2020", "dmy"), {
-    ok: false,
-    reason: "impossible",
-  });
-  assert.deepEqual(parseImportDate("02/31/2020", "mdy"), {
-    ok: false,
-    reason: "impossible",
-  });
-  assert.deepEqual(parseImportDate("2020-02-31", null), {
-    ok: false,
-    reason: "impossible",
-  });
-  assert.deepEqual(parseImportDate("2019-02-29", null), {
-    ok: false,
-    reason: "impossible",
-  });
+  assert.equal(parseImportDate("31/02/2020", "dmy").ok, false);
+  assert.equal(parseImportDate("02/31/2020", "mdy").ok, false);
+  for (const cell of ["2020-02-31", "2019-02-29"]) {
+    assert.deepEqual(parseImportDate(cell, null), {
+      ok: false,
+      reason: "impossible",
+      message: `"${cell}" is not a date this importer recognises. Use YYYY-MM-DD.`,
+    });
+  }
 });
 
 test("ISO parses identically under either order", () => {
   for (const order of ["dmy", "mdy", null] as const) {
-    assert.deepEqual(parseImportDate("2020-03-04", order), { ok: true, iso: "2020-03-04" });
+    assert.deepEqual(parseImportDate("2020-03-04", order), { ok: true, iso: "2020-03-04", warning: null });
   }
 });
 
 test("blank and junk cells are told apart", () => {
-  assert.deepEqual(parseImportDate("   ", "dmy"), { ok: false, reason: "blank" });
-  assert.deepEqual(parseImportDate("N/A", "dmy"), { ok: false, reason: "unrecognised" });
+  const blank = parseImportDate("   ", "dmy");
+  assert.equal(blank.ok ? null : blank.reason, "blank");
+  assert.deepEqual(parseImportDate("N/A", "dmy"), {
+    ok: false,
+    reason: "unrecognised",
+    message: '"N/A" is not a date this importer recognises. Use YYYY-MM-DD.',
+  });
 });
 
-test("separators and single-digit components are accepted", () => {
-  assert.deepEqual(parseImportDate("3/4/2020", "dmy"), { ok: true, iso: "2020-04-03" });
-  assert.deepEqual(parseImportDate("03-04-2020", "dmy"), { ok: true, iso: "2020-04-03" });
-  assert.deepEqual(parseImportDate("03.04.2020", "dmy"), { ok: true, iso: "2020-04-03" });
-  assert.deepEqual(parseImportDate("2020/03/04", null), { ok: true, iso: "2020-03-04" });
+test("with an order, a day/month/year cell reads with any of the Check step's separators", () => {
+  assert.deepEqual(parseImportDate("3/4/2020", "dmy"), { ok: true, iso: "2020-04-03", warning: null });
+  assert.deepEqual(parseImportDate("03-04-2020", "dmy"), { ok: true, iso: "2020-04-03", warning: null });
+  assert.deepEqual(parseImportDate("03.04.2020", "dmy"), { ok: true, iso: "2020-04-03", warning: null });
+  assert.deepEqual(parseImportDate("2020/03/04", null), { ok: true, iso: "2020-03-04", warning: null });
 });
 
-test("a trailing time from the Excel export is dropped, not converted", () => {
-  // The number in the cell is a wall clock the client typed, so the date beside
-  // it is the date they meant. Converting a `Z` instant to local time here
-  // would reintroduce the off-by-one-day bug from the other direction.
-  assert.deepEqual(parseImportDate("03/04/2020 00:00:00", "dmy"), {
-    ok: true,
-    iso: "2020-04-03",
-  });
-  assert.deepEqual(parseImportDate("2020-03-04T00:00:00.000Z", null), {
-    ok: true,
-    iso: "2020-03-04",
-  });
-  assert.deepEqual(parseImportDate("03/04/2020 12:30 PM", "mdy"), {
-    ok: true,
-    iso: "2020-03-04",
-  });
+test("a cell the server doesn't read isn't read here: an unpadded or dotted ISO date, or a time", () => {
+  for (const cell of ["2025-3-4", "2025/3/4", "2025.03.04", "03/04/2025 00:00:00", "2025-03-04T00:00:00", "2025-03-04 00:00", "10000-01-01"]) {
+    for (const order of ["dmy", "mdy", null] as const) {
+      const parsed = parseImportDate(cell, order);
+      assert.equal(parsed.ok ? parsed.iso : parsed.message, `"${cell}" is not a date this importer recognises. Use YYYY-MM-DD.`, `${cell} ${order}`);
+    }
+  }
 });
 
 // ── The timezone trap itself ───────────────────────────────────────────────
@@ -380,7 +371,7 @@ test("parsed dates keep their calendar day where toISOString would lose one", ()
   // back one, at every hour of the day, not just before 08:00.
   for (const [cell, expected] of [["31/12/2019", "2019-12-31"], ["43831", "2020-01-01"]] as const) {
     const parsed = parseImportDate(cell, "dmy");
-    assert.deepEqual(parsed, { ok: true, iso: expected });
+    assert.equal(parsed.ok && parsed.iso, expected);
 
     const [y, m, d] = expected.split("-").map(Number);
     // eslint-disable-next-line no-restricted-syntax -- documents the old bug
@@ -395,7 +386,8 @@ test("inference is unaffected by the hour the admin runs the import", () => {
   try {
     const result = expectStatus(inferDateFormat(["31/12/2019", "43831"]), "resolved");
     assert.equal(result.order, "dmy");
-    assert.deepEqual(parseImportDate("43831", "dmy"), { ok: true, iso: "2020-01-01" });
+    const parsed = parseImportDate("43831", "dmy");
+    assert.equal(parsed.ok && parsed.iso, "2020-01-01");
   } finally {
     mock.timers.reset();
   }
@@ -416,12 +408,104 @@ test("isFutureDate answers on the local calendar, not the UTC one", () => {
 
 // ── looksLikeDate (used by wrong-slot detection) ───────────────────────────
 
-test("looksLikeDate accepts the three real shapes and nothing else", () => {
+test("looksLikeDate accepts the server's shapes and nothing else", () => {
   assert.equal(looksLikeDate("2020-03-04"), true);
   assert.equal(looksLikeDate("03/04/2020"), true);
   assert.equal(looksLikeDate("43831"), true);
+  assert.equal(looksLikeDate("4 Mar 1990"), true);
+  assert.equal(looksLikeDate("2020-3-4"), false);
   assert.equal(looksLikeDate("Dela Cruz"), false);
   assert.equal(looksLikeDate("12"), false);
   assert.equal(looksLikeDate(""), false);
   assert.equal(looksLikeDate("31/02/2020"), false);
+});
+
+// ── The server's reading, written out (ValueNormalizer::date()) ────────────
+
+/**
+ * How the server reads a date cell (lendyph-backend,
+ * app/Services/CsvImport/ValueNormalizer.php), after a trim:
+ *  1. With the column's order (`dmy` or `mdy`): a day and month then a
+ *     four-digit year, split by "/", "-" or ".", read in that order, and the
+ *     date must exist (PHP checkdate(), no year 0). No warning.
+ *  2. Otherwise the formats, in order, each read back exactly as written:
+ *     `Y-m-d`, `Y/m/d`, `m/d/Y`, `n/j/Y`, `d-M-Y`, `j M Y`, `M j, Y`. A
+ *     month-first slash date that also reads day-first warns that it reads
+ *     two ways.
+ *  3. Otherwise a whole number from 20000 to 60000 is an Excel serial date,
+ *     read with a warning.
+ *  4. Anything else is refused.
+ * Each row: the cell, then what it reads as with no order, day-first and
+ * month-first (`null` when refused), from the server's own output.
+ */
+const SERVER_READS: ReadonlyArray<readonly [string, string | null, string | null, string | null]> = [
+  ["2025-03-04", "2025-03-04", "2025-03-04", "2025-03-04"],
+  ["2025-3-4", null, null, null],
+  ["2025/03/04", "2025-03-04", "2025-03-04", "2025-03-04"],
+  ["2025/3/4", null, null, null],
+  ["2025.03.04", null, null, null],
+  ["0000-01-01", "0000-01-01", "0000-01-01", "0000-01-01"],
+  ["0999-12-31", "0999-12-31", "0999-12-31", "0999-12-31"],
+  ["9999-12-31", "9999-12-31", "9999-12-31", "9999-12-31"],
+  ["10000-01-01", null, null, null],
+  ["2025-02-29", null, null, null],
+  ["2024-02-29", "2024-02-29", "2024-02-29", "2024-02-29"],
+  ["03/04/2025", "2025-03-04", "2025-04-03", "2025-03-04"],
+  ["3/4/2025", "2025-03-04", "2025-04-03", "2025-03-04"],
+  ["03/4/2025", null, "2025-04-03", "2025-03-04"],
+  ["3/04/2025", null, "2025-04-03", "2025-03-04"],
+  ["03-04-2025", null, "2025-04-03", "2025-03-04"],
+  ["03.04.2025", null, "2025-04-03", "2025-03-04"],
+  ["13/04/2025", null, "2025-04-13", null],
+  ["03/13/2025", "2025-03-13", null, "2025-03-13"],
+  ["03/04/0000", "0000-03-04", null, null],
+  ["03/04/0001", "0001-03-04", "0001-04-03", "0001-03-04"],
+  ["03/04/2205", "2205-03-04", "2205-04-03", "2205-03-04"],
+  ["03/04/25", null, null, null],
+  ["12/25/2025", "2025-12-25", null, "2025-12-25"],
+  ["1/15/2025", "2025-01-15", null, "2025-01-15"],
+  ["04-Mar-1990", "1990-03-04", "1990-03-04", "1990-03-04"],
+  ["4-Mar-1990", null, null, null],
+  ["04-mar-1990", null, null, null],
+  ["4 Mar 1990", "1990-03-04", "1990-03-04", "1990-03-04"],
+  ["04 Mar 1990", null, null, null],
+  ["Mar 4, 1990", "1990-03-04", "1990-03-04", "1990-03-04"],
+  ["Mar 04, 1990", null, null, null],
+  ["March 4, 1990", null, null, null],
+  ["31-Feb-1990", null, null, null],
+  ["Sep 4, 1990", "1990-09-04", "1990-09-04", "1990-09-04"],
+  ["Sept 4, 1990", null, null, null],
+  ["03/04/2025 00:00:00", null, null, null],
+  ["19999", null, null, null],
+  ["20000", "1954-10-03", "1954-10-03", "1954-10-03"],
+  ["32874", "1990-01-01", "1990-01-01", "1990-01-01"],
+  ["60000", "2064-04-08", "2064-04-08", "2064-04-08"],
+  ["60001", null, null, null],
+  ["3654", null, null, null],
+  ["2025-03-04 ", "2025-03-04", "2025-03-04", "2025-03-04"],
+  ["45000.0", null, null, null],
+];
+
+test("every cell reads as the server reads it, under no order, day-first and month-first", () => {
+  for (const [cell, none, dmy, mdy] of SERVER_READS) {
+    for (const [order, expected] of [[null, none], ["dmy", dmy], ["mdy", mdy]] as const) {
+      const parsed = parseImportDate(cell, order);
+      assert.equal(parsed.ok ? parsed.iso : null, expected, `${JSON.stringify(cell)} ${order ?? "no order"}`);
+    }
+  }
+});
+
+test("only a month-first slash date that also reads day-first, and a serial, warn", () => {
+  const warned = (cell: string, order: "dmy" | "mdy" | null) => {
+    const parsed = parseImportDate(cell, order);
+    return parsed.ok ? parsed.warning !== null : null;
+  };
+  assert.equal(warned("03/04/2025", null), true);
+  assert.equal(warned("3/4/2025", null), true);
+  assert.equal(warned("03/04/2025", "mdy"), false, "a chosen order decides it");
+  assert.equal(warned("03/04/2025", "dmy"), false);
+  assert.equal(warned("03/13/2025", null), false, "reads only month-first");
+  assert.equal(warned("05/05/2025", null), false, "the same day either way");
+  assert.equal(warned("32874", "dmy"), true);
+  assert.equal(warned("4 Mar 1990", null), false);
 });

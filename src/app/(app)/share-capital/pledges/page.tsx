@@ -1,11 +1,20 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import { useMenuVisibility } from "@/hooks/use-menu-visibility";
+import { pledgeEntryParts } from "@/lib/hidden-module-parts";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { AlertTriangle } from "lucide-react";
-import { RouteGuard } from "@/components/common";
+import { PermissionButton, RouteGuard } from "@/components/common";
+import { DisabledReason } from "@/components/common/disabled-reason";
+import { PLEDGE_ENTRY_CREATE_GATE, PLEDGE_UPDATE_GATE } from "@/lib/lending-write-gates";
+import { usePermission } from "@/hooks/use-permission";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { hasIllustration, Illustration } from "@/components/common/illustration";
+import { emptyArt } from "@/lib/illustrations";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -33,6 +42,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { Spinner } from "@/components/ui/spinner";
 import { shareCapitalService } from "@/services";
 import type { Pledge } from "@/types";
 import {
@@ -48,6 +58,26 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { formatCurrency, todayISO } from "@/lib/format";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { currencyOrDash } from "@/lib/report-format";
+import { notifyError } from "@/lib/notify";
+import { bulkEntryAmounts, parsePledgeAmount } from "./_lib/pledge-amount";
+import { bulkEntriesRequest, manualEntryRequest } from "./_lib/pledge-entry-request";
+import {
+  AUTO_CREDIT_ENTRY_LOCK_REASON,
+  autoCreditFromResponse,
+  canTickForManualEntry,
+  manualEntrySelection,
+  pageSelectionState,
+} from "./_lib/manual-entry-selection";
+import { MethodReferenceFields } from "@/components/common/method-reference-fields";
+import { PAYMENT_METHOD_OPTIONS, type RecordPaymentMethod } from "@/constants/payment-methods";
+import { paymentReferenceError } from "@/lib/payment-reference";
+import { cashAutoReference, savedReferencesText } from "@/lib/cash-reference";
+import { env } from "@/config/env";
+import { useCashReferencePreview } from "@/hooks/use-cash-reference-preview";
+import { useDialogOpening } from "@/hooks/use-dialog-opening";
+import { createLatestGate, drainPledgesWithTotal, readPledgeTotalAmount } from "./_lib/pledge-totals";
 
 interface LocalPledge {
   id: number;
@@ -62,7 +92,7 @@ function toLocalPledge(p: Pledge): LocalPledge {
   return {
     id: p.id,
     borrowerId: p.borrower_id,
-    borrower: p.borrower?.full_name ?? p.borrower?.name ?? p.borrower_name ?? `Borrower #${p.borrower_id}`,
+    borrower: p.borrower?.full_name ?? p.borrower?.name ?? p.borrower_name ?? `Member #${p.borrower_id}`,
     amount: p.amount,
     schedule: p.schedule,
     autoCredit: p.auto_credit,
@@ -87,7 +117,17 @@ function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: 
     : <ArrowDown className="h-3.5 w-3.5 ml-1 text-brand-orange" />;
 }
 
-export default function PledgeEntryPage() {
+function PledgeEntryContent() {
+  const { can } = usePermission();
+  // Menu Visibility: while Auto-Credit is hidden, its switch, stat, filter and
+  // column go. A pledge set to auto-credit still takes no manual entry, so a
+  // month is never credited twice once Auto-Credit shows again.
+  const { isHidden } = useMenuVisibility();
+  const autoCreditShown = pledgeEntryParts(isHidden).autoCredit;
+  // The amount, the schedule and auto-credit save through PUT /pledges/{id}
+  // and the auto-credit toggle, which both need share_capital:update.
+  const canUpdatePledge = can(PLEDGE_UPDATE_GATE.permission);
+  const pledgeUpdateReason = canUpdatePledge ? null : PLEDGE_UPDATE_GATE.tooltip;
   const [pledges, setPledges] = useState<LocalPledge[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -103,20 +143,32 @@ export default function PledgeEntryPage() {
   // empty one after a failed request invites an operator to conclude there is
   // nothing to post rather than that nothing loaded.
   const [failed, setFailed] = useState(false);
+  // GET /pledges `meta.totals.amount`: the server's total over every pledge.
+  // Null when it sent none, shown as a dash.
+  const [totalAmount, setTotalAmount] = useState<number | null>(null);
+  // Every request that sets `totalAmount` takes a ticket; only the newest
+  // answer is used, so a slow older one can't overwrite a newer total.
+  const totalGate = useRef(createLatestGate());
 
   const fetchPledges = useCallback(async () => {
+    const ticket = totalGate.current.begin();
     try {
       setLoading(true);
       // Drained across pages. `per_page: 9999` was clamped to 100, so on a
       // co-op with more members than that the bulk-posting worksheet simply had
       // no row for the rest — and a bulk entry run against "all selected"
       // reported success for everyone it could see.
-      const { rows, truncated, total } = await shareCapitalService.pledgeListAll();
+      const { drain, totalAmount: serverTotal } = await drainPledgesWithTotal((params) =>
+        shareCapitalService.pledgeList(params),
+      );
+      const { rows, truncated, total } = drain;
       setPledges(rows.map(toLocalPledge));
+      if (totalGate.current.isLatest(ticket)) setTotalAmount(serverTotal);
       setShortfall(truncated ? { shown: rows.length, total } : null);
       setFailed(false);
     } catch {
       setShortfall(null);
+      if (totalGate.current.isLatest(ticket)) setTotalAmount(null);
       setFailed(true);
       toast.error("We couldn't load the pledges. Please try again.");
     } finally {
@@ -153,15 +205,48 @@ export default function PledgeEntryPage() {
   const [manualEntryId, setManualEntryId] = useState<number | null>(null);
   const [manualAmount, setManualAmount] = useState("");
   const [manualTransaction, setManualTransaction] = useState<"credit" | "debit">("credit");
+  // How the entry's money came in or went out; the reference is required unless cash.
+  const [manualMethod, setManualMethod] = useState<RecordPaymentMethod>("cash");
+  const [manualReference, setManualReference] = useState("");
+  // Each entry posts a journal: Submit and Enter wait while one posts.
+  const [manualSubmitting, setManualSubmitting] = useState(false);
 
   // Per-member bulk entry dialog
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
   const [bulkEntries, setBulkEntries] = useState<Record<number, { amount: string; transaction: "credit" | "debit" }>>({});
+  // One method and reference for the whole batch. Every opening starts at Cash
+  // with no reference.
+  const [bulkMethod, setBulkMethod] = useState<RecordPaymentMethod>("cash");
+  const [bulkReference, setBulkReference] = useState("");
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  if (useDialogOpening(bulkDialogOpen, true)) {
+    setBulkMethod("cash");
+    setBulkReference("");
+  }
+
+  // Cash entries are numbered by the server (CSH-…); the field shows its next
+  // number while a Cash form is open, and moves on after every save.
+  const [entriesSaved, setEntriesSaved] = useState(0);
+  const cashNumbering = env.features.cashPledgeReference;
+  // Every entry here is dated today, so the preview asks for today's series.
+  const cashPreview = useCashReferencePreview(
+    shareCapitalService.nextCashReference,
+    cashNumbering &&
+      ((manualEntryId !== null && manualMethod === "cash") || (bulkDialogOpen && bulkMethod === "cash")),
+    entriesSaved,
+    todayISO(),
+  );
+  const manualAutoReference = cashAutoReference(cashNumbering, manualMethod, cashPreview);
+  // Each selected row is its own entry, numbered in turn from the preview.
+  // The ticked pledges an entry goes to, and those set to auto-credit left out.
+  const entrySelection = manualEntrySelection(pledges, selectedIds);
+  const bulkAutoReference = cashAutoReference(cashNumbering, bulkMethod, cashPreview, entrySelection.included.length);
 
   // ── Derived data ──
 
   const activeCount = pledges.filter((p) => p.autoCredit).length;
-  const totalPledge = pledges.reduce((sum, p) => sum + p.amount, 0);
+  const manualReferenceProblem = paymentReferenceError(manualMethod, manualReference, "share_capital");
+  const bulkReferenceProblem = paymentReferenceError(bulkMethod, bulkReference, "share_capital");
 
   const processed = useMemo(() => {
     let result = [...pledges];
@@ -212,6 +297,11 @@ export default function PledgeEntryPage() {
   const totalPages = Math.max(1, Math.ceil(processed.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const paginated = processed.slice((safePage - 1) * pageSize, safePage * pageSize);
+  // The module's picture while nothing is searched or filtered.
+  const emptyPicture = emptyArt(
+    "emptyShareCapital",
+    Boolean(search) || filterSchedule !== "all" || filterStatus !== "all"
+  );
 
   // ── Handlers ──
 
@@ -229,17 +319,24 @@ export default function PledgeEntryPage() {
     const pledge = pledges.find((p) => p.id === id);
     if (!pledge) return;
     try {
-      await shareCapitalService.pledgeToggleAutoCredit(id);
-      setPledges((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, autoCredit: !p.autoCredit } : p))
-      );
+      const saved = autoCreditFromResponse(await shareCapitalService.pledgeToggleAutoCredit(id));
+      if (saved === null) {
+        // The server's answer didn't say where the switch landed: reload the list.
+        await fetchPledges();
+        return;
+      }
+      // The row takes the switch as the server saved it, never a local flip.
+      setPledges((prev) => prev.map((p) => (p.id === id ? { ...p, autoCredit: saved } : p)));
+      // A pledge switched to auto-credit takes no entry by hand, so it leaves
+      // the bulk selection.
+      if (saved && selectedIds.has(id)) toggleSelect(id);
       toast.success(
-        pledge.autoCredit
-          ? `Auto-credit deactivated for ${pledge.borrower}`
-          : `Auto-credit activated for ${pledge.borrower}`
+        saved
+          ? `Auto-credit activated for ${pledge.borrower}`
+          : `Auto-credit deactivated for ${pledge.borrower}`
       );
-    } catch {
-      toast.error("We couldn't toggle auto-credit. Please try again.");
+    } catch (err) {
+      notifyError(err, "We couldn't toggle auto-credit. Please try again.");
     }
   }
 
@@ -249,11 +346,12 @@ export default function PledgeEntryPage() {
   }
 
   async function saveAmountEdit(id: number) {
-    const newAmount = Math.round(parseFloat(editAmount) || 0);
-    if (newAmount <= 0) {
-      toast.error("Pledge amount must be greater than 0");
+    const parsed = parsePledgeAmount(editAmount, "Pledge amount");
+    if (!parsed.ok) {
+      toast.error(parsed.message);
       return;
     }
+    const newAmount = parsed.amount;
     try {
       const current = pledges.find((p) => p.id === id);
       await shareCapitalService.pledgeUpdate(id, { amount: newAmount, schedule: current?.schedule });
@@ -262,8 +360,19 @@ export default function PledgeEntryPage() {
       );
       setEditingAmountId(null);
       toast.success("Pledge amount updated");
-    } catch {
-      toast.error("We couldn't update the pledge amount. Please try again.");
+      // The total is the server's, so ask it again rather than adjust it here.
+      // One one-row page is enough: `meta.totals` covers every pledge.
+      const ticket = totalGate.current.begin();
+      shareCapitalService
+        .pledgeList({ page: 1, per_page: 1 })
+        .then((res) => {
+          if (totalGate.current.isLatest(ticket)) setTotalAmount(readPledgeTotalAmount(res));
+        })
+        .catch(() => {
+          if (totalGate.current.isLatest(ticket)) setTotalAmount(null);
+        });
+    } catch (err) {
+      notifyError(err, "We couldn't update the pledge amount. Please try again.");
     }
   }
 
@@ -295,45 +404,69 @@ export default function PledgeEntryPage() {
     setManualEntryId(id);
     setManualAmount("");
     setManualTransaction("credit");
+    setManualMethod("cash");
+    setManualReference("");
   }
 
   async function handleManualEntry(id: number) {
-    const amount = Math.round(parseFloat(manualAmount) || 0);
-    if (amount <= 0) {
-      toast.error("Amount must be greater than 0");
+    if (manualSubmitting) return;
+    const parsed = parsePledgeAmount(manualAmount);
+    if (!parsed.ok) {
+      toast.error(parsed.message);
       return;
     }
+    const amount = parsed.amount;
     const pledge = pledges.find((p) => p.id === id);
     if (!pledge) return;
+    const request = manualEntryRequest({
+      borrowerId: pledge.borrowerId,
+      type: manualTransaction,
+      amount,
+      date: todayISO(),
+      method: manualMethod,
+      reference: manualReference,
+    });
+    if (!request.ok) {
+      toast.error(request.message);
+      return;
+    }
+    setManualSubmitting(true);
     try {
-      await shareCapitalService.ledgerCreate({
-        borrower_id: pledge.borrowerId,
-        date: todayISO(),
-        description: `Manual ${manualTransaction} entry`,
-        type: manualTransaction,
-        amount,
-      });
+      const entry = await shareCapitalService.ledgerCreate(request.data);
+      const savedReference = entry?.reference_number ? ` (${entry.reference_number})` : "";
       toast.success(
-        `Manual ${manualTransaction} of ${formatCurrency(amount)} for ${pledge.borrower}`
+        `Manual ${manualTransaction} of ${formatCurrency(amount)} for ${pledge.borrower}${savedReference}`
       );
+      setEntriesSaved((n) => n + 1);
       setManualEntryId(null);
       setManualAmount("");
       setManualTransaction("credit");
-    } catch {
-      toast.error("We couldn't create the manual entry. Please try again.");
+      setManualMethod("cash");
+      setManualReference("");
+    } catch (err) {
+      notifyError(err, "We couldn't create the manual entry. Please try again.");
+    } finally {
+      setManualSubmitting(false);
     }
   }
 
   // Selection helpers
-  const allPageSelected = paginated.length > 0 && paginated.every((p) => selectedIds.has(p.id));
-  const somePageSelected = paginated.some((p) => selectedIds.has(p.id));
+  // Only rows that take an entry by hand can be ticked: never a pledge set to
+  // auto-credit (finish run round 7).
+  const pageSelection = pageSelectionState(paginated, selectedIds);
+  const allPageSelected = pageSelection.all;
+  const somePageSelected = pageSelection.some;
 
   function toggleSelect(id: number) {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
         next.delete(id);
-        setBulkEntries((e) => { const { [id]: _, ...rest } = e; return rest; });
+        setBulkEntries((e) => {
+          const rest = { ...e };
+          delete rest[id];
+          return rest;
+        });
       } else {
         next.add(id);
         setBulkEntries((e) => ({ ...e, [id]: { amount: "", transaction: "credit" } }));
@@ -358,7 +491,7 @@ export default function PledgeEntryPage() {
         const next = new Set(prev);
         setBulkEntries((e) => {
           const updated = { ...e };
-          for (const p of paginated) { next.add(p.id); if (!updated[p.id]) updated[p.id] = { amount: "", transaction: "credit" }; }
+          for (const p of pageSelection.tickable) { next.add(p.id); if (!updated[p.id]) updated[p.id] = { amount: "", transaction: "credit" }; }
           return updated;
         });
         return next;
@@ -373,161 +506,190 @@ export default function PledgeEntryPage() {
     }));
   }
 
-  async function handleBulkSubmit() {
-    const entries = Object.entries(bulkEntries).filter(
-      ([id]) => selectedIds.has(Number(id))
+  /** Posts the batch; true once it has posted, so the dialog may close. */
+  async function handleBulkSubmit(): Promise<boolean> {
+    const included = new Set(entrySelection.included.map((p) => p.id));
+    const entries = Object.entries(bulkEntries).filter(([id]) => included.has(Number(id)));
+    const parsed = bulkEntryAmounts(
+      entries.map(([id, entry]) => [
+        Number(id),
+        {
+          name: pledges.find((p) => p.id === Number(id))?.borrower ?? `Pledge #${id}`,
+          amount: entry.amount,
+        },
+      ])
     );
-    const valid = entries.filter(([, e]) => Math.round(parseFloat(e.amount) || 0) > 0);
-    if (valid.length === 0) {
-      toast.error("Enter an amount for at least one member");
-      return;
+    if (!parsed.ok) {
+      toast.error(parsed.message);
+      return false;
     }
+    const valid = entries.flatMap(([id, entry]) => {
+      const amount = parsed.amounts.get(Number(id));
+      return amount === undefined ? [] : [{ pledgeId: Number(id), amount, type: entry.transaction }];
+    });
+    const request = bulkEntriesRequest(valid, todayISO(), bulkMethod, bulkReference);
+    if (!request.ok) {
+      toast.error(request.message);
+      return false;
+    }
+    setBulkSubmitting(true);
     try {
-      await shareCapitalService.pledgeBulkEntries({
-        entries: valid.map(([id, entry]) => ({
-          pledge_id: Number(id),
-          amount: Math.round(parseFloat(entry.amount)),
-          type: entry.transaction,
-        })),
-      });
-      toast.success(`${valid.length} entries created`);
+      const result = await shareCapitalService.pledgeBulkEntries(request.data);
+      const numbers = bulkMethod === "cash" ? savedReferencesText(result?.reference_numbers ?? []) : "";
+      toast.success(`${valid.length} ${valid.length === 1 ? "entry" : "entries"} created${numbers === "" ? "" : ` (${numbers})`}`);
+      setEntriesSaved((n) => n + 1);
       setSelectedIds(new Set());
       setBulkEntries({});
-    } catch {
-      toast.error("We couldn't create the bulk entries. Please try again.");
+      return true;
+    } catch (err) {
+      notifyError(err, "We couldn't create the bulk entries. Please try again.");
+      return false;
+    } finally {
+      setBulkSubmitting(false);
     }
   }
 
   return (
-    <RouteGuard permission="share_capital:view" pageName="Pledge Entry">
-      <div className="space-y-6">
-        {failed && (
-          <div
-            role="alert"
-            className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4"
-          >
-            <AlertTriangle
-              className="mt-0.5 size-5 shrink-0 text-amber-600"
-              aria-hidden="true"
-            />
-            <div className="text-sm">
-              <p className="font-medium text-amber-900 dark:text-amber-200">
-                The pledge worksheet could not be loaded
-              </p>
-              <p className="mt-0.5 text-muted-foreground">
-                No members are listed below. That is a failure to read the pledges,
-                not a co-op with none — a bulk entry must not be posted from
-                this screen until it loads.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {shortfall && (
-          <IncompleteListNotice
-            shown={shortfall.shown}
-            total={shortfall.total}
-            noun="pledges"
-            consequence="Members missing from this worksheet cannot be selected, so a bulk entry posted from here will skip them without saying so."
+    <PageFill>
+      {failed && (
+        <div
+          role="alert"
+          className="flex shrink-0 items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4"
+        >
+          <AlertTriangle
+            className="mt-0.5 size-5 shrink-0 text-amber-600"
+            aria-hidden="true"
           />
-        )}
-
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Pledge Entry</h1>
-          <p className="text-muted-foreground">
-            Configure share capital pledges for members
-          </p>
+          <div className="text-sm">
+            <p className="font-medium text-amber-900 dark:text-amber-200">
+              The pledge worksheet could not be loaded
+            </p>
+            <p className="mt-0.5 text-muted-foreground">
+              No members are listed below. That is a failure to read the pledges,
+              not a co-op with none — a bulk entry must not be posted from
+              this screen until it loads.
+            </p>
+          </div>
         </div>
+      )}
 
-        {/* Summary */}
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+      {shortfall && (
+        <IncompleteListNotice
+          shown={shortfall.shown}
+          total={shortfall.total}
+          noun="pledges"
+          consequence="Members missing from this worksheet cannot be selected, so a bulk entry posted from here will skip them without saying so."
+          className="shrink-0"
+        />
+      )}
+
+      <div className="shrink-0">
+        <h1 className="text-2xl font-bold tracking-tight">Pledge Entry</h1>
+        <p className="text-muted-foreground">
+          Configure share capital pledges for members
+        </p>
+      </div>
+
+      {/* Summary */}
+      <div className="grid shrink-0 gap-4 grid-cols-1 sm:grid-cols-3">
+        <Card>
+          <CardContent className="py-4 fit:py-0">
+            <div className="flex flex-col gap-1">
+              <span className="text-sm font-medium text-muted-foreground">Total Pledges</span>
+              <span className="text-2xl font-bold">{pledges.length}</span>
+            </div>
+          </CardContent>
+        </Card>
+        {autoCreditShown && (
           <Card>
-            <CardContent className="py-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-muted-foreground">Total Pledges</span>
-                <span className="text-2xl font-bold">{pledges.length}</span>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="py-4">
-              <div className="flex items-center justify-between">
+            <CardContent className="py-4 fit:py-0">
+              <div className="flex flex-col gap-1">
                 <span className="text-sm font-medium text-green-600">Active Auto-Credit</span>
                 <span className="text-2xl font-bold text-green-600">{activeCount}</span>
               </div>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="py-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-muted-foreground">Total Amount</span>
-                <span className="text-2xl font-bold text-brand-orange">{formatCurrency(totalPledge)}</span>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Bulk Entry Action Bar */}
-        {selectedIds.size > 0 && (
-          <div className="flex items-center gap-3 rounded-lg border border-brand-orange/30 bg-brand-orange/5 px-4 py-3">
-            <span className="text-sm font-medium">
-              {selectedIds.size} member{selectedIds.size > 1 ? "s" : ""} selected
-            </span>
-            <Button
-              size="sm"
-              className="h-8 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-              onClick={() => setBulkDialogOpen(true)}
-            >
-              <PlusCircle className="h-3.5 w-3.5 mr-1" />
-              Manual Entry
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 text-xs"
-              onClick={() => { setSelectedIds(new Set()); setBulkEntries({}); }}
-            >
-              Clear
-            </Button>
-          </div>
         )}
-
-        {/* Table */}
         <Card>
-          <CardHeader>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <CardTitle className="text-sm font-medium">
-                All Pledges
-                <span className="text-muted-foreground font-normal ml-1">({processed.length})</span>
-              </CardTitle>
-              <div className="flex flex-wrap items-center gap-2">
-                {/* Search */}
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search member..."
-                    value={search}
-                    onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                    className="pl-9 w-48 h-8 text-sm"
-                  />
-                </div>
-                {/* Filter: Schedule */}
-                <Select value={filterSchedule} onValueChange={(v) => { setFilterSchedule(v as string); setPage(1); }}>
-                  <SelectTrigger className="w-36 h-8 text-xs">
-                    <SelectValue>
-                      {(value: string | null) =>
-                        value === "all" ? "All Schedules" : (SCHEDULE_OPTIONS.find((s) => s.value === value)?.label ?? value)
-                      }
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Schedules</SelectItem>
-                    {SCHEDULE_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {/* Filter: Status */}
+          <CardContent className="py-4 fit:py-0">
+            <div className="flex flex-col gap-1">
+              <span className="text-sm font-medium text-muted-foreground">Total Amount</span>
+              <span className="text-2xl font-bold text-brand-orange">{currencyOrDash(totalAmount)}</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Bulk Entry Action Bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex shrink-0 items-center gap-3 rounded-lg border border-brand-orange/30 bg-brand-orange/5 px-4 py-3">
+          <span className="text-sm font-medium">
+            {entrySelection.included.length} member{entrySelection.included.length === 1 ? "" : "s"} selected
+          </span>
+          {entrySelection.excluded.length > 0 && (
+            <span className="text-xs text-muted-foreground">
+              {entrySelection.excluded.length} set to auto-credit left out
+            </span>
+          )}
+          <PermissionButton
+            permission={PLEDGE_ENTRY_CREATE_GATE.permission}
+            tooltip={PLEDGE_ENTRY_CREATE_GATE.tooltip}
+            size="sm"
+            className="h-8 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+            disabled={entrySelection.included.length === 0}
+            onClick={() => setBulkDialogOpen(true)}
+          >
+            <PlusCircle className="h-3.5 w-3.5 mr-1" />
+            Manual Entry
+          </PermissionButton>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => { setSelectedIds(new Set()); setBulkEntries({}); }}
+          >
+            Clear
+          </Button>
+        </div>
+      )}
+
+      {/* Table */}
+      <Card className={FIT_CLASSES.section}>
+        <CardHeader className="shrink-0">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <CardTitle className="text-sm font-medium">
+              All Pledges
+              <span className="text-muted-foreground font-normal ml-1">({processed.length})</span>
+            </CardTitle>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search member..."
+                  value={search}
+                  onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                  className="pl-9 w-48 h-8 text-sm"
+                />
+              </div>
+              {/* Filter: Schedule */}
+              <Select value={filterSchedule} onValueChange={(v) => { setFilterSchedule(v as string); setPage(1); }}>
+                <SelectTrigger className="w-36 h-8 text-xs">
+                  <SelectValue>
+                    {(value: string | null) =>
+                      value === "all" ? "All Schedules" : (SCHEDULE_OPTIONS.find((s) => s.value === value)?.label ?? value)
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Schedules</SelectItem>
+                  {SCHEDULE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {/* Filter: auto-credit status */}
+              {autoCreditShown && (
                 <Select value={filterStatus} onValueChange={(v) => { setFilterStatus(v as string); setPage(1); }}>
                   <SelectTrigger className="w-32 h-8 text-xs">
                     <SelectValue>
@@ -542,49 +704,51 @@ export default function PledgeEntryPage() {
                     <SelectItem value="inactive">Inactive</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
+              )}
             </div>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10">
-                      <Checkbox
-                        checked={allPageSelected}
-                        indeterminate={somePageSelected && !allPageSelected}
-                        onCheckedChange={toggleSelectAll}
-                        aria-label="Select all"
-                      />
-                    </TableHead>
-                    <TableHead
-                      className="cursor-pointer select-none hover:text-foreground"
-                      onClick={() => toggleSort("borrower")}
-                    >
-                      <span className="flex items-center">
-                        Member
-                        <SortIcon field="borrower" sortField={sortField} sortDir={sortDir} />
-                      </span>
-                    </TableHead>
-                    <TableHead
-                      className="cursor-pointer select-none hover:text-foreground"
-                      onClick={() => toggleSort("amount")}
-                    >
-                      <span className="flex items-center">
-                        Pledge Amount
-                        <SortIcon field="amount" sortField={sortField} sortDir={sortDir} />
-                      </span>
-                    </TableHead>
-                    <TableHead
-                      className="cursor-pointer select-none hover:text-foreground"
-                      onClick={() => toggleSort("schedule")}
-                    >
-                      <span className="flex items-center">
-                        Schedule
-                        <SortIcon field="schedule" sortField={sortField} sortDir={sortDir} />
-                      </span>
-                    </TableHead>
+          </div>
+        </CardHeader>
+        <CardContent className={FIT_CLASSES.section}>
+          <ScrollBox>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={allPageSelected}
+                      indeterminate={somePageSelected && !allPageSelected}
+                      onCheckedChange={toggleSelectAll}
+                      aria-label="Select all"
+                    />
+                  </TableHead>
+                  <TableHead
+                    className="cursor-pointer select-none hover:text-foreground"
+                    onClick={() => toggleSort("borrower")}
+                  >
+                    <span className="flex items-center">
+                      Member
+                      <SortIcon field="borrower" sortField={sortField} sortDir={sortDir} />
+                    </span>
+                  </TableHead>
+                  <TableHead
+                    className="cursor-pointer select-none hover:text-foreground"
+                    onClick={() => toggleSort("amount")}
+                  >
+                    <span className="flex items-center">
+                      Pledge Amount
+                      <SortIcon field="amount" sortField={sortField} sortDir={sortDir} />
+                    </span>
+                  </TableHead>
+                  <TableHead
+                    className="cursor-pointer select-none hover:text-foreground"
+                    onClick={() => toggleSort("schedule")}
+                  >
+                    <span className="flex items-center">
+                      Schedule
+                      <SortIcon field="schedule" sortField={sortField} sortDir={sortDir} />
+                    </span>
+                  </TableHead>
+                  {autoCreditShown && (
                     <TableHead
                       className="cursor-pointer select-none hover:text-foreground"
                       onClick={() => toggleSort("autoCredit")}
@@ -594,192 +758,236 @@ export default function PledgeEntryPage() {
                         <SortIcon field="autoCredit" sortField={sortField} sortDir={sortDir} />
                       </span>
                     </TableHead>
-                    <TableHead className="w-12" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginated.map((pledge) => (
-                    <React.Fragment key={pledge.id}>
-                      <TableRow>
-                        <TableCell>
+                  )}
+                  <TableHead className="w-12" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {paginated.map((pledge) => (
+                  <React.Fragment key={pledge.id}>
+                    <TableRow>
+                      <TableCell>
+                        <DisabledReason reason={canTickForManualEntry(pledge) ? null : AUTO_CREDIT_ENTRY_LOCK_REASON}>
                           <Checkbox
-                            checked={selectedIds.has(pledge.id)}
+                            checked={selectedIds.has(pledge.id) && canTickForManualEntry(pledge)}
+                            disabled={!canTickForManualEntry(pledge)}
                             onCheckedChange={() => toggleSelect(pledge.id)}
                             aria-label={`Select ${pledge.borrower}`}
                           />
-                        </TableCell>
-                        <TableCell className="font-medium text-sm">{pledge.borrower}</TableCell>
-                        <TableCell>
-                          {editingAmountId === pledge.id ? (
-                            <div className="flex items-center gap-1">
-                              <Input
-                                type="number"
-                                min={1}
-                                step="1"
-                                autoFocus
-                                className="w-28 h-8 text-sm"
-                                value={editAmount}
-                                onChange={(e) => setEditAmount(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") saveAmountEdit(pledge.id);
-                                  if (e.key === "Escape") cancelAmountEdit();
-                                }}
-                              />
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-green-600 hover:text-green-700"
-                                onClick={() => saveAmountEdit(pledge.id)}
-                              >
-                                <Check className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                                onClick={cancelAmountEdit}
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-                          ) : (
+                        </DisabledReason>
+                      </TableCell>
+                      <TableCell className="font-medium text-sm">{pledge.borrower}</TableCell>
+                      <TableCell>
+                        {editingAmountId === pledge.id ? (
+                          <div className="flex items-center gap-1">
+                            <Input
+                              type="number"
+                              min="0.01"
+                              step="0.01"
+                              autoFocus
+                              className="w-28 h-8 text-sm"
+                              value={editAmount}
+                              onChange={(e) => setEditAmount(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") saveAmountEdit(pledge.id);
+                                if (e.key === "Escape") cancelAmountEdit();
+                              }}
+                            />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-green-600 hover:text-green-700"
+                              onClick={() => saveAmountEdit(pledge.id)}
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                              onClick={cancelAmountEdit}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <DisabledReason reason={pledgeUpdateReason}>
                             <span
-                              className="text-sm cursor-pointer hover:text-brand-orange hover:underline"
-                              onClick={() => startAmountEdit(pledge)}
-                              title="Click to edit"
+                              className={
+                                canUpdatePledge
+                                  ? "text-sm cursor-pointer hover:text-brand-orange hover:underline"
+                                  : "text-sm"
+                              }
+                              onClick={canUpdatePledge ? () => startAmountEdit(pledge) : undefined}
+                              title={canUpdatePledge ? "Click to edit" : undefined}
                             >
                               {formatCurrency(pledge.amount)}
                             </span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {editingScheduleId === pledge.id ? (
-                            <Select
-                              value={editSchedule}
-                              onValueChange={(v) => saveScheduleEdit(pledge.id, v as string)}
-                            >
-                              <SelectTrigger className="w-36 h-8 text-xs">
-                                <SelectValue>
-                                  {(value: string | null) =>
-                                    value
-                                      ? (SCHEDULE_OPTIONS.find((s) => s.value === value)?.label ?? value)
-                                      : "Select"
-                                  }
-                                </SelectValue>
-                              </SelectTrigger>
-                              <SelectContent>
-                                {SCHEDULE_OPTIONS.map((opt) => (
-                                  <SelectItem key={opt.value} value={opt.value}>
-                                    {opt.label}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          ) : (
+                          </DisabledReason>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {editingScheduleId === pledge.id ? (
+                          <Select
+                            value={editSchedule}
+                            onValueChange={(v) => saveScheduleEdit(pledge.id, v as string)}
+                          >
+                            <SelectTrigger className="w-36 h-8 text-xs">
+                              <SelectValue>
+                                {(value: string | null) =>
+                                  value
+                                    ? (SCHEDULE_OPTIONS.find((s) => s.value === value)?.label ?? value)
+                                    : "Select"
+                                }
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              {SCHEDULE_OPTIONS.map((opt) => (
+                                <SelectItem key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <DisabledReason reason={pledgeUpdateReason}>
                             <Badge
                               variant="outline"
-                              className="text-xs cursor-pointer hover:border-brand-orange"
-                              onClick={() => startScheduleEdit(pledge)}
+                              className={
+                                canUpdatePledge
+                                  ? "text-xs cursor-pointer hover:border-brand-orange"
+                                  : "text-xs opacity-50"
+                              }
+                              onClick={canUpdatePledge ? () => startScheduleEdit(pledge) : undefined}
                             >
                               <Settings2 className="h-3 w-3 mr-1" />
                               {SCHEDULE_OPTIONS.find((s) => s.value === pledge.schedule)?.label ?? pledge.schedule ?? "—"}
                             </Badge>
-                          )}
-                        </TableCell>
+                          </DisabledReason>
+                        )}
+                      </TableCell>
+                      {autoCreditShown && (
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <Switch
-                              checked={pledge.autoCredit}
-                              onCheckedChange={() => handleToggleAutoCredit(pledge.id)}
-                            />
+                            <DisabledReason reason={pledgeUpdateReason}>
+                              <Switch
+                                checked={pledge.autoCredit}
+                                disabled={!canUpdatePledge}
+                                onCheckedChange={() => handleToggleAutoCredit(pledge.id)}
+                              />
+                            </DisabledReason>
                             <span className={`text-xs font-medium ${pledge.autoCredit ? "text-green-600" : "text-muted-foreground"}`}>
                               {pledge.autoCredit ? "Active" : "Inactive"}
                             </span>
                           </div>
                         </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-xs text-brand-orange hover:text-brand-orange disabled:text-muted-foreground disabled:opacity-50"
-                            disabled={pledge.autoCredit}
-                            title={pledge.autoCredit ? "Auto-credit is active — manual entry disabled" : "Create manual entry"}
-                            onClick={() =>
-                              manualEntryId === pledge.id
-                                ? setManualEntryId(null)
-                                : startManualEntry(pledge.id)
-                            }
-                          >
-                            <PlusCircle className="h-3.5 w-3.5 mr-1" />
-                            Entry
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                      {manualEntryId === pledge.id && (
-                        <TableRow>
-                          <TableCell colSpan={6} className="p-0">
-                            <div className="border-t border-b border-brand-orange/20 bg-brand-orange/5 px-6 py-4 space-y-3">
-                              <p className="text-sm font-medium">
-                                Manual Pledge Entry — {pledge.borrower}
-                              </p>
-                              <div className="flex items-end gap-4">
-                                <div className="space-y-1.5">
-                                  <p className="text-xs text-muted-foreground">Amount (PHP)</p>
-                                  <Input
-                                    type="number"
-                                    min={1}
-                                    step="1"
-                                    placeholder="0"
-                                    autoFocus
-                                    className="w-40 h-9"
-                                    value={manualAmount}
-                                    onChange={(e) => setManualAmount(e.target.value)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Enter") handleManualEntry(pledge.id);
-                                      if (e.key === "Escape") setManualEntryId(null);
-                                    }}
-                                  />
+                      )}
+                      <TableCell>
+                        <PermissionButton
+                          permission={PLEDGE_ENTRY_CREATE_GATE.permission}
+                          tooltip={PLEDGE_ENTRY_CREATE_GATE.tooltip}
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs text-brand-orange hover:text-brand-orange disabled:text-muted-foreground disabled:opacity-50"
+                          disabled={pledge.autoCredit}
+                          title={pledge.autoCredit ? "This pledge is set to auto-credit; manual entry is off." : "Create manual entry"}
+                          onClick={() =>
+                            manualEntryId === pledge.id
+                              ? setManualEntryId(null)
+                              : startManualEntry(pledge.id)
+                          }
+                        >
+                          <PlusCircle className="h-3.5 w-3.5 mr-1" />
+                          Entry
+                        </PermissionButton>
+                      </TableCell>
+                    </TableRow>
+                    {manualEntryId === pledge.id && (
+                      <TableRow>
+                        <TableCell colSpan={autoCreditShown ? 6 : 5} className="p-0">
+                          <div className="border-t border-b border-brand-orange/20 bg-brand-orange/5 px-6 py-4 space-y-3">
+                            <p className="text-sm font-medium">
+                              Manual Pledge Entry — {pledge.borrower}
+                            </p>
+                            {/* Every field has the same label, so aligned at the top the fields
+                                share one line whether or not the reference shows a note. */}
+                            <div className="flex flex-wrap items-start gap-4">
+                              <div className="space-y-1.5">
+                                <Label htmlFor={`pledge-${pledge.id}-amount`}>Amount (₱)</Label>
+                                <Input
+                                  id={`pledge-${pledge.id}-amount`}
+                                  type="number"
+                                  min="0.01"
+                                  step="0.01"
+                                  placeholder="0"
+                                  autoFocus
+                                  className="w-40"
+                                  value={manualAmount}
+                                  onChange={(e) => setManualAmount(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") handleManualEntry(pledge.id);
+                                    if (e.key === "Escape") setManualEntryId(null);
+                                  }}
+                                />
+                              </div>
+                              <div className="space-y-1.5">
+                                <Label id={`pledge-${pledge.id}-transaction`}>Transaction</Label>
+                                <div
+                                  role="group"
+                                  aria-labelledby={`pledge-${pledge.id}-transaction`}
+                                  className="flex h-8 overflow-hidden rounded-md border"
+                                >
+                                  <button
+                                    type="button"
+                                    className={`px-4 text-xs font-medium transition-colors ${
+                                      manualTransaction === "credit"
+                                        ? "bg-green-600 text-white"
+                                        : "bg-background text-muted-foreground hover:bg-muted"
+                                    }`}
+                                    onClick={() => setManualTransaction("credit")}
+                                  >
+                                    Credit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={`px-4 text-xs font-medium border-l transition-colors ${
+                                      manualTransaction === "debit"
+                                        ? "bg-red-600 text-white"
+                                        : "bg-background text-muted-foreground hover:bg-muted"
+                                    }`}
+                                    onClick={() => setManualTransaction("debit")}
+                                  >
+                                    Debit
+                                  </button>
                                 </div>
-                                <div className="space-y-1.5">
-                                  <p className="text-xs text-muted-foreground">Transaction</p>
-                                  <div className="flex rounded-md border overflow-hidden">
-                                    <button
-                                      type="button"
-                                      className={`px-4 py-2 text-xs font-medium transition-colors ${
-                                        manualTransaction === "credit"
-                                          ? "bg-green-600 text-white"
-                                          : "bg-background text-muted-foreground hover:bg-muted"
-                                      }`}
-                                      onClick={() => setManualTransaction("credit")}
-                                    >
-                                      Credit
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className={`px-4 py-2 text-xs font-medium border-l transition-colors ${
-                                        manualTransaction === "debit"
-                                          ? "bg-red-600 text-white"
-                                          : "bg-background text-muted-foreground hover:bg-muted"
-                                      }`}
-                                      onClick={() => setManualTransaction("debit")}
-                                    >
-                                      Debit
-                                    </button>
-                                  </div>
-                                </div>
+                              </div>
+                              <MethodReferenceFields
+                                idPrefix={`pledge-${pledge.id}`}
+                                options={PAYMENT_METHOD_OPTIONS}
+                                method={manualMethod}
+                                reference={manualReference}
+                                onChange={(next) => {
+                                  setManualMethod(next.method);
+                                  setManualReference(next.reference);
+                                }}
+                                referenceRequired={manualMethod !== "cash"}
+                                problem={manualReferenceProblem}
+                                autoReference={manualAutoReference}
+                                className="grid w-full max-w-md gap-3 sm:grid-cols-2"
+                              />
+                              <div className="space-y-1.5">
+                                {/* A label's height, so the buttons sit on the fields' line. */}
+                                <span aria-hidden="true" className="block h-3.5" />
                                 <div className="flex gap-2">
                                   <Button
-                                    size="sm"
-                                    className="h-9 bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                                    disabled={!manualAmount}
+                                    className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+                                    disabled={manualSubmitting || !manualAmount || manualReferenceProblem !== null}
                                     onClick={() => handleManualEntry(pledge.id)}
                                   >
                                     Submit
                                   </Button>
                                   <Button
                                     variant="outline"
-                                    size="sm"
-                                    className="h-9"
                                     onClick={() => setManualEntryId(null)}
                                   >
                                     Cancel
@@ -787,139 +995,195 @@ export default function PledgeEntryPage() {
                                 </div>
                               </div>
                             </div>
-                          </TableCell>
-                        </TableRow>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </React.Fragment>
+                ))}
+                {paginated.length === 0 && loading && (
+                  <TableRow>
+                    <TableCell colSpan={autoCreditShown ? 6 : 5} className="h-24 text-center text-muted-foreground">
+                      <Spinner className="mx-auto size-5" />
+                    </TableCell>
+                  </TableRow>
+                )}
+                {paginated.length === 0 && !loading && (
+                  <TableRow>
+                    <TableCell colSpan={autoCreditShown ? 6 : 5} className="h-24 text-center text-muted-foreground">
+                      {!failed && hasIllustration(emptyPicture) && (
+                        <Illustration name={emptyPicture} className="mx-auto mb-3 block" />
                       )}
-                    </React.Fragment>
-                  ))}
-                  {paginated.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                        <p>No pledges found.</p>
-                        <p className="text-xs mt-1">Pledges are created when borrowers are added to the system.</p>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+                      <p>No pledges found.</p>
+                      <p className="text-xs mt-1">Pledges are created when members are added to the system.</p>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </ScrollBox>
 
-            {/* Pagination */}
-            <div className="flex items-center justify-between pt-4">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Rows per page</span>
-                <Select
-                  value={String(pageSize)}
-                  onValueChange={(v) => { setPageSize(Number(v)); setPage(1); }}
-                >
-                  <SelectTrigger className="w-16 h-8 text-xs">
-                    <SelectValue>{() => String(pageSize)}</SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PAGE_SIZES.map((s) => (
-                      <SelectItem key={s} value={String(s)}>{s}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">
-                  {processed.length === 0
-                    ? "0 of 0"
-                    : `${(safePage - 1) * pageSize + 1}–${Math.min(safePage * pageSize, processed.length)} of ${processed.length}`}
-                </span>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  disabled={safePage <= 1}
-                  onClick={() => setPage((p) => p - 1)}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  disabled={safePage >= totalPages}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
+          {/* Pagination */}
+          <div data-fab-clear className="flex shrink-0 items-center justify-between pt-4">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Rows per page</span>
+              <Select
+                value={String(pageSize)}
+                onValueChange={(v) => { setPageSize(Number(v)); setPage(1); }}
+              >
+                <SelectTrigger className="w-16 h-8 text-xs">
+                  <SelectValue>{() => String(pageSize)}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {PAGE_SIZES.map((s) => (
+                    <SelectItem key={s} value={String(s)}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          </CardContent>
-        </Card>
-        {/* Bulk Entry Dialog */}
-        <Dialog open={bulkDialogOpen} onOpenChange={setBulkDialogOpen}>
-          <DialogContent className="sm:max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Manual Pledge Entry</DialogTitle>
-              <DialogDescription>
-                Set amount and transaction type for each selected member.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-3 max-h-80 overflow-y-auto py-2">
-              {pledges
-                .filter((p) => selectedIds.has(p.id))
-                .map((p) => {
-                  const entry = bulkEntries[p.id] || { amount: "", transaction: "credit" };
-                  return (
-                    <div key={p.id} className="flex items-center gap-3">
-                      <span className="text-sm font-medium w-40 truncate shrink-0" title={p.borrower}>
-                        {p.borrower}
-                      </span>
-                      <Input
-                        type="number"
-                        min={1}
-                        step="1"
-                        placeholder="Amount"
-                        className="w-28 h-8 text-sm"
-                        value={entry.amount}
-                        onChange={(e) => updateBulkEntry(p.id, "amount", e.target.value)}
-                      />
-                      <div className="flex rounded-md border overflow-hidden shrink-0">
-                        <button
-                          type="button"
-                          className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                            entry.transaction === "credit"
-                              ? "bg-green-600 text-white"
-                              : "bg-background text-muted-foreground hover:bg-muted"
-                          }`}
-                          onClick={() => updateBulkEntry(p.id, "transaction", "credit")}
-                        >
-                          Credit
-                        </button>
-                        <button
-                          type="button"
-                          className={`px-3 py-1.5 text-xs font-medium border-l transition-colors ${
-                            entry.transaction === "debit"
-                              ? "bg-red-600 text-white"
-                              : "bg-background text-muted-foreground hover:bg-muted"
-                          }`}
-                          onClick={() => updateBulkEntry(p.id, "transaction", "debit")}
-                        >
-                          Debit
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setBulkDialogOpen(false)}>
-                Cancel
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">
+                {processed.length === 0
+                  ? "0 of 0"
+                  : `${(safePage - 1) * pageSize + 1}–${Math.min(safePage * pageSize, processed.length)} of ${processed.length}`}
+              </span>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                aria-label="Previous page"
+                disabled={safePage <= 1}
+                onClick={() => setPage((p) => p - 1)}
+              >
+                <ChevronLeft className="h-4 w-4" />
               </Button>
               <Button
-                className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
-                onClick={() => { handleBulkSubmit(); setBulkDialogOpen(false); }}
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                aria-label="Next page"
+                disabled={safePage >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
               >
-                Submit All
+                <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
-          </DialogContent>
-        </Dialog>
-      </div>
+          </div>
+        </CardContent>
+      </Card>
+      {/* Bulk Entry Dialog */}
+      <Dialog
+        open={bulkDialogOpen}
+        onOpenChange={(open) => {
+          if (!bulkSubmitting) setBulkDialogOpen(open);
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Manual Pledge Entry</DialogTitle>
+            <DialogDescription>
+              Set amount and transaction type for each selected member, and how the money came in or went out.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 max-h-80 overflow-y-auto py-2">
+            {entrySelection.included
+              .map((p) => {
+                const entry = bulkEntries[p.id] || { amount: "", transaction: "credit" };
+                return (
+                  <div key={p.id} className="flex items-center gap-3">
+                    <span className="text-sm font-medium w-40 truncate shrink-0" title={p.borrower}>
+                      {p.borrower}
+                    </span>
+                    <Input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      placeholder="Amount"
+                      className="w-28 h-8 text-sm"
+                      value={entry.amount}
+                      onChange={(e) => updateBulkEntry(p.id, "amount", e.target.value)}
+                    />
+                    <div className="flex rounded-md border overflow-hidden shrink-0">
+                      <button
+                        type="button"
+                        className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                          entry.transaction === "credit"
+                            ? "bg-green-600 text-white"
+                            : "bg-background text-muted-foreground hover:bg-muted"
+                        }`}
+                        onClick={() => updateBulkEntry(p.id, "transaction", "credit")}
+                      >
+                        Credit
+                      </button>
+                      <button
+                        type="button"
+                        className={`px-3 py-1.5 text-xs font-medium border-l transition-colors ${
+                          entry.transaction === "debit"
+                            ? "bg-red-600 text-white"
+                            : "bg-background text-muted-foreground hover:bg-muted"
+                        }`}
+                        onClick={() => updateBulkEntry(p.id, "transaction", "debit")}
+                      >
+                        Debit
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+          {entrySelection.excluded.length > 0 && (
+            <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs">
+              <p className="font-medium">Left out of this entry</p>
+              <ul className="mt-1 space-y-0.5 text-muted-foreground">
+                {entrySelection.excluded.map(({ pledge, reason }) => (
+                  <li key={pledge.id}>
+                    <span className="font-medium text-foreground">{pledge.borrower}</span>: {reason}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <MethodReferenceFields
+            idPrefix="bulk-entry"
+            options={PAYMENT_METHOD_OPTIONS}
+            method={bulkMethod}
+            reference={bulkReference}
+            onChange={(next) => {
+              setBulkMethod(next.method);
+              setBulkReference(next.reference);
+            }}
+            referenceRequired={bulkMethod !== "cash"}
+            problem={bulkReferenceProblem}
+            autoReference={bulkAutoReference}
+            disabled={bulkSubmitting}
+          />
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setBulkDialogOpen(false)} disabled={bulkSubmitting}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-brand-orange text-brand-orange-foreground hover:bg-brand-orange-dark"
+              disabled={bulkSubmitting || bulkReferenceProblem !== null || entrySelection.included.length === 0}
+              onClick={async () => {
+                // Closes only once the batch has posted: a missing field or a
+                // refusal keeps every row typed so far.
+                if (await handleBulkSubmit()) setBulkDialogOpen(false);
+              }}
+            >
+              {bulkSubmitting && <Spinner className="mr-2 size-4" />}
+              Submit All
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </PageFill>
+  );
+}
+
+export default function PledgeEntryPage() {
+  return (
+    <RouteGuard permission="share_capital:view" pageName="Pledge Entry">
+      <PledgeEntryContent />
     </RouteGuard>
   );
 }

@@ -15,7 +15,7 @@ import { getFieldErrors } from "@/lib/api-error";
 //   "A similar borrower already exists: <Name> (BRW-XXXXXX, born YYYY-MM-DD). Pass force=true to create anyway."
 export function isDuplicateNameMessage(message?: string | null): boolean {
   if (!message) return false;
-  return /similar borrower|force=true|already exists/i.test(message);
+  return /similar (borrower|member)|force=true|already exists/i.test(message);
 }
 
 // A unique-email collision as worded for a SIGNED-IN user (staff creating a

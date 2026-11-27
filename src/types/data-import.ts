@@ -19,12 +19,13 @@ export type ImportPhase =
   | "awaiting_mapping"
   | "importing_customers"
   | "importing_loans"
+  | "importing_share_capital"
   | "completed"
   | "failed"
   | "cancelled";
 
-/** The two files, keyed — never a positional array. Both endpoints key by this. */
-export type ImportFileKind = "customers" | "loans";
+/** The files, keyed — never a positional array. Every endpoint keys by this. */
+export type ImportFileKind = "customers" | "loans" | "share_capital";
 
 /** Per-row outcome. `matched_existing` is deliberately NOT a kind of `skipped`:
  *  the coop already has 44 self-registered members who will appear in the
@@ -277,7 +278,14 @@ export interface ProductMappingConfirmation {
   data: ProductMappingConfirmedPayload;
 }
 
-export type ImportIssueSeverity = "error" | "warning";
+/**
+ * An import report line's severity, by what became of its row: `error` is why
+ * a row was not imported, `skipped` every other line of a row that was not
+ * imported (never a warning), and `warning` a row that WAS imported with
+ * something adjusted. The Check step, before anything is imported, uses only
+ * `error` and `warning`.
+ */
+export type ImportIssueSeverity = "error" | "skipped" | "warning";
 
 export interface ImportRowIssue {
   /** The uploaded FILENAME, not the kind — the API sends both. */
@@ -290,6 +298,8 @@ export interface ImportRowIssue {
   severity: ImportIssueSeverity;
   category: string;
   field: string | null;
+  /** The column's label for a column's field; blank for a whole-row problem. */
+  field_label?: string;
   message: string;
   original_value: string | null;
 }

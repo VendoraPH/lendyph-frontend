@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import test from "node:test";
 import type { CsvRecord } from "@/lib/csv-parse";
 import {
@@ -9,6 +11,7 @@ import {
   describeIsoDate,
   fileBlockers,
   inspectFile,
+  runDateOrders,
   sessionAnswers,
   type DateColumnFinding,
   type FileInspection,
@@ -18,7 +21,7 @@ import {
 // Fixtures
 // ---------------------------------------------------------------------------
 
-/** A complete, valid Customer Profile row. Mutate a copy to make one bad. */
+/** A complete, valid members file row. Mutate a copy to make one bad. */
 const CUSTOMER: string[] = [
   "2019-00101",
   "Dela Cruz",
@@ -109,6 +112,57 @@ test("a contact number holding two numbers is a warning, not a failure", () => {
   assert.match(result.issues[0].message, /drops 09181234567/);
 });
 
+test("a malformed email warns that it will be imported as blank, and the row still imports", () => {
+  const row = [...CUSTOMER];
+  row[9] = "maria@example .com";
+
+  const result = checkRows(customerRows([row]), CUSTOMER_CONTEXT);
+
+  assert.equal(result.errorCount, 0);
+  assert.equal(result.failingRows, 0, "the server imports the row with the email blank");
+  assert.deepEqual(result.issues.map((issue) => [issue.column, issue.severity, issue.category, issue.value]), [
+    ["email", "warning", "value", "maria@example .com"],
+  ]);
+  assert.match(result.issues[0].message, /will be imported as blank/);
+});
+
+test("an email over 255 characters warns that it will be imported as blank, and the row still imports", () => {
+  const row = [...CUSTOMER];
+  row[9] = `${"a".repeat(250)}@b.com`;
+
+  const result = checkRows(customerRows([row]), CUSTOMER_CONTEXT);
+
+  assert.equal(result.errorCount, 0);
+  assert.equal(result.failingRows, 0);
+  assert.deepEqual(result.issues.map((issue) => [issue.column, issue.severity]), [["email", "warning"]]);
+  assert.equal(
+    result.issues[0].message,
+    "email is 256 characters; this field holds 255, so it will be imported as blank. The row still imports; shorten it in the file to keep it, or add it later on the member's page.",
+  );
+});
+
+test("an email the server accepts raises nothing, however unusual", () => {
+  for (const email of ["juan@localhost", '"juan dela cruz"@example.com', "juan @example.com"]) {
+    const row = [...CUSTOMER];
+    row[9] = email;
+    assert.deepEqual(checkRows(customerRows([row]), CUSTOMER_CONTEXT).issues, [], email);
+  }
+});
+
+test("a member's amounts are read as the server reads them, in its words", () => {
+  const row = [...CUSTOMER];
+  row[15] = "1234.500"; // Monthly Income: refused, as on the server
+  row[16] = "10,000,000.00"; // Pledge Amt: above the member form's limit, imported blank
+
+  const result = checkRows(customerRows([row]), CUSTOMER_CONTEXT);
+
+  assert.equal(result.failingRows, 1);
+  assert.deepEqual(result.issues.map((issue) => [issue.column, issue.severity, issue.message]), [
+    ["Monthly Income", "error", '"1234.500" has more than 2 decimal places. Round it to centavos in the source file — this importer will not round it for you.'],
+    ["Pledge Amt(If Applicable)", "warning", "This amount is above the 9,999,999.99 the member form allows, so it will be imported as blank rather than leaving a member who cannot be saved."],
+  ]);
+});
+
 test("a value the server rejects is an error, next to a value it repairs", () => {
   const row = [...CUSTOMER];
   row[8] = "09171234567/09181234567"; // repaired -> warning
@@ -148,15 +202,74 @@ test("cross-file matching is skipped entirely when the customers file was not re
 // Row-level checks
 // ---------------------------------------------------------------------------
 
-test("a blank required field fails the row and names the column", () => {
+test("a blank Account No. fails the row and names the column", () => {
   const row = [...CUSTOMER];
-  row[11] = ""; // Barangay
+  row[0] = "";
 
   const result = checkRows(customerRows([row]), CUSTOMER_CONTEXT);
 
   assert.equal(result.failingRows, 1);
+  assert.equal(result.issues[0].severity, "error");
   assert.equal(result.issues[0].category, "required");
-  assert.equal(result.issues[0].column, "Barangay");
+  assert.equal(result.issues[0].column, "Account No.");
+  assert.equal(result.issues[0].message, "Account No. is blank, and this row cannot be imported without it.");
+});
+
+// ---------------------------------------------------------------------------
+// Blank and unrecognised member cells: what the server refuses (round 3)
+// ---------------------------------------------------------------------------
+
+test("of the workbook's required cells, only a blank Account No., Last Name or First Name fails a member's row", () => {
+  const refused: Array<[number, string]> = [[0, "Account No."], [1, "Last Name"], [2, "First Name"]];
+  const imported: Array<[number, string]> = [
+    [5, "Birthdate"], [6, "Gender"], [7, "Civil Status"], [8, "Contact Number"],
+    [9, "email"], [11, "Barangay"], [12, "City/Municipality"], [13, "Province"],
+  ];
+
+  for (const [index, label] of refused) {
+    const row = [...CUSTOMER];
+    row[index] = "";
+    const result = checkRows(customerRows([row]), CUSTOMER_CONTEXT);
+    assert.deepEqual(
+      result.issues.map((issue) => [issue.column, issue.severity, issue.message]),
+      [[label, "error", `${label} is blank, and this row cannot be imported without it.`]],
+      label,
+    );
+    assert.equal(result.failingRows, 1, label);
+  }
+
+  for (const [index, label] of imported) {
+    const row = [...CUSTOMER];
+    row[index] = "";
+    const result = checkRows(customerRows([row]), CUSTOMER_CONTEXT);
+    assert.deepEqual(
+      result.issues.map((issue) => [issue.column, issue.severity, issue.category, issue.message]),
+      [[label, "warning", "required", `${label} is blank. The member will be imported without it; add it later on their page.`]],
+      label,
+    );
+    assert.equal(result.errorCount, 0, label);
+    assert.equal(result.failingRows, 0, label);
+  }
+});
+
+test("a married member with a blank spouse name or contact number warns, and the row imports", () => {
+  const row = [...CUSTOMER];
+  row[17] = ""; // Spouse FName
+  row[19] = ""; // Spouse LName
+  row[20] = ""; // Spouse Contact No
+
+  const result = checkRows(customerRows([row]), CUSTOMER_CONTEXT);
+
+  assert.equal(result.errorCount, 0);
+  assert.equal(result.failingRows, 0);
+  assert.deepEqual(
+    result.issues.map((issue) => [issue.column, issue.severity, issue.message]),
+    ["Spouse FName (If Married)", "Spouse LName (If Married)", "Spouse Contact No (If Married)"].map((label) => [
+      label,
+      "warning",
+      `${label} is blank. The member will be imported without it; add it later on their page.`,
+    ]),
+  );
 });
 
 test("a row of the wrong width is reported once, as a whole-row problem", () => {
@@ -168,14 +281,72 @@ test("a row of the wrong width is reported once, as a whole-row problem", () => 
   assert.match(columnIssues[0].message, /21 columns/);
 });
 
-test("an unknown closed-vocabulary value quotes the options back", () => {
+test("an unrecognised gender or civil status warns that it will be imported blank, and quotes the options", () => {
+  const gender = [...CUSTOMER];
+  gender[6] = "Other";
+  const civil = [...CUSTOMER];
+  civil[0] = "2019-00102";
+  civil[7] = "Live-in";
+
+  const result = checkRows(customerRows([gender, civil]), CUSTOMER_CONTEXT);
+
+  assert.equal(result.errorCount, 0);
+  assert.equal(result.failingRows, 0);
+  assert.deepEqual(result.issues.map((issue) => [issue.column, issue.severity, issue.category, issue.message]), [
+    [
+      "Gender",
+      "warning",
+      "value",
+      'Gender "Other" isn\'t one the import recognises, so it will be imported blank; add it later on the member\'s page. Expected one of: Male, Female.',
+    ],
+    [
+      "Civil Status",
+      "warning",
+      "value",
+      'Civil Status "Live-in" isn\'t one the import recognises, so it will be imported blank; add it later on the member\'s page. Expected one of: Single, Married, Widowed, Separated, Divorced.',
+    ],
+  ]);
+});
+
+test("Lalaki, Lalake and Babae read as a gender, as the server reads them, and raise nothing", () => {
+  for (const spelling of ["Lalaki", "LALAKE", "babae"]) {
+    const row = [...CUSTOMER];
+    row[6] = spelling;
+
+    assert.deepEqual(checkRows(customerRows([row]), CUSTOMER_CONTEXT).issues, [], spelling);
+  }
+});
+
+test("a gender or civil status the server imports blank warns, even a spelling a reader would know", () => {
+  const cases: Array<[number, string, string]> = [
+    [6, "Gender", "Lalakii"],
+    [6, "Gender", "Babai"],
+    [7, "Civil Status", "Maried"],
+    [7, "Civil Status", "Marrried"],
+    [7, "Civil Status", "Seperated"],
+    [7, "Civil Status", "Divorce"],
+    [7, "Civil Status", "Annulled"],
+  ];
+
+  for (const [index, label, spelling] of cases) {
+    const row = [...CUSTOMER];
+    row[index] = spelling;
+    const result = checkRows(customerRows([row]), CUSTOMER_CONTEXT);
+
+    assert.deepEqual(result.issues.map((issue) => [issue.column, issue.severity]), [[label, "warning"]], spelling);
+    assert.ok(
+      result.issues[0].message.startsWith(`${label} "${spelling}" isn't one the import recognises, so it will be imported blank;`),
+      result.issues[0].message,
+    );
+    assert.equal(result.failingRows, 0, spelling);
+  }
+});
+
+test("a civil status the server reads, Legally Separated, raises nothing", () => {
   const row = [...CUSTOMER];
-  row[6] = "Lalake";
+  row[7] = "Legally Separated";
 
-  const result = checkRows(customerRows([row]), CUSTOMER_CONTEXT);
-
-  assert.equal(result.issues[0].category, "value");
-  assert.match(result.issues[0].message, /Expected one of/);
+  assert.deepEqual(checkRows(customerRows([row]), CUSTOMER_CONTEXT).issues, []);
 });
 
 test("a duplicate identifier is a warning that points at the first row", () => {
@@ -186,6 +357,156 @@ test("a duplicate identifier is a warning that points at the first row", () => {
   assert.equal(dupes[0].line, 2);
   assert.match(dupes[0].message, /already on line 1/);
   assert.equal(result.errorCount, 0);
+});
+
+// ---------------------------------------------------------------------------
+// The loans file follows the server (finish run round 4)
+// ---------------------------------------------------------------------------
+
+/** One loans row with the given cells changed, checked on its own. */
+function checkLoan(changes: Record<number, string>) {
+  return checkRows(customerRows([LOAN.map((cell, index) => changes[index] ?? cell)]), LOANS_CONTEXT);
+}
+
+/** Each issue as [column, severity, message]. */
+function described(result: ReturnType<typeof checkRows>) {
+  return result.issues.map((issue) => [issue.column, issue.severity, issue.message]);
+}
+
+test("a complete loans row raises nothing", () => {
+  assert.deepEqual(checkLoan({}).issues, []);
+});
+
+test("a blank Purpose or Loan Product warns and the loan imports, as on the server", () => {
+  const purpose = checkLoan({ 7: "" });
+  assert.equal(purpose.failingRows, 0);
+  assert.deepEqual(described(purpose), [["Purpose", "warning", "Purpose is blank. The loan will be imported with no purpose."]]);
+
+  const product = checkLoan({ 8: "  " });
+  assert.equal(product.failingRows, 0);
+  assert.deepEqual(described(product), [
+    ["Loan Product", "warning", "Loan Product is blank. The loan will still import: on the Processing step, choose a product for the loans with no product named."],
+  ]);
+
+  // Any other blank required cell still refuses the row.
+  const amount = checkLoan({ 2: "" });
+  assert.equal(amount.failingRows, 1);
+  assert.deepEqual(described(amount), [["Loan Amount", "error", "Loan Amount is blank, and this row cannot be imported without it."]]);
+});
+
+test("a Loan No. or Account No. longer than its 50-character column can't be imported; 50 can", () => {
+  const fifty = "LN-2023-".padEnd(50, "7");
+  assert.deepEqual(checkLoan({ 1: fifty }).issues, []);
+  assert.deepEqual(checkLoan({ 1: "LN-2023-ABCDEFGHIJKLM" }).issues, [], "21 characters, cut to 20 before round 4");
+
+  const long = checkLoan({ 1: `${fifty}7` });
+  assert.equal(long.failingRows, 1);
+  assert.deepEqual(described(long), [["Loan No.", "error", "Loan No. is 51 characters; this field holds 50."]]);
+
+  const account = "ACCT-".padEnd(51, "4");
+  assert.deepEqual(described(checkLoan({ 0: account })), [["Account No.", "error", "Account No. is 51 characters; this field holds 50."]]);
+  const member = [...CUSTOMER];
+  member[0] = account;
+  assert.deepEqual(described(checkRows(customerRows([member]), CUSTOMER_CONTEXT)), [
+    ["Account No.", "error", "Account No. is 51 characters; this field holds 50."],
+  ]);
+});
+
+/** The loans file's two dates, settled as written (year-month-day). */
+const LOAN_DATES: DateColumnFinding[] = [
+  { key: "date_released", label: "Date Released", inference: { status: "resolved", order: null, evidence: null, stats: {} as never }, order: null, chosen: false, blocked: false },
+  { key: "maturity_date", label: "Maturity Date", inference: { status: "resolved", order: null, evidence: null, stats: {} as never }, order: null, chosen: false, blocked: false },
+];
+
+test("amounts the server refuses can't be imported here either, in its words", () => {
+  const negative = checkLoan({ 3: "-500.00", 14: "(1,000.00)" });
+  assert.equal(negative.failingRows, 1);
+  assert.deepEqual(described(negative), [
+    ["Loan Balance", "error", '"-500.00" is a negative amount, which cannot be imported.'],
+    ["Processing Fee", "error", '"(1,000.00)" is written in accounting notation for a negative amount. Negative amounts cannot be imported.'],
+  ]);
+
+  assert.deepEqual(described(checkLoan({ 2: "0.00", 3: "0", 14: "", 15: "" })), [
+    ["Loan Amount", "error", "The loan amount must be greater than zero."],
+  ]);
+  assert.deepEqual(described(checkLoan({ 5: "1234.500" })), [
+    ["Interest Amount", "error", '"1234.500" has more than 2 decimal places. Round it to centavos in the source file — this importer will not round it for you.'],
+  ]);
+  // A rate written with its percent sign reads, as on the server.
+  assert.deepEqual(checkLoan({ 4: "2%" }).issues, []);
+});
+
+test("a balance above its amount, or fees above the principal, can't be imported", () => {
+  assert.deepEqual(described(checkLoan({ 3: "50,000.01", 6: "12,000.01" })), [
+    ["Loan Balance", "error", "The loan balance is larger than the loan amount. A balance cannot exceed the principal that was released."],
+    ["Interest Balance", "error", "The interest balance is larger than the total interest. A balance cannot exceed what was charged."],
+  ]);
+
+  const fees = checkLoan({ 14: "40,000.00", 15: "10,000.00", 16: "Notarial", 17: "0.01" });
+  assert.equal(fees.failingRows, 1);
+  assert.deepEqual(described(fees), [
+    [null, "error", "The fees on this loan add up to more than the principal, which would make its net proceeds negative. Check the Processing Fee, Service Fee and Other Fee Amount cells."],
+  ]);
+});
+
+test("a maturity date on or before the date released can't be imported, on the dates as read", () => {
+  const result = checkRows(customerRows([LOAN.map((cell, index) => (index === 13 ? "2025-01-15" : cell))]), { ...LOANS_CONTEXT, dates: LOAN_DATES });
+  assert.equal(result.failingRows, 1);
+  assert.deepEqual(described(result), [
+    ["Maturity Date", "error", "The maturity date (2025-01-15) is not after the date released (2025-01-15), so no payment schedule can be built."],
+  ]);
+  assert.deepEqual(checkRows(customerRows([LOAN]), { ...LOANS_CONTEXT, dates: LOAN_DATES }).issues, []);
+});
+
+test("a long Loan Product or Other Fee Detail, and an other fee with no description, warn and the loan imports", () => {
+  const long = checkLoan({ 8: "p".repeat(256), 16: "d".repeat(300), 17: "150.00" });
+  assert.equal(long.failingRows, 0);
+  assert.deepEqual(described(long), [
+    ["Loan Product", "warning", "Loan Product is 256 characters. The import keeps the first 255."],
+    ["Other Fee Detail", "warning", "Other Fee Detail is 300 characters. The import keeps the first 255."],
+  ]);
+
+  const unexplained = checkLoan({ 17: "150.00" });
+  assert.equal(unexplained.failingRows, 0);
+  assert.deepEqual(described(unexplained), [
+    ["Other Fee Detail", "warning", "An other-fee amount was given with no description. The disclosure statement has to itemise every deduction, so a description will need to be added."],
+  ]);
+});
+
+test("a Purpose longer than 500 characters warns that the import keeps the first 500", () => {
+  assert.deepEqual(checkLoan({ 7: "p".repeat(500) }).issues, []);
+
+  const long = checkLoan({ 7: "p".repeat(1000) });
+  assert.equal(long.failingRows, 0);
+  assert.deepEqual(described(long), [["Purpose", "warning", "Purpose is 1000 characters. The import keeps the first 500."]]);
+});
+
+test("Term in Months is a whole number of months from 1 to 120, else the row can't be imported", () => {
+  for (const term of ["1", "120", " 12 ", "006"]) {
+    assert.deepEqual(checkLoan({ 9: term }).issues, [], term);
+  }
+  for (const term of ["0", "121", "240"]) {
+    const result = checkLoan({ 9: term });
+    assert.equal(result.failingRows, 1, term);
+    assert.deepEqual(described(result), [["Term in Months", "error", `"${term}" is outside the accepted range 1–120.`]], term);
+  }
+  for (const term of ["12.5", "12.0", "-6", "₱12", "12 months", "twelve"]) {
+    const result = checkLoan({ 9: term });
+    assert.equal(result.failingRows, 1, term);
+    assert.deepEqual(described(result), [["Term in Months", "error", `"${term}" is not a whole number.`]], term);
+  }
+});
+
+test("a payment frequency or interest type the server doesn't read can't be imported, and names the ones it takes", () => {
+  assert.deepEqual(checkLoan({ 10: "Bi-Weekly", 11: "Straight (Fixed)" }).issues, []);
+  assert.deepEqual(checkLoan({ 10: "UPON MATURITY", 11: "Upon Maturity" }).issues, []);
+
+  const result = checkLoan({ 10: "Fortnightly", 11: "Reducing" });
+  assert.equal(result.failingRows, 1);
+  assert.deepEqual(described(result), [
+    ["Payment Frequency", "error", '"Fortnightly" is not a value Payment Frequency accepts. Expected one of: Daily, Weekly, Bi-Weekly, Semi-Monthly, Monthly, Upon Maturity.'],
+    ["Interest Type", "error", '"Reducing" is not a value Interest Type accepts. Expected one of: Straight (Fixed), Diminishing, Upon Maturity.'],
+  ]);
 });
 
 // ---------------------------------------------------------------------------
@@ -212,6 +533,31 @@ test("dates are checked against the settled order, and an impossible one fails",
   assert.match(dates[0].message, /not a real date read day-first/);
 });
 
+test("a date read with the server's warning warns, in its words, and the row imports", () => {
+  const BIRTHDATE_AS_WRITTEN: DateColumnFinding = { ...BIRTHDATE_DMY, order: null };
+  const row = [...CUSTOMER];
+  row[5] = "32874";
+
+  const result = checkRows(customerRows([row]), { ...CUSTOMER_CONTEXT, dates: [BIRTHDATE_AS_WRITTEN] });
+
+  assert.equal(result.failingRows, 0);
+  assert.deepEqual(result.issues.map((issue) => [issue.column, issue.severity, issue.category, issue.message]), [
+    ["Birthdate", "warning", "date", '"32874" is an Excel serial date number and will be read as 1990-01-01. Confirm it against the source workbook.'],
+  ]);
+});
+
+test("a date the server doesn't read can't be imported, in its words", () => {
+  const BIRTHDATE_AS_WRITTEN: DateColumnFinding = { ...BIRTHDATE_DMY, order: null };
+  for (const cell of ["1990-3-4", "1990.03.04", "17673", "1990-03-04 00:00:00"]) {
+    const row = [...CUSTOMER];
+    row[5] = cell;
+    const result = checkRows(customerRows([row]), { ...CUSTOMER_CONTEXT, dates: [BIRTHDATE_AS_WRITTEN] });
+    assert.deepEqual(result.issues.map((issue) => [issue.column, issue.severity, issue.message]), [
+      ["Birthdate", "error", `"${cell}" is not a date this importer recognises. Use YYYY-MM-DD.`],
+    ], cell);
+  }
+});
+
 test("an ambiguous column with no choice yet produces no row issues at all", () => {
   const pending: DateColumnFinding = { ...BIRTHDATE_DMY, order: undefined, blocked: false };
   const row = [...CUSTOMER];
@@ -236,12 +582,170 @@ test("a blocked column is not judged row by row — it is one file-level blocker
 });
 
 // ---------------------------------------------------------------------------
+// The four Member Profile columns, and the two layouts
+// ---------------------------------------------------------------------------
+
+/** The same member in today's 26-column layout: the workbook's 22, then four. */
+const CUSTOMER_26: string[] = [...CUSTOMER, "2012-06-01", "2010-03-15", "Associate", "BC-0007"];
+
+const NEW_COLUMN_AT = { date_hired: 22, membership_date: 23, member_type: 24, membership_number: 25 } as const;
+
+function memberRow(overrides: Partial<Record<keyof typeof NEW_COLUMN_AT, string>>, account = "2019-00101"): string[] {
+  const row = [...CUSTOMER_26];
+  row[0] = account;
+  for (const [key, value] of Object.entries(overrides)) {
+    row[NEW_COLUMN_AT[key as keyof typeof NEW_COLUMN_AT]] = value ?? "";
+  }
+  return row;
+}
+
+function isoColumn(key: string, label: string): DateColumnFinding {
+  return {
+    key,
+    label,
+    inference: { status: "resolved", order: null, evidence: null, stats: {} as never },
+    order: null,
+    chosen: false,
+    blocked: false,
+  };
+}
+
+const CURRENT_CONTEXT = {
+  ...CUSTOMER_CONTEXT,
+  expectedColumns: 26,
+  dates: [
+    isoColumn("birthdate", "Birthdate"),
+    isoColumn("date_hired", "Date Hired"),
+    isoColumn("membership_date", "Membership Date"),
+  ],
+  today: "2026-11-24",
+};
+
+test("good values in the four new columns pass the pre-check", () => {
+  const rows = customerRows([
+    CUSTOMER_26,
+    // The birthdate itself is not before the birthdate, and today is not after today.
+    memberRow({ date_hired: "1985-03-12", membership_date: "2026-11-24", member_type: "REGULAR", membership_number: "2019-00102" }, "2019-00102"),
+    // Every new column blank: not set.
+    memberRow({ date_hired: "", membership_date: "", member_type: "", membership_number: "" }, "2019-00103"),
+  ]);
+
+  const result = checkRows(rows, CURRENT_CONTEXT);
+
+  assert.equal(result.errorCount, 0, result.issues.map((issue) => issue.message).join(" | "));
+  assert.equal(result.warningCount, 0);
+});
+
+test("a bad value in a new column fails the row, in words", () => {
+  const cases: Array<[Partial<Record<keyof typeof NEW_COLUMN_AT, string>>, string, RegExp]> = [
+    [{ date_hired: "2026-11-25" }, "Date Hired", /after today, and a date hired can't be in the future/],
+    [{ date_hired: "1980-01-01" }, "Date Hired", /before this member's birthdate/],
+    [{ date_hired: "1900-01-01" }, "Date Hired", /not after 1 January 1900/],
+    [{ date_hired: "last year" }, "Date Hired", /is not a date/],
+    [{ membership_date: "2026-11-25" }, "Membership Date", /after today, and a membership date can't be in the future/],
+    [{ member_type: "Premium" }, "Member Type", /Expected one of: Regular, Associate/],
+    [{ membership_number: "brw-000123" }, "Membership Number", /starts like a member code \(BRW\)/],
+    // Look-alikes of a member code are refused the same way.
+    [{ membership_number: "BRW000123" }, "Membership Number", /starts like a member code \(BRW\)/],
+    [{ membership_number: "BRW-00O123" }, "Membership Number", /starts like a member code \(BRW\)/],
+    [{ membership_number: "NIÑO-01" }, "Membership Number", /plain letters, numbers and punctuation/],
+    [{ membership_number: "7".repeat(31) }, "Membership Number", /31 characters; this field holds 30/],
+    // A spreadsheet placeholder would become the member's sign-in number.
+    [{ membership_number: "-" }, "Membership Number", /has no digits, so it reads as a spreadsheet placeholder/],
+    [{ membership_number: "N/A" }, "Membership Number", /has no digits, so it reads as a spreadsheet placeholder/],
+    [{ membership_number: "0" }, "Membership Number", /is nothing but zeros/],
+    [{ membership_number: "00-00" }, "Membership Number", /is nothing but zeros/],
+  ];
+
+  for (const [override, label, words] of cases) {
+    const result = checkRows(customerRows([memberRow(override)]), CURRENT_CONTEXT);
+    const summary = `${JSON.stringify(override)}: ${result.issues.map((issue) => issue.message).join(" | ")}`;
+
+    assert.equal(result.errorCount, 1, summary);
+    assert.equal(result.failingRows, 1, summary);
+    assert.equal(result.issues[0].column, label, summary);
+    assert.match(result.issues[0].message, words, summary);
+    assert.doesNotMatch(result.issues[0].message, /\b[a-z]+_[a-z_]+\b/, `${summary}: words, never field keys`);
+  }
+});
+
+test("an unknown Member Type still fails the row: the server refuses it, unlike a gender", () => {
+  const result = checkRows(customerRows([memberRow({ member_type: "Premium" })]), CURRENT_CONTEXT);
+
+  assert.equal(result.failingRows, 1);
+  assert.deepEqual(result.issues.map((issue) => [issue.column, issue.severity, issue.message]), [
+    ["Member Type", "error", '"Premium" is not a value Member Type accepts. Expected one of: Regular, Associate.'],
+  ]);
+});
+
+test("a real membership number may hold zeros, and letters other than a member code's", () => {
+  const rows = customerRows(
+    ["BC-000", "A1", "10", "BR-0007"].map((number, i) => memberRow({ membership_number: number }, `2019-0020${i}`)),
+  );
+
+  const result = checkRows(rows, CURRENT_CONTEXT);
+
+  assert.equal(result.errorCount, 0, result.issues.map((issue) => issue.message).join(" | "));
+});
+
+test("spaces in a membership number are a warning: it is stored without them", () => {
+  const result = checkRows(customerRows([memberRow({ membership_number: "bc 0007" })]), CURRENT_CONTEXT);
+
+  assert.equal(result.errorCount, 0);
+  assert.equal(result.warningCount, 1);
+  assert.match(result.issues[0].message, /stored as BC0007/);
+});
+
+test("a membership number used twice in one file fails the second row", () => {
+  const rows = customerRows([
+    memberRow({ membership_number: "BC-0100" }, "2019-00101"),
+    memberRow({ membership_number: "bc-0100" }, "2019-00102"),
+  ]);
+
+  const result = checkRows(rows, CURRENT_CONTEXT);
+
+  assert.equal(result.errorCount, 1);
+  assert.equal(result.issues[0].line, 2);
+  assert.equal(result.issues[0].column, "Membership Number");
+  assert.match(result.issues[0].message, /BC-0100 is already on line 1/);
+});
+
+test("without permission to edit members, a filled membership column fails the row", () => {
+  const rows = customerRows([
+    memberRow({}, "2019-00101"),
+    // Date Hired is an ordinary member field; only the membership columns need it.
+    memberRow({ membership_date: "", member_type: "", membership_number: "" }, "2019-00102"),
+  ]);
+
+  const result = checkRows(rows, { ...CURRENT_CONTEXT, membershipAllowed: false });
+
+  assert.equal(result.errorCount, 1);
+  assert.equal(result.failingRows, 1);
+  assert.equal(result.issues[0].line, 1);
+  assert.match(result.issues[0].message, /Only staff who can edit members can import membership details/);
+});
+
+test("each layout holds its rows to its own width", () => {
+  // An old file's row that grew four cells is not a row of today's layout.
+  const grown = checkRows(customerRows([CUSTOMER_26]), CUSTOMER_CONTEXT);
+  const grownIssue = grown.issues.find((issue) => issue.category === "columns");
+  assert.ok(grownIssue);
+  assert.match(grownIssue.message, /26 columns/);
+  assert.match(grownIssue.message, /earlier 22-column layout/);
+
+  const short = checkRows(customerRows([CUSTOMER]), CURRENT_CONTEXT);
+  const shortIssue = short.issues.find((issue) => issue.category === "columns");
+  assert.ok(shortIssue);
+  assert.match(shortIssue.message, /22 columns; the members file needs 26/);
+});
+
+// ---------------------------------------------------------------------------
 // Truncation
 // ---------------------------------------------------------------------------
 
 test("capping the issue LIST never caps the issue COUNT", () => {
   const bad = [...CUSTOMER];
-  bad[11] = ""; // Barangay blank on every row
+  bad[1] = ""; // Last Name blank on every row: the server refuses it
   const rows = customerRows(Array.from({ length: 40 }, () => bad));
 
   const result = checkRows(rows, CUSTOMER_CONTEXT, 10);
@@ -266,7 +770,7 @@ function inspectionStub(overrides: Partial<FileInspection> = {}): FileInspection
   return {
     kind: "customers",
     shape: "customer",
-    label: "Customer Profile",
+    label: "Members file",
     fileName: "customers.csv",
     sizeBytes: 100,
     delimiter: ",",
@@ -278,7 +782,7 @@ function inspectionStub(overrides: Partial<FileInspection> = {}): FileInspection
     expectedColumns: 22,
     header: null,
     headerFields: null,
-    slot: { shape: "customer", customerScore: 1, loansScore: 0, basis: "content" },
+    slot: { shape: "customer", customerScore: 1, loansScore: 0, shareCapitalScore: 0, basis: "content" },
     widths: [{ columns: 22, rows: 1 }],
     ...overrides,
   };
@@ -308,13 +812,24 @@ test("a conflicted date column blocks the file and quotes both proofs", () => {
 
 test("the loans file dropped into the customers slot is a blocker, not a row error", () => {
   const inspection = inspectionStub({
-    slot: { shape: "loans", customerScore: 0.1, loansScore: 0.9, basis: "content" },
+    slot: { shape: "loans", customerScore: 0.1, loansScore: 0.9, shareCapitalScore: 0, basis: "content" },
   });
 
   const blockers = fileBlockers(inspection, customerRows([CUSTOMER]), NO_DATES);
 
   assert.equal(blockers.length, 1);
-  assert.match(blockers[0], /looks like the Loans file/);
+  assert.match(blockers[0], /looks like the loans file, but it was chosen as the members file/);
+});
+
+test("the share capital file dropped into the members slot is a blocker, not a row error", () => {
+  const inspection = inspectionStub({
+    slot: { shape: "share_capital", customerScore: 0.1, loansScore: 0.1, shareCapitalScore: 0.9, basis: "content" },
+  });
+
+  const blockers = fileBlockers(inspection, customerRows([CUSTOMER]), NO_DATES);
+
+  assert.equal(blockers.length, 1);
+  assert.match(blockers[0], /looks like the share capital file, but it was chosen as the members file/);
 });
 
 test("a file whose rows are systematically the wrong width is blocked once", () => {
@@ -324,6 +839,109 @@ test("a file whose rows are systematically the wrong width is blocked once", () 
 
   assert.equal(blockers.length, 1);
   assert.match(blockers[0], /Most rows have 18 columns/);
+});
+
+/** A members file from records, comma-joined (no cell here holds a comma). */
+function membersFile(records: readonly (readonly string[])[]): File {
+  return new File([records.map((fields) => fields.join(",")).join("\r\n") + "\r\n"], "members.csv", {
+    type: "text/csv",
+  });
+}
+
+const OLD_LABELS = [
+  "Account No.", "Last Name", "First Name", "Middle Name", "Suffix", "Birthdate", "Gender",
+  "Civil Status", "Contact Number", "email", "Street Address", "Barangay", "City/Municipality",
+  "Province", "Employer/Business Name", "Monthly Income", "Pledge Amt(If Applicable)",
+  "Spouse FName (If Married)", "Spouse MName (If Married)", "Spouse LName (If Married)",
+  "Spouse Contact No (If Married)", "Spouse Occupation (If Married)",
+];
+
+test("a 22-column header over 26-column rows is caught, as the server holds a header to the rows' width", async () => {
+  const inspection = await inspectFile("customers", membersFile([
+    OLD_LABELS,
+    memberRow({}, "2019-00101"),
+    memberRow({}, "2019-00102"),
+  ]));
+
+  assert.equal(inspection.expectedColumns, 26);
+  assert.equal(inspection.header?.isHeader, true, "it is still the header row, and is not imported as a member");
+
+  const findings = computeFindings({ customers: inspection }, {}, {}).customers;
+  assert.ok(findings);
+  assert.equal(findings.totalRows, 2);
+  assert.deepEqual(findings.blockers, [
+    "Members file (members.csv): Row 1 is the header, but it leaves 4 columns unnamed: Date Hired, Membership Date, Member Type and Membership Number. The import holds the header to every column the rows have, so it would refuse this file. Add the missing labels; the members template has them all.",
+  ]);
+});
+
+test("a full header over rows in the earlier layout is read against those rows' 22 columns", async () => {
+  const fullHeader = [...OLD_LABELS, "Date Hired", "Membership Date", "Member Type", "Membership Number"];
+  const inspection = await inspectFile("customers", membersFile([fullHeader, CUSTOMER, ["2019-00102", ...CUSTOMER.slice(1)]]));
+
+  assert.equal(inspection.expectedColumns, 22);
+  assert.equal(inspection.header?.isHeader, true);
+  assert.deepEqual(inspection.header?.mismatched, []);
+
+  const findings = computeFindings({ customers: inspection }, {}, {}).customers;
+  assert.deepEqual(findings?.blockers, []);
+  assert.equal(findings?.errorCount, 0);
+});
+
+test("a refusal names the file it is about, and an empty loans file says it can be left out", async () => {
+  const loans = new File(
+    ["Account No.,Loan No.,Loan Amount,Loan Balance,Interest Rate,Interest Amount,Interest Balance,Purpose,Loan Product,Term in Months,Payment Frequency,Interest Type,Date Released,Maturity Date,Processing Fee,Service Fee,Other Fee Detail,Other Fee Amount\r\n"],
+    "loans.csv",
+    { type: "text/csv" },
+  );
+  const inspection = await inspectFile("loans", loans);
+
+  const findings = computeFindings({ loans: inspection }, {}, {}).loans;
+
+  assert.deepEqual(findings?.blockers, [
+    "Loans file (loans.csv): The only row in this file is the header row, so there is nothing to import. The loans file is optional: leave it out when there are no loans to bring over.",
+  ]);
+});
+
+test("a file in the earlier layout lists only the date columns it has", () => {
+  const earlier = computeFindings({ customers: inspectionStub() }, {}, {}).customers;
+  assert.deepEqual(earlier?.dates.map((date) => date.key), ["birthdate"], "Date Hired and Membership Date are not in a 22-column file");
+
+  const current = computeFindings(
+    { customers: inspectionStub({ records: customerRows([CUSTOMER_26]), expectedColumns: 26, widths: [{ columns: 26, rows: 1 }] }) },
+    {},
+    {},
+  ).customers;
+  assert.deepEqual(current?.dates.map((date) => date.key), ["birthdate", "date_hired", "membership_date"]);
+});
+
+test("a date column of one unreadable value says 1 value, not 1 values", () => {
+  const unusable: DateColumnFinding = {
+    key: "birthdate",
+    label: "Birthdate",
+    inference: {
+      status: "unusable",
+      stats: {
+        total: 1, blank: 0, iso: 0, pair: 0, serial: 0, shortYear: 0, invalid: 0, unrecognised: 1,
+        shortYearSamples: [], invalidSamples: [], unrecognisedSamples: ["soon"],
+      } as never,
+    },
+    order: undefined,
+    chosen: false,
+    blocked: true,
+  };
+
+  const [blocker] = fileBlockers(inspectionStub(), customerRows([CUSTOMER]), [unusable]);
+
+  assert.match(blocker, /Of 1 value, 1 isn't written in a form the import reads \(soon\)\./);
+});
+
+test("a members file at neither layout's width is blocked, and the blocker names both", () => {
+  const inspection = inspectionStub({ widths: [{ columns: 24, rows: 400 }], expectedColumns: 26 });
+
+  const blockers = fileBlockers(inspection, customerRows([CUSTOMER]), NO_DATES);
+
+  assert.equal(blockers.length, 1);
+  assert.match(blockers[0], /Most rows have 24 columns, but the members file needs 26, or 22 in the earlier layout/);
 });
 
 test("an unbalanced quote is carried through as a blocker, in the reader's own words", () => {
@@ -355,6 +973,29 @@ test("the row total is the complete parse even when checks stop at the ceiling",
   assert.equal(findings.customers?.totalRows, 25);
   assert.equal(findings.customers?.checkedRows, 10);
   assert.equal(findings.customers?.rowsNotChecked, 15);
+});
+
+test("a members file with only these warnings isn't counted as failing, and nothing holds it up", () => {
+  const changes: Array<Record<number, string>> = [
+    { 0: "2019-00201", 5: "" }, // Birthdate blank
+    { 0: "2019-00202", 6: "Other" }, // a gender the server doesn't recognise
+    { 0: "2019-00203", 17: "", 19: "" }, // married, spouse names blank
+    { 0: "2019-00204", 9: "", 13: "" }, // email and Province blank
+  ];
+  const rows = changes.map((change) => CUSTOMER.map((cell, index) => change[index] ?? cell));
+
+  const findings = computeFindings(
+    { customers: inspectionStub({ records: customerRows(rows), widths: [{ columns: 22, rows: rows.length }] }) },
+    {},
+    {},
+  ).customers;
+
+  assert.ok(findings);
+  assert.equal(findings.errorCount, 0, findings.issues.map((issue) => issue.message).join(" | "));
+  assert.equal(findings.failingRows, 0, "no row will fail");
+  assert.equal(findings.warningCount, 6);
+  assert.deepEqual(findings.blockers, []);
+  assert.deepEqual(findings.pendingDecisions, []);
 });
 
 test("the header override moves the first row between header and data", () => {
@@ -545,4 +1186,273 @@ test("a file with no date columns still records its header answer", () => {
   const written = sessionAnswers([answer("customers", true, {})]);
   assert.equal(written.hasHeaderRow.customers, true);
   assert.deepEqual(written.dateFormat.customers, {});
+});
+
+// ---------------------------------------------------------------------------
+// runDateOrders — what the run carries to the server (finish run round 4)
+// ---------------------------------------------------------------------------
+
+test("the run carries exactly the date order the Check step settled for each date column", () => {
+  const settled = sessionAnswers([
+    answer("customers", true, { birthdate: "dmy", date_hired: null }),
+    answer("loans", false, { date_released: "dmy", maturity_date: "mdy" }),
+  ]);
+
+  // Day-first or month-first, and null where the column needed no order.
+  assert.deepEqual(runDateOrders(settled.dateFormat), {
+    customers: { birthdate: "dmy", date_hired: null },
+    loans: { date_released: "dmy", maturity_date: "mdy" },
+  });
+});
+
+test("only the members and loans files carry date orders, and a file with none sends none", () => {
+  assert.deepEqual(runDateOrders({}), {});
+  assert.deepEqual(
+    runDateOrders({ customers: { birthdate: ISO_DATE_FORMAT }, share_capital: { transaction_date: ISO_DATE_FORMAT } }),
+    { customers: { birthdate: null } },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// The share capital file (finish run round 2, decision 13)
+// ---------------------------------------------------------------------------
+
+/** A valid share capital row: account, date, reference, type, amount, remarks. */
+const SHARE: string[] = ["2019-00101", "2026-01-15", "OR-1001", "Contribution", "1500.00", "Opening share capital"];
+
+const SHARE_CONTEXT = {
+  kind: "share_capital" as const,
+  shape: "share_capital" as const,
+  dates: NO_DATES,
+  knownAccounts: null,
+  expectedColumns: 6,
+  today: "2026-11-24",
+};
+
+/** Share capital records from line 2 on, as under a header row. */
+function shareRows(rows: readonly (readonly string[])[]): CsvRecord[] {
+  return rows.map((fields, i) => record(fields, i + 2));
+}
+
+function share(changes: Record<number, string>): string[] {
+  const row = [...SHARE];
+  for (const [index, value] of Object.entries(changes)) row[Number(index)] = value;
+  return row;
+}
+
+test("a share capital row the server takes passes, in either type's words", () => {
+  const result = checkRows(
+    shareRows([SHARE, share({ 2: "", 3: "Withdrawal", 4: "250" }), share({ 0: "BRW-000007", 2: "OR-2", 3: "CR" }), share({ 2: "OR-3", 3: "dr", 4: "₱1,000.50" })]),
+    SHARE_CONTEXT,
+  );
+
+  assert.equal(result.errorCount, 0, result.issues.map((issue) => issue.message).join(" | "));
+  assert.equal(result.warningCount, 0, "a member's account on many rows is what this file is");
+});
+
+test("the transaction date is written year-month-day, from 1900 and not after today", () => {
+  const cases: Array<[string, RegExp]> = [
+    ["03/04/2026", /^Transaction Date "03\/04\/2026" isn't a date written as year-month-day, such as 2026-11-24\.$/],
+    ["2026-02-30", /isn't a date written as year-month-day/],
+    ["45000", /isn't a date written as year-month-day/],
+    ["2026-11-25", /^Transaction Date "2026-11-25" is after today, and a share capital entry can't be dated in the future\.$/],
+    ["1899-12-31", /^Transaction Date "1899-12-31" is before 1900, too early for a share capital entry\. Check the year\.$/],
+  ];
+
+  for (const [date, message] of cases) {
+    const result = checkRows(shareRows([share({ 1: date })]), SHARE_CONTEXT);
+    assert.equal(result.errorCount, 1, date);
+    assert.equal(result.issues[0].column, "Transaction Date", date);
+    assert.equal(result.issues[0].category, "date", date);
+    assert.match(result.issues[0].message, message, date);
+  }
+
+  assert.equal(checkRows(shareRows([share({ 1: "2026-11-24" })]), SHARE_CONTEXT).errorCount, 0, "today is allowed");
+  assert.equal(checkRows(shareRows([share({ 1: "1900-01-01" })]), SHARE_CONTEXT).errorCount, 0);
+});
+
+/**
+ * The share capital Amount as the server reads it (lendyph-backend,
+ * app/Services/CsvImport), written out. `ShareCapitalRowNormalizer::amount()`
+ * reads it with `ValueNormalizer::centavos()`, required, after a trim:
+ *  1. starts with "(" or ends with ")": refused, accounting notation;
+ *  2. with "₱", ",", spaces and "php" (any case) removed and leading "+"
+ *     dropped, starts or ends with "-": refused, negative;
+ *  3. matches /^\d*\.\d{3,}$/: refused, more than 2 decimal places;
+ *  4. doesn't match /^(\d+(\.\d{1,2})?|\.\d{1,2})$/: refused, not an amount;
+ *  5. above 999,999,999,999 centavos: refused, too large;
+ * and then refuses ₱0.00. A blank is the required check's.
+ */
+test("the amount is read as the server reads it, in its words, and must be above ₱0.00", () => {
+  for (const amount of ["1500.00", "₱1,000.50", "PHP 250", "php250", "+500", ".50", "1 000", "9,999,999,999.99"]) {
+    assert.deepEqual(checkRows(shareRows([share({ 4: amount })]), SHARE_CONTEXT).issues, [], amount);
+  }
+
+  const refusals: Array<[string, string]> = [
+    ["0.00", "The amount is ₱0.00. A share capital entry moves money, so its amount must be above ₱0.00."],
+    ["0", "The amount is ₱0.00. A share capital entry moves money, so its amount must be above ₱0.00."],
+    ["(500.00)", '"(500.00)" is written in accounting notation for a negative amount. Negative amounts cannot be imported.'],
+    ["-500", '"-500" is a negative amount, which cannot be imported.'],
+    ["500-", '"500-" is a negative amount, which cannot be imported.'],
+    ["1.005", '"1.005" has more than 2 decimal places. Round it to centavos in the source file — this importer will not round it for you.'],
+    ["1234.500", '"1234.500" has more than 2 decimal places. Round it to centavos in the source file — this importer will not round it for you.'],
+    ["$500", '"$500" is not a valid amount.'],
+    ["P500", '"P500" is not a valid amount.'],
+    ["five hundred", '"five hundred" is not a valid amount.'],
+    ["₱", '"₱" is not a valid amount.'],
+    ["10000000000", '"10000000000" is larger than the maximum this system stores (9,999,999,999.99).'],
+  ];
+  for (const [amount, message] of refusals) {
+    const result = checkRows(shareRows([share({ 4: amount })]), SHARE_CONTEXT);
+    assert.equal(result.failingRows, 1, amount);
+    assert.deepEqual(result.issues.map((issue) => [issue.column, issue.severity, issue.message]), [["Amount", "error", message]], amount);
+  }
+});
+
+test("a repeated row is one with the same amount as the server reads it", () => {
+  // `₱1,000.50` and `1000.5` are one amount; the second row, with no reference, repeats the first.
+  const result = checkRows(shareRows([share({ 2: "", 4: "₱1,000.50" }), share({ 2: "", 4: "1000.5" })]), SHARE_CONTEXT);
+  assert.deepEqual(result.issues.map((issue) => [issue.line, issue.category]), [[3, "duplicate"]]);
+});
+
+test("an unknown transaction type quotes the two it takes", () => {
+  const result = checkRows(shareRows([share({ 3: "Dividend" })]), SHARE_CONTEXT);
+
+  assert.equal(result.errorCount, 1);
+  assert.equal(result.issues[0].message, '"Dividend" is not a value Transaction Type accepts. Expected one of: Contribution, Withdrawal.');
+});
+
+test("a blank member, date, type or amount fails the row; a reference and remarks may be blank", () => {
+  const result = checkRows(shareRows([share({ 0: "", 1: "", 3: "", 4: "" }), share({ 2: "", 5: "" })]), SHARE_CONTEXT);
+
+  assert.deepEqual(
+    result.issues.map((issue) => [issue.line, issue.column, issue.category]),
+    [
+      [2, "Account No. or Member ID", "required"],
+      [2, "Transaction Date", "required"],
+      [2, "Transaction Type", "required"],
+      [2, "Amount", "required"],
+    ],
+  );
+});
+
+test("nothing that names the entry is cut short, and long remarks are a warning the server repairs", () => {
+  const long = checkRows(shareRows([share({ 0: "7".repeat(51), 2: "R".repeat(101) })]), SHARE_CONTEXT);
+  assert.deepEqual(long.issues.map((issue) => [issue.column, issue.severity]), [
+    ["Account No. or Member ID", "error"],
+    ["Reference Number", "error"],
+  ]);
+
+  const remarks = checkRows(shareRows([share({ 5: "x".repeat(300) })]), SHARE_CONTEXT);
+  assert.equal(remarks.errorCount, 0);
+  assert.equal(remarks.warningCount, 1);
+  assert.equal(remarks.issues[0].message, "Remarks is 300 characters. The import keeps the first 255 as the entry's description.");
+});
+
+test("a row repeating an earlier row of the file fails, naming that line, and the first is kept", () => {
+  const result = checkRows(
+    shareRows([
+      share({ 2: "OR-7", 4: "100" }),
+      share({ 2: "or-7", 4: "999" }),
+      share({ 2: "", 4: "40" }),
+      share({ 0: "2019-00101 ", 2: "", 4: "40.00" }),
+      share({ 2: "", 4: "41" }),
+      // No reference, the same figures as the referenced first row: nothing tells them apart.
+      share({ 2: "", 4: "100" }),
+    ]),
+    SHARE_CONTEXT,
+  );
+
+  assert.deepEqual(
+    result.issues.map((issue) => [issue.line, issue.column, issue.category, issue.message]),
+    [
+      [3, "Reference Number", "duplicate", "Reference or-7 is also on line 2 of this file. A reference number belongs to one transaction, so only that first row is imported."],
+      [5, null, "duplicate", "This row repeats line 4 of this file: the same member, date, type and amount, with no reference number. Only that first row is imported; if both are real, give each its own reference number."],
+      [7, null, "duplicate", "This row repeats line 2 of this file: the same member, date, type and amount, with no reference number. Only that first row is imported; if both are real, give each its own reference number."],
+    ],
+  );
+  assert.equal(result.failingRows, 3);
+});
+
+test("a row that already fails is not remembered as the first", () => {
+  const result = checkRows(shareRows([share({ 2: "OR-1", 4: "0" }), share({ 2: "OR-1" })]), SHARE_CONTEXT);
+
+  assert.deepEqual(result.issues.map((issue) => issue.line), [2]);
+});
+
+test("a member not in the members file is a warning: members already in Lendyph are matched on the server", () => {
+  const result = checkRows(shareRows([share({ 0: "BRW-000007" })]), {
+    ...SHARE_CONTEXT,
+    knownAccounts: new Set(["2019-00101"]),
+  });
+
+  assert.equal(result.errorCount, 0);
+  assert.equal(result.warningCount, 1);
+  assert.equal(result.issues[0].category, "cross-file");
+  assert.equal(
+    result.issues[0].message,
+    "No member with account number BRW-000007 is in the members file. A member already in Lendyph is matched on the server by account number or member ID, so this row can still land; if no member has it, the row is refused.",
+  );
+});
+
+test("the share capital file is read and checked beside the members file", async () => {
+  const members = membersFile([CUSTOMER]);
+  const shareCapital = new File(
+    ["Account No. or Member ID,Transaction Date,Reference Number,Transaction Type,Amount,Remarks\r\n2019-00101,2026-01-15,OR-1,Contribution,500,\r\n2020-00999,2026-01-16,OR-2,Contribution,500,\r\n"],
+    "share-capital.csv",
+    { type: "text/csv" },
+  );
+  const inspections = {
+    customers: await inspectFile("customers", members),
+    share_capital: await inspectFile("share_capital", shareCapital),
+  };
+
+  assert.equal(inspections.share_capital.shape, "share_capital");
+  assert.equal(inspections.share_capital.expectedColumns, 6);
+  assert.equal(inspections.share_capital.label, "Share capital file");
+
+  const findings = computeFindings(inspections, {}, {}).share_capital;
+  assert.ok(findings);
+  assert.equal(findings.totalRows, 2);
+  assert.deepEqual(findings.blockers, []);
+  assert.deepEqual(findings.dates, [], "the date is checked as written, not settled to an order");
+  assert.deepEqual(findings.issues.map((issue) => [issue.line, issue.category]), [[3, "cross-file"]]);
+});
+
+test("an empty share capital file says it can be left out", async () => {
+  const inspection = await inspectFile(
+    "share_capital",
+    new File(["Account No. or Member ID,Transaction Date,Reference Number,Transaction Type,Amount,Remarks\r\n"], "share-capital.csv", { type: "text/csv" }),
+  );
+
+  assert.deepEqual(computeFindings({ share_capital: inspection }, {}, {}).share_capital?.blockers, [
+    "Share capital file (share-capital.csv): The only row in this file is the header row, so there is nothing to import. The share capital file is optional: leave it out when there is no share capital to bring over.",
+  ]);
+});
+
+// ---------------------------------------------------------------------------
+// Before an import, nothing has been imported yet
+// ---------------------------------------------------------------------------
+
+test("no Check step note says the import already happened, in any of the three files", () => {
+  // The Check step runs before anything is uploaded, so a note copied from the
+  // server reads in the future ("will be imported as blank"), never as done.
+  const sources = [
+    "src/lib/import-member-fields.ts",
+    "src/lib/import-loan-fields.ts",
+    "src/lib/import-share-capital.ts",
+    "src/lib/import-date.ts",
+    "src/lib/import-schema.ts",
+    "src/lib/import-server-values.ts",
+    "src/app/(app)/settings/data-import/_hooks/use-file-precheck.ts",
+  ];
+  const done = /\b(?:was|were) (?:imported|read as|kept|stored|left|shortened|cut|dropped)\b|which is what was used/;
+  for (const path of sources) {
+    const text = readFileSync(join(process.cwd(), path), "utf8");
+    // The notes are the string and template literals, never the comments.
+    const code = text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    for (const literal of code.match(/(["`])(?:\\.|(?!\1)[^\\])*\1/g) ?? []) {
+      assert.doesNotMatch(literal, done, `${path}: ${literal}`);
+    }
+  }
 });

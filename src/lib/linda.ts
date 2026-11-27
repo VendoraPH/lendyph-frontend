@@ -1,0 +1,420 @@
+/**
+ * Pure helpers for Linda, the AI lending assistant. No React, no network, so
+ * the rules that keep the panel honest are unit-tested.
+ */
+
+import { formatCurrencyExact } from "@/lib/format";
+import type { Permission } from "@/types";
+import type {
+  LindaBlock,
+  LindaField,
+  LindaHistoryTurn,
+  LindaLink,
+  LindaListItem,
+  LindaReply,
+  LindaValueFormat,
+} from "@/types/linda";
+
+/** Longest question the composer accepts. */
+export const LINDA_MAX_MESSAGE_LENGTH = 500;
+
+/**
+ * How many earlier messages go back with a question. Enough for "How about
+ * last month?" to resolve, small enough to keep the request lean.
+ */
+export const LINDA_HISTORY_LIMIT = 10;
+
+/** Longest link kept from a reply. No in-app page needs more. */
+export const LINDA_MAX_LINK_LENGTH = 2048;
+
+export const LINDA_SUGGESTED_QUESTIONS = [
+  "How much have we collected this month?",
+  "Which members currently have overdue payments?",
+  "How many active loans do we have?",
+  "How much have we disbursed this month?",
+  "Give me a summary of our lending operation this month.",
+] as const;
+
+export const LINDA_MESSAGES = {
+  loading: "Linda is checking your lending data...",
+  /** Stands in for a missing `answer` above figures the server did send. */
+  figuresOnly: "Here's what I found.",
+  unableToProcess: "Linda is currently unable to process your request. Please try again.",
+  /** The AI model couldn't be reached; the matcher's questions are answered without it. */
+  aiUnavailable: "Linda can't reach the AI service right now. The suggested questions still work.",
+  dataUnavailable: "I couldn't retrieve the lending data right now. Please try again.",
+  forbidden: "Your role doesn't have access to Linda. Please ask your administrator.",
+  notSetUp: "Linda isn't available on this account yet.",
+  rateLimited: "You're sending questions a little fast. Please wait a moment and try again.",
+  monthlyLimit:
+    "Linda has reached this month's question limit for your cooperative. The suggested questions still work.",
+  dailyLimit: "You've reached today's question limit. Please try again tomorrow.",
+  invalidQuestion: "Linda can't take that question as written. Please rephrase it.",
+  noHistory:
+    "Linda does not save your chat history. Please take note of any important information before closing this chat. Questions Linda can't answer itself may be sent to an outside AI service; your Lendy records are never sent.",
+} as const;
+
+/**
+ * Whether Linda shows for this user: the build flag
+ * (NEXT_PUBLIC_ENABLE_LINDA) and `linda:use`, as the server checks. Revoking
+ * the permission in the role editor hides every entry at once.
+ */
+export function lindaAvailable(
+  enabled: boolean,
+  can: (permission: Permission) => boolean,
+  /** Menu Visibility hides Linda on this deployment (finish run round 6). */
+  hidden = false,
+): boolean {
+  return enabled && !hidden && can("linda:use");
+}
+
+/** Linda's own page. The floating button hides there: it is Linda already. */
+export const LINDA_PAGE_PATH = "/linda";
+
+export function isLindaPage(pathname: string | null | undefined): boolean {
+  return pathname === LINDA_PAGE_PATH || (pathname ?? "").startsWith(`${LINDA_PAGE_PATH}/`);
+}
+
+/**
+ * Whether the floating "Ask Linda" button shows: Linda is available to this
+ * user (`lindaAvailable`: the flag and `linda:use`), the page isn't /linda,
+ * and neither the panel nor the expanded chat is open (each has its own close
+ * button).
+ */
+export function lindaFabVisible(state: {
+  available: boolean;
+  pathname: string | null | undefined;
+  open: boolean;
+  expanded: boolean;
+}): boolean {
+  return (
+    state.available &&
+    !isLindaPage(state.pathname) &&
+    !state.open &&
+    !state.expanded
+  );
+}
+
+/**
+ * A message in Linda's conversation. Held in memory only (`useLindaStore`),
+ * never saved to localStorage or sessionStorage.
+ */
+export interface LindaMessage {
+  id: number;
+  role: "user" | "assistant";
+  content: string;
+  reply?: LindaReply;
+  /** An assistant message that stands in for a failed request. */
+  failed?: boolean;
+}
+
+/**
+ * The earlier turns sent with a new question: the most recent
+ * `LINDA_HISTORY_LIMIT`, as question-and-answer pairs. An answer goes back as
+ * its intent alone, with empty `content`: answers carry member names and
+ * figures, and the model must never see them. The intent is all a follow-up
+ * ("How about last month?") needs.
+ *
+ * A question goes back only with the answer Linda gave it, so a failed answer
+ * (it carries no data the backend should build on) and a question whose
+ * request ended silently (cancelled, 401, 423) are both left out. The server
+ * therefore always gets alternating turns that start with a question, even
+ * after trimming.
+ */
+export function buildLindaHistory(
+  messages: readonly LindaMessage[],
+  limit = LINDA_HISTORY_LIMIT,
+): LindaHistoryTurn[] {
+  const pairs: [LindaHistoryTurn, LindaHistoryTurn][] = [];
+  for (let i = 0; i < messages.length - 1; i++) {
+    const question = messages[i];
+    const answer = messages[i + 1];
+    if (question.role !== "user" || answer.role !== "assistant" || !answer.reply) continue;
+    pairs.push([
+      { role: "user", content: question.content },
+      { role: "assistant", content: "", intent: answer.reply.intent },
+    ]);
+  }
+  const keep = Math.floor(limit / 2);
+  return keep > 0 ? pairs.slice(-keep).flat() : [];
+}
+
+/**
+ * True while an input method (Japanese, Chinese, Korean…) is composing, when
+ * Enter confirms a candidate and Escape cancels it. Safari ends composition
+ * before the keydown, so its 229 key code is checked as well.
+ */
+export function isImeComposing(e: { isComposing: boolean; keyCode: number }): boolean {
+  return e.isComposing || e.keyCode === 229;
+}
+
+// ---------------------------------------------------------------------------
+// Reply normalisation
+// ---------------------------------------------------------------------------
+
+const FORMATS: readonly LindaValueFormat[] = ["currency", "number", "percent", "date", "text"];
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+function str(v: unknown): string | undefined {
+  return typeof v === "string" && v.trim() !== "" ? v : undefined;
+}
+
+/** Control characters, which browsers strip from a URL, and the backslash, which they read as "/". */
+const URL_TRICK_CHARS = /[\u0000-\u001F\u007F\\]/;
+
+/** The API proxy and API routes: requests, not pages a link should open. */
+const API_PATH = /^\/api(\/|$)/i;
+
+/** `%XX` escapes decoded byte by byte. Lenient on purpose: never throws. */
+function percentDecode(s: string): string {
+  return s.replace(/%([0-9a-f]{2})/gi, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)));
+}
+
+function appOrigin(): string {
+  return typeof window === "undefined" ? "http://localhost" : window.location.origin;
+}
+
+/**
+ * An in-app path, or nothing. Links come from a model-assisted response, so
+ * anything that could leave the app is dropped rather than rendered.
+ *
+ * Checking the raw string is not enough: browsers strip tabs and newlines
+ * before following a URL ("/\t/evil.com" opens evil.com), and dot segments
+ * resolve away ("/.//evil.com" becomes the path "//evil.com", which is a link
+ * to that host). So the candidate is resolved against the app's origin, must
+ * stay on it, and only its path, query and hash are kept, with the path
+ * checked again (also percent-decoded) for anything that reads as a host.
+ * API paths and overlong links are dropped too: neither is a page.
+ */
+export function safeLindaPath(v: unknown, origin: string = appOrigin()): string | undefined {
+  const s = str(v)?.trim();
+  if (!s || s.length > LINDA_MAX_LINK_LENGTH) return undefined;
+  if (!s.startsWith("/") || URL_TRICK_CHARS.test(s)) return undefined;
+  let url: URL;
+  try {
+    url = new URL(s, origin);
+    if (url.origin !== new URL(origin).origin) return undefined;
+  } catch {
+    return undefined;
+  }
+  const path = percentDecode(url.pathname);
+  if (path.startsWith("//") || URL_TRICK_CHARS.test(path) || API_PATH.test(path)) return undefined;
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+/** An ISO 8601 timestamp the panel can format, or nothing. */
+function validDate(v: unknown): string | undefined {
+  const s = str(v);
+  return s && !Number.isNaN(Date.parse(s)) ? s : undefined;
+}
+
+function normalizeField(v: unknown): LindaField | null {
+  if (!isRecord(v)) return null;
+  const label = str(v.label);
+  if (!label) return null;
+  const value =
+    typeof v.value === "number" || typeof v.value === "string" ? v.value : null;
+  const format = FORMATS.includes(v.format as LindaValueFormat)
+    ? (v.format as LindaValueFormat)
+    : undefined;
+  return { label, value, format, currency: str(v.currency) };
+}
+
+function fields(v: unknown): LindaField[] {
+  return Array.isArray(v)
+    ? v.map(normalizeField).filter((f): f is LindaField => f !== null)
+    : [];
+}
+
+function normalizeListItem(v: unknown): LindaListItem | null {
+  if (!isRecord(v)) return null;
+  const title = str(v.title);
+  if (!title) return null;
+  return { title, subtitle: str(v.subtitle), fields: fields(v.fields), url: safeLindaPath(v.url) };
+}
+
+function normalizeBlock(v: unknown): LindaBlock | null {
+  if (!isRecord(v)) return null;
+  const title = str(v.title);
+  if (v.type === "stats") {
+    const items = fields(v.items);
+    return items.length ? { type: "stats", title, items } : null;
+  }
+  if (v.type === "list") {
+    const items = Array.isArray(v.items)
+      ? v.items.map(normalizeListItem).filter((i): i is LindaListItem => i !== null)
+      : [];
+    return items.length ? { type: "list", title, ordered: v.ordered === true, items } : null;
+  }
+  return null;
+}
+
+function normalizeLink(v: unknown): LindaLink | null {
+  if (!isRecord(v)) return null;
+  const label = str(v.label);
+  const url = safeLindaPath(v.url);
+  return label && url ? { label, url } : null;
+}
+
+/**
+ * The reply as the panel can safely render it, or `null` when the body is not
+ * a Linda reply at all. Unknown block types, malformed rows and off-site links
+ * are dropped one by one so a single bad entry does not cost the whole answer.
+ */
+export function normalizeLindaReply(raw: unknown): LindaReply | null {
+  if (!isRecord(raw)) return null;
+  const answer = str(raw.answer);
+  const blocks = Array.isArray(raw.blocks)
+    ? raw.blocks.map(normalizeBlock).filter((b): b is LindaBlock => b !== null)
+    : [];
+  if (!answer && blocks.length === 0) return null;
+  const links = Array.isArray(raw.links)
+    ? raw.links.map(normalizeLink).filter((l): l is LindaLink => l !== null)
+    : [];
+  return {
+    intent: str(raw.intent) ?? "unknown",
+    answer: answer ?? LINDA_MESSAGES.figuresOnly,
+    blocks,
+    links,
+    as_of: validDate(raw.as_of),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Errors
+// ---------------------------------------------------------------------------
+
+/**
+ * What the panel says when a request fails. Never the server's own message:
+ * that can carry SQL, paths or stack traces, and the spec forbids showing any
+ * of it. `null` means stay silent (the request was cancelled, or the session
+ * interceptor is already handling a 401/423).
+ */
+export function lindaErrorMessage(
+  status: number | undefined,
+  errorCode?: string,
+  canceled = false,
+): string | null {
+  if (canceled || status === 401 || status === 423) return null;
+  if (errorCode === "data_unavailable") return LINDA_MESSAGES.dataUnavailable;
+  if (errorCode === "ai_unavailable") return LINDA_MESSAGES.aiUnavailable;
+  // Each limit is named before the general 429, so the user knows which one was hit.
+  if (errorCode === "monthly_limit") return LINDA_MESSAGES.monthlyLimit;
+  if (errorCode === "daily_limit") return LINDA_MESSAGES.dailyLimit;
+  if (status === 403) return LINDA_MESSAGES.forbidden;
+  if (status === 404 || status === 501) return LINDA_MESSAGES.notSetUp;
+  if (status === 429) return LINDA_MESSAGES.rateLimited;
+  // The server refused the question itself; sending it again changes nothing.
+  if (status === 400 || status === 422) return LINDA_MESSAGES.invalidQuestion;
+  return LINDA_MESSAGES.unableToProcess;
+}
+
+// ---------------------------------------------------------------------------
+// Links
+// ---------------------------------------------------------------------------
+
+/** Record pages a row can link to, by path. Only an id opens a record. */
+const RECORD_LINK_LABELS: readonly [RegExp, string][] = [
+  [/^\/borrowers\/\d+(?:[/?#]|$)/, "View member"],
+  [/^\/loans\/\d+(?:[/?#]|$)/, "View loan"],
+  [/^\/payments\/\d+(?:[/?#]|$)/, "View payment"],
+];
+
+/** A row link's visible text: what the in-app path opens, or "View". */
+export function lindaLinkLabel(path: string): string {
+  return RECORD_LINK_LABELS.find(([pattern]) => pattern.test(path))?.[1] ?? "View";
+}
+
+/** A row link's accessible name, with the row's title so each link is told apart. */
+export function lindaLinkAriaLabel(path: string, title: string): string {
+  return `${lindaLinkLabel(path)}: ${title}`;
+}
+
+// ---------------------------------------------------------------------------
+// Dates
+// ---------------------------------------------------------------------------
+
+/** Linda's dates read in Philippine time, whatever the computer is set to. */
+const PHILIPPINE_TIME = "Asia/Manila";
+
+const longDateFmt = new Intl.DateTimeFormat("en-PH", {
+  timeZone: PHILIPPINE_TIME,
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+});
+
+const dateTimeFmt = new Intl.DateTimeFormat("en-PH", {
+  timeZone: PHILIPPINE_TIME,
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+const NO_ZONE = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/;
+
+/**
+ * A server date as an instant, or null. A date alone parses as midnight UTC,
+ * which is the same day in Manila. A time with no zone is the server's own
+ * Manila time, which `new Date()` would read in the computer's zone instead.
+ */
+function parseLindaDate(value: string): Date | null {
+  const date = NO_ZONE.test(value) ? new Date(`${value.replace(" ", "T")}+08:00`) : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/** "Dec 5, 2026, 02:05 PM" in Philippine time, e.g. a reply's as-of line. */
+export function formatLindaDateTime(value: string): string {
+  const date = parseLindaDate(value);
+  return date ? dateTimeFmt.format(date) : value;
+}
+
+// ---------------------------------------------------------------------------
+// Values
+// ---------------------------------------------------------------------------
+
+/**
+ * Every digit the server sent, grouped. Rates and figures are never rounded
+ * for display (a 2.375% rate must not read 2.38%); a trailing zero carries no
+ * value, so "2.3750" still reads 2.375, as `formatRate` shows rates.
+ */
+const exactNumber = new Intl.NumberFormat("en-PH", { maximumFractionDigits: 20 });
+
+/**
+ * A field's value as display text. Numbers arrive raw from the backend and are
+ * formatted here, so "₱245,600" is spelled the same in every answer. A blank
+ * value is a dash: `Number(" ")` is 0, and "₱0" would be a figure nobody sent.
+ */
+export function formatLindaValue(field: LindaField): string {
+  const { value, format, currency } = field;
+  if (value === null || (typeof value === "string" && value.trim() === "")) return "—";
+  const n = typeof value === "number" ? value : Number(value);
+  switch (format) {
+    case "currency":
+      if (!Number.isFinite(n)) return String(value);
+      if (currency && currency.toUpperCase() !== "PHP") {
+        try {
+          return new Intl.NumberFormat("en-PH", { style: "currency", currency }).format(n);
+        } catch {
+          return `${currency} ${n.toLocaleString("en-PH")}`;
+        }
+      }
+      return formatCurrencyExact(n);
+    case "number":
+      return Number.isFinite(n) ? exactNumber.format(n) : String(value);
+    case "percent":
+      return Number.isFinite(n) ? `${exactNumber.format(n)}%` : String(value);
+    case "date": {
+      const s = String(value);
+      const date = parseLindaDate(s);
+      return date ? longDateFmt.format(date) : s;
+    }
+    default:
+      return String(value);
+  }
+}

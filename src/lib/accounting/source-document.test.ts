@@ -72,11 +72,45 @@ test("an expense payment has no route at all", () => {
 test("a type nobody has mapped is readable and unlinked, never a crash", () => {
   // The server snake-cases the basename of any class it has not curated.
   const doc = sourceDocument(
-    entry({ postable_type: "gcash_transaction", postable_id: 3, postable_label: "GC-77" })
+    entry({ postable_type: "petty_cash_voucher", postable_id: 3, postable_label: "PCV-77" })
   );
   assert.equal(doc?.href, null);
-  assert.equal(doc?.text, "gcash transaction GC-77");
-  assert.equal(doc?.type, "gcash_transaction");
+  assert.equal(doc?.text, "petty cash voucher PCV-77");
+  assert.equal(doc?.type, "petty_cash_voucher");
+});
+
+test("the Phase 2 documents are named in words and not linked — none has a detail page", () => {
+  const cases = [
+    ["loan_adjustment", "Loan adjustment"],
+    ["share_capital_entry", "Share capital entry"],
+    ["gcash_transaction", "GCash transaction"],
+  ] as const;
+  for (const [type, name] of cases) {
+    const doc = sourceDocument(entry({ postable_type: type, postable_id: 5 }));
+    assert.equal(doc?.typeLabel, name, type);
+    assert.equal(doc?.text, `${name} #5`, type);
+    assert.equal(doc?.href, null, type);
+  }
+});
+
+test("the savings documents are named in words; only a time deposit has a page to open", () => {
+  const txn = sourceDocument(entry({ postable_type: "savings_transaction", postable_id: 9, postable_label: "SVT-20261110-000001" }));
+  assert.equal(txn?.text, "Savings transaction SVT-20261110-000001");
+  assert.equal(txn?.href, null);
+  const run = sourceDocument(entry({ postable_type: "savings_interest_run", postable_id: 3 }));
+  assert.equal(run?.text, "Savings interest run #3");
+  assert.equal(run?.href, null);
+  const td = sourceDocument(entry({ postable_type: "time_deposit", postable_id: 4, postable_label: "TD-2026-000004" }));
+  assert.equal(td?.text, "Time deposit TD-2026-000004");
+  assert.equal(td?.href, "/savings/time-deposits/4");
+});
+
+test("a GCash transaction keeps its own reference as the label", () => {
+  const doc = sourceDocument(
+    entry({ postable_type: "gcash_transaction", postable_id: 3, postable_label: "GC-77" })
+  );
+  assert.equal(doc?.text, "GCash transaction GC-77");
+  assert.equal(doc?.href, null);
 });
 
 test("a known type with no id cannot be linked — there is no url to build", () => {
@@ -132,4 +166,24 @@ test("id 0 is an id, not a missing one", () => {
   assert.equal(doc?.id, 0);
   assert.equal(doc?.text, "Loan #0");
   assert.equal(doc?.href, "/loans/0");
+});
+
+// ── Year-end close ──
+
+test("a year-end closing entry reads as the close of its year, never the class name", () => {
+  const doc = sourceDocument({
+    postable_type: "accounting_year_close_entry",
+    postable_id: 1,
+    postable_label: null,
+    source: "closing",
+    date: "2025-12-31",
+  });
+  assert.equal(doc?.text, "Year-end close 2025");
+  assert.equal(doc?.typeLabel, "Year-end close");
+  assert.equal(doc?.href, null);
+});
+
+test("a year-end closing entry without its date still reads in words", () => {
+  const doc = sourceDocument({ postable_type: "accounting_year_close_entry", postable_id: 1 });
+  assert.equal(doc?.text, "Year-end close");
 });

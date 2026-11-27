@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * The register's Reference cell, and the dialog's source-document note.
+ * The Reference cell, on the register and the journal page.
  *
  * `reference` and the `postable_*` trio are the same idea at two fidelities: a
  * string the poster wrote down, and a resolvable pointer at the row it came
@@ -52,8 +52,8 @@ export function JournalReferenceCell({ entry }: { entry: JournalEntry }) {
         size="icon-xs"
         nativeButton={false}
         render={<Link href={doc.href} />}
-        // The whole row opens the entry dialog. Without this, following the
-        // link would also open the dialog behind the page being navigated to.
+        // The whole register row opens the journal page. Without this,
+        // following the link would also open the journal behind it.
         onClick={(event) => event.stopPropagation()}
         aria-label={`Open ${doc.text}`}
         title={`Open ${doc.text}`}
@@ -61,25 +61,5 @@ export function JournalReferenceCell({ entry }: { entry: JournalEntry }) {
         <ArrowUpRight />
       </Button>
     </div>
-  );
-}
-
-/**
- * The tail of the dialog's `·`-separated metadata line — separator included,
- * so an entry with no source document (a transfer, a reversal, a manual entry)
- * renders nothing at all rather than a dangling dot.
- *
- * The link carries no `aria-label`: its visible text already names the
- * document, and overriding that would read the label instead.
- */
-export function JournalSourceDocumentNote({ entry }: { entry: JournalEntry }) {
-  const doc = sourceDocument(entry);
-  if (!doc) return null;
-
-  return (
-    <>
-      {" · "}
-      {doc.href ? <Link href={doc.href}>{doc.text}</Link> : doc.text}
-    </>
   );
 }

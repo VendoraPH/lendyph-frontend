@@ -51,9 +51,11 @@ import {
   pick,
   pickNumber,
   presentFields,
+  rateFrequencyFrom,
   rateLabel,
   type PrintableBuildOptions,
 } from "./shared";
+import { penaltyClauseText, readDocumentPenaltyTerms } from "@/lib/penalty-terms";
 
 interface Party {
   name: string | null;
@@ -176,6 +178,13 @@ export function buildPromissoryNoteDoc(
   // blank rather than to a guess at the loan's frequency.
   const frequencyWord = frequency ? frequency.toLowerCase() : BLANK_LINE;
 
+  // The loan's own late penalty terms (wording in src/lib/penalty-terms.ts).
+  // Terms the payload did not carry print a rule to complete, never a guess.
+  const penaltyTerms = readDocumentPenaltyTerms(terms);
+  const penaltyClause = penaltyTerms
+    ? escapeHtml(penaltyClauseText(penaltyTerms))
+    : `If any installment is not paid in full when due, a penalty of ${fill(null)} shall be charged on it.`;
+
   const blocks: PrintBlock[] = [
     {
       kind: "title",
@@ -225,10 +234,10 @@ export function buildPromissoryNoteDoc(
             ? null
             : `${amountInWords(principal)} (${formatCurrency(principal)})`
         )}, ` +
-        // "per month" was written into this sentence whatever the loan's
-        // frequency was, so a daily loan promised to pay 1% a month. The rate
+        // "per month" was written into this sentence whatever the rate was
+        // quoted per, so a 1%-a-day loan promised to pay 1% a month. The rate
         // the Note states must be the rate the schedule charges.
-        `Philippine Currency, together with interest thereon at the rate of ${fill(rateLabel(rate, rawFrequency))}, ` +
+        `Philippine Currency, together with interest thereon at the rate of ${fill(rateLabel(rate, rateFrequencyFrom(terms)))}, ` +
         `computed on the basis of ${fill(`${interestMethod} Balance`)}.`,
     },
     {
@@ -247,10 +256,9 @@ export function buildPromissoryNoteDoc(
     {
       kind: "paragraph",
       html:
-        "<strong>1. DEFAULT / PENALTY.</strong> In case of default in the payment of any installment " +
-        "or any portion thereof when due, a penalty charge shall be imposed on the amount in arrears, " +
-        "computed from the date of default until full payment thereof, without prejudice to the right " +
-        "of the holder to exercise any or all remedies available under this Note or under applicable law.",
+        `<strong>1. DEFAULT / PENALTY.</strong> ${penaltyClause} ` +
+        "The penalty is without prejudice to the right of the holder to exercise any or all remedies " +
+        "available under this Note or under applicable law.",
     },
     {
       kind: "paragraph",

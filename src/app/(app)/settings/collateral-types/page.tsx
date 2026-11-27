@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
+import { completeRows } from "@/lib/paginate";
 import {
   ShieldCheck,
   Plus,
@@ -15,6 +16,9 @@ import {
   EyeOff,
 } from "lucide-react";
 import { RouteGuard } from "@/components/common";
+import { Illustration, hasIllustration } from "@/components/common/illustration";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,6 +70,13 @@ interface FormState {
   is_visible: boolean;
 }
 
+// Passed to the Source <Select items>, so the trigger reads "Manual entry",
+// not the stored "manual".
+const SOURCE_OPTIONS: { value: CollateralSource; label: string }[] = [
+  { value: "manual", label: "Manual entry" },
+  { value: "share_capital", label: "Share Capital (auto-derived)" },
+];
+
 const EMPTY_FORM: FormState = {
   name: "",
   detail_field_label: "",
@@ -74,7 +85,7 @@ const EMPTY_FORM: FormState = {
   is_visible: true,
 };
 
-export default function CollateralTypesSettingsPage() {
+function CollateralTypesSettingsContent() {
   const [types, setTypes] = useState<CollateralType[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
@@ -86,8 +97,7 @@ export default function CollateralTypesSettingsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const rows = await collateralTypeService.list();
-      setTypes(rows);
+      setTypes(completeRows(await collateralTypeService.listAll()));
     } catch {
       toast.error("We couldn't load the collateral types. Please try again.");
     } finally {
@@ -180,40 +190,43 @@ export default function CollateralTypesSettingsPage() {
   };
 
   return (
-    <RouteGuard permission="settings:view" pageName="Collateral Types">
-      <div className="space-y-6">
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">
-              Collateral Types
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Manage the collateral kinds available across the system.
-            </p>
-          </div>
-          <Button onClick={openAdd}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Type
-          </Button>
+    <PageFill>
+      <div className="flex shrink-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Collateral Types
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Manage the collateral kinds available across the system.
+          </p>
         </div>
+        <Button onClick={openAdd}>
+          <Plus className="mr-2 h-4 w-4" />
+          New Type
+        </Button>
+      </div>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">
-              Configured Types
-            </CardTitle>
-            <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <Spinner className="size-6 text-muted-foreground" />
-              </div>
-            ) : types.length === 0 ? (
-              <p className="py-12 text-center text-sm text-muted-foreground">
+      <Card className={FIT_CLASSES.section}>
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-sm font-medium">
+            Configured Types
+          </CardTitle>
+          <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent className={FIT_CLASSES.section}>
+          {loading ? (
+            <div className="flex items-center justify-center py-12 fit:flex-1">
+              <Spinner className="size-6 text-muted-foreground" />
+            </div>
+          ) : types.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-4 py-12 text-center fit:flex-1">
+              {hasIllustration("empty") && <Illustration name="empty" />}
+              <p className="text-sm text-muted-foreground">
                 No collateral types yet.
               </p>
-            ) : (
+            </div>
+          ) : (
+            <ScrollBox>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -320,143 +333,156 @@ export default function CollateralTypesSettingsPage() {
                   ))}
                 </TableBody>
               </Table>
-            )}
-          </CardContent>
-        </Card>
+            </ScrollBox>
+          )}
+        </CardContent>
+      </Card>
 
-        {/* Add / Edit Dialog */}
-        <Dialog open={formOpen} onOpenChange={setFormOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>
-                {editing ? "Edit Collateral Type" : "New Collateral Type"}
-              </DialogTitle>
-              <DialogDescription>
-                Define the labels that members and loan officers will see when
-                registering or attaching a collateral of this kind.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
+      {/* Add / Edit Dialog */}
+      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editing ? "Edit Collateral Type" : "New Collateral Type"}
+            </DialogTitle>
+            <DialogDescription>
+              Define the labels that members and loan officers will see when
+              registering or attaching a collateral of this kind.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Name</Label>
+              <Input
+                value={form.name}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, name: e.target.value }))
+                }
+                placeholder="e.g. Vehicle OR/CR"
+              />
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>Name</Label>
+                <Label>Detail field label</Label>
                 <Input
-                  value={form.name}
+                  value={form.detail_field_label}
                   onChange={(e) =>
-                    setForm((f) => ({ ...f, name: e.target.value }))
+                    setForm((f) => ({
+                      ...f,
+                      detail_field_label: e.target.value,
+                    }))
                   }
-                  placeholder="e.g. Vehicle OR/CR"
+                  placeholder="e.g. OR Number"
                 />
               </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Detail field label</Label>
-                  <Input
-                    value={form.detail_field_label}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        detail_field_label: e.target.value,
-                      }))
-                    }
-                    placeholder="e.g. OR Number"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Amount field label</Label>
-                  <Input
-                    value={form.amount_field_label}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        amount_field_label: e.target.value,
-                      }))
-                    }
-                    placeholder="e.g. Estimated Value"
-                  />
-                </div>
-              </div>
               <div className="space-y-2">
-                <Label>Source</Label>
-                <Select
-                  value={form.source}
-                  onValueChange={(v) =>
-                    setForm((f) => ({ ...f, source: v as CollateralSource }))
+                <Label>Amount field label</Label>
+                <Input
+                  value={form.amount_field_label}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      amount_field_label: e.target.value,
+                    }))
                   }
-                  disabled={editing?.is_seed}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="manual">Manual entry</SelectItem>
-                    <SelectItem value="share_capital">
-                      Share Capital (auto-derived)
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  {form.source === "share_capital"
-                    ? "Amount is pulled live from the member's share capital balance."
-                    : "Amount is entered by the user during collateral registration."}
-                </p>
-              </div>
-              <div className="flex items-center justify-between rounded-lg border p-3">
-                <div>
-                  <p className="text-sm font-medium">Visible</p>
-                  <p className="text-xs text-muted-foreground">
-                    Hidden types won&apos;t appear in the collateral picker.
-                  </p>
-                </div>
-                <Switch
-                  checked={form.is_visible}
-                  onCheckedChange={(v) =>
-                    setForm((f) => ({ ...f, is_visible: v }))
-                  }
+                  placeholder="e.g. Estimated Value"
                 />
               </div>
             </div>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setFormOpen(false)}
-                disabled={submitting}
+            <div className="space-y-2">
+              <Label>Source</Label>
+              <Select
+                items={SOURCE_OPTIONS}
+                value={form.source}
+                onValueChange={(v) =>
+                  setForm((f) => ({ ...f, source: v as CollateralSource }))
+                }
+                disabled={editing?.is_seed}
               >
-                Cancel
-              </Button>
-              <Button onClick={handleSave} disabled={submitting}>
-                {submitting && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                {editing ? "Save Changes" : "Create Type"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SOURCE_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {form.source === "share_capital"
+                  ? "Amount is pulled live from the member's share capital balance."
+                  : "Amount is entered by the user during collateral registration."}
+              </p>
+            </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div>
+                <p className="text-sm font-medium">Visible</p>
+                <p className="text-xs text-muted-foreground">
+                  Hidden types won&apos;t appear in the collateral picker.
+                </p>
+              </div>
+              <Switch
+                checked={form.is_visible}
+                onCheckedChange={(v) =>
+                  setForm((f) => ({ ...f, is_visible: v }))
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setFormOpen(false)}
+              disabled={submitting}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={submitting}>
+              {submitting && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              {editing ? "Save Changes" : "Create Type"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-        <AlertDialog
-          open={Boolean(deleting)}
-          onOpenChange={(o) => !o && setDeleting(null)}
-        >
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete this collateral type?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Existing collaterals of this type will keep their data, but the
-                type will no longer appear in the picker. This cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                variant="destructive"
-                onClick={handleDelete}
-              >
-                Delete
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </div>
+      <AlertDialog
+        open={Boolean(deleting)}
+        onOpenChange={(o) => !o && setDeleting(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this collateral type?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Existing collaterals of this type will keep their data, but the
+              type will no longer appear in the picker. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={handleDelete}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </PageFill>
+  );
+}
+
+// The types themselves come from `GET /collateral-types`, which needs `collaterals:view`.
+export default function CollateralTypesSettingsPage() {
+  return (
+    <RouteGuard permission="settings:view" pageName="Collateral Types">
+      <RouteGuard permission="collaterals:view" pageName="Collateral Types">
+        <CollateralTypesSettingsContent />
+      </RouteGuard>
     </RouteGuard>
   );
 }

@@ -1,13 +1,16 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Plus } from "lucide-react";
-import { toast } from "sonner";
-import { PermissionGate, RouteGuard } from "@/components/common";
+import { useRouter } from "next/navigation";
+import { Plus, Search } from "lucide-react";
+import { PermissionGate, RouteGuard, TablePagination } from "@/components/common";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { hasIllustration, Illustration } from "@/components/common/illustration";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -20,19 +23,21 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useAccountingResource } from "@/hooks";
+import { SEARCH_DEBOUNCE_MS } from "@/hooks/use-search-page";
 import { accountingService } from "@/services";
+import { getErrorMessage } from "@/lib/api-error";
 import { formatCentavos } from "@/lib/accounting/money";
 import { formatDate, todayISO } from "@/lib/format";
-import type { DrainResult } from "@/lib/paginate";
-import type { JournalEntry, JournalStatus } from "@/types";
-import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { emptyArt } from "@/lib/illustrations";
+import { cn } from "@/lib/utils";
+import type { JournalPage } from "@/types";
 import { AccountingPageHeader } from "../_components/page-header";
-import { DataState } from "../_components/data-state";
 import {
   ALL_BRANCHES,
   BranchFilter,
@@ -40,177 +45,321 @@ import {
   FilterBar,
   branchParam,
 } from "../_components/accounting-filters";
-import { JournalEntryDialog } from "../_components/journal-entry-dialog";
 import { JournalReferenceCell } from "../_components/journal-source-document";
-
-const ANY_STATUS = "any";
-
-const STATUS_STYLES: Record<JournalStatus, string> = {
-  draft: "bg-slate-500/10 text-slate-700 border-slate-500/30",
-  posted: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30",
-  reversed: "bg-orange-500/10 text-orange-700 border-orange-500/30",
-};
+import { journalSourceLabel } from "../_lib/display-labels";
+import {
+  ANY_SOURCE,
+  ANY_STATUS,
+  journalSourceItems,
+  journalStatusItems,
+} from "../_lib/select-items";
+import { JournalStatusBadge } from "./_components/journal-status-badge";
+import {
+  JOURNAL_PAGE_SIZE,
+  journalRegisterKey,
+  journalRegisterParams,
+  journalStatusCounts,
+  journalTitle,
+  registerAmount,
+  registerTotalLabel,
+} from "./_lib/journal-register";
+import { useBranchFilter, useBranchFollowingPage } from "@/hooks/use-working-branch";
 
 function startOfMonthISO(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
-export default function JournalEntriesPage() {
-  const [from, setFrom] = useState(startOfMonthISO());
-  const [to, setTo] = useState(todayISO());
-  const [branch, setBranch] = useState(ALL_BRANCHES);
-  const [status, setStatus] = useState<string>(ANY_STATUS);
-  const [selected, setSelected] = useState<JournalEntry | null>(null);
+interface RegisterAnswer {
+  key: string;
+  page: JournalPage | null;
+  error: string | null;
+}
 
-  const fetcher = useCallback(
+function JournalEntriesContent() {
+  const router = useRouter();
+  const [from, setFrom] = useState(startOfMonthISO);
+  const [to, setTo] = useState(todayISO);
+  const [branch, setBranch] = useBranchFilter();
+  const [status, setStatus] = useState<string>(ANY_STATUS);
+  const [source, setSource] = useState<string>(ANY_SOURCE);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useBranchFollowingPage();
+  const [reload, setReload] = useState(0);
+
+  const params = useMemo(
     () =>
-      // Drained: the register showed the endpoint's default 15 entries as
-      // though they were every journal in the range.
-      accountingService.journalsListAll({
+      journalRegisterParams({
         from,
         to,
-        branch_id: branchParam(branch),
-        status: status === ANY_STATUS ? undefined : (status as JournalStatus),
+        branchId: branchParam(branch),
+        status,
+        source,
+        search,
+        page,
       }),
-    [from, to, branch, status],
+    [from, to, branch, status, source, search, page],
   );
-  const resource = useAccountingResource<DrainResult<JournalEntry>>(fetcher);
+  const key = journalRegisterKey(params, reload);
+  const [answer, setAnswer] = useState<RegisterAnswer | null>(null);
 
-  const post = async (entry: JournalEntry) => {
-    try {
-      await accountingService.postJournal(entry.id);
-      toast.success(`${entry.reference || "Entry"} posted.`);
-      setSelected(null);
-      resource.refetch();
-    } catch {
-      toast.error("Could not post this entry.");
-    }
-  };
+  // One request per settled change, after typing pauses. Only the latest
+  // request's answer is kept, so a slow answer never replaces a newer one.
+  useEffect(() => {
+    let current = true;
+    const timer = setTimeout(() => {
+      accountingService
+        .journalsPage(params)
+        .then((body) => {
+          if (current) setAnswer({ key, page: body, error: null });
+        })
+        .catch((err: unknown) => {
+          if (!current) return;
+          const error = getErrorMessage(err, "The journal entries couldn't be loaded.");
+          // The rows already on screen stay, dimmed, with the error and a retry.
+          setAnswer((prev) => ({ key, page: prev?.page ?? null, error }));
+        });
+    }, SEARCH_DEBOUNCE_MS);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  }, [key, params]);
 
-  const reverse = async (entry: JournalEntry, reason: string) => {
-    try {
-      await accountingService.reverseJournal(entry.id, todayISO(), reason);
-      toast.success("Reversing entry created. The original is unchanged.");
-      setSelected(null);
-      resource.refetch();
-    } catch {
-      toast.error("Could not reverse this entry.");
-    }
-  };
+  const settled = answer?.key === key;
+  // The module's picture on the opening view (this month, nothing narrowed);
+  // any other filter that matched nothing reads as no results.
+  const emptyPicture = emptyArt(
+    "emptyLedger",
+    from !== startOfMonthISO() ||
+      to !== todayISO() ||
+      branch !== ALL_BRANCHES ||
+      status !== ANY_STATUS ||
+      source !== ANY_SOURCE ||
+      search.trim() !== "",
+  );
+  // The previous rows stay up, dimmed, until the new page arrives; its figures
+  // read as a dash so no total describes filters other than those on screen.
+  const rows = answer?.page?.data ?? [];
+  const failed = settled && answer.error !== null;
+  // A failed request keeps the earlier page's rows, never its figures.
+  const meta = settled && !failed ? answer.page?.meta : undefined;
+
+  const changeFilter =
+    <T,>(set: (value: T) => void) =>
+    (value: T) => {
+      set(value);
+      setPage(1);
+    };
 
   return (
-    <RouteGuard permission="journals:view" pageName="Journal Entries">
-      <div className="space-y-6">
-        <AccountingPageHeader
-          title="Journal Entries"
-          description="Every entry in the books, automatic and manual."
-          actions={
-            <PermissionGate permission="journals:create">
-              <Button nativeButton={false} render={<Link href="/accounting/journals/new" />}>
-                <Plus className="mr-2 h-4 w-4" />
-                New Entry
-              </Button>
-            </PermissionGate>
-          }
-        />
+    <PageFill>
+      <AccountingPageHeader
+        title="Journal Entries"
+        description="Every entry in the books, automatic and manual."
+        actions={
+          <PermissionGate permission="journals:create">
+            <Button nativeButton={false} render={<Link href="/accounting/journals/new" />}>
+              <Plus className="mr-2 h-4 w-4" />
+              New Entry
+            </Button>
+          </PermissionGate>
+        }
+      />
 
-        <FilterBar>
-          <DateFilter label="From" value={from} onChange={setFrom} />
-          <DateFilter label="To" value={to} onChange={setTo} />
-          <BranchFilter value={branch} onChange={setBranch} />
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Status</Label>
-            <Select value={status} onValueChange={(v) => setStatus(v ?? ANY_STATUS)}>
-              <SelectTrigger className="w-[150px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ANY_STATUS}>Any status</SelectItem>
-                <SelectItem value="draft">Draft</SelectItem>
-                <SelectItem value="posted">Posted</SelectItem>
-                <SelectItem value="reversed">Reversed</SelectItem>
-              </SelectContent>
-            </Select>
+      <FilterBar>
+        <DateFilter label="From" value={from} onChange={changeFilter(setFrom)} />
+        <DateFilter label="To" value={to} onChange={changeFilter(setTo)} />
+        <BranchFilter value={branch} onChange={changeFilter(setBranch)} />
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs text-muted-foreground">Status</Label>
+          <Select
+            value={status}
+            onValueChange={(v) => changeFilter(setStatus)(v ?? ANY_STATUS)}
+            items={journalStatusItems}
+          >
+            <SelectTrigger className="w-[150px]" aria-label="Status">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {journalStatusItems.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs text-muted-foreground">Source</Label>
+          <Select
+            value={source}
+            onValueChange={(v) => changeFilter(setSource)(v ?? ANY_SOURCE)}
+            items={journalSourceItems}
+          >
+            <SelectTrigger className="w-[190px]" aria-label="Source">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {journalSourceItems.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="journal-search" className="text-xs text-muted-foreground">
+            Search
+          </Label>
+          <div className="relative">
+            <Search
+              className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              id="journal-search"
+              type="search"
+              value={search}
+              onChange={(e) => changeFilter(setSearch)(e.target.value)}
+              placeholder="Number, reference or description"
+              maxLength={100}
+              className="w-[280px] pl-8"
+            />
           </div>
-        </FilterBar>
+        </div>
+      </FilterBar>
 
-        <DataState
-          resource={resource}
-          summary="The journal register: entries raised automatically by lending events alongside manual ones, with drafting, posting and reversal."
-          endpoints={[
-            "GET /accounting/journals",
-            "POST /accounting/journals",
-            "POST /accounting/journals/{id}/post",
-            "POST /accounting/journals/{id}/reverse",
-          ]}
-          isEmpty={(drain) => drain.rows.length === 0}
-          emptyMessage="No journal entry in the chosen range."
-        >
-          {({ rows, truncated, total }) => (
-            <Card>
-              <CardContent className="space-y-4 pt-6">
-                {truncated && (
-                  <IncompleteListNotice
-                    shown={rows.length}
-                    total={total}
-                    noun="journal entries"
-                    consequence="Entries missing from this register cannot be opened, posted or reversed from here."
-                  />
-                )}
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-28">Date</TableHead>
-                      <TableHead className="w-36">Reference</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead className="w-32">Source</TableHead>
-                      <TableHead className="w-24">Status</TableHead>
-                      <TableHead className="w-36 text-right">Amount</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {rows.map((entry) => (
-                      <TableRow
-                        key={entry.id}
-                        className="cursor-pointer"
-                        onClick={() => setSelected(entry)}
+      <Card className={FIT_CLASSES.section}>
+        <CardContent className={cn(FIT_CLASSES.section, "space-y-4 pt-6 fit:pt-0")}>
+          <p className="text-sm text-muted-foreground" aria-live="polite">
+            {meta ? journalStatusCounts(meta.stats) : "Loading…"}
+          </p>
+
+          {/* With no rows the box keeps its natural height; a failed load's message sits under it. */}
+          <ScrollBox
+            className={cn(!(settled && !failed) && "opacity-60", rows.length === 0 && "fit:flex-initial")}
+            aria-busy={!settled}
+          >
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-28">Date</TableHead>
+                  <TableHead className="w-32">Number</TableHead>
+                  <TableHead className="w-36">Reference</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead className="w-32">Branch</TableHead>
+                  <TableHead className="w-32">Source</TableHead>
+                  <TableHead className="w-24">Status</TableHead>
+                  <TableHead className="w-36 text-right">Amount</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((entry) => (
+                  <TableRow
+                    key={entry.id}
+                    className="cursor-pointer"
+                    onClick={() => router.push(`/accounting/journals/${entry.id}`)}
+                  >
+                    <TableCell className="text-sm">{formatDate(entry.date)}</TableCell>
+                    <TableCell className="font-mono text-xs">
+                      <Link
+                        href={`/accounting/journals/${entry.id}`}
+                        className="underline-offset-4 hover:underline"
+                        onClick={(event) => event.stopPropagation()}
                       >
-                        <TableCell className="text-sm">{formatDate(entry.date)}</TableCell>
-                        <TableCell className="font-mono text-xs">
-                          <JournalReferenceCell entry={entry} />
-                        </TableCell>
-                        <TableCell className="text-sm">{entry.description}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-[10px]">
-                            {entry.source.replace(/_/g, " ")}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className={STATUS_STYLES[entry.status]}>
-                            {entry.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-sm">
-                          {/* Debits equal credits, so either side is "the amount". */}
-                          {formatCentavos(entry.total_debit)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          )}
-        </DataState>
+                        {journalTitle(entry)}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">
+                      <JournalReferenceCell entry={entry} />
+                    </TableCell>
+                    <TableCell className="text-sm">{entry.description}</TableCell>
+                    <TableCell className="text-sm">{entry.branch_name ?? "No branch"}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-[10px]">
+                        {journalSourceLabel(entry.source)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <JournalStatusBadge status={entry.status} />
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-sm">
+                      {registerAmount(entry)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {/* Inside the box, so the pinned register total below always shows whole. */}
+                {settled && !failed && rows.length === 0 && (
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell colSpan={8} className="py-6 text-center text-sm text-muted-foreground">
+                      {hasIllustration(emptyPicture) && (
+                        <Illustration
+                          name={emptyPicture}
+                          className="mx-auto mb-3 block fit:max-h-[min(6rem,11dvh)]"
+                        />
+                      )}
+                      No journal entry matches these filters.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+              <TableFooter>
+                <TableRow>
+                  <TableCell colSpan={7} className="text-sm font-semibold">
+                    {meta ? registerTotalLabel(meta.totals.count, status) : "Register total: —"}
+                    <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                      Total debit {meta ? formatCentavos(meta.totals.total_debit) : "—"} · Total
+                      credit {meta ? formatCentavos(meta.totals.total_credit) : "—"}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm font-semibold">
+                    {meta ? formatCentavos(meta.totals.total_debit) : "—"}
+                  </TableCell>
+                </TableRow>
+              </TableFooter>
+            </Table>
+          </ScrollBox>
 
-        <JournalEntryDialog
-          entry={selected}
-          onOpenChange={(open) => !open && setSelected(null)}
-          onPost={post}
-          onReverse={reverse}
-        />
-      </div>
+          {settled && failed && rows.length === 0 && (
+            <div className="space-y-3 py-12 text-center text-sm text-muted-foreground">
+              <p className="text-destructive">{answer.error}</p>
+              <Button variant="outline" size="sm" onClick={() => setReload((n) => n + 1)}>
+                Try again
+              </Button>
+            </div>
+          )}
+
+          {meta && (
+            <TablePagination
+              page={page}
+              perPage={JOURNAL_PAGE_SIZE}
+              total={meta.total}
+              perPageOptions={[JOURNAL_PAGE_SIZE]}
+              onPageChange={setPage}
+              onPerPageChange={() => setPage(1)}
+            />
+          )}
+
+          {failed && rows.length > 0 && (
+            <div className="flex items-center justify-between gap-2 text-sm text-destructive">
+              <span>{answer.error}</span>
+              <Button variant="outline" size="sm" onClick={() => setReload((n) => n + 1)}>
+                Try again
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </PageFill>
+  );
+}
+
+export default function JournalEntriesPage() {
+  return (
+    <RouteGuard permission="journals:view" pageName="Journal Entries">
+      <JournalEntriesContent />
     </RouteGuard>
   );
 }

@@ -1,13 +1,20 @@
 "use client";
 
 import { useCallback } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { RouteGuard } from "@/components/common/route-guard";
 import { DataState } from "@/components/common/data-state";
 import { useApiResource } from "@/hooks";
 import { creditScoringService } from "@/services";
 import { CreditScoringPageHeader } from "../_components/page-header";
-import { RiskLevelBadge } from "../_components/risk-level-badge";
+import { MemberCell } from "../_components/member-cell";
+import { ScoreCells } from "../_components/score-cells";
+import { FigureCard } from "../_components/figure-card";
+import { ALERT_KIND_LABELS, ALERT_SEVERITY_LABELS } from "@/lib/credit-scoring/labels";
+import { borrowerLabel } from "@/lib/credit-scoring/borrower-label";
+import { countOrDash } from "@/lib/credit-scoring/score-state";
+import { yesNoOrDash } from "@/lib/credit-scoring/loan-facts";
+import { loanFigureReason, pesosOrDash } from "@/lib/credit-scoring/money";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -20,6 +27,7 @@ import {
 } from "@/components/ui/table";
 import { formatDateTime } from "@/lib/format";
 import type { RiskMonitoringData } from "@/types/credit-scoring";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 
 const SEVERITY_VARIANT = {
   info: "outline",
@@ -27,45 +35,45 @@ const SEVERITY_VARIANT = {
   critical: "destructive",
 } as const;
 
-function Figure({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border bg-card p-4">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1 text-2xl font-semibold">{value}</p>
-    </div>
-  );
-}
-
-export default function RiskMonitoringPage() {
-  const router = useRouter();
+function RiskMonitoringContent() {
   const fetcher = useCallback(() => creditScoringService.getRiskMonitoring(), []);
   const resource = useApiResource<RiskMonitoringData>(fetcher);
 
   return (
-    <RouteGuard permission="credit_scoring:view" pageName="Risk Monitoring">
-      <div className="space-y-6">
-        <CreditScoringPageHeader
-          title="Risk Monitoring"
-          description="Borrowers whose risk has changed and alerts that need review."
-        />
+    <PageFill>
+      <CreditScoringPageHeader
+        title="Risk Monitoring"
+        description="Members whose risk has changed and alerts that need review."
+      />
 
+      <ScrollBox className="p-px">
         <DataState
           resource={resource}
-          summary="Risk alerts and affected-borrower details will appear here once the backend is connected."
+          summary="Risk alerts and the members who need review."
           endpoints={["GET /credit-scoring/risk-monitoring"]}
         >
           {(data) => (
             <div className="space-y-6">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <Figure label="Total Borrowers" value={String(data.summary.total_borrowers)} />
-                <Figure label="High Risk" value={String(data.summary.high_risk_count)} />
-                <Figure label="Score Declines (30d)" value={String(data.summary.score_declines_30d)} />
-                <Figure label="New Hard Flags (30d)" value={String(data.summary.new_hard_flags_30d)} />
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <FigureCard label="Total Members" value={countOrDash(data.summary.total_borrowers)} />
+                <FigureCard label="High Risk" value={countOrDash(data.summary.high_risk_count)} />
+                <FigureCard label="Score Declines (30d)" value={countOrDash(data.summary.score_declines_30d)} />
+                <FigureCard label="New Hard Flags (30d)" value={countOrDash(data.summary.new_hard_flags_30d)} />
+                <FigureCard
+                  label="Past Due Members"
+                  value={countOrDash(data.summary.past_due_borrowers)}
+                  hiddenReason={loanFigureReason(data.summary.past_due_borrowers)}
+                />
+                <FigureCard
+                  label="High Risk Exposure"
+                  value={pesosOrDash(data.summary.high_risk_exposure)}
+                  hiddenReason={loanFigureReason(data.summary.high_risk_exposure)}
+                />
               </div>
 
               <Card>
-                <CardContent className="space-y-3 pt-6">
-                  <p className="text-sm font-medium">Alerts</p>
+                <CardContent className="space-y-3 pt-6 fit:pt-0">
+                  <p className="text-sm font-medium">Alerts (last 30 days)</p>
                   {data.alerts.length === 0 && (
                     <p className="text-sm text-muted-foreground">No active alerts.</p>
                   )}
@@ -73,12 +81,21 @@ export default function RiskMonitoringPage() {
                     <div key={alert.id} className="flex items-start justify-between gap-3 border-b pb-3 last:border-b-0 last:pb-0">
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">{alert.borrower_name}</span>
-                          <Badge variant={SEVERITY_VARIANT[alert.severity]}>{alert.severity}</Badge>
+                          <Link href={`/credit-scoring/borrowers/${alert.borrower_id}`} className="text-sm font-medium hover:underline">
+                            {borrowerLabel(alert)}
+                          </Link>
+                          {alert.borrower_code && (
+                            <span className="text-xs text-muted-foreground">{alert.borrower_code}</span>
+                          )}
+                          <Badge variant={SEVERITY_VARIANT[alert.severity]}>{ALERT_SEVERITY_LABELS[alert.severity]}</Badge>
+                          <Badge variant="outline">{ALERT_KIND_LABELS[alert.kind]}</Badge>
                         </div>
                         <p className="text-sm text-muted-foreground">{alert.message}</p>
                         <p className="text-xs text-muted-foreground">
-                          {alert.previous_score} → {alert.current_score} · {formatDateTime(alert.created_at)}
+                          {alert.previous_score === null
+                            ? `First score ${alert.current_score ?? "—"}`
+                            : `${alert.previous_score} → ${alert.current_score ?? "—"}`}{" "}
+                          · {formatDateTime(alert.created_at)}
                         </p>
                       </div>
                     </div>
@@ -86,11 +103,12 @@ export default function RiskMonitoringPage() {
                 </CardContent>
               </Card>
 
-              <div className="rounded-lg border">
+              <div className="space-y-2 rounded-lg border p-2">
+                <p className="px-2 pt-2 text-sm font-medium">Members to review</p>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Borrower</TableHead>
+                      <TableHead>Member</TableHead>
                       <TableHead>Branch</TableHead>
                       <TableHead>Score</TableHead>
                       <TableHead>Risk Level</TableHead>
@@ -99,25 +117,42 @@ export default function RiskMonitoringPage() {
                   </TableHeader>
                   <TableBody>
                     {data.affected_borrowers.map((row) => (
-                      <TableRow
-                        key={row.borrower_id}
-                        className="cursor-pointer"
-                        onClick={() => router.push(`/credit-scoring/borrowers/${row.borrower_id}`)}
-                      >
-                        <TableCell className="font-medium">{row.borrower_name}</TableCell>
-                        <TableCell>{row.branch_name}</TableCell>
-                        <TableCell>{row.score}</TableCell>
-                        <TableCell><RiskLevelBadge level={row.risk_level} /></TableCell>
-                        <TableCell>{row.past_due ? "Yes" : "No"}</TableCell>
+                      <TableRow key={row.borrower_id}>
+                        <TableCell>
+                          <MemberCell row={row} />
+                        </TableCell>
+                        <TableCell>{row.branch_name ?? "—"}</TableCell>
+                        <ScoreCells row={row} />
+                        <TableCell>{yesNoOrDash(row.past_due)}</TableCell>
                       </TableRow>
                     ))}
+                    {data.affected_borrowers.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={5} className="py-6 text-center text-sm text-muted-foreground">
+                          No members need review.
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
+                {data.affected_total > data.affected_borrowers.length && (
+                  <p className="px-2 pb-2 text-xs text-muted-foreground">
+                    Showing {data.affected_borrowers.length} of {data.affected_total}, lowest score first.
+                  </p>
+                )}
               </div>
             </div>
           )}
         </DataState>
-      </div>
+      </ScrollBox>
+    </PageFill>
+  );
+}
+
+export default function RiskMonitoringPage() {
+  return (
+    <RouteGuard permission="credit_scoring:view" pageName="Risk Monitoring">
+      <RiskMonitoringContent />
     </RouteGuard>
   );
 }

@@ -1,11 +1,16 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
 import { repaymentService } from "@/services";
-import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
+import { PermissionButton, RouteGuard, TablePagination } from "@/components/common";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { hasIllustration, Illustration } from "@/components/common/illustration";
+import { emptyArt } from "@/lib/illustrations";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { SEARCH_DEBOUNCE_MS } from "@/hooks/use-search-page";
 import type { Repayment } from "@/types";
 import { Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,22 +35,38 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Search,
-  Receipt,
+  ReceiptText,
   Ban,
   AlertTriangle,
   Eye,
   CheckCircle2,
   XCircle,
+  ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  PAYMENT_PAGE_SIZE,
+  pageToStepBackTo,
+  paymentAmountFigures,
+  paymentListKey,
+  paymentListParams,
+  paymentRemarks,
+  paymentStatusBreakdown,
+  readPaymentPage,
+  shownPaymentPage,
+  totalFigure,
+  voidedByName,
+  type PaymentPage,
+} from "./_lib/payment-history";
 import {
   formatCurrency as formatPHP,
   formatDate,
   formatDateTime,
 } from "@/lib/format";
+import { loanNumberLabel } from "@/lib/loan-number";
 
 // ── Types ──
 
@@ -62,6 +83,7 @@ interface MockPayment {
   date: string;
   amount: number;
   penalty_amount: number;
+  insurance_applied: number;
   method: PaymentMethod;
   status: PaymentStatus;
   collected_by: string;
@@ -79,15 +101,17 @@ function mapRepaymentToRow(r: Repayment): MockPayment {
   const loanRel = p.loan as
     | {
         id?: number;
+        display_number?: string | null;
         loan_account_number?: string;
+        external_loan_no?: string | null;
         application_number?: string;
-        borrower?: { id?: number; full_name?: string; name?: string };
+        borrower?: { id?: number; full_name?: string; name?: string; first_name?: string; last_name?: string };
         borrower_id?: number;
         borrower_name?: string;
       }
     | undefined;
   const borrowerRel = p.borrower as
-    | { id?: number; full_name?: string; name?: string }
+    | { id?: number; full_name?: string; name?: string; first_name?: string; last_name?: string }
     | undefined;
   return {
     id: p.id,
@@ -107,8 +131,8 @@ function mapRepaymentToRow(r: Repayment): MockPayment {
       (p.borrower_id as number) ??
       0,
     loan_account:
-      loanRel?.loan_account_number ||
-      loanRel?.application_number ||
+      (p.loan_display_number as string) ||
+      loanNumberLabel(loanRel, "") ||
       (p.loan_account_number as string) ||
       (p.loan_account as string) ||
       "—",
@@ -123,15 +147,16 @@ function mapRepaymentToRow(r: Repayment): MockPayment {
       (p.penalty_paid as number) ||
       (p.penalty_amount as number) ||
       0,
+    insurance_applied: Number(p.insurance_applied ?? 0) || 0,
     method: ((p.method as PaymentMethod) || "cash"),
     status: (p.status === "voided" ? "voided" : "completed") as PaymentStatus,
     collected_by: (p.collected_by as string) || "—",
     balance_before: (p.balance_before as number) || 0,
     balance_after: (p.balance_after as number) || 0,
     reference_number: p.reference_number as string | undefined,
-    remarks: p.remarks || undefined,
+    remarks: paymentRemarks(p.remarks),
     void_reason: p.void_reason || undefined,
-    voided_by: p.voided_by || undefined,
+    voided_by: p.status === "voided" ? voidedByName(p) : undefined,
     voided_at: p.voided_at || undefined,
   };
 }
@@ -145,6 +170,9 @@ const METHOD_LABELS: Record<PaymentMethod, string> = {
   maya: "Maya",
   online: "Online",
 };
+
+/** Why Void is disabled for a role without `payments:void`. */
+const VOID_DENIED_TOOLTIP = "Your role doesn't have permission to void payments";
 
 // ── Void Payment Dialog ──
 
@@ -208,7 +236,7 @@ function VoidPaymentDialog({
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Borrower</span>
+              <span className="text-muted-foreground">Member</span>
               <span className="font-medium">{payment.borrower_name}</span>
             </div>
             <div className="flex justify-between">
@@ -218,7 +246,7 @@ function VoidPaymentDialog({
             <div className="flex justify-between">
               <span className="text-muted-foreground">Amount</span>
               <span className="font-bold text-green-700">
-                {formatPHP(payment.amount + payment.penalty_amount)}
+                {paymentAmountFigures(payment).amount}
               </span>
             </div>
             <div className="flex justify-between">
@@ -227,11 +255,11 @@ function VoidPaymentDialog({
             </div>
             <Separator />
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Balance Before</span>
+              <span className="text-muted-foreground">Principal Balance Before</span>
               <span>{formatPHP(payment.balance_before)}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Balance After Void</span>
+              <span className="text-muted-foreground">Principal Balance After Void</span>
               <span className="text-brand-orange font-medium">
                 {formatPHP(payment.balance_before)}
               </span>
@@ -259,8 +287,16 @@ function VoidPaymentDialog({
             <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
             <p>
               This action requires admin authorization and cannot be undone. The
-              loan balance will be restored to{" "}
-              <strong>{formatPHP(payment.balance_before)}</strong>.
+              loan&apos;s principal balance will be restored to{" "}
+              <strong>{formatPHP(payment.balance_before)}</strong>
+              {payment.insurance_applied > 0 ? (
+                <>
+                  , and the <strong>{formatPHP(payment.insurance_applied)}</strong> insurance
+                  premium this payment collected will be owed again.
+                </>
+              ) : (
+                "."
+              )}
             </p>
           </div>
 
@@ -370,7 +406,7 @@ function PaymentCard({
                   : "text-green-700"
               )}
             >
-              {formatPHP(payment.amount + payment.penalty_amount)}
+              {paymentAmountFigures(payment).amount}
             </p>
           </div>
           <div>
@@ -405,7 +441,10 @@ function PaymentCard({
             </Button>
           </Link>
           {!isVoided && (
-            <Button
+            <PermissionButton
+              permission="payments:void"
+              tooltip={VOID_DENIED_TOOLTIP}
+              wrapperClassName="flex-1"
               variant="outline"
               size="sm"
               className="flex-1 gap-1 text-destructive border-destructive/30 hover:bg-destructive/5"
@@ -413,7 +452,7 @@ function PaymentCard({
             >
               <Ban className="h-3 w-3" />
               Void
-            </Button>
+            </PermissionButton>
           )}
         </div>
       </CardContent>
@@ -423,93 +462,80 @@ function PaymentCard({
 
 // ── Main Page ──
 
-export default function PaymentHistoryPage() {
-  const [payments, setPayments] = useState<MockPayment[]>([]);
-  const [loading, setLoading] = useState(true);
+function PaymentHistoryContent() {
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [statusTab, setStatusTab] = useState<string>("all");
+  const [page, setPage] = useState(1);
+  const [reload, setReload] = useState(0);
   const [voidTarget, setVoidTarget] = useState<MockPayment | null>(null);
   const [voidDialogOpen, setVoidDialogOpen] = useState(false);
-  // Set only when the drain gave up with pages outstanding, i.e. this screen is
-  // knowingly missing payments. Null means complete.
-  const [shortfall, setShortfall] = useState<{
-    shown: number;
-    total: number | null;
-  } | null>(null);
 
-  const fetchPayments = useCallback(async () => {
-    setLoading(true);
-    try {
-      // Drained across pages. This asked for `per_page: 100` — exactly the
-      // server's ceiling, so it was never clamped and never looked wrong, and
-      // that was the trap: a co-op with 101 payments got 100 of them in a
-      // response shaped identically to a complete one, and payment #101 could
-      // not be found, filtered to, or voided from this screen. Sitting ON the
-      // limit is worse than sitting above it, because nothing is even
-      // theoretically available to notice.
-      //
-      // The whole set is needed rather than a page of it: the search box, the
-      // date range and the status tabs below all filter in the browser, so a
-      // server-side page would silently scope every one of them to whatever
-      // happened to load.
-      const { rows, truncated, total } = await repaymentService.listAll();
-      setPayments(rows.map(mapRepaymentToRow));
-      setShortfall(truncated ? { shown: rows.length, total } : null);
-    } catch (err) {
-      console.error("Failed to load payment history", err);
-      setPayments([]);
-      setShortfall(null);
-      notifyError(err, "We couldn't load the payment history. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // One request per settled change: the rows, the count and the cards all come
+  // from its answer. Only the latest request's answer is kept, so a slow answer
+  // never replaces a newer one.
+  const params = useMemo(
+    () => paymentListParams({ search, dateFrom, dateTo, status: statusTab, page }),
+    [search, dateFrom, dateTo, statusTab, page]
+  );
+  const requestKey = paymentListKey(params, reload);
+  const [request, setRequest] = useState(() => ({ key: requestKey, params }));
+  const [answer, setAnswer] = useState<PaymentPage<MockPayment> | null>(null);
+  const [failedKey, setFailedKey] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchPayments();
-  }, [fetchPayments]);
+    const t = setTimeout(
+      () => setRequest((prev) => (prev.key === requestKey ? prev : { key: requestKey, params })),
+      SEARCH_DEBOUNCE_MS
+    );
+    return () => clearTimeout(t);
+  }, [requestKey, params]);
 
-  // Filter logic
-  const filtered = useMemo(() => {
-    return payments.filter((p) => {
-      const q = search.toLowerCase();
-      const matchSearch =
-        !q ||
-        p.receipt_number.toLowerCase().includes(q) ||
-        p.borrower_name.toLowerCase().includes(q) ||
-        p.loan_account.toLowerCase().includes(q);
+  useEffect(() => {
+    let current = true;
+    repaymentService
+      .listPage(request.params)
+      .then((body) => {
+        if (!current) return;
+        const rows = (body?.data ?? []).map(mapRepaymentToRow);
+        const stepBack = pageToStepBackTo({
+          rows: rows.length,
+          page: Number(request.params.page),
+          lastPage: body?.meta?.last_page,
+        });
+        if (stepBack !== null) {
+          setPage(stepBack);
+          return;
+        }
+        setAnswer(readPaymentPage({ data: rows, meta: body?.meta }, request.key));
+        setFailedKey(null);
+      })
+      .catch((err) => {
+        if (!current) return;
+        setAnswer(readPaymentPage<MockPayment>(null, request.key));
+        setFailedKey(request.key);
+        notifyError(err, "We couldn't load the payment history. Please try again.");
+      });
+    return () => {
+      current = false;
+    };
+  }, [request]);
 
-      const matchStatus =
-        statusTab === "all" ||
-        (statusTab === "completed" && p.status === "completed") ||
-        (statusTab === "voided" && p.status === "voided");
-
-      const payDate = new Date(p.date);
-      const matchFrom = !dateFrom || payDate >= new Date(dateFrom);
-      const matchTo = !dateTo || payDate <= new Date(dateTo);
-
-      return matchSearch && matchStatus && matchFrom && matchTo;
-    });
-  }, [payments, search, statusTab, dateFrom, dateTo]);
-
-  // Summary cards (over the full unfiltered set for totals context, over filtered for display)
-  const totalCollected = useMemo(
-    () =>
-      filtered
-        .filter((p) => p.status === "completed")
-        .reduce((s, p) => s + p.amount + p.penalty_amount, 0),
-    [filtered]
+  const shown = shownPaymentPage(answer, requestKey);
+  // The module's picture while nothing is searched or filtered.
+  const emptyPicture = emptyArt(
+    "emptyPayments",
+    search.trim() !== "" || dateFrom !== "" || dateTo !== "" || statusTab !== "all"
   );
-  const totalVoided = useMemo(
-    () =>
-      filtered
-        .filter((p) => p.status === "voided")
-        .reduce((s, p) => s + p.amount + p.penalty_amount, 0),
-    [filtered]
-  );
-  const transactionCount = filtered.length;
+  const payments = shown.rows;
+  const loading = shown.pending;
+  const failed = !loading && failedKey === requestKey;
+
+  const changeFilter = <T,>(set: (value: T) => void) => (value: T) => {
+    set(value);
+    setPage(1);
+  };
 
   const handleVoidClick = (p: MockPayment) => {
     setVoidTarget(p);
@@ -520,14 +546,15 @@ export default function PaymentHistoryPage() {
     try {
       await repaymentService.void(id, { void_reason: reason });
       toast.success("Payment voided");
-      fetchPayments();
-    } catch {
-      toast.error("We couldn't void the payment. Please try again.");
+      setReload((n) => n + 1);
+    } catch (err) {
+      // The server explains a refusal (e.g. a payment made before an extension).
+      notifyError(err, "We couldn't void the payment. Please try again.");
     }
   };
 
   return (
-    <div className="space-y-6">
+    <PageFill className="gap-4 fit:gap-3">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Payment History</h1>
@@ -536,18 +563,9 @@ export default function PaymentHistoryPage() {
         </p>
       </div>
 
-      {shortfall && (
-        <IncompleteListNotice
-          shown={shortfall.shown}
-          total={shortfall.total}
-          noun="payments"
-          consequence="The totals below, the search box and the status tabs all describe only the payments that loaded, and a payment that is missing cannot be voided from this screen."
-        />
-      )}
-
       {/* Summary Cards */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card className="fit:gap-1 fit:py-3">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">
               Total Collected
@@ -555,8 +573,8 @@ export default function PaymentHistoryPage() {
             <CheckCircle2 className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-green-700">
-              {formatPHP(totalCollected)}
+            <p className="text-2xl font-bold fit:text-xl text-green-700">
+              {totalFigure(shown.totals?.collected)}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
               From completed payments
@@ -564,14 +582,14 @@ export default function PaymentHistoryPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="fit:gap-1 fit:py-3">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Total Voided</CardTitle>
             <XCircle className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-destructive">
-              {formatPHP(totalVoided)}
+            <p className="text-2xl font-bold fit:text-xl text-destructive">
+              {totalFigure(shown.totals?.voided)}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
               Reversed transactions
@@ -579,107 +597,119 @@ export default function PaymentHistoryPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="fit:gap-1 fit:py-3">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Insurance Premium Collected</CardTitle>
+            <ShieldCheck className="h-4 w-4 text-purple-600" />
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold fit:text-xl text-purple-700 dark:text-purple-300">
+              {totalFigure(shown.totals?.insurance)}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Included in Total Collected
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="fit:gap-1 fit:py-3">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">
               Transactions Count
             </CardTitle>
-            <Receipt className="h-4 w-4 text-brand-orange" />
+            <ReceiptText className="h-4 w-4 text-brand-orange" />
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{transactionCount}</p>
+            <p className="text-2xl font-bold fit:text-xl">{shown.total ?? "—"}</p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {filtered.filter((p) => p.status === "completed").length}{" "}
-              completed,{" "}
-              {filtered.filter((p) => p.status === "voided").length} voided
+              {paymentStatusBreakdown(shown.stats, { search, dateFrom, dateTo })}
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="pt-4 pb-4">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
-            {/* Search */}
-            <div className="flex-1 space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Search</Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Receipt #, borrower name, or loan account..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
-            </div>
-
-            {/* Date range */}
-            <div className="flex gap-2 items-end">
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">From</Label>
-                <Input
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                  className="w-36"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">To</Label>
-                <Input
-                  type="date"
-                  value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
-                  className="w-36"
-                />
-              </div>
-            </div>
-
-            {/* Reset filters */}
-            {(search || dateFrom || dateTo) && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setSearch("");
-                  setDateFrom("");
-                  setDateTo("");
-                }}
-              >
-                Clear
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Status Tabs + Table */}
-      <Card>
+      <Card className={cn(FIT_CLASSES.section, "fit:gap-3 fit:py-3")}>
         <CardHeader className="pb-0">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <CardTitle className="text-sm font-medium">
-              Transactions ({filtered.length})
-            </CardTitle>
-            <Tabs value={statusTab} onValueChange={setStatusTab}>
-              <TabsList>
-                <TabsTrigger value="all">All</TabsTrigger>
-                <TabsTrigger value="completed">Completed</TabsTrigger>
-                <TabsTrigger value="voided">Voided</TabsTrigger>
-              </TabsList>
-            </Tabs>
+          {/* The title, the status tabs and the filters share one row on wide
+              screens, so the table keeps the height. */}
+          <div className="flex flex-col gap-4 lg:flex-row lg:flex-wrap lg:items-end">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 lg:justify-start lg:gap-4">
+              <CardTitle className="text-sm font-medium">
+                Transactions ({shown.total ?? "—"})
+              </CardTitle>
+              <Tabs value={statusTab} onValueChange={changeFilter(setStatusTab)}>
+                <TabsList>
+                  <TabsTrigger value="all">All</TabsTrigger>
+                  <TabsTrigger value="completed">Completed</TabsTrigger>
+                  <TabsTrigger value="voided">Voided</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end lg:min-w-0 lg:flex-1">
+              {/* Search */}
+              <div className="min-w-48 flex-1 space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Search</Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Receipt #, member name, or loan account..."
+                    value={search}
+                    onChange={(e) => changeFilter(setSearch)(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+              </div>
+
+              {/* Date range */}
+              <div className="flex gap-2 items-end">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">From</Label>
+                  <Input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => changeFilter(setDateFrom)(e.target.value)}
+                    className="w-36"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">To</Label>
+                  <Input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => changeFilter(setDateTo)(e.target.value)}
+                    className="w-36"
+                  />
+                </div>
+              </div>
+
+              {/* Reset filters */}
+              {(search || dateFrom || dateTo) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSearch("");
+                    setDateFrom("");
+                    setDateTo("");
+                    setPage(1);
+                  }}
+                >
+                  Clear
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
 
-        <CardContent className="pt-4">
+        <CardContent className={cn("pt-4 fit:pt-0 transition-opacity", FIT_CLASSES.section, loading && payments.length > 0 && "opacity-60")} aria-busy={loading}>
           {/* Desktop Table */}
-          <div className="hidden md:block overflow-x-auto">
+          <ScrollBox className="hidden md:block">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Receipt #</TableHead>
-                  <TableHead>Borrower</TableHead>
+                  <TableHead>Member</TableHead>
                   <TableHead>Loan Account</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
@@ -689,8 +719,9 @@ export default function PaymentHistoryPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((payment) => {
+                {payments.map((payment) => {
                   const isVoided = payment.status === "voided";
+                  const figures = paymentAmountFigures(payment);
                   return (
                     <TableRow
                       key={payment.id}
@@ -728,11 +759,16 @@ export default function PaymentHistoryPage() {
                               : "text-green-700"
                           )}
                         >
-                          {formatPHP(payment.amount + payment.penalty_amount)}
+                          {figures.amount}
                         </span>
-                        {payment.penalty_amount > 0 && (
+                        {figures.penaltyNote && (
                           <p className="text-xs text-amber-600 text-right">
-                            incl. {formatPHP(payment.penalty_amount)} penalty
+                            {figures.penaltyNote}
+                          </p>
+                        )}
+                        {figures.insuranceNote && (
+                          <p className="text-xs text-muted-foreground text-right">
+                            {figures.insuranceNote}
                           </p>
                         )}
                       </TableCell>
@@ -764,7 +800,9 @@ export default function PaymentHistoryPage() {
                             </Button>
                           </Link>
                           {!isVoided && (
-                            <Button
+                            <PermissionButton
+                              permission="payments:void"
+                              tooltip={VOID_DENIED_TOOLTIP}
                               variant="outline"
                               size="sm"
                               className="h-7 gap-1 text-xs text-destructive border-destructive/30 hover:bg-destructive/5"
@@ -772,14 +810,14 @@ export default function PaymentHistoryPage() {
                             >
                               <Ban className="h-3 w-3" />
                               Void
-                            </Button>
+                            </PermissionButton>
                           )}
                         </div>
                       </TableCell>
                     </TableRow>
                   );
                 })}
-                {loading && (
+                {loading && payments.length === 0 && (
                   <TableRow>
                     <TableCell
                       colSpan={8}
@@ -792,13 +830,16 @@ export default function PaymentHistoryPage() {
                     </TableCell>
                   </TableRow>
                 )}
-                {!loading && filtered.length === 0 && (
+                {!loading && payments.length === 0 && (
                   <TableRow>
                     <TableCell
                       colSpan={8}
                       className="h-32 text-center text-muted-foreground"
                     >
-                      No payments found.
+                      {!failed && hasIllustration(emptyPicture) && (
+                        <Illustration name={emptyPicture} className="mx-auto mb-3 block" />
+                      )}
+                      {failed ? "The payments couldn't be loaded." : "No payments found."}
                     </TableCell>
                   </TableRow>
                 )}
@@ -806,12 +847,12 @@ export default function PaymentHistoryPage() {
             </Table>
 
             {/* Void audit details under the table */}
-            {filtered.some((p) => p.status === "voided") && (
+            {payments.some((p) => p.status === "voided") && (
               <div className="mt-4 space-y-2">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                   Void Audit Trail
                 </p>
-                {filtered
+                {payments
                   .filter((p) => p.status === "voided")
                   .map((p) => (
                     <div
@@ -837,29 +878,43 @@ export default function PaymentHistoryPage() {
                   ))}
               </div>
             )}
-          </div>
+          </ScrollBox>
 
           {/* Mobile Cards */}
           <div className="grid gap-3 md:hidden">
-            {filtered.map((payment) => (
+            {payments.map((payment) => (
               <PaymentCard
                 key={payment.id}
                 payment={payment}
                 onVoidClick={handleVoidClick}
               />
             ))}
-            {loading && (
+            {loading && payments.length === 0 && (
               <div className="py-12 text-center text-muted-foreground text-sm inline-flex w-full items-center justify-center gap-2">
                 <Loader2 className="size-4 animate-spin" />
                 Loading payments...
               </div>
             )}
-            {!loading && filtered.length === 0 && (
+            {!loading && payments.length === 0 && (
               <div className="py-12 text-center text-muted-foreground text-sm">
-                No payments found.
+                {!failed && hasIllustration(emptyPicture) && (
+                  <Illustration name={emptyPicture} className="mx-auto mb-3 block" />
+                )}
+                {failed ? "The payments couldn't be loaded." : "No payments found."}
               </div>
             )}
           </div>
+
+          {answer?.total != null && (
+            <TablePagination
+              page={page}
+              perPage={PAYMENT_PAGE_SIZE}
+              total={answer.total}
+              perPageOptions={[PAYMENT_PAGE_SIZE]}
+              onPageChange={setPage}
+              onPerPageChange={() => setPage(1)}
+            />
+          )}
         </CardContent>
       </Card>
 
@@ -870,6 +925,14 @@ export default function PaymentHistoryPage() {
         onOpenChange={setVoidDialogOpen}
         onVoid={handleVoid}
       />
-    </div>
+    </PageFill>
+  );
+}
+
+export default function PaymentHistoryPage() {
+  return (
+    <RouteGuard permission="payments:view" pageName="Payment History">
+      <PaymentHistoryContent />
+    </RouteGuard>
   );
 }

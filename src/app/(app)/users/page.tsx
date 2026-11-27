@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { RouteGuard, PermissionButton } from "@/components/common";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
+import { PageFill, PageLoader, ScrollBox } from "@/components/common/page-fill";
+import { DisabledReason } from "@/components/common/disabled-reason";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,6 +20,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -57,23 +60,53 @@ import {
   AlertTriangle,
   Check,
   ChevronsUpDown,
+  History,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
-import { userEditChanges, userEditPayload } from "@/lib/user-edit";
-import { primaryBranchId, userBranchIds, userBranches } from "@/lib/user-branches";
+import { completeRows } from "@/lib/paginate";
+import {
+  userEditChanges,
+  userEditForm,
+  userEditPayload,
+  withoutUnchangedPrimary,
+  type UserEditForm,
+} from "@/lib/user-edit";
+import {
+  branchViewer,
+  primaryBranchId,
+  userBranches,
+  visibleBranches,
+  worksOutsideCallerBranches,
+} from "@/lib/user-branches";
 import {
   countUsersWithRole,
   filterUsers,
   toUserList,
   type UserListShortfall,
 } from "@/lib/user-list";
+import { useDialogOpening } from "@/hooks";
 import { useAuthStore } from "@/store";
 import { userService, roleService, branchService } from "@/services";
 import type { User, UserStatus } from "@/types";
 import type { ApiRole } from "@/services/role.service";
+import { roleDisplayName } from "@/lib/role-display-name";
+import { isInactiveRole, roleOptionLabel, roleOptions, withoutUnchangedRole } from "./_lib/role-options";
+import { USERNAME_PLACEHOLDER, permissionChipLabel, permissionCountLabel, userStatusLabel } from "./_lib/user-labels";
+import { userManageLock } from "./_lib/manage-lock";
+import { branchHistoryLock } from "./_lib/branch-history";
+import {
+  ownPrimaryBranchLock,
+  primaryBranchOptionsFor,
+  primaryBranchProblem,
+  shownPrimaryBranch,
+  type PrimaryBranchChoice,
+} from "./_lib/primary-branch";
+import { PrimaryBranchField } from "./_components/primary-branch-field";
+import { BranchHistoryDialog } from "./_components/branch-history-dialog";
 import type { ApiBranch } from "@/services/branch.service";
 
 // ── Styling helpers ──
@@ -90,13 +123,6 @@ const statusBadge: Record<UserStatus, string> = {
   active: "bg-green-100 text-green-700 border-green-200",
   inactive: "bg-red-100 text-red-700 border-red-200",
 };
-
-function capitalize(s: string) {
-  return s
-    .split("_")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
 
 // ── Loading Spinner ──
 
@@ -149,7 +175,10 @@ function RoleSelector({
               >
                 <Users className="h-3.5 w-3.5" />
               </div>
-              <p className="text-xs font-medium leading-tight">{capitalize(role.name)}</p>
+              <p className="text-xs font-medium leading-tight">{roleOptionLabel(role)}</p>
+              {isInactiveRole(role) && (
+                <p className="text-[10px] leading-tight text-amber-700">Inactive: grants no access</p>
+              )}
             </button>
           );
         })}
@@ -159,12 +188,12 @@ function RoleSelector({
         if (!selected) return null;
         return (
           <div className="rounded-lg border border-dashed bg-muted/30 px-3 py-2">
-            <p className="text-xs font-medium mb-1">{capitalize(selected.name)} can access:</p>
+            <p className="text-xs font-medium mb-1">{roleOptionLabel(selected)} can access:</p>
             {selected.permissions.length > 0 ? (
               <div className="flex flex-wrap gap-1">
                 {selected.permissions.map((p) => (
                   <span key={p} className="inline-block rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                    {capitalize(p)}
+                    {permissionChipLabel(p)}
                   </span>
                 ))}
               </div>
@@ -183,6 +212,12 @@ function RoleSelector({
 // A user can be assigned more than one branch: access to branch-scoped data
 // (loan applications included) extends to every branch they're assigned to,
 // not just one, so this has to allow selecting several.
+//
+// A caller without `branches:view_all` may only assign their own branches (the
+// API refuses any other with a 422), so only those are offered. Badges read the
+// full list. A user who also works in a branch the caller doesn't hold can't be
+// edited by them at all (the API answers 404), so the row disables Edit before
+// this dialog opens; see UserActionsCell.
 
 function BranchMultiSelect({
   value,
@@ -194,6 +229,9 @@ function BranchMultiSelect({
   branches: ApiBranch[];
 }) {
   const [open, setOpen] = useState(false);
+  const caller = useAuthStore((s) => s.user);
+  const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
+  const options = visibleBranches(branches, branchViewer(caller, viewAll));
   const selected = branches.filter((b) => value.includes(b.id));
 
   const toggle = (branchId: number) => {
@@ -211,6 +249,7 @@ function BranchMultiSelect({
           render={
             <button
               type="button"
+              // eslint-disable-next-line jsx-a11y/role-has-required-aria-props -- Base UI PopoverTrigger sets aria-expanded and aria-controls on this button at runtime
               role="combobox"
               aria-expanded={open}
               className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
@@ -232,7 +271,7 @@ function BranchMultiSelect({
             <CommandList>
               <CommandEmpty>No branch found.</CommandEmpty>
               <CommandGroup>
-                {branches.map((branch) => (
+                {options.map((branch) => (
                   <CommandItem
                     key={branch.id}
                     value={branch.name}
@@ -286,6 +325,7 @@ function AddUserDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const callerRoles = useAuthStore((s) => s.user?.roles);
   const [form, setForm] = useState({
     first_name: "",
     last_name: "",
@@ -296,10 +336,23 @@ function AddUserDialog({
     password_confirmation: "",
     role: "",
     branch_ids: [] as number[],
+    primary_branch_id: undefined as PrimaryBranchChoice,
   });
 
   const update = (field: string, value: string | number | number[]) =>
     setForm((prev) => ({ ...prev, [field]: value }));
+  const setPrimary = (choice: PrimaryBranchChoice) =>
+    setForm((prev) => ({ ...prev, primary_branch_id: choice }));
+
+  // Worked out on every render from the branches and role picked, so taking a
+  // branch off (or picking a role that doesn't see every branch) moves the
+  // choice with it, and putting it back restores it.
+  const primaryOptions = primaryBranchOptionsFor(
+    branches,
+    form.branch_ids,
+    roles.find((r) => r.name === form.role),
+  );
+  const primary = shownPrimaryBranch(form.primary_branch_id, primaryOptions);
 
   const resetForm = () =>
     setForm({
@@ -312,6 +365,7 @@ function AddUserDialog({
       password_confirmation: "",
       role: "",
       branch_ids: [],
+      primary_branch_id: undefined,
     });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -337,6 +391,11 @@ function AddUserDialog({
       toast.error("Please select a role");
       return;
     }
+    const primaryProblem = primaryBranchProblem(primary, form.branch_ids.length);
+    if (primaryProblem) {
+      toast.error(primaryProblem);
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -350,6 +409,7 @@ function AddUserDialog({
         mobile_number: form.mobile_number || undefined,
         branch_ids: form.branch_ids,
         branch_id: primaryBranchId(form.branch_ids),
+        primary_branch_id: primary,
         role: form.role,
       });
       toast.success("User created");
@@ -411,7 +471,8 @@ function AddUserDialog({
                 <Label htmlFor="add-username">Username <span className="text-red-500">*</span></Label>
                 <Input
                   id="add-username"
-                  placeholder="juan.dc"
+                  autoComplete="off"
+                  placeholder={USERNAME_PLACEHOLDER}
                   value={form.username}
                   onChange={(e) => update("username", e.target.value)}
                   required
@@ -436,6 +497,7 @@ function AddUserDialog({
                 <Input
                   id="add-password"
                   type="password"
+                  autoComplete="new-password"
                   placeholder="Min 8 characters"
                   value={form.password}
                   onChange={(e) => update("password", e.target.value)}
@@ -448,6 +510,7 @@ function AddUserDialog({
                 <Input
                   id="add-confirm"
                   type="password"
+                  autoComplete="new-password"
                   placeholder="Re-enter password"
                   value={form.password_confirmation}
                   onChange={(e) =>
@@ -461,16 +524,6 @@ function AddUserDialog({
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="add-mobile">Mobile Number</Label>
-                <Input
-                  id="add-mobile"
-                  type="tel"
-                  placeholder="09171234567"
-                  value={form.mobile_number}
-                  onChange={(e) => update("mobile_number", e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
                 <Label>Branches <span className="text-red-500">*</span></Label>
                 <BranchMultiSelect
                   value={form.branch_ids}
@@ -481,6 +534,25 @@ function AddUserDialog({
                   <p className="text-xs text-red-500">Please select at least one branch</p>
                 )}
               </div>
+              <PrimaryBranchField
+                id="add-primary-branch"
+                options={primaryOptions}
+                value={primary}
+                onChange={setPrimary}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="add-mobile">Mobile Number</Label>
+                <Input
+                  id="add-mobile"
+                  type="tel"
+                  placeholder="09171234567"
+                  value={form.mobile_number}
+                  onChange={(e) => update("mobile_number", e.target.value)}
+                />
+              </div>
             </div>
 
             <div className="space-y-1.5">
@@ -488,7 +560,7 @@ function AddUserDialog({
               <RoleSelector
                 value={form.role}
                 onChange={(v) => update("role", v)}
-                roles={roles}
+                roles={roleOptions(roles, undefined, callerRoles)}
               />
               {!form.role && submitting && (
                 <p className="text-xs text-red-500">Please select a role</p>
@@ -535,23 +607,45 @@ function EditUserDialog({
   branches: ApiBranch[];
 }) {
   const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({
-    first_name: user.first_name,
-    last_name: user.last_name,
-    email: user.email,
-    mobile_number: user.mobile_number ?? "",
-    role: user.roles?.[0] ?? "",
-    branch_ids: userBranchIds(user),
-  });
+  const callerRoles = useAuthStore((s) => s.user?.roles);
+  const callerId = useAuthStore((s) => s.user?.id);
+  const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
+  const [form, setForm] = useState<UserEditForm>(() => userEditForm(user));
+  // Filled from the user each time the dialog opens, so Cancel throws away
+  // what wasn't saved: a primary branch picked and then cancelled can't ride
+  // along with a later edit.
+  if (useDialogOpening(open, user)) setForm(userEditForm(user));
 
   const update = (field: string, value: string | number | number[]) =>
     setForm((prev) => ({ ...prev, [field]: value }));
+  const setPrimary = (choice: PrimaryBranchChoice) =>
+    setForm((prev) => ({ ...prev, primary_branch_id: choice }));
+
+  // A caller who doesn't see every branch can't change their own primary
+  // branch; the field stays shown, disabled, and the save leaves it out.
+  const primaryLock = ownPrimaryBranchLock({ isSelf: callerId === user.id, viewAll });
+  const primaryOptions = primaryBranchOptionsFor(
+    branches,
+    form.branch_ids,
+    roles.find((r) => r.name === form.role),
+    // A branches:view_all given to the user directly counts too, when the
+    // payload lists their permissions (GET /users sends them only to a caller
+    // without every branch).
+    { heldRole: roles.find((r) => r.name === user.roles?.[0]), permissions: user.permissions },
+  );
+  const primary = shownPrimaryBranch(form.primary_branch_id, primaryOptions);
+  const sent = { ...form, primary_branch_id: primaryLock ? undefined : primary };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (form.branch_ids.length === 0) {
       toast.error("Please select at least one branch");
+      return;
+    }
+    const primaryProblem = primaryLock ? null : primaryBranchProblem(primary, form.branch_ids.length);
+    if (primaryProblem) {
+      toast.error(primaryProblem);
       return;
     }
 
@@ -561,7 +655,7 @@ function EditUserDialog({
     // ids are super_admin accounts. Without this, Save on an unedited form
     // would surface as "please try again" on a request that fails identically
     // every time.
-    const changed = userEditChanges(user, form);
+    const changed = userEditChanges(user, sent);
     if (changed.length === 0) {
       toast.info("No changes to save.");
       onOpenChange(false);
@@ -570,7 +664,10 @@ function EditUserDialog({
 
     setSubmitting(true);
     try {
-      await userService.update(user.id, userEditPayload(form));
+      await userService.update(
+        user.id,
+        withoutUnchangedPrimary(withoutUnchangedRole(userEditPayload(sent), user.roles?.[0]), user),
+      );
       toast.success("User updated");
       onOpenChange(false);
       onSave();
@@ -662,6 +759,14 @@ function EditUserDialog({
                   branches={branches}
                 />
               </div>
+              <PrimaryBranchField
+                id={`edit-primary-branch-${user.id}`}
+                options={primaryOptions}
+                value={primary}
+                onChange={setPrimary}
+                lockReason={primaryLock}
+                lockedValue={user.primary_branch_name}
+              />
             </div>
 
             <div className="space-y-1.5">
@@ -669,7 +774,7 @@ function EditUserDialog({
               <RoleSelector
                 value={form.role}
                 onChange={(v) => update("role", v)}
-                roles={roles}
+                roles={roleOptions(roles, user.roles?.[0], callerRoles)}
               />
             </div>
           </div>
@@ -748,6 +853,7 @@ function ResetPasswordDialog({
             <Input
               id="reset-password"
               type="password"
+              autoComplete="new-password"
               placeholder="Minimum 8 characters"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -760,6 +866,7 @@ function ResetPasswordDialog({
             <Input
               id="reset-confirm"
               type="password"
+              autoComplete="new-password"
               placeholder="Re-enter password"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
@@ -906,6 +1013,8 @@ function UserActionsCell({
   const [openDialog, setOpenDialog] = useState<string | null>(null);
   const isActive = user.status === "active";
   const currentUserRoles = useAuthStore((s) => s.user?.roles ?? []);
+  const caller = useAuthStore((s) => s.user);
+  const viewAll = useAuthStore((s) => s.hasPermission("branches:view_all"));
 
   // Only a super_admin may act on a super_admin. The API enforces this and now
   // answers the same 404 a missing id gives, rather than a 422 naming the
@@ -921,13 +1030,29 @@ function UserActionsCell({
   // sets: a denied action stays visible with a reason attached, because an
   // action that vanishes reads as a bug in the page.
   //
-  // Read off the raw roles array rather than usePermission().isRole, because
-  // the `Role` union deliberately excludes "super_admin" — it is the platform
-  // team's role, not a client one, so it is not a value client code is meant to
-  // name. This is the one place that has to.
+  // Read off the raw roles arrays: `usePermission().isRole` checks only the
+  // caller, and the target's roles come from the list row.
   const targetIsSuperAdmin = user.roles?.includes("super_admin") ?? false;
-  const cannotManageTarget =
+  const isSuperAdminLocked =
     targetIsSuperAdmin && !currentUserRoles.includes("super_admin");
+  // Same masked 404, for the same reason, on edit, reset password and
+  // deactivate: the API refuses a caller without `branches:view_all` any target
+  // who also works in a branch the caller doesn't hold.
+  const isBranchLocked = worksOutsideCallerBranches(user, caller, viewAll);
+  // The two locks above always apply. The server's `can_manage: false` adds
+  // the cases the client can't see (permissions the target holds); it never
+  // lifts a client lock.
+  const { locked: cannotManageTarget, reason: lockReason } = userManageLock(user, {
+    superAdminLocked: isSuperAdminLocked,
+    branchLocked: isBranchLocked,
+  });
+  // The history needs only the caller's reach, not the right to manage: a
+  // super_admin's history is open to an admin who sees every branch.
+  const historyLock = branchHistoryLock(user, {
+    viewAll,
+    isSelf: caller?.id === user.id,
+    branchLocked: isBranchLocked,
+  });
 
   return (
     <>
@@ -938,9 +1063,13 @@ function UserActionsCell({
         <DropdownMenuContent align="end">
           {cannotManageTarget && (
             <>
-              <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-                Only a super_admin can change this account.
-              </DropdownMenuLabel>
+              {/* Base UI's GroupLabel needs a Group around it, or the menu
+                  throws "MenuGroupContext is missing" as it opens. */}
+              <DropdownMenuGroup>
+                <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                  {lockReason}
+                </DropdownMenuLabel>
+              </DropdownMenuGroup>
               <DropdownMenuSeparator />
             </>
           )}
@@ -958,6 +1087,18 @@ function UserActionsCell({
             <KeyRound className="mr-2 h-4 w-4" />
             Reset Password
           </DropdownMenuItem>
+          {/* Its own lock, not the row's: why it's off shows on hover and
+              focus, the way the page's other disabled actions say it. */}
+          <DisabledReason reason={historyLock.reason} wrapperClassName="flex w-full">
+            <DropdownMenuItem
+              disabled={historyLock.locked}
+              onClick={() => setOpenDialog("history")}
+              className="w-full"
+            >
+              <History className="mr-2 h-4 w-4" />
+              Branch History
+            </DropdownMenuItem>
+          </DisabledReason>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             disabled={cannotManageTarget}
@@ -984,6 +1125,11 @@ function UserActionsCell({
       <ResetPasswordDialog
         user={user}
         open={openDialog === "reset"}
+        onOpenChange={(v) => !v && setOpenDialog(null)}
+      />
+      <BranchHistoryDialog
+        user={user}
+        open={openDialog === "history"}
         onOpenChange={(v) => !v && setOpenDialog(null)}
       />
       <ToggleStatusDialog
@@ -1014,12 +1160,12 @@ function RoleSummaryCard({
               roleBadgeColor[role.name] ?? "bg-muted text-muted-foreground"
             }
           >
-            {capitalize(role.name)}
+            {roleDisplayName(role)}
           </Badge>
           <span className="text-2xl font-bold">{count}</span>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          {role.permissions.length} permissions
+          {permissionCountLabel(role.permissions.length)}
         </p>
       </CardContent>
     </Card>
@@ -1028,7 +1174,7 @@ function RoleSummaryCard({
 
 // ── Main Page ──
 
-export default function UsersPage() {
+function UsersContent() {
   const [users, setUsers] = useState<User[]>([]);
   // Set only when the drain gave up with pages outstanding, i.e. this screen is
   // knowingly missing users. Null means complete.
@@ -1048,16 +1194,18 @@ export default function UsersPage() {
         // counts. From the 16th user on all four were short, and the oldest
         // accounts could not be found, edited or deactivated from here at all.
         userService.listAll(),
-        // Not drained, and not truncated: RoleController and BranchController
-        // answer every row (`->get()`), not a paginator.
-        roleService.list(),
-        branchService.list(),
+        // RoleController and BranchController answer every row (`->get()`)
+        // today, so these are one request each. The pickers below need every
+        // role and branch or none, so a shortfall fails the load instead of
+        // rendering short.
+        roleService.listAll().then(completeRows),
+        branchService.listAll().then(completeRows),
       ]);
       const list = toUserList(userDrain);
       setUsers(list.users);
       setShortfall(list.shortfall);
-      setRoles(Array.isArray(r) ? r : (r as unknown as { data: ApiRole[] }).data ?? []);
-      setBranches(Array.isArray(b) ? b : (b as unknown as { data: ApiBranch[] }).data ?? []);
+      setRoles(r);
+      setBranches(b);
     } catch (err) {
       notifyError(err, "We couldn't load the data. Please try again.");
     } finally {
@@ -1072,17 +1220,12 @@ export default function UsersPage() {
   const filteredUsers = filterUsers(users, search);
 
   if (loading) {
-    return (
-      <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
-        <Spinner className="size-6 text-muted-foreground" />
-      </div>
-    );
+    return <PageLoader />;
   }
 
   return (
-    <RouteGuard permission="users:view" pageName="User Management">
-    <div className="space-y-6">
-      <Card>
+    <PageFill>
+      <Card className="shrink-0">
         <CardContent className="py-5">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -1102,13 +1245,14 @@ export default function UsersPage() {
         <IncompleteListNotice
           shown={shortfall.shown}
           total={shortfall.total}
+          className="shrink-0"
           noun="users"
           consequence="The Total, the role counts and the search box below cover only the users that loaded, and a user missing here cannot be edited, reset or deactivated from this screen."
         />
       )}
 
-      {/* Role Summary Cards */}
-      <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-6">
+      {/* Role Summary Cards: one row at every size, scrolling sideways when the roles don't all fit */}
+      <div className="grid shrink-0 grid-flow-col auto-cols-[minmax(10rem,1fr)] gap-4 overflow-x-auto p-px pb-2">
         <Card>
           <CardContent className="py-4">
             <div className="flex items-center justify-between">
@@ -1130,7 +1274,7 @@ export default function UsersPage() {
       </div>
 
       {/* Users Table */}
-      <Card>
+      <Card className={FIT_CLASSES.section}>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-sm font-medium">
             All Users ({filteredUsers.length})
@@ -1141,12 +1285,12 @@ export default function UsersPage() {
               placeholder="Search users..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 h-9"
+              className="pl-9"
             />
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
+        <CardContent className={FIT_CLASSES.section}>
+          <ScrollBox>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -1176,20 +1320,25 @@ export default function UsersPage() {
                             "bg-muted text-muted-foreground"
                           }
                         >
-                          {capitalize(role)}
+                          {roleDisplayName(
+                            roles.find((r) => r.name === role) ?? { name: role },
+                          )}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {userBranches(user).length > 0
                           ? userBranches(user).map((b) => b.name).join(", ")
                           : "-"}
+                        {user.primary_branch_name && (
+                          <p className="text-xs">Primary: {user.primary_branch_name}</p>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge
                           variant="outline"
                           className={statusBadge[user.status]}
                         >
-                          {user.status}
+                          {userStatusLabel(user.status)}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -1215,10 +1364,17 @@ export default function UsersPage() {
                 )}
               </TableBody>
             </Table>
-          </div>
+          </ScrollBox>
         </CardContent>
       </Card>
-    </div>
+    </PageFill>
+  );
+}
+
+export default function UsersPage() {
+  return (
+    <RouteGuard permission="users:view" pageName="User Management">
+      <UsersContent />
     </RouteGuard>
   );
 }

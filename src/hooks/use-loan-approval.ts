@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { loanApprovalService } from "@/services/loan-approval.service";
-import {
-  isApprovalChainHidden,
-  type LoanApprovalRound,
-  type LoanApprovalStep,
-} from "@/types";
+import type { LoanApprovalLeftOutStep, LoanApprovalRound, LoanApprovalStep } from "@/types";
+import { readsApprovalChain } from "@/types/loan-approval";
 
 interface UseLoanApprovalResult {
   steps: LoanApprovalStep[];
   rounds: LoanApprovalRound[];
+  /** The steps the current round left out by their minimum; none when the server doesn't say. */
+  leftOut: LoanApprovalLeftOutStep[];
   /** First load only — a `refresh()` after an action does not blank the chain. */
   loading: boolean;
   /**
@@ -28,8 +27,9 @@ interface UseLoanApprovalResult {
  * response. That is the whole point of moving off `localStorage`: the browser
  * gets to display the chain, not to decide it.
  *
- * Skips the fetch entirely once the loan is `rejected` or `void`; those loans
- * have no live chain and asking for one only produces a 404 to swallow.
+ * Skips the fetch for a `rejected` loan, which has no chain to show. A `void`
+ * loan's chain is still read, read only: its card stays hidden, but Workflow
+ * History lists the steps the void cancelled.
  */
 export function useLoanApproval(
   loanId: number | undefined,
@@ -37,13 +37,14 @@ export function useLoanApproval(
 ): UseLoanApprovalResult {
   const [steps, setSteps] = useState<LoanApprovalStep[]>([]);
   const [rounds, setRounds] = useState<LoanApprovalRound[]>([]);
+  const [leftOut, setLeftOut] = useState<LoanApprovalLeftOutStep[]>([]);
   const [loading, setLoading] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
   // Guards against an in-flight read landing after a newer one (or after the
   // user has navigated to another loan) and overwriting the fresher answer.
   const requestRef = useRef(0);
 
-  const hidden = isApprovalChainHidden(status);
+  const hidden = !readsApprovalChain(status);
 
   const load = useCallback(
     async (showSpinner: boolean) => {
@@ -51,6 +52,7 @@ export function useLoanApproval(
         requestRef.current++;
         setSteps([]);
         setRounds([]);
+        setLeftOut([]);
         setUnavailable(false);
         setLoading(false);
         return;
@@ -62,6 +64,7 @@ export function useLoanApproval(
         if (token !== requestRef.current) return;
         setSteps(Array.isArray(state?.current_steps) ? state.current_steps : []);
         setRounds(Array.isArray(state?.rounds) ? state.rounds : []);
+        setLeftOut(Array.isArray(state?.left_out_steps) ? state.left_out_steps : []);
         setUnavailable(false);
       } catch {
         if (token !== requestRef.current) return;
@@ -69,6 +72,7 @@ export function useLoanApproval(
         // seeded. Either way there is nothing trustworthy to show.
         setSteps([]);
         setRounds([]);
+        setLeftOut([]);
         setUnavailable(true);
       } finally {
         if (token === requestRef.current && showSpinner) setLoading(false);
@@ -86,5 +90,5 @@ export function useLoanApproval(
 
   const refresh = useCallback(() => load(false), [load]);
 
-  return { steps, rounds, loading, unavailable, refresh };
+  return { steps, rounds, leftOut, loading, unavailable, refresh };
 }

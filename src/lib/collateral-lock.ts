@@ -26,6 +26,7 @@
  */
 
 import type { ActiveLoanRef } from "@/types/collateral";
+import { loanNumberLabel } from "@/lib/loan-number";
 
 export type CollateralLock =
   /** The server was asked and named no active holder (beyond any exclusion). */
@@ -90,7 +91,7 @@ export function isLocked(lock: CollateralLock): boolean {
 
 /** How a holder is named to a user: its account number, or a last-resort id. */
 export function holderLabel(loan: ActiveLoanRef): string {
-  return loan.loan_account_number ?? `#${loan.id}`;
+  return loanNumberLabel(loan, `#${loan.id}`);
 }
 
 /**

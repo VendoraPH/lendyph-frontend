@@ -1,12 +1,13 @@
 // src/app/(app)/borrowers/registrations/[id]/_components/review-action-panel.tsx
 "use client";
 
+import type { ReactNode } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, CheckCircle, XCircle, Pencil } from "lucide-react";
 import type { Registration } from "@/services/registration.service";
 import { formatDate, formatDateTime } from "@/lib/format";
-import { reviewerLabel } from "@/app/(app)/borrowers/_components/utils";
+import { registrationSubmittedAt, reviewerLabel } from "@/app/(app)/borrowers/_components/utils";
 
 interface Props {
   registration: Registration;
@@ -17,6 +18,10 @@ interface Props {
   onReject: () => void;
   onToggleEdit: () => void;
   onSaveEdit: () => void;
+  /** The branch the member is approved into, shown above the decision buttons. */
+  branchField: ReactNode;
+  /** Why the last approval was held, in the server's words, until the next try. */
+  approvalRefusal?: string | null;
 }
 
 function StatusPill({ status }: { status: Registration["status"] }) {
@@ -46,10 +51,11 @@ export function ReviewActionPanel({
   onReject,
   onToggleEdit,
   onSaveEdit,
+  branchField,
+  approvalRefusal,
 }: Props) {
-  const submittedDate = registration.submitted_at
-    ? formatDate(registration.submitted_at)
-    : "—";
+  const submitted = registrationSubmittedAt(registration);
+  const submittedDate = submitted ? formatDate(submitted) : "—";
 
   // A rejected application is a record, not a decision still to be made. The
   // approve/reject/edit buttons all 422 against it server-side ("Only borrowers
@@ -61,8 +67,8 @@ export function ReviewActionPanel({
   const reviewer = reviewerLabel(registration);
 
   return (
-    <Card className="sticky top-6">
-      <CardContent className="pt-5 space-y-4">
+    <Card className="sticky top-0 self-start">
+      <CardContent className="pt-5 fit:pt-0 space-y-4">
         <h3 className="text-sm font-bold text-foreground">Admin Decision</h3>
 
         <div className="space-y-2 pb-4 border-b border-border text-sm">
@@ -109,6 +115,17 @@ export function ReviewActionPanel({
           </div>
         ) : (
           <>
+            {branchField}
+
+            {approvalRefusal ? (
+              <p
+                role="alert"
+                className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+              >
+                {approvalRefusal}
+              </p>
+            ) : null}
+
             <div className="space-y-2">
               {editMode ? (
                 <>

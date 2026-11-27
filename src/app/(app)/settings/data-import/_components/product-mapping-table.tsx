@@ -96,6 +96,7 @@ import type {
   LoanProductOption,
   ProductMappingResponse,
 } from "@/types/data-import";
+import { productMatches } from "@/lib/count-words";
 
 /** Sentinel for "not mapped". Product ids are numbers, so it cannot collide. */
 const UNMAPPED = "";
@@ -190,7 +191,7 @@ function SuggestionNote({
         <span className="text-xs text-muted-foreground">
           {candidates.length > 0 ? (
             <>
-              Matches {candidates.length} products with this name:{" "}
+              {productMatches(candidates.length)}{" "}
               {candidates.map((option, index) => (
                 <span key={option.id}>
                   {index > 0 && ", "}
@@ -816,7 +817,7 @@ export function ProductMappingGate({
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          <Button render={<Link href={LOAN_PRODUCTS_HREF} />}>
+          <Button nativeButton={false} render={<Link href={LOAN_PRODUCTS_HREF} />}>
             Go to Loan Products
             <ExternalLink aria-hidden="true" />
           </Button>

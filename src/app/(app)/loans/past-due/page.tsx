@@ -1,9 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { formatDate as formatShortDate } from "@/lib/format";
 import Link from "next/link";
 import { notifyError } from "@/lib/notify";
 import { RouteGuard } from "@/components/common";
+import { Illustration, hasIllustration } from "@/components/common/illustration";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,41 +39,37 @@ import {
   Banknote,
   Wallet,
 } from "lucide-react";
+import { Icon3D } from "@/components/common/icon-3d";
 import { cn } from "@/lib/utils";
-import { formatCurrency } from "@/lib/format";
 import { reportService } from "@/services";
-
-// ── Types ──
-
-interface PastDueLoan {
-  loanId: number;
-  loanNumber: string;
-  memberId: string;
-  memberName: string;
-  daysPastDue: number;
-  pastDuePrincipal: number;
-  pastDueInterest: number;
-  pastDuePenalty: number;
-  outstandingBalance: number;
-  lastPaymentDate: string | null;
-  branch: string;
-}
+import { currencyOrDash } from "@/lib/report-format";
+import { compareFigure } from "./_lib/past-due-outstanding";
+import {
+  PAST_DUE_REQUEST_PARAMS,
+  aggregateByLoan,
+  mapRow,
+  summarizePastDue,
+  type PastDueLoan,
+  type RawPastDueRow,
+} from "./_lib/past-due-loans";
 
 // ── Helpers ──
 
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return "—";
-  return new Date(dateStr).toLocaleDateString("en-PH", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+  return formatShortDate(dateStr);
 };
 
-const totalPastDue = (l: PastDueLoan) =>
-  l.pastDuePrincipal + l.pastDueInterest + l.pastDuePenalty;
-
 type AgingBucket = "all" | "1-30" | "31-60" | "61-90" | "90+";
+
+// Passed to <Select items>, so the trigger shows "1–30 days", not "1-30".
+const BUCKET_OPTIONS: { value: AgingBucket; label: string }[] = [
+  { value: "all", label: "All ages" },
+  { value: "1-30", label: "1–30 days" },
+  { value: "31-60", label: "31–60 days" },
+  { value: "61-90", label: "61–90 days" },
+  { value: "90+", label: "90+ days" },
+];
 
 const inBucket = (days: number, bucket: AgingBucket): boolean => {
   if (bucket === "all") return true;
@@ -92,125 +92,6 @@ const severityClass = (days: number): string => {
 type SortKey = "memberName" | "daysPastDue" | "pastDue" | "outstanding";
 type SortDir = "asc" | "desc";
 
-// ── Response mapping ──
-//
-// /api/reports/due-past-due is documented in swagger as a paginated list of
-// "schedules that are due or overdue as of today" — but the response body
-// shape isn't pinned down there. Map defensively against the most likely
-// snake_case field names so this works whether the row represents a loan
-// summary or an individual schedule period, with sensible fallbacks.
-
-interface RawPastDueRow {
-  [key: string]: unknown;
-  loan?: { loan_account_number?: string; outstanding_balance?: number | string } | null;
-  borrower?: {
-    full_name?: string;
-    name?: string;
-    borrower_code?: string;
-  } | null;
-  branch?: { name?: string } | string | null;
-}
-
-const num = (v: unknown): number => {
-  if (v === null || v === undefined || v === "") return 0;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-};
-
-const str = (v: unknown, fallback = ""): string => {
-  if (v === null || v === undefined) return fallback;
-  return String(v);
-};
-
-const computeDaysPastDue = (raw: RawPastDueRow): number => {
-  const direct = num(raw.days_past_due ?? raw.days_overdue ?? raw.daysPastDue);
-  if (direct > 0) return direct;
-  const dueDate = raw.due_date ?? raw.dueDate;
-  if (typeof dueDate === "string") {
-    const ms = Date.now() - new Date(dueDate).getTime();
-    if (Number.isFinite(ms) && ms > 0) {
-      return Math.floor(ms / 86_400_000);
-    }
-  }
-  return 0;
-};
-
-const mapRow = (raw: RawPastDueRow): PastDueLoan => {
-  const loanId = num(raw.loan_id ?? raw.loanId ?? raw.id);
-  const loanNumber = str(
-    raw.loan_account_number ??
-      raw.loan_number ??
-      raw.loanNumber ??
-      raw.loan?.loan_account_number,
-    loanId ? `#${loanId}` : "—",
-  );
-  const memberId = str(
-    raw.borrower_code ??
-      raw.member_id ??
-      raw.memberId ??
-      raw.borrower?.borrower_code ??
-      raw.borrower_id,
-    "—",
-  );
-  const memberName = str(
-    raw.borrower_name ??
-      raw.member_name ??
-      raw.memberName ??
-      raw.borrower?.full_name ??
-      raw.borrower?.name,
-    "—",
-  );
-  const branchValue = raw.branch_name ?? raw.branchName ?? raw.branch;
-  const branch =
-    typeof branchValue === "object" && branchValue !== null
-      ? str((branchValue as { name?: string }).name, "—")
-      : str(branchValue, "—");
-  const lastPaymentRaw =
-    raw.last_payment_date ??
-    raw.last_payment_at ??
-    raw.lastPaymentDate ??
-    null;
-  const lastPaymentDate =
-    typeof lastPaymentRaw === "string" ? lastPaymentRaw : null;
-
-  return {
-    loanId,
-    loanNumber,
-    memberId,
-    memberName,
-    daysPastDue: computeDaysPastDue(raw),
-    pastDuePrincipal: num(
-      raw.past_due_principal ??
-        raw.pastDuePrincipal ??
-        raw.principal_due ??
-        raw.principal_remaining,
-    ),
-    pastDueInterest: num(
-      raw.past_due_interest ??
-        raw.pastDueInterest ??
-        raw.interest_due ??
-        raw.interest_remaining,
-    ),
-    pastDuePenalty: num(
-      raw.past_due_penalty ??
-        raw.pastDuePenalty ??
-        raw.penalty_amount ??
-        raw.penalty,
-    ),
-    outstandingBalance: num(
-      raw.outstanding_balance ??
-        raw.outstandingBalance ??
-        raw.remaining_balance ??
-        raw.loan?.outstanding_balance,
-    ),
-    lastPaymentDate,
-    branch,
-  };
-};
-
-// Row extraction moved to `reportService.duePastDueAll`, which has to read the
-// `{ data, meta }` envelope anyway to know when it has reached the last page.
-
 /** HTTP status of a failed request, or null when it never got a response. */
 const statusOf = (err: unknown): number | null => {
   if (!err || typeof err !== "object" || !("response" in err)) return null;
@@ -231,46 +112,11 @@ const statusOf = (err: unknown): number | null => {
 const isMalformedRequest = (status: number | null): boolean =>
   status !== null && status >= 400 && status < 500 && ![401, 403, 429].includes(status);
 
-// If the backend returns one row per overdue *schedule period* instead of
-// one row per loan, multiple rows can share the same loan_id. Aggregate
-// into per-loan summaries so the UI shows each member's loan once.
-const aggregateByLoan = (rows: PastDueLoan[]): PastDueLoan[] => {
-  const map = new Map<number, PastDueLoan>();
-  for (const r of rows) {
-    if (!r.loanId) continue;
-    const existing = map.get(r.loanId);
-    if (existing) {
-      existing.pastDuePrincipal += r.pastDuePrincipal;
-      existing.pastDueInterest += r.pastDueInterest;
-      existing.pastDuePenalty += r.pastDuePenalty;
-      // Keep the largest daysPastDue (oldest unpaid period defines the loan's age)
-      if (r.daysPastDue > existing.daysPastDue) {
-        existing.daysPastDue = r.daysPastDue;
-      }
-      // Outstanding should be the loan's running balance — same across periods
-      // but take the max defensively in case some rows omit it.
-      if (r.outstandingBalance > existing.outstandingBalance) {
-        existing.outstandingBalance = r.outstandingBalance;
-      }
-      // Latest last-payment date wins
-      if (
-        r.lastPaymentDate &&
-        (!existing.lastPaymentDate ||
-          new Date(r.lastPaymentDate) > new Date(existing.lastPaymentDate))
-      ) {
-        existing.lastPaymentDate = r.lastPaymentDate;
-      }
-    } else {
-      map.set(r.loanId, { ...r });
-    }
-  }
-  return Array.from(map.values());
-};
-
 // ── Page ──
 
-export default function PastDueLoansPage() {
+function PastDueLoansContent() {
   const [loans, setLoans] = useState<PastDueLoan[]>([]);
+  const [serverTotals, setServerTotals] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   // Rows fetched so far / rows the server says there are. Drives the progress
@@ -297,11 +143,12 @@ export default function PastDueLoansPage() {
       // due date, so a loan's periods are spread across the whole set and
       // aggregateByLoan() under-reports days past due and amounts owed for any
       // loan whose periods it cannot all see.
-      const { rows, complete } = await reportService.duePastDueAll(
-        undefined,
+      const { rows, complete, totals } = await reportService.duePastDueAll(
+        PAST_DUE_REQUEST_PARAMS,
         (loaded, total) => setProgress({ loaded, total }),
       );
       setLoans(aggregateByLoan((rows as RawPastDueRow[]).map(mapRow)));
+      setServerTotals(totals);
       setFailed(false);
       setPartial(!complete);
     } catch (err) {
@@ -327,6 +174,7 @@ export default function PastDueLoansPage() {
       }
       notifyError(err, "We couldn't load past due loans.");
       setLoans([]);
+      setServerTotals(null);
       setFailed(true);
       setPartial(false);
     } finally {
@@ -356,42 +204,25 @@ export default function PastDueLoansPage() {
   const sorted = useMemo(() => {
     const arr = [...filtered];
     arr.sort((a, b) => {
-      let cmp = 0;
-      switch (sortKey) {
-        case "memberName":
-          cmp = a.memberName.localeCompare(b.memberName);
-          break;
-        case "daysPastDue":
-          cmp = a.daysPastDue - b.daysPastDue;
-          break;
-        case "pastDue":
-          cmp = totalPastDue(a) - totalPastDue(b);
-          break;
-        case "outstanding":
-          cmp = a.outstandingBalance - b.outstandingBalance;
-          break;
+      // Money columns keep rows with no figure last in either direction.
+      if (sortKey === "pastDue") return compareFigure(a.pastDueAmount, b.pastDueAmount, sortDir);
+      if (sortKey === "outstanding") {
+        return compareFigure(a.outstandingBalance, b.outstandingBalance, sortDir);
       }
+      const cmp =
+        sortKey === "memberName"
+          ? a.memberName.localeCompare(b.memberName)
+          : a.daysPastDue - b.daysPastDue;
       return sortDir === "asc" ? cmp : -cmp;
     });
     return arr;
   }, [filtered, sortKey, sortDir]);
 
-  const totals = useMemo(() => {
-    const memberIds = new Set<string>();
-    let pastDueSum = 0;
-    let outstandingSum = 0;
-    for (const l of sorted) {
-      memberIds.add(l.memberId);
-      pastDueSum += totalPastDue(l);
-      outstandingSum += l.outstandingBalance;
-    }
-    return {
-      memberCount: memberIds.size,
-      loanCount: sorted.length,
-      pastDueSum,
-      outstandingSum,
-    };
-  }, [sorted]);
+  // Every loaded loan, not `sorted`: the search and age filters narrow the
+  // table only.
+  const summary = useMemo(() => summarizePastDue(loans, serverTotals), [loans, serverTotals]);
+  const filterActive = search.trim() !== "" || bucket !== "all";
+  const emptyIllustration = loans.length === 0 ? "allCaughtUp" : "noResults";
 
   // A failed load has no figures to show. Rendering the zeroed totals would
   // print "0 members past due / ₱0.00" over a cooperative's real arrears.
@@ -407,214 +238,226 @@ export default function PastDueLoansPage() {
   };
 
   return (
-    <RouteGuard permission="loans:view" pageName="Past Due Loans">
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <Link
-              href="/loans"
-              className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-1"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              Back to Loans
-            </Link>
-            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-              <AlertTriangle className="h-6 w-6 text-red-600" />
-              Past Due Loans
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Members with overdue loan payments as of today.
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => load(true)}
-            disabled={loading || refreshing}
+    <PageFill>
+      {/* Header */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <Link
+            href="/loans"
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-1"
           >
-            <RefreshCw
-              className={cn(
-                "mr-2 h-3.5 w-3.5",
-                refreshing && "animate-spin",
-              )}
-            />
-            Refresh
-          </Button>
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back to Loans
+          </Link>
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <Icon3D name="icon-alert" size={28} />
+            Past Due Loans
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Members with overdue loan payments as of today.
+          </p>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => load(true)}
+          disabled={loading || refreshing}
+        >
+          <RefreshCw
+            className={cn(
+              "mr-2 h-3.5 w-3.5",
+              refreshing && "animate-spin",
+            )}
+          />
+          Refresh
+        </Button>
+      </div>
 
-        {/* Summary Cards */}
-        <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardContent className="py-4">
-              <div className="flex items-center gap-3">
-                <div className="rounded-lg bg-red-500/10 p-2">
-                  <Users className="h-5 w-5 text-red-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">
-                    Members Past Due
-                  </p>
-                  <p className="text-xl font-bold tabular-nums">
-                    {figuresUnavailable ? "—" : totals.memberCount}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="py-4">
-              <div className="flex items-center gap-3">
-                <div className="rounded-lg bg-amber-500/10 p-2">
-                  <AlertTriangle className="h-5 w-5 text-amber-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">
-                    Past Due Loans
-                  </p>
-                  <p className="text-xl font-bold tabular-nums">
-                    {figuresUnavailable ? "—" : totals.loanCount}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="py-4">
-              <div className="flex items-center gap-3">
-                <div className="rounded-lg bg-red-500/10 p-2">
-                  <Banknote className="h-5 w-5 text-red-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">
-                    Total Past Due
-                  </p>
-                  <p className="text-xl font-bold tabular-nums text-red-600">
-                    {figuresUnavailable ? "—" : formatCurrency(totals.pastDueSum)}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="py-4">
-              <div className="flex items-center gap-3">
-                <div className="rounded-lg bg-brand-orange/10 p-2">
-                  <Wallet className="h-5 w-5 text-brand-orange" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">
-                    Outstanding Balance
-                  </p>
-                  <p className="text-xl font-bold tabular-nums">
-                    {figuresUnavailable ? "—" : formatCurrency(totals.outstandingSum)}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Filters */}
+      {/* Summary Cards */}
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardContent className="py-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="relative flex-1">
-                <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search member name, member ID, or loan number…"
-                  className="pl-8"
-                  disabled={loading}
-                />
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-red-500/10 p-2">
+                <Users className="h-5 w-5 text-red-600" />
               </div>
-              <Select
-                value={bucket}
-                onValueChange={(v) => setBucket(v as AgingBucket)}
-                disabled={loading}
-              >
-                <SelectTrigger className="sm:w-52">
-                  <SelectValue placeholder="Aging bucket" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All ages</SelectItem>
-                  <SelectItem value="1-30">1–30 days</SelectItem>
-                  <SelectItem value="31-60">31–60 days</SelectItem>
-                  <SelectItem value="61-90">61–90 days</SelectItem>
-                  <SelectItem value="90+">90+ days</SelectItem>
-                </SelectContent>
-              </Select>
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  Members Past Due
+                </p>
+                <p className="text-xl font-bold tabular-nums">
+                  {figuresUnavailable ? "—" : summary.memberCount}
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>
-
-        {/* Partial-set warning — only when the page walk stopped early. */}
-        {partial && !loading ? (
-          <div
-            role="alert"
-            className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-500/10 dark:text-amber-400"
-          >
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <p>
-              This list is incomplete — not every past due payment could be
-              loaded, so the totals below are a minimum, not the full amount.
-              Refresh to try again.
-            </p>
-          </div>
-        ) : null}
-
-        {/* Table */}
         <Card>
-          <CardContent className="p-0">
-            {loading ? (
-              <div
-                className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground"
-                role="status"
-                aria-live="polite"
-              >
-                <Loader2 className="h-6 w-6 animate-spin" />
-                <p className="text-sm">Loading past due loans…</p>
-                {progress && progress.total !== null && progress.total > 0 ? (
-                  <p className="text-xs tabular-nums">
-                    {progress.loaded.toLocaleString("en-PH")} of{" "}
-                    {progress.total.toLocaleString("en-PH")} scheduled payments
-                  </p>
-                ) : null}
+          <CardContent className="py-4">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-amber-500/10 p-2">
+                <AlertTriangle className="h-5 w-5 text-amber-600" />
               </div>
-            ) : failed ? (
-              // Never the empty state on failure. Telling a collections officer
-              // "all members are current" when the request errored is a false
-              // all-clear on the one screen whose job is to say who is behind.
-              <div
-                className="flex flex-col items-center justify-center gap-3 py-16 text-center"
-                role="alert"
-              >
-                <AlertTriangle className="h-8 w-8 text-red-600" />
-                <div>
-                  <p className="text-sm font-medium">
-                    We couldn&apos;t load past due loans.
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    This list is unavailable right now — it is not a sign that
-                    every member is current.
-                  </p>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => load()}>
-                  <RefreshCw className="mr-2 h-3.5 w-3.5" />
-                  Try again
-                </Button>
-              </div>
-            ) : sorted.length === 0 ? (
-              <div className="flex flex-col items-center justify-center gap-2 py-16 text-muted-foreground">
-                <AlertTriangle className="h-8 w-8 opacity-40" />
-                <p className="text-sm">
-                  {loans.length === 0
-                    ? "No past due loans — all members are current."
-                    : "No past due loans match your filter."}
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  Past Due Loans
+                </p>
+                <p className="text-xl font-bold tabular-nums">
+                  {figuresUnavailable ? "—" : summary.loanCount}
                 </p>
               </div>
-            ) : (
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="py-4">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-red-500/10 p-2">
+                <Banknote className="h-5 w-5 text-red-600" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  Total Past Due
+                </p>
+                <p className="text-xl font-bold tabular-nums text-red-600">
+                  {figuresUnavailable ? "—" : currencyOrDash(summary.pastDueAmount)}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="py-4">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-brand-orange/10 p-2">
+                <Wallet className="h-5 w-5 text-brand-orange" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  Outstanding Balance
+                </p>
+                <p className="text-xl font-bold tabular-nums">
+                  {figuresUnavailable ? "—" : currencyOrDash(summary.totalOutstanding)}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {filterActive && !figuresUnavailable ? (
+        <p className="-mt-3 text-xs text-muted-foreground">
+          These totals cover every loan in this list (due or past due), not
+          only the filtered rows.
+        </p>
+      ) : null}
+
+      {/* Filters */}
+      <Card className="shrink-0">
+        <CardContent className="py-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search member name, member ID, or loan number…"
+                className="pl-8"
+                disabled={loading}
+              />
+            </div>
+            <Select
+              items={BUCKET_OPTIONS}
+              value={bucket}
+              onValueChange={(v) => setBucket(v as AgingBucket)}
+              disabled={loading}
+            >
+              <SelectTrigger className="sm:w-52">
+                <SelectValue placeholder="Aging bucket" />
+              </SelectTrigger>
+              <SelectContent>
+                {BUCKET_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Partial-set warning — only when the page walk stopped early. */}
+      {partial && !loading ? (
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-500/10 dark:text-amber-400"
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>
+            This list is incomplete — not every past due payment could be
+            loaded, so the table and the member and loan counts may be missing
+            loans. Refresh to try again.
+          </p>
+        </div>
+      ) : null}
+
+      {/* Table */}
+      <Card className={FIT_CLASSES.section}>
+        <CardContent className={cn("p-0", FIT_CLASSES.section)}>
+          {loading ? (
+            <div
+              className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground"
+              role="status"
+              aria-live="polite"
+            >
+              <Loader2 className="h-6 w-6 animate-spin" />
+              <p className="text-sm">Loading past due loans…</p>
+              {progress && progress.total !== null && progress.total > 0 ? (
+                <p className="text-xs tabular-nums">
+                  {progress.loaded.toLocaleString("en-PH")} of{" "}
+                  {progress.total.toLocaleString("en-PH")} scheduled payments
+                </p>
+              ) : null}
+            </div>
+          ) : failed ? (
+            // Never the empty state on failure. Telling a collections officer
+            // "all members are current" when the request errored is a false
+            // all-clear on the one screen whose job is to say who is behind.
+            <div
+              className="flex flex-col items-center justify-center gap-3 py-16 text-center"
+              role="alert"
+            >
+              <AlertTriangle className="h-8 w-8 text-red-600" />
+              <div>
+                <p className="text-sm font-medium">
+                  We couldn&apos;t load past due loans.
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  This list is unavailable right now — it is not a sign that
+                  every member is current.
+                </p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => load()}>
+                <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                Try again
+              </Button>
+            </div>
+          ) : sorted.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-16 text-muted-foreground">
+              {hasIllustration(emptyIllustration) ? (
+                <Illustration name={emptyIllustration} />
+              ) : (
+                <AlertTriangle className="h-8 w-8 opacity-40" />
+              )}
+              <p className="text-sm">
+                {loans.length === 0
+                  ? "No past due loans — all members are current."
+                  : "No past due loans match your filter."}
+              </p>
+            </div>
+          ) : (
+            <ScrollBox>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -687,10 +530,10 @@ export default function PastDueLoansPage() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right tabular-nums font-semibold text-red-600">
-                        {formatCurrency(totalPastDue(l))}
+                        {currencyOrDash(l.pastDueAmount)}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {formatCurrency(l.outstandingBalance)}
+                        {currencyOrDash(l.outstandingBalance)}
                       </TableCell>
                       <TableCell className="text-sm">
                         {formatDate(l.lastPaymentDate)}
@@ -712,10 +555,22 @@ export default function PastDueLoansPage() {
                   ))}
                 </TableBody>
               </Table>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+            </ScrollBox>
+          )}
+        </CardContent>
+      </Card>
+    </PageFill>
+  );
+}
+
+// The list is the due and past-due report, and `GET /reports/due-past-due` needs
+// `reports:view`, which `loans:view` does not imply.
+export default function PastDueLoansPage() {
+  return (
+    <RouteGuard permission="loans:view" pageName="Past Due Loans">
+      <RouteGuard permission="reports:view" pageName="Past Due Loans">
+        <PastDueLoansContent />
+      </RouteGuard>
     </RouteGuard>
   );
 }

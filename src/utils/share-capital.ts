@@ -1,49 +1,43 @@
 import { shareCapitalService } from "@/services";
-import type { DrainResult } from "@/lib/paginate";
-import type { ShareCapitalLedgerEntry } from "@/types";
+import { httpStatusOf } from "@/lib/api-error";
+import type { ShareCapitalLedgerEntry, ShareCapitalMemberPeriod } from "@/types";
 
 /**
  * What a screen learns when it asks for a member's share capital balance.
  *
  * A discriminated union rather than a `number`, because the old `Promise<number>`
- * could not express the two answers that actually matter here — and every one
+ * could not express the answer that actually matters here — and every one
  * of the five callers treats this figure as a hard eligibility number: it caps
  * how much a share-capital collateral is worth, which caps what the member can
  * borrow against it.
  *
- * The two states that used to be indistinguishable from a real balance:
+ * The balance is the server's (`meta.summary.ending_balance` of
+ * `GET /share-capital/ledger?borrower_id=`), never a browser sum.
+ * `unavailable` covers a failed or skipped request and a missing or unreadable
+ * figure. The old code returned 0 there, which is byte-identical to a member
+ * who genuinely holds no share capital: a network blip presented as "this
+ * member has no share capital" and failed the eligibility check on its own.
  *
- *  - `incomplete` — the drain gave up with pages outstanding, so the sum is
- *    over part of the ledger. This is NOT "a bit low". A clamped ledger drops
- *    credits and debits alike, so the error has no direction: reproduced
- *    against a stub, one member read ₱40,000 against a true ₱180,000 and
- *    another read ₱100,000 against a true ₱25,000. There is no safe way to
- *    round a partial ledger, which is why this is a refusal and not a caveat.
- *  - `unavailable` — the request failed. The old code returned 0 here, which
- *    is byte-identical to a member who genuinely holds no share capital: a
- *    network blip presented as "this member has no share capital" and failed
- *    the eligibility check on its own, silently, with no error anywhere on
- *    screen.
- *
- * Neither carries a `balance` field. That is the point — there is no number to
+ * It carries no `balance` field. That is the point — there is no number to
  * reach for, so a caller cannot fall back to `?? 0` and re-create the bug.
  */
 export type ShareCapitalBalance =
   | {
       status: "ok";
-      /** Credits minus debits over the member's WHOLE ledger. */
+      /** The server's balance over the member's WHOLE ledger. */
       balance: number;
-      /** How many entries it was summed from. */
-      entries: number;
     }
   | {
-      status: "incomplete";
-      /** Entries actually in hand. */
-      shown: number;
-      /** `meta.total` — how many exist. Null when the response carried none. */
-      total: number | null;
-    }
-  | { status: "unavailable" };
+      status: "unavailable";
+      /**
+       * Why, when the caller can't be shown it: no `share_capital:view`
+       * (`no_permission`), or the member is outside the caller's branches
+       * (`no_branch_access`). Absent for a failed or unreadable load.
+       */
+      cause?: ShareCapitalUnavailableCause;
+    };
+
+export type ShareCapitalUnavailableCause = "no_permission" | "no_branch_access";
 
 /**
  * The one label for "we cannot tell you this member's balance".
@@ -66,15 +60,17 @@ export function shareCapitalUnavailableReason(
   switch (result.status) {
     case "ok":
       return null;
-    case "incomplete":
-      return result.total !== null
-        ? `Only ${result.shown} of ${result.total} share capital entries could be read, so the balance would be wrong in either direction.`
-        : `Only ${result.shown} share capital entries could be read, so the balance would be wrong in either direction.`;
     case "unavailable":
+      // Access, not a fault: say which access is missing.
+      if (result.cause === "no_permission") {
+        return "Your role doesn't include Share Capital: View, so this member's share capital balance isn't shown.";
+      }
+      if (result.cause === "no_branch_access") {
+        return "This member's branch isn't one of your branches, so their share capital balance isn't shown.";
+      }
       // Deliberately member-NEUTRAL ("the balance", not "this member's"): the
-      // same sentence is rendered under a singular heading on a member's own
-      // record and under a plural one on the collateral listing, where several
-      // ledgers may have failed at once.
+      // same sentence sits under a banner heading on one screen and beside a
+      // form control on another, and each of those names the member itself.
       return "The share capital ledger could not be loaded, so the balance is unknown — which is not the same as zero.";
   }
 }
@@ -87,62 +83,65 @@ export function hasShareCapitalBalance(
 }
 
 /**
- * Credits minus debits over a drained ledger.
+ * An entry's `debit` and `credit`, each coerced to a finite number.
  *
- * Split out from the request so it can be tested without a network, and so the
- * truncation decision is made in exactly one place. Takes the whole
- * `DrainResult`, not `result.rows`, precisely so it cannot be called in a way
- * that ignores `truncated`.
+ * Defensive coercion — a bad or missing column counts as 0 rather than
+ * poisoning a running total with NaN (which would propagate to "-₱NaN" in the
+ * UI). Shared by every screen that sums a ledger, so the rule lives in one
+ * place.
  */
-export function toShareCapitalBalance(
-  drain: DrainResult<ShareCapitalLedgerEntry>
-): ShareCapitalBalance {
-  if (drain.truncated) {
-    return { status: "incomplete", shown: drain.rows.length, total: drain.total };
-  }
-
-  let credits = 0;
-  let debits = 0;
-  for (const entry of drain.rows) {
-    // Defensive coercion — bad/missing amounts shouldn't poison the running
-    // total with NaN (which would propagate to "-₱NaN" in the UI).
-    const amount = Number(entry.amount);
-    if (!Number.isFinite(amount)) continue;
-    if (entry.type === "credit") credits += amount;
-    else debits += amount;
-  }
-
-  const balance = credits - debits;
-  // A non-finite total means the arithmetic itself is untrustworthy, so it is
-  // reported as unknown rather than coerced to 0 — same reasoning as the
-  // failure path.
-  return Number.isFinite(balance)
-    ? { status: "ok", balance, entries: drain.rows.length }
-    : { status: "unavailable" };
+export function ledgerAmounts(
+  entry: Pick<ShareCapitalLedgerEntry, "debit" | "credit">
+): { debit: number; credit: number } {
+  const debit = Number(entry.debit);
+  const credit = Number(entry.credit);
+  return {
+    debit: Number.isFinite(debit) ? debit : 0,
+    credit: Number.isFinite(credit) ? credit : 0,
+  };
 }
 
 /**
- * The member's current share capital balance, over their whole ledger.
+ * The server's balance from a member's `meta.summary`, as the result type.
  *
- * Drained page by page. It used to be one request with `per_page: 9999`, which
- * `ShareCapitalLedgerController::index()` clamps to `min(per_page, 100)`
- * without a word — so for any member past their hundredth entry this returned
- * the sum of a page and presented it as a balance.
+ * Split out from the request so it can be tested without a network. A missing
+ * summary or an unreadable `ending_balance` is `unavailable`, never 0.
+ */
+export function toShareCapitalBalance(
+  summary: ShareCapitalMemberPeriod | null | undefined
+): ShareCapitalBalance {
+  const raw: unknown = summary?.ending_balance;
+  const balance = typeof raw === "number" || typeof raw === "string" ? Number(raw) : Number.NaN;
+  return Number.isFinite(balance) ? { status: "ok", balance } : { status: "unavailable" };
+}
+
+/**
+ * The member's current share capital balance, over their whole ledger, as the
+ * server states it: `meta.summary.ending_balance` of
+ * `GET /share-capital/ledger?borrower_id=` with no date range. One row is
+ * asked for because only the summary is read; nothing is added up here.
  *
- * Callers must handle all three states rather than reach for a number. Every
- * one of them was written against `Promise<number>` and used the result to
- * decide what a member may borrow, so "refuse to decide" is the only correct
- * behaviour when the ledger is short or missing: an eligibility check computed
- * against a partial ledger is not a conservative answer, it is a wrong one.
+ * Callers must handle both states rather than reach for a number: they use the
+ * result to decide what a share-capital collateral is worth, so "refuse to
+ * decide" is the only correct behaviour when the balance is unknown.
+ *
+ * `canRead` is the caller's `share_capital:view`. The ledger answers 403
+ * without it, so the request is not made and the result is `unavailable`
+ * with the `no_permission` cause, exactly what a refused one produces. A
+ * member outside the caller's branches gets no `meta.summary` (the server
+ * leaves it out rather than sum another branch's ledger): `no_branch_access`.
  */
 export async function getShareCapitalBalance(
-  borrowerId: number
+  borrowerId: number,
+  canRead = true
 ): Promise<ShareCapitalBalance> {
+  if (!canRead) return { status: "unavailable", cause: "no_permission" };
   try {
-    return toShareCapitalBalance(
-      await shareCapitalService.ledgerListAll({ borrower_id: borrowerId })
-    );
-  } catch {
-    return { status: "unavailable" };
+    const res = await shareCapitalService.ledgerList({ borrower_id: borrowerId, per_page: 1 });
+    const meta = (res as { meta?: { summary?: ShareCapitalMemberPeriod } } | undefined)?.meta;
+    if (meta && meta.summary === undefined) return { status: "unavailable", cause: "no_branch_access" };
+    return toShareCapitalBalance(meta?.summary);
+  } catch (err) {
+    return httpStatusOf(err) === 403 ? { status: "unavailable", cause: "no_permission" } : { status: "unavailable" };
   }
 }

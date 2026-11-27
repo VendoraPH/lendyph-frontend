@@ -15,6 +15,8 @@
  * template carry fields it does not use.
  */
 
+import type { ModuleIllustrationName } from "@/lib/illustrations";
+
 /** Every document the catalog can produce. */
 export type PrintableId =
   | "disclosure_statement"
@@ -24,13 +26,30 @@ export type PrintableId =
   | "demand_letter"
   | "amortization_schedule"
   | "share_capital_certificate"
-  | "member_ledger_card";
+  | "member_ledger_card"
+  | "time_deposit_certificate"
+  | "savings_passbook"
+  | "savings_receipt"
+  // Savings documents in the catalog (gap round F4c).
+  | "savings_opening_form"
+  | "savings_agreement"
+  | "savings_closure_form"
+  | "savings_dormancy_notice"
+  | "savings_withdrawal_slip"
+  | "time_deposit_maturity_notice"
+  | "time_deposit_early_termination";
 
 /**
  * What a template needs picked before it can run. Mirrors the reports'
  * `ReportSubject`, extended with the repayment a receipt is printed from.
  */
-export type PrintableSubject = "loan" | "borrower" | "repayment";
+export type PrintableSubject =
+  | "loan"
+  | "borrower"
+  | "repayment"
+  | "savings_account"
+  | "savings_withdrawal"
+  | "time_deposit";
 
 /**
  * Letterhead identity.
@@ -121,6 +140,8 @@ export type PrintBlock =
       /** Footer row, keyed by column. Values are pre-formatted strings. */
       totals?: Record<string, string>;
       emptyText?: string;
+      /** Smaller type, for a table too wide for the page at the normal size. */
+      compact?: boolean;
     }
   | { kind: "charges"; title?: string; lines: PrintChargeLine[] }
   | {
@@ -136,8 +157,31 @@ export type PrintBlock =
   | { kind: "spacer"; height?: string }
   | { kind: "page_break" };
 
+/**
+ * The terms a printed loan document states, as its payload sent them
+ * (`terms_fingerprint` and `terms_version` on the disclosure and promissory
+ * note endpoints). The print log sends them, so the print records what the
+ * paper shows rather than the terms when Print was pressed.
+ */
+export interface PrintedTerms {
+  /** 64 lowercase hexadecimal characters. */
+  terms_fingerprint: string;
+  terms_version: number;
+}
+
 export interface PrintableDocument {
   id: PrintableId;
+  /**
+   * The record this document was built from. The catalog sets it, and only when
+   * the record was read: a blank form is not that record's document.
+   */
+  subjectId?: number;
+  /**
+   * The terms the payload this document was built from stated. The catalog
+   * sets it, only from a payload that carries them; absent otherwise (other
+   * documents, a blank form, an older API), and the print log then sends none.
+   */
+  printedTerms?: PrintedTerms;
   org: PrintableOrg;
   title: string;
   /**
@@ -145,6 +189,12 @@ export interface PrintableDocument {
    * `print-chrome`, not by the template.
    */
   reference?: string | null;
+  /**
+   * The words printed before `reference` in the footer: "Ref:" unless the
+   * document calls its number something else (the withdrawal slip's "No.",
+   * as its fields read).
+   */
+  referenceLabel?: string;
   generatedAt: string;
   /**
    * Labelled copies of the same body, e.g.
@@ -190,6 +240,16 @@ export interface PrintableDefinition {
   /** lucide-react icon, as in `REPORT_CATALOG`. */
   icon: import("lucide-react").LucideIcon;
   /**
+   * A permission beyond `reports:view` that the document's data needs, such as
+   * `savings:view` for the savings documents. Without it the document is not
+   * listed and its page answers "not found".
+   */
+  permission?: import("@/types").Permission;
+  /** False when the document's module is switched off for this deployment. */
+  available?: boolean;
+  /** The menus it reads (Savings, Share Capital); hidden by Menu Visibility, it is not listed. */
+  modules?: readonly import("@/constants/menu-modules").MenuModuleKey[];
+  /**
    * Fetch + map. Fails soft the way report builders do: a rejected request
    * still yields a document, with blanks where the data would have been, so a
    * form can always be printed and completed by hand.
@@ -201,9 +261,12 @@ export const SUBJECT_META: Record<
   PrintableSubject,
   { label: string; placeholder: string }
 > = {
-  loan: { label: "Loan", placeholder: "Search loan or borrower…" },
+  loan: { label: "Loan", placeholder: "Search loan or member…" },
   borrower: { label: "Member", placeholder: "Search member…" },
   repayment: { label: "Payment", placeholder: "Search receipt number…" },
+  savings_account: { label: "Savings Account", placeholder: "Search account number or member…" },
+  savings_withdrawal: { label: "Withdrawal", placeholder: "Search reference or member…" },
+  time_deposit: { label: "Time Deposit", placeholder: "Search certificate number or member…" },
 };
 
 /**
@@ -221,4 +284,20 @@ export const SUBJECT_ACCENT: Record<
   loan: { text: "text-blue-600", bg: "bg-blue-50", ring: "ring-blue-200" },
   borrower: { text: "text-purple-600", bg: "bg-purple-50", ring: "ring-purple-200" },
   repayment: { text: "text-emerald-600", bg: "bg-emerald-50", ring: "ring-emerald-200" },
+  savings_account: { text: "text-teal-600", bg: "bg-teal-50", ring: "ring-teal-200" },
+  savings_withdrawal: { text: "text-orange-600", bg: "bg-orange-50", ring: "ring-orange-200" },
+  time_deposit: { text: "text-amber-600", bg: "bg-amber-50", ring: "ring-amber-200" },
+};
+
+/**
+ * The small picture beside each subject's heading on `/printables`, one of the
+ * module pictures, chosen so no two neighbouring sections repeat.
+ */
+export const SUBJECT_ILLUSTRATION: Record<PrintableSubject, ModuleIllustrationName> = {
+  loan: "emptyLoans",
+  borrower: "emptyMembers",
+  repayment: "emptyPayments",
+  savings_account: "emptySavings",
+  savings_withdrawal: "emptyWallet",
+  time_deposit: "emptyShareCapital",
 };

@@ -19,26 +19,85 @@ export interface RepaymentPreviewAllocation {
   remaining_balance?: number;
 }
 
+export type PaymentBadgeType = "partial" | "exact" | "advance";
+
 export interface RepaymentPreview {
   total_paid?: number;
   total_principal?: number;
   total_interest?: number;
   total_penalty?: number;
   excess?: number;
+  allocated_to_next_interest?: number;
+  allocated_to_next_principal?: number;
+  /** Insurance premium owed on the loan that this payment collects first. */
+  allocated_to_insurance?: number;
+  /** Same figure as `allocated_to_insurance`, named like `total_penalty`. */
+  total_insurance?: number;
+  /** The loan's outstanding balance, insurance premium owed included, before the payment. */
+  balance_before?: number;
+  /** The same balance once the payment posts. */
+  balance_after?: number;
+  /** Everything owed on the loan (the summary's `total_outstanding`) before the payment. */
+  total_outstanding_before?: number;
+  /** Everything owed on the loan once the payment posts. */
+  total_outstanding_after?: number;
+  /** What the payment will store; anything paid before its due date is `advance`. */
+  payment_type?: "exact" | "partial" | "advance";
+  /** The payments page's badge, measured against what is owed on the payment date. */
+  payment_badge?: { type: PaymentBadgeType; label: string };
   allocations?: RepaymentPreviewAllocation[];
   [key: string]: unknown;
 }
 
 export const repaymentService = {
-  list: (loanId: number, params?: Record<string, unknown>) =>
-    api.get<PaginatedResponse<Repayment>>(API_ENDPOINTS.REPAYMENTS.LIST(loanId), { params }),
+  /**
+   * ONE page of one loan's repayments — `GET /loans/{loan}/repayments`.
+   *
+   * `getRaw`, not `get`: `RepaymentController::index()` answers
+   * `RepaymentResource::collection($paginator)`, a raw `{ data, links, meta }`
+   * body with no envelope. `api.get` unwrapped it to the bare rows and dropped
+   * `meta` while this was declared `PaginatedResponse` all along, so both
+   * callers normalised a shape that never arrived and took page 1 for the
+   * loan's whole history.
+   *
+   * That page is 15 rows by default, and they are the OLDEST 15:
+   * `Loan::repayments()` orders by `payment_date` ascending, and that clause
+   * comes before the controller's `latest()`, so the list reads oldest first.
+   * A loan past its fifteenth payment lost its newest ones — a daily-collection
+   * loan gets there in three weeks. For the whole history, `listAllForLoan`.
+   */
+  list: (loanId: number, params?: { page?: number; per_page?: number }) =>
+    api.getRaw<PaginatedResponse<Repayment>>(API_ENDPOINTS.REPAYMENTS.LIST(loanId), {
+      params,
+    }),
+
+  /**
+   * Every repayment on one loan, across as many pages as it takes — what the
+   * loan ledger is built from.
+   *
+   * Each row is the full `RepaymentResource`, identical to what `detail()`
+   * returns for it, so nothing needs fetching per row: N payments cost
+   * ceil(N / 100) requests.
+   *
+   * Not `listAll`: that name is the org-wide drain below (`GET /repayments`),
+   * which takes filters rather than a loan. For everything one MEMBER paid
+   * across all their loans, drain that with `{ borrower_id }` — one drain
+   * however many loans they hold — rather than calling this once per loan.
+   *
+   * Returns a `DrainResult`, NOT a row array, for the reason on
+   * `borrowerService.listAll`: `truncated` is part of the answer.
+   */
+  listAllForLoan: (loanId: number): Promise<DrainResult<Repayment>> =>
+    fetchAllPages<Repayment>(({ page, per_page }) =>
+      repaymentService.list(loanId, { page, per_page }),
+    ),
 
   /**
    * ONE PAGE of `GET /repayments` — every loan's repayments, not one loan's.
    *
    * This was called `listAll`, which in this codebase means "drained across
    * every page" (`borrowerService.listAll`, `loanService.listAll`,
-   * `shareCapitalService.ledgerListAll`). It was not a drain: it was a single
+   * `shareCapitalService.pledgeListAll`). It was not a drain: it was a single
    * `api.get` whose callers passed `per_page: 100` and `per_page: 200` and
    * believed the name. The 200 was clamped to 100 and the 100 sat exactly on
    * the ceiling with nothing to say more existed, so payment #101 was

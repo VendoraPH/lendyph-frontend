@@ -1,7 +1,12 @@
 "use client";
 
+import { useMenuVisibility } from "@/hooks/use-menu-visibility";
+import { approvalWorkflowParts } from "@/lib/hidden-module-parts";
 import { useState, useEffect, useMemo } from "react";
 import { RouteGuard } from "@/components/common";
+import { PageFill, PageLoader, ScrollBox } from "@/components/common/page-fill";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { useDialogOpening, usePermission } from "@/hooks";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,8 +33,18 @@ import {
   type ChainStepKind,
 } from "@/services";
 import type { ApiRole } from "@/services/role.service";
-import { ROLES } from "@/constants/rbac";
-import type { Role } from "@/types";
+import { roleDisplayName } from "@/lib/role-display-name";
+import { stepRoleOptions } from "./_lib/step-role-options";
+import {
+  minimumLabel,
+  minimumRuleFor,
+  minimumToSend,
+  sameMinimum,
+  stepMinimumErrors,
+  withMinimum,
+} from "./_lib/step-minimum";
+import { CdaReviewChain } from "./_components/cda-review-chain";
+import { env } from "@/config/env";
 import {
   Workflow,
   Plus,
@@ -47,6 +62,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { notifyError } from "@/lib/notify";
+import { completeRows } from "@/lib/paginate";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -60,7 +76,7 @@ const KIND_META: Record<
   submit: {
     label: "Submit",
     icon: Send,
-    description: "Prepares and submits the draft for review",
+    description: "Prepares and submits the draft for approval",
     colorClass: "bg-teal-500/10 text-teal-700 border-teal-500/30",
   },
   approve: {
@@ -82,13 +98,12 @@ const KIND_META: Record<
   // loan page already labels its button "Confirm & Forward".
 };
 
-function titleCase(s: string): string {
-  return s.split("_").filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
-}
-
-function roleLabel(roleName: string): string {
-  return ROLES[roleName as Role]?.label ?? titleCase(roleName);
-}
+// Passed to the Step Kind <Select items>, so the trigger reads "Approve", not
+// the stored "approve".
+const KIND_ITEMS = (Object.keys(KIND_META) as ChainStepKind[]).map((k) => ({
+  value: k,
+  label: KIND_META[k].label,
+}));
 
 function slugify(s: string): string {
   return s
@@ -114,6 +129,9 @@ interface StepFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   step: ApprovalChainStep | null; // null = add
+  /** The chain on screen, and where the step sits in it (a new step goes at the end). */
+  steps: ApprovalChainStep[];
+  index: number;
   existingIds: string[];
   roles: ApiRole[];
   onSave: (step: ApprovalChainStep) => void;
@@ -123,6 +141,8 @@ function StepFormDialog({
   open,
   onOpenChange,
   step,
+  steps,
+  index,
   existingIds,
   roles,
   onSave,
@@ -132,15 +152,23 @@ function StepFormDialog({
   const [role, setRole] = useState<string>("");
   const [kind, setKind] = useState<ChainStepKind>("approve");
   const [status, setStatus] = useState<string>("");
+  const [minimum, setMinimum] = useState("");
+  // Active roles, plus the step's own role when it has since been
+  // deactivated, so the trigger reads "Name (inactive)", never the key.
+  const roleOptions = stepRoleOptions(roles, role);
+  // Only an approval step after the first may carry a minimum principal; the
+  // Submit step, the first approval step and the Release step always apply.
+  const minimumRule = minimumRuleFor(steps, index, kind);
+  // A minimum this step has but can't keep where it is: saving drops it.
+  const minimumDropped = !minimumRule.allowed && !!step?.min_principal;
 
-  useEffect(() => {
-    if (open) {
-      setName(step?.name ?? "");
-      setRole(step?.role ?? "");
-      setKind(step?.kind ?? "approve");
-      setStatus(step?.status ?? "");
-    }
-  }, [open, step]);
+  if (useDialogOpening(open, step)) {
+    setName(step?.name ?? "");
+    setRole(step?.role ?? "");
+    setKind(step?.kind ?? "approve");
+    setStatus(step?.status ?? "");
+    setMinimum(step?.min_principal ?? "");
+  }
 
   function handleSave() {
     if (!name.trim()) {
@@ -151,18 +179,19 @@ function StepFormDialog({
       toast.error("Required role is required");
       return;
     }
-    if (!status.trim()) {
-      toast.error("Status is required");
-      return;
-    }
     const id = isEdit && step ? step.id : generateUniqueId(name, existingIds);
-    onSave({
-      id,
-      name: name.trim(),
-      role: role.trim(),
-      kind,
-      status: status.trim(),
-    });
+    onSave(
+      withMinimum(
+        {
+          id,
+          name: name.trim(),
+          role: role.trim(),
+          kind,
+          status: status.trim() || null,
+        },
+        minimumRule.allowed ? minimumToSend(minimum) : null,
+      ),
+    );
     onOpenChange(false);
   }
 
@@ -195,6 +224,7 @@ function StepFormDialog({
               Required Role <span className="text-destructive">*</span>
             </Label>
             <Select
+              items={roleOptions}
               value={role || null}
               onValueChange={(v) => setRole(v ?? "")}
             >
@@ -202,9 +232,9 @@ function StepFormDialog({
                 <SelectValue placeholder="Select a role" />
               </SelectTrigger>
               <SelectContent>
-                {roles.filter((r) => r.is_active !== false).map((r) => (
-                  <SelectItem key={r.id} value={r.name}>
-                    {roleLabel(r.name)}
+                {roleOptions.map((o) => (
+                  <SelectItem key={o.value} value={o.value} disabled={o.disabled}>
+                    {o.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -218,6 +248,7 @@ function StepFormDialog({
               Step Kind <span className="text-destructive">*</span>
             </Label>
             <Select
+              items={KIND_ITEMS}
               value={kind}
               onValueChange={(v) => setKind(v as ChainStepKind)}
             >
@@ -240,19 +271,44 @@ function StepFormDialog({
           </div>
           <div className="space-y-2">
             <Label htmlFor="step-status">
-              Status <span className="text-destructive">*</span>
+              Status
             </Label>
             <Input
               id="step-status"
-              placeholder="e.g. for_review"
+              placeholder="e.g. Credit Check"
               value={status}
               onChange={(e) => setStatus(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              When a user executes this step, the loan application&apos;s status
-              will be set to this value.
+              Shown as the loan&apos;s status while it waits at this step.
             </p>
           </div>
+          {minimumRule.allowed ? (
+            <div className="space-y-2">
+              <Label htmlFor="step-min-principal">Minimum Principal (₱)</Label>
+              <Input
+                id="step-min-principal"
+                inputMode="decimal"
+                placeholder="No minimum"
+                value={minimum}
+                onChange={(e) => setMinimum(e.target.value)}
+                className="text-right font-mono"
+                aria-describedby="step-min-principal-hint"
+              />
+              <p id="step-min-principal-hint" className="text-xs text-muted-foreground">
+                Loans with a smaller principal skip this step. A restructure counts the
+                larger of its new principal and the amount it restructures. Leave empty to
+                apply this step to every loan.
+              </p>
+            </div>
+          ) : (
+            (kind === "approve" || minimumDropped) && (
+              <p className="text-xs text-muted-foreground" role="note">
+                {minimumRule.reason}
+                {minimumDropped && " Saving this step removes its minimum."}
+              </p>
+            )
+          )}
         </div>
         <div className="flex justify-end gap-3 pt-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -274,13 +330,23 @@ function StepFormDialog({
 // Page
 // ---------------------------------------------------------------------------
 
-type WorkflowTab = "normal" | "policy_exception";
+type WorkflowTab = "normal" | "policy_exception" | "cda";
 
-export default function ApprovalWorkflowPage() {
+function ApprovalWorkflowContent() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<WorkflowTab>("normal");
   const [roles, setRoles] = useState<ApiRole[]>([]);
+  // Listing roles needs `users:view`, which this page does not. Without it the
+  // role picker is left empty rather than asking and being refused.
+  const { can } = usePermission();
+  const canListRoles = can("users:view");
+  // The CDA review chain (backend B6): saving it needs cda:settings with
+  // every branch, so the tab shows only to those users, and only with CDA on.
+  // Menu Visibility hides it with CDA (its API answers 404 then).
+  const { isHidden } = useMenuVisibility();
+  const showCda =
+    env.features.cda && approvalWorkflowParts(isHidden).cdaChain && can("cda:settings") && can("branches:view_all");
 
   // Normal flow state
   const [normalSteps, setNormalSteps] = useState<ApprovalChainStep[]>([]);
@@ -298,6 +364,20 @@ export default function ApprovalWorkflowPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingStep, setEditingStep] = useState<ApprovalChainStep | null>(null);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  // The server's refusals of step minimums from the last save, by step id,
+  // shown under their step until it changes. Kept with the tab they came from.
+  const [minimumErrors, setMinimumErrors] = useState<{
+    tab: WorkflowTab;
+    byStep: Record<string, string>;
+  } | null>(null);
+  const shownMinimumErrors = minimumErrors?.tab === activeTab ? minimumErrors.byStep : {};
+  const forgetMinimumError = (id: string) =>
+    setMinimumErrors((prev) => {
+      if (!prev || !(id in prev.byStep)) return prev;
+      const byStep = { ...prev.byStep };
+      delete byStep[id];
+      return { ...prev, byStep };
+    });
 
   useEffect(() => {
     let cancelled = false;
@@ -305,8 +385,8 @@ export default function ApprovalWorkflowPage() {
       try {
         const [normalResult, peResult, rolesResult] = await Promise.allSettled([
           approvalWorkflowService.listNormal(),
-          approvalWorkflowService.list(),
-          roleService.list(),
+          approvalWorkflowService.listPolicyException(),
+          canListRoles ? roleService.listAll().then(completeRows) : [],
         ]);
         if (cancelled) return;
 
@@ -319,11 +399,9 @@ export default function ApprovalWorkflowPage() {
           setSavedPeSteps(peResult.value);
         }
         if (rolesResult.status === "fulfilled") {
-          const raw = rolesResult.value;
-          const list = Array.isArray(raw)
-            ? raw
-            : (raw as { data: ApiRole[] })?.data ?? [];
-          setRoles(list);
+          setRoles(rolesResult.value);
+        } else {
+          toast.error("We couldn't load the roles, so the step role picker is empty. Please try again.");
         }
 
         if (normalResult.status === "rejected" || peResult.status === "rejected") {
@@ -337,7 +415,7 @@ export default function ApprovalWorkflowPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [canListRoles]);
 
   const validationError = useMemo(
     () => approvalWorkflowService.validate(steps),
@@ -354,7 +432,8 @@ export default function ApprovalWorkflowPage() {
         s.name !== saved.name ||
         s.role !== saved.role ||
         s.kind !== saved.kind ||
-        (s.status ?? null) !== (saved.status ?? null)
+        (s.status ?? null) !== (saved.status ?? null) ||
+        !sameMinimum(s.min_principal, saved.min_principal)
       );
     });
   }, [steps, savedSteps]);
@@ -379,6 +458,7 @@ export default function ApprovalWorkflowPage() {
   }
 
   function handleSaveStep(newStep: ApprovalChainStep) {
+    forgetMinimumError(newStep.id);
     setSteps((prev) => {
       if (editingStep) {
         return prev.map((s) => (s.id === editingStep.id ? newStep : s));
@@ -389,11 +469,14 @@ export default function ApprovalWorkflowPage() {
   }
 
   function handleDeleteStep(id: string) {
+    forgetMinimumError(id);
     setSteps((prev) => prev.filter((s) => s.id !== id));
     toast.success("Step removed");
   }
 
   function moveStep(index: number, direction: "up" | "down") {
+    // A refusal can depend on the step's place in the chain, so a move clears them.
+    setMinimumErrors(null);
     setSteps((prev) => {
       const next = [...prev];
       const target = direction === "up" ? index - 1 : index + 1;
@@ -410,6 +493,7 @@ export default function ApprovalWorkflowPage() {
     }
     try {
       setSaving(true);
+      setMinimumErrors(null);
       if (activeTab === "normal") {
         await approvalWorkflowService.saveNormal(steps);
         // Refetch from server so display reflects server truth — catches any
@@ -419,12 +503,15 @@ export default function ApprovalWorkflowPage() {
         setSavedNormalSteps(fresh);
       } else {
         await approvalWorkflowService.save(steps);
-        const fresh = await approvalWorkflowService.list();
+        const fresh = await approvalWorkflowService.listPolicyException();
         setPeSteps(fresh);
         setSavedPeSteps(fresh);
       }
       toast.success(`${activeTab === "normal" ? "Normal" : "Policy Exception"} workflow saved`);
     } catch (err) {
+      // The server refuses a minimum on a step that can't carry one, or one
+      // that isn't an amount, in words; each refusal shows under its step too.
+      setMinimumErrors({ tab: activeTab, byStep: stepMinimumErrors(err, steps) });
       notifyError(err, "We couldn't save the workflow. Please try again.");
     } finally {
       setSaving(false);
@@ -432,6 +519,7 @@ export default function ApprovalWorkflowPage() {
   }
 
   function handleRevert() {
+    setMinimumErrors(null);
     if (activeTab === "normal") {
       setNormalSteps(savedNormalSteps);
     } else {
@@ -443,6 +531,7 @@ export default function ApprovalWorkflowPage() {
   async function handleReset() {
     try {
       setSaving(true);
+      setMinimumErrors(null);
       if (activeTab === "normal") {
         const defaults = await approvalWorkflowService.resetNormal();
         setNormalSteps(defaults);
@@ -462,31 +551,27 @@ export default function ApprovalWorkflowPage() {
   }
 
   if (loading) {
-    return (
-      <RouteGuard permission="settings:view" pageName="Approval Workflow">
-        <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-      </RouteGuard>
-    );
+    return <PageLoader />;
   }
 
   const existingIds = steps.map((s) => s.id);
 
   return (
-    <RouteGuard permission="settings:view" pageName="Approval Workflow">
-      <div className="space-y-6">
-        {/* Header row: title + actions */}
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0">
-            <h1 className="text-2xl font-bold tracking-tight">
-              Approval Workflow
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Configure the loan approval chain — who acts at each step and in what order
-            </p>
-          </div>
+    <PageFill>
+      {/* Header row: title + actions */}
+      <div className="flex shrink-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight">
+            Approval Workflow
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {activeTab === "cda"
+              ? "Configure the CDA report review chain: who approves each report, and in what order"
+              : "Configure the loan approval chain — who acts at each step and in what order"}
+          </p>
+        </div>
 
+        {activeTab !== "cda" && (
           <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
             <Button
               variant="outline"
@@ -524,282 +609,334 @@ export default function ApprovalWorkflowPage() {
               Save Changes
             </Button>
           </div>
-        </div>
+        )}
+      </div>
 
-        {/* Workflow Type Tabs — own row so they never fight with title/actions */}
-        <div className="flex w-full rounded-lg border p-1 bg-muted/50 sm:w-fit">
+      {/* Workflow Type Tabs — own row so they never fight with title/actions */}
+      <div className="flex w-full shrink-0 rounded-lg border p-1 bg-muted/50 sm:w-fit">
+        <button
+          type="button"
+          onClick={() => setActiveTab("normal")}
+          aria-pressed={activeTab === "normal"}
+          className={cn(
+            "flex-1 sm:flex-none px-4 py-1.5 text-sm font-medium rounded-md transition-colors",
+            activeTab === "normal"
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          Normal Flow
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("policy_exception")}
+          aria-pressed={activeTab === "policy_exception"}
+          className={cn(
+            "flex-1 sm:flex-none px-4 py-1.5 text-sm font-medium rounded-md transition-colors",
+            activeTab === "policy_exception"
+              ? "bg-amber-500/10 text-amber-700 shadow-sm border border-amber-300"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          Policy Exception
+        </button>
+        {showCda && (
           <button
             type="button"
-            onClick={() => setActiveTab("normal")}
+            onClick={() => setActiveTab("cda")}
+            aria-pressed={activeTab === "cda"}
             className={cn(
               "flex-1 sm:flex-none px-4 py-1.5 text-sm font-medium rounded-md transition-colors",
-              activeTab === "normal"
+              activeTab === "cda"
                 ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
             )}
           >
-            Normal Flow
+            CDA reports
           </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("policy_exception")}
-            className={cn(
-              "flex-1 sm:flex-none px-4 py-1.5 text-sm font-medium rounded-md transition-colors",
-              activeTab === "policy_exception"
-                ? "bg-amber-500/10 text-amber-700 shadow-sm border border-amber-300"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            Policy Exception
-          </button>
-        </div>
-
-        {/* Summary cards */}
-        <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
-          <Card>
-            <CardContent className="py-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Total Steps
-                  </p>
-                  <p className="text-2xl font-bold mt-0.5">{stepCounts.total}</p>
-                </div>
-                <Workflow className="h-8 w-8 text-brand-orange/40" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="py-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Submit</p>
-                  <p className="text-2xl font-bold mt-0.5">{stepCounts.submit}</p>
-                </div>
-                <Send className="h-8 w-8 text-teal-500/40" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="py-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Approve</p>
-                  <p className="text-2xl font-bold mt-0.5">{stepCounts.approve}</p>
-                </div>
-                <CheckCircle2 className="h-8 w-8 text-green-500/40" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="py-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Release</p>
-                  <p className="text-2xl font-bold mt-0.5">{stepCounts.release}</p>
-                </div>
-                <Unlock className="h-8 w-8 text-brand-orange/40" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Validation warning */}
-        {validationError && (
-          <div className="rounded-lg border border-red-200 bg-red-50 dark:border-red-800/40 dark:bg-red-900/10 p-3 flex items-start gap-2">
-            <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
-            <div className="text-sm">
-              <p className="font-medium text-red-700 dark:text-red-400">
-                Chain is invalid
-              </p>
-              <p className="text-red-600 dark:text-red-500 mt-0.5">
-                {validationError.message}
-              </p>
-            </div>
-          </div>
         )}
-
-        {/* Unsaved changes indicator */}
-        {isDirty && !validationError && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-900/10 p-3 flex items-start gap-2">
-            <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
-            <p className="text-sm text-amber-700 dark:text-amber-400">
-              You have unsaved changes. Click <strong>Save Changes</strong> to apply,
-              or <strong>Revert</strong> to discard.
-            </p>
-          </div>
-        )}
-
-        {/* Steps list */}
-        <Card>
-          <CardHeader>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <CardTitle className="text-sm font-medium">Chain Steps</CardTitle>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={openAdd}
-                className="h-8 gap-1 text-xs"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Add Step
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {steps.length === 0 && (
-              <div className="text-center py-12 text-muted-foreground text-sm">
-                No steps configured. Click <strong>Add Step</strong> to start.
-              </div>
-            )}
-            {steps.map((step, i) => {
-              const meta = KIND_META[step.kind];
-              const Icon = meta.icon;
-              const apiRole = roles.find((r) => r.name === step.role);
-              return (
-                <div
-                  key={step.id}
-                  className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border p-3 bg-card hover:bg-muted/30 transition-colors"
-                >
-                  {/* Reorder buttons */}
-                  <div className="flex flex-col gap-0.5 shrink-0">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-5 w-5"
-                      disabled={i === 0}
-                      onClick={() => moveStep(i, "up")}
-                      aria-label="Move up"
-                    >
-                      <ChevronUp className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-5 w-5"
-                      disabled={i === steps.length - 1}
-                      onClick={() => moveStep(i, "down")}
-                      aria-label="Move down"
-                    >
-                      <ChevronDown className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-
-                  {/* Position number */}
-                  <div className="h-8 w-8 rounded-full bg-muted text-muted-foreground flex items-center justify-center text-xs font-semibold shrink-0">
-                    {i + 1}
-                  </div>
-
-                  {/* Kind icon */}
-                  <div
-                    className={cn(
-                      "h-9 w-9 rounded-md flex items-center justify-center shrink-0",
-                      meta.colorClass
-                    )}
-                  >
-                    <Icon className="h-4 w-4" />
-                  </div>
-
-                  {/* Name + role */}
-                  <div className="min-w-0 flex-1 basis-[180px]">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-semibold truncate">{step.name}</p>
-                      <Badge
-                        variant="outline"
-                        className={cn("text-[10px] h-4 px-1.5", meta.colorClass)}
-                      >
-                        {meta.label}
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                      Role:{" "}
-                      <span className="font-mono">
-                        {apiRole ? roleLabel(step.role) : step.role}
-                      </span>
-                      {!apiRole && (
-                        <span className="ml-1 text-amber-600">
-                          (role removed)
-                        </span>
-                      )}
-                      {step.status && (
-                        <>
-                          <span className="mx-1.5 text-muted-foreground/40">
-                            ·
-                          </span>
-                          Status:{" "}
-                          <span className="font-mono">{step.status}</span>
-                        </>
-                      )}
-                    </p>
-                  </div>
-
-                  {/* Actions — wrap to their own row on very narrow widths */}
-                  <div className="flex items-center gap-1 shrink-0 ml-auto">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs"
-                      onClick={() => openEdit(step)}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs text-destructive border-destructive/30 hover:bg-destructive/5"
-                      onClick={() => handleDeleteStep(step.id)}
-                      aria-label="Delete step"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-
-        {/* Dialogs */}
-        <StepFormDialog
-          open={formOpen}
-          onOpenChange={setFormOpen}
-          step={editingStep}
-          existingIds={existingIds}
-          roles={roles}
-          onSave={handleSaveStep}
-        />
-
-        <Dialog open={resetConfirmOpen} onOpenChange={setResetConfirmOpen}>
-          <DialogContent size="sm">
-            <DialogHeader>
-              <DialogTitle>Reset to Default</DialogTitle>
-              <DialogDescription>
-                This will discard your current configuration and restore the
-                default 10-step chain (Loan Processor → Manager → BOD1..BOD7 →
-                Cashier). Existing in-flight loans will keep their own snapshots
-                and are not affected.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="flex justify-end gap-3 pt-2">
-              <Button
-                variant="outline"
-                onClick={() => setResetConfirmOpen(false)}
-                disabled={saving}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={handleReset}
-                disabled={saving}
-              >
-                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Reset to Default
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
       </div>
+
+      {activeTab === "cda" && showCda ? (
+        <CdaReviewChain roles={roles} />
+      ) : (
+        <>
+
+          {/* Summary cards */}
+          <div className="grid shrink-0 gap-4 grid-cols-2 md:grid-cols-4">
+            <Card>
+              <CardContent className="py-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Total Steps
+                    </p>
+                    <p className="text-2xl font-bold mt-0.5">{stepCounts.total}</p>
+                  </div>
+                  <Workflow className="h-8 w-8 text-brand-orange/40" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="py-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Submit</p>
+                    <p className="text-2xl font-bold mt-0.5">{stepCounts.submit}</p>
+                  </div>
+                  <Send className="h-8 w-8 text-teal-500/40" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="py-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Approve</p>
+                    <p className="text-2xl font-bold mt-0.5">{stepCounts.approve}</p>
+                  </div>
+                  <CheckCircle2 className="h-8 w-8 text-green-500/40" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="py-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Release</p>
+                    <p className="text-2xl font-bold mt-0.5">{stepCounts.release}</p>
+                  </div>
+                  <Unlock className="h-8 w-8 text-brand-orange/40" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Validation warning */}
+          {validationError && (
+            <div className="shrink-0 rounded-lg border border-red-200 bg-red-50 dark:border-red-800/40 dark:bg-red-900/10 p-3 flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
+              <div className="text-sm">
+                <p className="font-medium text-red-700 dark:text-red-400">
+                  Chain is invalid
+                </p>
+                <p className="text-red-600 dark:text-red-500 mt-0.5">
+                  {validationError.message}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Unsaved changes indicator */}
+          {isDirty && !validationError && (
+            <div className="shrink-0 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-900/10 p-3 flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+              <p className="text-sm text-amber-700 dark:text-amber-400">
+                You have unsaved changes. Click <strong>Save Changes</strong> to apply,
+                or <strong>Revert</strong> to discard.
+              </p>
+            </div>
+          )}
+
+          {/* Steps list */}
+          <Card className={FIT_CLASSES.section}>
+            <CardHeader>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <CardTitle className="text-sm font-medium">Chain Steps</CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={openAdd}
+                  className="h-8 gap-1 text-xs"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add Step
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className={FIT_CLASSES.section}>
+              {/*
+                Keyed by tab so each tab's list opens at its top; data-fab-clear
+                keeps the rows' actions clear of Linda's button at fit.
+              */}
+              <ScrollBox key={activeTab} data-fab-clear className="space-y-2 p-px">
+                {steps.length === 0 && (
+                  <div className="text-center py-12 text-muted-foreground text-sm">
+                    No steps configured. Click <strong>Add Step</strong> to start.
+                  </div>
+                )}
+                {steps.map((step, i) => {
+                  const meta = KIND_META[step.kind];
+                  const Icon = meta.icon;
+                  const apiRole = roles.find((r) => r.name === step.role);
+                  const minimum = minimumLabel(step.min_principal);
+                  const minimumError = shownMinimumErrors[step.id];
+                  return (
+                    <div
+                      key={step.id}
+                      className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border p-3 bg-card hover:bg-muted/30 transition-colors"
+                    >
+                      {/* Reorder buttons */}
+                      <div className="flex flex-col gap-0.5 shrink-0">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5"
+                          disabled={i === 0}
+                          onClick={() => moveStep(i, "up")}
+                          aria-label="Move up"
+                        >
+                          <ChevronUp className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5"
+                          disabled={i === steps.length - 1}
+                          onClick={() => moveStep(i, "down")}
+                          aria-label="Move down"
+                        >
+                          <ChevronDown className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+
+                      {/* Position number */}
+                      <div className="h-8 w-8 rounded-full bg-muted text-muted-foreground flex items-center justify-center text-xs font-semibold shrink-0">
+                        {i + 1}
+                      </div>
+
+                      {/* Kind icon */}
+                      <div
+                        className={cn(
+                          "h-9 w-9 rounded-md flex items-center justify-center shrink-0",
+                          meta.colorClass
+                        )}
+                      >
+                        <Icon className="h-4 w-4" />
+                      </div>
+
+                      {/* Name + role */}
+                      <div className="min-w-0 flex-1 basis-[180px]">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-semibold truncate">{step.name}</p>
+                          <Badge
+                            variant="outline"
+                            className={cn("text-[10px] h-4 px-1.5", meta.colorClass)}
+                          >
+                            {meta.label}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                          Role:{" "}
+                          <span className="font-mono">
+                            {apiRole ? roleDisplayName(apiRole) : step.role}
+                          </span>
+                          {!apiRole && (
+                            <span className="ml-1 text-amber-600">
+                              (role removed)
+                            </span>
+                          )}
+                          {step.status && (
+                            <>
+                              <span className="mx-1.5 text-muted-foreground/40">
+                                ·
+                              </span>
+                              Status:{" "}
+                              <span className="font-mono">{step.status}</span>
+                            </>
+                          )}
+                        </p>
+                        {minimum && (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {minimum}: loans with a smaller principal skip this step.
+                          </p>
+                        )}
+                        {minimumError && (
+                          <p className="text-xs text-red-600 dark:text-red-400 mt-1" role="alert">
+                            {minimumError}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Actions — wrap to their own row on very narrow widths */}
+                      <div className="flex items-center gap-1 shrink-0 ml-auto">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => openEdit(step)}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs text-destructive border-destructive/30 hover:bg-destructive/5"
+                          onClick={() => handleDeleteStep(step.id)}
+                          aria-label="Delete step"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </ScrollBox>
+            </CardContent>
+          </Card>
+
+          {/* Dialogs */}
+          <StepFormDialog
+            open={formOpen}
+            onOpenChange={setFormOpen}
+            step={editingStep}
+            steps={steps}
+            index={editingStep ? steps.findIndex((s) => s.id === editingStep.id) : steps.length}
+            existingIds={existingIds}
+            roles={roles}
+            onSave={handleSaveStep}
+          />
+
+          <Dialog open={resetConfirmOpen} onOpenChange={setResetConfirmOpen}>
+            <DialogContent size="sm">
+              <DialogHeader>
+                <DialogTitle>Reset to Default</DialogTitle>
+                <DialogDescription>
+                  This will discard your current configuration and restore the
+                  default 10-step chain (Loan Processor → Manager → BOD1..BOD7 →
+                  Cashier). Existing in-flight loans will keep their own snapshots
+                  and are not affected.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex justify-end gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setResetConfirmOpen(false)}
+                  disabled={saving}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleReset}
+                  disabled={saving}
+                >
+                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Reset to Default
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </>
+      )}
+    </PageFill>
+  );
+}
+
+export default function ApprovalWorkflowPage() {
+  return (
+    <RouteGuard permission="settings:view" pageName="Approval Workflow">
+      <ApprovalWorkflowContent />
     </RouteGuard>
   );
 }

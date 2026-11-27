@@ -1,12 +1,19 @@
 "use client";
 
+import { useMenuVisibility } from "@/hooks/use-menu-visibility";
+import { accountingStatementsParts } from "@/lib/hidden-module-parts";
 import { useState } from "react";
 import { RouteGuard } from "@/components/common";
+import { PageFill } from "@/components/common/page-fill";
+import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { env } from "@/config/env";
+import { usePermission } from "@/hooks";
 import { todayISO } from "@/lib/format";
+import { FIT_CLASSES } from "@/lib/page-fill";
+import { cn } from "@/lib/utils";
 import { AccountingPageHeader } from "../_components/page-header";
 import {
-  ALL_BRANCHES,
   BranchFilter,
   DateFilter,
   FilterBar,
@@ -16,13 +23,31 @@ import { BalanceSheetReport } from "./_components/balance-sheet-report";
 import { IncomeStatementReport } from "./_components/income-statement-report";
 import { CashFlowReport } from "./_components/cash-flow-report";
 import { EquityChangesReport } from "./_components/equity-changes-report";
+import { StatementNotesReport } from "./_components/statement-notes-report";
+import { canSeeStatementNotes } from "./_lib/statement-notes";
+import { statementRangeError } from "./_lib/statement-request";
+import { useBranchFilter } from "@/hooks/use-working-branch";
 
 function startOfYearISO(): string {
   return `${new Date().getFullYear()}-01-01`;
 }
 
+/** Shown in place of a range statement while From is after To; nothing is sent. */
+function RangeRefused({ message }: { message: string }) {
+  return (
+    <Card className="shrink-0">
+      <CardContent className="py-12 text-center text-sm text-muted-foreground">
+        {message} Change the dates to see this statement.
+      </CardContent>
+    </Card>
+  );
+}
+
+/** A statement's tab: at fit it takes the height left, and the statement scrolls inside. */
+const TAB_PANEL = cn("mt-2", FIT_CLASSES.section);
+
 /**
- * The four statements, as tabs rather than as four sidebar entries.
+ * The four statements, as tabs rather than as four sidebar entries (plus Notes, below).
  *
  * The spec nests them under a "Financial Statements" heading, but `NavSubItem`
  * has no children — the sidebar is two levels deep by design. Tabs give the
@@ -30,60 +55,100 @@ function startOfYearISO(): string {
  * which is what someone comparing the sheet against the P&L actually wants.
  *
  * The balance sheet is first because it is the one a lender opens daily.
+ *
+ * A fifth tab, Notes, quotes the Enhanced PESOS rating of the To date's year.
+ * It shows only with CDA on and to users who also hold `branches:view_all`
+ * (the rating covers the whole cooperative), and takes no branch.
  */
 export default function FinancialStatementsPage() {
   const [tab, setTab] = useState("balance-sheet");
   const [from, setFrom] = useState(startOfYearISO());
   const [to, setTo] = useState(todayISO());
-  const [branch, setBranch] = useState(ALL_BRANCHES);
+  const [branch, setBranch] = useBranchFilter();
+  const { can } = usePermission();
+  // The Notes tab quotes CDA's PESOS rating, so it goes while Menu Visibility hides CDA.
+  const { isHidden } = useMenuVisibility();
+  const showNotes = canSeeStatementNotes(can, env.features.cda && accountingStatementsParts(isHidden).pesosNotes);
+  const notesTab = showNotes && tab === "notes";
 
   const branchId = branchParam(branch);
   // The balance sheet is a position on a date, not a range — it reads the
   // period's end, so moving `to` moves the sheet with it.
   const asOf = to;
+  // A To before From is refused here, so the three range statements never ask.
+  const rangeError = statementRangeError(from, to);
+  const showRangeError = tab !== "balance-sheet" && !notesTab && rangeError !== null;
 
   return (
     <RouteGuard permission="accounting:view" pageName="Financial Statements">
-      <div className="space-y-6">
+      <PageFill className="gap-4">
         <AccountingPageHeader
           title="Financial Statements"
-          description="The four statements, from the same set of posted entries."
+          description={
+            showNotes
+              ? "The financial statements, from the same set of posted entries, and their notes."
+              : "The financial statements, from the same set of posted entries."
+          }
         />
 
         <FilterBar>
-          {tab !== "balance-sheet" && (
+          {tab !== "balance-sheet" && !notesTab && (
             <DateFilter label="From" value={from} onChange={setFrom} />
           )}
           <DateFilter
-            label={tab === "balance-sheet" ? "As of" : "To"}
+            label={tab === "balance-sheet" ? "As of" : notesTab ? "Year of" : "To"}
             value={to}
             onChange={setTo}
           />
-          <BranchFilter value={branch} onChange={setBranch} />
+          {!notesTab && <BranchFilter value={branch} onChange={setBranch} />}
+          {showRangeError && (
+            <p role="alert" className="pb-2 text-sm text-destructive">
+              {rangeError}
+            </p>
+          )}
         </FilterBar>
 
-        <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
-          <TabsList>
+        <Tabs value={tab} onValueChange={(v) => setTab(String(v))} className={FIT_CLASSES.section}>
+          {/* On a phone the strip scrolls inside itself, never the page. */}
+          <TabsList className="max-w-full shrink-0 justify-start overflow-x-auto">
             <TabsTrigger value="balance-sheet">Balance Sheet</TabsTrigger>
             <TabsTrigger value="income-statement">Income Statement</TabsTrigger>
             <TabsTrigger value="cash-flow">Cash Flow</TabsTrigger>
             <TabsTrigger value="equity">Changes in Equity</TabsTrigger>
+            {showNotes && <TabsTrigger value="notes">Notes</TabsTrigger>}
           </TabsList>
 
-          <TabsContent value="balance-sheet" className="mt-4">
+          <TabsContent value="balance-sheet" className={TAB_PANEL}>
             <BalanceSheetReport asOf={asOf} branchId={branchId} />
           </TabsContent>
-          <TabsContent value="income-statement" className="mt-4">
-            <IncomeStatementReport from={from} to={to} branchId={branchId} />
+          <TabsContent value="income-statement" className={TAB_PANEL}>
+            {rangeError ? (
+              <RangeRefused message={rangeError} />
+            ) : (
+              <IncomeStatementReport from={from} to={to} branchId={branchId} />
+            )}
           </TabsContent>
-          <TabsContent value="cash-flow" className="mt-4">
-            <CashFlowReport from={from} to={to} branchId={branchId} />
+          <TabsContent value="cash-flow" className={TAB_PANEL}>
+            {rangeError ? (
+              <RangeRefused message={rangeError} />
+            ) : (
+              <CashFlowReport from={from} to={to} branchId={branchId} />
+            )}
           </TabsContent>
-          <TabsContent value="equity" className="mt-4">
-            <EquityChangesReport from={from} to={to} branchId={branchId} />
+          <TabsContent value="equity" className={TAB_PANEL}>
+            {rangeError ? (
+              <RangeRefused message={rangeError} />
+            ) : (
+              <EquityChangesReport from={from} to={to} branchId={branchId} />
+            )}
           </TabsContent>
+          {showNotes && (
+            <TabsContent value="notes" className={TAB_PANEL}>
+              <StatementNotesReport year={Number(to.slice(0, 4))} />
+            </TabsContent>
+          )}
         </Tabs>
-      </div>
+      </PageFill>
     </RouteGuard>
   );
 }

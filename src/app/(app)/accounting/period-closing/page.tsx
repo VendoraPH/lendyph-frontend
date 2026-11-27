@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Lock, LockOpen } from "lucide-react";
 import { toast } from "sonner";
 import { PermissionGate, RouteGuard } from "@/components/common";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -26,12 +27,19 @@ import { useAccountingResource } from "@/hooks";
 import { accountingService } from "@/services";
 import { formatDate, formatDateTime } from "@/lib/format";
 import type { DrainResult } from "@/lib/paginate";
-import type { AccountingPeriod } from "@/types";
+import type { AccountingPeriod, YearClose, YearClosePage } from "@/types";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { AccountingPageHeader } from "../_components/page-header";
 import { DataState } from "../_components/data-state";
+import { periodStatusLabel } from "../_lib/display-labels";
+import { YearCloseHistory } from "./_components/year-close-history";
+import { YearEndCloseSection } from "./_components/year-end-close-section";
+import { REOPEN_THE_YEAR, monthAction, periodReopenFailure } from "./_lib/month-actions";
+import { periodYearEndLabels } from "./_lib/year-close";
 
-export default function PeriodClosingPage() {
+const NO_CLOSES: YearClose[] = [];
+
+function PeriodClosingContent() {
   const [confirming, setConfirming] = useState<AccountingPeriod | null>(null);
 
   // Drained. A co-op live since 2024 already has more than 15 monthly periods,
@@ -39,6 +47,29 @@ export default function PeriodClosingPage() {
   // someone opens this screen to close.
   const fetcher = useCallback(() => accountingService.periodsListAll(), []);
   const resource = useAccountingResource<DrainResult<AccountingPeriod>>(fetcher);
+
+  // The year closes, newest first, up to the API's 100: which months a close
+  // closed, which years are closed, and the latest one (the only one that can
+  // reopen). The history below pages on its own. If this fails, the months
+  // simply don't say which close closed them.
+  const closesFetcher = useCallback(
+    () => accountingService.yearClosesPage({ page: 1, per_page: 100 }),
+    [],
+  );
+  const closesResource = useAccountingResource<YearClosePage>(closesFetcher);
+  const closes = closesResource.data?.data ?? NO_CLOSES;
+  const yearEndLabels = useMemo(() => periodYearEndLabels(closes), [closes]);
+
+  // A close or a reopen changes the months, the closes, the preview and the
+  // history: refetch the first two and remount the year-end cards.
+  const [yearEndVersion, setYearEndVersion] = useState(0);
+  const refetchPeriods = resource.refetch;
+  const refetchCloses = closesResource.refetch;
+  const yearEndChanged = useCallback(() => {
+    refetchPeriods();
+    refetchCloses();
+    setYearEndVersion((v) => v + 1);
+  }, [refetchPeriods, refetchCloses]);
 
   const close = async (period: AccountingPeriod) => {
     try {
@@ -56,31 +87,32 @@ export default function PeriodClosingPage() {
       await accountingService.reopenPeriod(period.id);
       toast.success(`${period.name} reopened.`);
       resource.refetch();
-    } catch {
-      toast.error("Could not reopen this period.");
+    } catch (err) {
+      toast.error(periodReopenFailure(err));
     }
   };
 
   return (
-    <RouteGuard permission="accounting:close" pageName="Period Closing">
-      <div className="space-y-6">
-        <AccountingPageHeader
-          title="Period Closing"
-          description="Lock a month once it has been reviewed."
-        />
+    <PageFill>
+      <AccountingPageHeader
+        title="Period Closing"
+        description="Lock a month once it has been reviewed, and close the year once its books are final."
+      />
 
-        {/*
-          Closing is presented as the review step it is, not as a button that
-          tidies something up. Once a month is closed, nothing can be posted
-          into it — which is the whole value, and also why reopening exists
-          and is logged.
-        */}
-        <div className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
-          Closing a period stops anything further being posted into it. Do it
-          once the trial balance is in balance and the money accounts have been
-          reconciled.
-        </div>
+      {/*
+        Closing is presented as the review step it is, not as a button that
+        tidies something up. Once a month is closed, nothing can be posted
+        into it — which is the whole value, and also why reopening exists
+        and is logged.
+      */}
+      <div className="shrink-0 rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
+        Closing a period stops anything further being posted into it. Do it
+        once the trial balance is in balance and the money accounts have been
+        reconciled.
+      </div>
 
+      {/* The months, the year-end close and its history scroll together under the header. */}
+      <ScrollBox className="space-y-6 p-px">
         <DataState
           resource={resource}
           summary="Each accounting period, whether it is still accepting entries, and who closed it."
@@ -94,7 +126,7 @@ export default function PeriodClosingPage() {
         >
           {({ rows: periods, truncated, total }) => (
             <Card>
-              <CardContent className="space-y-4 pt-6">
+              <CardContent className="space-y-4 pt-6 fit:pt-0">
                 {truncated && (
                   <IncompleteListNotice
                     shown={periods.length}
@@ -111,7 +143,7 @@ export default function PeriodClosingPage() {
                       <TableHead className="w-56">Dates</TableHead>
                       <TableHead className="w-28">Status</TableHead>
                       <TableHead className="w-56">Closed</TableHead>
-                      <TableHead className="w-28" />
+                      <TableHead className="w-44" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -139,10 +171,15 @@ export default function PeriodClosingPage() {
                             ) : (
                               <Lock className="mr-1 h-3 w-3" />
                             )}
-                            {period.status}
+                            {periodStatusLabel(period.status)}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
+                          {yearEndLabels.has(period.id) && (
+                            <p className="font-medium text-foreground">
+                              {yearEndLabels.get(period.id)}
+                            </p>
+                          )}
                           {period.closed_at
                             ? `${formatDateTime(period.closed_at)}${
                                 period.closed_by ? ` · ${period.closed_by}` : ""
@@ -151,7 +188,7 @@ export default function PeriodClosingPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           <PermissionGate permission="accounting:close">
-                            {period.status === "open" ? (
+                            {monthAction(period, yearEndLabels) === "close" && (
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -159,7 +196,8 @@ export default function PeriodClosingPage() {
                               >
                                 Close
                               </Button>
-                            ) : (
+                            )}
+                            {monthAction(period, yearEndLabels) === "reopen" && (
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -167,6 +205,11 @@ export default function PeriodClosingPage() {
                               >
                                 Reopen
                               </Button>
+                            )}
+                            {monthAction(period, yearEndLabels) === "year" && (
+                              <span className="text-xs text-muted-foreground">
+                                {REOPEN_THE_YEAR}
+                              </span>
                             )}
                           </PermissionGate>
                         </TableCell>
@@ -179,29 +222,53 @@ export default function PeriodClosingPage() {
           )}
         </DataState>
 
-        <Dialog
-          open={confirming !== null}
-          onOpenChange={(open) => !open && setConfirming(null)}
-        >
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Close {confirming?.name}?</DialogTitle>
-              <DialogDescription>
-                No entry can be posted into this period afterwards. It can be
-                reopened, and reopening is recorded.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setConfirming(null)}>
-                Cancel
-              </Button>
-              <Button onClick={() => confirming && close(confirming)}>
-                Close period
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
+        <PermissionGate permission="accounting:close">
+          {resource.data && !closesResource.loading && (
+            <YearEndCloseSection
+              key={`close-${yearEndVersion}`}
+              periods={resource.data.rows}
+              closes={closes}
+              onChanged={yearEndChanged}
+            />
+          )}
+          <YearCloseHistory
+            key={`history-${yearEndVersion}`}
+            closes={closes}
+            onChanged={yearEndChanged}
+          />
+        </PermissionGate>
+      </ScrollBox>
+
+      <Dialog
+        open={confirming !== null}
+        onOpenChange={(open) => !open && setConfirming(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Close {confirming?.name}?</DialogTitle>
+            <DialogDescription>
+              No entry can be posted into this period afterwards. It can be
+              reopened, and reopening is recorded.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setConfirming(null)}>
+              Cancel
+            </Button>
+            <Button onClick={() => confirming && close(confirming)}>
+              Close period
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </PageFill>
+  );
+}
+
+export default function PeriodClosingPage() {
+  return (
+    <RouteGuard permission="accounting:close" pageName="Period Closing">
+      <PeriodClosingContent />
     </RouteGuard>
   );
 }

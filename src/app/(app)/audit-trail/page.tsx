@@ -6,6 +6,9 @@ import { RouteGuard, TablePagination } from "@/components/common";
 // barrel is not tree-shaken and is pulled in by nearly every page, so
 // re-exporting a calendar there would ship react-day-picker to all of them.
 import { DateRangeFilter } from "@/components/common/date-range-filter";
+// By path, like the date filter: it loads the branch list.
+import { BranchFilter } from "@/components/common/branch-filter";
+import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,6 +17,19 @@ import { Spinner } from "@/components/ui/spinner";
 import { toast } from "sonner";
 import { getInitials } from "@/lib/initials";
 import { auditService } from "@/services";
+import { usePermission } from "@/hooks";
+import { useBranchFilter, useBranchFollowingPage } from "@/hooks/use-working-branch";
+import { ALL_BRANCHES, branchIdParam } from "@/lib/branch-filter";
+import { auditLoadRestriction, auditTrailRestriction } from "./_lib/audit-access";
+import { AUDIT_DETAIL_ACTION_BADGE, AUDIT_DETAIL_CELL } from "./_lib/audit-detail-layout";
+import {
+  AUDIT_BRANCH_NOTE,
+  auditBranchFilterShown,
+  auditExportParams,
+  auditFiltersActive,
+  auditListParams,
+  type AuditFilters,
+} from "./_lib/audit-query";
 import {
   Table,
   TableBody,
@@ -43,70 +59,79 @@ import {
   ArrowRight,
   Monitor,
   X,
+  Cog,
+  UserRound,
+  ShieldAlert,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FIT_CLASSES } from "@/lib/page-fill";
 import { MAX_PER_PAGE } from "@/lib/paginate";
 import { formatDate, formatDateISO, formatTime, todayISO } from "@/lib/format";
-import type { AuditLog, AuditAction, AuditModule } from "@/types";
+import type { AuditLog, AuditAction } from "@/types";
+import {
+  AUDIT_ACTION_OPTIONS,
+  AUDIT_MODULE_OPTIONS,
+  auditActionLabel,
+  auditChangePair,
+  auditDescription,
+  auditFieldLabel,
+  auditModuleLabel,
+  auditTargetLabel,
+  auditTargetTypeLine,
+  auditUserName,
+  auditUserRole,
+} from "./_lib/audit-labels";
 
 // ── Constants ──
 
-const ACTION_CONFIG: Record<
-  AuditAction,
-  { label: string; color: string }
-> = {
-  login: { label: "Login", color: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-800" },
-  logout: { label: "Logout", color: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-800" },
-  created: { label: "Created", color: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800" },
-  updated: { label: "Updated", color: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800" },
-  deleted: { label: "Deleted", color: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800" },
-  voided: { label: "Voided", color: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800" },
-  approved: { label: "Approved", color: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800" },
-  rejected: { label: "Rejected", color: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800" },
-  released: { label: "Released", color: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800" },
-  printed: { label: "Printed", color: "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700" },
-  reset_password: { label: "Reset Password", color: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800" },
-  status_changed: { label: "Status Changed", color: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800" },
+const ACTION_COLOR: Record<AuditAction, string> = {
+  login: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-800",
+  logout: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-800",
+  created: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
+  updated: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800",
+  deleted: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
+  voided: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
+  approved: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
+  rejected: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
+  released: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
+  printed: "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700",
+  reset_password: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800",
+  status_changed: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800",
+  uploaded: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
+  attachment_removed: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
+  loan_chain_cancelled: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
+  savings_account_frozen: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800",
+  savings_account_unfrozen: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800",
+  savings_account_reactivated: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
+  savings_account_dormant: "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700",
+  savings_account_closed: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
+  savings_hold_expired: "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700",
+  savings_approval_expired: "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700",
+  time_deposit_matured: "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700",
+  time_deposit_settled: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
+  time_deposit_preterminated: "bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-800",
+  cda_workflow: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800",
+  cda_report_saved: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-800",
+  cda_report_refreshed: "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700",
+  cda_export_generated: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-800",
+  year_end_captured: "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-500/15 dark:text-gray-400 dark:border-gray-700",
 };
 
-const MODULE_CONFIG: Record<AuditModule, { label: string }> = {
-  auth: { label: "Auth" },
-  borrowers: { label: "Borrowers" },
-  loans: { label: "Loans" },
-  payments: { label: "Payments" },
-  collections: { label: "Collections" },
-  users: { label: "Users" },
-  reports: { label: "Reports" },
-};
+// Each filter's options, "all" first. The same list is the Select's `items`,
+// which is what lets the closed trigger show the label, not the raw value.
+const MODULE_FILTER_ITEMS = [{ value: "all", label: "All Modules" }, ...AUDIT_MODULE_OPTIONS];
+const ACTION_FILTER_ITEMS = [{ value: "all", label: "All Actions" }, ...AUDIT_ACTION_OPTIONS];
 
-const ACTION_OPTIONS: { value: AuditAction; label: string }[] = [
-  { value: "login", label: "Login" },
-  { value: "logout", label: "Logout" },
-  { value: "created", label: "Created" },
-  { value: "updated", label: "Updated" },
-  { value: "deleted", label: "Deleted" },
-  { value: "voided", label: "Voided" },
-  { value: "approved", label: "Approved" },
-  { value: "rejected", label: "Rejected" },
-  { value: "released", label: "Released" },
-  { value: "printed", label: "Printed" },
-  { value: "reset_password", label: "Reset Password" },
-  { value: "status_changed", label: "Status Changed" },
-];
-
-const MODULE_OPTIONS: { value: AuditModule; label: string }[] = [
-  { value: "auth", label: "Auth" },
-  { value: "borrowers", label: "Borrowers" },
-  { value: "loans", label: "Loans" },
-  { value: "payments", label: "Payments" },
-  { value: "collections", label: "Collections" },
-  { value: "users", label: "Users" },
-  { value: "reports", label: "Reports" },
-];
 
 
 // ── Helpers ──
 
+/** A user's initials, or a system mark for a row no user made. */
+function AuditAvatarContent({ log, iconClassName }: { log: AuditLog; iconClassName: string }) {
+  if (log.actor_type === "member") return <UserRound className={iconClassName} aria-hidden="true" />;
+  if (!log.user?.full_name?.trim()) return <Cog className={iconClassName} aria-hidden="true" />;
+  return <>{getInitials(log.user.full_name)}</>;
+}
 
 // ── Detail Drawer ──
 
@@ -119,7 +144,7 @@ function AuditDetailDrawer({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const actionCfg = ACTION_CONFIG[log.action] ?? { label: log.action, color: "" };
+  const actionColor = ACTION_COLOR[log.action] ?? "";
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -138,12 +163,12 @@ function AuditDetailDrawer({
           {/* User Info */}
           <div className="flex items-center gap-3 rounded-lg border p-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-orange text-white text-sm font-semibold">
-              {getInitials(log.user?.full_name)}
+              <AuditAvatarContent log={log} iconClassName="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <p className="font-medium text-sm">{log.user?.full_name ?? "System"}</p>
+              <p className="font-medium text-sm">{auditUserName(log)}</p>
               <p className="text-xs text-muted-foreground capitalize">
-                {log.user?.roles?.[0]?.replace("_", " ") ?? ""}
+                {auditUserRole(log)}
               </p>
             </div>
           </div>
@@ -154,16 +179,16 @@ function AuditDetailDrawer({
               Event Summary
             </h4>
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
+              <div className={AUDIT_DETAIL_CELL}>
                 <p className="text-xs text-muted-foreground">Action</p>
-                <Badge variant="outline" className={actionCfg.color}>
-                  {actionCfg.label}
+                <Badge variant="outline" className={cn(AUDIT_DETAIL_ACTION_BADGE, actionColor)}>
+                  {auditActionLabel(log.action)}
                 </Badge>
               </div>
-              <div className="space-y-1">
+              <div className={AUDIT_DETAIL_CELL}>
                 <p className="text-xs text-muted-foreground">Module</p>
                 <p className="text-sm font-medium">
-                  {MODULE_CONFIG[log.module]?.label ?? log.module}
+                  {auditModuleLabel(log)}
                 </p>
               </div>
               <div className="space-y-1">
@@ -183,7 +208,7 @@ function AuditDetailDrawer({
               Description
             </h4>
             <p className="text-sm rounded-lg bg-muted/50 p-3">
-              {log.description}
+              {auditDescription(log)}
             </p>
           </div>
 
@@ -195,10 +220,12 @@ function AuditDetailDrawer({
               </h4>
               <div className="flex items-center gap-2 rounded-lg border p-3">
                 <div className="flex-1">
-                  <p className="text-sm font-medium">{log.target.label}</p>
-                  <p className="text-xs text-muted-foreground capitalize">
-                    {log.target.type} #{log.target.id}
-                  </p>
+                  <p className="text-sm font-medium">{auditTargetLabel(log.target)}</p>
+                  {auditTargetTypeLine(log.target) !== null && (
+                    <p className="text-xs text-muted-foreground">
+                      {auditTargetTypeLine(log.target)}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -219,27 +246,27 @@ function AuditDetailDrawer({
                   >
                     <div className="bg-muted/50 px-3 py-1.5">
                       <p className="text-xs font-medium capitalize">
-                        {change.field.replace("_", " ")}
+                        {auditFieldLabel(change.field, log.target)}
                       </p>
                     </div>
                     <div className="px-3 py-2 space-y-1">
                       {change.old !== null && (
                         <div className="flex items-start gap-2 text-sm">
-                          <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded bg-red-100 text-red-600 text-xs font-bold">
-                            &minus;
+                          <span className="inline-flex h-5 shrink-0 items-center justify-center rounded bg-red-100 px-1.5 text-red-600 text-xs font-medium">
+                            Old
                           </span>
                           <span className="text-red-700 break-all">
-                            {change.old}
+                            {auditChangePair(log, change).old}
                           </span>
                         </div>
                       )}
                       {change.new !== null && (
                         <div className="flex items-start gap-2 text-sm">
-                          <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded bg-green-100 text-green-600 text-xs font-bold">
-                            +
+                          <span className="inline-flex h-5 shrink-0 items-center justify-center rounded bg-green-100 px-1.5 text-green-600 text-xs font-medium">
+                            New
                           </span>
                           <span className="text-green-700 break-all">
-                            {change.new}
+                            {auditChangePair(log, change).new}
                           </span>
                         </div>
                       )}
@@ -277,7 +304,7 @@ function AuditDetailDrawer({
 const PER_PAGE_OPTIONS = [25, 50, MAX_PER_PAGE] as const;
 const DEFAULT_PER_PAGE = 25;
 
-export default function AuditTrailPage() {
+function AuditTrailContent() {
   // `searchDraft` is what the box shows; `search` is what has been sent. Keeping
   // them apart is what makes the debounce one request per settled query instead
   // of one per keystroke.
@@ -291,12 +318,19 @@ export default function AuditTrailPage() {
   // re-trigger the fetch forever.
   const [dateFrom, setDateFrom] = useState<string | null>(null);
   const [dateTo, setDateTo] = useState<string | null>(null);
+  // The audited record's branch (Phase 6 MB-BE6), through the shared branch
+  // filter: shown only with every branch, which the trail itself needs.
+  const viewAll = usePermission().can("branches:view_all");
+  const [branch, setBranch] = useBranchFilter();
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
+  // Back to page 1 when the header's working branch moves the branch filter.
+  const [page, setPage] = useBranchFollowingPage();
   const [perPage, setPerPage] = useState<number>(DEFAULT_PER_PAGE);
   const [meta, setMeta] = useState<{ current_page: number; last_page: number; per_page: number; total: number } | null>(null);
+  // Set when the list answers 403: the table says why instead of "No audit logs found".
+  const [loadRestriction, setLoadRestriction] = useState<string | null>(null);
 
   // Guards against out-of-order responses: rapid page clicks or a fast-changing
   // filter can land an older request last and repaint the previous page's rows
@@ -310,22 +344,19 @@ export default function AuditTrailPage() {
     let clamping = false;
     try {
       setLoading(true);
-      const params: Record<string, unknown> = { page, per_page: perPage };
-      if (actionFilter !== "all") params.action = actionFilter;
-      if (moduleFilter !== "all") params.auditable_type = moduleFilter;
-      // Whole-day bounds on `created_at`, applied by `buildQuery()`. Sent as
-      // the calendar strings themselves — shifting either end by a day here to
-      // reinterpret the window would put the screen and the CSV, which sends
-      // the same two values, one day apart.
-      if (dateFrom) params.date_from = dateFrom;
-      if (dateTo) params.date_to = dateTo;
-      // Sent to the server, not applied here. Filtering the fetched page
-      // client-side would search one page of an unbounded log and report
-      // "no results" for events that exist — the same truncation as the table,
-      // one layer along. `buildQuery()` searches action, auditable_type,
-      // description and the user's name; the export already relied on it.
-      if (search) params.search = search;
-      const res = await auditService.list(params);
+      // Whole-day bounds on `created_at`, applied by `buildQuery()`, sent as
+      // the calendar strings themselves: shifting either end by a day here
+      // would put the screen and the CSV, which sends the same two values, one
+      // day apart. The search goes to the server too; filtering the fetched
+      // page here would search one page of an unbounded log.
+      const res = await auditService.list(
+        auditListParams(
+          { search, module: moduleFilter, action: actionFilter, dateFrom, dateTo, branch },
+          viewAll,
+          page,
+          perPage,
+        ),
+      );
       if (requestId !== requestIdRef.current) return;
       const rows = res?.data ?? [];
       const nextMeta = res?.meta ?? null;
@@ -346,16 +377,19 @@ export default function AuditTrailPage() {
       }
 
       setLogs(rows);
-    } catch {
+      setLoadRestriction(null);
+    } catch (err) {
       if (requestId === requestIdRef.current) {
-        toast.error("We couldn't load the audit logs. Please try again.");
+        const restriction = auditLoadRestriction(err);
+        if (!restriction) toast.error("We couldn't load the audit logs. Please try again.");
+        setLoadRestriction(restriction);
         setLogs([]);
         setMeta(null);
       }
     } finally {
       if (requestId === requestIdRef.current && !clamping) setLoading(false);
     }
-  }, [actionFilter, moduleFilter, dateFrom, dateTo, search, page, perPage]);
+  }, [actionFilter, moduleFilter, dateFrom, dateTo, search, branch, viewAll, page, perPage, setPage]);
 
   useEffect(() => {
     fetchLogs();
@@ -369,7 +403,7 @@ export default function AuditTrailPage() {
       setPage(1);
     }, 250);
     return () => clearTimeout(t);
-  }, [searchDraft, search]);
+  }, [searchDraft, search, setPage]);
 
   const todayStr = todayISO();
 
@@ -390,17 +424,19 @@ export default function AuditTrailPage() {
     setDateTo(to);
     setPage(1);
   };
+  const changeBranch = (value: string) => {
+    setBranch(value);
+    setPage(1);
+  };
   const changePerPage = (next: number) => {
     setPerPage(next);
     setPage(1);
   };
 
-  const hasFilters =
-    searchDraft !== "" ||
-    moduleFilter !== "all" ||
-    actionFilter !== "all" ||
-    dateFrom !== null ||
-    dateTo !== null;
+  const filters: AuditFilters = { search, module: moduleFilter, action: actionFilter, dateFrom, dateTo, branch };
+  const hasFilters = auditFiltersActive({ ...filters, search: searchDraft });
+  const showBranchFilter = auditBranchFilterShown(viewAll);
+  const branchPicked = showBranchFilter && branchIdParam(branch) !== undefined;
 
   const clearFilters = () => {
     setSearchDraft("");
@@ -409,6 +445,7 @@ export default function AuditTrailPage() {
     setActionFilter("all");
     setDateFrom(null);
     setDateTo(null);
+    setBranch(ALL_BRANCHES);
     setPage(1);
   };
 
@@ -431,13 +468,7 @@ export default function AuditTrailPage() {
   const handleExport = async () => {
     setExporting(true);
     try {
-      const params: Record<string, unknown> = {};
-      if (search) params.search = search;
-      if (actionFilter !== "all") params.action = actionFilter;
-      if (moduleFilter !== "all") params.auditable_type = moduleFilter;
-      if (dateFrom) params.date_from = dateFrom;
-      if (dateTo) params.date_to = dateTo;
-      const blob = await auditService.export(params);
+      const blob = await auditService.export(auditExportParams(filters, viewAll));
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -455,10 +486,9 @@ export default function AuditTrailPage() {
   };
 
   return (
-    <RouteGuard permission="audit_logs:view" pageName="Audit Trail">
-    <div className="space-y-6">
+    <PageFill>
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex shrink-0 items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Audit Trail</h1>
           <p className="text-muted-foreground">
@@ -487,7 +517,7 @@ export default function AuditTrailPage() {
         total beside a truncated one, and the server offers no per-filter
         equivalent to compute them from.
       */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid shrink-0 gap-4 md:grid-cols-4">
         <Card>
           <CardContent className="py-4">
             <p className="text-xs text-muted-foreground">Total Events</p>
@@ -543,8 +573,12 @@ export default function AuditTrailPage() {
       </div>
 
       {/* Logs Table */}
-      <Card>
-        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <Card className={FIT_CLASSES.section}>
+        {/* The Loans list's layout: the title and the filters share a row only
+            when every filter fits beside the title. Otherwise the filters move
+            together onto their own row under it, left-aligned, and wrap there,
+            so no single filter is left beside the title on a second line. */}
+        <CardHeader className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-6">
           <CardTitle className="text-sm font-medium">
             {/* The count of every matching row, not of the visible page — the
                 paginator underneath says which slice of it is on screen. */}
@@ -557,30 +591,28 @@ export default function AuditTrailPage() {
                 placeholder="Search logs..."
                 value={searchDraft}
                 onChange={(e) => setSearchDraft(e.target.value)}
-                className="pl-9 h-9"
+                className="pl-9"
                 aria-label="Search audit logs"
               />
             </div>
-            <Select value={moduleFilter} onValueChange={changeModuleFilter}>
+            <Select value={moduleFilter} onValueChange={changeModuleFilter} items={MODULE_FILTER_ITEMS}>
               <SelectTrigger>
                 <SelectValue placeholder="Module" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Modules</SelectItem>
-                {MODULE_OPTIONS.map((m) => (
+                {MODULE_FILTER_ITEMS.map((m) => (
                   <SelectItem key={m.value} value={m.value}>
                     {m.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <Select value={actionFilter} onValueChange={changeActionFilter}>
+            <Select value={actionFilter} onValueChange={changeActionFilter} items={ACTION_FILTER_ITEMS}>
               <SelectTrigger>
                 <SelectValue placeholder="Action" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Actions</SelectItem>
-                {ACTION_OPTIONS.map((a) => (
+                {ACTION_FILTER_ITEMS.map((a) => (
                   <SelectItem key={a.value} value={a.value}>
                     {a.label}
                   </SelectItem>
@@ -588,15 +620,15 @@ export default function AuditTrailPage() {
               </SelectContent>
             </Select>
             <DateRangeFilter
-              label="Date Exclusive"
+              label="Dates"
               from={dateFrom}
               to={dateTo}
               onChange={changeDateRange}
             />
+            {showBranchFilter && <BranchFilter value={branch} onChange={changeBranch} hideLabel />}
             {hasFilters && (
               <Button
                 variant="ghost"
-                size="sm"
                 onClick={clearFilters}
                 className="gap-1 text-muted-foreground"
               >
@@ -606,106 +638,112 @@ export default function AuditTrailPage() {
             )}
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className={FIT_CLASSES.section}>
+          {branchPicked && (
+            <p className="shrink-0 text-xs text-muted-foreground">{AUDIT_BRANCH_NOTE}</p>
+          )}
           {loading ? (
             <div className="flex items-center justify-center h-32">
               <Spinner className="size-6 text-muted-foreground" />
             </div>
           ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-40">Timestamp</TableHead>
-                  <TableHead>User</TableHead>
-                  <TableHead>Action</TableHead>
-                  <TableHead>Module</TableHead>
-                  <TableHead className="min-w-[200px]">
-                    Description
-                  </TableHead>
-                  <TableHead className="w-12" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {logs.map((log) => {
-                  const actionCfg = ACTION_CONFIG[log.action] ?? { label: log.action, color: "" };
-                  return (
-                    <TableRow
-                      key={log.id}
-                      className="cursor-pointer hover:bg-muted/50"
-                      onClick={async () => {
-                        setSelectedLog(log);
-                        try {
-                          const fresh = await auditService.detail(log.id);
-                          if (fresh) setSelectedLog(fresh);
-                        } catch {
-                          // Keep the list row data if detail fetch fails
-                        }
-                      }}
-                    >
-                      <TableCell>
-                        <div>
-                          <p className="text-sm">
-                            {formatDate(log.created_at)}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {formatTime(log.created_at)}
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-orange/10 text-brand-orange text-xs font-semibold">
-                            {getInitials(log.user?.full_name)}
-                          </div>
+          <>
+            <ScrollBox>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-40">Timestamp</TableHead>
+                    <TableHead>User</TableHead>
+                    <TableHead>Action</TableHead>
+                    <TableHead>Module</TableHead>
+                    <TableHead className="min-w-[200px]">
+                      Description
+                    </TableHead>
+                    <TableHead className="w-12" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {logs.map((log) => {
+                    const actionColor = ACTION_COLOR[log.action] ?? "";
+                    return (
+                      <TableRow
+                        key={log.id}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={async () => {
+                          setSelectedLog(log);
+                          try {
+                            const fresh = await auditService.detail(log.id);
+                            if (fresh) setSelectedLog(fresh);
+                          } catch {
+                            // Keep the list row data if detail fetch fails
+                          }
+                        }}
+                      >
+                        <TableCell>
                           <div>
-                            <p className="text-sm font-medium">
-                              {log.user?.full_name ?? "System"}
+                            <p className="text-sm">
+                              {formatDate(log.created_at)}
                             </p>
-                            <p className="text-xs text-muted-foreground capitalize">
-                              {log.user?.roles?.[0]?.replace("_", " ") ?? ""}
+                            <p className="text-xs text-muted-foreground">
+                              {formatTime(log.created_at)}
                             </p>
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={cn(actionCfg.color)}
-                        >
-                          {actionCfg.label}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-sm">
-                          {MODULE_CONFIG[log.module]?.label ?? log.module}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <p className="text-sm text-muted-foreground truncate max-w-xs">
-                          {log.description}
-                        </p>
-                      </TableCell>
-                      <TableCell>
-                        <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-orange/10 text-brand-orange text-xs font-semibold">
+                              <AuditAvatarContent log={log} iconClassName="h-4 w-4" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium">
+                                {auditUserName(log)}
+                              </p>
+                              <p className="text-xs text-muted-foreground capitalize">
+                                {auditUserRole(log)}
+                              </p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={cn(actionColor)}
+                          >
+                            {auditActionLabel(log.action)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm">
+                            {auditModuleLabel(log)}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <p className="text-sm text-muted-foreground truncate max-w-xs">
+                            {auditDescription(log)}
+                          </p>
+                        </TableCell>
+                        <TableCell>
+                          <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  {logs.length === 0 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={6}
+                        className="h-24 text-center text-muted-foreground"
+                      >
+                        {loadRestriction ??
+                          (hasFilters
+                            ? "No audit logs match these filters."
+                            : "No audit logs found.")}
                       </TableCell>
                     </TableRow>
-                  );
-                })}
-                {logs.length === 0 && (
-                  <TableRow>
-                    <TableCell
-                      colSpan={6}
-                      className="h-24 text-center text-muted-foreground"
-                    >
-                      {hasFilters
-                        ? "No audit logs match these filters."
-                        : "No audit logs found."}
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                  )}
+                </TableBody>
+              </Table>
+            </ScrollBox>
             {/*
               An audit log only grows, so this paginates rather than draining:
               there is no page count at which "fetch everything" stops being a
@@ -721,7 +759,7 @@ export default function AuditTrailPage() {
               onPageChange={setPage}
               onPerPageChange={changePerPage}
             />
-          </div>
+          </>
           )}
         </CardContent>
       </Card>
@@ -736,7 +774,45 @@ export default function AuditTrailPage() {
           }}
         />
       )}
-    </div>
+    </PageFill>
+  );
+}
+
+/** The Audit Trail in place of its logs, for a user the API would refuse them to. */
+function AuditTrailRestricted({ message }: { message: string }) {
+  return (
+    <PageFill>
+      <div className="shrink-0">
+        <h1 className="text-2xl font-bold tracking-tight">Audit Trail</h1>
+        <p className="text-muted-foreground">
+          Track and review all user actions across the system
+        </p>
+      </div>
+      <Card className="shrink-0">
+        <CardContent className="flex items-start gap-3 py-6">
+          <ShieldAlert className="h-5 w-5 shrink-0 text-muted-foreground" />
+          <div className="space-y-1">
+            <p className="font-medium">{message}</p>
+            <p className="text-sm text-muted-foreground">
+              Ask your administrator for the &quot;See all branches&quot; permission.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    </PageFill>
+  );
+}
+
+/** Checks branch access before the logs are requested. */
+function AuditTrailAccess() {
+  const restriction = auditTrailRestriction(usePermission().can("branches:view_all"));
+  return restriction ? <AuditTrailRestricted message={restriction} /> : <AuditTrailContent />;
+}
+
+export default function AuditTrailPage() {
+  return (
+    <RouteGuard permission="audit_logs:view" pageName="Audit Trail">
+      <AuditTrailAccess />
     </RouteGuard>
   );
 }
