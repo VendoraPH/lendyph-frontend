@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { DataState } from "@/components/common/data-state";
+import { Icon3D } from "@/components/common/icon-3d";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,16 +30,19 @@ export function AmlaDashboard() {
   const access = amlaMonitoringAccess(can);
   return (
     <PageFill>
-      <div className="shrink-0">
-        <h1 className="text-2xl font-semibold tracking-tight">AMLA Dashboard</h1>
-        <p className="text-sm text-muted-foreground">
-          Monitoring at a glance: the server&apos;s counts, then the latest open alerts and CTR candidates. The full figures
-          are in{" "}
-          <Link href="/amla/reports" className="underline underline-offset-4">
-            AMLA Reports
-          </Link>
-          .
-        </p>
+      <div className="flex shrink-0 items-center gap-3">
+        <Icon3D name="icon-amla" size={40} className="hidden sm:block" />
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold tracking-tight">AMLA Dashboard</h1>
+          <p className="text-sm text-muted-foreground">
+            Monitoring at a glance: the server&apos;s counts, then the latest open alerts and CTR candidates. The full
+            figures are in{" "}
+            <Link href="/amla/reports" className="underline underline-offset-4">
+              AMLA Reports
+            </Link>
+            .
+          </p>
+        </div>
       </div>
       <ScrollBox className="space-y-4 p-px">
         {access.status && <StatusCard />}

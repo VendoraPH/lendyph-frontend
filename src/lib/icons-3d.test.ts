@@ -1,14 +1,16 @@
 /**
  * The 3D icon set (Higgsfield, 2026-11-17) and where it is used.
  *
- * WHAT THIS PROVES: the registry holds exactly the thirty icons, each a local
- * path under /icons/3d/ whose file is really in public/ and stays light; every
- * side-menu item (every module switched on) has its agreed icon, except Linda
- * and GCash, which keep their own; every dashboard figure card, report and
- * printable has a 3D icon mapped, the agreed one for its line icon; and the
- * module headers show their module's icon.
- * WHAT IT DOES NOT PROVE: how the icons look, or that every page still fits at
- * 1366x768 (browser check).
+ * WHAT THIS PROVES: the registry holds exactly the thirty-two icons, each a
+ * local path under /icons/3d/ whose file is really in public/, a 192x192 WebP
+ * with an alpha channel, and stays light; every side-menu item (every module
+ * switched on) has its agreed icon, except Linda, who keeps her face; GCash and
+ * AMLA show their own icons (GCash's brand mark stays its line icon); every
+ * dashboard figure card, report and printable has a 3D icon mapped, the agreed
+ * one for its line icon, and the AMLA report cards show AMLA's; and the module
+ * headers show their module's icon.
+ * WHAT IT DOES NOT PROVE: how the icons look (clean edges on the light and dark
+ * menu), or that every page still fits at 1366x768 (browser check).
  */
 import { before, test } from "node:test";
 import assert from "node:assert/strict";
@@ -35,6 +37,8 @@ const EXPECTED = [
   "icon-signed",
   "icon-moon",
   "icon-calendar",
+  "icon-gcash",
+  "icon-amla",
   "empty-loans",
   "empty-members",
   "empty-payments",
@@ -63,14 +67,15 @@ before(async () => {
     "NEXT_PUBLIC_ENABLE_MEMBER_PORTAL",
     "NEXT_PUBLIC_ENABLE_CREDIT_SCORING",
     "NEXT_PUBLIC_ENABLE_CIC",
+    "NEXT_PUBLIC_ENABLE_AMLA",
   ]) {
     process.env[name] = "true";
   }
   nav = await import("@/constants/navigation");
 });
 
-test("the registry holds exactly the thirty icons", () => {
-  assert.equal(EXPECTED.length, 30);
+test("the registry holds exactly the thirty-two icons", () => {
+  assert.equal(EXPECTED.length, 32);
   assert.deepEqual([...ICON_3D_NAMES].sort(), [...EXPECTED].sort());
   assert.deepEqual(Object.keys(ICONS_3D).sort(), [...EXPECTED].sort());
 });
@@ -90,13 +95,33 @@ test("every icon's file is in public/ and stays light (under 12 KB)", () => {
   }
 });
 
+/** A WebP's canvas size and whether it carries alpha, read from its VP8X header. */
+function webpInfo(file: string): { width: number; height: number; alpha: boolean } {
+  const b = readFileSync(file);
+  assert.equal(b.toString("ascii", 0, 4), "RIFF", `${file} is not a RIFF file`);
+  assert.equal(b.toString("ascii", 8, 12), "WEBP", `${file} is not a WebP`);
+  assert.equal(b.toString("ascii", 12, 16), "VP8X", `${file} has no extended header (no alpha)`);
+  return {
+    alpha: (b[20] & 0x10) !== 0,
+    width: 1 + b.readUIntLE(24, 3),
+    height: 1 + b.readUIntLE(27, 3),
+  };
+}
+
+test("every icon's file is a 192x192 WebP with an alpha channel", () => {
+  for (const name of ICON_3D_NAMES) {
+    const info = webpInfo(join(process.cwd(), "public", ICONS_3D[name]));
+    assert.deepEqual(info, { width: 192, height: 192, alpha: true }, name);
+  }
+});
+
 test("the menu tile is a soft neutral tile: light in light mode, the card colour in dark mode", () => {
   const classes = ICON_3D_TILE_CLASS.split(/\s+/);
   for (const t of ["bg-white", "dark:bg-card"]) assert.ok(classes.includes(t), t);
   assert.ok(!classes.some((c) => /^bg-gradient|^from-|^to-/.test(c)), "no coloured gradient");
 });
 
-test("every side-menu item shows its agreed 3D icon; Linda and GCash keep their own", () => {
+test("every side-menu item shows its agreed 3D icon; only Linda keeps her own", () => {
   const byHref = Object.fromEntries(nav.SIDEBAR_NAV.map((item) => [item.href, item.icon3d]));
   assert.deepEqual(byHref, {
     "/dashboard": "icon-dashboard",
@@ -107,11 +132,12 @@ test("every side-menu item shows its agreed 3D icon; Linda and GCash keep their 
     "/share-capital": "empty-share-capital",
     "/savings": "empty-savings",
     "/collaterals": "empty-collaterals",
-    "/gcash": undefined,
+    "/gcash": "icon-gcash",
     "/credit-scoring": "icon-credit-score",
     "/cic": "empty-compliance",
     "/cda": "empty-compliance",
     "/member-portal": "icon-portal",
+    "/amla": "icon-amla",
     "/accounting": "empty-ledger",
     "/users": "icon-users",
     "/reports": "pick-report",
@@ -128,8 +154,16 @@ test("the side menu draws the 3D icon on the neutral tile, in both the full and 
   // One helper draws the item's icon for all three layouts (collapsed, plain
   // link, expander), so the collapsed menu shows the same icons.
   assert.equal((sidebar.match(/<NavItemIcon\b/g) ?? []).length, 3);
-  // The line icon is drawn once, inside that helper, for GCash only.
+  // The line icon is drawn once, inside that helper, for an item with no 3D icon.
   assert.equal((sidebar.match(/<item\.icon\b/g) ?? []).length, 1);
+});
+
+test("GCash keeps its brand mark as its line icon, for the command palette, beside its 3D icon", async () => {
+  const { GCashIcon } = await import("@/components/icons/gcash-icon");
+  const gcash = nav.SIDEBAR_NAV.find((item) => item.href === "/gcash");
+  assert.equal(gcash?.icon, GCashIcon);
+  assert.equal(gcash?.icon3d, "icon-gcash");
+  assert.equal(nav.AMLA_NAV.icon3d, "icon-amla");
 });
 
 test("Linda's menu tile shows her face on the neutral tile, as her floating button does", () => {
@@ -233,6 +267,16 @@ test("every printable has a 3D icon mapped from its line icon, the agreed one", 
   }
 });
 
+test("every AMLA report card, and the AMLA section on the Reports page, shows AMLA's icon", async () => {
+  const { AMLA_REPORT_CATALOG } = await import("@/app/(app)/reports/_lib/report-catalog");
+  assert.equal(AMLA_REPORT_CATALOG.length, 10);
+  for (const report of AMLA_REPORT_CATALOG) assert.equal(report.icon3d, "icon-amla", report.key);
+  const page = read("src/app/(app)/reports/page.tsx");
+  assert.match(page, /<Icon3D name=\{report\.icon3d \?\? reportIcon3D\(report\.icon\)\} size=\{30\} \/>/);
+  assert.match(page, /<Icon3D name="icon-amla" size=\{56\} \/>/);
+  assert.doesNotMatch(page, /name="emptyCompliance"/);
+});
+
 test("the report and printable cards and their page headers draw the 3D icon", () => {
   for (const path of [
     "src/app/(app)/reports/page.tsx",
@@ -257,6 +301,8 @@ test("each module header shows its module's 3D icon", () => {
     "src/app/(app)/cda/_components/cda-page.tsx": "empty-compliance",
     "src/app/(app)/loans/reminders/_components/reminders-shell.tsx": "empty-reminders",
     "src/app/(app)/loans/past-due/page.tsx": "icon-alert",
+    "src/app/(app)/gcash/page.tsx": "icon-gcash",
+    "src/app/(app)/amla/_components/amla-dashboard.tsx": "icon-amla",
   };
   for (const [path, icon] of Object.entries(headers)) {
     assert.match(read(path), new RegExp(`<Icon3D name="${icon}"`), path);
@@ -270,6 +316,8 @@ test("module headers draw their icon at 40px beside the title, Reminders include
     "src/app/(app)/credit-scoring/_components/page-header.tsx",
     "src/app/(app)/cda/_components/cda-page.tsx",
     "src/app/(app)/loans/reminders/_components/reminders-shell.tsx",
+    "src/app/(app)/gcash/page.tsx",
+    "src/app/(app)/amla/_components/amla-dashboard.tsx",
   ]) {
     const src = read(path);
     assert.match(src, /<Icon3D name="[a-z0-9-]+" size=\{40\} className="hidden sm:block[^"]*" \/>/, path);
