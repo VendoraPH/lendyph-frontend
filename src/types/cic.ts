@@ -161,6 +161,10 @@ export interface CicLoanOverride {
   contract_type_label: string | null;
   transaction_type: string | null;
   transaction_type_label: string | null;
+  /** The number CIC reads the loan by, when its own Loan No. is too long or collides. */
+  contract_no: string | null;
+  /** A file submitted to CIC carries `contract_no`: it can't change and the override can't be removed. */
+  contract_no_reported: boolean;
   /** The product mapping the override stands in for, as the server reads it. */
   product_mapping: Partial<CicProductMappingValue> | null;
   reason: string;
@@ -178,10 +182,14 @@ export interface CicLoanOverrideCodes {
 
 export interface CreateCicLoanOverride extends CicLoanOverrideCodes {
   loan_id: number;
+  /** Up to 38 letters, digits and dashes; left out when there is none. */
+  contract_no?: string;
   reason: string;
 }
 
 export interface UpdateCicLoanOverride extends CicLoanOverrideCodes {
+  /** Left out keeps the stored number; null clears it. */
+  contract_no?: string | null;
   reason: string;
 }
 

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { LoanSearchPicker } from "@/components/common/loan-search-picker";
 import { ReasonDialog } from "@/components/common/reason-dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { useDialogOpening, usePermission } from "@/hooks";
@@ -12,6 +13,7 @@ import { cicService } from "@/services";
 import type { CicContractRecordType, CicLoanOverride, CicLoanOverrideCodes, CicProductMappingCodeLists } from "@/types/cic";
 import { recordTypeLabel } from "@/app/(app)/cic/_lib/labels";
 import { CodeSelect } from "./code-select";
+import { CONTRACT_NO_MAX, contractNoChange } from "../_lib/override-contract-no";
 
 const RECORD_TYPES: CicContractRecordType[] = ["CI", "CN"];
 const BLANK: CicLoanOverrideCodes = { record_type: null, contract_type: null, transaction_type: null };
@@ -37,8 +39,10 @@ export function OverrideDialog({
   const { can } = usePermission();
   const [loan, setLoan] = useState<LoanOption | null>(null);
   const [codes, setCodes] = useState<CicLoanOverrideCodes>(BLANK);
+  const [contractNo, setContractNo] = useState("");
   if (useDialogOpening(open, editing)) {
     setLoan(null);
+    setContractNo(editing?.contract_no ?? "");
     setCodes(
       editing
         ? { record_type: editing.record_type, contract_type: editing.contract_type, transaction_type: editing.transaction_type }
@@ -47,18 +51,31 @@ export function OverrideDialog({
   }
   // Contract types depend on the record type: the override's own, else the product's.
   const recordType = codes.record_type ?? editing?.product_mapping?.record_type ?? null;
+  // A submitted file carries the number: the server refuses any change.
+  const contractNoLocked = editing?.contract_no_reported === true;
 
   return (
     <ReasonDialog
       open={open}
       onOpenChange={onOpenChange}
       title={editing ? `Change the CIC Codes of ${editing.loan.display_number}` : "Override a Loan's CIC Codes"}
-      description="This loan is reported with these codes instead of its product's mapping. Leave a code blank to keep the product's."
+      description="This loan is reported with these codes instead of its product's mapping, and with its own CIC contract number when one is given. Leave a code blank to keep the product's."
       confirmLabel={editing ? "Save Override" : "Add Override"}
       missingFields={!editing && !loan ? ["Loan"] : []}
       onConfirm={async (reason) => {
-        if (editing) await cicService.updateLoanOverride(editing.id, { ...codes, reason });
-        else if (loan) await cicService.createLoanOverride({ loan_id: loan.id, ...codes, reason });
+        const number = contractNoChange(editing?.contract_no ?? null, contractNo, {
+          editing: editing !== null,
+          locked: contractNoLocked,
+        });
+        if (editing) await cicService.updateLoanOverride(editing.id, { ...codes, ...number, reason });
+        else if (loan) {
+          await cicService.createLoanOverride({
+            loan_id: loan.id,
+            ...codes,
+            ...("contract_no" in number && number.contract_no ? { contract_no: number.contract_no } : {}),
+            reason,
+          });
+        }
         notifySuccess("Loan override saved.");
         onSaved();
       }}
@@ -105,6 +122,24 @@ export function OverrideDialog({
             empty={recordType ? "The product's" : "Choose the CIC record first"}
             onChange={(contract_type) => setCodes({ ...codes, contract_type })}
           />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="cic-override-contract-no">CIC contract number (optional)</Label>
+          <Input
+            id="cic-override-contract-no"
+            className="font-mono"
+            autoComplete="off"
+            spellCheck={false}
+            maxLength={CONTRACT_NO_MAX}
+            readOnly={contractNoLocked}
+            value={contractNo}
+            onChange={(e) => setContractNo(e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">
+            {contractNoLocked
+              ? "A file submitted to CIC carries this number, so it can't change."
+              : `For a loan whose Loan No. is over ${CONTRACT_NO_MAX} characters or matches another's: up to ${CONTRACT_NO_MAX} letters, digits and dashes. Leave it blank to report the Loan No.${editing?.contract_no ? " Empty it to clear the number." : ""}`}
+          </p>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="cic-override-transaction">Transaction type</Label>

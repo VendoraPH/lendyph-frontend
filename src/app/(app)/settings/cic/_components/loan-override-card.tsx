@@ -54,6 +54,7 @@ export function LoanOverrideCard({ codeLists }: { codeLists: CicProductMappingCo
                       <TableHead>Record</TableHead>
                       <TableHead>Contract type</TableHead>
                       <TableHead>Transaction type</TableHead>
+                      <TableHead className="whitespace-normal">CIC contract number</TableHead>
                       <TableHead>Reason</TableHead>
                       {canWrite && <TableHead />}
                     </TableRow>
@@ -70,6 +71,18 @@ export function LoanOverrideCard({ codeLists }: { codeLists: CicProductMappingCo
                         <TableCell>{o.record_type ? recordTypeLabel(o.record_type) : "The product's"}</TableCell>
                         <TableCell className="whitespace-normal">{code(o.contract_type, o.contract_type_label)}</TableCell>
                         <TableCell className="whitespace-normal">{code(o.transaction_type, o.transaction_type_label)}</TableCell>
+                        <TableCell className="max-w-48 whitespace-normal">
+                          {o.contract_no ? (
+                            <>
+                              <span className="break-all font-mono text-xs">{o.contract_no}</span>
+                              {o.contract_no_reported && (
+                                <span className="block text-xs text-muted-foreground">Reported to CIC</span>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-muted-foreground">The Loan No.</span>
+                          )}
+                        </TableCell>
                         <TableCell className="max-w-72 whitespace-normal text-sm">
                           {o.reason}
                           <span className="block text-xs text-muted-foreground">
