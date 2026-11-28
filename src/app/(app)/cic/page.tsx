@@ -28,7 +28,7 @@ function CicDashboardContent() {
         description="How ready Lendy's members and loans are to report to the Credit Information Corporation, built live by the server."
         actions={
           <>
-            <ReferenceDateField value={referenceDate} onChange={setReferenceDate} max={todayISO()} />
+            <ReferenceDateField value={referenceDate} onChange={setReferenceDate} />
             <Button variant="outline" nativeButton={false} render={<Link href="/cic/issues" />}>
               Review Issues
             </Button>

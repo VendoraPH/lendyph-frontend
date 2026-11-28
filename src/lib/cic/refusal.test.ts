@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { getErrorMessage } from "@/lib/api-error";
 import { test } from "node:test";
 
 import { CIC_RATE_LIMIT_WORDS, cicRateLimitMessage, cicRefusal, withCicRateLimitWords } from "./refusal";
@@ -48,4 +49,19 @@ test("the words go into the body's message, where the error readers look", () =>
   const other = { response: { status: 403, data: { message: "No." } } };
   withCicRateLimitWords(other);
   assert.deepEqual(other.response.data, { message: "No." });
+});
+
+// The live views and the override dialog show these through getErrorMessage
+// (toasts and ReasonDialog) and the body's message (pages): both read the
+// server's own words.
+test("a refused live date and a refused override read in the server's words", () => {
+  const liveDate = "Choose today, or the last day of a month within the last 92 days. Older months are read from their captures.";
+  const dateRefusal = { response: { status: 422, data: { message: liveDate, errors: { reference_date: [liveDate] } } } };
+  assert.equal(getErrorMessage(dateRefusal, "fallback"), liveDate);
+  assert.equal(withCicRateLimitWords(dateRefusal), dateRefusal);
+  assert.equal(dateRefusal.response.data.message, liveDate);
+
+  const reserved = 'The contract number can\'t be "loan-" and digits: CIC Reporting keeps that form for loans with no number of their own.';
+  const overrideRefusal = { response: { status: 422, data: { message: reserved, errors: { contract_no: [reserved] } } } };
+  assert.equal(getErrorMessage(overrideRefusal, "fallback"), reserved);
 });

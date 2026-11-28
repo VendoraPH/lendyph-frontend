@@ -3,7 +3,6 @@
 import { useId } from "react";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import { todayISO } from "@/lib/format";
 import type { CicCapture } from "@/types/cic";
 import { captureLabel } from "../_lib/labels";
 import type { CicSourceValue } from "../_hooks/use-cic-source";
@@ -41,7 +40,6 @@ export function SourceField({
       {value.captureId === null && (
         <ReferenceDateField
           value={value.referenceDate}
-          max={todayISO()}
           onChange={(referenceDate) => onChange({ ...value, referenceDate })}
         />
       )}
