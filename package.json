@@ -87,7 +87,7 @@
     "sharp": "^0.35.5",
     "socket.io-client": "^4.8.4",
     "sonner": "^2.0.8",
-    "sweetalert2": "^11.26.25",
+    "sweetalert2": "^11.26.26",
     "tailwind-merge": "^3.7.1",
     "vaul": "^1.1.2",
     "web-vitals": "^6.2.3",
