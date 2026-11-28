@@ -186,8 +186,8 @@ export const env = {
     // its endpoints stop answering 501. Literal reference for the same reason.
     creditScoring: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_CREDIT_SCORING),
     // CIC reporting (Credit Information Corporation submission files: /cic and
-    // Settings → CIC). Off by default until the backend serves /cic. Literal
-    // reference, as above.
+    // Settings → CIC). Off by default; turn it on only where the backend has
+    // CIC_ENABLED on. Literal reference, as above.
     cic: parseBoolEnvValue(process.env.NEXT_PUBLIC_ENABLE_CIC),
     // Loan Origination (online applications: Loans → Loan Origination and the
     // public /apply/{token} pages). Off by default until the backend serves

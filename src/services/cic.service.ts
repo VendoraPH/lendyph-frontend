@@ -51,6 +51,16 @@ export interface CicDownloadedFile {
   filename: string | null;
 }
 
+/** A file the server sends, with its name; a refusal's JSON is read back so it shows in words. */
+async function downloadFile(path: string, params?: object): Promise<CicDownloadedFile> {
+  try {
+    const response = await axiosClient.get<Blob>(path, { params, responseType: "blob" });
+    return { blob: response.data, filename: filenameFrom(response.headers?.["content-disposition"]) };
+  } catch (err) {
+    throw await readBlobError(err);
+  }
+}
+
 export const cicService = {
   getStatus: () => api.get<CicStatus>(C.STATUS),
 
@@ -72,6 +82,8 @@ export const cicService = {
   retirePublicKey: (id: number, reason: string) => api.post<CicPublicKey>(C.PUBLIC_KEY_RETIRE(id), { reason }),
 
   getProductMappings: () => api.get<CicProductMappings>(C.PRODUCT_MAPPINGS),
+  /** Clears one product's mapping; answers with the whole listing again. */
+  clearProductMapping: (loanProductId: number) => api.delete<CicProductMappings>(C.PRODUCT_MAPPING(loanProductId)),
   /** Products not listed are left as they are. */
   saveProductMappings: (mappings: SaveCicProductMapping[]) =>
     api.put<CicProductMappings>(C.PRODUCT_MAPPINGS, { mappings }),
@@ -97,11 +109,17 @@ export const cicService = {
 
   issuesPage: (source: CicSourceFilter, filters: CicIssueFilters) =>
     api.getRaw<CicPage<CicIssue, CicIssuesMeta>>(C.ISSUES, { params: { ...source, ...filters } }),
+  /** Every issue for the list's filters, as the CSV the server builds and audits. */
+  exportIssues: (source: CicSourceFilter, filters: Omit<CicIssueFilters, "page">) =>
+    downloadFile(C.ISSUES_EXPORT, { ...source, ...filters }),
 
   /** Every capture, newest reference date first. */
   listAllCaptures: (): Promise<DrainResult<CicCapture>> =>
     fetchAllPages<CicCapture>(({ page }) => api.getRaw(C.CAPTURES, { params: { page } })),
-  /** A test capture (staging, while test captures are on) or a correction of a month-end capture. */
+  /**
+   * A test capture (staging, while test captures are on) or a correction of a
+   * month-end capture. A capture that fails answers 422 in words.
+   */
   createCapture: (data: CreateCicCaptureData) => api.post<CicCapture>(C.CAPTURES, data),
 
   submissionsPage: (filters: CicSubmissionFilters) =>
@@ -112,14 +130,7 @@ export const cicService = {
   /** Zips and encrypts the file with the active key, after the explicit confirmation. */
   encrypt: (id: number) => api.post<CicSubmissionDetail>(C.SUBMISSION_ENCRYPT(id), { confirm: true }),
   /** The `.zip.gpg` only; the server never serves a plain file. */
-  download: async (id: number): Promise<CicDownloadedFile> => {
-    try {
-      const response = await axiosClient.get<Blob>(C.SUBMISSION_DOWNLOAD(id), { responseType: "blob" });
-      return { blob: response.data, filename: filenameFrom(response.headers?.["content-disposition"]) };
-    } catch (err) {
-      throw await readBlobError(err);
-    }
-  },
+  download: (id: number) => downloadFile(C.SUBMISSION_DOWNLOAD(id)),
   markSubmitted: (id: number) => api.post<CicSubmissionDetail>(C.SUBMISSION_MARK_SUBMITTED(id)),
   acknowledge: (id: number, data: CicAcknowledgementData) =>
     api.post<CicSubmissionDetail>(C.SUBMISSION_ACKNOWLEDGE(id), data),

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ConfirmDeleteDialog } from "@/components/common/confirm-delete-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
@@ -48,7 +49,10 @@ export function ProductMappingCard({ initial }: { initial: CicProductMappings })
   const [mappings, setMappings] = useState(initial);
   const [rows, setRows] = useState(() => draftsOf(initial));
   const [saving, setSaving] = useState(false);
+  const [clearing, setClearing] = useState<Draft | null>(null);
+  const [clearBusy, setClearBusy] = useState(false);
   const saved = draftsOf(mappings);
+  const savedOf = (id: number) => saved.find((s) => s.loan_product_id === id);
   const lists = mappings.code_lists;
   const patch = (id: number, change: Partial<Draft>) =>
     setRows((prev) => prev.map((r) => (r.loan_product_id === id ? { ...r, ...change } : r)));
@@ -88,6 +92,23 @@ export function ProductMappingCard({ initial }: { initial: CicProductMappings })
     }
   };
 
+  /** The server clears it and answers with the whole listing, which the table shows again. */
+  const clear = async () => {
+    if (!clearing) return;
+    setClearBusy(true);
+    try {
+      const next = await cicService.clearProductMapping(clearing.loan_product_id);
+      setClearBusy(false);
+      setClearing(null);
+      setMappings(next);
+      setRows(draftsOf(next));
+      notifySuccess("Product mapping cleared.");
+    } catch (err) {
+      setClearBusy(false);
+      notifyError(err, "The product mapping could not be cleared.");
+    }
+  };
+
   const unmapped = saved.filter((r) => !r.record_type).length;
 
   return (
@@ -114,6 +135,7 @@ export function ProductMappingCard({ initial }: { initial: CicProductMappings })
                   <TableHead>Contract type</TableHead>
                   <TableHead>Transaction type</TableHead>
                   <TableHead>Purpose of credit</TableHead>
+                  <TableHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -130,8 +152,8 @@ export function ProductMappingCard({ initial }: { initial: CicProductMappings })
                           patch(r.loan_product_id, { record_type: next, contract_type: null, purpose_code: null });
                         }}
                       >
-                        {/* A saved mapping can't be cleared, so "Not mapped" is offered only before one exists. */}
-                        {!saved.find((s) => s.loan_product_id === r.loan_product_id)?.record_type && (
+                        {/* A saved mapping is cleared with Clear, so "Not mapped" is offered only before one exists. */}
+                        {!savedOf(r.loan_product_id)?.record_type && (
                           <NativeSelectOption value="">Not mapped</NativeSelectOption>
                         )}
                         {RECORD_TYPES.map((t) => (
@@ -175,6 +197,13 @@ export function ProductMappingCard({ initial }: { initial: CicProductMappings })
                         />
                       )}
                     </TableCell>
+                    <TableCell className="text-right">
+                      {savedOf(r.loan_product_id)?.record_type && (
+                        <Button variant="outline" onClick={() => setClearing(r)}>
+                          Clear
+                        </Button>
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -185,6 +214,18 @@ export function ProductMappingCard({ initial }: { initial: CicProductMappings })
           {saving ? "Saving…" : "Save Mapping"}
         </Button>
       </CardContent>
+      <ConfirmDeleteDialog
+        open={clearing !== null}
+        title="Clear the CIC Mapping?"
+        description={
+          clearing
+            ? `${clearing.name} loses its CIC mapping. Its loans read as errors until it is mapped again or each has its own override.`
+            : null
+        }
+        busy={clearBusy}
+        onCancel={() => setClearing(null)}
+        onConfirm={clear}
+      />
     </Card>
   );
 }

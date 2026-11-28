@@ -126,12 +126,13 @@ export type Module =
   // ── CIC reporting (Phase 10) ──
   //
   // Credit Submission Data Files for the Credit Information Corporation.
-  // `view` = dashboard, readiness, records, validation and history;
-  // `prepare` = generate a file and run validation; `submit` = encrypt it
-  // and record it as sent; `review` = record CIC's acknowledgement, approve
-  // a correction; `settings` = provider code, public key, product mapping.
-  // Not seeded by lendyph-backend yet (docs/CIC_BACKEND_HANDOFF.md), so no
-  // role holds them and the menu stays hidden even with the flag on.
+  // `view` = readiness, records, issues, captures and history;
+  // `prepare` = generate a file, take a test or correction capture, loan
+  // overrides; `submit` = encrypt, download and record it as sent;
+  // `review` = record CIC's answer (never the file's generator);
+  // `settings` = settings, CIC's public key, product and code mappings.
+  // lendyph-backend seeds them for admin and super_admin; each also needs
+  // `branches:view_all`.
   | "cic"
   // ── Automated due-date reminders ──
   //

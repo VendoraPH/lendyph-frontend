@@ -49,9 +49,9 @@ import type { Action, Module } from "@/types";
  * and `loan_origination:view|update|assess|convert|settings`. An API older
  * than X0 refuses a save naming one with a 422, so this ships after X0.
  *
- * `cic` is not offered yet: the backend seeds no `cic:*` permission, and a
- * save naming one would be refused with a 422. Offer it once it does
- * (docs/CIC_BACKEND_HANDOFF.md).
+ * `cic` is not offered yet: the backend seeds `cic:view|prepare|submit|
+ * review|settings` for admin and super_admin, and offering them in the role
+ * editor is a later decision.
  */
 export type UIModule = Exclude<Module, "collections" | "loan_adjustments" | "auto_credit" | "cic">;
 

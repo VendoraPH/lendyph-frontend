@@ -74,7 +74,16 @@ function CicSubmissionsContent() {
           {(d) => (
             <>
               <ScrollBox className="rounded-lg border">
-                <SubmissionTable submissions={d.data} />
+                <SubmissionTable
+                  submissions={d.data}
+                  action={(s) =>
+                    s.actions.correct ? (
+                      <Button variant="outline" nativeButton={false} render={<Link href={`/cic/generate?corrects=${s.id}`} />}>
+                        Prepare Correction
+                      </Button>
+                    ) : null
+                  }
+                />
               </ScrollBox>
               <CicPager pager={pager} total={d.meta.total} />
             </>

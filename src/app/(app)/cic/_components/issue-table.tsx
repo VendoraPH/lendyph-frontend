@@ -70,7 +70,10 @@ export function IssueTable({
                 "—"
               )}
             </TableCell>
-            <TableCell className="whitespace-normal">{i.message}</TableCell>
+            <TableCell className="whitespace-normal">
+              {i.message}
+              {i.code_label && <span className="block text-xs text-muted-foreground">{i.code_label}</span>}
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>

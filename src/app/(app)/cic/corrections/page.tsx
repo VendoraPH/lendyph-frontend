@@ -6,16 +6,13 @@ import { DataState } from "@/components/common/data-state";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Button } from "@/components/ui/button";
-import { useApiResource, usePermission } from "@/hooks";
+import { useApiResource } from "@/hooks";
 import { fetchAllPages } from "@/lib/paginate";
 import { cicService } from "@/services";
 import type { CicSubmissionRow } from "@/types/cic";
 import { CicPageHeader } from "../_components/page-header";
 import { SubmissionTable } from "../_components/submission-table";
 import { CicGuard } from "../_components/cic-guard";
-
-/** Files CIC has seen; only these can be answered with a correction file (the server checks again). */
-const SEEN_BY_CIC = new Set<CicSubmissionRow["status"]>(["submitted", "accepted", "rejected"]);
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -27,7 +24,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function CicCorrectionsContent() {
-  const { can } = usePermission();
   const fetcher = useCallback(
     () =>
       fetchAllPages<CicSubmissionRow>(({ page, per_page }) =>
@@ -48,7 +44,8 @@ function CicCorrectionsContent() {
         endpoints={["GET /cic/submissions"]}
       >
         {(d) => {
-          const regular = d.rows.filter((s) => s.submission_type === 0 && SEEN_BY_CIC.has(s.status));
+          // The server says which files this caller can correct (`actions.correct`).
+          const regular = d.rows.filter((s) => s.submission_type === 0 && s.actions.correct);
           const corrections = d.rows.filter((s) => s.submission_type === 1);
           return (
             <ScrollBox className="space-y-6 p-px">
@@ -62,22 +59,20 @@ function CicCorrectionsContent() {
               )}
               <Section title="Files to Correct">
                 {regular.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No file has been submitted to CIC yet.</p>
+                  <p className="text-sm text-muted-foreground">No file you can correct: only a file CIC has received can be.</p>
                 ) : (
                   <div className="rounded-lg border">
                     <SubmissionTable
                       submissions={regular}
-                      action={(s) =>
-                        can("cic:prepare") ? (
-                          <Button
-                            variant={s.status === "rejected" ? "default" : "outline"}
-                            nativeButton={false}
-                            render={<Link href={`/cic/generate?corrects=${s.id}`} />}
-                          >
-                            Prepare Correction
-                          </Button>
-                        ) : null
-                      }
+                      action={(s) => (
+                        <Button
+                          variant={s.status === "rejected" ? "default" : "outline"}
+                          nativeButton={false}
+                          render={<Link href={`/cic/generate?corrects=${s.id}`} />}
+                        >
+                          Prepare Correction
+                        </Button>
+                      )}
                     />
                   </div>
                 )}

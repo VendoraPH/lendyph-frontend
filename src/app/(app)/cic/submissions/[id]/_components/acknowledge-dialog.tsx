@@ -10,13 +10,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { useDialogOpening } from "@/hooks";
 import type { CicAcknowledgementData } from "@/types/cic";
 
-const BLANK: CicAcknowledgementData = { status: "accepted", notes: "" };
+const BLANK: CicAcknowledgementData = { status: "accepted", notes: "", cic_reference_no: "" };
 
 /** Records CIC's answer to a submitted file: accepted, or rejected with its reasons. */
 export function AcknowledgeDialog({
@@ -54,6 +55,17 @@ export function AcknowledgeDialog({
             </NativeSelect>
           </div>
           <div className="space-y-1.5">
+            <Label htmlFor="cic-ack-reference">CIC reference number (optional)</Label>
+            <Input
+              id="cic-ack-reference"
+              autoComplete="off"
+              maxLength={60}
+              value={form.cic_reference_no ?? ""}
+              onChange={(e) => setForm({ ...form, cic_reference_no: e.target.value })}
+            />
+            <p className="text-xs text-muted-foreground">The reference CIC gave the file, if its answer has one.</p>
+          </div>
+          <div className="space-y-1.5">
             <Label htmlFor="cic-ack-notes">
               {form.status === "rejected" ? "Why CIC rejected it" : "Notes (optional)"}
             </Label>
@@ -72,7 +84,12 @@ export function AcknowledgeDialog({
           <Button
             disabled={busy || needsNotes}
             onClick={async () => {
-              if (await onSave({ status: form.status, notes: form.notes?.trim() || undefined })) onOpenChange(false);
+              const saved = await onSave({
+                status: form.status,
+                notes: form.notes?.trim() || undefined,
+                cic_reference_no: form.cic_reference_no?.trim() || undefined,
+              });
+              if (saved) onOpenChange(false);
             }}
           >
             {busy ? "Saving…" : "Save"}

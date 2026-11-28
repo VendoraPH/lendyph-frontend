@@ -119,6 +119,12 @@ function SubmissionContent({ id }: { id: number }) {
                       Downloaded {s.download_count} {s.download_count === 1 ? "time" : "times"}
                     </span>
                   </div>
+                  {s.cic_reference_no && (
+                    <p className="text-sm">
+                      <span className="text-muted-foreground">CIC reference number: </span>
+                      <span className="font-mono">{s.cic_reference_no}</span>
+                    </p>
+                  )}
                   {s.acknowledgement_notes && (
                     <p className="max-w-3xl text-sm">
                       <span className="text-muted-foreground">CIC&apos;s notes: </span>

@@ -1,10 +1,14 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { Download } from "lucide-react";
 import { DataState } from "@/components/common/data-state";
 import { FillSection, ScrollBox } from "@/components/common/page-fill";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { notifyError } from "@/lib/notify";
+import { saveBlob } from "@/lib/save-blob";
 import { cicService } from "@/services";
 import type { CicDataRecordType, CicSeverity, CicSourceFilter } from "@/types/cic";
 import { RECORD_TYPE_LABELS } from "../_lib/labels";
@@ -31,6 +35,17 @@ export function IssueList({ source }: { source: CicSourceFilter }) {
   );
   const { resource, pager } = usePagedResource(load);
   const filtered = severity !== "" || recordType !== "";
+  const [exporting, setExporting] = useState(false);
+
+  /** The server builds and audits the CSV for the same filters; a 429 reads in its words. */
+  const exportCsv = () => {
+    setExporting(true);
+    cicService
+      .exportIssues(source, { severity: severity || undefined, record_type: recordType || undefined })
+      .then((file) => saveBlob(file.blob, file.filename ?? "cic-issues.csv"))
+      .catch((err) => notifyError(err, "The issues could not be exported."))
+      .then(() => setExporting(false));
+  };
 
   return (
     <FillSection className="gap-3">
@@ -66,6 +81,13 @@ export function IssueList({ source }: { source: CicSourceFilter }) {
             ))}
           </NativeSelect>
         </div>
+        <Button
+          variant="outline"
+          disabled={exporting || (resource.data?.meta.total ?? 0) === 0}
+          onClick={exportCsv}
+        >
+          <Download className="size-4" /> {exporting ? "Exporting…" : "Export CSV"}
+        </Button>
         {resource.data && (
           <p className="text-sm text-muted-foreground">
             {resource.data.meta.errors} {resource.data.meta.errors === 1 ? "error" : "errors"} ·{" "}

@@ -244,8 +244,10 @@ export interface CicIssue {
   field_name: string | null;
   classification: CicClassification | null;
   severity: CicSeverity;
-  /** The server's internal code. Never shown: `message` says it in words. */
+  /** The server's internal code. Never shown: `code_label` and `message` say it in words. */
   code: string;
+  /** The code in words ("Missing required field"), once the server sends it. */
+  code_label?: string;
   message: string;
   /** Only with `borrowers:view`. */
   member?: CicMember;
@@ -410,6 +412,10 @@ export interface CicSubmissionRow {
   acknowledged_at: string | null;
   acknowledged_by: CicStaff | null;
   acknowledgement_notes: string | null;
+  /** CIC's own reference for the file, recorded with its answer. */
+  cic_reference_no: string | null;
+  /** What the caller may do with the file now, as the server decides it. */
+  actions: CicSubmissionActions;
 }
 
 export interface CicValidationSummary {
@@ -494,7 +500,6 @@ export interface CicSubmissionDetail extends CicSubmissionRow {
   } | null;
   corrections: CicSubmissionLink[];
   history: CicSubmissionHistoryEntry[];
-  actions: CicSubmissionActions;
 }
 
 export interface CicSubmissionFilters {
@@ -519,4 +524,6 @@ export interface CicAcknowledgementData {
   status: Extract<CicSubmissionStatus, "accepted" | "rejected">;
   /** Required for a rejection. */
   notes?: string;
+  /** Up to 60 characters; the server checks and folds it. */
+  cic_reference_no?: string;
 }
