@@ -59,6 +59,7 @@ export function AcknowledgeDialog({
             </Label>
             <Textarea
               id="cic-ack-notes"
+              maxLength={2000}
               value={form.notes ?? ""}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
             />

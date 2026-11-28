@@ -602,27 +602,28 @@ export const API_ENDPOINTS = {
     LOAN_ASSESSMENT: (loanId: number) => `/credit-scoring/loans/${loanId}/assessment`,
   },
   /**
-   * CIC reporting (Phase 10). Not built in lendyph-backend yet: every route
-   * answers 404, which the screens show as "Not connected yet". Contract and
-   * permissions (cic:view|prepare|submit|review|settings) in
-   * docs/CIC_BACKEND_HANDOFF.md. Behind NEXT_PUBLIC_ENABLE_CIC.
+   * CIC reporting (Phase 10): `routes/api/cic/*.php` in the backend. Every
+   * route needs `branches:view_all` and answers 404 while CIC_ENABLED is off or
+   * Menu Visibility hides `cic`. Behind NEXT_PUBLIC_ENABLE_CIC.
    */
   CIC: {
+    STATUS: "/cic/status",
     SETTINGS: "/cic/settings",
-    PUBLIC_KEY: "/cic/settings/public-key",
-    PUBLIC_KEY_VERIFY: "/cic/settings/public-key/verify",
-    PUBLIC_KEY_HISTORY: "/cic/settings/public-key/history",
+    PUBLIC_KEYS: "/cic/public-keys",
+    PUBLIC_KEY_VERIFY: (id: number) => `/cic/public-keys/${id}/verify`,
+    PUBLIC_KEY_RETIRE: (id: number) => `/cic/public-keys/${id}/retire`,
     PRODUCT_MAPPINGS: "/cic/product-mappings",
+    LOAN_OVERRIDES: "/cic/loan-overrides",
+    LOAN_OVERRIDE: (id: number) => `/cic/loan-overrides/${id}`,
+    CODE_MAPPINGS: "/cic/code-mappings",
     READINESS: "/cic/readiness",
-    SUBJECTS: "/cic/subjects",
-    CONTRACTS: "/cic/contracts",
+    RECORDS: "/cic/records",
+    RECORD: (type: string, key: string) => `/cic/records/${encodeURIComponent(type)}/${encodeURIComponent(key)}`,
     ISSUES: "/cic/issues",
-    ISSUES_EXPORT: "/cic/issues/export",
+    CAPTURES: "/cic/captures",
+    CAPTURE: (id: number) => `/cic/captures/${id}`,
     SUBMISSIONS: "/cic/submissions",
     SUBMISSION: (id: number) => `/cic/submissions/${id}`,
-    SUBMISSION_ISSUES: (id: number) => `/cic/submissions/${id}/issues`,
-    SUBMISSION_ISSUES_EXPORT: (id: number) => `/cic/submissions/${id}/issues/export`,
-    SUBMISSION_PREVIEW: (id: number) => `/cic/submissions/${id}/preview`,
     SUBMISSION_ENCRYPT: (id: number) => `/cic/submissions/${id}/encrypt`,
     SUBMISSION_DOWNLOAD: (id: number) => `/cic/submissions/${id}/download`,
     SUBMISSION_MARK_SUBMITTED: (id: number) => `/cic/submissions/${id}/mark-submitted`,

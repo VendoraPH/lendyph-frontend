@@ -4,70 +4,86 @@ import { useCallback, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { DataState } from "@/components/common/data-state";
-import { PermissionButton } from "@/components/common/permission-button";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Button } from "@/components/ui/button";
 import { useApiResource, usePermission } from "@/hooks";
 import { cicService } from "@/services";
-import { formatDate, formatDateTime } from "@/lib/format";
-import type { CicSubmission } from "@/types/cic";
+import { formatDateTime } from "@/lib/format";
+import type { CicSubmissionDetail } from "@/types/cic";
 import { CicPageHeader } from "../../_components/page-header";
-import { IssueList } from "../../_components/issue-list";
-import { CORRECTABLE_STATUSES, SubmissionStatusBadge, submissionTypeLabel } from "../../_components/submission-status-badge";
-import { useSubmissionIssueList } from "../../_hooks/use-issue-lists";
+import { SubmissionReview } from "../../_components/submission-review";
+import { SubmissionStatusBadge } from "../../_components/submission-status-badge";
 import { useSubmissionActions } from "../../_hooks/use-submission-actions";
+import { staffName } from "../../_lib/labels";
 import { AcknowledgeDialog } from "./_components/acknowledge-dialog";
 import { EncryptDialog } from "./_components/encrypt-dialog";
+import { StatusHistory } from "./_components/status-history";
 import { CicGuard } from "../../_components/cic-guard";
 
-function Facts({ s }: { s: CicSubmission }) {
-  const rows: [string, React.ReactNode][] = [
-    ["Status", <SubmissionStatusBadge key="status" status={s.status} />],
-    ["File Reference Date", formatDate(s.file_reference_date)],
-    ["Submission type", `${s.submission_type} · ${submissionTypeLabel(s.submission_type)}`],
-    ["Records", s.record_count],
-    ["Errors / warnings", `${s.error_count} / ${s.warning_count}`],
-    ["Comments", s.comments || "—"],
-    ["Checksum (SHA-256)", <span key="sum" className="break-all font-mono text-xs">{s.checksum ?? "—"}</span>],
-    ["Encrypted file", <span key="enc" className="font-mono text-xs">{s.encrypted_filename ?? "Not encrypted yet"}</span>],
-    ["Encrypted checksum", <span key="esum" className="break-all font-mono text-xs">{s.encrypted_checksum ?? "—"}</span>],
-    ["Encrypted for key", <span key="key" className="break-all font-mono text-xs">{s.key_fingerprint ?? "—"}</span>],
-    ["Encrypted", s.encrypted_at ? `${formatDateTime(s.encrypted_at)}${s.encrypted_by ? ` by ${s.encrypted_by}` : ""}` : "—"],
-    ["Generated", `${formatDateTime(s.created_at)}${s.created_by ? ` by ${s.created_by}` : ""}`],
-    ["Submitted to CIC", s.submitted_at ? formatDateTime(s.submitted_at) : "—"],
-    ["CIC's answer", s.acknowledged_at ? formatDateTime(s.acknowledged_at) : "—"],
-  ];
-  if (s.acknowledgement_notes) rows.push(["CIC's notes", s.acknowledgement_notes]);
-  if (s.corrects_submission_id) {
-    rows.push(["Correction reason", s.correction_reason || "—"]);
-    rows.push([
-      "Corrects",
-      <Link key="corrects" href={`/cic/submissions/${s.corrects_submission_id}`} className="underline">
-        Submission #{s.corrects_submission_id}
-      </Link>,
-    ]);
-  }
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <dl className="grid max-w-2xl shrink-0 grid-cols-[11rem_1fr] gap-x-4 gap-y-1.5 text-sm">
-      {rows.map(([label, value]) => (
-        <div key={label} className="contents">
-          <dt className="text-muted-foreground">{label}</dt>
-          <dd>{value}</dd>
-        </div>
-      ))}
-    </dl>
+    <section className="space-y-2">
+      <h2 className="text-base font-semibold">{title}</h2>
+      {children}
+    </section>
   );
 }
 
-function SubmissionIssues({ id, filename }: { id: number; filename: string }) {
-  return <IssueList {...useSubmissionIssueList(id, filename)} />;
+/** The actions the server offers this caller now (`actions`); nothing else shows. */
+function Actions({
+  s,
+  canSubmit,
+  busy,
+  onEncrypt,
+  onDownload,
+  onSubmit,
+  onAcknowledge,
+}: {
+  s: CicSubmissionDetail;
+  /** Opens the review even when the server can't encrypt yet, so it says why. */
+  canSubmit: boolean;
+  busy: string | null;
+  onEncrypt: () => void;
+  onDownload: () => void;
+  onSubmit: () => void;
+  onAcknowledge: () => void;
+}) {
+  return (
+    <>
+      {s.status === "generated" && canSubmit && (
+        <Button disabled={busy !== null} onClick={onEncrypt}>
+          Review and Encrypt
+        </Button>
+      )}
+      {s.actions.download && (
+        <Button variant="outline" disabled={busy !== null} onClick={onDownload}>
+          {busy === "download" ? "Downloading…" : "Download Encrypted File"}
+        </Button>
+      )}
+      {s.actions.mark_submitted && (
+        <Button disabled={busy !== null} onClick={onSubmit}>
+          {busy === "submit" ? "Saving…" : "Mark Submitted to CIC"}
+        </Button>
+      )}
+      {s.actions.acknowledge && (
+        <Button disabled={busy !== null} onClick={onAcknowledge}>
+          Record CIC&apos;s Answer
+        </Button>
+      )}
+      {s.actions.correct && (
+        <Button variant="outline" nativeButton={false} render={<Link href={`/cic/generate?corrects=${s.id}`} />}>
+          Prepare Correction
+        </Button>
+      )}
+    </>
+  );
 }
 
 function SubmissionContent({ id }: { id: number }) {
   const fetcher = useCallback(() => cicService.getSubmission(id), [id]);
-  const resource = useApiResource<CicSubmission>(fetcher);
-  // An action returns the updated submission; show it instead of the load.
-  const [updated, setUpdated] = useState<CicSubmission | null>(null);
+  const resource = useApiResource(fetcher);
+  // An action answers with the updated detail; show it instead of the load.
+  const [updated, setUpdated] = useState<CicSubmissionDetail | null>(null);
   const actions = useSubmissionActions(setUpdated);
   const [acknowledging, setAcknowledging] = useState(false);
   const [encrypting, setEncrypting] = useState(false);
@@ -75,73 +91,83 @@ function SubmissionContent({ id }: { id: number }) {
 
   return (
     <PageFill>
-      <DataState resource={resource} summary="One CIC submission: its file, status and problems." endpoints={["GET /cic/submissions/{id}"]}>
-        {(detail) => {
-          const s: CicSubmission = updated ?? detail;
+      <DataState resource={resource} summary="One CIC file: its review, status and history." endpoints={["GET /cic/submissions/{id}"]}>
+        {(loaded) => {
+          const s = updated ?? loaded;
           return (
             <>
               <CicPageHeader
-                title={s.filename}
-                description="A Credit Submission Data File and its way to CIC."
+                title={s.reference}
+                description={s.encrypted_filename ?? s.filename}
                 actions={
-                  <>
-                    {s.status === "generated" && (
-                      <PermissionButton permission="cic:submit" disabled={actions.busy !== null} onClick={() => setEncrypting(true)}>
-                        Review and Encrypt
-                      </PermissionButton>
-                    )}
-                    {s.status !== "generated" && (
-                      <PermissionButton
-                        permission="cic:submit"
-                        variant="outline"
-                        disabled={actions.busy !== null}
-                        onClick={() => actions.download(s)}
-                      >
-                        {actions.busy === "download" ? "Downloading…" : "Download Encrypted File"}
-                      </PermissionButton>
-                    )}
-                    {s.status === "encrypted" && (
-                      <PermissionButton permission="cic:submit" disabled={actions.busy !== null} onClick={() => actions.markSubmitted(s)}>
-                        Mark Submitted to CIC
-                      </PermissionButton>
-                    )}
-                    {s.status === "submitted" && (
-                      <PermissionButton permission="cic:review" onClick={() => setAcknowledging(true)}>
-                        Record CIC&apos;s Answer
-                      </PermissionButton>
-                    )}
-                    {CORRECTABLE_STATUSES.has(s.status) && can("cic:prepare") && (
-                      <Button
-                        variant="outline"
-                        nativeButton={false}
-                        render={<Link href={`/cic/generate?corrects=${s.id}&date=${s.file_reference_date}`} />}
-                      >
-                        Prepare Correction
-                      </Button>
-                    )}
-                  </>
+                  <Actions
+                    s={s}
+                    canSubmit={can("cic:submit")}
+                    busy={actions.busy}
+                    onEncrypt={() => setEncrypting(true)}
+                    onDownload={() => actions.download(s)}
+                    onSubmit={() => actions.markSubmitted(s)}
+                    onAcknowledge={() => setAcknowledging(true)}
+                  />
                 }
               />
-              <ScrollBox className="flex flex-col gap-6 p-px">
-                <Facts s={s} />
-                <section className="flex min-h-80 flex-col gap-2">
-                  <h2 className="text-base font-semibold">Problems Found When Generated</h2>
-                  <SubmissionIssues id={s.id} filename={s.filename} />
-                </section>
+              <ScrollBox className="space-y-6 p-px">
+                <Section title="Status">
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <SubmissionStatusBadge status={s.status} label={s.status_label} />
+                    <span className="text-muted-foreground">
+                      Downloaded {s.download_count} {s.download_count === 1 ? "time" : "times"}
+                    </span>
+                  </div>
+                  {s.acknowledgement_notes && (
+                    <p className="max-w-3xl text-sm">
+                      <span className="text-muted-foreground">CIC&apos;s notes: </span>
+                      {s.acknowledgement_notes}
+                    </p>
+                  )}
+                  {s.acknowledged_at && (
+                    <p className="text-sm text-muted-foreground">
+                      Recorded {formatDateTime(s.acknowledged_at)}
+                      {s.acknowledged_by ? ` by ${staffName(s.acknowledged_by)}` : ""}
+                    </p>
+                  )}
+                  <StatusHistory history={s.history} />
+                </Section>
+                <Section title="Review">
+                  <SubmissionReview detail={s} />
+                </Section>
+                {s.corrections.length > 0 && (
+                  <Section title="Corrections Sent for This File">
+                    <ul className="space-y-1 text-sm">
+                      {s.corrections.map((c) => (
+                        <li key={c.id}>
+                          <Link href={`/cic/submissions/${c.id}`} className="underline">
+                            {c.reference}
+                          </Link>{" "}
+                          <span className="text-muted-foreground">
+                            · {c.status_label} · generated {formatDateTime(c.generated_at)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </Section>
+                )}
               </ScrollBox>
               <EncryptDialog
                 open={encrypting}
                 onOpenChange={setEncrypting}
-                submission={s}
+                detail={s}
                 busy={actions.busy === "encrypt"}
-                onEncrypt={(fp) => actions.encrypt(s, fp)}
+                onEncrypt={() => actions.encrypt(s)}
               />
-              <AcknowledgeDialog
-                open={acknowledging}
-                onOpenChange={setAcknowledging}
-                busy={actions.busy === "acknowledge"}
-                onSave={(data) => actions.acknowledge(s, data)}
-              />
+              {s.actions.acknowledge && (
+                <AcknowledgeDialog
+                  open={acknowledging}
+                  onOpenChange={setAcknowledging}
+                  busy={actions.busy === "acknowledge"}
+                  onSave={(data) => actions.acknowledge(s, data)}
+                />
+              )}
             </>
           );
         }}
@@ -155,7 +181,7 @@ export default function CicSubmissionPage() {
   const raw = typeof params.id === "string" ? params.id : "";
   const id = /^\d+$/.test(raw) ? Number(raw) : 0;
   return (
-    <CicGuard permission="cic:view" pageName="CIC Submission">
+    <CicGuard permission="cic:view" pageName="Submission History">
       {id > 0 ? (
         <SubmissionContent key={id} id={id} />
       ) : (

@@ -389,10 +389,11 @@ const CREDIT_SCORING_NAV: NavItem = {
  * also answer not found with the flag off (cic/layout.tsx).
  *
  * The file covers the whole cooperative, so the menu also needs every branch
- * (`branches:view_all`), as each page does (CicGuard). The backend seeds no
- * `cic:*` permission yet, so no role sees this menu even with the flag on
- * until it does (docs/CIC_BACKEND_HANDOFF.md). Menu Visibility hides it under
- * the "cic" key (menu-modules.ts).
+ * (`branches:view_all`), as each page does (CicGuard) and every `/cic` API.
+ * The backend seeds `cic:view|prepare|submit|review|settings` for admin and
+ * super_admin. Menu Visibility hides the menu, its pages and Settings → CIC
+ * under the `cic` key (menu-modules.ts), and the server then answers 404 on
+ * every `/cic` route.
  */
 export const CIC_NAV: NavItem = {
   title: "CIC Reporting",
@@ -406,7 +407,7 @@ export const CIC_NAV: NavItem = {
     { title: "Data Readiness", href: "/cic", permission: "cic:view" },
     { title: "Subject Records", href: "/cic/subjects", permission: "cic:view" },
     { title: "Contract Records", href: "/cic/contracts", permission: "cic:view" },
-    { title: "Validation", href: "/cic/validation", permission: "cic:view" },
+    { title: "Issues", href: "/cic/issues", permission: "cic:view" },
     { title: "Generate Report", href: "/cic/generate", permission: "cic:prepare" },
     { title: "Corrections", href: "/cic/corrections", permission: "cic:view" },
     { title: "Submission History", href: "/cic/submissions", permission: "cic:view" },

@@ -17,37 +17,33 @@ import { notifyError, notifySuccess } from "@/lib/notify";
 import { cicService } from "@/services";
 import type { CicPublicKey } from "@/types/cic";
 
-/** Fingerprints compare without spaces or case: CIC may read one out in groups of four. */
-const normalize = (fp: string) => fp.replace(/\s+/g, "").toUpperCase();
-
 /**
- * Verifying the key: the admin types the fingerprint CIC gave them out of
- * band (a call or a signed letter), and it must match the uploaded key. A
- * key that is not verified cannot encrypt a file.
+ * A second person verifies the key: they type the fingerprint CIC gave them
+ * directly (a call or a signed letter). The server compares it with the
+ * uploaded key and activates it, retiring the one before.
  */
 export function VerifyKeyDialog({
-  open,
-  onOpenChange,
   publicKey,
+  onOpenChange,
   onVerified,
 }: {
-  open: boolean;
+  publicKey: CicPublicKey | null;
   onOpenChange: (open: boolean) => void;
-  publicKey: CicPublicKey;
-  onVerified: (key: CicPublicKey) => void;
+  onVerified: () => void;
 }) {
+  const open = publicKey !== null;
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
-  if (useDialogOpening(open, publicKey.id)) setTyped("");
-  const matches = typed.trim() !== "" && normalize(typed) === normalize(publicKey.fingerprint);
+  if (useDialogOpening(open, publicKey?.id)) setTyped("");
 
   const verify = () => {
+    if (!publicKey) return;
     setBusy(true);
     cicService
-      .verifyPublicKey(normalize(typed))
-      .then((key) => {
-        notifySuccess("CIC's public key verified.");
-        onVerified(key);
+      .verifyPublicKey(publicKey.id, typed.trim())
+      .then(() => {
+        notifySuccess("CIC's public key verified. It encrypts every new file from now on.");
+        onVerified();
         onOpenChange(false);
       })
       .catch((err) => notifyError(err, "The key could not be verified."))
@@ -55,13 +51,13 @@ export function VerifyKeyDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Verify CIC&apos;s Public Key</DialogTitle>
           <DialogDescription>
             Type the fingerprint CIC gave you directly, by phone or in its signed letter, not one copied from this
-            screen. It must match the uploaded key.
+            screen. The server checks that it matches key {publicKey?.key_id}.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-1.5">
@@ -70,20 +66,16 @@ export function VerifyKeyDialog({
             id="cic-key-fingerprint"
             autoComplete="off"
             className="font-mono"
+            maxLength={200}
             value={typed}
             onChange={(e) => setTyped(e.target.value)}
           />
-          {typed.trim() !== "" && !matches && (
-            <p className="text-xs text-destructive">
-              This does not match the uploaded key. Do not verify it: ask CIC to confirm its key.
-            </p>
-          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
             Cancel
           </Button>
-          <Button disabled={!matches || busy} onClick={verify}>
+          <Button disabled={!typed.trim() || busy} onClick={verify}>
             {busy ? "Verifying…" : "Verify Key"}
           </Button>
         </DialogFooter>

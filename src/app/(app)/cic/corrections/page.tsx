@@ -1,15 +1,21 @@
 "use client";
 
+import { useCallback } from "react";
 import Link from "next/link";
 import { DataState } from "@/components/common/data-state";
+import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Button } from "@/components/ui/button";
-import { usePermission } from "@/hooks";
+import { useApiResource, usePermission } from "@/hooks";
+import { fetchAllPages } from "@/lib/paginate";
+import { cicService } from "@/services";
+import type { CicSubmissionRow } from "@/types/cic";
 import { CicPageHeader } from "../_components/page-header";
-import { CORRECTABLE_STATUSES } from "../_components/submission-status-badge";
 import { SubmissionTable } from "../_components/submission-table";
-import { CIC_SUBMISSION_ENDPOINTS, useCicSubmissions } from "../_hooks/use-cic-submissions";
 import { CicGuard } from "../_components/cic-guard";
+
+/** Files CIC has seen; only these can be answered with a correction file (the server checks again). */
+const SEEN_BY_CIC = new Set<CicSubmissionRow["status"]>(["submitted", "accepted", "rejected"]);
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -21,48 +27,57 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function CicCorrectionsContent() {
-  const resource = useCicSubmissions();
   const { can } = usePermission();
+  const fetcher = useCallback(
+    () =>
+      fetchAllPages<CicSubmissionRow>(({ page, per_page }) =>
+        cicService.submissionsPage({ page, per_page }),
+      ),
+    [],
+  );
+  const resource = useApiResource(fetcher);
   return (
     <PageFill>
       <CicPageHeader
         title="Corrections"
-        description="Answer a file CIC rejected, or correct records already reported, with a correction file."
+        description="Answer a file CIC rejected, or correct records already reported, with a correction file built from a new capture of the same month."
       />
-      <DataState resource={resource} summary="Files CIC has received, and the corrections sent for them." endpoints={CIC_SUBMISSION_ENDPOINTS}>
+      <DataState
+        resource={resource}
+        summary="Files CIC has received, and the corrections sent for them."
+        endpoints={["GET /cic/submissions"]}
+      >
         {(d) => {
-          const regular = d.rows.filter((s) => s.submission_type === 0 && CORRECTABLE_STATUSES.has(s.status));
+          const regular = d.rows.filter((s) => s.submission_type === 0 && SEEN_BY_CIC.has(s.status));
           const corrections = d.rows.filter((s) => s.submission_type === 1);
-          const correctedBy = new Map(corrections.map((c) => [c.corrects_submission_id, c]));
           return (
             <ScrollBox className="space-y-6 p-px">
+              {d.truncated && (
+                <IncompleteListNotice
+                  shown={d.rows.length}
+                  total={d.total}
+                  noun="submissions"
+                  consequence="The oldest files are missing from these lists."
+                />
+              )}
               <Section title="Files to Correct">
                 {regular.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No submitted file yet.</p>
+                  <p className="text-sm text-muted-foreground">No file has been submitted to CIC yet.</p>
                 ) : (
                   <div className="rounded-lg border">
                     <SubmissionTable
                       submissions={regular}
-                      action={(s) => {
-                        const existing = correctedBy.get(s.id);
-                        if (existing) {
-                          return (
-                            <Link href={`/cic/submissions/${existing.id}`} className="text-sm underline">
-                              Corrected
-                            </Link>
-                          );
-                        }
-                        return can("cic:prepare") ? (
+                      action={(s) =>
+                        can("cic:prepare") ? (
                           <Button
-                            size="sm"
                             variant={s.status === "rejected" ? "default" : "outline"}
                             nativeButton={false}
-                            render={<Link href={`/cic/generate?corrects=${s.id}&date=${s.file_reference_date}`} />}
+                            render={<Link href={`/cic/generate?corrects=${s.id}`} />}
                           >
                             Prepare Correction
                           </Button>
-                        ) : null;
-                      }}
+                        ) : null
+                      }
                     />
                   </div>
                 )}
@@ -86,7 +101,7 @@ function CicCorrectionsContent() {
 
 export default function CicCorrectionsPage() {
   return (
-    <CicGuard permission="cic:view" pageName="CIC Corrections">
+    <CicGuard permission="cic:view" pageName="Corrections">
       <CicCorrectionsContent />
     </CicGuard>
   );

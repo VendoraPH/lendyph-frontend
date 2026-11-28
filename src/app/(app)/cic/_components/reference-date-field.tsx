@@ -4,7 +4,7 @@ import { useId } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-/** The File Reference Date: the date the file reports balances as of. */
+/** The date a live picture is built as of; never after today. */
 export function ReferenceDateField({
   value,
   onChange,
@@ -18,7 +18,7 @@ export function ReferenceDateField({
   return (
     <div className="flex items-center gap-2">
       <Label htmlFor={id} className="whitespace-nowrap text-sm">
-        File Reference Date
+        As of
       </Label>
       <Input
         id={id}

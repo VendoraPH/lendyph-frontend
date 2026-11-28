@@ -1,64 +1,83 @@
-// The Generate Report wizard's steps and what each one waits on. Pure, so
-// the gating is tested without a browser.
-import { cicKeyProblem } from "@/lib/cic/rules";
-import type { CicSettings, CicSubmission } from "@/types/cic";
+// The Generate Report wizard's steps and what each one waits on. Pure, so the
+// gating is tested without a browser. Every "can it" comes from the server's
+// answer (the capture list, the submission's status and `actions`).
+import type { FormStepDef, StepErrors } from "@/lib/form-stepper";
+import type { CicSubmissionDetail } from "@/types/cic";
+import { encryptBlockedReason } from "../../_lib/encrypt-gate";
 
-/**
- * The file is generated before it is reviewed: the reviewer reads the file
- * the server stored (masked), not a browser rebuild of it, and confirms it
- * before it is encrypted.
- */
-export const GENERATE_STEPS = [
-  "Reference Date",
-  "Readiness",
-  "Validation",
-  "Generate",
-  "Review",
-  "Encrypt",
-  "Download",
-  "Submit",
-] as const;
-
-export type GenerateStep = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+export const GENERATE_STEPS: readonly FormStepDef[] = [
+  {
+    id: "capture",
+    title: "Capture",
+    description: "The month-end capture the file is built from: its records were frozen at 23:58 on the month's last day.",
+    fields: ["capture_id", "correction_reason"],
+  },
+  {
+    id: "generate",
+    title: "Generate",
+    description: "The server builds the file from the capture and checks it again.",
+    fields: ["comments", "generate"],
+  },
+  {
+    id: "review",
+    title: "Review",
+    description: "What the server will encrypt, and the key it encrypts for.",
+    fields: ["confirmed"],
+  },
+  {
+    id: "encrypt",
+    title: "Encrypt",
+    description: "The server zips the file and encrypts the zip with CIC's public key.",
+    fields: ["encrypt"],
+  },
+  {
+    id: "download",
+    title: "Download",
+    description: "Save the encrypted file, then upload it on CIC's submission portal.",
+    fields: ["download"],
+  },
+  {
+    id: "submit",
+    title: "Submit",
+    description: "Once the file is uploaded to CIC, mark it submitted. Record CIC's answer on the file when it arrives.",
+  },
+];
 
 export interface GenerateState {
-  referenceDate: string;
-  submissionType: 0 | 1;
-  correctsId: number | null;
+  correction: boolean;
+  captureId: number | null;
   correctionReason: string;
-  settings: CicSettings | null;
-  recordCount: number;
-  errorCount: number;
-  submission: CicSubmission | null;
-  /** The reviewer ticked that the previewed file is ready to encrypt. */
-  reviewed: boolean;
+  submission: CicSubmissionDetail | null;
+  /** The reviewer ticked that the file is ready to encrypt. */
+  confirmed: boolean;
   downloaded: boolean;
-  now: Date;
 }
 
-/** Why the user cannot leave `step` yet, or null when they can. */
-export function blockedReason(step: GenerateStep, s: GenerateState): string | null {
-  switch (step) {
-    case 0:
-      if (!s.referenceDate) return "Choose the File Reference Date.";
-      if (s.submissionType === 1 && s.correctsId === null) return "Choose the submission this file corrects.";
-      if (s.submissionType === 1 && !s.correctionReason.trim()) return "Say why the correction is sent.";
-      return null;
-    case 1:
-      if (!s.settings?.provider_code) return "Set the CIC provider code in CIC Settings first.";
-      if (s.recordCount === 0) return "There is nothing to report as of this date.";
-      return cicKeyProblem(s.settings.public_key, s.now);
-    case 2:
-      return s.errorCount > 0 ? "Fix every error first: CIC rejects a file with any of them." : null;
-    case 3:
-      return s.submission ? null : "Generate the file.";
-    case 4:
-      return s.reviewed ? null : "Review the file and confirm it is ready to encrypt.";
-    case 5:
-      return s.submission?.status === "generated" || !s.submission ? "Encrypt the file." : null;
-    case 6:
-      return s.downloaded ? null : "Download the encrypted file.";
-    case 7:
-      return null;
+/** The open step's problem, keyed by its field, or true when the user may go on. */
+export function generateStepErrors(stepId: string, s: GenerateState): StepErrors | true {
+  switch (stepId) {
+    case "capture":
+      if (s.captureId === null) {
+        return { capture_id: s.correction ? "Take or choose the correction capture." : "Choose the capture to report." };
+      }
+      if (s.correction && !s.correctionReason.trim()) return { correction_reason: "Say why the correction is sent." };
+      return true;
+    case "generate":
+      return s.submission ? true : { generate: "Generate the file." };
+    case "review": {
+      if (!s.submission) return { confirmed: "Generate the file." };
+      if (s.submission.status !== "generated") return true;
+      const blocked = encryptBlockedReason(s.submission);
+      if (blocked) return { confirmed: blocked };
+      return s.confirmed ? true : { confirmed: "Confirm you reviewed the file before it is encrypted." };
+    }
+    case "encrypt":
+      return s.submission && s.submission.status !== "generated" ? true : { encrypt: "Encrypt the file." };
+    case "download":
+      return s.downloaded || (s.submission !== null && s.submission.status !== "encrypted")
+        ? true
+        : { download: "Download the encrypted file." };
+    default:
+      return true;
   }
 }

@@ -7,41 +7,49 @@ import { useApiResource } from "@/hooks";
 import { cicService } from "@/services";
 import type { CicSettings } from "@/types/cic";
 import { CicPageHeader } from "../../cic/_components/page-header";
+import { CodeMappingCard } from "./_components/code-mapping-card";
 import { GeneralSettingsCard } from "./_components/general-settings-card";
+import { LoanOverrideCard } from "./_components/loan-override-card";
 import { ProductMappingCard } from "./_components/product-mapping-card";
 import { PublicKeyCard } from "./_components/public-key-card";
 import { CicGuard } from "@/app/(app)/cic/_components/cic-guard";
 
 function CicSettingsContent() {
   const settings = useApiResource(cicService.getSettings);
-  const mappings = useApiResource(cicService.getProductMappings);
-  // A save returns the new settings; show them without reloading the page.
+  const products = useApiResource(cicService.getProductMappings);
+  const codes = useApiResource(cicService.getCodeMappings);
+  // A save answers with the new settings; show them without reloading the page.
   const [saved, setSaved] = useState<CicSettings | null>(null);
 
   return (
     <PageFill>
       <CicPageHeader
-        title="CIC Settings"
-        description="The provider code, encryption key and loan product mapping the CIC report is built with."
+        title="CIC"
+        description="The provider code, CIC's encryption key, and how loan products, loans, collateral and IDs are reported."
       />
       <ScrollBox className="space-y-6 p-px">
-        <DataState resource={settings} summary="The CIC provider code, MFI status and CIC's public key." endpoints={["GET /cic/settings"]}>
-          {(loaded) => {
-            const current = saved ?? loaded;
-            return (
-              <>
-                <GeneralSettingsCard settings={current} onSaved={setSaved} />
-                <PublicKeyCard settings={current} onChange={setSaved} />
-              </>
-            );
-          }}
+        <DataState resource={settings} summary="The CIC provider code, MFI status and contact." endpoints={["GET /cic/settings"]}>
+          {(loaded) => <GeneralSettingsCard key={(saved ?? loaded).updated_at ?? "new"} settings={saved ?? loaded} onSaved={setSaved} />}
         </DataState>
+        <PublicKeyCard />
         <DataState
-          resource={mappings}
-          summary="Which CIC contract record and type each loan product is reported as."
+          resource={products}
+          summary="Which CIC record and codes each loan product is reported with."
           endpoints={["GET /cic/product-mappings"]}
         >
-          {(rows) => <ProductMappingCard mappings={rows} />}
+          {(m) => (
+            <>
+              <ProductMappingCard initial={m} />
+              <LoanOverrideCard codeLists={m.code_lists} />
+            </>
+          )}
+        </DataState>
+        <DataState
+          resource={codes}
+          summary="The CIC code each collateral type and ID kind is reported as."
+          endpoints={["GET /cic/code-mappings"]}
+        >
+          {(m) => <CodeMappingCard initial={m} />}
         </DataState>
       </ScrollBox>
     </PageFill>
@@ -50,7 +58,7 @@ function CicSettingsContent() {
 
 export default function CicSettingsPage() {
   return (
-    <CicGuard permission="cic:settings" pageName="CIC Settings">
+    <CicGuard permission="cic:settings" pageName="CIC">
       <CicSettingsContent />
     </CicGuard>
   );

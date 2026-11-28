@@ -4,74 +4,64 @@ import { useState } from "react";
 import { cicService } from "@/services";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { saveBlob } from "@/lib/save-blob";
-import type { CicAcknowledgementData, CicSubmission } from "@/types/cic";
+import type { CicAcknowledgementData, CicSubmissionDetail } from "@/types/cic";
 
 /**
- * Encrypt, download, mark submitted and acknowledge one submission. Shared
- * by the Generate Report wizard and the submission's own page. Each action
- * hands the updated submission to `onChange`.
+ * Encrypt, download, mark submitted and acknowledge one submission, shared by
+ * the Generate Report wizard and the submission's own page. Each action hands
+ * the server's updated detail to `onChange`; refusals show in the server's
+ * words.
  */
-export function useSubmissionActions(onChange: (submission: CicSubmission) => void) {
+export function useSubmissionActions(onChange: (detail: CicSubmissionDetail) => void) {
   const [busy, setBusy] = useState<null | "encrypt" | "download" | "submit" | "acknowledge">(null);
 
-  /** Sends the reviewer's confirmation and the key they saw; resolves true once encrypted. */
-  const encrypt = async (s: CicSubmission, keyFingerprint: string): Promise<boolean> => {
-    setBusy("encrypt");
+  async function run<T>(kind: NonNullable<typeof busy>, call: () => Promise<T>, failure: string): Promise<T | null> {
+    setBusy(kind);
     try {
-      const updated = await cicService.encrypt(s.id, { confirmed: true, key_fingerprint: keyFingerprint });
-      notifySuccess("File zipped and encrypted with CIC's public key.");
+      const result = await call();
       setBusy(null);
-      onChange(updated);
-      return true;
+      return result;
     } catch (err) {
       setBusy(null);
-      notifyError(err, "The file could not be encrypted.");
-      return false;
+      notifyError(err, failure);
+      return null;
     }
+  }
+
+  /** Sends the reviewer's explicit confirmation; resolves true once encrypted. */
+  const encrypt = async (s: CicSubmissionDetail): Promise<boolean> => {
+    const updated = await run("encrypt", () => cicService.encrypt(s.id), "The file could not be encrypted.");
+    if (!updated) return false;
+    notifySuccess("File zipped and encrypted with CIC's public key.");
+    onChange(updated);
+    return true;
   };
 
-  /** Resolves true once the encrypted file is saved. */
-  const download = async (s: CicSubmission): Promise<boolean> => {
-    setBusy("download");
-    try {
-      const blob = await cicService.download(s.id);
-      saveBlob(blob, s.encrypted_filename ?? `${s.filename.replace(/\.txt$/, "")}.zip.gpg`);
-      setBusy(null);
-      return true;
-    } catch (err) {
-      setBusy(null);
-      notifyError(err, "The encrypted file could not be downloaded.");
-      return false;
-    }
+  /** Saves the `.zip.gpg`; resolves true once saved. The count goes up on the server, so the detail reloads. */
+  const download = async (s: CicSubmissionDetail): Promise<boolean> => {
+    const file = await run("download", () => cicService.download(s.id), "The encrypted file could not be downloaded.");
+    if (!file) return false;
+    saveBlob(file.blob, file.filename ?? s.encrypted_filename ?? `${s.zip_filename}.gpg`);
+    const updated = await cicService.getSubmission(s.id).catch(() => null);
+    if (updated) onChange(updated);
+    return true;
   };
 
-  const markSubmitted = async (s: CicSubmission) => {
-    setBusy("submit");
-    try {
-      const updated = await cicService.markSubmitted(s.id);
-      notifySuccess("Marked as submitted to CIC.");
-      setBusy(null);
-      onChange(updated);
-    } catch (err) {
-      setBusy(null);
-      notifyError(err, "The submission could not be updated.");
-    }
+  const markSubmitted = async (s: CicSubmissionDetail): Promise<boolean> => {
+    const updated = await run("submit", () => cicService.markSubmitted(s.id), "The submission could not be updated.");
+    if (!updated) return false;
+    notifySuccess("Marked as submitted to CIC.");
+    onChange(updated);
+    return true;
   };
 
   /** Resolves true once CIC's answer is recorded. */
-  const acknowledge = async (s: CicSubmission, data: CicAcknowledgementData): Promise<boolean> => {
-    setBusy("acknowledge");
-    try {
-      const updated = await cicService.acknowledge(s.id, data);
-      notifySuccess(data.status === "accepted" ? "Recorded CIC's acceptance." : "Recorded CIC's rejection.");
-      setBusy(null);
-      onChange(updated);
-      return true;
-    } catch (err) {
-      setBusy(null);
-      notifyError(err, "CIC's answer could not be recorded.");
-      return false;
-    }
+  const acknowledge = async (s: CicSubmissionDetail, data: CicAcknowledgementData): Promise<boolean> => {
+    const updated = await run("acknowledge", () => cicService.acknowledge(s.id, data), "CIC's answer could not be recorded.");
+    if (!updated) return false;
+    notifySuccess(data.status === "accepted" ? "Recorded CIC's acceptance." : "Recorded CIC's rejection.");
+    onChange(updated);
+    return true;
   };
 
   return { busy, encrypt, download, markSubmitted, acknowledge };

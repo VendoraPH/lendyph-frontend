@@ -6,42 +6,81 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cicService } from "@/services";
-import { CIC_DOMAINS } from "@/lib/cic/domains.generated";
-import { notifyError, notifySuccess, notifyValidation } from "@/lib/notify";
-import type { CicContractRecordType, CicProductMapping } from "@/types/cic";
+import { notifyError, notifyInfo, notifySuccess, notifyValidation } from "@/lib/notify";
+import type { CicContractRecordType, CicProductMappings, SaveCicProductMapping } from "@/types/cic";
+import { recordTypeLabel } from "@/app/(app)/cic/_lib/labels";
+import { CodeSelect } from "./code-select";
 
-const RECORD_TYPES: { code: CicContractRecordType; label: string }[] = [
-  { code: "CI", label: "CI · Installment" },
-  { code: "CN", label: "CN · Non-installment" },
-];
+interface Draft {
+  loan_product_id: number;
+  name: string;
+  record_type: CicContractRecordType | null;
+  contract_type: string | null;
+  transaction_type: string | null;
+  purpose_code: string | null;
+}
 
-const contractTypes = (type: CicContractRecordType) => CIC_DOMAINS[`${type}:ContractTypeDomain`];
+const draftsOf = (m: CicProductMappings): Draft[] =>
+  m.products.map((p) => ({
+    loan_product_id: p.loan_product.id,
+    name: p.loan_product.name,
+    record_type: p.mapping?.record_type ?? null,
+    contract_type: p.mapping?.contract_type ?? null,
+    transaction_type: p.mapping?.transaction_type ?? null,
+    purpose_code: p.mapping?.purpose_code ?? null,
+  }));
 
-/** Each loan product's CIC record and contract type. An unmapped product's loans are left out of the file. */
-export function ProductMappingCard({ mappings }: { mappings: CicProductMapping[] }) {
-  const [rows, setRows] = useState(mappings);
+const same = (a: Draft, b: Draft | undefined) =>
+  !!b &&
+  a.record_type === b.record_type &&
+  a.contract_type === b.contract_type &&
+  a.transaction_type === b.transaction_type &&
+  a.purpose_code === b.purpose_code;
+
+const RECORD_TYPES: CicContractRecordType[] = ["CI", "CN"];
+
+/**
+ * How each loan product is reported: CI or CN, its contract and transaction
+ * types and, for CI, the purpose of credit, from the server's code lists.
+ * A loan can be given its own codes below (Loan Overrides).
+ */
+export function ProductMappingCard({ initial }: { initial: CicProductMappings }) {
+  const [mappings, setMappings] = useState(initial);
+  const [rows, setRows] = useState(() => draftsOf(initial));
   const [saving, setSaving] = useState(false);
-  const patch = (id: number, change: Partial<CicProductMapping>) =>
+  const saved = draftsOf(mappings);
+  const lists = mappings.code_lists;
+  const patch = (id: number, change: Partial<Draft>) =>
     setRows((prev) => prev.map((r) => (r.loan_product_id === id ? { ...r, ...change } : r)));
 
   const save = async () => {
-    const incomplete = rows.filter((r) => r.record_type && !r.contract_type).map((r) => r.loan_product_name);
+    const changed = rows.filter((r) => r.record_type && !same(r, saved.find((s) => s.loan_product_id === r.loan_product_id)));
+    const incomplete = changed.filter((r) => !r.contract_type || !r.transaction_type);
     if (incomplete.length > 0) {
-      notifyValidation(incomplete.map((name) => `Contract type for ${name}`));
+      notifyValidation(incomplete.map((r) => `Contract and transaction type for ${r.name}`));
       return;
+    }
+    if (changed.length === 0) {
+      notifyInfo("Nothing changed.");
+      return;
+    }
+    const body: SaveCicProductMapping[] = [];
+    for (const r of changed) {
+      if (!r.record_type || !r.contract_type || !r.transaction_type) continue;
+      body.push({
+        loan_product_id: r.loan_product_id,
+        record_type: r.record_type,
+        contract_type: r.contract_type,
+        transaction_type: r.transaction_type,
+        purpose_code: r.record_type === "CI" ? r.purpose_code : null,
+      });
     }
     setSaving(true);
     try {
-      const saved = await cicService.saveProductMappings(
-        rows.map(({ loan_product_id, record_type, contract_type, purpose }) => ({
-          loan_product_id,
-          record_type,
-          contract_type: record_type ? contract_type : null,
-          purpose: record_type ? purpose : null,
-        })),
-      );
+      const next = await cicService.saveProductMappings(body);
       setSaving(false);
-      setRows(saved);
+      setMappings(next);
+      setRows(draftsOf(next));
       notifySuccess("Product mapping saved.");
     } catch (err) {
       setSaving(false);
@@ -49,7 +88,7 @@ export function ProductMappingCard({ mappings }: { mappings: CicProductMapping[]
     }
   };
 
-  const unmapped = rows.filter((r) => !r.record_type).length;
+  const unmapped = saved.filter((r) => !r.record_type).length;
 
   return (
     <Card>
@@ -58,7 +97,7 @@ export function ProductMappingCard({ mappings }: { mappings: CicProductMapping[]
         <CardDescription>
           How each loan product is reported to CIC.{" "}
           {unmapped > 0
-            ? `${unmapped} ${unmapped === 1 ? "product is" : "products are"} not reported until mapped.`
+            ? `${unmapped} ${unmapped === 1 ? "product has" : "products have"} no mapping: their loans read as errors until mapped.`
             : "Every product is mapped."}
         </CardDescription>
       </CardHeader>
@@ -73,62 +112,68 @@ export function ProductMappingCard({ mappings }: { mappings: CicProductMapping[]
                   <TableHead>Loan product</TableHead>
                   <TableHead>CIC record</TableHead>
                   <TableHead>Contract type</TableHead>
-                  <TableHead>Purpose</TableHead>
+                  <TableHead>Transaction type</TableHead>
+                  <TableHead>Purpose of credit</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {rows.map((r) => (
                   <TableRow key={r.loan_product_id}>
-                    <TableCell className="font-medium">{r.loan_product_name}</TableCell>
+                    <TableCell className="font-medium">{r.name}</TableCell>
                     <TableCell>
                       <NativeSelect
-                        aria-label={`CIC record for ${r.loan_product_name}`}
+                        aria-label={`CIC record for ${r.name}`}
+                        className="w-56"
                         value={r.record_type ?? ""}
-                        onChange={(e) =>
-                          patch(r.loan_product_id, {
-                            record_type: (e.target.value || null) as CicContractRecordType | null,
-                            contract_type: null,
-                          })
-                        }
+                        onChange={(e) => {
+                          const next = RECORD_TYPES.find((t) => t === e.target.value) ?? null;
+                          patch(r.loan_product_id, { record_type: next, contract_type: null, purpose_code: null });
+                        }}
                       >
-                        <NativeSelectOption value="">Not reported</NativeSelectOption>
+                        {/* A saved mapping can't be cleared, so "Not mapped" is offered only before one exists. */}
+                        {!saved.find((s) => s.loan_product_id === r.loan_product_id)?.record_type && (
+                          <NativeSelectOption value="">Not mapped</NativeSelectOption>
+                        )}
                         {RECORD_TYPES.map((t) => (
-                          <NativeSelectOption key={t.code} value={t.code}>
-                            {t.label}
+                          <NativeSelectOption key={t} value={t}>
+                            {recordTypeLabel(t)}
                           </NativeSelectOption>
                         ))}
                       </NativeSelect>
                     </TableCell>
                     <TableCell>
-                      <NativeSelect
-                        aria-label={`Contract type for ${r.loan_product_name}`}
+                      <CodeSelect
+                        aria-label={`Contract type for ${r.name}`}
+                        codes={r.record_type ? lists[`${r.record_type}:ContractTypeDomain`] : []}
                         disabled={!r.record_type}
-                        value={r.contract_type ?? ""}
-                        onChange={(e) => patch(r.loan_product_id, { contract_type: e.target.value || null })}
-                      >
-                        <NativeSelectOption value="">Choose</NativeSelectOption>
-                        {r.record_type &&
-                          contractTypes(r.record_type).map((d) => (
-                            <NativeSelectOption key={d.code} value={d.code}>
-                              {d.code} · {d.label}
-                            </NativeSelectOption>
-                          ))}
-                      </NativeSelect>
+                        value={r.contract_type}
+                        empty="Choose"
+                        onChange={(contract_type) => patch(r.loan_product_id, { contract_type })}
+                      />
                     </TableCell>
                     <TableCell>
-                      <NativeSelect
-                        aria-label={`Purpose for ${r.loan_product_name}`}
+                      <CodeSelect
+                        aria-label={`Transaction type for ${r.name}`}
+                        codes={lists.TransactionTypeDomain}
                         disabled={!r.record_type}
-                        value={r.purpose ?? ""}
-                        onChange={(e) => patch(r.loan_product_id, { purpose: e.target.value || null })}
-                      >
-                        <NativeSelectOption value="">From each loan</NativeSelectOption>
-                        {CIC_DOMAINS.CreditPurposeDomain.map((d) => (
-                          <NativeSelectOption key={d.code} value={d.code}>
-                            {d.code} · {d.label}
-                          </NativeSelectOption>
-                        ))}
-                      </NativeSelect>
+                        value={r.transaction_type}
+                        empty="Choose"
+                        onChange={(transaction_type) => patch(r.loan_product_id, { transaction_type })}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      {r.record_type === "CN" ? (
+                        <span className="text-sm text-muted-foreground">Not reported for CN</span>
+                      ) : (
+                        <CodeSelect
+                          aria-label={`Purpose of credit for ${r.name}`}
+                          codes={lists.CreditPurposeDomain}
+                          disabled={!r.record_type}
+                          value={r.purpose_code}
+                          empty="None"
+                          onChange={(purpose_code) => patch(r.loan_product_id, { purpose_code })}
+                        />
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

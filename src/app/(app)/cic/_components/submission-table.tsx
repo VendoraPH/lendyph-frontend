@@ -2,21 +2,24 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDate, formatDateTime } from "@/lib/format";
-import type { CicSubmission } from "@/types/cic";
-import { SubmissionStatusBadge, submissionTypeLabel } from "./submission-status-badge";
+import { formatCount } from "@/lib/report-format";
+import type { CicSubmissionRow } from "@/types/cic";
+import { whenBy } from "../_lib/labels";
+import { SubmissionStatusBadge } from "./submission-status-badge";
 
-/** Submissions newest first; `action` adds a last column per row. */
+/** Submission rows as the server sends them; `action` adds a last column per row. */
 export function SubmissionTable({
   submissions,
   action,
 }: {
-  submissions: CicSubmission[];
-  action?: (s: CicSubmission) => ReactNode;
+  submissions: CicSubmissionRow[];
+  action?: (s: CicSubmissionRow) => ReactNode;
 }) {
   return (
     <Table>
       <TableHeader>
         <TableRow>
+          <TableHead>Reference</TableHead>
           <TableHead>File</TableHead>
           <TableHead>Reference Date</TableHead>
           <TableHead>Type</TableHead>
@@ -30,20 +33,18 @@ export function SubmissionTable({
         {submissions.map((s) => (
           <TableRow key={s.id}>
             <TableCell>
-              <Link href={`/cic/submissions/${s.id}`} className="font-mono text-xs underline">
-                {s.filename}
+              <Link href={`/cic/submissions/${s.id}`} className="font-medium underline">
+                {s.reference}
               </Link>
             </TableCell>
-            <TableCell>{formatDate(s.file_reference_date)}</TableCell>
-            <TableCell>{submissionTypeLabel(s.submission_type)}</TableCell>
-            <TableCell className="text-right tabular-nums">{s.record_count}</TableCell>
+            <TableCell className="font-mono text-xs">{s.encrypted_filename ?? s.filename}</TableCell>
+            <TableCell>{formatDate(s.reference_date)}</TableCell>
+            <TableCell>{s.submission_type_label}</TableCell>
+            <TableCell className="text-right tabular-nums">{formatCount(s.record_count)}</TableCell>
             <TableCell>
-              <SubmissionStatusBadge status={s.status} />
+              <SubmissionStatusBadge status={s.status} label={s.status_label} />
             </TableCell>
-            <TableCell className="text-muted-foreground">
-              {formatDateTime(s.created_at)}
-              {s.created_by ? ` · ${s.created_by}` : ""}
-            </TableCell>
+            <TableCell className="text-muted-foreground">{whenBy(s.generated_at, s.generated_by, formatDateTime)}</TableCell>
             {action && <TableCell className="text-right">{action(s)}</TableCell>}
           </TableRow>
         ))}
