@@ -308,3 +308,15 @@ describe("AMLA report breadcrumbs", () => {
     }
   });
 });
+
+describe("CIC reporting's titles", () => {
+  test("the cic segment reads CIC wherever a title is built from it, flag on or off", () => {
+    assert.equal(humanizeSegment("cic"), "CIC");
+    assert.equal(subPageTitle("settings", "cic"), "CIC");
+    assert.equal(humanizeSegment("cash-flow"), "Cash flow");
+  });
+
+  test("a correction file's page reads Prepare Correction, under Corrections", () => {
+    assert.equal(nestedPageTitle("cic", "corrections", "new"), "Prepare Correction");
+  });
+});

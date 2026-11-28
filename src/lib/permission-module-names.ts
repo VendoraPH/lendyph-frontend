@@ -41,11 +41,12 @@ export function permissionModuleName(key: string): string {
 
 /**
  * Modules that open only with more than their `<module>:view`, as their menu
- * section requires (`NavItem.alsoRequires` reads this): CDA Compliance covers
- * the whole cooperative, so it also needs every branch.
+ * section requires (`NavItem.alsoRequires` reads this): CDA Compliance and CIC
+ * reporting cover the whole cooperative, so they also need every branch.
  */
 export const MODULE_ALSO_REQUIRES: Readonly<Record<string, readonly string[]>> = {
   cda: ["branches:view_all"],
+  cic: ["branches:view_all"],
 };
 
 /**

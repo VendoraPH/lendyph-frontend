@@ -52,3 +52,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# CIC source workbooks and sample files hold real borrower data: never commit them.
+docs/CIC/

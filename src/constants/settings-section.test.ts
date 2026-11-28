@@ -19,6 +19,7 @@ before(async () => {
   process.env.NEXT_PUBLIC_ENABLE_SAVINGS = "true";
   process.env.NEXT_PUBLIC_ENABLE_CDA = "true";
   process.env.NEXT_PUBLIC_ENABLE_CREDIT_SCORING = "true";
+  process.env.NEXT_PUBLIC_ENABLE_CIC = "true";
   nav = await import("./navigation");
 });
 
@@ -38,6 +39,7 @@ test("a role holding only one page's permission sees Settings with just that pag
     // Company-wide pages keep their own gate: their key and branches:view_all.
     [["member_portal:settings", "branches:view_all"], "/settings/member-portal"],
     [["linda:settings", "branches:view_all"], "/settings/linda"],
+    [["cic:settings", "branches:view_all"], "/settings/cic"],
     [["imports:process"], "/settings/data-import"],
   ];
   for (const [keys, page] of cases) {
@@ -59,7 +61,7 @@ test("every Settings page opens the section for whoever passes that page's own g
 });
 
 test("a company-wide page's key without branches:view_all, or view_all alone, shows no Settings", () => {
-  for (const key of ["member_portal:settings", "linda:settings", "cda:view"] as Permission[]) {
+  for (const key of ["member_portal:settings", "linda:settings", "cda:view", "cic:settings"] as Permission[]) {
     assert.equal(nav.navItemAllowed(settings(), holds(key)), false, key);
   }
   assert.equal(nav.navItemAllowed(settings(), holds("branches:view_all")), false);
