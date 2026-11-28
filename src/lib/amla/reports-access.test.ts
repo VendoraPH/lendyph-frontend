@@ -90,7 +90,6 @@ test("exporting needs amla:export as well as the report's own access", () => {
   assert.equal(access.amlaExportAllowed(report("audit_history"), holds("amla:audit", "amla:export", "branches:view_all")), true);
 });
 
-test("every AMLA report's card has a 3D icon mapped from its line icon", async () => {
-  const { REPORT_ICONS_3D } = await import("@/app/(app)/reports/_lib/report-icons-3d");
-  for (const r of catalog.AMLA_REPORT_CATALOG) assert.ok(REPORT_ICONS_3D.has(r.icon), `${r.key} has no 3D icon`);
+test("every AMLA report's card shows AMLA's own 3D icon", () => {
+  for (const r of catalog.AMLA_REPORT_CATALOG) assert.equal(r.icon3d, "icon-amla", r.key);
 });

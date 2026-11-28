@@ -7,6 +7,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { MembersTab } from "./_components/members-tab";
 import { TransactionsTab } from "./_components/transactions-tab";
 import { ReportsTab } from "./_components/reports-tab";
+import { Icon3D } from "@/components/common/icon-3d";
 import { PageFill } from "@/components/common/page-fill";
 import { FIT_CLASSES } from "@/lib/page-fill";
 import { cn } from "@/lib/utils";
@@ -33,12 +34,15 @@ function GCashPageContent() {
 
   return (
     <PageFill>
-      <div className="shrink-0">
-        <h1 className="text-2xl font-semibold">GCash</h1>
-        <p className="text-sm text-muted-foreground">
-          Record Cash In / Cash Out transactions for members and walk-ins,
-          manage pending payments, and view income reports.
-        </p>
+      <div className="flex shrink-0 items-center gap-3">
+        <Icon3D name="icon-gcash" size={40} className="hidden sm:block" />
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold">GCash</h1>
+          <p className="text-sm text-muted-foreground">
+            Record Cash In / Cash Out transactions for members and walk-ins,
+            manage pending payments, and view income reports.
+          </p>
+        </div>
       </div>
 
       <Tabs value={active} onValueChange={setTab} className={FIT_CLASSES.section}>
