@@ -81,6 +81,7 @@ import {
   Building2,
   ArrowLeftRight,
   FileInput,
+  FileUp,
   ShieldAlert,
   EyeOff,
   type LucideIcon,
@@ -393,6 +394,19 @@ const MODULE_META: Record<UIModule, ModuleMeta> = {
       "View the dashboard, member scores, assessments, risk monitoring and score history",
       "Record a credit decision (approve, decline, refer, hold) against a score",
       "Configure the scorecard and credit scoring settings",
+    ],
+  },
+  cic: {
+    label: "CIC Reporting",
+    description:
+      "The monthly credit data files for the Credit Information Corporation. Every CIC permission also needs See all branches.",
+    icon: FileUp,
+    features: [
+      "View data readiness, subject and contract records, issues, corrections and submission history",
+      "Prepare a file, take a test or correction capture, and override a loan's CIC fields",
+      "Encrypt and download a file, and record it as sent to CIC",
+      "Record CIC's answer on a file someone else prepared",
+      "Configure CIC settings, its public key, and the product and code mappings",
     ],
   },
   reminders: {
