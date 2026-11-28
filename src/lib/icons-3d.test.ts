@@ -62,6 +62,7 @@ before(async () => {
     "NEXT_PUBLIC_ENABLE_CDA",
     "NEXT_PUBLIC_ENABLE_MEMBER_PORTAL",
     "NEXT_PUBLIC_ENABLE_CREDIT_SCORING",
+    "NEXT_PUBLIC_ENABLE_CIC",
   ]) {
     process.env[name] = "true";
   }
@@ -108,6 +109,7 @@ test("every side-menu item shows its agreed 3D icon; Linda and GCash keep their 
     "/collaterals": "empty-collaterals",
     "/gcash": undefined,
     "/credit-scoring": "icon-credit-score",
+    "/cic": "empty-compliance",
     "/cda": "empty-compliance",
     "/member-portal": "icon-portal",
     "/accounting": "empty-ledger",

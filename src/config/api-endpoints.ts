@@ -602,6 +602,36 @@ export const API_ENDPOINTS = {
     LOAN_ASSESSMENT: (loanId: number) => `/credit-scoring/loans/${loanId}/assessment`,
   },
   /**
+   * CIC reporting (Phase 10): `routes/api/cic/*.php` in the backend. Every
+   * route needs `branches:view_all` and answers 404 while CIC_ENABLED is off or
+   * Menu Visibility hides `cic`. Behind NEXT_PUBLIC_ENABLE_CIC.
+   */
+  CIC: {
+    STATUS: "/cic/status",
+    SETTINGS: "/cic/settings",
+    PUBLIC_KEYS: "/cic/public-keys",
+    PUBLIC_KEY_VERIFY: (id: number) => `/cic/public-keys/${id}/verify`,
+    PUBLIC_KEY_RETIRE: (id: number) => `/cic/public-keys/${id}/retire`,
+    PRODUCT_MAPPINGS: "/cic/product-mappings",
+    PRODUCT_MAPPING: (loanProductId: number) => `/cic/product-mappings/${loanProductId}`,
+    LOAN_OVERRIDES: "/cic/loan-overrides",
+    LOAN_OVERRIDE: (id: number) => `/cic/loan-overrides/${id}`,
+    CODE_MAPPINGS: "/cic/code-mappings",
+    READINESS: "/cic/readiness",
+    RECORDS: "/cic/records",
+    RECORD: (type: string, key: string) => `/cic/records/${encodeURIComponent(type)}/${encodeURIComponent(key)}`,
+    ISSUES: "/cic/issues",
+    ISSUES_EXPORT: "/cic/issues/export",
+    CAPTURES: "/cic/captures",
+    CAPTURE: (id: number) => `/cic/captures/${id}`,
+    SUBMISSIONS: "/cic/submissions",
+    SUBMISSION: (id: number) => `/cic/submissions/${id}`,
+    SUBMISSION_ENCRYPT: (id: number) => `/cic/submissions/${id}/encrypt`,
+    SUBMISSION_DOWNLOAD: (id: number) => `/cic/submissions/${id}/download`,
+    SUBMISSION_MARK_SUBMITTED: (id: number) => `/cic/submissions/${id}/mark-submitted`,
+    SUBMISSION_ACKNOWLEDGE: (id: number) => `/cic/submissions/${id}/acknowledgement`,
+  },
+  /**
    * Loan Origination, staff side: `routes/api/loan-origination/*` in the
    * backend (LO-B1 to LO-B4). The screens stay behind
    * NEXT_PUBLIC_ENABLE_LOAN_ORIGINATION. "Submit for approval" is the

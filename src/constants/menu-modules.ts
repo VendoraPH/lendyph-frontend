@@ -27,6 +27,7 @@ export type MenuModuleKey =
   | "collateral"
   | "gcash"
   | "credit_scoring"
+  | "cic"
   | "cda"
   | "member_portal"
   | "amla"
@@ -99,6 +100,7 @@ export const MENU_MODULES: readonly MenuModule[] = [
     inBuild: env.features.creditScoring,
     paths: ["/credit-scoring", "/settings/credit-scoring", "/settings/scorecard-configuration"],
   },
+  { key: "cic", label: "CIC Reporting", parent: null, inBuild: env.features.cic, paths: ["/cic", "/settings/cic"] },
   { key: "cda", label: "CDA Compliance", parent: null, inBuild: env.features.cda, paths: ["/cda", "/settings/cda"] },
   {
     key: "member_portal",
