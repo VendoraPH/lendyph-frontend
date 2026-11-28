@@ -6,6 +6,7 @@ import { DataState } from "@/components/common/data-state";
 import { FormStep, FormStepper } from "@/components/common/form-stepper";
 import { PageFill } from "@/components/common/page-fill";
 import { useApiResource } from "@/hooks";
+import { getErrorMessage } from "@/lib/api-error";
 import { errorMessages, type StepErrors } from "@/lib/form-stepper";
 import { notifyError, notifyWarning } from "@/lib/notify";
 import { FIT_CLASSES } from "@/lib/page-fill";
@@ -15,8 +16,8 @@ import { CicPageHeader } from "../../_components/page-header";
 import { EncryptConfirmation } from "../../_components/encrypt-confirmation";
 import { SubmissionReview } from "../../_components/submission-review";
 import { useSubmissionActions } from "../../_hooks/use-submission-actions";
-import { cicRefusal } from "../../_lib/refusal";
-import { GENERATE_STEPS, generateStepErrors } from "../_lib/steps";
+import { cicRefusal } from "@/lib/cic/refusal";
+import { generateStepErrors, generateSteps } from "../_lib/steps";
 import { CaptureStep } from "./capture-step";
 import { CorrectionStep } from "./correction-step";
 import { DownloadStep, EncryptStep } from "./file-steps";
@@ -37,7 +38,7 @@ function Wizard({ context, correctsId }: { context: WizardContext; correctsId: n
   const [correctionReason, setCorrectionReason] = useState("");
   const [comments, setComments] = useState("");
   const [submission, setSubmission] = useState<CicSubmissionDetail | null>(null);
-  const [outcome, setOutcome] = useState<GenerateOutcome>({ refusal: null, confirmWarnings: false });
+  const [outcome, setOutcome] = useState<GenerateOutcome>({ refusal: null });
   const [generating, setGenerating] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [downloaded, setDownloaded] = useState(false);
@@ -52,10 +53,10 @@ function Wizard({ context, correctsId }: { context: WizardContext; correctsId: n
 
   const pick = (id: number | null) => {
     setCaptureId(id);
-    setOutcome({ refusal: null, confirmWarnings: false });
+    setOutcome({ refusal: null });
   };
 
-  const generate = async () => {
+  const generate = async (confirmWarnings: boolean) => {
     if (captureId === null) return;
     setGenerating(true);
     try {
@@ -63,7 +64,7 @@ function Wizard({ context, correctsId }: { context: WizardContext; correctsId: n
         capture_id: captureId,
         submission_type: correction ? 1 : 0,
         comments: comments.trim() || undefined,
-        confirm_warnings: outcome.confirmWarnings || undefined,
+        confirm_warnings: confirmWarnings || undefined,
         corrects_submission_id: correctsId ?? undefined,
         correction_reason: correction ? correctionReason.trim() : undefined,
       });
@@ -72,11 +73,11 @@ function Wizard({ context, correctsId }: { context: WizardContext; correctsId: n
     } catch (err) {
       setGenerating(false);
       const refusal = cicRefusal(err);
-      setOutcome({
-        refusal: refusal.validation ? { code: refusal.code, validation: refusal.validation } : null,
-        confirmWarnings: false,
-      });
-      notifyError(err, "The file could not be generated.");
+      const message = getErrorMessage(err, "The file could not be generated.");
+      setOutcome({ refusal: refusal.validation ? { code: refusal.code, message, validation: refusal.validation } : null });
+      // Warnings aren't an error: the step shows them in amber, with the confirmation.
+      if (refusal.code === "warnings_unconfirmed") notifyWarning(message);
+      else notifyError(err, "The file could not be generated.");
     }
   };
 
@@ -93,7 +94,7 @@ function Wizard({ context, correctsId }: { context: WizardContext; correctsId: n
   return (
     <form onSubmit={handleSubmit} noValidate className={FIT_CLASSES.section}>
       <FormStepper
-        steps={GENERATE_STEPS}
+        steps={generateSteps(correction)}
         validateStep={validateStep}
         onInvalid={onInvalid}
         submitLabel="Mark Submitted to CIC"
@@ -132,7 +133,6 @@ function Wizard({ context, correctsId }: { context: WizardContext; correctsId: n
             outcome={outcome}
             generating={generating}
             onComments={setComments}
-            onConfirmWarnings={(on) => setOutcome((o) => ({ ...o, confirmWarnings: on }))}
             onGenerate={generate}
           />
         </FormStep>

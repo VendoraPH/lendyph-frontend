@@ -12,6 +12,7 @@ import axiosClient from "@/lib/axios-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { filenameFrom } from "@/lib/content-disposition";
 import { readBlobError } from "@/lib/amla/case-api";
+import { withCicRateLimitWords } from "@/lib/cic/refusal";
 import { fetchAllPages, type DrainResult } from "@/lib/paginate";
 import type { PaginatedResponse } from "@/types/api";
 import type {
@@ -61,7 +62,21 @@ async function downloadFile(path: string, params?: object): Promise<CicDownloade
   }
 }
 
-export const cicService = {
+type Calls = Record<string, (...args: never[]) => Promise<unknown>>;
+
+/** Each call's 429 reads in the CIC words (`withCicRateLimitWords`), on a page as in a toast. */
+function withRateLimitWords<T extends Calls>(calls: T): T {
+  const wrapped: Record<string, unknown> = {};
+  for (const [name, call] of Object.entries(calls)) {
+    wrapped[name] = (...args: never[]) =>
+      call(...args).catch((err: unknown) => {
+        throw withCicRateLimitWords(err);
+      });
+  }
+  return wrapped as T;
+}
+
+const calls = {
   getStatus: () => api.get<CicStatus>(C.STATUS),
 
   getSettings: () => api.get<CicSettings>(C.SETTINGS),
@@ -135,3 +150,5 @@ export const cicService = {
   acknowledge: (id: number, data: CicAcknowledgementData) =>
     api.post<CicSubmissionDetail>(C.SUBMISSION_ACKNOWLEDGE(id), data),
 };
+
+export const cicService = withRateLimitWords(calls);

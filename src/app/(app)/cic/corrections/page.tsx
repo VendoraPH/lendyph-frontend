@@ -68,7 +68,7 @@ function CicCorrectionsContent() {
                         <Button
                           variant={s.status === "rejected" ? "default" : "outline"}
                           nativeButton={false}
-                          render={<Link href={`/cic/generate?corrects=${s.id}`} />}
+                          render={<Link href={`/cic/corrections/new?corrects=${s.id}`} />}
                         >
                           Prepare Correction
                         </Button>

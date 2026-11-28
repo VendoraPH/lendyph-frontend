@@ -114,6 +114,7 @@ const ID_TITLES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     "savings-products": "Savings Products",
     savings: "Savings",
     cda: "CDA",
+    cic: "CIC",
     "scorecard-configuration": "Scorecard Configuration",
     "credit-scoring": "Credit Scoring",
   },
@@ -160,6 +161,8 @@ const NESTED_PAGE_TITLES: Readonly<Record<string, Readonly<Record<string, string
   "loans/reminders": { history: "Message History" },
   // Each AMLA report reads the server's title for it (`/amla/reports/<key>`).
   "amla/reports": AMLA_REPORT_TITLES,
+  // A correction file has its own page under Corrections, titled as it titles itself.
+  "cic/corrections": { new: "Prepare Correction" },
 };
 
 /**
@@ -206,9 +209,14 @@ export function menuTitles(menu: readonly MenuEntry[]): MenuTitle {
   return (href) => titles.get(href);
 }
 
-/** A route segment as words: "cash_flow" and "cash-flow" both read "Cash flow". */
+/** Segments that are initials, so their words aren't built from the letters ("CIC", not "Cic"). */
+const SEGMENT_WORDS: Readonly<Record<string, string>> = {
+  cic: "CIC",
+};
+
+/** A route segment as words: "cash_flow" and "cash-flow" both read "Cash flow"; "cic" reads "CIC". */
 export function humanizeSegment(segment: string): string {
-  return segment.charAt(0).toUpperCase() + segment.slice(1).replace(/[-_]/g, " ");
+  return own(SEGMENT_WORDS, segment) ?? segment.charAt(0).toUpperCase() + segment.slice(1).replace(/[-_]/g, " ");
 }
 
 /**

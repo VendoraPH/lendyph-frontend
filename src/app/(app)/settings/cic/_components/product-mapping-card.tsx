@@ -127,7 +127,7 @@ export function ProductMappingCard({ initial }: { initial: CicProductMappings })
                     <TableCell>
                       <NativeSelect
                         aria-label={`CIC record for ${r.name}`}
-                        className="w-56"
+                        className="w-48"
                         value={r.record_type ?? ""}
                         onChange={(e) => {
                           const next = RECORD_TYPES.find((t) => t === e.target.value) ?? null;
@@ -148,6 +148,7 @@ export function ProductMappingCard({ initial }: { initial: CicProductMappings })
                     <TableCell>
                       <CodeSelect
                         aria-label={`Contract type for ${r.name}`}
+                        className="w-full min-w-40"
                         codes={r.record_type ? lists[`${r.record_type}:ContractTypeDomain`] : []}
                         disabled={!r.record_type}
                         value={r.contract_type}
@@ -158,6 +159,7 @@ export function ProductMappingCard({ initial }: { initial: CicProductMappings })
                     <TableCell>
                       <CodeSelect
                         aria-label={`Transaction type for ${r.name}`}
+                        className="w-full min-w-40"
                         codes={lists.TransactionTypeDomain}
                         disabled={!r.record_type}
                         value={r.transaction_type}
@@ -171,6 +173,7 @@ export function ProductMappingCard({ initial }: { initial: CicProductMappings })
                       ) : (
                         <CodeSelect
                           aria-label={`Purpose of credit for ${r.name}`}
+                        className="w-full min-w-40"
                           codes={lists.CreditPurposeDomain}
                           disabled={!r.record_type}
                           value={r.purpose_code}

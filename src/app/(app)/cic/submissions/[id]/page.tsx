@@ -71,7 +71,7 @@ function Actions({
         </Button>
       )}
       {s.actions.correct && (
-        <Button variant="outline" nativeButton={false} render={<Link href={`/cic/generate?corrects=${s.id}`} />}>
+        <Button variant="outline" nativeButton={false} render={<Link href={`/cic/corrections/new?corrects=${s.id}`} />}>
           Prepare Correction
         </Button>
       )}

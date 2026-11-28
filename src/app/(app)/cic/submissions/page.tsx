@@ -78,7 +78,7 @@ function CicSubmissionsContent() {
                   submissions={d.data}
                   action={(s) =>
                     s.actions.correct ? (
-                      <Button variant="outline" nativeButton={false} render={<Link href={`/cic/generate?corrects=${s.id}`} />}>
+                      <Button variant="outline" nativeButton={false} render={<Link href={`/cic/corrections/new?corrects=${s.id}`} />}>
                         Prepare Correction
                       </Button>
                     ) : null

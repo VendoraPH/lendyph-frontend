@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import type { CicSubmissionDetail } from "@/types/cic";
-import { GENERATE_STEPS, generateStepErrors, type GenerateState } from "./steps";
+import { generateStepErrors, generateSteps, type GenerateState } from "./steps";
 
 const detail = (over: Partial<CicSubmissionDetail> = {}) =>
   ({
@@ -24,10 +24,21 @@ const start: GenerateState = {
 };
 
 test("the wizard reviews the file between generating and encrypting it", () => {
-  assert.deepEqual(
-    GENERATE_STEPS.map((s) => s.id),
-    ["capture", "generate", "review", "encrypt", "download", "submit"],
-  );
+  for (const correction of [false, true]) {
+    assert.deepEqual(
+      generateSteps(correction).map((s) => s.id),
+      ["capture", "generate", "review", "encrypt", "download", "submit"],
+    );
+  }
+});
+
+test("a correction's capture step speaks of the correction capture, never the month-end one", () => {
+  const [standard] = generateSteps(false);
+  const [correction] = generateSteps(true);
+  assert.match(standard.description ?? "", /month-end capture/);
+  assert.equal(correction.title, "Correction Capture");
+  assert.match(correction.description ?? "", /correction capture of the capture it corrects/);
+  assert.doesNotMatch(`${correction.title} ${correction.description}`, /month-end/i);
 });
 
 test("a file is built only from a capture, and a correction says why", () => {

@@ -15,8 +15,8 @@ import { captureLabel } from "../../_lib/labels";
 import { CaptureFacts } from "./capture-step";
 
 /**
- * A correction file's capture: a correction capture of the original file's
- * month-end capture. Member details are read again from today's records;
+ * A correction file's capture: a correction capture of the capture the
+ * original file was built from. Member details are read again from today's records;
  * contract figures stay as captured at month end. The server lists the
  * records that changed once the file is generated.
  */

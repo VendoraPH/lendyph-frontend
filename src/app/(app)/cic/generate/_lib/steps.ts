@@ -5,13 +5,23 @@ import type { FormStepDef, StepErrors } from "@/lib/form-stepper";
 import type { CicSubmissionDetail } from "@/types/cic";
 import { encryptBlockedReason } from "../../_lib/encrypt-gate";
 
-export const GENERATE_STEPS: readonly FormStepDef[] = [
-  {
-    id: "capture",
-    title: "Capture",
-    description: "The month-end capture the file is built from: its records were frozen at 23:58 on the month's last day.",
-    fields: ["capture_id", "correction_reason"],
-  },
+const CAPTURE_STEP: FormStepDef = {
+  id: "capture",
+  title: "Capture",
+  description: "The month-end capture the file is built from: its records were frozen at 23:58 on the month's last day.",
+  fields: ["capture_id", "correction_reason"],
+};
+
+/** A correction's first step: its own capture of the month, not the month-end one. */
+const CORRECTION_CAPTURE_STEP: FormStepDef = {
+  id: "capture",
+  title: "Correction Capture",
+  description:
+    "A correction capture of the capture it corrects: member details are read again from today's records, and contract figures stay as they were captured.",
+  fields: ["capture_id", "correction_reason"],
+};
+
+const FILE_STEPS: readonly FormStepDef[] = [
   {
     id: "generate",
     title: "Generate",
@@ -42,6 +52,14 @@ export const GENERATE_STEPS: readonly FormStepDef[] = [
     description: "Once the file is uploaded to CIC, mark it submitted. Record CIC's answer on the file when it arrives.",
   },
 ];
+
+const STANDARD_STEPS: readonly FormStepDef[] = [CAPTURE_STEP, ...FILE_STEPS];
+const CORRECTION_STEPS: readonly FormStepDef[] = [CORRECTION_CAPTURE_STEP, ...FILE_STEPS];
+
+/** The wizard's steps, the same list each time; a correction names its own capture. */
+export function generateSteps(correction: boolean): readonly FormStepDef[] {
+  return correction ? CORRECTION_STEPS : STANDARD_STEPS;
+}
 
 export interface GenerateState {
   correction: boolean;
