@@ -21,6 +21,8 @@ interface ConfirmDeleteDialogProps {
   busy: boolean;
   onCancel: () => void;
   onConfirm: () => void;
+  /** The confirm button's words when the action isn't a delete, e.g. "Clear mapping". Defaults to "Delete". */
+  confirmLabel?: string;
 }
 
 /**
@@ -30,7 +32,15 @@ interface ConfirmDeleteDialogProps {
  * Imported by path, not from components/common/index (that index isn't
  * tree-shaken).
  */
-export function ConfirmDeleteDialog({ open, title, description, busy, onCancel, onConfirm }: ConfirmDeleteDialogProps) {
+export function ConfirmDeleteDialog({
+  open,
+  title,
+  description,
+  busy,
+  onCancel,
+  onConfirm,
+  confirmLabel = "Delete",
+}: ConfirmDeleteDialogProps) {
   return (
     <AlertDialog
       open={open}
@@ -47,7 +57,7 @@ export function ConfirmDeleteDialog({ open, title, description, busy, onCancel, 
           <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
           <AlertDialogAction variant="destructive" disabled={busy} onClick={onConfirm}>
             {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : null}
-            Delete
+            {confirmLabel}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

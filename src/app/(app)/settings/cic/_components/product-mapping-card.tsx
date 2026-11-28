@@ -9,34 +9,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { cicService } from "@/services";
 import { notifyError, notifyInfo, notifySuccess, notifyValidation } from "@/lib/notify";
 import type { CicContractRecordType, CicProductMappings, SaveCicProductMapping } from "@/types/cic";
+import {
+  draftsOf,
+  mergeClearedRow,
+  sameDraft as same,
+  type ProductMappingDraft as Draft,
+} from "../_lib/product-mapping-drafts";
 import { recordTypeLabel } from "@/app/(app)/cic/_lib/labels";
 import { CodeSelect } from "./code-select";
-
-interface Draft {
-  loan_product_id: number;
-  name: string;
-  record_type: CicContractRecordType | null;
-  contract_type: string | null;
-  transaction_type: string | null;
-  purpose_code: string | null;
-}
-
-const draftsOf = (m: CicProductMappings): Draft[] =>
-  m.products.map((p) => ({
-    loan_product_id: p.loan_product.id,
-    name: p.loan_product.name,
-    record_type: p.mapping?.record_type ?? null,
-    contract_type: p.mapping?.contract_type ?? null,
-    transaction_type: p.mapping?.transaction_type ?? null,
-    purpose_code: p.mapping?.purpose_code ?? null,
-  }));
-
-const same = (a: Draft, b: Draft | undefined) =>
-  !!b &&
-  a.record_type === b.record_type &&
-  a.contract_type === b.contract_type &&
-  a.transaction_type === b.transaction_type &&
-  a.purpose_code === b.purpose_code;
 
 const RECORD_TYPES: CicContractRecordType[] = ["CI", "CN"];
 
@@ -97,11 +77,13 @@ export function ProductMappingCard({ initial }: { initial: CicProductMappings })
     if (!clearing) return;
     setClearBusy(true);
     try {
-      const next = await cicService.clearProductMapping(clearing.loan_product_id);
+      const id = clearing.loan_product_id;
+      const next = await cicService.clearProductMapping(id);
       setClearBusy(false);
       setClearing(null);
       setMappings(next);
-      setRows(draftsOf(next));
+      // Only the cleared row is replaced; other rows keep their unsaved edits.
+      setRows((prev) => mergeClearedRow(prev, next, id));
       notifySuccess("Product mapping cleared.");
     } catch (err) {
       setClearBusy(false);
@@ -217,9 +199,10 @@ export function ProductMappingCard({ initial }: { initial: CicProductMappings })
       <ConfirmDeleteDialog
         open={clearing !== null}
         title="Clear the CIC Mapping?"
+        confirmLabel="Clear mapping"
         description={
           clearing
-            ? `${clearing.name} loses its CIC mapping. Its loans read as errors until it is mapped again or each has its own override.`
+            ? `${clearing.name} loses its CIC mapping, so its loans will show as unmapped until it is mapped again or a loan has its own override.`
             : null
         }
         busy={clearBusy}
