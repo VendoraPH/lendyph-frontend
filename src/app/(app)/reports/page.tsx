@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { categoryDescription, visibleAmlaReports, visibleReports } from "./_lib/report-catalog";
 import { reportIcon3D } from "./_lib/report-icons-3d";
 import { Icon3D } from "@/components/common/icon-3d";
+import type { Icon3DName } from "@/lib/icons-3d";
 import { CATEGORY_ILLUSTRATION, CATEGORY_META } from "./_lib/types";
 import type { AmlaReportDefinition, ReportCategory, ReportDefinition } from "./_lib/types";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
@@ -162,7 +163,7 @@ function AmlaSection({ reports, can }: { reports: AmlaReportDefinition[]; can: (
     <section>
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          {hasIllustration("emptyCompliance") && <Illustration name="emptyCompliance" className="h-14 max-h-14 w-14 shrink-0" />}
+          <Icon3D name="icon-amla" size={56} />
           <div className="min-w-0">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">AMLA Compliance</h2>
             <p className="text-xs text-muted-foreground/80">
@@ -189,7 +190,10 @@ function AmlaSection({ reports, can }: { reports: AmlaReportDefinition[]; can: (
 }
 
 interface ReportCardProps {
-  report: Pick<ReportDefinition, "title" | "description" | "icon" | "accent">;
+  report: Pick<ReportDefinition, "title" | "description" | "icon" | "accent"> & {
+    /** A module's own 3D icon (AMLA's), in place of the one mapped from `icon`. */
+    icon3d?: Icon3DName;
+  };
   /** The report's page: `/reports/<id>`, or an AMLA report's under /amla/reports. */
   href: string;
   /** What opening it offers; the in-browser reports preview and export to Excel. */
@@ -219,7 +223,7 @@ function ReportCard({ report, href, footer = "Preview · Excel export" }: Report
                 report.accent.ring
               )}
             >
-              <Icon3D name={reportIcon3D(report.icon)} size={30} />
+              <Icon3D name={report.icon3d ?? reportIcon3D(report.icon)} size={30} />
             </div>
             <div className="min-w-0">
               <h3 className="text-sm font-semibold leading-tight">

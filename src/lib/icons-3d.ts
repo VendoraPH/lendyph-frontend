@@ -1,7 +1,9 @@
 /**
  * The 3D icon set, made with Higgsfield in the same style as the app's
  * pictures (`@/lib/illustrations`). Each is a 192x192 WebP with a transparent
- * background, trimmed to the object, served from `public/icons/3d/`.
+ * background, trimmed to the object, served from `public/icons/3d/`. GCash's
+ * and AMLA's (`icon-gcash`, `icon-amla`) are the client's own pictures, with
+ * their edges cleaned and trimmed the same way.
  *
  * They replace the decorative feature icons (the side menu, the dashboard
  * figure cards, the report and document cards and the module headers). Line
@@ -27,6 +29,8 @@ export const ICON_3D_NAMES = [
   "icon-signed",
   "icon-moon",
   "icon-calendar",
+  "icon-gcash",
+  "icon-amla",
   "empty-loans",
   "empty-members",
   "empty-payments",

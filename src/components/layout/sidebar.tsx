@@ -44,14 +44,14 @@ const MIN_WIDTH = 64;
 const DEFAULT_WIDTH = 260;
 const MAX_WIDTH = 600;
 
-/** GCash, which keeps its own brand mark, still sits on today's grey tile. */
+/** The grey tile for an item with no 3D icon (none today; Linda has her own). */
 const LINE_ICON_TILE = "bg-gradient-to-br from-gray-400 to-gray-500 text-white";
 
 /**
- * An item's icon on its tile: the 3D icon on the soft neutral tile, Linda's
- * face on the same tile (as on her floating button), or, for GCash, its own
- * mark on the grey tile. The tile keeps today's size (36px collapsed, 32px
- * open), so nothing in the menu moves.
+ * An item's icon on its tile: the 3D icon on the soft neutral tile, or Linda's
+ * face on the same tile (as on her floating button). An item without either
+ * would show its line icon on the grey tile. The tile keeps today's size (36px
+ * collapsed, 32px open), so nothing in the menu moves.
  */
 function NavItemIcon({ item, collapsed, className, children }: {
   item: NavItem;

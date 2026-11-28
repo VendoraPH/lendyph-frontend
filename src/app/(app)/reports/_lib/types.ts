@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import type { SubjectKind } from "@/components/common/subject-picker";
 import { DASH, type FormattableColumn } from "@/lib/report-format";
 import type { Permission } from "@/types";
+import type { Icon3DName } from "@/lib/icons-3d";
 import type { ModuleIllustrationName } from "@/lib/illustrations";
 
 export type ReportId =
@@ -436,6 +437,8 @@ export interface AmlaReportDefinition {
   title: string;
   description: string;
   icon: LucideIcon;
+  /** Its card's 3D icon: AMLA's own, on every AMLA report, rather than one mapped from `icon`. */
+  icon3d: Icon3DName;
   accent: ReportDefinition["accent"];
   /** Its page: `/amla/reports/<key>`. */
   href: string;

@@ -74,8 +74,9 @@ export interface NavItem {
   /** The line icon, for the command palette and items without a 3D icon. */
   icon: ComponentType<{ className?: string }>;
   /**
-   * The side menu's 3D icon (`@/lib/icons-3d`). Linda (her face) and GCash
-   * (its brand mark) have none and keep their own picture.
+   * The side menu's 3D icon (`@/lib/icons-3d`). Every item has one except
+   * Linda, who keeps her face. GCash's line icon stays its brand mark, for the
+   * command palette.
    */
   icon3d?: Icon3DName;
   permission: Permission;
@@ -283,6 +284,7 @@ export const AMLA_NAV: NavItem = {
   title: "AMLA Compliance",
   href: "/amla",
   icon: ShieldAlert,
+  icon3d: "icon-amla",
   module: "amla",
   permission: "amla:view",
   anyOf: [...AMLA_SETTINGS_PAGE_PERMISSIONS],
@@ -560,6 +562,7 @@ export const SIDEBAR_NAV: NavItem[] = [
     href: "/gcash",
     module: "gcash",
     icon: GCashIcon,
+    icon3d: "icon-gcash",
     permission: "gcash:view",
   },
   // Gated on NEXT_PUBLIC_ENABLE_CREDIT_SCORING at build time. The routes also

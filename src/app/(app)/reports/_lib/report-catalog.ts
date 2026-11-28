@@ -718,6 +718,7 @@ const amlaReport = (
   title: AMLA_REPORT_TITLES[key],
   description,
   icon,
+  icon3d: "icon-amla",
   accent: ACCENT.red,
   href: `/amla/reports/${key}`,
   permissions,
