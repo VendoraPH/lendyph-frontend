@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { DataState } from "@/components/common/data-state";
+import { DisabledReason } from "@/components/common/disabled-reason";
 import { ReasonDialog } from "@/components/common/reason-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,6 +16,7 @@ import { recordTypeLabel, whenBy } from "@/app/(app)/cic/_lib/labels";
 import { CicPager } from "@/app/(app)/cic/_components/cic-pager";
 import { usePagedResource } from "@/app/(app)/cic/_hooks/use-paged-resource";
 import { OverrideDialog } from "./override-dialog";
+import { overrideRemoveBlockedReason } from "../_lib/override-contract-no";
 
 const code = (c: string | null, label: string | null) => (c ? `${c}${label ? ` · ${label}` : ""}` : "The product's");
 
@@ -95,9 +97,15 @@ export function LoanOverrideCard({ codeLists }: { codeLists: CicProductMappingCo
                               <Button variant="outline" onClick={() => setDialog({ editing: o })}>
                                 Edit
                               </Button>
-                              <Button variant="outline" onClick={() => setRemoving(o)}>
-                                Remove
-                              </Button>
+                              <DisabledReason reason={overrideRemoveBlockedReason(o)}>
+                                <Button
+                                  variant="outline"
+                                  disabled={o.contract_no_reported}
+                                  onClick={() => setRemoving(o)}
+                                >
+                                  Remove
+                                </Button>
+                              </DisabledReason>
                             </div>
                           </TableCell>
                         )}

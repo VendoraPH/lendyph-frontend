@@ -24,3 +24,8 @@ export function contractNoChange(stored: string | null, typed: string, { editing
   if (value === (stored ?? "")) return {};
   return value === "" ? { contract_no: null } : { contract_no: value };
 }
+
+/** Why an override can't be removed, or null when it can: a submitted file carries its number. */
+export function overrideRemoveBlockedReason(override: { contract_no_reported: boolean }): string | null {
+  return override.contract_no_reported ? "A file submitted to CIC carries this number, so the override stays." : null;
+}

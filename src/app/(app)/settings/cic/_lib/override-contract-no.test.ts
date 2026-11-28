@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { contractNoChange } from "./override-contract-no";
+import { contractNoChange, overrideRemoveBlockedReason } from "./override-contract-no";
 
 const adding = { editing: false, locked: false };
 const editing = { editing: true, locked: false };
@@ -28,4 +28,12 @@ test("a number a submitted file carries is never sent", () => {
 
 test("the browser doesn't judge the form: the reserved loan- form goes to the server, which refuses it in words", () => {
   assert.deepEqual(contractNoChange(null, "loan-12", adding), { contract_no: "loan-12" });
+});
+
+test("an override whose number a submitted file carries can't be removed, and says why", () => {
+  assert.equal(
+    overrideRemoveBlockedReason({ contract_no_reported: true }),
+    "A file submitted to CIC carries this number, so the override stays.",
+  );
+  assert.equal(overrideRemoveBlockedReason({ contract_no_reported: false }), null);
 });
