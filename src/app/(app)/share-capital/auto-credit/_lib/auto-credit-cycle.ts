@@ -50,10 +50,38 @@ export function runCompletedMessage(
   );
 }
 
+/** A branch of the caller's members on auto-credit, and its run for the cycle, if any. */
+export interface CycleBranch {
+  name: string;
+  /** Whether it has a run for the cycle. */
+  done: boolean;
+}
+
+/**
+ * The server's `cycle_branches` (round 9): one row per branch of the caller's
+ * members on auto-credit, in the server's order (by name), plus a "No branch"
+ * row (a null `branch_id`) for head office's members with no branch. An older
+ * API that sends none reads as no branches; only rows without a name are left
+ * out.
+ */
+export function cycleBranches(status: Record<string, unknown>): CycleBranch[] {
+  const raw = Array.isArray(status.cycle_branches) ? status.cycle_branches : [];
+  return raw.flatMap((row: unknown): CycleBranch[] => {
+    if (typeof row !== "object" || row === null) return [];
+    const { branch_name: name, run_id: runId } = row as Record<string, unknown>;
+    if (typeof name !== "string" || name === "") return [];
+    return [{ name, done: typeof runId === "number" }];
+  });
+}
+
 /**
  * The status card for the chosen cycle (finish run round 8): its own run
- * (`cycle_run`), never another cycle's last run. `formatDay` reads the run's
- * time as a date in the app's time zone.
+ * (`cycle_run`), never another cycle's last run. Since round 9 `cycle_run` is
+ * only a run that covered every branch of the caller's members on
+ * auto-credit, so a cycle run for some branches only reads as partly done,
+ * naming the branches done and not yet. Completed comes from `cycle_run`
+ * alone. `formatDay` reads the run's time as a
+ * date in the app's time zone.
  */
 export function cycleRunState(
   status: Record<string, unknown>,
@@ -66,6 +94,16 @@ export function cycleRunState(
     if (runStatus === "completed" && typeof processedAt === "string" && processedAt !== "") {
       return { done: true, text: `Completed on ${formatDay(processedAt)}` };
     }
+  }
+  // Completed only ever comes from the server's `cycle_run`, which it sets
+  // once the cycle's runs cover every row, the "No branch" row included.
+  const branches = cycleBranches(status);
+  const done = branches.filter((branch) => branch.done);
+  if (done.length > 0) {
+    const notYet = branches.filter((branch) => !branch.done);
+    const names = (rows: CycleBranch[]) => rows.map((branch) => branch.name).join(", ");
+    const rest = notYet.length > 0 ? `; not yet: ${names(notYet)}` : "";
+    return { done: false, text: `Partly done for ${cycleLabel}: ${names(done)} done${rest}` };
   }
   return { done: false, text: `Not run yet for ${cycleLabel}` };
 }
