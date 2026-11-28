@@ -301,3 +301,57 @@ test("the matrix offers menu_visibility:manage, right after Settings, in words",
   const page = readFileSync(resolve(process.cwd(), "src/app/(app)/settings/user-roles/page.tsx"), "utf8");
   assert.ok(page.indexOf("\n  menu_visibility: {") > page.indexOf("\n  settings: {"));
 });
+
+// CIC Reporting (Phase 10): the API seeds exactly these five for admin and
+// super_admin, in the menu's order. Each also needs See all branches.
+test("the matrix offers exactly the five CIC permissions, in the menu's order", () => {
+  assert.deepEqual(offered.filter((p) => p.startsWith("cic:")), [
+    "cic:view",
+    "cic:prepare",
+    "cic:submit",
+    "cic:review",
+    "cic:settings",
+  ]);
+  assert.deepEqual(moduleToggleActions("cic"), MODULE_ACTIONS.cic);
+});
+
+test("every CIC permission reads in CIC's own words", () => {
+  assert.equal(moduleActionLabel("cic", "view"), "View CIC reporting");
+  assert.equal(moduleActionLabel("cic", "prepare"), "Prepare files");
+  assert.equal(moduleActionLabel("cic", "submit"), "Submit to CIC");
+  assert.equal(moduleActionLabel("cic", "review"), "Record CIC's answer");
+  assert.equal(moduleActionLabel("cic", "settings"), "CIC settings");
+});
+
+test("the roles screen describes CIC Reporting, with the See all branches hint", () => {
+  const page = readFileSync(resolve(process.cwd(), "src/app/(app)/settings/user-roles/page.tsx"), "utf8");
+  assert.match(page, /\n  cic: \{\n\s+label: "CIC Reporting"/);
+  const meta = page.slice(page.indexOf("\n  cic: {"), page.indexOf("\n  reminders: {"));
+  assert.match(meta, /Every CIC permission also needs See all branches\./);
+});
+
+// The role editor offers every module the API seeds, flagged ones (Credit
+// Scoring, Savings, CDA, AMLA, Linda) included, whatever the build's flags:
+// a role's permissions are the deployment's, not the build's. CIC follows.
+test("the role editor offers CIC in every build, as it does the other flagged modules", () => {
+  for (const file of ["page.tsx", "_lib/permission-matrix.ts"]) {
+    const source = readFileSync(resolve(process.cwd(), "src/app/(app)/settings/user-roles", file), "utf8");
+    assert.doesNotMatch(source, /env\.features|@\/config\/env/, file);
+  }
+});
+
+// Adding CIC moves no other module: the rest keep their order, and CIC sits
+// right after Credit Scoring, as in the side menu.
+test("CIC sits after Credit Scoring and the other modules keep their order", () => {
+  const modules = Object.keys(MODULE_ACTIONS);
+  assert.equal(modules.indexOf("cic"), modules.indexOf("credit_scoring") + 1);
+  assert.deepEqual(
+    modules.filter((m) => m !== "cic"),
+    [
+      "fees", "penalties", "dashboard", "borrowers", "loans", "loan_products", "loan_origination", "payments",
+      "share_capital", "collaterals", "reports", "users", "branches", "interbranch_transfers", "settings",
+      "menu_visibility", "audit_logs", "auto_pay", "gcash", "imports", "accounting", "chart_of_accounts", "journals",
+      "expenses", "cash_accounts", "credit_scoring", "reminders", "savings", "cda", "member_portal", "linda", "amla",
+    ],
+  );
+});

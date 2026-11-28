@@ -49,11 +49,11 @@ import type { Action, Module } from "@/types";
  * and `loan_origination:view|update|assess|convert|settings`. An API older
  * than X0 refuses a save naming one with a 422, so this ships after X0.
  *
- * `cic` is not offered yet: the backend seeds `cic:view|prepare|submit|
- * review|settings` for admin and super_admin, and offering them in the role
- * editor is a later decision.
+ * `cic` is offered too (Phase 10, CIC Reporting): the backend seeds
+ * `cic:view|prepare|submit|review|settings` for admin and super_admin. Each
+ * works only with `branches:view_all`.
  */
-export type UIModule = Exclude<Module, "collections" | "loan_adjustments" | "auto_credit" | "cic">;
+export type UIModule = Exclude<Module, "collections" | "loan_adjustments" | "auto_credit">;
 
 // Applicable actions per module — only the actions that make sense for each area
 export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
@@ -119,6 +119,9 @@ export const MODULE_ACTIONS: Record<UIModule, Action[]> = {
   // `settings` (not `configure`) mirrors `accounting:settings`; `override` is
   // the human decision verb, an action on the borrower profile, not a page.
   credit_scoring: ["view", "override", "settings"],
+  // CIC Reporting, in the menu's order: read, prepare a file, submit it, record
+  // CIC's answer (never the file's generator), settings.
+  cic: ["view", "prepare", "submit", "review", "settings"],
   // `send` is one manual reminder to a member, `pause` stops reminders
   // (all, one member or one loan), `settings` covers rules, templates and the
   // provider set-up.
@@ -205,6 +208,13 @@ export const MODULE_ACTION_LABELS: Partial<Record<UIModule, Partial<Record<Actio
     analytics: "Open the executive dashboard",
     export: "Export the executive dashboard",
     settings: "Set dashboard alert thresholds",
+  },
+  cic: {
+    view: "View CIC reporting",
+    prepare: "Prepare files",
+    submit: "Submit to CIC",
+    review: "Record CIC's answer",
+    settings: "CIC settings",
   },
   borrowers: { transfer: "Move members to another branch" },
   menu_visibility: { manage: "Manage menu visibility" },
