@@ -48,7 +48,7 @@ test("admin's module count never exceeds the modules offered", () => {
 // four reminders permissions (Phase 2), savings:view, cda:view and
 // member_portal:view (Phase 3), penalties:view (Phase 4), linda:use
 // (Linda v1), and amla:view, interbranch_transfers:view and
-// loan_origination:view (Phase 6).
+// loan_origination:view (Phase 6), and cic:view (Phase 10).
 const REMINDERS = [
   "reminders:view",
   "reminders:send",
@@ -63,6 +63,7 @@ const REMINDERS = [
   "interbranch_transfers:view",
   "loan_origination:view",
   "menu_visibility:manage",
+  "cic:view",
 ];
 
 test("admin holding loan_products:manage, branches:view_all and reminders is in every offered module", () => {
