@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { RouteGuard } from "@/components/common/route-guard";
 import { DataState } from "@/components/common/data-state";
 import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
@@ -10,6 +9,7 @@ import { usePermission } from "@/hooks";
 import { CicPageHeader } from "../_components/page-header";
 import { SubmissionTable } from "../_components/submission-table";
 import { CIC_SUBMISSION_ENDPOINTS, useCicSubmissions } from "../_hooks/use-cic-submissions";
+import { CicGuard } from "../_components/cic-guard";
 
 function CicSubmissionsContent() {
   const resource = useCicSubmissions();
@@ -56,8 +56,8 @@ function CicSubmissionsContent() {
 
 export default function CicSubmissionsPage() {
   return (
-    <RouteGuard permission="cic:view" pageName="CIC Submission History">
+    <CicGuard permission="cic:view" pageName="CIC Submission History">
       <CicSubmissionsContent />
-    </RouteGuard>
+    </CicGuard>
   );
 }

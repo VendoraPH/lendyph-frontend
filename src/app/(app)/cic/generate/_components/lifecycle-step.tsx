@@ -6,7 +6,7 @@ import { PermissionButton } from "@/components/common/permission-button";
 import { formatDateTime } from "@/lib/format";
 import type { CicSubmission } from "@/types/cic";
 import { SubmissionStatusBadge } from "../../_components/submission-status-badge";
-import { encryptedFilename, type useSubmissionActions } from "../../_hooks/use-submission-actions";
+import type { useSubmissionActions } from "../../_hooks/use-submission-actions";
 
 type Actions = ReturnType<typeof useSubmissionActions>;
 
@@ -23,6 +23,14 @@ function Facts({ submission }: { submission: CicSubmission }) {
       <dd>{submission.record_count}</dd>
       <dt className="text-muted-foreground">Checksum (SHA-256)</dt>
       <dd className="break-all font-mono text-xs">{submission.checksum ?? "—"}</dd>
+      {submission.encrypted_filename && (
+        <>
+          <dt className="text-muted-foreground">Encrypted file</dt>
+          <dd className="font-mono text-xs">{submission.encrypted_filename}</dd>
+          <dt className="text-muted-foreground">Encrypted checksum</dt>
+          <dd className="break-all font-mono text-xs">{submission.encrypted_checksum ?? "—"}</dd>
+        </>
+      )}
       {submission.key_fingerprint && (
         <>
           <dt className="text-muted-foreground">Encrypted for key</dt>
@@ -43,11 +51,14 @@ function Facts({ submission }: { submission: CicSubmission }) {
 export function LifecycleStep({
   step,
   submission,
+  keyFingerprint,
   actions,
   onDownloaded,
 }: {
   step: 5 | 6 | 7;
   submission: CicSubmission;
+  /** The key the reviewer confirmed on the Review step. */
+  keyFingerprint: string;
   actions: Actions;
   onDownloaded: () => void;
 }) {
@@ -57,13 +68,13 @@ export function LifecycleStep({
       {step === 5 && (
         <div className="space-y-2">
           <p className="max-w-xl text-sm text-muted-foreground">
-            Lendy encrypts the file with the public key CIC issued, so only CIC can read it. The plain file never
-            leaves the server.
+            Lendy zips the file and encrypts the zip with the public key CIC issued, giving a{" "}
+            <span className="font-mono">.zip.gpg</span> only CIC can open. The plain file never leaves the server.
           </p>
           <PermissionButton
             permission="cic:submit"
             disabled={submission.status !== "generated" || actions.busy !== null}
-            onClick={() => actions.encrypt(submission)}
+            onClick={() => actions.encrypt(submission, keyFingerprint)}
           >
             {actions.busy === "encrypt" ? "Encrypting…" : submission.status === "generated" ? "Encrypt File" : "Encrypted"}
           </PermissionButton>
@@ -72,7 +83,7 @@ export function LifecycleStep({
       {step === 6 && (
         <div className="space-y-2">
           <p className="max-w-xl text-sm text-muted-foreground">
-            Download <span className="font-mono">{encryptedFilename(submission)}</span>, then upload it to CIC&apos;s
+            Download <span className="font-mono">{submission.encrypted_filename}</span>, then upload it to CIC&apos;s
             submission portal.
           </p>
           <PermissionButton

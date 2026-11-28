@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { RouteGuard } from "@/components/common/route-guard";
 import { DataState } from "@/components/common/data-state";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { useApiResource } from "@/hooks";
@@ -11,6 +10,7 @@ import { CicPageHeader } from "../../cic/_components/page-header";
 import { GeneralSettingsCard } from "./_components/general-settings-card";
 import { ProductMappingCard } from "./_components/product-mapping-card";
 import { PublicKeyCard } from "./_components/public-key-card";
+import { CicGuard } from "@/app/(app)/cic/_components/cic-guard";
 
 function CicSettingsContent() {
   const settings = useApiResource(cicService.getSettings);
@@ -50,8 +50,8 @@ function CicSettingsContent() {
 
 export default function CicSettingsPage() {
   return (
-    <RouteGuard permission="cic:settings" pageName="CIC Settings">
+    <CicGuard permission="cic:settings" pageName="CIC Settings">
       <CicSettingsContent />
-    </RouteGuard>
+    </CicGuard>
   );
 }

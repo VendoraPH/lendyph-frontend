@@ -262,7 +262,7 @@ export const MODULE_SETTINGS_NAV: NavSubItem[] = [
       ]
     : []),
   ...(env.features.cic
-    ? [{ title: "CIC", href: "/settings/cic", permission: "cic:settings" as const, module: "cic" as const }]
+    ? [{ title: "CIC", href: "/settings/cic", permission: "cic:settings" as const, alsoRequires: ["branches:view_all" as const], module: "cic" as const }]
     : []),
 ];
 
@@ -388,17 +388,20 @@ const CREDIT_SCORING_NAV: NavItem = {
  * Credit Information Corporation. Gated on NEXT_PUBLIC_ENABLE_CIC; the routes
  * also answer not found with the flag off (cic/layout.tsx).
  *
- * The backend seeds no `cic:*` permission yet, so no role sees this menu even
- * with the flag on until it does (docs/CIC_BACKEND_HANDOFF.md). It has no
- * Menu Visibility key either, for the same reason.
+ * The file covers the whole cooperative, so the menu also needs every branch
+ * (`branches:view_all`), as each page does (CicGuard). The backend seeds no
+ * `cic:*` permission yet, so no role sees this menu even with the flag on
+ * until it does (docs/CIC_BACKEND_HANDOFF.md). Menu Visibility hides it under
+ * the "cic" key (menu-modules.ts).
  */
-const CIC_NAV: NavItem = {
+export const CIC_NAV: NavItem = {
   title: "CIC Reporting",
   href: "/cic",
   icon: FileUp,
   icon3d: "empty-compliance",
   module: "cic",
   permission: "cic:view",
+  alsoRequires: MODULE_ALSO_REQUIRES.cic as Permission[],
   children: [
     { title: "Data Readiness", href: "/cic", permission: "cic:view" },
     { title: "Subject Records", href: "/cic/subjects", permission: "cic:view" },

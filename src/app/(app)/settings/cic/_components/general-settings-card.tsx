@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { cicService } from "@/services";
-import { isValidProviderCode } from "@/lib/cic/validate";
+import { isValidProviderCode } from "@/lib/cic/rules";
 import { notifyError, notifySuccess, notifyValidation } from "@/lib/notify";
 import type { CicSettings, UpdateCicSettingsData } from "@/types/cic";
 

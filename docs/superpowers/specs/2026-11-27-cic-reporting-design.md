@@ -14,7 +14,7 @@ Lendy reports its members and loans to the Credit Information Corporation (CIC) 
 ## Source documents
 
 These are CIC's 2016 CSDF workbooks, in `docs/CIC/`, which is git-ignored because the samples hold real customer data:
-- `data format.xlsx` holds the record layouts. It produced `src/lib/cic/layouts.generated.ts`.
+- `data format.xlsx` holds the record layouts. The backend owns them and builds the file (docs/CIC_BACKEND_HANDOFF.md).
 - `Fields in Excel.xlsx` holds the domain code lists. It produced `domains.generated.ts`.
 
 No customer data from those files is copied into the repo.

@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { RouteGuard } from "@/components/common/route-guard";
 import { DataState } from "@/components/common/data-state";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Button } from "@/components/ui/button";
@@ -10,6 +9,7 @@ import { CicPageHeader } from "../_components/page-header";
 import { CORRECTABLE_STATUSES } from "../_components/submission-status-badge";
 import { SubmissionTable } from "../_components/submission-table";
 import { CIC_SUBMISSION_ENDPOINTS, useCicSubmissions } from "../_hooks/use-cic-submissions";
+import { CicGuard } from "../_components/cic-guard";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -86,8 +86,8 @@ function CicCorrectionsContent() {
 
 export default function CicCorrectionsPage() {
   return (
-    <RouteGuard permission="cic:view" pageName="CIC Corrections">
+    <CicGuard permission="cic:view" pageName="CIC Corrections">
       <CicCorrectionsContent />
-    </RouteGuard>
+    </CicGuard>
   );
 }

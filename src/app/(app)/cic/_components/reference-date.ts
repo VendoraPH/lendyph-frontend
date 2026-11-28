@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { todayISO } from "@/lib/format";
-import { defaultCicReferenceDate } from "@/lib/cic/records";
+import { defaultCicReferenceDate } from "@/lib/cic/rules";
 
 /** The screen's File Reference Date, starting at the month just closed. */
 export function useReferenceDate(initial?: string | null) {

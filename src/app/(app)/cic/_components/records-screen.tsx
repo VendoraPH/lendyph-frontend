@@ -1,62 +1,46 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import { DataState } from "@/components/common/data-state";
-import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { PageFill } from "@/components/common/page-fill";
+import { TablePagination } from "@/components/common/table-pagination";
 import { Button } from "@/components/ui/button";
 import { todayISO } from "@/lib/format";
-import { issueCountsByRecord } from "@/lib/cic/records";
-import { CIC_RECORD_ENDPOINTS, useCicRecords, type CicRecordSet } from "../_hooks/use-cic-records";
+import { cicService } from "@/services";
+import { CIC_PER_PAGE_OPTIONS, usePagedResource } from "../_hooks/use-paged-resource";
 import { CicPageHeader } from "./page-header";
-import { RecordTable, type CicRecordRow } from "./record-table";
+import { RecordFilters, RecordTable } from "./record-table";
 import { ReferenceDateField } from "./reference-date-field";
 import { useReferenceDate } from "./reference-date";
 
-const RECORD_NAMES: Record<string, string> = {
-  ID: "Individual",
-  BD: "Business",
-  CI: "Installment",
-  CN: "Non-installment",
-  CC: "Credit card",
-};
-
-function subjectRows(set: CicRecordSet): CicRecordRow[] {
-  const counts = issueCountsByRecord(set.issues);
-  return set.subjects.map((s, i) => ({
-    key: `s${s.id}`,
-    number: s.subject_no,
-    name: s.name,
-    kind: `${s.record_type} · ${RECORD_NAMES[s.record_type]}`,
-    detail: `Member #${s.borrower_id}`,
-    counts: counts.get(i),
-  }));
-}
-
-function contractRows(set: CicRecordSet): CicRecordRow[] {
-  const counts = issueCountsByRecord(set.issues);
-  // Contracts follow the subjects in the file, so their issues are indexed after them.
-  const offset = set.subjects.length;
-  return set.contracts.map((c, i) => ({
-    key: `c${c.id}`,
-    number: c.loan_number ?? `Loan #${c.loan_id}`,
-    name: c.borrower_name,
-    kind: `${c.record_type} · ${RECORD_NAMES[c.record_type]}`,
-    detail: `Subject ${c.subject_no}${c.contract_phase ? ` · phase ${c.contract_phase}` : ""}`,
-    counts: counts.get(offset + i),
-  }));
-}
-
-/** Subject Records and Contract Records: the same screen over a different half of the file. */
+/**
+ * Subject Records and Contract Records: the same screen over a different half
+ * of the file. The server pages, searches and masks the list; no record's
+ * field values reach the browser.
+ */
 export function RecordsScreen({ kind }: { kind: "subjects" | "contracts" }) {
   const [referenceDate, setReferenceDate] = useReferenceDate();
-  const resource = useCicRecords(referenceDate);
+  const [search, setSearch] = useState("");
+  const [withErrors, setWithErrors] = useState(false);
   const isSubjects = kind === "subjects";
-  const rows = useMemo(
-    () => (resource.data ? (isSubjects ? subjectRows(resource.data) : contractRows(resource.data)) : []),
-    [resource.data, isSubjects],
+  const numberLabel = isSubjects ? "Subject No" : "Loan No";
+
+  const load = useCallback(
+    (page: number, perPage: number) => {
+      const filters = {
+        reference_date: referenceDate,
+        search: search || undefined,
+        with_errors: withErrors || undefined,
+        page,
+        per_page: perPage,
+      };
+      return isSubjects ? cicService.subjectsPage(filters) : cicService.contractsPage(filters);
+    },
+    [referenceDate, search, withErrors, isSubjects],
   );
+  const { resource, page, perPage, setPage, setPerPage } = usePagedResource(load);
+  const filtered = search !== "" || withErrors;
 
   return (
     <PageFill>
@@ -64,8 +48,8 @@ export function RecordsScreen({ kind }: { kind: "subjects" | "contracts" }) {
         title={isSubjects ? "Subject Records" : "Contract Records"}
         description={
           isSubjects
-            ? "Each member (ID record) and business (BD record) as CIC will receive it."
-            : "Each loan as a CIC contract record: installment (CI), non-installment (CN) or credit card (CC)."
+            ? "Each member (ID record) and business (BD record) CIC will receive, and what holds it back."
+            : "Each loan as a CIC contract record, installment (CI) or non-installment (CN), and what holds it back."
         }
         actions={
           <>
@@ -76,6 +60,7 @@ export function RecordsScreen({ kind }: { kind: "subjects" | "contracts" }) {
           </>
         }
       />
+      <RecordFilters numberLabel={numberLabel} withErrors={withErrors} onSearch={setSearch} onWithErrors={setWithErrors} />
       <DataState
         resource={resource}
         summary={
@@ -83,21 +68,28 @@ export function RecordsScreen({ kind }: { kind: "subjects" | "contracts" }) {
             ? "Every member and business CIC will receive, checked field by field."
             : "Every loan CIC will receive, checked field by field."
         }
-        endpoints={CIC_RECORD_ENDPOINTS}
-        isEmpty={(set) => (isSubjects ? set.subjects.length === 0 : set.contracts.length === 0)}
-        emptyMessage={isSubjects ? "No subject to report as of this date." : "No loan to report as of this date."}
+        endpoints={[isSubjects ? "GET /cic/subjects" : "GET /cic/contracts"]}
+        isEmpty={(d) => d.data.length === 0}
+        emptyMessage={
+          filtered
+            ? "No record matches."
+            : isSubjects
+              ? "No subject to report as of this date."
+              : "No loan to report as of this date."
+        }
+        emptyIllustration={filtered ? "noResults" : "empty"}
       >
-        {(set) => (
+        {(d) => (
           <>
-            {set.truncated && (
-              <IncompleteListNotice
-                shown={set.inputs.length}
-                total={set.total}
-                noun="records"
-                consequence="Some records are missing from this list and were not checked."
-              />
-            )}
-            <RecordTable rows={rows} numberLabel={isSubjects ? "Subject No" : "Contract No"} />
+            <RecordTable rows={d.data} numberLabel={numberLabel} />
+            <TablePagination
+              page={page}
+              perPage={perPage}
+              total={d.meta.total}
+              perPageOptions={CIC_PER_PAGE_OPTIONS}
+              onPageChange={setPage}
+              onPerPageChange={setPerPage}
+            />
           </>
         )}
       </DataState>

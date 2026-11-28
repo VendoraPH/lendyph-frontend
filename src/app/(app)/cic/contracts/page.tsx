@@ -1,12 +1,12 @@
 "use client";
 
-import { RouteGuard } from "@/components/common/route-guard";
 import { RecordsScreen } from "../_components/records-screen";
+import { CicGuard } from "../_components/cic-guard";
 
 export default function CicContractsPage() {
   return (
-    <RouteGuard permission="cic:view" pageName="Contract Records">
+    <CicGuard permission="cic:view" pageName="Contract Records">
       <RecordsScreen kind="contracts" />
-    </RouteGuard>
+    </CicGuard>
   );
 }

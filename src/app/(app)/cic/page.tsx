@@ -3,7 +3,6 @@
 import { useCallback } from "react";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
-import { RouteGuard } from "@/components/common/route-guard";
 import { DataState } from "@/components/common/data-state";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { useApiResource, usePermission } from "@/hooks";
@@ -18,6 +17,7 @@ import { CicPageHeader } from "./_components/page-header";
 import { ReferenceDateField } from "./_components/reference-date-field";
 import { useReferenceDate } from "./_components/reference-date";
 import { SubmissionStatusBadge } from "./_components/submission-status-badge";
+import { CicGuard } from "./_components/cic-guard";
 
 function CountCard({ label, count }: { label: string; count: CicReadinessCount }) {
   const percent = count.total === 0 ? null : Math.floor((count.ready / count.total) * 100);
@@ -168,8 +168,8 @@ function CicDashboardContent() {
 
 export default function CicDashboardPage() {
   return (
-    <RouteGuard permission="cic:view" pageName="CIC Reporting">
+    <CicGuard permission="cic:view" pageName="CIC Reporting">
       <CicDashboardContent />
-    </RouteGuard>
+    </CicGuard>
   );
 }

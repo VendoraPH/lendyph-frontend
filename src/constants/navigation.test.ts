@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { env } from "@/config/env";
-import { CDA_NAV, EXECUTIVE_DASHBOARD_NAV, INTERBRANCH_TRANSFERS_NAV, LINDA_SETTINGS_NAV, MEMBER_PORTAL_NAV, PENALTIES_SETTINGS_NAV, SIDEBAR_NAV, navChildAllowed, navItemAllowed, navItemHref, navItemMatches } from "./navigation";
+import { CDA_NAV, CIC_NAV, EXECUTIVE_DASHBOARD_NAV, INTERBRANCH_TRANSFERS_NAV, LINDA_SETTINGS_NAV, MEMBER_PORTAL_NAV, PENALTIES_SETTINGS_NAV, SIDEBAR_NAV, navChildAllowed, navItemAllowed, navItemHref, navItemMatches } from "./navigation";
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
 const LAYOUT = "src/app/(app)/credit-scoring/layout.tsx";
@@ -283,4 +283,41 @@ test("Interbranch Transfers needs interbranch_transfers:view, as its page does",
     read("src/app/(app)/accounting/interbranch-transfers/page.tsx"),
     /<RouteGuard permission="interbranch_transfers:view"/,
   );
+});
+
+test("CIC reporting is off when the flag isn't set: no menu, no Settings link, and its routes answer not found", () => {
+  assert.equal(env.features.cic, false);
+  assert.equal(SIDEBAR_NAV.some((item) => item.href === "/cic"), false);
+  const settings = SIDEBAR_NAV.find((item) => item.href === "/settings");
+  assert.equal(settings?.children?.some((c) => c.href === "/settings/cic"), false);
+  assert.match(read("src/config/env.ts"), /cic: parseBoolEnvValue\(process\.env\.NEXT_PUBLIC_ENABLE_CIC\)/);
+  assert.match(read(".env.example"), /^NEXT_PUBLIC_ENABLE_CIC=false$/m);
+  assert.match(read("src/constants/navigation.ts"), /env\.features\.cic \? \[CIC_NAV\]/);
+  const layout = read("src/app/(app)/cic/layout.tsx");
+  assert.match(layout, /env\.features\.cic/);
+  assert.match(layout, /notFound\(\)/);
+  assert.doesNotMatch(layout, /"use client"/);
+  assert.match(read("src/app/(app)/settings/cic/layout.tsx"), /export \{ default \} from "@\/app\/\(app\)\/cic\/layout"/);
+});
+
+test("the CIC menu needs cic:view and every branch, and Generate Report needs cic:prepare", () => {
+  const holds = (...held: string[]) => (p: string) => held.includes(p);
+  assert.equal(navItemAllowed(CIC_NAV, holds("cic:view")), false);
+  assert.equal(navItemAllowed(CIC_NAV, holds("branches:view_all")), false);
+  assert.equal(navItemAllowed(CIC_NAV, holds("cic:view", "branches:view_all")), true);
+  const generate = CIC_NAV.children?.find((c) => c.href === "/cic/generate");
+  assert.ok(generate);
+  assert.equal(navChildAllowed(generate, holds("cic:view", "branches:view_all")), false);
+  assert.equal(navChildAllowed(generate, holds("cic:prepare", "branches:view_all")), true);
+});
+
+test("every CIC menu link has a page, guarded by every branch and the permission its entry names", () => {
+  for (const child of CIC_NAV.children ?? []) {
+    const path = `src/app/(app)${child.href}/page.tsx`;
+    assert.equal(existsSync(resolve(process.cwd(), path)), true, path);
+    assert.match(read(path), new RegExp(`<CicGuard permission="${child.permission}"`), path);
+  }
+  assert.match(read("src/app/(app)/settings/cic/page.tsx"), /<CicGuard permission="cic:settings"/);
+  const guard = read("src/app/(app)/cic/_components/cic-guard.tsx");
+  assert.match(guard, /<RouteGuard permission="branches:view_all"/);
 });

@@ -1,104 +1,109 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollBox } from "@/components/common/page-fill";
-import type { CicRecordIssueCount } from "@/lib/cic/records";
+import type { CicRecordSummary } from "@/types/cic";
 
-export interface CicRecordRow {
-  key: string;
-  /** The number CIC knows it by: subject number or contract number. */
-  number: string;
-  name: string;
-  /** Record type and its name. */
-  kind: string;
-  detail: string;
-  counts: CicRecordIssueCount | undefined;
-}
+const RECORD_NAMES: Record<CicRecordSummary["record_type"], string> = {
+  ID: "Individual",
+  BD: "Business",
+  CI: "Installment",
+  CN: "Non-installment",
+};
 
-/** Rendering thousands of rows freezes the page; search narrows it. */
-const SHOWN = 500;
-
-function Readiness({ counts }: { counts: CicRecordIssueCount | undefined }) {
-  if (!counts || (counts.errors === 0 && counts.warnings === 0)) return <Badge variant="outline">Ready</Badge>;
-  if (counts.errors > 0) {
+function Readiness({ r }: { r: CicRecordSummary }) {
+  if (r.error_count > 0) {
     return (
       <Badge variant="destructive">
-        {counts.errors} {counts.errors === 1 ? "error" : "errors"}
+        {r.error_count} {r.error_count === 1 ? "error" : "errors"}
       </Badge>
     );
   }
+  if (r.warning_count > 0) {
+    return (
+      <Badge variant="secondary">
+        {r.warning_count} {r.warning_count === 1 ? "warning" : "warnings"}
+      </Badge>
+    );
+  }
+  return <Badge variant="outline">Ready</Badge>;
+}
+
+/** The search box and the errors-only switch; the server applies both. */
+export function RecordFilters({
+  numberLabel,
+  withErrors,
+  onSearch,
+  onWithErrors,
+}: {
+  numberLabel: string;
+  withErrors: boolean;
+  onSearch: (search: string) => void;
+  onWithErrors: (on: boolean) => void;
+}) {
+  const [typed, setTyped] = useState("");
   return (
-    <Badge variant="secondary">
-      {counts.warnings} {counts.warnings === 1 ? "warning" : "warnings"}
-    </Badge>
+    <form
+      className="flex shrink-0 flex-wrap items-center gap-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSearch(typed.trim());
+      }}
+    >
+      <Input
+        type="search"
+        placeholder={`Search ${numberLabel.toLowerCase()} and press Enter`}
+        aria-label="Search"
+        className="w-72"
+        value={typed}
+        onChange={(e) => {
+          setTyped(e.target.value);
+          // Clearing the box shows everything again without another Enter.
+          if (e.target.value === "") onSearch("");
+        }}
+      />
+      <Label className="flex items-center gap-2 text-sm font-normal">
+        <Checkbox checked={withErrors} onCheckedChange={(on) => onWithErrors(on === true)} />
+        With errors only
+      </Label>
+    </form>
   );
 }
 
-export function RecordTable({ rows, numberLabel }: { rows: CicRecordRow[]; numberLabel: string }) {
-  const [search, setSearch] = useState("");
-  const [onlyErrors, setOnlyErrors] = useState(false);
-  const shown = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return rows.filter(
-      (r) =>
-        (!onlyErrors || (r.counts?.errors ?? 0) > 0) &&
-        (!q || r.number.toLowerCase().includes(q) || r.name.toLowerCase().includes(q)),
-    );
-  }, [rows, search, onlyErrors]);
-
+/** One page of records: what staff know each by, its masked name and its problems. */
+export function RecordTable({ rows, numberLabel }: { rows: CicRecordSummary[]; numberLabel: string }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="flex shrink-0 flex-wrap items-center gap-3">
-        <Input
-          type="search"
-          placeholder={`Search name or ${numberLabel.toLowerCase()}`}
-          aria-label="Search"
-          className="w-64"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={onlyErrors} onChange={(e) => setOnlyErrors(e.target.checked)} />
-          With errors only
-        </label>
-        <span className="text-sm text-muted-foreground">
-          {shown.length} of {rows.length}
-        </span>
-      </div>
-      <ScrollBox className="rounded-lg border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{numberLabel}</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Record</TableHead>
-              <TableHead>Details</TableHead>
-              <TableHead>Readiness</TableHead>
+    <ScrollBox className="rounded-lg border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>{numberLabel}</TableHead>
+            <TableHead>Name</TableHead>
+            <TableHead>Record</TableHead>
+            <TableHead>Readiness</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((r) => (
+            <TableRow key={r.id}>
+              <TableCell className="font-mono text-xs">{r.number}</TableCell>
+              <TableCell>{r.label}</TableCell>
+              <TableCell>
+                {r.record_type} · {RECORD_NAMES[r.record_type]}
+                {r.contract_phase && <span className="ml-1 text-muted-foreground">· phase {r.contract_phase}</span>}
+              </TableCell>
+              <TableCell>
+                <Readiness r={r} />
+              </TableCell>
             </TableRow>
-          </TableHeader>
-          <TableBody>
-            {shown.slice(0, SHOWN).map((r) => (
-              <TableRow key={r.key}>
-                <TableCell className="font-mono text-xs">{r.number}</TableCell>
-                <TableCell>{r.name}</TableCell>
-                <TableCell>{r.kind}</TableCell>
-                <TableCell className="text-muted-foreground">{r.detail}</TableCell>
-                <TableCell>
-                  <Readiness counts={r.counts} />
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </ScrollBox>
-      {shown.length > SHOWN && (
-        <p className="shrink-0 text-xs text-muted-foreground">
-          Showing the first {SHOWN} of {shown.length}. Search to narrow the list.
-        </p>
-      )}
-    </div>
+          ))}
+        </TableBody>
+      </Table>
+    </ScrollBox>
   );
 }

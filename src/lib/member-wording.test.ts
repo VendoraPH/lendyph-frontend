@@ -6,14 +6,18 @@ import { join } from "node:path";
 
 const source = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
 
-/** Files whose text must say "Borrower": R.A. 3765, the loan contract and CIC's code lists use the term. */
+/** Files whose text must say "Borrower": R.A. 3765 and the loan contract use the term. */
 const LEGAL_DOCUMENTS = [
   "src/lib/printables/templates/disclosure.ts",
   "src/lib/printables/templates/promissory-note.ts",
   "src/lib/printables/templates/demand-letter.ts",
   "src/lib/printables/templates/amortization-schedule.ts",
-  // CIC's own code list: role codes B and C are defined as "Borrower" and "Co-Borrower".
-  "src/lib/cic/domains.generated.ts",
+];
+
+/** CIC's RoleDomain defines codes B and C as "Borrower" and "Co-Borrower"; only those two lines may say it. */
+const CIC_ROLE_LABELS = [
+  'src/lib/cic/domains.generated.ts: {"code": "B", "label": "Borrower"},',
+  'src/lib/cic/domains.generated.ts: {"code": "C", "label": "Co-Borrower"},',
 ];
 
 const sourceFiles = () =>
@@ -34,7 +38,8 @@ describe('users read "Member"', () => {
         codeLines(source(path))
           .filter((line) => quoted.test(line))
           .map((line) => `${path}: ${line.trim()}`),
-      );
+      )
+      .filter((line) => !CIC_ROLE_LABELS.includes(line));
     assert.deepEqual(found, []);
   });
 

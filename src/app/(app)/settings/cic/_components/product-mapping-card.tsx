@@ -13,7 +13,6 @@ import type { CicContractRecordType, CicProductMapping } from "@/types/cic";
 const RECORD_TYPES: { code: CicContractRecordType; label: string }[] = [
   { code: "CI", label: "CI · Installment" },
   { code: "CN", label: "CN · Non-installment" },
-  { code: "CC", label: "CC · Credit card" },
 ];
 
 const contractTypes = (type: CicContractRecordType) => CIC_DOMAINS[`${type}:ContractTypeDomain`];

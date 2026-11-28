@@ -3,27 +3,32 @@
  * it is built in lendyph-backend yet, so every call answers 404 and the
  * screens show "Not connected yet".
  *
- * The backend maps Lendy's members and loans to CIC records, generates the
- * file and encrypts it with CIC's public key. The frontend validates the
- * records it is served with `src/lib/cic/` so staff see every problem before
- * they generate, and previews the file in the same format.
+ * The backend maps Lendy's members and loans to CIC records, validates them,
+ * builds the file, masks its preview, zips and encrypts it with CIC's public
+ * key. Lists are paged on the server and carry counts, issues and masked
+ * labels only: a record's personal data never reaches the browser, and the
+ * plain file is never served.
  *
  * No fixtures: a CIC file built from invented data must never look real.
  */
 import { api } from "@/lib/api-client";
 import { API_ENDPOINTS } from "@/config/api-endpoints";
 import { fetchAllPages, type DrainResult } from "@/lib/paginate";
+import type { PaginatedResponse } from "@/types/api";
 import type {
   CicAcknowledgementData,
-  CicContractRecord,
+  CicFilePreview,
+  CicIssue,
+  CicIssueFilters,
   CicProductMapping,
   CicPublicKey,
+  CicPublicKeyHistoryEntry,
   CicReadiness,
   CicRecordFilters,
+  CicRecordSummary,
   CicSettings,
-  CicSubjectRecord,
   CicSubmission,
-  CicSubmissionDetail,
+  EncryptCicSubmissionData,
   GenerateCicSubmissionData,
   SaveCicProductMapping,
   UpdateCicSettingsData,
@@ -31,17 +36,29 @@ import type {
 
 const C = API_ENDPOINTS.CIC;
 
+/** The issue filters minus paging, for the server-built CSV. */
+type IssueExportFilters = Pick<CicIssueFilters, "severity">;
+
 export const cicService = {
   getSettings: () => api.get<CicSettings>(C.SETTINGS),
   updateSettings: (data: UpdateCicSettingsData) => api.put<CicSettings>(C.SETTINGS, data),
 
-  /** Upload the armored public key CIC issued. The server reads its fingerprint and expiry. */
-  uploadPublicKey: (file: File) => {
+  /**
+   * Upload the armored public key CIC issued. The server reads its fingerprint
+   * and expiry and stores it unverified; a key it replaces moves to the
+   * history with `reason`.
+   */
+  uploadPublicKey: (file: File, reason?: string) => {
     const body = new FormData();
     body.append("public_key", file);
+    if (reason) body.append("reason", reason);
     return api.upload<CicPublicKey>(C.PUBLIC_KEY, body);
   },
-  removePublicKey: () => api.delete<null>(C.PUBLIC_KEY),
+  /** Confirm the stored key's fingerprint matches the one CIC gave out of band. */
+  verifyPublicKey: (fingerprint: string) => api.post<CicPublicKey>(C.PUBLIC_KEY_VERIFY, { fingerprint }),
+  removePublicKey: (reason: string) => api.delete<null>(C.PUBLIC_KEY, { data: { reason } }),
+  /** Every key that was replaced or removed, newest first. Small, so one list. */
+  getPublicKeyHistory: () => api.get<CicPublicKeyHistoryEntry[]>(C.PUBLIC_KEY_HISTORY),
 
   /** One row per loan product, mapped or not. Small, so one unpaginated list. */
   getProductMappings: () => api.get<CicProductMapping[]>(C.PRODUCT_MAPPINGS),
@@ -51,24 +68,36 @@ export const cicService = {
   getReadiness: (referenceDate: string) =>
     api.get<CicReadiness>(C.READINESS, { params: { reference_date: referenceDate } }),
 
-  /** Every subject record as of `reference_date`, drained. Callers render `IncompleteListNotice` on `truncated`. */
-  listAllSubjects: (filters: CicRecordFilters): Promise<DrainResult<CicSubjectRecord>> =>
-    fetchAllPages<CicSubjectRecord>(({ page, per_page }) =>
-      api.getRaw(C.SUBJECTS, { params: { ...filters, page, per_page } }),
-    ),
-  listAllContracts: (filters: CicRecordFilters): Promise<DrainResult<CicContractRecord>> =>
-    fetchAllPages<CicContractRecord>(({ page, per_page }) =>
-      api.getRaw(C.CONTRACTS, { params: { ...filters, page, per_page } }),
-    ),
+  /** One page of subject records, searched and filtered on the server. */
+  subjectsPage: (filters: CicRecordFilters) =>
+    api.getRaw<PaginatedResponse<CicRecordSummary>>(C.SUBJECTS, { params: filters }),
+  contractsPage: (filters: CicRecordFilters) =>
+    api.getRaw<PaginatedResponse<CicRecordSummary>>(C.CONTRACTS, { params: filters }),
+
+  /** One page of the issues in the file as of `referenceDate`. */
+  issuesPage: (referenceDate: string, filters: CicIssueFilters) =>
+    api.getRaw<PaginatedResponse<CicIssue>>(C.ISSUES, { params: { reference_date: referenceDate, ...filters } }),
+  /** Every issue as a CSV the server builds and audits. */
+  exportIssues: (referenceDate: string, filters: IssueExportFilters) =>
+    api.download(C.ISSUES_EXPORT, { params: { reference_date: referenceDate, ...filters } }),
 
   listAllSubmissions: (): Promise<DrainResult<CicSubmission>> =>
     fetchAllPages<CicSubmission>(({ page, per_page }) =>
       api.getRaw(C.SUBMISSIONS, { params: { page, per_page } }),
     ),
-  getSubmission: (id: number) => api.get<CicSubmissionDetail>(C.SUBMISSION(id)),
-  generate: (data: GenerateCicSubmissionData) => api.post<CicSubmissionDetail>(C.SUBMISSIONS, data),
-  encrypt: (id: number) => api.post<CicSubmission>(C.SUBMISSION_ENCRYPT(id)),
-  /** The encrypted file once encrypted, the plain one before. */
+  getSubmission: (id: number) => api.get<CicSubmission>(C.SUBMISSION(id)),
+  submissionIssuesPage: (id: number, filters: CicIssueFilters) =>
+    api.getRaw<PaginatedResponse<CicIssue>>(C.SUBMISSION_ISSUES(id), { params: filters }),
+  exportSubmissionIssues: (id: number, filters: IssueExportFilters) =>
+    api.download(C.SUBMISSION_ISSUES_EXPORT(id), { params: filters }),
+  /** The stored file's masked preview, for the review before encryption. */
+  getPreview: (id: number) => api.get<CicFilePreview>(C.SUBMISSION_PREVIEW(id)),
+
+  generate: (data: GenerateCicSubmissionData) => api.post<CicSubmission>(C.SUBMISSIONS, data),
+  /** Zips the stored TXT and encrypts it to `….zip.gpg`, once the reviewer has confirmed. */
+  encrypt: (id: number, data: EncryptCicSubmissionData) =>
+    api.post<CicSubmission>(C.SUBMISSION_ENCRYPT(id), data),
+  /** The encrypted file only. The server refuses before encryption. */
   download: (id: number) => api.download(C.SUBMISSION_DOWNLOAD(id)),
   markSubmitted: (id: number) => api.post<CicSubmission>(C.SUBMISSION_MARK_SUBMITTED(id)),
   acknowledge: (id: number, data: CicAcknowledgementData) =>

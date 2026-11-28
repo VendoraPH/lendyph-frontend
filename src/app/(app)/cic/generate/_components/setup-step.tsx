@@ -11,6 +11,8 @@ export interface SetupValue {
   referenceDate: string;
   submissionType: 0 | 1;
   correctsId: number | null;
+  /** Why the correction is sent (§14.2); kept with the submission. */
+  correctionReason: string;
   comments: string;
 }
 
@@ -68,6 +70,21 @@ export function SetupStep({
           {correctable.length === 0 && (
             <p className="text-xs text-muted-foreground">No submitted file to correct yet.</p>
           )}
+        </div>
+      )}
+
+      {value.submissionType === 1 && (
+        <div className="space-y-1.5">
+          <Label htmlFor="cic-correction-reason">Reason for the correction</Label>
+          <Textarea
+            id="cic-correction-reason"
+            maxLength={500}
+            value={value.correctionReason}
+            onChange={(e) => onChange({ ...value, correctionReason: e.target.value })}
+          />
+          <p className="text-xs text-muted-foreground">
+            What was wrong, for example CIC&apos;s rejection or a corrected balance. Kept with the submission.
+          </p>
         </div>
       )}
 

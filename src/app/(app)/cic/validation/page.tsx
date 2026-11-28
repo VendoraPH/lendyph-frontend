@@ -1,32 +1,35 @@
 "use client";
 
+import { useCallback } from "react";
 import Link from "next/link";
-import { RouteGuard } from "@/components/common/route-guard";
 import { DataState } from "@/components/common/data-state";
-import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { PageFill } from "@/components/common/page-fill";
-import { usePermission } from "@/hooks";
+import { useApiResource, usePermission } from "@/hooks";
 import { todayISO } from "@/lib/format";
-import { summarizeCicIssues } from "@/lib/cic/validate";
+import { cicService } from "@/services";
 import { Button } from "@/components/ui/button";
+import type { CicReadiness } from "@/types/cic";
 import { CicPageHeader } from "../_components/page-header";
 import { IssueList } from "../_components/issue-list";
 import { IssueSummary } from "../_components/issue-summary";
 import { ReferenceDateField } from "../_components/reference-date-field";
 import { useReferenceDate } from "../_components/reference-date";
-import { CIC_RECORD_ENDPOINTS, useCicRecords } from "../_hooks/use-cic-records";
+import { useDateIssueList } from "../_hooks/use-issue-lists";
+import { CicGuard } from "../_components/cic-guard";
 
 function CicValidationContent() {
   const [referenceDate, setReferenceDate] = useReferenceDate();
-  const resource = useCicRecords(referenceDate);
+  const fetcher = useCallback(() => cicService.getReadiness(referenceDate), [referenceDate]);
+  const readiness = useApiResource<CicReadiness>(fetcher);
+  const issues = useDateIssueList(referenceDate);
   const { can } = usePermission();
-  const blocking = resource.data ? summarizeCicIssues(resource.data.issues).blocking : true;
+  const blocking = readiness.data ? readiness.data.issue_counts.errors > 0 : true;
 
   return (
     <PageFill>
       <CicPageHeader
         title="Validation"
-        description="Every field CIC would refuse, checked against the 2016 CSDF layouts before a file is generated."
+        description="Every field CIC would refuse, checked by Lendy against the 2016 CSDF layouts before a file is generated."
         actions={
           <>
             <ReferenceDateField value={referenceDate} onChange={setReferenceDate} max={todayISO()} />
@@ -42,19 +45,11 @@ function CicValidationContent() {
           </>
         }
       />
-      <DataState resource={resource} summary="Every problem in the file, record by record." endpoints={CIC_RECORD_ENDPOINTS}>
-        {(set) => (
+      <DataState resource={readiness} summary="How many problems the file has, by severity." endpoints={["GET /cic/readiness"]}>
+        {(r) => (
           <>
-            {set.truncated && (
-              <IncompleteListNotice
-                shown={set.inputs.length}
-                total={set.total}
-                noun="records"
-                consequence="Some records were not loaded, so their problems are not listed here."
-              />
-            )}
-            <IssueSummary issues={set.issues} recordCount={set.inputs.length} />
-            <IssueList issues={set.issues} csvName={`cic-validation-${referenceDate}.csv`} />
+            <IssueSummary counts={r.issue_counts} recordCount={r.subjects.total + r.contracts.total} />
+            <IssueList key={referenceDate} {...issues} />
           </>
         )}
       </DataState>
@@ -64,8 +59,8 @@ function CicValidationContent() {
 
 export default function CicValidationPage() {
   return (
-    <RouteGuard permission="cic:view" pageName="CIC Validation">
+    <CicGuard permission="cic:view" pageName="CIC Validation">
       <CicValidationContent />
-    </RouteGuard>
+    </CicGuard>
   );
 }

@@ -3,7 +3,6 @@
 import { useCallback, useState } from "react";
 import Link from "next/link";
 import { DataState } from "@/components/common/data-state";
-import { IncompleteListNotice } from "@/components/common/incomplete-list-notice";
 import { PageFill, ScrollBox } from "@/components/common/page-fill";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -11,17 +10,17 @@ import { useApiResource } from "@/hooks";
 import { cicService } from "@/services";
 import { emptyDrain } from "@/lib/paginate";
 import { notifyError } from "@/lib/notify";
-import { summarizeCicIssues } from "@/lib/cic/validate";
 import type { CicSubmission } from "@/types/cic";
 import { CicPageHeader } from "../../_components/page-header";
 import { CORRECTABLE_STATUSES } from "../../_components/submission-status-badge";
+import { EncryptReview } from "../../_components/encrypt-review";
 import { IssueList } from "../../_components/issue-list";
 import { IssueSummary } from "../../_components/issue-summary";
-import { CIC_RECORD_ENDPOINTS, useCicRecords } from "../../_hooks/use-cic-records";
+import { useDateIssueList } from "../../_hooks/use-issue-lists";
 import { useSubmissionActions } from "../../_hooks/use-submission-actions";
 import { blockedReason, GENERATE_STEPS, type GenerateStep } from "../_lib/steps";
 import { LifecycleStep } from "./lifecycle-step";
-import { PreviewStep } from "./preview-step";
+import { ReadinessStep } from "./readiness-step";
 import { SetupStep, type SetupValue } from "./setup-step";
 import { StepRail } from "./step-rail";
 
@@ -31,33 +30,45 @@ export function GenerateWizard({ initial }: { initial: Pick<SetupValue, "referen
     referenceDate: initial.referenceDate,
     submissionType: initial.correctsId === null ? 0 : 1,
     correctsId: initial.correctsId,
+    correctionReason: "",
     comments: "",
   });
   const [submission, setSubmission] = useState<CicSubmission | null>(null);
+  const [reviewed, setReviewed] = useState(false);
   const [downloaded, setDownloaded] = useState(false);
   const [generating, setGenerating] = useState(false);
+  // Fixed for the visit, so a key's expiry is judged without reading the clock in render.
+  const [now] = useState(() => new Date());
 
-  // Records follow the date chosen on step 1, so they are ready by step 2.
-  const records = useCicRecords(setup.referenceDate);
+  // Settings and the server's readiness figures follow the date chosen on step 1.
+  const contextFetcher = useCallback(
+    () =>
+      Promise.all([cicService.getSettings(), cicService.getReadiness(setup.referenceDate)]).then(
+        ([settings, readiness]) => ({ settings, readiness }),
+      ),
+    [setup.referenceDate],
+  );
+  const context = useApiResource(contextFetcher);
+  const issues = useDateIssueList(setup.referenceDate);
   const submissionsFetcher = useCallback(() => cicService.listAllSubmissions().catch(() => emptyDrain<CicSubmission>()), []);
   const submissions = useApiResource(submissionsFetcher);
   const correctable = (submissions.data?.rows ?? []).filter((s) => CORRECTABLE_STATUSES.has(s.status));
   const actions = useSubmissionActions(setSubmission);
 
-  const set = records.data;
-  const summary = set ? summarizeCicIssues(set.issues) : null;
+  const ctx = context.data;
+  const keyFingerprint = ctx?.settings.public_key?.fingerprint ?? null;
   const blocked = blockedReason(step, {
-    referenceDate: setup.referenceDate,
-    submissionType: setup.submissionType,
-    correctsId: setup.correctsId,
-    settings: set?.settings ?? null,
-    recordCount: set?.inputs.length ?? 0,
-    errorCount: summary?.errors ?? 0,
+    ...setup,
+    settings: ctx?.settings ?? null,
+    recordCount: ctx ? ctx.readiness.subjects.total + ctx.readiness.contracts.total : 0,
+    errorCount: ctx?.readiness.issue_counts.errors ?? 0,
     submission,
+    reviewed,
     downloaded,
+    now,
   });
-  // Nothing past step 1 can be judged until the records are in.
-  const waiting = step > 0 && step < 4 && !set;
+  // Readiness and validation cannot be judged until the server's figures are in.
+  const waiting = (step === 1 || step === 2) && !ctx;
   // Once a file exists, its date and type are fixed.
   const locked = submission !== null;
 
@@ -69,6 +80,7 @@ export function GenerateWizard({ initial }: { initial: Pick<SetupValue, "referen
         submission_type: setup.submissionType,
         comments: setup.comments || undefined,
         corrects_submission_id: setup.correctsId ?? undefined,
+        correction_reason: setup.submissionType === 1 ? setup.correctionReason.trim() : undefined,
       });
       setGenerating(false);
       setSubmission(created);
@@ -78,78 +90,44 @@ export function GenerateWizard({ initial }: { initial: Pick<SetupValue, "referen
     }
   };
 
-  const recordStep = (
-    <DataState
-      resource={records}
-      summary="Every member and loan CIC will receive, checked before the file is generated."
-      endpoints={CIC_RECORD_ENDPOINTS}
-    >
-      {(data) => (
-        <div className="flex min-h-0 flex-1 flex-col gap-4">
-          {data.truncated && (
-            <IncompleteListNotice
-              shown={data.inputs.length}
-              total={data.total}
-              noun="records"
-              consequence="Not every record was checked here; the backend checks the full file when it generates it."
-            />
-          )}
-          {step === 1 && (
-            <dl className="grid max-w-xl grid-cols-[12rem_1fr] gap-x-4 gap-y-1.5 text-sm">
-              <dt className="text-muted-foreground">Provider code</dt>
-              <dd className="font-mono">{data.settings.provider_code ?? "Not set"}</dd>
-              <dt className="text-muted-foreground">Reporting as</dt>
-              <dd>{data.settings.is_mfi ? "Microfinance institution" : "Lender (not MFI)"}</dd>
-              <dt className="text-muted-foreground">CIC public key</dt>
-              <dd className="break-all font-mono text-xs">{data.settings.public_key?.fingerprint ?? "Not uploaded"}</dd>
-              <dt className="text-muted-foreground">Subjects</dt>
-              <dd>{data.subjects.length}</dd>
-              <dt className="text-muted-foreground">Contracts</dt>
-              <dd>{data.contracts.length}</dd>
-            </dl>
-          )}
-          {step === 2 && (
-            <>
-              <IssueSummary issues={data.issues} recordCount={data.inputs.length} />
-              <IssueList issues={data.issues} csvName={`cic-validation-${setup.referenceDate}.csv`} />
-            </>
-          )}
-          {step === 3 && (
-            <PreviewStep
-              settings={data.settings}
-              referenceDate={setup.referenceDate}
-              submissionType={setup.submissionType}
-              comments={setup.comments}
-              inputs={data.inputs}
-            />
-          )}
-        </div>
-      )}
-    </DataState>
-  );
-
   return (
     <PageFill>
       <CicPageHeader
         title="Generate Report"
-        description="Build the Credit Submission Data File, encrypt it for CIC and record its submission."
+        description="Generate the Credit Submission Data File on the server, review it, encrypt it for CIC and record its submission."
       />
       <StepRail step={step} />
 
       <ScrollBox className="flex flex-col gap-4 p-px">
         {step === 0 && (
-          <SetupStep
-            value={setup}
-            onChange={locked ? () => undefined : setSetup}
-            correctable={correctable}
-          />
+          <SetupStep value={setup} onChange={locked ? () => undefined : setSetup} correctable={correctable} />
         )}
-        {step >= 1 && step <= 3 && recordStep}
-        {step === 4 && (
+        {(step === 1 || step === 2) && (
+          <DataState
+            resource={context}
+            summary="The CIC settings and how ready the file is, worked out by the backend."
+            endpoints={["GET /cic/settings", "GET /cic/readiness"]}
+          >
+            {({ settings, readiness }) =>
+              step === 1 ? (
+                <ReadinessStep settings={settings} readiness={readiness} />
+              ) : (
+                <div className="flex min-h-0 flex-1 flex-col gap-4">
+                  <IssueSummary
+                    counts={readiness.issue_counts}
+                    recordCount={readiness.subjects.total + readiness.contracts.total}
+                  />
+                  <IssueList key={setup.referenceDate} {...issues} />
+                </div>
+              )
+            }
+          </DataState>
+        )}
+        {step === 3 && (
           <div className="space-y-3">
             <p className="max-w-xl text-sm text-muted-foreground">
-              Lendy builds the file from every record as of the File Reference Date, checks it again and keeps it
-              in the submission history.
+              The server builds the file from every record as of the File Reference Date, checks it again and stores
+              it with the submission. You review it on the next step before it is encrypted.
             </p>
             {submission ? (
               <Alert>
@@ -165,10 +143,19 @@ export function GenerateWizard({ initial }: { initial: Pick<SetupValue, "referen
             )}
           </div>
         )}
-        {step >= 5 && submission && (
+        {step === 4 && submission && (
+          <EncryptReview
+            submission={submission}
+            keyFingerprint={keyFingerprint}
+            confirmed={reviewed}
+            onConfirmedChange={setReviewed}
+          />
+        )}
+        {step >= 5 && submission && keyFingerprint && (
           <LifecycleStep
             step={step as 5 | 6 | 7}
             submission={submission}
+            keyFingerprint={keyFingerprint}
             actions={actions}
             onDownloaded={() => setDownloaded(true)}
           />

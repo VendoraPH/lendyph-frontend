@@ -2,11 +2,11 @@
 
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { RouteGuard } from "@/components/common/route-guard";
 import { PageLoader } from "@/components/common/page-fill";
 import { todayISO } from "@/lib/format";
-import { defaultCicReferenceDate } from "@/lib/cic/records";
+import { defaultCicReferenceDate } from "@/lib/cic/rules";
 import { GenerateWizard } from "./_components/generate-wizard";
+import { CicGuard } from "../_components/cic-guard";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -27,10 +27,10 @@ function GenerateContent() {
 
 export default function CicGeneratePage() {
   return (
-    <RouteGuard permission="cic:prepare" pageName="Generate CIC Report">
+    <CicGuard permission="cic:prepare" pageName="Generate CIC Report">
       <Suspense fallback={<PageLoader />}>
         <GenerateContent />
       </Suspense>
-    </RouteGuard>
+    </CicGuard>
   );
 }

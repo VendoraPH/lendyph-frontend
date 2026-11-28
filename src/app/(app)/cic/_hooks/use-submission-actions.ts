@@ -6,11 +6,6 @@ import { notifyError, notifySuccess } from "@/lib/notify";
 import { saveBlob } from "@/lib/save-blob";
 import type { CicAcknowledgementData, CicSubmission } from "@/types/cic";
 
-/** The encrypted file's name: the CSDF name with the PGP extension. */
-export function encryptedFilename(submission: Pick<CicSubmission, "filename">): string {
-  return `${submission.filename}.pgp`;
-}
-
 /**
  * Encrypt, download, mark submitted and acknowledge one submission. Shared
  * by the Generate Report wizard and the submission's own page. Each action
@@ -19,16 +14,19 @@ export function encryptedFilename(submission: Pick<CicSubmission, "filename">): 
 export function useSubmissionActions(onChange: (submission: CicSubmission) => void) {
   const [busy, setBusy] = useState<null | "encrypt" | "download" | "submit" | "acknowledge">(null);
 
-  const encrypt = async (s: CicSubmission) => {
+  /** Sends the reviewer's confirmation and the key they saw; resolves true once encrypted. */
+  const encrypt = async (s: CicSubmission, keyFingerprint: string): Promise<boolean> => {
     setBusy("encrypt");
     try {
-      const updated = await cicService.encrypt(s.id);
-      notifySuccess("File encrypted with CIC's public key.");
+      const updated = await cicService.encrypt(s.id, { confirmed: true, key_fingerprint: keyFingerprint });
+      notifySuccess("File zipped and encrypted with CIC's public key.");
       setBusy(null);
       onChange(updated);
+      return true;
     } catch (err) {
       setBusy(null);
       notifyError(err, "The file could not be encrypted.");
+      return false;
     }
   };
 
@@ -37,7 +35,7 @@ export function useSubmissionActions(onChange: (submission: CicSubmission) => vo
     setBusy("download");
     try {
       const blob = await cicService.download(s.id);
-      saveBlob(blob, encryptedFilename(s));
+      saveBlob(blob, s.encrypted_filename ?? `${s.filename.replace(/\.txt$/, "")}.zip.gpg`);
       setBusy(null);
       return true;
     } catch (err) {
